@@ -50,6 +50,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --things            add the placed objects from the map's .tng (needs an install)
 --creatures         with --things: include creature meshes in bind pose
 --particles         with --things: static stand-ins for particle emitters (off by default)
+--no-water          leave out the water surface
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 8 = the engine's)

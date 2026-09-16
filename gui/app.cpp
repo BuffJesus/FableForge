@@ -181,6 +181,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.walkable = j.value("walkable", settings_.walkable);
         settings_.foliage = j.value("foliage", settings_.foliage);
         settings_.things = j.value("things", settings_.things);
+        settings_.water = j.value("water", settings_.water);
         settings_.world = j.value("world", settings_.world);
     } catch (...) {}
 }
@@ -193,7 +194,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage}, {"things", settings_.things}, {"world", settings_.world},
+            {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"world", settings_.world},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -443,6 +444,7 @@ void App::startExportOf(const MapEntry& entry) {
             o.gain = s.gain;
             o.layers = s.layers;
             o.walkableColor = s.walkable;
+            o.water = s.water;
             o.up = s.up == 0 ? te::UpAxis::Y : te::UpAxis::Z;
             if (ctx) { o.gameRoot = ctx->gameRoot(); o.mapName = entry.key.rfind("file:", 0) == 0 ? std::string() : entry.name; }
             if (s.world && entry.hasWorld) { o.originX = entry.worldX; o.originY = entry.worldY; }
@@ -963,7 +965,7 @@ void App::drawViewport(float width) {
         modesW += chipW("Frame  (F)") + S(8);
         const char* layerNames[3] = {"Foliage", "Objects", "Water"};
         float layersW = 0; for (const char* n : layerNames) layersW += chipW(n) + gap;
-        const bool twoRows = modesW + layersW + S(32) > size.x;
+        const bool twoRows = modesW + layersW + ImGui::CalcTextSize("Show:").x + S(40) > size.x;
         const float yModes = origin.y + size.y - rowH - S(10);
         const float yLayers = twoRows ? yModes - rowH - S(4) : yModes;
         float x = origin.x + S(14);
@@ -978,9 +980,14 @@ void App::drawViewport(float width) {
         if (theme::chip("Frame  (F)", false)) frameMap();
         auto_.registerWidget("chip_reset");
         const float modesEnd = ImGui::GetItemRectMax().x;
-        // layer chips, right-aligned
+        // layer chips, right-aligned, with a "Show:" caption so nobody mistakes them
+        // for export settings (those are the toggles in the right panel)
         float lx = origin.x + size.x - S(14) - layersW + gap;
         if (!twoRows && lx < modesEnd + S(16)) lx = modesEnd + S(16);
+        {
+            const ImVec2 cs = ImGui::CalcTextSize("Show:");
+            dl->AddText(ImVec2(lx - cs.x - S(8), yLayers + (rowH - cs.y) * 0.5f), theme::col(theme::Faint), "Show:");
+        }
         ImGui::SetCursorScreenPos(ImVec2(lx, yLayers));
         if (theme::chip("Foliage", previewFoliage_)) setPreviewFoliage(!previewFoliage_);
         auto_.registerWidget("chip_foliage");
@@ -1103,6 +1110,8 @@ void App::drawActions(float width) {
     auto_.registerWidget("toggle_foliage");
     theme::toggle("Placed objects (fences, walls, rocks, buildings)", &settings_.things);
     auto_.registerWidget("toggle_things");
+    theme::toggle("Water (lakes, rivers, sea)", &settings_.water);
+    auto_.registerWidget("toggle_water");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The map's .tng, plus the doors, windows and building parts their meshes spawn.\nMesh instances with textures; creatures are skipped.");
     theme::endCard();
 
@@ -1359,6 +1368,7 @@ bool Automation::tick(App& app) {
         else if (key == "foliage") s.foliage = val == "1";
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "things") s.things = val == "1";
+        else if (key == "water") s.water = val == "1";
         else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");
         else if (key == "preview_water") app.setPreviewWater(val == "1");
