@@ -211,6 +211,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
 
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        if (automated) {   // scripted mouse wins over the backend's real-cursor fallback
+            float vx, vy;
+            if (app.automation().virtualMouse(vx, vy)) io.AddMousePosEvent(vx, vy);
+        }
         ImGui::NewFrame();
         app.frame(dt);
         if (automated && !app.automation().tick(app)) running = false;

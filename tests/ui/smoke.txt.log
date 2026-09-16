@@ -68,6 +68,9 @@ shot build/ui/08_exported.png
      foliage_instances=5111
      preview_foliage=1
      export_foliage=1
+     thing_instances=232
+     preview_things=1
+     export_things=1
      batch_done=0
      batch_failed=0
      filter=

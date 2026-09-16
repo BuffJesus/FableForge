@@ -64,6 +64,9 @@ ok   filter
      foliage_instances=0
      preview_foliage=1
      export_foliage=1
+     thing_instances=0
+     preview_things=1
+     export_things=1
      batch_done=3
      batch_failed=0
      filter=

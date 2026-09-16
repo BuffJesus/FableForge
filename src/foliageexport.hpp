@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -79,6 +80,7 @@ struct Instance {
 
 struct Scene {
     std::string mapName;
+    std::string rootName = "Foliage"; // glTF root node / OBJ object suffix
     bool found = false;               // the STB knows this map
     int worldX = 0, worldY = 0;       // STB origin (Fable units)
     std::vector<Mesh> meshes;
@@ -95,6 +97,19 @@ struct Scene {
     size_t triangleCount() const;
 };
 
+// --- shared mesh bank access (process-wide cache over MBANK_ALLMESHES) ------
+bool openMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
+const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err);
+std::string meshName(uint32_t id);
+uint32_t meshIdByName(const std::string& name);   // 0 when unknown
+// Build a Mesh (parts split by material, textures resolved through `context`,
+// UVs normalised) from a decoded geometry. `images` / `textureToImage` are the
+// scene's shared image table.
+Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label,
+              const forge::meshpreview::Geometry& geo, bool textures,
+              const terrainexport::Context& context, std::vector<terrainexport::Image>& images,
+              std::map<uint32_t, int>& textureToImage, std::vector<std::string>& warnings);
+
 // Basis images of the instance's local axes in Fable space (col[k] = image of
 // local axis k, scale included): world = pos + lx*col[0] + ly*col[1] + lz*col[2].
 void instanceBasis(const Instance& i, float col[3][3]);
@@ -105,14 +120,22 @@ void instanceBasis(const Instance& i, float col[3][3]);
 Scene load(const std::string& mapName, const Options& options,
            const terrainexport::Context& context);
 
-// Appends foliage to a GLB document under construction. Used by
-// terrainexport::buildGlb via the combined writer below.
+// Writers: terrain plus any number of instance scenes (foliage, things...).
+// GLB: each scene becomes a root node (Scene::rootName) with one child per
+// instance. OBJ: each scene is baked into world-space triangles as an extra
+// object group (one material per texture) in the same .obj/.mtl.
+std::vector<uint8_t> buildGlbWith(const terrainexport::Scene& terrain, const std::vector<const Scene*>& layers);
+std::vector<std::filesystem::path> writeGlbWith(const terrainexport::Scene& terrain,
+                                                const std::vector<const Scene*>& layers,
+                                                const std::filesystem::path& out);
+std::vector<std::filesystem::path> writeObjWith(const terrainexport::Scene& terrain,
+                                                const std::vector<const Scene*>& layers,
+                                                const std::filesystem::path& out);
+// Single-layer conveniences.
 std::vector<uint8_t> buildGlbWithFoliage(const terrainexport::Scene& terrain, const Scene& foliage);
 std::vector<std::filesystem::path> writeGlbWithFoliage(const terrainexport::Scene& terrain,
                                                        const Scene& foliage,
                                                        const std::filesystem::path& out);
-// OBJ: foliage instances are baked into world-space triangles in a second object
-// group (one material per texture), written into the same .obj/.mtl.
 std::vector<std::filesystem::path> writeObjWithFoliage(const terrainexport::Scene& terrain,
                                                        const Scene& foliage,
                                                        const std::filesystem::path& out);

@@ -80,6 +80,79 @@ struct MeshCache {
 
 MeshCache& meshCache() { static MeshCache c; return c; }
 
+} // namespace
+
+bool openMeshBank(const fs::path& graphicsBig, std::string& err) { return meshCache().open(graphicsBig, err); }
+const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err) { return meshCache().get(id, err); }
+std::string meshName(uint32_t id) {
+    std::lock_guard<std::mutex> lock(meshCache().mutex);
+    auto it = meshCache().names.find(id);
+    return it == meshCache().names.end() ? std::string() : it->second;
+}
+uint32_t meshIdByName(const std::string& name) {
+    std::lock_guard<std::mutex> lock(meshCache().mutex);
+    for (const auto& [id, n] : meshCache().names) if (lower(n) == lower(name)) return id;
+    return 0;
+}
+
+Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label,
+              const forge::meshpreview::Geometry& geo, bool textures,
+              const te::Context& context, std::vector<te::Image>& images,
+              std::map<uint32_t, int>& textureToImage, std::vector<std::string>& warnings) {
+    Mesh m;
+    m.meshId = meshId;
+    m.name = name;
+    m.label = label;
+    m.geometry = geo;
+    // Compressed vertex formats decode UVs with an integer offset (8.x);
+    // wrap-equivalent, but normalise so exported UVs read as 0..1.
+    if (!m.geometry.vertices.empty()) {
+        float minU = 1e30f, minV = 1e30f;
+        for (const auto& v : m.geometry.vertices) { minU = std::min(minU, v.u); minV = std::min(minV, v.v); }
+        const float du = std::floor(minU), dv = std::floor(minV);
+        if (std::isfinite(du) && std::isfinite(dv) && (du != 0 || dv != 0))
+            for (auto& v : m.geometry.vertices) { v.u -= du; v.v -= dv; }
+    }
+    std::map<int, size_t> partByMaterial;
+    for (const auto& t : geo.triangles) {
+        const int mat = (t.material >= 0 && size_t(t.material) < geo.materials.size()) ? int(t.material) : -1;
+        auto it = partByMaterial.find(mat);
+        if (it == partByMaterial.end()) {
+            SubMesh part;
+            part.material = mat;
+            if (mat >= 0) part.diffuseTexture = geo.materials[size_t(mat)].diffuseTexture > 0 ? uint32_t(geo.materials[size_t(mat)].diffuseTexture) : 0;
+            if (textures && part.diffuseTexture) {
+                auto img = textureToImage.find(part.diffuseTexture);
+                if (img == textureToImage.end()) {
+                    std::string twarn;
+                    const te::Image* tex = context.texture(part.diffuseTexture, twarn);
+                    if (tex) {
+                        images.push_back(*tex);
+                        img = textureToImage.emplace(part.diffuseTexture, int(images.size() - 1)).first;
+                    } else {
+                        warnings.push_back(name + ": " + twarn);
+                        img = textureToImage.emplace(part.diffuseTexture, -1).first;
+                    }
+                }
+                part.image = img->second;
+                if (part.image >= 0) {
+                    const auto& px = images[size_t(part.image)].rgba;
+                    for (size_t i = 3; i < px.size(); i += 4) if (px[i] < 250) { part.hasAlpha = true; break; }
+                }
+            }
+            it = partByMaterial.emplace(mat, m.parts.size()).first;
+            m.parts.push_back(std::move(part));
+        }
+        auto& idx = m.parts[it->second].indices;
+        idx.push_back(t.a); idx.push_back(t.b); idx.push_back(t.c);
+    }
+    if (!m.parts.empty()) { m.diffuseTexture = m.parts[0].diffuseTexture; m.image = m.parts[0].image; m.hasAlpha = m.parts[0].hasAlpha; }
+    for (const auto& part : m.parts) if (part.hasAlpha) m.hasAlpha = true;
+    return m;
+}
+
+namespace {
+
 void toUp(te::UpAxis up, float x, float y, float z, float& ox, float& oy, float& oz) {
     if (up == te::UpAxis::Y) { ox = x; oy = z; oz = -y; }
     else                     { ox = x; oy = y; oz = z; }
@@ -344,56 +417,10 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
                 std::string merr;
                 const auto* geo = meshCache().get(type.meshIdx, merr);
                 if (!geo) { warn(options, scene, merr); meshIdToIndex[type.meshIdx] = -1; typeToMesh[inst.type] = -1; continue; }
-                Mesh m;
-                m.meshId = type.meshIdx;
-                m.name = type.meshName.empty() ? meshCache().names[type.meshIdx] : type.meshName;
-                m.label = type.label;
-                m.geometry = *geo;
-                // Compressed vertex formats decode UVs with an integer offset (8.x);
-                // wrap-equivalent, but normalise so exported UVs read as 0..1.
-                if (!m.geometry.vertices.empty()) {
-                    float minU = 1e30f, minV = 1e30f;
-                    for (const auto& v : m.geometry.vertices) { minU = std::min(minU, v.u); minV = std::min(minV, v.v); }
-                    const float du = std::floor(minU), dv = std::floor(minV);
-                    if (std::isfinite(du) && std::isfinite(dv) && (du != 0 || dv != 0))
-                        for (auto& v : m.geometry.vertices) { v.u -= du; v.v -= dv; }
-                }
-                // Split triangles by material; resolve each material's diffuse once.
-                std::map<int, size_t> partByMaterial;
-                for (const auto& t : geo->triangles) {
-                    const int mat = (t.material >= 0 && size_t(t.material) < geo->materials.size()) ? int(t.material) : -1;
-                    auto it = partByMaterial.find(mat);
-                    if (it == partByMaterial.end()) {
-                        SubMesh part;
-                        part.material = mat;
-                        if (mat >= 0) part.diffuseTexture = geo->materials[size_t(mat)].diffuseTexture > 0 ? uint32_t(geo->materials[size_t(mat)].diffuseTexture) : 0;
-                        if (options.textures && part.diffuseTexture) {
-                            auto img = textureToImage.find(part.diffuseTexture);
-                            if (img == textureToImage.end()) {
-                                std::string twarn;
-                                const te::Image* tex = context.texture(part.diffuseTexture, twarn);
-                                if (tex) {
-                                    scene.images.push_back(*tex);
-                                    img = textureToImage.emplace(part.diffuseTexture, int(scene.images.size() - 1)).first;
-                                } else {
-                                    warn(options, scene, m.name + ": " + twarn);
-                                    img = textureToImage.emplace(part.diffuseTexture, -1).first;
-                                }
-                            }
-                            part.image = img->second;
-                            if (part.image >= 0) {
-                                const auto& px = scene.images[size_t(part.image)].rgba;
-                                for (size_t i = 3; i < px.size(); i += 4) if (px[i] < 250) { part.hasAlpha = true; break; }
-                            }
-                        }
-                        it = partByMaterial.emplace(mat, m.parts.size()).first;
-                        m.parts.push_back(std::move(part));
-                    }
-                    auto& idx = m.parts[it->second].indices;
-                    idx.push_back(t.a); idx.push_back(t.b); idx.push_back(t.c);
-                }
-                if (!m.parts.empty()) { m.diffuseTexture = m.parts[0].diffuseTexture; m.image = m.parts[0].image; m.hasAlpha = m.parts[0].hasAlpha; }
-                for (const auto& part : m.parts) if (part.hasAlpha) m.hasAlpha = true;
+                std::vector<std::string> mw;
+                Mesh m = makeMesh(type.meshIdx, type.meshName.empty() ? meshName(type.meshIdx) : type.meshName, type.label,
+                                  *geo, options.textures, context, scene.images, textureToImage, mw);
+                for (const auto& w : mw) warn(options, scene, w);
                 scene.meshes.push_back(std::move(m));
                 meshIndex = int(scene.meshes.size() - 1);
                 meshIdToIndex[type.meshIdx] = meshIndex;
@@ -533,7 +560,7 @@ void appendFoliage(glb::Builder& b, const Scene& f, te::UpAxis up, std::vector<i
                                    {"translation", {tx, ty, tz}}, {"rotation", {q[0], q[1], q[2], q[3]}},
                                    {"scale", {sx, sy, sz}}}));
     }
-    roots.push_back(b.node({{"name", "Foliage"}, {"children", children},
+    roots.push_back(b.node({{"name", f.rootName}, {"children", children},
                             {"extras", {{"instances", children.size()}, {"scenery_types", f.paletteTypes},
                                         {"unbound_instances", f.unboundInstances},
                                         {"note", "baked local-detail from FinalAlbion_RT.stb; LOD0 meshes"}}}}));
@@ -541,15 +568,15 @@ void appendFoliage(glb::Builder& b, const Scene& f, te::UpAxis up, std::vector<i
 
 } // namespace
 
-std::vector<uint8_t> buildGlbWithFoliage(const te::Scene& terrain, const Scene& foliage) {
+std::vector<uint8_t> buildGlbWith(const te::Scene& terrain, const std::vector<const Scene*>& layers) {
     glb::Builder b;
     std::vector<int> roots{te::appendTerrain(b, terrain)};
-    appendFoliage(b, foliage, terrain.up, roots);
+    for (const Scene* layer : layers) if (layer) appendFoliage(b, *layer, terrain.up, roots);
     return b.finish(terrain.sourceName, roots, "AlbionTerrain terrain exporter");
 }
 
-std::vector<fs::path> writeGlbWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) {
-    const auto glb = buildGlbWithFoliage(terrain, foliage);
+std::vector<fs::path> writeGlbWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {
+    const auto glb = buildGlbWith(terrain, layers);
     if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
     std::ofstream f(out, std::ios::binary);
     if (!f) throw std::runtime_error("cannot write " + out.string());
@@ -559,21 +586,25 @@ std::vector<fs::path> writeGlbWithFoliage(const te::Scene& terrain, const Scene&
     return written;
 }
 
-std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) {
-    auto written = te::writeObj(terrain, out);
-    if (foliage.instances.empty()) return written;
+std::vector<uint8_t> buildGlbWithFoliage(const te::Scene& terrain, const Scene& foliage) { return buildGlbWith(terrain, {&foliage}); }
+std::vector<fs::path> writeGlbWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) { return writeGlbWith(terrain, {&foliage}, out); }
+
+namespace {
+
+void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::path& out,
+                    uint32_t& base, std::vector<fs::path>& written) {
+    if (foliage.instances.empty()) return;
     const std::string stem = out.stem().string();
     const fs::path mtlPath = out.parent_path() / (stem + ".mtl");
     std::ofstream obj(out, std::ios::app), mtl(mtlPath, std::ios::app);
-    uint32_t base = uint32_t(terrain.vertices.size());
-    obj << "o " << stem << "_foliage\n";
+    obj << "o " << stem << "_" << foliage.rootName << "\n";
     // One material per texture image.
     std::map<int, std::string> imageMaterial;
     for (const Mesh& m : foliage.meshes) {
         if (m.instanceCount == 0) continue;
         for (const SubMesh& part : m.parts) {
             if (part.image < 0 || imageMaterial.count(part.image)) continue;
-            const std::string matName = "foliage_" + std::to_string(part.diffuseTexture);
+            const std::string matName = lower(foliage.rootName) + "_" + std::to_string(part.diffuseTexture);
             const fs::path png = out.parent_path() / (stem + "_" + matName + ".png");
             const auto bytes = te::encodePng(foliage.images[size_t(part.image)]);
             std::ofstream(png, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
@@ -583,7 +614,7 @@ std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene&
             imageMaterial[part.image] = matName;
         }
     }
-    mtl << "newmtl foliage_untextured\nKd 0.35 0.55 0.3\n";
+    mtl << "newmtl " << lower(foliage.rootName) << "_untextured\nKd 0.35 0.55 0.3\n";
     char line[160];
     // Bake instances: group by material to minimise usemtl switches.
     std::vector<size_t> order(foliage.instances.size());
@@ -612,7 +643,7 @@ std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene&
         for (const SubMesh& part : m.parts) {
             if (part.image != currentImage) {
                 currentImage = part.image;
-                obj << "usemtl " << (part.image >= 0 ? imageMaterial[part.image] : "foliage_untextured") << "\n";
+                obj << "usemtl " << (part.image >= 0 ? imageMaterial[part.image] : lower(foliage.rootName) + "_untextured") << "\n";
             }
             for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
                 const uint32_t a = base + part.indices[k] + 1, bb = base + part.indices[k + 1] + 1, c = base + part.indices[k + 2] + 1;
@@ -622,7 +653,19 @@ std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene&
         }
         base += uint32_t(m.geometry.vertices.size());
     }
+}
+
+} // namespace
+
+std::vector<fs::path> writeObjWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {
+    auto written = te::writeObj(terrain, out);
+    uint32_t base = uint32_t(terrain.vertices.size());
+    for (const Scene* layer : layers) if (layer) appendObjLayer(terrain, *layer, out, base, written);
     return written;
+}
+
+std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) {
+    return writeObjWith(terrain, {&foliage}, out);
 }
 
 } // namespace albion::foliageexport

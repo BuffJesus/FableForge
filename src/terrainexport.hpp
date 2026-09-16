@@ -123,6 +123,10 @@ public:
     // Decoded GBANK_MAIN_PC texture by id (cached; owned by the context). nullptr
     // with `warning` set when the id is unknown or undecodable.
     const Image* texture(uint32_t id, std::string& warning) const;
+    // game.bin lookup for placed things: the definition's Graphic model id
+    // (MBANK_ALLMESHES). Result codes: 1 = found (modelId set, may be 0 = no
+    // model), 0 = definition not in game.bin, -1 = def type not decodable.
+    int graphicModelId(const std::string& definitionName, uint32_t& modelId) const;
     struct Impl;
     Impl& impl() const { return *impl_; }
 private:

@@ -30,6 +30,7 @@ add_library(forgecore_slice STATIC
   vendor/forgecore/src/stb.cpp
   vendor/forgecore/src/stbinfo.cpp
   vendor/forgecore/src/rangecodec.cpp
+  vendor/forgecore/src/tng.cpp
   vendor/third_party/miniz/miniz.c
   vendor/third_party/minilzo/minilzo.c
 )
@@ -38,7 +39,7 @@ target_include_directories(forgecore_slice PUBLIC
   vendor/third_party
 )
 
-add_library(albionterrain STATIC src/terrainexport.cpp src/foliageexport.cpp)
+add_library(albionterrain STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp)
 target_include_directories(albionterrain PUBLIC src)
 target_link_libraries(albionterrain PUBLIC forgecore_slice)
 

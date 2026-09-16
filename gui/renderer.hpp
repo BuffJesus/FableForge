@@ -54,12 +54,19 @@ public:
     bool upload(const terrainexport::Scene& scene, Camera& camera);
     void clear();
     bool hasMesh() const { return indexCount_ > 0; }
-    // Bakes every instance into world-space triangle batches (one per texture).
-    bool uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up);
-    void clearFoliage();
-    bool hasFoliage() const { return !foliage_.empty(); }
-    size_t foliageTriangles() const { return foliageTriangles_; }
-    bool showFoliage = true;
+    // Instance layers (0 = foliage, 1 = placed things): every instance baked
+    // into world-space triangle batches, one batch per texture.
+    static constexpr int kLayers = 2;
+    bool uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    void clearLayer(int layer);
+    bool hasLayer(int layer) const { return !layers_[layer].empty(); }
+    bool showLayer[kLayers] = {true, true};
+    bool& showFoliage = showLayer[0];
+    bool& showThings = showLayer[1];
+    // Back-compat names used by the app.
+    bool uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up) { return uploadLayer(0, scene, up); }
+    void clearFoliage() { clearLayer(0); }
+    bool hasFoliage() const { return hasLayer(0); }
 
     // Renders into the offscreen target at the given size and returns its SRV
     // (valid until the next render call).
@@ -89,8 +96,7 @@ private:
     ID3D11BlendState* blend_ = nullptr;
     ID3D11ShaderResourceView* albedo_ = nullptr;
     struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; };
-    std::vector<FoliageBatch> foliage_;
-    size_t foliageTriangles_ = 0;
+    std::vector<FoliageBatch> layers_[kLayers];
     ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img);
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;

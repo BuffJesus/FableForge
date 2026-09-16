@@ -6,6 +6,8 @@ ok   wait_foliage
 ok   frames 3
 ok   assert_state foliage_loaded 1
 ok   assert_widget chip_foliage
+ok   assert_widget chip_things
+ok   assert_widget toggle_things
 ok   screenshot build/ui/f1_foliage_far.png
 shot build/ui/f1_foliage_far.png
 ok   zoom 5
@@ -20,7 +22,13 @@ ok   screenshot build/ui/f3_foliage_off.png
 shot build/ui/f3_foliage_off.png
 ..   click chip_foliage
 ok   frames 2
+..   click chip_things
+ok   frames 2
+ok   assert_state preview_things 0
+..   click chip_things
+ok   frames 2
 ok   set outdir build/ui
+ok   set things 1
 ok   set texels 4
 ok   set foliage 1
 ..   click btn_export
@@ -49,9 +57,12 @@ ok   assert_file build/ui/StartOakValeWest.glb
      foliage_instances=4437
      preview_foliage=1
      export_foliage=1
+     thing_instances=600
+     preview_things=1
+     export_things=1
      batch_done=0
      batch_failed=0
      filter=
-     camera=146.05,56.70,-80.10
+     camera=113.05,23.17,-149.22
 ok   quit
 RESULT PASS

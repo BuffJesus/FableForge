@@ -27,6 +27,7 @@
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
 #include "foliageexport.hpp"
+#include "thingsexport.hpp"
 #include "terrainexport.hpp"
 
 namespace fs = std::filesystem;
@@ -48,6 +49,8 @@ int usage() {
         "  --install <root>    Fable TLC install dir (default: auto-detect Steam)\n"
         "  --no-textures       heightmap only (no install needed)\n"
         "  --foliage           add the baked grass/plants/trees as mesh instances (needs install)\n"
+        "  --things            add the placed objects (fences, walls, rocks, buildings) from the .tng\n"
+        "  --creatures         with --things: include creature meshes in bind pose\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 4)\n"
@@ -199,7 +202,7 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false;
     int texels = 8;
     float tile = 4.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -212,6 +215,8 @@ int main(int argc, char** argv) {
         else if (a == "--out") out = next();
         else if (a == "--no-textures") textures = false;
         else if (a == "--foliage") foliage = true;
+        else if (a == "--things") things = true;
+        else if (a == "--creatures") creatures = true;
         else if (a == "--layers") layers = true;
         else if (a == "--texels") texels = std::atoi(next().c_str());
         else if (a == "--tile") tile = float(std::atof(next().c_str()));
@@ -258,8 +263,8 @@ int main(int argc, char** argv) {
             o.originY = float(std::atof(originArg.substr(c + 1).c_str()));
         }
         if (!quiet) o.log = [](const std::string& m) { std::printf("  %s\n", m.c_str()); };
-        if (foliage && !install.valid) {
-            std::fprintf(stderr, "--foliage needs a Fable install (pass --install <root>)\n");
+        if ((foliage || things) && !install.valid) {
+            std::fprintf(stderr, "--foliage / --things need a Fable install (pass --install <root>)\n");
             return 1;
         }
         if (textures) {
@@ -276,7 +281,7 @@ int main(int argc, char** argv) {
         const auto file = forge::lev::File::open(lev);
         if (!quiet) std::printf("map: %s  %dx%d cells\n", file.source().c_str(), file.width(), file.height());
         te::Context ctx;
-        if (textures || foliage) {
+        if (textures || foliage || things) {
             std::string err;
             if (!ctx.load(install.root, install.root / "data" / "graphics" / "pc" / "textures.big", err))
                 std::fprintf(stderr, "warning: %s\n", err.c_str());
@@ -292,8 +297,22 @@ int main(int argc, char** argv) {
             fo.log = o.log;
             fol = albion::foliageexport::load(lev.stem().string(), fo, ctx);
         }
-        const auto written = ext == ".glb" ? albion::foliageexport::writeGlbWithFoliage(scene, fol, out)
-                                           : albion::foliageexport::writeObjWithFoliage(scene, fol, out);
+        albion::foliageexport::Scene thg;
+        albion::thingsexport::Stats thingStats;
+        if (things) {
+            albion::thingsexport::Options to;
+            to.gameRoot = install.root;
+            to.textures = textures;
+            to.creatures = creatures;
+            to.up = o.up;
+            to.log = o.log;
+            thg = albion::thingsexport::load(lev.stem().string(), to, ctx, &thingStats);
+        }
+        std::vector<const albion::foliageexport::Scene*> layersOut;
+        if (foliage) layersOut.push_back(&fol);
+        if (things) layersOut.push_back(&thg);
+        const auto written = ext == ".glb" ? albion::foliageexport::writeGlbWith(scene, layersOut, out)
+                                           : albion::foliageexport::writeObjWith(scene, layersOut, out);
         const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 
         if (!quiet) {
@@ -302,6 +321,8 @@ int main(int argc, char** argv) {
                                                       (unsigned long long)fs::file_size(p));
             if (foliage) std::printf("foliage: %zu instances, %zu meshes, %zu triangles%s\n", fol.instances.size(), fol.meshes.size(),
                                      fol.triangleCount(), fol.found ? "" : " (none found for this map)");
+            if (things) std::printf("things: %d placed of %d, %zu meshes, %zu triangles\n", thingStats.placed, thingStats.things,
+                                    thg.meshes.size(), thg.triangleCount());
             std::printf("%zu vertices, %zu triangles, %s, %.2fs\n", scene.vertices.size(), scene.indices.size() / 3,
                         scene.hasAlbedo ? (std::to_string(scene.albedo.width) + "x" + std::to_string(scene.albedo.height) + " albedo").c_str()
                                         : "untextured", secs);

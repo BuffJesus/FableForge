@@ -8,6 +8,8 @@ wait_foliage
 frames 3
 assert_state foliage_loaded 1
 assert_widget chip_foliage
+assert_widget chip_things
+assert_widget toggle_things
 screenshot build/ui/f1_foliage_far.png
 zoom 5
 orbit 0.4 -0.25
@@ -19,7 +21,13 @@ assert_state preview_foliage 0
 screenshot build/ui/f3_foliage_off.png
 click chip_foliage
 frames 2
+click chip_things
+frames 2
+assert_state preview_things 0
+click chip_things
+frames 2
 set outdir build/ui
+set things 1
 set texels 4
 set foliage 1
 click btn_export

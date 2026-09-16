@@ -169,6 +169,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.layers = j.value("layers", settings_.layers);
         settings_.walkable = j.value("walkable", settings_.walkable);
         settings_.foliage = j.value("foliage", settings_.foliage);
+        settings_.things = j.value("things", settings_.things);
     } catch (...) {}
 }
 
@@ -180,7 +181,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage},
+            {"foliage", settings_.foliage}, {"things", settings_.things},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -279,9 +280,11 @@ void App::selectMap(const std::string& nameOrKey) {
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
     selectedName_ = it->key;
-    renderer_.clearFoliage();
+    renderer_.clearLayer(0);
+    renderer_.clearLayer(1);
     foliageLoadedFor_.clear();
     foliageInstances_ = 0;
+    thingInstances_ = 0;
     foliageStatus_.clear();
     startPreviewLoad();
 }
@@ -289,6 +292,12 @@ void App::selectMap(const std::string& nameOrKey) {
 void App::setPreviewFoliage(bool on) {
     previewFoliage_ = on;
     renderer_.showFoliage = on;
+    if (on && !foliageLoaded() && !foliageFuture_.valid() && previewLoaded()) startFoliageLoad();
+}
+
+void App::setPreviewThings(bool on) {
+    previewThings_ = on;
+    renderer_.showThings = on;
     if (on && !foliageLoaded() && !foliageFuture_.valid() && previewLoaded()) startFoliageLoad();
 }
 
@@ -308,6 +317,11 @@ void App::startFoliageLoad() {
         fo.up = te::UpAxis::Y;
         fo.mapLocal = true;
         try { r.scene = foliageexport::load(entry.name, fo, *ctx); } catch (const std::exception& e) { r.scene.warnings.push_back(e.what()); }
+        thingsexport::Options to;
+        to.gameRoot = root;
+        to.textures = true;
+        to.up = te::UpAxis::Y;
+        try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
         return r;
     });
 }
@@ -414,8 +428,20 @@ void App::startExportOf(const MapEntry& entry) {
                 fo.log = o.log;
                 fol = foliageexport::load(entry.name, fo, *ctx);
             }
-            const auto files = s.format == 0 ? foliageexport::writeGlbWithFoliage(scene, fol, outPath)
-                                             : foliageexport::writeObjWithFoliage(scene, fol, outPath);
+            foliageexport::Scene thg;
+            if (s.things && ctx) {
+                thingsexport::Options to;
+                to.gameRoot = ctx->gameRoot();
+                to.textures = o.textures;
+                to.up = o.up;
+                to.log = o.log;
+                thg = thingsexport::load(entry.name, to, *ctx);
+            }
+            std::vector<const foliageexport::Scene*> layers;
+            if (s.foliage && ctx) layers.push_back(&fol);
+            if (s.things && ctx) layers.push_back(&thg);
+            const auto files = s.format == 0 ? foliageexport::writeGlbWith(scene, layers, outPath)
+                                             : foliageexport::writeObjWith(scene, layers, outPath);
             for (const auto& f : files) r.files.push_back(f.string());
             r.ok = true;
         } catch (const std::exception& e) {
@@ -466,12 +492,20 @@ void App::pollWorkers() {
         if (r.name == selectedName_) {
             foliageLoadedFor_ = r.name;
             foliageInstances_ = r.scene.instances.size();
+            thingInstances_ = r.things.instances.size();
             if (r.scene.found && !r.scene.instances.empty()) {
-                renderer_.uploadFoliage(r.scene, te::UpAxis::Y);
-                foliageStatus_ = std::to_string(r.scene.instances.size()) + " foliage instances, " + std::to_string(r.scene.meshes.size()) + " plant meshes";
+                renderer_.uploadLayer(0, r.scene, te::UpAxis::Y);
+                foliageStatus_ = std::to_string(r.scene.instances.size()) + " plants (" + std::to_string(r.scene.treeInstances) + " trees)";
             } else {
-                foliageStatus_ = r.scene.found ? "no baked foliage on this map" : "no foliage bank entry for this map";
+                foliageStatus_ = r.scene.found ? "no baked foliage" : "no foliage bank entry";
             }
+            if (!r.things.instances.empty()) {
+                renderer_.uploadLayer(1, r.things, te::UpAxis::Y);
+                foliageStatus_ += ", " + std::to_string(r.things.instances.size()) + " objects";
+            } else if (r.things.found) {
+                foliageStatus_ += ", no placed objects";
+            }
+            for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
             for (const auto& w : r.scene.warnings)
                 if (w.rfind("mesh", 0) != 0) pushLog("foliage: " + w, 1);
         }
@@ -541,6 +575,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("foliage_instances=" + std::to_string(foliageInstances_));
     v.push_back("preview_foliage=" + std::string(previewFoliage_ ? "1" : "0"));
     v.push_back("export_foliage=" + std::string(settings_.foliage ? "1" : "0"));
+    v.push_back("thing_instances=" + std::to_string(thingInstances_));
+    v.push_back("preview_things=" + std::string(previewThings_ ? "1" : "0"));
+    v.push_back("export_things=" + std::string(settings_.things ? "1" : "0"));
     v.push_back("batch_done=" + std::to_string(batchDone_));
     v.push_back("batch_failed=" + std::to_string(batchFailed_));
     v.push_back("filter=" + filter_);
@@ -844,9 +881,9 @@ void App::drawViewport(float width) {
                            previewScene_.mapWidth, previewScene_.mapHeight, previewScene_.vertices.size(),
                            previewScene_.minHeight, previewScene_.maxHeight,
                            previewTextured_ ? "" : "   |   textures loading...");
-        if (previewFoliage_) {
+        if (previewFoliage_ || previewThings_) {
             ImGui::SameLine(0, 0);
-            if (foliageFuture_.valid()) ImGui::TextColored(theme::vec(theme::Faint), "   |   foliage loading...");
+            if (foliageFuture_.valid()) ImGui::TextColored(theme::vec(theme::Faint), "   |   plants + objects loading...");
             else if (!foliageStatus_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "   |   %s", foliageStatus_.c_str());
         }
         if (previewTextured_ && previewScene_.unresolvedThemes > 0) {
@@ -875,6 +912,9 @@ void App::drawViewport(float width) {
         ImGui::SameLine(0, 6);
         if (theme::chip("Foliage", previewFoliage_)) setPreviewFoliage(!previewFoliage_);
         auto_.registerWidget("chip_foliage");
+        ImGui::SameLine(0, 6);
+        if (theme::chip("Objects", previewThings_)) setPreviewThings(!previewThings_);
+        auto_.registerWidget("chip_things");
         x = ImGui::GetItemRectMax().x;
         const char* hint = "RMB: look + WASD fly (Q/E, Shift)   LMB: dolly/turn   MMB: pan   Alt+LMB: orbit   Wheel: zoom   F: frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
@@ -958,10 +998,12 @@ void App::drawActions(float width) {
     ImGui::Dummy(ImVec2(0, 8));
     ImGui::SetCursorPosX(16);
     theme::beginCard("##fol", inner);
-    theme::toggle("Foliage (baked grass, plants, stumps)", &settings_.foliage);
+    theme::toggle("Foliage (grass, plants, trees)", &settings_.foliage);
     auto_.registerWidget("toggle_foliage");
+    theme::toggle("Placed objects (fences, walls, rocks, buildings)", &settings_.things);
+    auto_.registerWidget("toggle_things");
     ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), "Mesh instances from FinalAlbion_RT.stb. Big trees and props are\nplaced objects (.tng) and are not included yet.");
+    ImGui::TextColored(theme::vec(theme::Faint), "Foliage: baked instances in FinalAlbion_RT.stb.  Objects: the map's .tng.\nBoth as mesh instances with their textures; creatures are skipped.");
     ImGui::PopFont();
     theme::endCard();
 
@@ -1094,7 +1136,8 @@ bool Automation::tick(App& app) {
         if (it == widgets_.end()) { fail("click: widget not on screen: " + clickTarget_); clickTarget_.clear(); return true; }
         ImGuiIO& io = ImGui::GetIO();
         const ImVec4 r = it->second;
-        io.AddMousePosEvent((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
+        setVirtualMouse((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
+        io.AddMousePosEvent(vmX_, vmY_);
         if (clickPhase_ == 1) io.AddMouseButtonEvent(0, true);
         if (clickPhase_ == 2) io.AddMouseButtonEvent(0, false);
         if (++clickPhase_ > 3) { clickTarget_.clear(); clickPhase_ = 0; }
@@ -1140,8 +1183,9 @@ bool Automation::tick(App& app) {
         ImGuiIO& io = ImGui::GetIO();
         if (rest == "viewport" && widgets_.count("viewport")) {
             const ImVec4 r = widgets_["viewport"];
-            io.AddMousePosEvent((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
-        } else { float x = 0, y = 0; std::istringstream(rest) >> x >> y; io.AddMousePosEvent(x, y); }
+            setVirtualMouse((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
+        } else { float x = 0, y = 0; std::istringstream(rest) >> x >> y; setVirtualMouse(x, y); }
+        io.AddMousePosEvent(vmX_, vmY_);
         note("ok   " + line); ++pc_; waitFrames_ = 1;
     }
     else if (cmd == "mouse_down" || cmd == "mouse_up") {
@@ -1152,7 +1196,8 @@ bool Automation::tick(App& app) {
     else if (cmd == "mouse_delta") {   // mouse_delta <dx> <dy>: move relative to the current position
         ImGuiIO& io = ImGui::GetIO();
         float x = 0, y = 0; std::istringstream(rest) >> x >> y;
-        io.AddMousePosEvent(io.MousePos.x + x, io.MousePos.y + y);
+        setVirtualMouse(vmX_ + x, vmY_ + y);
+        io.AddMousePosEvent(vmX_, vmY_);
         note("ok   " + line); ++pc_; waitFrames_ = 1;
     }
     else if (cmd == "key_down" || cmd == "key_up") {
@@ -1202,6 +1247,8 @@ bool Automation::tick(App& app) {
         else if (key == "walkable") s.walkable = val == "1";
         else if (key == "foliage") s.foliage = val == "1";
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
+        else if (key == "things") s.things = val == "1";
+        else if (key == "preview_things") app.setPreviewThings(val == "1");
         else if (key == "texels") s.texels = std::atoi(val.c_str());
         else if (key == "tile") s.tile = float(std::atof(val.c_str()));
         else if (key == "up") s.up = lower(val) == "z" ? 1 : 0;

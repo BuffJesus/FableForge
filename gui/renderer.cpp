@@ -203,7 +203,7 @@ void Camera::fly(float forward, float strafe, float rise, float dt) {
 Renderer::~Renderer() {
     releaseTarget();
     releaseMesh();
-    clearFoliage();
+    for (int i = 0; i < kLayers; ++i) clearLayer(i);
     release(white_);
     release(blend_); release(depth_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
     release(cbuffer_); release(layout_); release(ps_); release(vs_);
@@ -285,12 +285,11 @@ void Renderer::releaseMesh() {
     indexCount_ = 0;
 }
 
-void Renderer::clear() { releaseMesh(); clearFoliage(); }
+void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearLayer(i); }
 
-void Renderer::clearFoliage() {
-    for (auto& b : foliage_) { release(b.vb); release(b.srv); }
-    foliage_.clear();
-    foliageTriangles_ = 0;
+void Renderer::clearLayer(int layer) {
+    for (auto& b : layers_[layer]) { release(b.vb); release(b.srv); }
+    layers_[layer].clear();
 }
 
 ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img) {
@@ -309,9 +308,10 @@ ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img)
     return srv;
 }
 
-bool Renderer::uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up) {
-    clearFoliage();
+bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up) {
+    clearLayer(layer);
     if (scene.instances.empty()) return false;
+    auto& foliage_ = layers_[layer];
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
         if (up == terrainexport::UpAxis::Y) { ox = x; oy = z; oz = -y; } else { ox = x; oy = y; oz = z; }
     };
@@ -351,7 +351,6 @@ bool Renderer::uploadFoliage(const foliageexport::Scene& scene, terrainexport::U
         b.count = uint32_t(verts.size());
         if (image >= 0 && size_t(image) < scene.images.size()) b.srv = makeTexture(scene.images[size_t(image)]);
         b.alpha = true;
-        foliageTriangles_ += verts.size() / 3;
         foliage_.push_back(b);
     }
     return !foliage_.empty();
@@ -472,19 +471,26 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
     ctx_->DrawIndexed(indexCount_, 0, 0);
 
-    if (showFoliage && !foliage_.empty() && mode != ViewMode::Wireframe) {
-        cb.flags[0] = 1.0f;
-        if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
-            std::memcpy(map.pData, &cb, sizeof cb);
-            ctx_->Unmap(cbuffer_, 0);
-        }
-        ctx_->RSSetState(solid_);
-        ctx_->PSSetSamplers(0, 1, &wrapSampler_);
-        for (const auto& b : foliage_) {
-            ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
-            ctx_->PSSetShaderResources(0, 1, &t);
-            ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
-            ctx_->Draw(b.count, 0);
+    if (mode != ViewMode::Wireframe) {
+        bool any = false;
+        for (int i = 0; i < kLayers; ++i) any = any || (showLayer[i] && !layers_[i].empty());
+        if (any) {
+            cb.flags[0] = 1.0f;
+            if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
+                std::memcpy(map.pData, &cb, sizeof cb);
+                ctx_->Unmap(cbuffer_, 0);
+            }
+            ctx_->RSSetState(solid_);
+            ctx_->PSSetSamplers(0, 1, &wrapSampler_);
+            for (int i = 0; i < kLayers; ++i) {
+                if (!showLayer[i]) continue;
+                for (const auto& b : layers_[i]) {
+                    ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
+                    ctx_->PSSetShaderResources(0, 1, &t);
+                    ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
+                    ctx_->Draw(b.count, 0);
+                }
+            }
         }
     }
 

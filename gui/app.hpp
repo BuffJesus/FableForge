@@ -18,6 +18,7 @@
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "renderer.hpp"
+#include "thingsexport.hpp"
 #include "terrainexport.hpp"
 
 namespace albion::gui {
@@ -38,6 +39,7 @@ struct ExportSettings {
     bool layers = false;
     bool walkable = false;
     bool foliage = true;     // export baked grass/plants as instances
+    bool things = true;      // export placed objects (.tng)
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;
 };
@@ -52,6 +54,10 @@ public:
     bool tick(class App& app);
     void registerWidget(const char* id);   // records the last item's rect
     bool takeScreenshot(std::string& path); // host polls this after rendering
+    // The scripted mouse position, re-applied by the host every frame so the
+    // Win32 backend's real-cursor fallback cannot override it.
+    bool virtualMouse(float& x, float& y) const { x = vmX_; y = vmY_; return haveVm_; }
+    void setVirtualMouse(float x, float y) { vmX_ = x; vmY_ = y; haveVm_ = true; }
     int exitCode() const { return failures_.empty() ? 0 : 1; }
     const std::vector<std::string>& failures() const { return failures_; }
     void fail(const std::string& why);
@@ -71,6 +77,8 @@ private:
     std::vector<std::string> log_;
     bool quit_ = false;
     float camSnap_[3] = {0, 0, 0};
+    float vmX_ = 0, vmY_ = 0;
+    bool haveVm_ = false;
     std::string logPath_;
 };
 
@@ -91,6 +99,8 @@ public:
     bool foliageBusy() const { return foliageFuture_.valid(); }
     void setPreviewFoliage(bool on);
     bool previewFoliage() const { return previewFoliage_; }
+    void setPreviewThings(bool on);
+    bool previewThings() const { return previewThings_; }
     bool previewBusy() const { return previewFuture_.valid(); }
     bool exportBusy() const { return exportFuture_.valid(); }
     bool contextReady() const { return ctx_.ready(); }
@@ -172,7 +182,9 @@ private:
     terrainexport::Scene previewScene_;   // kept for stats
     bool reloadWhenContextReady_ = false;
     int previewTexels_ = 4;
-    struct FoliageResult { std::string name; foliageexport::Scene scene; };
+    struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; };
+    bool previewThings_ = true;
+    size_t thingInstances_ = 0;
     std::future<FoliageResult> foliageFuture_;
     std::string foliageLoadedFor_;
     std::string foliagePendingName_;
