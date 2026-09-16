@@ -1,7 +1,8 @@
 # Albion Atlas
 
-Export **Fable: The Lost Chapters** terrain to `.glb` (glTF binary) or `.obj`,
-straight from your Steam install. Two small Windows executables, no dependencies:
+Export **Fable: The Lost Chapters** maps — terrain, ground textures, grass, trees and
+placed objects — to `.glb` (glTF binary) or `.obj`, straight from your Steam install.
+Two small Windows executables, no dependencies:
 
 * **`AlbionAtlasGUI.exe`** — pick your install, browse the 399 maps on the left,
   see the textured terrain in 3D in the middle, export on the right. Drag a `.lev`
@@ -10,6 +11,9 @@ straight from your Steam install. Two small Windows executables, no dependencies
 
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
+
+![Greatwood in Albion Atlas](docs/screenshot_greatwood.png)
+![Oakvale in Albion Atlas](docs/screenshot_oakvale.png)
 
 ```
 AlbionAtlas list                             # every map in FinalAlbion.wad

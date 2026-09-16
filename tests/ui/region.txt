@@ -1,0 +1,22 @@
+# Region export in world coordinates: the two GreatwoodEntrance maps come out
+# placed at their WLD origins.
+wait_maps
+wait_ready
+select Greatwood_2
+wait_loaded
+assert_state region GreatwoodEntrance
+assert_widget btn_export_region
+set outdir build/ui
+set texels 2
+set foliage 0
+set things 0
+click btn_export_region
+frames 2
+assert_state batch_active 1
+assert_state world 1
+wait_batch
+assert_state batch_done 2
+assert_state batch_failed 0
+assert_file build/ui/Greatwood_1.glb
+assert_file build/ui/Greatwood_2.glb
+quit

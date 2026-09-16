@@ -5,3 +5,4 @@ out/
 *.obj
 *.mtl
 __pycache__/
+dist/

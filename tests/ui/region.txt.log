@@ -1,0 +1,21 @@
+ok   wait_maps
+ok   wait_ready
+ok   select Greatwood_2
+ok   wait_loaded
+ok   assert_state region GreatwoodEntrance
+ok   assert_widget btn_export_region
+ok   set outdir build/ui
+ok   set texels 2
+ok   set foliage 0
+ok   set things 0
+..   click btn_export_region
+ok   frames 2
+ok   assert_state batch_active 1
+ok   assert_state world 1
+ok   wait_batch
+ok   assert_state batch_done 2
+ok   assert_state batch_failed 0
+ok   assert_file build/ui/Greatwood_1.glb
+ok   assert_file build/ui/Greatwood_2.glb
+ok   quit
+RESULT PASS

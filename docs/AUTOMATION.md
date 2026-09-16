@@ -33,7 +33,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `wait_foliage`, `set preview_foliage 0\|1`, `set foliage 0\|1` | foliage preview / export |
 | `mode textured\|wireframe\|walkable\|height` | view mode |
 | `set <key> <value>` | export settings: `format glb\|obj`, `textures 0\|1`, `layers 0\|1`, `walkable 0\|1`, `texels n`, `tile f`, `up y\|z`, `outdir path` |
-| `export` / `export_all` | start a single / batch export (state path; use `click btn_export` for the UI path) |
+| `export` / `export_all` / `export_region` | start a single / batch / region export (state path; use `click btn_export` for the UI path) |
 | `screenshot <png>` | save the next presented frame |
 | `assert_file <path>` | file exists and is non-empty |
 | `assert_state <key> <value>` | see `dump_state` for keys |
@@ -61,6 +61,7 @@ A widget is only registered on frames where it was drawn, so expand a group
 * `tests/ui/paths.txt` — tree/row/toggle clicks, OBJ + untextured export, loose file, batch.
 * `tests/ui/controls.txt` — Unreal-style camera through injected input: RMB+W flies, RMB drag looks, MMB pans, F frames, Alt+LMB orbits.
 * `tests/ui/foliage.txt` — two-stage foliage load, chip toggle, export with the Foliage node.
+* `tests/ui/region.txt` — `Export region` writes every map of a region in world coordinates.
 * `tests/ui/noinstall.txt` — run with `--install <bogus>`: honest empty state, no crash.
 
 `python tools/check_all.py` runs the unit tests, the retail CLI smoke and all UI suites.
