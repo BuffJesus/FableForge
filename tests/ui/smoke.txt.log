@@ -72,6 +72,8 @@ shot build/ui/08_exported.png
      preview_things=1
      export_things=1
      world=0
+     holes=1
+     hidden_cells=371
      region=GreatwoodEntrance
      batch_done=0
      batch_failed=0

@@ -163,8 +163,10 @@ Scene buildMesh(const forge::lev::File& level, const Options& options) {
     if (scene.vertices.empty()) { scene.minHeight = scene.maxHeight = 0; }
 
     scene.indices.reserve(size_t(scene.mapWidth) * scene.mapHeight * 6);
+    const bool masked = options.cellMask && options.cellMask->size() == size_t(scene.mapWidth) * size_t(scene.mapHeight);
     for (int y = 0; y < scene.mapHeight; ++y) {
         for (int x = 0; x < scene.mapWidth; ++x) {
+            if (masked && !(*options.cellMask)[size_t(y) * scene.mapWidth + x]) { ++scene.hiddenCells; continue; }
             const uint32_t a = uint32_t(y * cx + x), b = a + 1;
             const uint32_t c = a + uint32_t(cx), d = c + 1;
             // CCW seen from +Z in Fable space; the Y-up mapping is a proper

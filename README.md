@@ -27,7 +27,7 @@ AlbionAtlas export my_edited.lev --no-textures
 
 | Layer | Source | In the file |
 |---|---|---|
-| Heightmap mesh | `.lev` cell grid — one vertex per world unit, height = raw × 2048 | `POSITION` / `NORMAL` / `TEXCOORD_0`, two triangles per cell, Y-up (or `--up z`) |
+| Heightmap mesh | `.lev` cell grid — one vertex per world unit, height = raw × 2048; cells the engine never draws (read from the STB's real patch geometry) are cut out | `POSITION` / `NORMAL` / `TEXCOORD_0`, two triangles per drawn cell, Y-up (or `--up z`) |
 | Ground texture | the per-vertex 3-theme blend → `ENGINE_THEME` defs in `game.bin` → `textures.big` entries, DXT-decoded and baked into one albedo PNG | `baseColorTexture` on a rough, non-metallic material |
 | Splat layers (`--layers`) | same, unbaked | `_THEME_INDEX` / `_THEME_WEIGHT` vertex attributes, one PNG per theme in `<name>_themes/`, and `<name>.themes.json` |
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
@@ -45,6 +45,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --foliage           add the baked grass/plants/trees as mesh instances (needs an install)
 --things            add the placed objects from the map's .tng (needs an install)
 --creatures         with --things: include creature meshes in bind pose
+--no-holes          keep the full grid instead of cutting out undrawn cells
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 4 — see "Known gaps")
@@ -61,8 +62,6 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 * **Cliffs** — the engine projects cliff textures along four horizontal
   directions; the bake approximates that by slope angle. `--layers` gives the raw
   inputs for an exact shader.
-* **Holes / caves** — the mesh is the full grid. The engine's masked 16×16
-  patches live in the STB and are not consulted yet.
 * **Foliage frames are found by grammar, not by directory** — every LZO frame
   in the map's STB chunk that parses as a cache-group collection is used (type-1
   grass batches and type-0 single meshes incl. trees). Type-2 z-sprite batches

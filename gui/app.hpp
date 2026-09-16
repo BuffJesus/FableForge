@@ -18,6 +18,7 @@
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "renderer.hpp"
+#include "stbterrain.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 
@@ -43,6 +44,7 @@ struct ExportSettings {
     bool foliage = true;     // export baked grass/plants as instances
     bool things = true;      // export placed objects (.tng)
     bool world = false;      // place at WLD MapX/MapY so maps line up
+    bool holes = true;       // cut out cells the engine never draws (caves)
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;
 };

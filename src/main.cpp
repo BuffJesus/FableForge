@@ -27,6 +27,7 @@
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
 #include "foliageexport.hpp"
+#include "stbterrain.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 
@@ -51,6 +52,7 @@ int usage() {
         "  --foliage           add the baked grass/plants/trees as mesh instances (needs install)\n"
         "  --things            add the placed objects (fences, walls, rocks, buildings) from the .tng\n"
         "  --creatures         with --things: include creature meshes in bind pose\n"
+        "  --no-holes          keep the full grid (default: cells the engine never draws are cut out)\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 4)\n"
@@ -203,7 +205,7 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false, holes = true;
     int texels = 8;
     float tile = 4.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -218,6 +220,7 @@ int main(int argc, char** argv) {
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
         else if (a == "--world") world = true;
+        else if (a == "--no-holes") holes = false;
         else if (a == "--creatures") creatures = true;
         else if (a == "--layers") layers = true;
         else if (a == "--texels") texels = std::atoi(next().c_str());
@@ -293,6 +296,14 @@ int main(int argc, char** argv) {
             std::string err;
             if (!ctx.load(install.root, install.root / "data" / "graphics" / "pc" / "textures.big", err))
                 std::fprintf(stderr, "warning: %s\n", err.c_str());
+        }
+        albion::stbterrain::CellMask mask;
+        if (holes && install.valid) {
+            mask = albion::stbterrain::load(install.root, lev.stem().string(), file.width(), file.height());
+            if (mask.found) {
+                o.cellMask = &mask.present;
+                if (!quiet) std::printf("  engine draws %d of %d cells (%d foreground frames); the rest are cut out\n", mask.presentCells, file.width() * file.height(), mask.frames);
+            } else if (!quiet) std::printf("  no patch mask (%s): full grid\n", mask.note.c_str());
         }
         const te::Scene scene = te::buildScene(file, o, &ctx);
         albion::foliageexport::Scene fol;

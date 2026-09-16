@@ -58,6 +58,10 @@ struct Options {
     // Map-local -> world offset (Fable-space), for stitching maps by WLD placement.
     float originX = 0.0f;
     float originY = 0.0f;
+    // Optional cell presence mask (mapWidth*mapHeight, 1 = rendered). Absent
+    // cells get no triangles: cave ceilings and cut-outs open up. Built by
+    // stbterrain::load from the map's STB foreground frames.
+    const std::vector<uint8_t>* cellMask = nullptr;
     std::function<void(const std::string&)> log; // optional progress/warning sink
 };
 
@@ -101,6 +105,7 @@ struct Scene {
     std::vector<ThemeLayer> themes;
     std::vector<Image> layerImages; // per-slot decoded textures (layers mode)
     std::vector<std::string> warnings;
+    int hiddenCells = 0;            // cells omitted by the presence mask
     int unresolvedThemes = 0;       // palette slots no ENGINE_THEME could be found for
     int nameResolvedThemes = 0;     // slots resolved by NAME because the stored def index was stale
     bool walkableColor = false;

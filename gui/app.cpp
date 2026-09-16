@@ -171,6 +171,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.foliage = j.value("foliage", settings_.foliage);
         settings_.things = j.value("things", settings_.things);
         settings_.world = j.value("world", settings_.world);
+        settings_.holes = j.value("holes", settings_.holes);
     } catch (...) {}
 }
 
@@ -182,7 +183,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage}, {"things", settings_.things}, {"world", settings_.world},
+            {"foliage", settings_.foliage}, {"things", settings_.things}, {"world", settings_.world}, {"holes", settings_.holes},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -350,8 +351,9 @@ void App::startPreviewLoad() {
     reloadWhenContextReady_ = !textured;
     const te::Context* ctx = textured ? &ctx_ : nullptr;
     const int texels = previewTexels_;
-    std::string installPath = installPath_;
-    previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, texels]() {
+    const std::string installPath = installPath_;
+    const bool holes = settings_.holes;
+    previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, texels, installPath, holes]() {
         PreviewResult r; r.name = entry.key; r.textured = textured;
         std::string err;
         const std::string lev = resolveLevPath(entry, err);
@@ -362,6 +364,11 @@ void App::startPreviewLoad() {
             o.textures = textured;
             o.texelsPerCell = texels;
             o.up = te::UpAxis::Y;
+            stbterrain::CellMask mask;
+            if (holes && entry.loosePath.empty()) {
+                mask = stbterrain::load(installPath, entry.name, file.width(), file.height());
+                if (mask.found) o.cellMask = &mask.present;
+            }
             r.scene = te::buildScene(file, o, ctx);
         } catch (const std::exception& e) {
             r.error = e.what();
@@ -434,6 +441,11 @@ void App::startExportOf(const MapEntry& entry) {
             else if (s.world) r.log.push_back("warning: no world placement known for " + entry.name + ", exporting map-local");
             o.log = [&](const std::string& m) { r.log.push_back(m); };
             if (s.textures && ctx == nullptr) r.log.push_back("warning: textures not loaded yet, exporting untextured");
+            stbterrain::CellMask mask;
+            if (s.holes && ctx && entry.loosePath.empty()) {
+                mask = stbterrain::load(ctx->gameRoot(), entry.name, file.width(), file.height());
+                if (mask.found) { o.cellMask = &mask.present; r.log.push_back("cut out " + std::to_string(file.width() * file.height() - mask.presentCells) + " undrawn cells"); }
+            }
             const auto scene = te::buildScene(file, o, ctx);
             foliageexport::Scene fol;
             if (s.foliage && ctx) {
@@ -597,6 +609,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("preview_things=" + std::string(previewThings_ ? "1" : "0"));
     v.push_back("export_things=" + std::string(settings_.things ? "1" : "0"));
     v.push_back("world=" + std::string(settings_.world ? "1" : "0"));
+    v.push_back("holes=" + std::string(settings_.holes ? "1" : "0"));
+    v.push_back("hidden_cells=" + std::to_string(previewScene_.hiddenCells));
     if (const MapEntry* e = findEntry(selectedName_)) v.push_back("region=" + e->group);
     v.push_back("batch_done=" + std::to_string(batchDone_));
     v.push_back("batch_failed=" + std::to_string(batchFailed_));
@@ -898,9 +912,10 @@ void App::drawViewport(float width) {
         ImGui::PopFont();
         ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 44));
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells   |   %zu vertices   |   height %.1f .. %.1f%s",
-                           previewScene_.mapWidth, previewScene_.mapHeight, previewScene_.vertices.size(),
-                           previewScene_.minHeight, previewScene_.maxHeight,
+        ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells%s   |   %zu vertices   |   height %.1f .. %.1f%s",
+                           previewScene_.mapWidth, previewScene_.mapHeight,
+                           previewScene_.hiddenCells ? (" (" + std::to_string(previewScene_.hiddenCells) + " cut out)").c_str() : "",
+                           previewScene_.vertices.size(), previewScene_.minHeight, previewScene_.maxHeight,
                            previewTextured_ ? "" : "   |   textures loading...");
         if (previewFoliage_ || previewThings_) {
             ImGui::SameLine(0, 0);
@@ -1023,6 +1038,8 @@ void App::drawActions(float width) {
     }
     theme::toggle("Walkability as vertex colours", &settings_.walkable);
     auto_.registerWidget("toggle_walkable");
+    if (theme::toggle("Cut out undrawn cells (caves, edges)", &settings_.holes)) { previewLoadedFor_.clear(); startPreviewLoad(); }
+    auto_.registerWidget("toggle_holes");
     theme::endCard();
 
     ImGui::Dummy(ImVec2(0, 8));
@@ -1290,6 +1307,7 @@ bool Automation::tick(App& app) {
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "things") s.things = val == "1";
         else if (key == "world") s.world = val == "1";
+        else if (key == "holes") { s.holes = val == "1"; app.previewLoadedFor_.clear(); app.startPreviewLoad(); }
         else if (key == "preview_things") app.setPreviewThings(val == "1");
         else if (key == "texels") s.texels = std::atoi(val.c_str());
         else if (key == "tile") s.tile = float(std::atof(val.c_str()));
