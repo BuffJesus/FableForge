@@ -114,6 +114,11 @@ struct Scene {
 };
 
 // --- shared mesh bank access (process-wide cache over MBANK_ALLMESHES) ------
+// Largest side an object/plant texture is exported at (0 = as authored, mostly
+// 512). Halving it quarters the texture bytes, which are most of a GLB.
+void setTextureLimit(int maxDimension);
+int textureLimit();
+
 bool openMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
 const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err);
 std::string meshName(uint32_t id);

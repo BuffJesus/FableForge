@@ -51,6 +51,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --creatures         with --things: include creature meshes in bind pose
 --particles         with --things: static stand-ins for particle emitters (off by default)
 --no-water          leave out the water surface
+--max-texture <px>  shrink object/plant textures to at most <px> per side (256 = files ~1/3 smaller)
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 8 = the engine's)

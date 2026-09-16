@@ -45,6 +45,7 @@ struct ExportSettings {
     bool foliage = true;     // export baked grass/plants as instances
     bool things = true;      // export placed objects (.tng)
     bool water = true;       // export the water surface
+    int texSize = 0;         // object/plant texture cap: 0 full, 1 half (256), 2 quarter (128)
     bool world = false;      // place at WLD MapX/MapY so maps line up
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;

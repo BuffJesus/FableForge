@@ -182,6 +182,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.foliage = j.value("foliage", settings_.foliage);
         settings_.things = j.value("things", settings_.things);
         settings_.water = j.value("water", settings_.water);
+        settings_.texSize = std::clamp(j.value("texSize", settings_.texSize), 0, 2);
         settings_.world = j.value("world", settings_.world);
     } catch (...) {}
 }
@@ -194,7 +195,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"world", settings_.world},
+            {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"texSize", settings_.texSize}, {"world", settings_.world},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -453,6 +454,7 @@ void App::startExportOf(const MapEntry& entry) {
             if (s.textures && ctx == nullptr) r.log.push_back("warning: textures not loaded yet, exporting untextured");
             const auto scene = te::buildScene(file, o, ctx);
             foliageexport::Scene fol;
+            albion::foliageexport::setTextureLimit(s.texSize == 1 ? 256 : s.texSize == 2 ? 128 : 0);
             if (s.foliage && ctx) {
                 foliageexport::Options fo;
                 fo.gameRoot = ctx->gameRoot();
@@ -482,6 +484,7 @@ void App::startExportOf(const MapEntry& entry) {
         } catch (const std::exception& e) {
             r.log.push_back(std::string("error: ") + e.what());
         }
+        albion::foliageexport::setTextureLimit(0);   // previews always load full-size textures
         r.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         return r;
     });
@@ -1112,6 +1115,11 @@ void App::drawActions(float width) {
     auto_.registerWidget("toggle_things");
     theme::toggle("Water (lakes, rivers, sea)", &settings_.water);
     auto_.registerWidget("toggle_water");
+    ImGui::Dummy(ImVec2(0, S(2)));
+    theme::label("Object texture size");
+    theme::segmented("##texsize", settings_.texSize, {"Full", "Half", "Quarter"}, cardInner);
+    auto_.registerWidget("seg_texsize");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Most object textures are 512 px. Half = 256 px (files about a third smaller), Quarter = 128 px.");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The map's .tng, plus the doors, windows and building parts their meshes spawn.\nMesh instances with textures; creatures are skipped.");
     theme::endCard();
 
@@ -1369,6 +1377,7 @@ bool Automation::tick(App& app) {
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "things") s.things = val == "1";
         else if (key == "water") s.water = val == "1";
+        else if (key == "texsize") s.texSize = std::atoi(val.c_str());
         else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");
         else if (key == "preview_water") app.setPreviewWater(val == "1");

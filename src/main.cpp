@@ -56,6 +56,7 @@ int usage() {
         "  --creatures         with --things: include creature meshes in bind pose\n"
         "  --particles         with --things: static stand-ins for particle emitters (flames, sun beams, lights)\n"
         "  --no-water          leave out the water surface (lakes, rivers, sea)\n"
+        "  --max-texture <px>  shrink object/plant textures to at most <px> on a side (256 = quarter-size files)\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 8, the engine's)\n"
@@ -224,6 +225,7 @@ int main(int argc, char** argv) {
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
         else if (a == "--no-water") water = false;
+        else if (a == "--max-texture") albion::foliageexport::setTextureLimit(std::atoi(next().c_str()));
         else if (a == "--world") world = true;
         else if (a == "--creatures") creatures = true;
         else if (a == "--particles") particles = true;

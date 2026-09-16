@@ -158,6 +158,11 @@ struct RegionIndex {
 };
 RegionIndex loadRegionIndex(const std::filesystem::path& gameRoot);
 
+// PNG encoding (used by the GLB builder and the OBJ/layer writers). Cached per
+// process by image content; prewarmPng encodes a set in parallel first.
+std::vector<uint8_t> encodePng(const Image& image);
+void prewarmPng(const std::vector<const Image*>& images);
+
 // Geometry only (positions/normals/UVs/walkable/theme slots), no textures.
 Scene buildMesh(const forge::lev::File& level, const Options& options);
 
@@ -202,7 +207,7 @@ std::vector<uint8_t> decodeBc2ToRgba(const uint8_t* blocks, uint32_t w, uint32_t
 std::vector<uint8_t> bgra8ToRgba(const uint8_t* pixels, uint32_t w, uint32_t h);
 
 // RGBA8 -> PNG bytes (miniz).
-std::vector<uint8_t> encodePng(const Image& image);
+
 
 // Serialize a scene as a self-contained GLB (PNG images embedded) in memory.
 std::vector<uint8_t> buildGlb(const Scene& scene);

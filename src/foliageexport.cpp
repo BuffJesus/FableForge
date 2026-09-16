@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 #include <tuple>
+#include <atomic>
 #include <mutex>
 
 #include "forge/big.hpp"
@@ -97,6 +98,32 @@ uint32_t meshIdByName(const std::string& name) {
     return 0;
 }
 
+namespace {
+std::atomic<int> g_textureLimit{0};
+// Box-filter halving until both sides fit the limit (textures are powers of two).
+te::Image limitTexture(const te::Image& src) {
+    const int limit = g_textureLimit.load();
+    te::Image img = src;
+    while (limit > 0 && (int(img.width) > limit || int(img.height) > limit) && img.width > 1 && img.height > 1) {
+        te::Image half;
+        half.name = img.name; half.width = img.width / 2; half.height = img.height / 2;
+        half.rgba.resize(size_t(half.width) * half.height * 4);
+        for (uint32_t y = 0; y < half.height; ++y)
+            for (uint32_t x = 0; x < half.width; ++x)
+                for (int c = 0; c < 4; ++c) {
+                    const uint8_t* a = &img.rgba[((size_t(y) * 2) * img.width + x * 2) * 4 + c];
+                    const uint8_t* b = a + img.width * 4;
+                    half.rgba[(size_t(y) * half.width + x) * 4 + c] = uint8_t((int(a[0]) + a[4] + b[0] + b[4] + 2) / 4);
+                }
+        img = std::move(half);
+    }
+    return img;
+}
+} // namespace
+
+void setTextureLimit(int maxDimension) { g_textureLimit = maxDimension; }
+int textureLimit() { return g_textureLimit.load(); }
+
 Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label,
               const forge::meshpreview::Geometry& geo, bool textures,
               const te::Context& context, std::vector<te::Image>& images,
@@ -143,7 +170,7 @@ Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label
                     std::string twarn;
                     const te::Image* tex = context.texture(part.diffuseTexture, twarn);
                     if (tex) {
-                        images.push_back(*tex);
+                        images.push_back(limitTexture(*tex));
                         img = textureToImage.emplace(part.diffuseTexture, int(images.size() - 1)).first;
                     } else {
                         warnings.push_back(name + ": " + twarn);
@@ -578,6 +605,11 @@ namespace {
 
 void appendFoliage(glb::Builder& b, const Scene& f, te::UpAxis up, std::vector<int>& roots) {
     if (f.instances.empty()) return;
+    {
+        std::vector<const te::Image*> used;
+        for (const Mesh& m : f.meshes) if (m.instanceCount) for (const auto& part : m.parts) if (part.image >= 0) used.push_back(&f.images[size_t(part.image)]);
+        te::prewarmPng(used);
+    }
     std::vector<int> glMesh(f.meshes.size(), -1);
     std::map<int, int> imageToTexture;
     for (size_t mi = 0; mi < f.meshes.size(); ++mi) {
