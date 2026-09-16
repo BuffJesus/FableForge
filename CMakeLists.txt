@@ -32,12 +32,13 @@ add_library(forgecore_slice STATIC
   vendor/forgecore/src/rangecodec.cpp
   vendor/forgecore/src/tng.cpp
   vendor/forgecore/src/wld.cpp
+  src/lzo1x.cpp
   vendor/third_party/miniz/miniz.c
-  vendor/third_party/minilzo/minilzo.c
 )
 target_include_directories(forgecore_slice PUBLIC
   vendor/forgecore/include
   vendor/third_party
+  src
 )
 
 add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp)
@@ -51,6 +52,12 @@ enable_testing()
 add_executable(albionatlas_tests tests/test_export.cpp)
 target_link_libraries(albionatlas_tests PRIVATE albionatlas)
 add_test(NAME albionatlas_tests COMMAND albionatlas_tests)
+
+# LZO1X decoder verification against minilzo (GPL; TEST BINARY ONLY, never shipped).
+add_executable(albionatlas_lzo_tests tests/test_lzo.cpp tests/third_party/minilzo/minilzo.c)
+target_include_directories(albionatlas_lzo_tests PRIVATE tests/third_party)
+target_link_libraries(albionatlas_lzo_tests PRIVATE albionatlas)
+add_test(NAME albionatlas_lzo_tests COMMAND albionatlas_lzo_tests)
 
 # ---------------------------------------------------------------- GUI (Windows)
 if(WIN32)

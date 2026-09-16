@@ -1,28 +1,14 @@
 #include "forge/lzo.hpp"
 
 #include <cstring>
-#include <mutex>
 
-// minilzo 2.10, vendored at third_party/minilzo. Single-header-ish C lib.
-#include "minilzo/minilzo.h"
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
+// Albion Atlas: decoding goes through the clean-room MIT LZO1X decoder in
+// src/lzo1x.cpp instead of GPL minilzo. Compression is not needed by this
+// tool and throws.
+#include "lzo1x.hpp"
 
 namespace forge::lzo {
 namespace {
-
-void ensureInit() {
-    // lzo_init() must run once before any compress/decompress. It only validates
-    // sizeof assumptions; cheap and idempotent behind a call_once.
-    static std::once_flag once;
-    static int rc = LZO_E_OK;
-    std::call_once(once, [] { rc = ::lzo_init(); });
-    if (rc != LZO_E_OK)
-        throw std::runtime_error("forge::lzo: lzo_init failed");
-}
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.push_back(uint8_t(v & 0xFF));
@@ -38,59 +24,32 @@ uint32_t getU32(const uint8_t* p) {
 
 } // namespace
 
-std::vector<uint8_t> compress(const uint8_t* data, size_t len) {
-    ensureInit();
-    // Worst-case LZO1X expansion: len + len/16 + 64 + 3.
-    std::vector<uint8_t> out(len + len / 16 + 64 + 3);
-    static thread_local std::vector<uint8_t> wrk(LZO1X_1_MEM_COMPRESS);
-    lzo_uint outLen = out.size();
-    int rc = ::lzo1x_1_compress(data, (lzo_uint)len, out.data(), &outLen, wrk.data());
-    if (rc != LZO_E_OK)
-        throw std::runtime_error("forge::lzo: compress failed");
-    out.resize(outLen);
-    return out;
+std::vector<uint8_t> compress(const uint8_t*, size_t) {
+    throw std::runtime_error("forge::lzo: compression is not available in Albion Atlas");
 }
 
-std::vector<uint8_t> compress999(const uint8_t* data, size_t len) {
-    ensureInit();
-#ifdef _WIN32
-    using Compress999Fn = int(__cdecl*)(const unsigned char*, lzo_uint,
-                                        unsigned char*, lzo_uint*, void*);
-    static HMODULE module = ::LoadLibraryA("liblzo2-2.dll");
-    static Compress999Fn fn = module ? reinterpret_cast<Compress999Fn>(
-        ::GetProcAddress(module, "lzo1x_999_compress")) : nullptr;
-    if (!fn)
-        throw std::runtime_error("forge::lzo: liblzo2-2.dll/lzo1x_999_compress unavailable");
-    std::vector<uint8_t> out(len + len / 16 + 64 + 3);
-    static thread_local std::vector<uint8_t> wrk(0x70000);
-    lzo_uint outLen = out.size();
-    const int rc = fn(data, lzo_uint(len), out.data(), &outLen, wrk.data());
-    if (rc != LZO_E_OK) throw std::runtime_error("forge::lzo: lzo1x_999_compress failed");
-    out.resize(outLen);
-    return out;
-#else
-    (void)data; (void)len;
-    throw std::runtime_error("forge::lzo: lzo1x_999 unavailable on this platform");
-#endif
+std::vector<uint8_t> compress999(const uint8_t*, size_t) {
+    throw std::runtime_error("forge::lzo: compression is not available in Albion Atlas");
 }
 
 std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLen) {
-    ensureInit();
     std::vector<uint8_t> out(uncompLen);
-    lzo_uint outLen = uncompLen;
-    int rc = ::lzo1x_decompress_safe(data, (lzo_uint)len, out.data(), &outLen, nullptr);
-    if (rc != LZO_E_OK || outLen != uncompLen)
+    size_t outLen = uncompLen;
+    const auto st = albion::lzo1x::decompress(data, len, out.data(), &outLen);
+    if (st != albion::lzo1x::Status::Ok || outLen != uncompLen)
         throw std::runtime_error("forge::lzo: decompress failed / length mismatch");
     return out;
 }
 
 std::vector<uint8_t> decompressBounded(const uint8_t* data, size_t len,
                                        size_t maxOut) {
-    ensureInit();
     std::vector<uint8_t> out(maxOut);
-    lzo_uint outLen = maxOut;
-    int rc = ::lzo1x_decompress_safe(data, (lzo_uint)len, out.data(), &outLen, nullptr);
-    if (rc != LZO_E_OK)
+    size_t outLen = maxOut;
+    const auto st = albion::lzo1x::decompress(data, len, out.data(), &outLen);
+    // The chunked texture stream may pack trailing bytes after the marker and
+    // may legitimately fill the bound exactly; only real corruption is fatal.
+    using S = albion::lzo1x::Status;
+    if (st != S::Ok && st != S::InputNotConsumed && st != S::OutputOverrun)
         throw std::runtime_error("forge::lzo: bounded decompress failed");
     out.resize(outLen);
     return out;

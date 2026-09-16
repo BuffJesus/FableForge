@@ -98,6 +98,8 @@ clicks on real widgets, state assertions, and pixel checks on backbuffer screens
 
 MinGW-w64 (WinLibs) or MSVC, C++20. The format parsers are a pinned snapshot
 of [FableForge](https://github.com/BuffJesus)'s `forgecore` (see `vendor/VENDORED.md`).
+MIT licensed; the shipped binaries contain no GPL code (LZO1X decoding is a
+clean-room implementation verified against minilzo in the test suite).
 
 ## Credits
 
