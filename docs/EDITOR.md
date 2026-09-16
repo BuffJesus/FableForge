@@ -95,6 +95,11 @@ mouse via relative motion, keyboard):
   (faulting address + stack scan in the report); `--trace-lzo` / `--trace-bp`
   log decoder calls / a breakpoint's stack. Needs a `0atlas` save profile
   whose AutoSave is in the target map.
+* `--new-game --things NAME,...` starts a fresh game (profile `0aa` is recreated
+  through New Profile; saves cache region entities, so a loaded save would not
+  show .tng changes) and checks that each ScriptName exists in the running
+  game at the position the loose .tng says. Verified 2026-09-16: a barrel
+  placed and written into FinalAlbion.wad is found at exactly its position.
 * `restore_install.sh` -- puts the `.atlas-orig` backups back and removes only
   the loose files Atlas created (`.atlas-created` marker).
 * `patch_stb_chunk.sh` -- write a same-size chunk into `FinalAlbion_RT.stb`

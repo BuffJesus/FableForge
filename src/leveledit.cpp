@@ -638,6 +638,13 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
         rep[entryName] = std::vector<uint8_t>(text.begin(), text.end());
         forge::wad::repack(wad, rep, temp);
         fs::rename(temp, wad);
+        // a loose copy (the user's, or ours) would otherwise go stale and shadow the WAD on read
+        const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
+        if (fs::exists(loose)) {
+            if (!fs::exists(loose.string() + ".atlas-orig")) fs::copy_file(loose, loose.string() + ".atlas-orig");
+            std::ofstream f(loose, std::ios::binary | std::ios::trunc);
+            f.write(text.data(), std::streamsize(text.size()));
+        }
         original_ = text; dirtyRev_ = ~0ull;
         return true;
     } catch (const std::exception& e) {
