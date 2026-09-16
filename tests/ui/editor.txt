@@ -1,0 +1,73 @@
+# Editor: select, move, duplicate, undo, place, save to a scratch tree.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+set saveroot build/ui/install
+edit 1
+frames 2
+assert_state edit_mode 1
+assert_state doc_loaded 1
+assert_widget seg_gizmo
+assert_widget btn_save
+select_def OBJECT_BARREL_BREAKABLE
+frames 2
+frame_selected
+frames 2
+screenshot build/ui/e1_selected.png
+move_thing 1.5 0 0
+frames 2
+assert_state doc_changes 1
+assert_state doc_dirty 1
+screenshot build/ui/e2_moved.png
+rotate_thing 45
+scale_thing 1.5
+frames 2
+assert_state selected_scale 1.500
+duplicate_thing
+wait_foliage
+frames 2
+assert_state doc_changes 2
+screenshot build/ui/e3_duplicated.png
+undo
+undo
+undo
+undo
+wait_foliage
+frames 2
+assert_state doc_changes 0
+assert_state doc_dirty 0
+place OBJECT_BARREL_BREAKABLE
+wait_foliage
+frames 2
+assert_state doc_changes 1
+frame_selected
+frames 2
+screenshot build/ui/e4_placed.png
+delete_thing
+wait_foliage
+frames 2
+assert_state doc_changes 0
+pick 0.5 0.5
+frames 1
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+frames 2
+gizmo 1
+drag_gizmo 60 0
+frames 3
+assert_state doc_changes 1
+screenshot build/ui/e5_gizmo_drag.png
+undo
+frames 1
+select_def OBJECT_BARREL_BREAKABLE
+move_thing 0 0 1
+frames 1
+save_level
+assert_file build/ui/install/data/Levels/FinalAlbion/StartOakValeWest.tng
+assert_state doc_dirty 0
+click seg_panel
+frames 2
+dump_state
+quit

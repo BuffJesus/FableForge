@@ -11,7 +11,7 @@ ok   mouse_down right
 ok   key_down W
 ok   frames 30
 ok   key_up W
-ok   assert_camera_moved 0.5  (moved 2.714684)
+ok   assert_camera_moved 0.5  (moved 2.768973)
 ok   snapshot_camera
 ok   mouse_delta 80 0
 ok   frames 2
@@ -78,5 +78,12 @@ shot build/ui/c3_orbited.png
      batch_failed=0
      filter=
      camera=-12.54,130.33,-10.44
+     edit_mode=0
+     doc_loaded=1
+     doc_things=355
+     doc_dirty=0
+     doc_changes=0
+     selected_thing=-1
+     gizmo=1
 ok   quit
 RESULT PASS

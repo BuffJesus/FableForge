@@ -22,6 +22,7 @@ resolve to meshes.
 - nlohmann/json — MIT, Niels Lohmann
 - miniz — MIT, Rich Geldreich / Tenacious Software (PNG encoder, zlib for bin)
 - Dear ImGui (`vendor/imgui`) — MIT, Omar Cornut; Win32 + DX11 backends
+- ImGuizmo (`vendor/ImGuizmo`) — MIT, Cedric Guillemet; the editor's transform gizmo
 
 ## Test-only
 - `tests/third_party/minilzo` — GPL-2.0+, Markus F.X.J. Oberhumer. Linked ONLY

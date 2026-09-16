@@ -468,6 +468,18 @@ int Context::graphicModelId(const std::string& name, uint32_t& modelId) const {
     return code;
 }
 
+std::vector<std::pair<std::string, std::string>> Context::definitions(const std::vector<std::string>& types) const {
+    std::vector<std::pair<std::string, std::string>> out;
+    if (!ready() || !impl_->defs) return out;
+    for (const auto& e : impl_->defs->entries()) {
+        if (e.name.empty()) continue;
+        for (const auto& t : types)
+            if (e.definition == t) { out.emplace_back(e.name, e.definition); break; }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
 Context::Context() : impl_(std::make_shared<Impl>()) {}
 bool Context::ready() const { return impl_ && impl_->ready; }
 fs::path Context::gameRoot() const { return impl_ ? impl_->gameRoot : fs::path(); }

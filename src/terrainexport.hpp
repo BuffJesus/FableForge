@@ -188,6 +188,9 @@ public:
     // (MBANK_ALLMESHES). Result codes: 1 = found (modelId set, may be 0 = no
     // model), 0 = definition not in game.bin, -1 = def type not decodable.
     int graphicModelId(const std::string& definitionName, uint32_t& modelId) const;
+    // Names of every game.bin definition whose type is one of `types` (e.g.
+    // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
+    std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;
     struct Impl;
     Impl& impl() const { return *impl_; }
 private:

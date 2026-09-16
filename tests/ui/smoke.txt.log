@@ -79,5 +79,12 @@ shot build/ui/08_exported.png
      batch_failed=0
      filter=
      camera=166.58,100.27,-75.55
+     edit_mode=0
+     doc_loaded=1
+     doc_things=313
+     doc_dirty=0
+     doc_changes=0
+     selected_thing=-1
+     gizmo=1
 ok   quit
 RESULT PASS

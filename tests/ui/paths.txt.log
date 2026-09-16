@@ -80,5 +80,12 @@ ok   filter
      batch_failed=0
      filter=
      camera=101.25,179.35,35.71
+     edit_mode=0
+     doc_loaded=1
+     doc_things=0
+     doc_dirty=0
+     doc_changes=0
+     selected_thing=-1
+     gizmo=1
 ok   quit
 RESULT PASS

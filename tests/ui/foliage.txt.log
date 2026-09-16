@@ -68,5 +68,12 @@ ok   assert_file build/ui/StartOakValeWest.glb
      batch_failed=0
      filter=
      camera=146.05,56.70,-80.10
+     edit_mode=0
+     doc_loaded=1
+     doc_things=874
+     doc_dirty=0
+     doc_changes=0
+     selected_thing=-1
+     gizmo=1
 ok   quit
 RESULT PASS

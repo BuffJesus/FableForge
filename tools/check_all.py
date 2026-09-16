@@ -28,6 +28,7 @@ def main():
     ok &= run("ui controls", [gui, "--auto", "tests/ui/controls.txt"])
     ok &= run("ui foliage", [gui, "--auto", "tests/ui/foliage.txt"])
     ok &= run("ui region export", [gui, "--auto", "tests/ui/region.txt"])
+    ok &= run("ui editor", [gui, "--auto", "tests/ui/editor.txt"])
     ok &= run("ui no-install", [gui, "--auto", "tests/ui/noinstall.txt", "--install", "D:/definitely/not/fable"])
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1

@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "ImGuizmo.h"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -309,6 +311,7 @@ void App::selectMap(const std::string& nameOrKey) {
     foliageInstances_ = 0;
     thingInstances_ = 0;
     foliageStatus_.clear();
+    openDocument();
     startPreviewLoad();
 }
 
@@ -332,7 +335,9 @@ void App::startFoliageLoad() {
     const MapEntry entry = *found;
     const te::Context* ctx = &ctx_;
     const std::string root = installPath_;
-    foliageFuture_ = std::async(std::launch::async, [entry, ctx, root]() {
+    const std::string tngText = documentLoaded() ? doc_.text() : std::string();
+    if (documentLoaded()) syncedRevision_ = doc_.revision();
+    foliageFuture_ = std::async(std::launch::async, [entry, ctx, root, tngText]() {
         FoliageResult r; r.name = entry.key;
         foliageexport::Options fo;
         fo.gameRoot = root;
@@ -344,6 +349,7 @@ void App::startFoliageLoad() {
         to.gameRoot = root;
         to.textures = true;
         to.up = te::UpAxis::Y;
+        to.tngText = tngText;
         try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
         return r;
     });
@@ -531,7 +537,12 @@ void App::pollWorkers() {
     }
     if (foliageFuture_.valid() && foliageFuture_.wait_for(0ms) == std::future_status::ready) {
         FoliageResult r = foliageFuture_.get();
-        if (r.name == selectedName_) {
+        if (r.name == selectedName_ && r.thingsOnly) {
+            thingInstances_ = r.things.instances.size();
+            renderer_.uploadThings(r.things, te::UpAxis::Y);
+            bindInstances(r.things);
+            for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
+        } else if (r.name == selectedName_) {
             foliageLoadedFor_ = r.name;
             foliageInstances_ = r.scene.instances.size();
             thingInstances_ = r.things.instances.size();
@@ -543,6 +554,7 @@ void App::pollWorkers() {
             }
             if (!r.things.instances.empty()) {
                 renderer_.uploadThings(r.things, te::UpAxis::Y);
+                bindInstances(r.things);
                 foliageStatus_ += ", " + std::to_string(r.things.instances.size()) + " objects";
             } else if (r.things.found) {
                 foliageStatus_ += ", no placed objects";
@@ -552,6 +564,7 @@ void App::pollWorkers() {
                 if (w.rfind("mesh", 0) != 0) pushLog("foliage: " + w, 1);
         }
         if (!foliagePendingName_.empty()) { foliagePendingName_.clear(); if (!foliageLoaded()) startFoliageLoad(); }
+        else if (thingsReloadPending_) startThingsReload();
     }
     if (exportFuture_.valid() && exportFuture_.wait_for(0ms) == std::future_status::ready) {
         ExportResult r = exportFuture_.get();
@@ -630,6 +643,24 @@ std::vector<std::string> App::stateDump() const {
     char cam[96];
     std::snprintf(cam, sizeof cam, "%.2f,%.2f,%.2f", camera_.posX, camera_.posY, camera_.posZ);
     v.push_back(std::string("camera=") + cam);
+    v.push_back("edit_mode=" + std::string(editMode_ ? "1" : "0"));
+    v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
+    v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
+    v.push_back("doc_dirty=" + std::string(documentLoaded() && doc_.dirty() ? "1" : "0"));
+    v.push_back("doc_changes=" + std::to_string(documentLoaded() ? doc_.changes().size() : 0));
+    v.push_back("selected_thing=" + std::to_string(selectedThing_));
+    if (documentLoaded() && selectedThing_ >= 0) {
+        v.push_back("selected_def=" + doc_.summary(size_t(selectedThing_)).definition);
+        editor::Frame f;
+        if (doc_.frameOf(size_t(selectedThing_), f)) {
+            char p[128];
+            std::snprintf(p, sizeof p, "%.3f,%.3f,%.3f", f.pos[0], f.pos[1], f.pos[2]);
+            v.push_back(std::string("selected_pos=") + p);
+            std::snprintf(p, sizeof p, "%.3f", f.scale);
+            v.push_back(std::string("selected_scale=") + p);
+        }
+    }
+    v.push_back("gizmo=" + std::to_string(gizmoOp_));
     return v;
 }
 
@@ -638,6 +669,9 @@ std::vector<std::string> App::stateDump() const {
 void App::frame(float dt) {
     time_ += dt;
     pollWorkers();
+    ImGuizmo::BeginFrame();
+    syncInstances();
+    editorShortcuts();
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
@@ -850,7 +884,6 @@ void App::drawExplorer(float width) {
 //   F             frame the whole map
 void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     ImGuiIO& io = ImGui::GetIO();
-    (void)origin;
     if (!renderer_.hasMesh()) return;
     const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     // Keep flying while RMB is held even if the cursor leaves the image.
@@ -870,14 +903,22 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
         const float boost = io.KeyShift ? 3.0f : 1.0f;
         if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
     } else {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        const bool gizmo = editMode_ && (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && !gizmo) { clickArmed_ = true; clickPos_ = io.MousePos; }
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) && !gizmo) {
             if (io.KeyAlt) camera_.orbit(-dx * 0.008f, dy * 0.008f);
             else { camera_.turn(-dx * 0.005f); camera_.dolly(-dy * 0.02f); }
         }
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && clickArmed_) {
+            clickArmed_ = false;
+            const float mx = io.MousePos.x - clickPos_.x, my = io.MousePos.y - clickPos_.y;
+            if (editMode_ && !gizmo && mx * mx + my * my < 16.0f && size.x > 0 && size.y > 0)
+                pickAt((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
+        }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) camera_.pan(-dx * panK, dy * panK);
-        if (io.MouseWheel != 0 && viewportHovered_) camera_.dolly(io.MouseWheel);
+        if (io.MouseWheel != 0 && viewportHovered_ && !ImGuizmo::IsUsing()) camera_.dolly(io.MouseWheel);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.KeyCtrl && !ImGui::IsAnyItemActive()) frameMap();
+    if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.KeyCtrl && !ImGui::IsAnyItemActive()) { if (editMode_ && selectedThing_ >= 0) frameSelected(); else frameMap(); }
 }
 
 void App::frameMap() {
@@ -899,8 +940,10 @@ void App::drawViewport(float width) {
     if (srv) {
         ImGui::SetCursorScreenPos(origin);
         ImGui::Image((ImTextureID)(intptr_t)srv, size);
+        viewportOrigin_ = origin; viewportSize_ = size;
         viewportHovered_ = ImGui::IsItemHovered();
         handleViewportInput(origin, size);
+        drawGizmo(origin, size);
     }
     auto_.registerWidget("viewport");
 
@@ -1026,7 +1069,7 @@ void App::drawActions(float width) {
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    const float footerHeight = editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
     // The settings stack takes what it needs (measured last frame); the activity log
     // takes the rest, never less than a few lines. On a short window the settings
     // scroll instead of pushing the export button off screen.
@@ -1040,13 +1083,21 @@ void App::drawActions(float width) {
     ImGui::BeginChild("##settings", ImVec2(width, settingsH), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
 
-    ImGui::SetCursorPos(ImVec2(pad, S(14)));
-    ImGui::PushFont(fontBold_);
-    ImGui::TextColored(theme::vec(theme::Muted), "EXPORT");
-    ImGui::PopFont();
-    ImGui::Dummy(ImVec2(0, S(4)));
+    ImGui::SetCursorPos(ImVec2(pad, S(12)));
+    {
+        int tab = editMode_ ? 1 : 0;
+        if (theme::segmented("##paneltab", tab, {"Export", "Edit"}, inner)) setEditMode(tab == 1);
+        auto_.registerWidget("seg_panel");
+    }
+    ImGui::Dummy(ImVec2(0, S(8)));
 
     const float cardInner = inner - S(24);
+    if (editMode_) {
+        drawEditPanel(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(6)));
+        settingsContentH_ = ImGui::GetCursorPosY();
+        ImGui::EndChild();  // ##settings
+    } else {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##fmt", inner);
     theme::label("Format");
@@ -1151,10 +1202,14 @@ void App::drawActions(float width) {
     ImGui::Dummy(ImVec2(0, S(6)));
     settingsContentH_ = ImGui::GetCursorPosY();
     ImGui::EndChild();  // ##settings
+    }
 
     // ---- footer
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + pad, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - pad, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
     ImGui::Dummy(ImVec2(0, S(8)));
+    if (editMode_) {
+        drawEditFooter(pad, inner);
+    } else {
     ImGui::SetCursorPosX(pad);
     const bool canExport = !selectedName_.empty() && !exportFuture_.valid() && installValid_;
     const MapEntry* selEntry = findEntry(selectedName_);
@@ -1200,6 +1255,7 @@ void App::drawActions(float width) {
             if (theme::ghostButton("Open output folder", ImVec2(inner, S(32)))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
             auto_.registerWidget("btn_open_folder");
         }
+    }
     }
 
     // Activity log takes whatever height is left.
@@ -1277,6 +1333,18 @@ bool Automation::tick(App& app) {
         if (clickPhase_ == 1) io.AddMouseButtonEvent(0, true);
         if (clickPhase_ == 2) io.AddMouseButtonEvent(0, false);
         if (++clickPhase_ > 3) { clickTarget_.clear(); clickPhase_ = 0; }
+        return true;
+    }
+    if (dragPhase_ > 0) {
+        // drag_gizmo: press on the selected pivot, glide by (dx, dy) over a few frames, release
+        ImGuiIO& io = ImGui::GetIO();
+        const int glide = 8;
+        if (dragPhase_ == 1) { if (!app.selectedPivotScreen(dragX0_, dragY0_)) { fail("drag_gizmo: no selected pivot on screen"); dragPhase_ = 0; return true; } setVirtualMouse(dragX0_, dragY0_); }
+        else if (dragPhase_ == 2) io.AddMouseButtonEvent(0, true);
+        else if (dragPhase_ <= 2 + glide) { const float t = float(dragPhase_ - 2) / float(glide); setVirtualMouse(dragX0_ + dragDx_ * t, dragY0_ + dragDy_ * t); }
+        else if (dragPhase_ == 3 + glide) io.AddMouseButtonEvent(0, false);
+        io.AddMousePosEvent(vmX_, vmY_);
+        if (++dragPhase_ > 4 + glide) dragPhase_ = 0;
         return true;
     }
     if (waitFrames_ > 0) { --waitFrames_; return true; }
@@ -1395,9 +1463,28 @@ bool Automation::tick(App& app) {
         else if (key == "gain") { s.gain = float(std::atof(val.c_str())); app.previewLoadedFor_.clear(); app.startPreviewLoad(); }
         else if (key == "up") s.up = lower(val) == "z" ? 1 : 0;
         else if (key == "outdir") { s.outDir = val; std::snprintf(app.outDirBuf_, sizeof app.outDirBuf_, "%s", val.c_str()); }
+        else if (key == "saveroot") app.setSaveRoot(val);
         else fail("set: unknown key " + key);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "edit") { app.setEditMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "gizmo") { app.setGizmoOp(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "pick") { float u = 0, v = 0; std::istringstream(rest) >> u >> v; const int t = app.pickAt(u, v); note("ok   " + line + " -> thing " + std::to_string(t)); ++pc_; }
+    else if (cmd == "select_def") { const int t = app.selectByDefinition(rest); if (t < 0) fail("select_def: not found " + rest); else note("ok   " + line + " -> " + std::to_string(t)); ++pc_; }
+    else if (cmd == "select_thing") { app.selectThing(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "move_thing") { float x = 0, y = 0, z = 0; std::istringstream(rest) >> x >> y >> z; app.moveSelected(x, y, z); note("ok   " + line); ++pc_; }
+    else if (cmd == "rotate_thing") { app.rotateSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "scale_thing") { app.scaleSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "ground_thing") { app.snapSelectedToGround(); note("ok   " + line); ++pc_; }
+    else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
+    else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
+    else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "place") { if (!app.placeDefinition(rest)) fail("place failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "save_level") { if (!app.saveDocument()) fail("save failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
+    else if (cmd == "frame_selected") { app.frameSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "export") { app.startExport(); note("ok   " + line); ++pc_; }
     else if (cmd == "export_all") { app.startBatchExport(app.visibleMapNames()); note("ok   " + line); ++pc_; }
     else if (cmd == "export_region") {

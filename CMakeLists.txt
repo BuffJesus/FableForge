@@ -53,16 +53,18 @@ if(WIN32)
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/ImGuizmo/ImGuizmo.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_impl_win32.cpp
     ${IMGUI_DIR}/imgui_impl_dx11.cpp
   )
-  target_include_directories(albion_imgui PUBLIC ${IMGUI_DIR})
+  target_include_directories(albion_imgui PUBLIC ${IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/vendor/ImGuizmo)
   target_link_libraries(albion_imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi ole32 shell32 uuid)
 
   add_executable(AlbionAtlasGUI WIN32
     gui/main.cpp
     gui/app.cpp
+    gui/editor.cpp
     gui/theme.cpp
     gui/renderer.cpp
   )

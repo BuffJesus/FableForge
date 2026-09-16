@@ -16,8 +16,11 @@
 #include <string>
 #include <vector>
 
+#include <array>
+
 #include "imgui.h"
 #include "foliageexport.hpp"
+#include "leveledit.hpp"
 #include "renderer.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
@@ -80,6 +83,9 @@ private:
     std::string pendingShot_;
     std::string clickTarget_;
     int clickPhase_ = 0;
+    float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
+    int dragPhase_ = 0;
+    float dragX0_ = 0, dragY0_ = 0;
     std::map<std::string, ImVec4> widgets_;
     std::vector<std::string> failures_;
     std::vector<std::string> log_;
@@ -137,6 +143,38 @@ public:
     void requestQuit() { quit_ = true; }
     std::vector<std::string> stateDump() const;
 
+    // ---- editor (placed things). The document is the source of truth; the
+    // preview instances follow it (fast path for moves, reload for structure).
+    void setEditMode(bool on);
+    bool editMode() const { return editMode_; }
+    bool documentLoaded() const { return docLoadedFor_ == selectedName_ && !selectedName_.empty(); }
+    editor::Document& document() { return doc_; }
+    int selectedThing() const { return selectedThing_; }
+    void selectThing(int index);
+    int selectByDefinition(const std::string& def);   // first thing with this DefinitionType
+    // Screen position (window pixels) of the selected thing's pivot, for scripted gizmo drags.
+    bool selectedPivotScreen(float& x, float& y) const;
+    void setGizmoOp(int op) { gizmoOp_ = op; }
+    int gizmoOp() const { return gizmoOp_; }
+    // Ray pick at viewport-relative (u, v) in [0,1]; selects the hit thing.
+    int pickAt(float u, float v);
+    void moveSelected(float dx, float dy, float dz);   // map-local Fable units
+    void rotateSelected(float degrees);                // yaw about the up axis
+    void scaleSelected(float factor);
+    void snapSelectedToGround();
+    void duplicateSelected();
+    void deleteSelected();
+    void editUndo();
+    void editRedo();
+    void frameSelected();
+    bool placeDefinition(const std::string& def);      // at the camera focus point, on the ground
+    bool saveDocument();                                // loose .tng under saveRoot()
+    bool deployDocument();                              // FinalAlbion.wad under saveRoot()
+    void revertDocument();
+    // Where saves go: the install by default; tests point it at a scratch tree.
+    void setSaveRoot(const std::string& root) { saveRoot_ = root; }
+    std::string saveRoot() const { return saveRoot_.empty() ? installPath_ : saveRoot_; }
+
 private:
     void scanInstall(const std::string& root);
     void startContextLoad();
@@ -156,6 +194,40 @@ private:
     void drawActions(float width);
     void handleViewportInput(const ImVec2& origin, const ImVec2& size);
     void frameMap();
+
+    // editor internals (gui/editor.cpp)
+    void openDocument();
+    void bindInstances(const foliageexport::Scene& things);   // after a things upload
+    void syncInstances();                                     // document revision -> instance worlds / reload
+    void applyFrame(int thing, const editor::Frame& f);       // preview only (no command)
+    bool frameOfSelected(editor::Frame& f) const;
+    void commitFrame(const editor::Frame& f);                 // document command
+    void drawGizmo(const ImVec2& origin, const ImVec2& size);
+    void editorShortcuts();
+    void drawEditPanel(float pad, float inner, float cardInner);
+    void drawEditFooter(float pad, float inner);
+    void startThingsReload();
+    bool editMode_ = false;
+    editor::Document doc_;
+    std::string docLoadedFor_;
+    int selectedThing_ = -1;
+    uint64_t selectedUid_ = 0;
+    int gizmoOp_ = 1;            // 0 select, 1 move, 2 rotate, 3 scale
+    bool gizmoSnap_ = false;
+    bool gizmoWasUsing_ = false;
+    editor::Frame gizmoFrame_;   // frame while dragging
+    std::vector<std::array<float, 16>> instLocal_;   // instance = local * thing world
+    std::vector<uint64_t> instUids_;                 // uid per thing index when instances were bound
+    uint64_t syncedRevision_ = 0;
+    bool thingsReloadPending_ = false;
+    std::string saveRoot_;
+    char defSearch_[64] = {};
+    std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
+    char thingSearch_[64] = {};
+    bool confirmDeploy_ = false;
+    bool clickArmed_ = false;
+    ImVec2 clickPos_;
+    ImVec2 viewportOrigin_, viewportSize_;
 
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;
@@ -193,7 +265,7 @@ private:
     terrainexport::Scene previewScene_;   // kept for stats
     bool reloadWhenContextReady_ = false;
     int previewTexels_ = 4;
-    struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; };
+    struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; bool thingsOnly = false; };
     bool previewThings_ = true;
     size_t thingInstances_ = 0;
     std::future<FoliageResult> foliageFuture_;
