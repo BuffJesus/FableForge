@@ -30,6 +30,10 @@ std::vector<uint8_t> compress999(const uint8_t* data, size_t len);
 // Raw LZO1X decompress into a caller-known uncompressed length.
 std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLen);
 
+// Non-throwing probe: true only when `data` decodes to EXACTLY `out.size()`
+// bytes with no error (the frame-scanner gate in stbbake).
+bool tryDecompress(const uint8_t* data, size_t len, std::vector<uint8_t>& out);
+
 // Raw LZO1X decompress where only an UPPER BOUND on the output is known (the
 // Fable chunked-texture stream stores no per-chunk uncompressed length; the
 // bound is the bytes still owed by the mip surface). Returns exactly what the

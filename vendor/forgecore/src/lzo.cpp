@@ -2,9 +2,10 @@
 
 #include <cstring>
 
-// Albion Atlas: decoding goes through the clean-room MIT LZO1X decoder in
-// src/lzo1x.cpp instead of GPL minilzo. Compression is not needed by this
-// tool and throws.
+// Albion Atlas: forge::lzo is backed by the clean-room MIT LZO1X codec in
+// src/lzo1x.cpp instead of GPL minilzo. compress999 (liblzo2's lzo1x_999
+// optimiser) has no clean-room equivalent here; callers fall back to
+// compress, whose LZO1X-1 class streams the retail loader decodes fine.
 #include "lzo1x.hpp"
 
 namespace forge::lzo {
@@ -24,12 +25,12 @@ uint32_t getU32(const uint8_t* p) {
 
 } // namespace
 
-std::vector<uint8_t> compress(const uint8_t*, size_t) {
-    throw std::runtime_error("forge::lzo: compression is not available in Albion Atlas");
+std::vector<uint8_t> compress(const uint8_t* data, size_t len) {
+    return albion::lzo1x::compress(data, len);
 }
 
 std::vector<uint8_t> compress999(const uint8_t*, size_t) {
-    throw std::runtime_error("forge::lzo: compression is not available in Albion Atlas");
+    throw std::runtime_error("forge::lzo: lzo1x_999 is not available in Albion Atlas (use compress)");
 }
 
 std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLen) {
@@ -39,6 +40,12 @@ std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLe
     if (st != albion::lzo1x::Status::Ok || outLen != uncompLen)
         throw std::runtime_error("forge::lzo: decompress failed / length mismatch");
     return out;
+}
+
+bool tryDecompress(const uint8_t* data, size_t len, std::vector<uint8_t>& out) {
+    size_t outLen = out.size();
+    const auto st = albion::lzo1x::decompress(data, len, out.data(), &outLen);
+    return st == albion::lzo1x::Status::Ok && outLen == out.size();
 }
 
 std::vector<uint8_t> decompressBounded(const uint8_t* data, size_t len,

@@ -150,4 +150,96 @@ Status decompress(const uint8_t* in, size_t inLen, uint8_t* out, size_t* outLen)
     #undef NEED_OUT
 }
 
+// ---------------------------------------------------------------- encoder
+
+std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
+    std::vector<uint8_t> out;
+    out.reserve(n / 2 + 16);
+    constexpr size_t kHashBits = 15;
+    constexpr size_t kMaxDist = 0xBFFF;      // M4 ceiling
+    std::vector<uint32_t> table(size_t(1) << kHashBits, 0xFFFFFFFFu);
+    auto hash = [&](size_t i) {
+        const uint32_t v = uint32_t(in[i]) | (uint32_t(in[i + 1]) << 8) | (uint32_t(in[i + 2]) << 16);
+        return size_t((v * 0x9E3779B1u) >> (32 - kHashBits));
+    };
+    auto extend = [&](size_t rem) {        // zero-run length continuation
+        while (rem > 255) { out.push_back(0); rem -= 255; }
+        out.push_back(uint8_t(rem));
+    };
+
+    size_t litStart = 0;
+    size_t litBitsPos = SIZE_MAX;            // byte whose low 2 bits hold the next 0..3 literal count
+    bool first = true;
+
+    auto flushLiterals = [&](size_t end) {
+        const size_t L = end - litStart;
+        if (first) {
+            first = false;
+            if (L == 0) { /* cannot happen: a match needs history */ }
+            else if (L <= 3) out.push_back(uint8_t(17 + L));
+            else if (L <= 18) out.push_back(uint8_t(L - 3));
+            else { out.push_back(0); extend(L - 18); }
+        } else if (L == 0) {
+            // nothing: previous token's literal bits stay 0
+        } else if (L <= 3) {
+            out[litBitsPos] |= uint8_t(L);
+        } else if (L <= 18) {
+            out.push_back(uint8_t(L - 3));
+        } else {
+            out.push_back(0); extend(L - 18);
+        }
+        out.insert(out.end(), in + litStart, in + end);
+        litStart = end;
+    };
+
+    size_t i = 0;
+    while (i + 3 <= n) {
+        const size_t h = hash(i);
+        const uint32_t cand = table[h];
+        table[h] = uint32_t(i);
+        size_t len = 0, dist = 0;
+        if (cand != 0xFFFFFFFFu && i - cand <= kMaxDist &&
+            in[cand] == in[i] && in[cand + 1] == in[i + 1] && in[cand + 2] == in[i + 2]) {
+            dist = i - cand;
+            len = 3;
+            const size_t maxLen = n - i;
+            while (len < maxLen && in[cand + len] == in[i + len]) ++len;
+        }
+        // A 3-byte match beyond M2 range costs as much as it saves; skip it.
+        if (len < 3 || (dist > 2048 && len < 4)) { ++i; continue; }
+
+        flushLiterals(i);
+        if (dist <= 2048 && len <= 8) {                       // M2
+            litBitsPos = out.size();
+            out.push_back(uint8_t(((len - 1) << 5) | (((dist - 1) & 7) << 2)));
+            out.push_back(uint8_t((dist - 1) >> 3));
+        } else if (dist <= 16384) {                           // M3
+            const size_t t = len - 2;
+            if (t <= 31) out.push_back(uint8_t(0x20 | t));
+            else { out.push_back(0x20); extend(t - 31); }
+            const size_t d = dist - 1;
+            litBitsPos = out.size();
+            out.push_back(uint8_t((d & 0x3F) << 2));
+            out.push_back(uint8_t(d >> 6));
+        } else {                                              // M4
+            const size_t d = dist - 0x4000;                   // 1..0x7FFF
+            uint8_t t0 = uint8_t(0x10 | ((d >> 11) & 8));
+            const size_t t = len - 2;
+            if (t <= 7) out.push_back(uint8_t(t0 | t));
+            else { out.push_back(t0); extend(t - 7); }
+            const size_t d14 = d & 0x3FFF;
+            litBitsPos = out.size();
+            out.push_back(uint8_t((d14 & 0x3F) << 2));
+            out.push_back(uint8_t(d14 >> 6));
+        }
+        // index the matched bytes so the next search can reach into them
+        for (size_t k = i + 1; k < i + len && k + 3 <= n; ++k) table[hash(k)] = uint32_t(k);
+        i += len;
+        litStart = i;
+    }
+    flushLiterals(n);   // trailing literals (empty input: nothing but the end marker)
+    out.push_back(0x11); out.push_back(0x00); out.push_back(0x00);   // end marker
+    return out;
+}
+
 } // namespace albion::lzo1x

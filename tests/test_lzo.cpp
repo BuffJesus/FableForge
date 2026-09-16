@@ -20,7 +20,52 @@ namespace fs = std::filesystem;
 
 namespace {
 
-int g_frames = 0, g_textures = 0, g_fail = 0;
+int g_frames = 0, g_textures = 0, g_fail = 0, g_roundtrips = 0;
+size_t g_rtIn = 0, g_rtOut = 0;
+
+// Encoder check: our stream must decode to the input through minilzo AND our
+// decoder, and consume exactly the stream.
+void roundTrip(const std::vector<uint8_t>& data, const char* what) {
+    const auto enc = albion::lzo1x::compress(data.data(), data.size());
+    std::vector<uint8_t> ref(data.size() + 8), mine(data.size() + 8);
+    lzo_uint refLen = data.size();
+    const int rc = lzo1x_decompress_safe(enc.data(), lzo_uint(enc.size()), ref.data(), &refLen, nullptr);
+    size_t mineLen = data.size();
+    const auto st = albion::lzo1x::decompress(enc.data(), enc.size(), mine.data(), &mineLen);
+    const bool refOk = rc == LZO_E_OK && size_t(refLen) == data.size() && std::memcmp(ref.data(), data.data(), data.size()) == 0;
+    const bool mineOk = st == albion::lzo1x::Status::Ok && mineLen == data.size() && std::memcmp(mine.data(), data.data(), data.size()) == 0;
+    if (!refOk || !mineOk) {
+        std::fprintf(stderr, "ROUNDTRIP FAIL %s (%zu bytes -> %zu): minilzo rc=%d len=%zu, mine %s len=%zu\n", what, data.size(), enc.size(), rc,
+                     size_t(refLen), albion::lzo1x::statusName(st), mineLen);
+        ++g_fail;
+    }
+    ++g_roundtrips; g_rtIn += data.size(); g_rtOut += enc.size();
+}
+
+void checkEncoderSynthetic() {
+    std::vector<uint8_t> v;
+    for (size_t n = 0; n <= 40; ++n) { v.assign(n, 'a'); roundTrip(v, "run-of-a"); }
+    for (size_t n = 0; n <= 40; ++n) { v.resize(n); for (size_t i = 0; i < n; ++i) v[i] = uint8_t(i * 7 + 3); roundTrip(v, "short-ramp"); }
+    v.assign(100000, 0); roundTrip(v, "zeros-100k");
+    // pseudo-random: incompressible, exercises long literal runs
+    uint32_t s = 12345; v.resize(70000); for (auto& b : v) { s = s * 1664525u + 1013904223u; b = uint8_t(s >> 24); } roundTrip(v, "random-70k");
+    // periodic with distances that hit each match class and the extended-length paths
+    for (size_t period : {1u, 2u, 3u, 7u, 100u, 2048u, 2049u, 3000u, 16384u, 16385u, 20000u, 49151u, 49152u, 60000u}) {
+        v.resize(period * 3 + 777);
+        for (size_t i = 0; i < v.size(); ++i) v[i] = uint8_t((i % period) * 31 + (i % period) / 7);
+        roundTrip(v, "periodic");
+    }
+    // text-like: matches of every length 3..40 separated by 0..5 literals
+    v.clear(); s = 99;
+    while (v.size() < 200000) {
+        s = s * 1664525u + 1013904223u;
+        const size_t lits = (s >> 28) % 6, len = 3 + (s >> 20) % 38;
+        for (size_t k = 0; k < lits; ++k) v.push_back(uint8_t(s >> (k * 3)));
+        if (v.size() > 5000) { const size_t back = 1 + (s >> 8) % 4000; for (size_t k = 0; k < len; ++k) v.push_back(v[v.size() - back]); }
+    }
+    roundTrip(v, "mixed-200k");
+    std::printf("  encoder synthetic: %d round trips\n", g_roundtrips);
+}
 
 bool same(const uint8_t* in, size_t inLen, size_t uncomp, const char* what) {
     std::vector<uint8_t> ref(uncomp + 8), mine(uncomp + 8);
@@ -51,6 +96,10 @@ void checkChunk(const std::vector<uint8_t>& d, const std::string& name) {
             if (off + 8 + size_t(comp) > d.size()) continue;
             if (same(d.data() + off + 8, comp, unc, (name + "@" + std::to_string(off)).c_str())) {
                 ++g_frames; ++local;
+                {   // re-encode the decoded body with our encoder and check both decoders read it back
+                    std::vector<uint8_t> body(unc); size_t bl = unc;
+                    if (albion::lzo1x::decompress(d.data() + off + 8, comp, body.data(), &bl) == albion::lzo1x::Status::Ok) roundTrip(body, name.c_str());
+                }
                 off = ((off + 8 + comp + 3) & ~size_t(3)) - 4;
                 break;
             }
@@ -117,6 +166,7 @@ void checkCorrupt() {
 int main() {
     if (lzo_init() != LZO_E_OK) { std::fprintf(stderr, "minilzo init failed\n"); return 1; }
     checkCorrupt();
+    checkEncoderSynthetic();
     fs::path root;
     try {
         const auto env = forge::env::Environment::detect();
@@ -139,6 +189,7 @@ int main() {
             if (int32_t(e.id) == bankIndex) { checkChunk(archive.read(e), stem); break; }
     }
     checkTextures(root / "data" / "graphics" / "pc" / "textures.big");
-    std::printf("albionatlas_lzo_tests: %d chunk frames + texture chunks compared, %d mismatches\n", g_frames, g_fail);
+    std::printf("albionatlas_lzo_tests: %d chunk frames + texture chunks compared, %d encoder round trips (%.1f%% of input), %d failures\n",
+                g_frames, g_roundtrips, g_rtIn ? 100.0 * double(g_rtOut) / double(g_rtIn) : 0.0, g_fail);
     return g_fail ? 1 : 0;
 }

@@ -191,7 +191,7 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         const uint32_t sbc=c.u32(),abc=c.u32(),vc=c.u32(),tc=c.u32(),ic=c.u32(),format=c.u32(); c.skip(8);
         if(sbc>100000||abc>100000||vc>10000000||ic>30000000)throw std::runtime_error("meshpreview: unreasonable primitive");
         std::vector<Block> staticBlocks,animatedBlocks;staticBlocks.reserve(sbc);animatedBlocks.reserve(abc);
-        // Albion Atlas: a static block carries its OWN material index (EgoCore
+        // A static block carries its OWN material index (EgoCore
         // GltfExporter uses CStaticBlock.MaterialIndex); the primitive's material is
         // only the fallback. Without this, multi-material meshes (roof + walls)
         // render entirely with material 0.

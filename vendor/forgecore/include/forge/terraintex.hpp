@@ -111,7 +111,7 @@ struct ThemeEntry {
     std::string name;           // e.g. GROUND_FOREST_LEAVES
     ThemeTextures textures;
     bool decoded = false;       // schema decode produced all six fields
-    // Water (Albion Atlas local edit; worth upstreaming): the engine's per-cell
+    // Water: the engine's per-cell
     // water depth is sum(blend * WaterHeight) over the cell's theme slots and a
     // cell has water when any slot's WaterType != 0 (CEngineMap::PeekWaterDepth /
     // PeekHasWaterFast).

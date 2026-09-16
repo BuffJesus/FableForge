@@ -12,26 +12,12 @@ if(MINGW)
   add_link_options(-static -static-libgcc -static-libstdc++)
 endif()
 
-# Vendored, pinned snapshot of FableForge's forgecore parsers (see
-# vendor/VENDORED.md). Only the modules the exporter needs.
+# FableForge's forgecore (parsers + writers), synced by tools/sync_forgecore.py
+# (see vendor/VENDORED.md). audio.cpp is skipped; lzo.cpp is the MIT override.
+file(GLOB FORGECORE_SOURCES CONFIGURE_DEPENDS vendor/forgecore/src/*.cpp)
+list(FILTER FORGECORE_SOURCES EXCLUDE REGEX "audio[.]cpp$")
 add_library(forgecore_slice STATIC
-  vendor/forgecore/src/lev.cpp
-  vendor/forgecore/src/terrain.cpp
-  vendor/forgecore/src/terraintex.cpp
-  vendor/forgecore/src/big.cpp
-  vendor/forgecore/src/bin.cpp
-  vendor/forgecore/src/defschema.cpp
-  vendor/forgecore/src/defdecode.cpp
-  vendor/forgecore/src/lzo.cpp
-  vendor/forgecore/src/env.cpp
-  vendor/forgecore/src/wad.cpp
-  vendor/forgecore/src/foliage.cpp
-  vendor/forgecore/src/meshpreview.cpp
-  vendor/forgecore/src/stb.cpp
-  vendor/forgecore/src/stbinfo.cpp
-  vendor/forgecore/src/rangecodec.cpp
-  vendor/forgecore/src/tng.cpp
-  vendor/forgecore/src/wld.cpp
+  ${FORGECORE_SOURCES}
   src/lzo1x.cpp
   vendor/third_party/miniz/miniz.c
 )

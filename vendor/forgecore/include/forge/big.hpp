@@ -49,7 +49,7 @@ struct Bank {
 
 class File {
 public:
-    // Albion Atlas local edit: open() reads only the bank directory and entry tables
+    // open() reads only the bank directory and entry tables
     // (the tail of the file) and reads entry payloads from disk on demand --
     // textures.big is 535 MB and graphics.big 244 MB, which used to sit in RAM for
     // the whole session. openFully() keeps the old whole-file behaviour, which
@@ -87,7 +87,7 @@ private:
     uint32_t contentType_ = 0;
     std::vector<Bank> banks_;
     std::vector<uint8_t> raw_;        // whole file (only when opened with openFully)
-    std::filesystem::path path_;      // lazy mode (Albion Atlas local edit): entries are read from disk on demand
+    std::filesystem::path path_;      // lazy mode : entries are read from disk on demand
     uint64_t fileSize_ = 0;
 };
 
