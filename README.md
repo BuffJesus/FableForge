@@ -71,6 +71,12 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   the brightness slider brighten if you want a lit look baked in.
 * **Caves have no lid** — terrain is the cave floor; walls and ceilings are placed
   meshes. Every cell of every map is drawn by the engine (`AlbionAtlas coverage <map>`).
+* **Placed-object orientation** — meshes compose as `pos + lx*right + ly*forward + lz*up`
+  (`right = forward x up`), pinned against the Arena (oval pit, N/S corridors, gates,
+  audience ring, `MINIMAP_ARENA`) and Oakvale's fence lines. Objects that float in the
+  export float in the data too: the Arena crowd sits 10 m above the outer sand with no
+  stand mesh anywhere (no thing, def, script or region places one); the pit parapet hides
+  the drop in-game.
 * **No water plane** — sea themes export as their seabed texture.
 * **No lights, particles, creatures (by default), scripts.**
 

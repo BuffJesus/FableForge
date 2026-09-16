@@ -62,6 +62,23 @@ void normalize(float v[3]) {
 
 } // namespace
 
+void thingBasis(const float forward[3], const float up[3], float scale, float m[9]) {
+    float f[3] = {forward[0], forward[1], forward[2]};
+    float u[3] = {up[0], up[1], up[2]};
+    normalize(f); normalize(u);
+    if (f[0] * f[0] + f[1] * f[1] + f[2] * f[2] < 0.5f) { f[0] = 1; f[1] = 0; f[2] = 0; }
+    if (u[0] * u[0] + u[1] * u[1] + u[2] * u[2] < 0.5f) { u[0] = 0; u[1] = 0; u[2] = 1; }
+    float r[3] = {f[1] * u[2] - f[2] * u[1], f[2] * u[0] - f[0] * u[2], f[0] * u[1] - f[1] * u[0]};
+    normalize(r);
+    // Mesh-local frame: +x = right, +y = forward, +z = up, so
+    // world = pos + lx*right + ly*forward + lz*up   (rows = images of local axes).
+    // Verified on the Arena: the oval pit's long axis and its two N/S entrance
+    // corridors only line up with the audience ring, the gate things and
+    // MINIMAP_ARENA this way (the previous -lx*forward + ly*right guess was a
+    // 90-degree yaw off, which turned Oakvale's fence lines into combs).
+    for (int k = 0; k < 3; ++k) { m[0 * 3 + k] = r[k] * scale; m[1 * 3 + k] = f[k] * scale; m[2 * 3 + k] = u[k] * scale; }
+}
+
 fe::Scene load(const std::string& mapName, const Options& options, const te::Context& context, Stats* statsOut) {
     fe::Scene scene;
     scene.mapName = mapName;
@@ -137,16 +154,12 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         inst.x = propF(*phys, "PositionX", 0.0f) + options.originX;
         inst.y = propF(*phys, "PositionY", 0.0f) + options.originY;
         inst.z = propF(*phys, "PositionZ", 0.0f);
-        float fwd[3] = {propF(*phys, "RHSetForwardX", 1.0f), propF(*phys, "RHSetForwardY", 0.0f), propF(*phys, "RHSetForwardZ", 0.0f)};
-        float up[3] = {propF(*phys, "RHSetUpX", 0.0f), propF(*phys, "RHSetUpY", 0.0f), propF(*phys, "RHSetUpZ", 1.0f)};
-        normalize(fwd); normalize(up);
-        float right[3] = {fwd[1] * up[2] - fwd[2] * up[1], fwd[2] * up[0] - fwd[0] * up[2], fwd[0] * up[1] - fwd[1] * up[0]};
-        normalize(right);
-        // world = pos + (-lx)*forward + ly*right + lz*up   (rows = images of local axes)
+        const float fwd[3] = {propF(*phys, "RHSetForwardX", 1.0f), propF(*phys, "RHSetForwardY", 0.0f), propF(*phys, "RHSetForwardZ", 0.0f)};
+        const float up[3] = {propF(*phys, "RHSetUpX", 0.0f), propF(*phys, "RHSetUpY", 0.0f), propF(*phys, "RHSetUpZ", 1.0f)};
         inst.hasMatrix = true;
-        for (int k = 0; k < 3; ++k) { inst.m[0 * 3 + k] = -fwd[k] * s; inst.m[1 * 3 + k] = right[k] * s; inst.m[2 * 3 + k] = up[k] * s; }
+        thingBasis(fwd, up, s, inst.m);
         inst.scale = s;
-        inst.yaw = std::atan2(fwd[1], fwd[0]);
+        inst.yaw = std::atan2(inst.m[4], inst.m[3]);
         scene.meshes[size_t(meshIndex)].instanceCount++;
         scene.instances.push_back(inst);
         ++st.placed;

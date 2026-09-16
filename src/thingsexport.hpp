@@ -8,10 +8,14 @@
 // field whose second dword is the MBANK_ALLMESHES model id. A thing may also
 // override the mesh by name (GraphicOverride) and scale it (ObjectScale).
 // Position and orientation come from the CTCPhysicsStandard / Navigator block:
-// PositionX/Y/Z (map-local), RHSetForward*, RHSetUp*. The mesh composes as
-//   world = pos + (-lx)*forward + ly*right + lz*up,  right = forward x up,
+// PositionX/Y/Z (map-local), RHSetForward*, RHSetUp*. The mesh-local frame is
+// +x = right, +y = forward, +z = up, so a vertex composes as
+//   world = pos + lx*right + ly*forward + lz*up,  right = forward x up,
 // with lx/ly/lz the mesh vertex scaled by 0.01 * ObjectScale (meshes are in cm).
-// That composition is the one FableForge verified against ChocolateBox.
+// Verified 2026-09-16 on the Arena (the oval pit's long axis, its N/S entrance
+// corridors, the gate things and the audience ring all agree, and match
+// MINIMAP_ARENA) and on Oakvale (fence segments join end-to-end instead of
+// forming a comb). The earlier -lx*forward + ly*right guess was 90 degrees off.
 //
 // Honest boundaries:
 //   * Creatures (AICreature) are skinned meshes; LOD0 is exported in bind pose
@@ -50,6 +54,11 @@ struct Stats {
     int noPosition = 0;      // no physics block
     int skippedCreatures = 0;
 };
+
+// Rows of `m` are the world images of the mesh-local x/y/z axes (times `scale`):
+// world = pos + lx*m[0..2] + ly*m[3..5] + lz*m[6..8]. `forward`/`up` need not be
+// normalised. A degenerate frame falls back to +X forward / +Z up.
+void thingBasis(const float forward[3], const float up[3], float scale, float m[9]);
 
 // Produces a foliageexport::Scene (same instance/mesh model, rootName "Things")
 // so every writer and the preview renderer work unchanged.

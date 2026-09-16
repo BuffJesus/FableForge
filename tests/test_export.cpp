@@ -17,6 +17,7 @@
 #include "nlohmann/json.hpp"
 #include "foliageexport.hpp"
 #include "terrainexport.hpp"
+#include "thingsexport.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -273,6 +274,32 @@ void testPng() {
 
 } // namespace
 
+// Thing composition (world = pos + lx*right + ly*forward + lz*up). Pinned by the
+// Arena (oval pit long axis E-W, N/S corridors, MINIMAP_ARENA) and Oakvale's
+// fence lines; a 90-degree slip here turns fences into combs.
+void testThingBasis() {
+    auto near = [](float a, float b) { return std::fabs(a - b) < 1e-5f; };
+    float m[9];
+    // North-facing thing (the Arena building): local x -> world +x, local y -> world +y.
+    const float north[3] = {0, 1, 0}, up[3] = {0, 0, 1};
+    albion::thingsexport::thingBasis(north, up, 1.0f, m);
+    CHECK(near(m[0], 1) && near(m[1], 0) && near(m[2], 0));
+    CHECK(near(m[3], 0) && near(m[4], 1) && near(m[5], 0));
+    CHECK(near(m[6], 0) && near(m[7], 0) && near(m[8], 1));
+    // Default east-facing thing: forward +X, right = X x Z = -Y. Local y -> +x, local x -> -y.
+    const float east[3] = {1, 0, 0};
+    albion::thingsexport::thingBasis(east, up, 0.01f, m);
+    CHECK(near(m[0], 0) && near(m[1], -0.01f) && near(m[2], 0));
+    CHECK(near(m[3], 0.01f) && near(m[4], 0) && near(m[5], 0));
+    CHECK(near(m[8], 0.01f));
+    // Unnormalised input is normalised; a zero forward falls back to +X.
+    const float longNorth[3] = {0, 5, 0}, zero[3] = {0, 0, 0};
+    albion::thingsexport::thingBasis(longNorth, up, 1.0f, m);
+    CHECK(near(m[4], 1));
+    albion::thingsexport::thingBasis(zero, up, 1.0f, m);
+    CHECK(near(m[3], 1) && near(m[1], -1));
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -284,6 +311,7 @@ int main() {
     testBcDecoders();
     testPng();
     testFoliageGlb(lev, dir);
+    testThingBasis();
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;
