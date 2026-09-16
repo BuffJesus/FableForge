@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <d3dcompiler.h>
+#include <map>
 #include <string>
 
 namespace albion::gui {
@@ -18,6 +19,7 @@ cbuffer Frame : register(b0) {
     float4 lightDir;      // xyz normalized, towards the light
     float4 params;        // x = mode, y = minH, z = maxH, w = time
     float4 eye;
+    float4 flags;         // x = alpha test (foliage cutouts)
 };
 Texture2D albedo : register(t0);
 SamplerState samp : register(s0);
@@ -51,6 +53,15 @@ float4 PS(VSOut i) : SV_Target {
     int mode = (int)params.x;
     float t = saturate((i.wpos.y - params.y) / max(params.z - params.y, 0.001));
     float3 base;
+    if (flags.x > 0.5) {
+        float4 tex = albedo.Sample(samp, i.uv);
+        if (tex.a < 0.5) discard;
+        // foliage: soften lighting so blades read as translucent-ish
+        float3 col = tex.rgb * (0.45 + 0.65 * ndl + 0.2 * hemi);
+        float dist = distance(eye.xyz, i.wpos);
+        float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
+        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), 1.0);
+    }
     if (mode == 0) {
         base = albedo.Sample(samp, i.uv).rgb;
     } else if (mode == 1) {
@@ -81,6 +92,7 @@ struct FrameCB {
     float lightDir[4];
     float params[4];
     float eye[4];
+    float flags[4];
 };
 
 void mul4(const float a[16], const float b[16], float out[16]) {
@@ -151,6 +163,7 @@ void Camera::eye(float out[3]) const {
 Renderer::~Renderer() {
     releaseTarget();
     releaseMesh();
+    clearFoliage();
     release(white_);
     release(blend_); release(depth_); release(wire_); release(solid_); release(sampler_);
     release(cbuffer_); release(layout_); release(ps_); release(vs_);
@@ -230,7 +243,72 @@ void Renderer::releaseMesh() {
     indexCount_ = 0;
 }
 
-void Renderer::clear() { releaseMesh(); }
+void Renderer::clear() { releaseMesh(); clearFoliage(); }
+
+void Renderer::clearFoliage() {
+    for (auto& b : foliage_) { release(b.vb); release(b.srv); }
+    foliage_.clear();
+    foliageTriangles_ = 0;
+}
+
+ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img) {
+    if (!img.width || !img.height) return nullptr;
+    D3D11_TEXTURE2D_DESC td = {};
+    td.Width = img.width; td.Height = img.height; td.MipLevels = 1; td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_IMMUTABLE; td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA init = {img.rgba.data(), img.width * 4, 0};
+    ID3D11Texture2D* tex = nullptr;
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (SUCCEEDED(device_->CreateTexture2D(&td, &init, &tex))) {
+        device_->CreateShaderResourceView(tex, nullptr, &srv);
+        tex->Release();
+    }
+    return srv;
+}
+
+bool Renderer::uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up) {
+    clearFoliage();
+    if (scene.instances.empty()) return false;
+    auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
+        if (up == terrainexport::UpAxis::Y) { ox = x; oy = z; oz = -y; } else { ox = x; oy = y; oz = z; }
+    };
+    std::map<int, std::vector<GpuVertex>> byImage;   // image index (-1 = untextured)
+    for (const auto& inst : scene.instances) {
+        if (inst.mesh < 0) continue;
+        const auto& m = scene.meshes[size_t(inst.mesh)];
+        auto& out = byImage[m.image];
+        const float cs = std::cos(inst.yaw), sn = std::sin(inst.yaw);
+        for (const auto& t : m.geometry.triangles) {
+            const uint32_t ids[3] = {t.a, t.b, t.c};
+            for (uint32_t id : ids) {
+                if (id >= m.geometry.vertices.size()) continue;
+                const auto& v = m.geometry.vertices[id];
+                const float lx = v.x * inst.scale, ly = v.y * inst.scale, lz = v.z * inst.scale;
+                GpuVertex g{};
+                toUp(inst.x + lx * cs - ly * sn, inst.y + lx * sn + ly * cs, inst.z + lz, g.px, g.py, g.pz);
+                toUp(v.nx * cs - v.ny * sn, v.nx * sn + v.ny * cs, v.nz, g.nx, g.ny, g.nz);
+                g.u = v.u; g.v = v.v; g.walk = 1.0f;
+                out.push_back(g);
+            }
+        }
+    }
+    for (auto& [image, verts] : byImage) {
+        if (verts.empty()) continue;
+        FoliageBatch b;
+        D3D11_BUFFER_DESC bd = {};
+        bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
+        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        D3D11_SUBRESOURCE_DATA sd = {verts.data(), 0, 0};
+        if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) continue;
+        b.count = uint32_t(verts.size());
+        if (image >= 0 && size_t(image) < scene.images.size()) b.srv = makeTexture(scene.images[size_t(image)]);
+        b.alpha = true;
+        foliageTriangles_ += verts.size() / 3;
+        foliage_.push_back(b);
+    }
+    return !foliage_.empty();
+}
 
 bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera) {
     releaseMesh();
@@ -349,6 +427,21 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     const float bf[4] = {0, 0, 0, 0};
     ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
     ctx_->DrawIndexed(indexCount_, 0, 0);
+
+    if (showFoliage && !foliage_.empty() && mode != ViewMode::Wireframe) {
+        cb.flags[0] = 1.0f;
+        if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
+            std::memcpy(map.pData, &cb, sizeof cb);
+            ctx_->Unmap(cbuffer_, 0);
+        }
+        ctx_->RSSetState(solid_);
+        for (const auto& b : foliage_) {
+            ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
+            ctx_->PSSetShaderResources(0, 1, &t);
+            ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
+            ctx_->Draw(b.count, 0);
+        }
+    }
 
     ID3D11ShaderResourceView* nullSrv = nullptr;
     ctx_->PSSetShaderResources(0, 1, &nullSrv);

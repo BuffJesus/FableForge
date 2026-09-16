@@ -168,6 +168,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.tile = std::clamp(j.value("tile", settings_.tile), 1.0f, 16.0f);
         settings_.layers = j.value("layers", settings_.layers);
         settings_.walkable = j.value("walkable", settings_.walkable);
+        settings_.foliage = j.value("foliage", settings_.foliage);
     } catch (...) {}
 }
 
@@ -179,6 +180,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
+            {"foliage", settings_.foliage},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -277,7 +279,37 @@ void App::selectMap(const std::string& nameOrKey) {
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
     selectedName_ = it->key;
+    renderer_.clearFoliage();
+    foliageLoadedFor_.clear();
+    foliageInstances_ = 0;
+    foliageStatus_.clear();
     startPreviewLoad();
+}
+
+void App::setPreviewFoliage(bool on) {
+    previewFoliage_ = on;
+    renderer_.showFoliage = on;
+    if (on && !foliageLoaded() && !foliageFuture_.valid() && previewLoaded()) startFoliageLoad();
+}
+
+void App::startFoliageLoad() {
+    if (selectedName_.empty() || !ctx_.ready()) return;
+    if (foliageFuture_.valid()) { foliagePendingName_ = selectedName_; return; }
+    const MapEntry* found = findEntry(selectedName_);
+    if (!found) return;
+    const MapEntry entry = *found;
+    const te::Context* ctx = &ctx_;
+    const std::string root = installPath_;
+    foliageFuture_ = std::async(std::launch::async, [entry, ctx, root]() {
+        FoliageResult r; r.name = entry.key;
+        foliageexport::Options fo;
+        fo.gameRoot = root;
+        fo.textures = true;
+        fo.up = te::UpAxis::Y;
+        fo.mapLocal = true;
+        try { r.scene = foliageexport::load(entry.name, fo, *ctx); } catch (const std::exception& e) { r.scene.warnings.push_back(e.what()); }
+        return r;
+    });
 }
 
 const MapEntry* App::findEntry(const std::string& key) const {
@@ -372,7 +404,18 @@ void App::startExportOf(const MapEntry& entry) {
             o.log = [&](const std::string& m) { r.log.push_back(m); };
             if (s.textures && ctx == nullptr) r.log.push_back("warning: textures not loaded yet, exporting untextured");
             const auto scene = te::buildScene(file, o, ctx);
-            const auto files = s.format == 0 ? te::writeGlb(scene, outPath) : te::writeObj(scene, outPath);
+            foliageexport::Scene fol;
+            if (s.foliage && ctx) {
+                foliageexport::Options fo;
+                fo.gameRoot = ctx->gameRoot();
+                fo.textures = o.textures;
+                fo.up = o.up;
+                fo.mapLocal = true;
+                fo.log = o.log;
+                fol = foliageexport::load(entry.name, fo, *ctx);
+            }
+            const auto files = s.format == 0 ? foliageexport::writeGlbWithFoliage(scene, fol, outPath)
+                                             : foliageexport::writeObjWithFoliage(scene, fol, outPath);
             for (const auto& f : files) r.files.push_back(f.string());
             r.ok = true;
         } catch (const std::exception& e) {
@@ -391,6 +434,7 @@ void App::pollWorkers() {
             ctx_ = *ctxPending_;
             pushLog("Textures ready (game.bin themes + textures.big)", 3);
             if (reloadWhenContextReady_ && !selectedName_.empty()) startPreviewLoad();
+            else if (previewFoliage_ && previewLoaded() && !foliageLoaded()) startFoliageLoad();
         } else {
             ctxError_ = err;
             pushLog("Textures unavailable: " + err, 1);
@@ -408,6 +452,7 @@ void App::pollWorkers() {
             previewScene_.albedo = {};  // GPU owns it now; keep stats only
             previewLoadedFor_ = r.name;
             previewTextured_ = r.textured;
+            if (previewFoliage_ && ctx_.ready() && !foliageLoaded()) startFoliageLoad();
         }
         if (!previewPendingName_.empty()) {
             previewPendingName_.clear();
@@ -415,6 +460,22 @@ void App::pollWorkers() {
         } else if (r.name == selectedName_ && !r.textured && ctx_.ready()) {
             startPreviewLoad();   // context arrived while we were baking untextured
         }
+    }
+    if (foliageFuture_.valid() && foliageFuture_.wait_for(0ms) == std::future_status::ready) {
+        FoliageResult r = foliageFuture_.get();
+        if (r.name == selectedName_) {
+            foliageLoadedFor_ = r.name;
+            foliageInstances_ = r.scene.instances.size();
+            if (r.scene.found && !r.scene.instances.empty()) {
+                renderer_.uploadFoliage(r.scene, te::UpAxis::Y);
+                foliageStatus_ = std::to_string(r.scene.instances.size()) + " foliage instances, " + std::to_string(r.scene.meshes.size()) + " plant meshes";
+            } else {
+                foliageStatus_ = r.scene.found ? "no baked foliage on this map" : "no foliage bank entry for this map";
+            }
+            for (const auto& w : r.scene.warnings)
+                if (w.rfind("mesh", 0) != 0) pushLog("foliage: " + w, 1);
+        }
+        if (!foliagePendingName_.empty()) { foliagePendingName_.clear(); if (!foliageLoaded()) startFoliageLoad(); }
     }
     if (exportFuture_.valid() && exportFuture_.wait_for(0ms) == std::future_status::ready) {
         ExportResult r = exportFuture_.get();
@@ -476,6 +537,10 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("texels=" + std::to_string(settings_.texels));
     v.push_back("mesh_vertices=" + std::to_string(previewScene_.vertices.size()));
     v.push_back("batch_active=" + std::string(batchActive() ? "1" : "0"));
+    v.push_back("foliage_loaded=" + std::string(foliageLoaded() ? "1" : "0"));
+    v.push_back("foliage_instances=" + std::to_string(foliageInstances_));
+    v.push_back("preview_foliage=" + std::string(previewFoliage_ ? "1" : "0"));
+    v.push_back("export_foliage=" + std::string(settings_.foliage ? "1" : "0"));
     v.push_back("batch_done=" + std::to_string(batchDone_));
     v.push_back("batch_failed=" + std::to_string(batchFailed_));
     v.push_back("filter=" + filter_);
@@ -743,6 +808,11 @@ void App::drawViewport(float width) {
                            previewScene_.mapWidth, previewScene_.mapHeight, previewScene_.vertices.size(),
                            previewScene_.minHeight, previewScene_.maxHeight,
                            previewTextured_ ? "" : "   |   textures loading...");
+        if (previewFoliage_) {
+            ImGui::SameLine(0, 0);
+            if (foliageFuture_.valid()) ImGui::TextColored(theme::vec(theme::Faint), "   |   foliage loading...");
+            else if (!foliageStatus_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "   |   %s", foliageStatus_.c_str());
+        }
         if (previewTextured_ && previewScene_.unresolvedThemes > 0) {
             ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 64));
             ImGui::TextColored(theme::vec(theme::Warn), "%d of %zu ground themes have no texture in this install (shown grey)",
@@ -772,6 +842,10 @@ void App::drawViewport(float width) {
             camera_.distance = span * 0.95f;
         }
         auto_.registerWidget("chip_reset");
+        ImGui::SameLine(0, 6);
+        if (theme::chip("Foliage", previewFoliage_)) setPreviewFoliage(!previewFoliage_);
+        auto_.registerWidget("chip_foliage");
+        x = ImGui::GetItemRectMax().x;
         const char* hint = "Drag: orbit   Right-drag: pan   Wheel: zoom";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
         if (origin.x + size.x - hs.x - 16 > x + 20)
@@ -849,6 +923,16 @@ void App::drawActions(float width) {
     }
     theme::toggle("Walkability as vertex colours", &settings_.walkable);
     auto_.registerWidget("toggle_walkable");
+    theme::endCard();
+
+    ImGui::Dummy(ImVec2(0, 8));
+    ImGui::SetCursorPosX(16);
+    theme::beginCard("##fol", inner);
+    theme::toggle("Foliage (baked grass, plants, stumps)", &settings_.foliage);
+    auto_.registerWidget("toggle_foliage");
+    ImGui::PushFont(fontSmall_);
+    ImGui::TextColored(theme::vec(theme::Faint), "Mesh instances from FinalAlbion_RT.stb. Big trees and props are\nplaced objects (.tng) and are not included yet.");
+    ImGui::PopFont();
     theme::endCard();
 
     ImGui::Dummy(ImVec2(0, 8));
@@ -1011,12 +1095,20 @@ bool Automation::tick(App& app) {
     else if (cmd == "wait_maps") waitOn(app.mapsReady(), "map list");
     else if (cmd == "wait_loaded") waitOn(app.previewLoaded() && !app.previewBusy(), "preview");
     else if (cmd == "wait_export") waitOn(!app.exportBusy(), "export");
+    else if (cmd == "wait_foliage") waitOn(app.foliageLoaded() && !app.foliageBusy(), "foliage");
     else if (cmd == "frames") { waitFrames_ = std::max(1, std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "select") { app.selectMap(rest); note("ok   " + line); ++pc_; }
     else if (cmd == "filter") { app.setFilter(rest); note("ok   " + line); ++pc_; }
     else if (cmd == "click") { clickTarget_ = rest; clickPhase_ = 0; note("..   " + line); ++pc_; }
     else if (cmd == "orbit") { float a = 0, b = 0; std::istringstream(rest) >> a >> b; app.camera().orbit(a, b); note("ok   " + line); ++pc_; }
     else if (cmd == "zoom") { app.camera().zoom(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "camera") {   // camera <fableX> <fableY> <fableZ> <yaw> <pitch> <distance>  (target in Fable map-local coords)
+        float fx = 0, fy = 0, fz = 0, yaw = 0.8f, pitch = 0.6f, dist = 30;
+        std::istringstream(rest) >> fx >> fy >> fz >> yaw >> pitch >> dist;
+        Camera& c = app.camera();
+        c.targetX = fx; c.targetY = fz; c.targetZ = -fy; c.yaw = yaw; c.pitch = pitch; c.distance = dist;
+        note("ok   " + line); ++pc_;
+    }
     else if (cmd == "mode") {
         const std::string m = lower(rest);
         app.setMode(m == "wireframe" ? ViewMode::Wireframe : m == "walkable" ? ViewMode::Walkable : m == "height" ? ViewMode::Height : ViewMode::Textured);
@@ -1030,6 +1122,8 @@ bool Automation::tick(App& app) {
         else if (key == "textures") s.textures = val == "1";
         else if (key == "layers") s.layers = val == "1";
         else if (key == "walkable") s.walkable = val == "1";
+        else if (key == "foliage") s.foliage = val == "1";
+        else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "texels") s.texels = std::atoi(val.c_str());
         else if (key == "tile") s.tile = float(std::atof(val.c_str()));
         else if (key == "up") s.up = lower(val) == "z" ? 1 : 0;

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "foliageexport.hpp"
 #include "renderer.hpp"
 #include "terrainexport.hpp"
 
@@ -36,6 +37,7 @@ struct ExportSettings {
     float tile = 4.0f;
     bool layers = false;
     bool walkable = false;
+    bool foliage = true;     // export baked grass/plants as instances
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;
 };
@@ -84,6 +86,10 @@ public:
     // ---- state accessors used by Automation ----
     void selectMap(const std::string& name);
     bool previewLoaded() const { return previewLoadedFor_ == selectedName_ && !selectedName_.empty(); }
+    bool foliageLoaded() const { return foliageLoadedFor_ == selectedName_ && !selectedName_.empty(); }
+    bool foliageBusy() const { return foliageFuture_.valid(); }
+    void setPreviewFoliage(bool on);
+    bool previewFoliage() const { return previewFoliage_; }
     bool previewBusy() const { return previewFuture_.valid(); }
     bool exportBusy() const { return exportFuture_.valid(); }
     bool contextReady() const { return ctx_.ready(); }
@@ -115,6 +121,7 @@ private:
     void scanInstall(const std::string& root);
     void startContextLoad();
     void startPreviewLoad();
+    void startFoliageLoad();
     void pollWorkers();
     void pushLog(const std::string& line, int level = 0);
     std::string resolveLevPath(const MapEntry& e, std::string& err);
@@ -163,6 +170,13 @@ private:
     terrainexport::Scene previewScene_;   // kept for stats
     bool reloadWhenContextReady_ = false;
     int previewTexels_ = 4;
+    struct FoliageResult { std::string name; foliageexport::Scene scene; };
+    std::future<FoliageResult> foliageFuture_;
+    std::string foliageLoadedFor_;
+    std::string foliagePendingName_;
+    bool previewFoliage_ = true;
+    size_t foliageInstances_ = 0;
+    std::string foliageStatus_;
 
     // export
     ExportSettings settings_;

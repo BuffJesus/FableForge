@@ -120,6 +120,9 @@ public:
               const std::filesystem::path& texturesBig, std::string& error);
     bool ready() const;
     std::filesystem::path gameRoot() const;
+    // Decoded GBANK_MAIN_PC texture by id (cached; owned by the context). nullptr
+    // with `warning` set when the id is unknown or undecodable.
+    const Image* texture(uint32_t id, std::string& warning) const;
     struct Impl;
     Impl& impl() const { return *impl_; }
 private:

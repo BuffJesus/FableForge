@@ -27,6 +27,7 @@ AlbionTerrain export my_edited.lev --no-textures
 | Ground texture | the per-vertex 3-theme blend → `ENGINE_THEME` defs in `game.bin` → `textures.big` entries, DXT-decoded and baked into one albedo PNG | `baseColorTexture` on a rough, non-metallic material |
 | Splat layers (`--layers`) | same, unbaked | `_THEME_INDEX` / `_THEME_WEIGHT` vertex attributes, one PNG per theme in `<name>_themes/`, and `<name>.themes.json` |
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
+| Foliage (`--foliage`) | baked local-detail instances in `FinalAlbion_RT.stb` (grass, flowers, bracken, bramble, stumps, scattered saplings) + LOD0 meshes from `graphics.big` + their textures | one glTF mesh per plant, one node per instance under a `Foliage` root; cutout (`MASK`) materials. OBJ: baked into a second object |
 
 The exporter never embeds retail data; it reads the textures from **your** install.
 
@@ -36,6 +37,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --out <path>        .glb (default, self-contained) or .obj (+ .mtl + PNG)
 --install <root>    Fable TLC folder (default: auto-detect via Steam)
 --no-textures       heightmap only; works without an install for loose .lev files
+--foliage           add the baked grass/plants as mesh instances (needs an install)
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 4 — see "Known gaps")
@@ -53,8 +55,13 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   inputs for an exact shader.
 * **Holes / caves** — the mesh is the full grid. The engine's masked 16×16
   patches live in the STB and are not consulted yet.
-* **Foliage and props** are not exported yet (planned: baked local-detail
-  instances + TNG things as glTF nodes).
+* **Foliage recovery is heuristic** — instances are scanned out of the STB's
+  LZO frames; a few false positives are rejected by scale, and tree-type
+  instances (a separate engine pass) are mostly not recovered. Counts are
+  reported per plant mesh in the export log.
+* **Placed objects** — big trees, buildings, fences, rocks — are `.tng` "things",
+  not foliage. Not exported yet (planned next: TNG + object def `Graphic.modelId`).
+* **No water plane** — sea themes export as their seabed texture.
 
 ## GUI
 

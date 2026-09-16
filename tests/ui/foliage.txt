@@ -1,0 +1,31 @@
+# Foliage preview + export: two-stage load (terrain first, plants after),
+# chip toggles it, export includes the Foliage node.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+frames 3
+assert_state foliage_loaded 1
+assert_widget chip_foliage
+screenshot build/ui/f1_foliage_far.png
+zoom 5
+orbit 0.4 -0.25
+frames 2
+screenshot build/ui/f2_foliage_near.png
+click chip_foliage
+frames 3
+assert_state preview_foliage 0
+screenshot build/ui/f3_foliage_off.png
+click chip_foliage
+frames 2
+set outdir build/ui
+set texels 4
+set foliage 1
+click btn_export
+frames 2
+wait_export
+assert_state export_ok 1
+assert_file build/ui/StartOakValeWest.glb
+dump_state
+quit

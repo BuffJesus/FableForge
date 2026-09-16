@@ -24,6 +24,7 @@ def main():
     ok &= run("ui smoke", [sys.executable, "tools/ui_smoke.py"], capture_output=True)
     gui = os.path.join("build", "AlbionTerrainGUI.exe")
     ok &= run("ui paths", [gui, "--auto", "tests/ui/paths.txt"])
+    ok &= run("ui foliage", [gui, "--auto", "tests/ui/foliage.txt"])
     ok &= run("ui no-install", [gui, "--auto", "tests/ui/noinstall.txt", "--install", "D:/definitely/not/fable"])
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1

@@ -60,6 +60,10 @@ ok   filter
      texels=8
      mesh_vertices=3201
      batch_active=0
+     foliage_loaded=1
+     foliage_instances=0
+     preview_foliage=1
+     export_foliage=1
      batch_done=3
      batch_failed=0
      filter=

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "foliageexport.hpp"
 #include "terrainexport.hpp"
 
 namespace albion::gui {
@@ -40,6 +41,12 @@ public:
     bool upload(const terrainexport::Scene& scene, Camera& camera);
     void clear();
     bool hasMesh() const { return indexCount_ > 0; }
+    // Bakes every instance into world-space triangle batches (one per texture).
+    bool uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    void clearFoliage();
+    bool hasFoliage() const { return !foliage_.empty(); }
+    size_t foliageTriangles() const { return foliageTriangles_; }
+    bool showFoliage = true;
 
     // Renders into the offscreen target at the given size and returns its SRV
     // (valid until the next render call).
@@ -67,6 +74,10 @@ private:
     ID3D11DepthStencilState* depth_ = nullptr;
     ID3D11BlendState* blend_ = nullptr;
     ID3D11ShaderResourceView* albedo_ = nullptr;
+    struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; };
+    std::vector<FoliageBatch> foliage_;
+    size_t foliageTriangles_ = 0;
+    ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img);
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;
     ID3D11RenderTargetView* rtv_ = nullptr;

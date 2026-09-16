@@ -15,6 +15,7 @@
 
 #include "forge/lev.hpp"
 #include "nlohmann/json.hpp"
+#include "foliageexport.hpp"
 #include "terrainexport.hpp"
 
 namespace fs = std::filesystem;
@@ -213,6 +214,53 @@ void testBcDecoders() {
     CHECK(rgba[0] == 3 && rgba[1] == 2 && rgba[2] == 1 && rgba[3] == 4);
 }
 
+void testFoliageGlb(const fs::path& lev, const fs::path& dir) {
+    const auto file = forge::lev::File::open(lev);
+    te::Options o; o.textures = false;
+    const auto terrain = te::buildScene(file, o);
+    namespace fe = albion::foliageexport;
+    fe::Scene fol;
+    fol.found = true;
+    fe::Mesh m; m.meshId = 7; m.name = "MESH_TEST_BLADE";
+    // A vertical quad in Fable space (x across, z up), two triangles.
+    for (int i = 0; i < 4; ++i) {
+        forge::meshpreview::Vertex v; v.x = (i & 1) ? 50.f : -50.f; v.y = 0; v.z = (i & 2) ? 100.f : 0.f;
+        v.nx = 0; v.ny = -1; v.nz = 0; v.u = (i & 1) ? 1.f : 0.f; v.v = (i & 2) ? 0.f : 1.f;
+        m.geometry.vertices.push_back(v);
+    }
+    m.geometry.triangles.push_back({0, 1, 3, 0}); m.geometry.triangles.push_back({0, 3, 2, 0});
+    te::Image img; img.width = img.height = 2; img.rgba = {0,255,0,255, 0,255,0,0, 0,255,0,255, 0,255,0,0}; img.name = "blade";
+    fol.images.push_back(img); m.image = 0; m.hasAlpha = true; m.instanceCount = 2;
+    fol.meshes.push_back(m);
+    fol.instances.push_back({0, 0, 1.0f, 2.0f, 5.0f, 0.0f, 0.01f});
+    fol.instances.push_back({0, 0, 3.0f, 1.0f, 6.0f, 3.14159265f / 2, 0.02f});
+    const auto glb = fe::buildGlbWithFoliage(terrain, fol);
+    json doc; std::vector<uint8_t> bin;
+    CHECK(parseGlb(glb, doc, bin));
+    CHECK(doc["meshes"].size() == 2 && doc["meshes"][1]["name"] == "MESH_TEST_BLADE");
+    CHECK(doc["materials"][1]["alphaMode"] == "MASK" && doc["materials"][1]["doubleSided"] == true);
+    CHECK(doc["scenes"][0]["nodes"].size() == 2);   // terrain + Foliage root
+    const auto& root = doc["nodes"][doc["scenes"][0]["nodes"][1].get<int>()];
+    CHECK(root["name"] == "Foliage" && root["children"].size() == 2);
+    const auto& n0 = doc["nodes"][root["children"][0].get<int>()];
+    // Fable (1, 2, 5) -> glTF (1, 5, -2); identity rotation; uniform scale.
+    CHECK(std::fabs(n0["translation"][0].get<float>() - 1) < 1e-5 && std::fabs(n0["translation"][1].get<float>() - 5) < 1e-5 &&
+          std::fabs(n0["translation"][2].get<float>() + 2) < 1e-5);
+    CHECK(std::fabs(n0["rotation"][3].get<float>() - 1) < 1e-5 && std::fabs(n0["scale"][0].get<float>() - 0.01f) < 1e-6);
+    const auto& n1 = doc["nodes"][root["children"][1].get<int>()];
+    // 90 degrees about Fable Z -> quaternion about glTF Y: (0, sin45, 0, cos45).
+    CHECK(std::fabs(n1["rotation"][1].get<float>() - 0.70710678f) < 1e-4 && std::fabs(n1["rotation"][3].get<float>() - 0.70710678f) < 1e-4);
+    // Mesh positions were axis-converted: the quad's top (z=100) is now y=100.
+    const auto& posAcc = doc["accessors"][doc["meshes"][1]["primitives"][0]["attributes"]["POSITION"].get<int>()];
+    CHECK(std::fabs(posAcc["max"][1].get<float>() - 100) < 1e-4 && std::fabs(posAcc["min"][0].get<float>() + 50) < 1e-4);
+    CHECK(doc["images"].size() == 1);   // untextured terrain + one blade texture
+    // OBJ variant appends a foliage object with 8 more vertices.
+    fe::writeObjWithFoliage(terrain, fol, dir / "fol.obj");
+    std::ifstream f(dir / "fol.obj"); std::string line; int v = 0, objs = 0, faces = 0;
+    while (std::getline(f, line)) { if (line.rfind("v ", 0) == 0) ++v; if (line.rfind("o ", 0) == 0) ++objs; if (line.rfind("f ", 0) == 0) ++faces; }
+    CHECK(v == 20 + 8 && objs == 2 && faces == 24 + 4);
+}
+
 void testPng() {
     te::Image img; img.width = 2; img.height = 2; img.rgba.assign(16, 200); img.name = "t";
     const auto png = te::encodePng(img);
@@ -231,6 +279,7 @@ int main() {
     testObjStructure(lev, dir);
     testBcDecoders();
     testPng();
+    testFoliageGlb(lev, dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionterrain_tests: all passed\n";
     return 0;

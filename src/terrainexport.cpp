@@ -17,6 +17,8 @@
 #include "forge/terraintex.hpp"
 #include "miniz/miniz.h"
 #include "nlohmann/json.hpp"
+#include "glbwriter.hpp"
+#include "terrainexport_internal.hpp"
 
 #include "../vendor/embedded_schema.hpp"
 
@@ -243,6 +245,10 @@ struct TextureCache {
     std::mutex mutex;
 
     const Image* get(uint32_t id, Scene& scene, const Options& o) {
+        return get(id, [&](const std::string& m) { say(o, scene, m, true); });
+    }
+
+    const Image* get(uint32_t id, const std::function<void(const std::string&)>& warn) {
         if (id == 0) return nullptr;
         std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
@@ -251,13 +257,13 @@ struct TextureCache {
         auto e = byId.find(id);
         if (e == byId.end()) {
             failed.insert(id);
-            say(o, scene, "texture id " + std::to_string(id) + " is not in GBANK_MAIN_PC", true);
+            warn("texture id " + std::to_string(id) + " is not in GBANK_MAIN_PC");
             return nullptr;
         }
         const auto mip = forge::terraintex::decodeMip0(e->second->subHeader, big->entryData(*e->second));
         if (!mip.ok) {
             failed.insert(id);
-            say(o, scene, "texture " + e->second->name + " (" + std::to_string(id) + "): " + mip.error, true);
+            warn("texture " + e->second->name + " (" + std::to_string(id) + "): " + mip.error);
             return nullptr;
         }
         std::vector<uint8_t> rgba;
@@ -283,6 +289,11 @@ struct Context::Impl {
 Context::Context() : impl_(std::make_shared<Impl>()) {}
 bool Context::ready() const { return impl_ && impl_->ready; }
 fs::path Context::gameRoot() const { return impl_ ? impl_->gameRoot : fs::path(); }
+
+const Image* Context::texture(uint32_t id, std::string& warning) const {
+    if (!ready()) return nullptr;
+    return impl_->cache.get(id, [&](const std::string& m) { warning = m; });
+}
 
 bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::string& error) {
     auto impl = std::make_shared<Impl>();
@@ -472,23 +483,6 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
 
 namespace {
 
-struct BinBuilder {
-    std::vector<uint8_t> bytes;
-    json views = json::array();
-    void pad() { while (bytes.size() % 4) bytes.push_back(0); }
-    // Appends `data`, returns the bufferView index.
-    int view(const void* data, size_t len, int target = 0, int stride = 0) {
-        pad();
-        json v = {{"buffer", 0}, {"byteOffset", bytes.size()}, {"byteLength", len}};
-        if (target) v["target"] = target;
-        if (stride) v["byteStride"] = stride;
-        const auto* p = static_cast<const uint8_t*>(data);
-        bytes.insert(bytes.end(), p, p + len);
-        views.push_back(v);
-        return int(views.size() - 1);
-    }
-};
-
 std::string themeSummaryJson(const Scene& scene, const std::vector<std::string>& pngs) {
     json themes = json::array();
     for (const auto& t : scene.themes) {
@@ -513,6 +507,8 @@ std::string themeSummaryJson(const Scene& scene, const std::vector<std::string>&
     return doc.dump(2);
 }
 
+} // namespace
+
 std::vector<fs::path> writeLayerSidecars(const Scene& scene, const fs::path& out) {
     std::vector<fs::path> written;
     if (!scene.layers) return written;
@@ -534,46 +530,25 @@ std::vector<fs::path> writeLayerSidecars(const Scene& scene, const fs::path& out
     return written;
 }
 
-} // namespace
 
-std::vector<uint8_t> buildGlb(const Scene& scene) {
-    BinBuilder bin;
-    json accessors = json::array();
+int appendTerrain(glb::Builder& b, const Scene& scene) {
     const size_t n = scene.vertices.size();
-
-    // Positions.
     std::vector<float> pos(n * 3), nrm(n * 3), uv(n * 2);
-    float mn[3] = {1e30f, 1e30f, 1e30f}, mx[3] = {-1e30f, -1e30f, -1e30f};
     for (size_t i = 0; i < n; ++i) {
         const Vertex& v = scene.vertices[i];
         pos[i * 3] = v.px; pos[i * 3 + 1] = v.py; pos[i * 3 + 2] = v.pz;
         nrm[i * 3] = v.nx; nrm[i * 3 + 1] = v.ny; nrm[i * 3 + 2] = v.nz;
         uv[i * 2] = v.u; uv[i * 2 + 1] = v.v;
-        for (int k = 0; k < 3; ++k) { mn[k] = std::min(mn[k], pos[i * 3 + k]); mx[k] = std::max(mx[k], pos[i * 3 + k]); }
     }
-    if (n == 0) { mn[0] = mn[1] = mn[2] = mx[0] = mx[1] = mx[2] = 0; }
-    auto addAccessor = [&](int view, int compType, const char* type, size_t count, json extra = json::object()) {
-        json a = {{"bufferView", view}, {"componentType", compType}, {"count", count}, {"type", type}};
-        for (auto& [k, val] : extra.items()) a[k] = val;
-        accessors.push_back(a);
-        return int(accessors.size() - 1);
-    };
-    const int aPos = addAccessor(bin.view(pos.data(), pos.size() * 4, 34962), 5126, "VEC3", n,
-                                 {{"min", {mn[0], mn[1], mn[2]}}, {"max", {mx[0], mx[1], mx[2]}}});
-    const int aNrm = addAccessor(bin.view(nrm.data(), nrm.size() * 4, 34962), 5126, "VEC3", n);
-    const int aUv = addAccessor(bin.view(uv.data(), uv.size() * 4, 34962), 5126, "VEC2", n);
-    const int aIdx = addAccessor(bin.view(scene.indices.data(), scene.indices.size() * 4, 34963),
-                                 5125, "SCALAR", scene.indices.size());
-
-    json attributes = {{"POSITION", aPos}, {"NORMAL", aNrm}, {"TEXCOORD_0", aUv}};
+    json attributes = {{"POSITION", b.positions(pos)}, {"NORMAL", b.vec3(nrm)}, {"TEXCOORD_0", b.vec2(uv)}};
+    const int aIdx = b.indices(scene.indices);
     if (scene.walkableColor) {
         std::vector<uint8_t> col(n * 4);
         for (size_t i = 0; i < n; ++i) {
             const bool w = scene.vertices[i].walkable;
             col[i * 4] = 255; col[i * 4 + 1] = w ? 255 : 70; col[i * 4 + 2] = w ? 255 : 70; col[i * 4 + 3] = 255;
         }
-        attributes["COLOR_0"] = addAccessor(bin.view(col.data(), col.size(), 34962, 4), 5121, "VEC4", n,
-                                            {{"normalized", true}});
+        attributes["COLOR_0"] = b.accessor(b.view(col.data(), col.size(), 34962, 4), 5121, "VEC4", n, {{"normalized", true}});
     }
     if (scene.layers) {
         std::vector<uint8_t> idx(n * 4, 0), wgt(n * 4, 0); // VEC3 u8 padded to a 4-byte stride
@@ -582,26 +557,16 @@ std::vector<uint8_t> buildGlb(const Scene& scene) {
                 idx[i * 4 + k] = scene.vertices[i].themeIndex[k];
                 wgt[i * 4 + k] = scene.vertices[i].themeWeight[k];
             }
-        attributes["_THEME_INDEX"] = addAccessor(bin.view(idx.data(), idx.size(), 34962, 4), 5121, "VEC3", n);
-        attributes["_THEME_WEIGHT"] = addAccessor(bin.view(wgt.data(), wgt.size(), 34962, 4), 5121, "VEC3", n,
-                                                  {{"normalized", true}});
+        attributes["_THEME_INDEX"] = b.accessor(b.view(idx.data(), idx.size(), 34962, 4), 5121, "VEC3", n);
+        attributes["_THEME_WEIGHT"] = b.accessor(b.view(wgt.data(), wgt.size(), 34962, 4), 5121, "VEC3", n, {{"normalized", true}});
     }
 
-    json images = json::array(), textures = json::array(), materials = json::array(), samplers = json::array();
     json material = {{"name", "terrain"},
                      {"pbrMetallicRoughness", {{"metallicFactor", 0.0}, {"roughnessFactor", 1.0}}},
                      {"doubleSided", false}};
-    if (scene.hasAlbedo) {
-        const auto png = encodePng(scene.albedo);
-        images.push_back({{"name", "albedo"}, {"mimeType", "image/png"},
-                          {"bufferView", bin.view(png.data(), png.size())}});
-        samplers.push_back({{"magFilter", 9729}, {"minFilter", 9987}, {"wrapS", 33071}, {"wrapT", 33071}});
-        textures.push_back({{"source", 0}, {"sampler", 0}});
-        material["pbrMetallicRoughness"]["baseColorTexture"] = {{"index", 0}};
-    } else {
-        material["pbrMetallicRoughness"]["baseColorFactor"] = {0.55, 0.6, 0.5, 1.0};
-    }
-    materials.push_back(material);
+    if (scene.hasAlbedo) material["pbrMetallicRoughness"]["baseColorTexture"] = {{"index", b.texture(scene.albedo, "albedo", false)}};
+    else material["pbrMetallicRoughness"]["baseColorFactor"] = {0.55, 0.6, 0.5, 1.0};
+    const int mat = b.material(material);
 
     json extras = {{"source", scene.sourceName}, {"map_width", scene.mapWidth},
                    {"map_height", scene.mapHeight}, {"uid", std::to_string(scene.uid)},
@@ -616,35 +581,15 @@ std::vector<uint8_t> buildGlb(const Scene& scene) {
                           {"base_texture_id", t.baseTexture}, {"cliff_texture_id", t.cliffTexture}});
         extras["themes"] = th;
     }
+    const int mesh = b.mesh({{"name", "terrain"}, {"extras", extras},
+                             {"primitives", {{{"attributes", attributes}, {"indices", aIdx}, {"material", mat}, {"mode", 4}}}}});
+    return b.node({{"name", fs::path(scene.sourceName).stem().string()}, {"mesh", mesh}});
+}
 
-    json doc = {
-        {"asset", {{"version", "2.0"}, {"generator", "AlbionTerrain terrain exporter"}}},
-        {"scene", 0},
-        {"scenes", {{{"name", scene.sourceName}, {"nodes", {0}}}}},
-        {"nodes", {{{"name", fs::path(scene.sourceName).stem().string()}, {"mesh", 0}}}},
-        {"meshes", {{{"name", "terrain"}, {"extras", extras},
-                     {"primitives", {{{"attributes", attributes}, {"indices", aIdx},
-                                      {"material", 0}, {"mode", 4}}}}}}},
-        {"materials", materials},
-        {"accessors", accessors},
-        {"bufferViews", bin.views},
-    };
-    if (!images.empty()) { doc["images"] = images; doc["textures"] = textures; doc["samplers"] = samplers; }
-    bin.pad();
-    doc["buffers"] = {{{"byteLength", bin.bytes.size()}}};
-
-    std::string js = doc.dump();
-    while (js.size() % 4) js.push_back(' ');
-
-    std::vector<uint8_t> out;
-    auto u32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(uint8_t(v >> (8 * i))); };
-    const uint32_t total = 12 + 8 + uint32_t(js.size()) + 8 + uint32_t(bin.bytes.size());
-    u32(0x46546C67); u32(2); u32(total);
-    u32(uint32_t(js.size())); u32(0x4E4F534A);
-    out.insert(out.end(), js.begin(), js.end());
-    u32(uint32_t(bin.bytes.size())); u32(0x004E4942);
-    out.insert(out.end(), bin.bytes.begin(), bin.bytes.end());
-    return out;
+std::vector<uint8_t> buildGlb(const Scene& scene) {
+    glb::Builder b;
+    const int root = appendTerrain(b, scene);
+    return b.finish(scene.sourceName, {root}, "AlbionTerrain terrain exporter");
 }
 
 std::vector<fs::path> writeGlb(const Scene& scene, const fs::path& out) {
