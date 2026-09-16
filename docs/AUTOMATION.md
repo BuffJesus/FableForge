@@ -26,7 +26,11 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `filter <text>` | set the search box (empty clears) |
 | `click <widget>` | synthetic click at the centre of a registered widget (3 frames: move, press, release) |
 | `open <path.lev>` | open a loose .lev (same path as drag-and-drop) |
-| `orbit <dyaw> <dpitch>` / `zoom <steps>` | camera |
+| `orbit <dyaw> <dpitch>` / `zoom <steps>` / `look <dyaw> <dpitch>` / `fly <fwd> <strafe> <rise> <secs>` | camera through its API |
+| `camera <x> <y> <z> <yaw> <pitch> <dist>` | look at a Fable map-local point |
+| `mouse_move <x> <y>` \| `mouse_move viewport`, `mouse_delta <dx> <dy>`, `mouse_down\|mouse_up left\|right\|middle`, `key_down\|key_up W\|A\|S\|D\|Q\|E\|F\|Shift\|Alt\|Ctrl\|Escape` | raw input through ImGui (tests the real control path) |
+| `snapshot_camera` / `assert_camera_moved [min]` | camera position delta check |
+| `wait_foliage`, `set preview_foliage 0\|1`, `set foliage 0\|1` | foliage preview / export |
 | `mode textured\|wireframe\|walkable\|height` | view mode |
 | `set <key> <value>` | export settings: `format glb\|obj`, `textures 0\|1`, `layers 0\|1`, `walkable 0\|1`, `texels n`, `tile f`, `up y\|z`, `outdir path` |
 | `export` / `export_all` | start a single / batch export (state path; use `click btn_export` for the UI path) |
@@ -55,6 +59,8 @@ A widget is only registered on frames where it was drawn, so expand a group
   orbit, filter, export via button. `tools/ui_smoke.py` runs it and adds GLB validation
   and screenshot pixel assertions.
 * `tests/ui/paths.txt` — tree/row/toggle clicks, OBJ + untextured export, loose file, batch.
+* `tests/ui/controls.txt` — Unreal-style camera through injected input: RMB+W flies, RMB drag looks, MMB pans, F frames, Alt+LMB orbits.
+* `tests/ui/foliage.txt` — two-stage foliage load, chip toggle, export with the Foliage node.
 * `tests/ui/noinstall.txt` — run with `--install <bogus>`: honest empty state, no crash.
 
 `python tools/check_all.py` runs the unit tests, the retail CLI smoke and all UI suites.

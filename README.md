@@ -69,10 +69,13 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 AlbionTerrainGUI.exe [--install <fable-root>]
 ```
 
-Left: searchable map list grouped by area (Ctrl+F). Middle: orbit with the left
-mouse button, pan with the right, zoom with the wheel; Textured / Wireframe /
-Walkable / Height views. Right: export settings, `Export <map>` (Ctrl+E),
-`Export all`, activity log. Settings are remembered in `%APPDATA%\AlbionTerrain`.
+Left: searchable map list grouped by area (Ctrl+F). Middle: the 3D view with
+Unreal-editor controls — hold **RMB** to look around and fly with **WASD**
+(**Q/E** down/up, **Shift** faster, wheel changes fly speed); **LMB** drag
+dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames
+the map. Textured / Wireframe / Walkable / Height views, Foliage toggle. Right:
+export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
+are remembered in `%APPDATA%\AlbionTerrain`.
 
 ## Building
 

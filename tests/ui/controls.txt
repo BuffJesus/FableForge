@@ -1,0 +1,52 @@
+# Unreal-style viewport controls through real ImGui input events.
+wait_maps
+wait_ready
+select Arena
+wait_loaded
+frames 2
+screenshot build/ui/c0_start.png
+# RMB hold + W flies forward
+mouse_move viewport
+snapshot_camera
+mouse_down right
+key_down W
+frames 30
+key_up W
+assert_camera_moved 0.5
+# RMB drag looks around (camera position must NOT change while only looking)
+snapshot_camera
+mouse_delta 80 0
+frames 2
+mouse_delta 80 0
+frames 2
+mouse_up right
+screenshot build/ui/c1_after_fly_look.png
+# wheel-free: MMB drag pans
+snapshot_camera
+mouse_down middle
+mouse_delta 60 40
+frames 2
+mouse_delta 60 40
+frames 2
+mouse_up middle
+assert_camera_moved 0.5
+# F frames the map again
+key_down F
+frames 2
+key_up F
+frames 2
+screenshot build/ui/c2_framed.png
+# Alt + LMB orbit keeps the focus point: camera moves but the view stays on the map
+snapshot_camera
+key_down Alt
+mouse_down left
+mouse_delta 120 0
+frames 2
+mouse_delta 120 0
+frames 2
+mouse_up left
+key_up Alt
+assert_camera_moved 0.5
+screenshot build/ui/c3_orbited.png
+dump_state
+quit

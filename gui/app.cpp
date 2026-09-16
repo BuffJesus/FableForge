@@ -544,6 +544,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("batch_done=" + std::to_string(batchDone_));
     v.push_back("batch_failed=" + std::to_string(batchFailed_));
     v.push_back("filter=" + filter_);
+    char cam[96];
+    std::snprintf(cam, sizeof cam, "%.2f,%.2f,%.2f", camera_.posX, camera_.posY, camera_.posZ);
+    v.push_back(std::string("camera=") + cam);
     return v;
 }
 
@@ -736,17 +739,50 @@ void App::drawExplorer(float width) {
     ImGui::EndChild();
 }
 
+// Unreal-editor viewport grammar:
+//   RMB hold      look around; WASD fly, Q/E down/up, Shift = 3x, wheel = fly speed
+//   LMB drag      dolly forward/back (mouse Y) + turn (mouse X)
+//   MMB drag      track (pan) in the view plane
+//   Alt + LMB     orbit around the focus point
+//   wheel         dolly towards the focus point
+//   F             frame the whole map
 void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     ImGuiIO& io = ImGui::GetIO();
-    if (!viewportHovered_ || !renderer_.hasMesh()) return;
-    const float dx = io.MouseDelta.x, dy = io.MouseDelta.y;
-    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) camera_.orbit(-dx * 0.008f, dy * 0.008f);
-    if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
-        const float k = camera_.distance / std::max(size.y, 1.0f) * 1.6f;
-        camera_.pan(-dx * k, dy * k);
-    }
-    if (io.MouseWheel != 0) camera_.zoom(io.MouseWheel);
     (void)origin;
+    if (!renderer_.hasMesh()) return;
+    const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    // Keep flying while RMB is held even if the cursor leaves the image.
+    const bool active = viewportHovered_ || viewportCaptured_;
+    viewportCaptured_ = active && (rmb || ImGui::IsMouseDown(ImGuiMouseButton_Left) || ImGui::IsMouseDown(ImGuiMouseButton_Middle));
+    if (!active) return;
+    const float dx = io.MouseDelta.x, dy = io.MouseDelta.y;
+    const float panK = camera_.distance / std::max(size.y, 1.0f) * 1.6f;
+
+    if (rmb) {
+        camera_.look(-dx * 0.005f, dy * 0.005f);
+        if (io.MouseWheel != 0) camera_.flySpeed = std::clamp(camera_.flySpeed * std::pow(1.25f, io.MouseWheel), 0.5f, 5000.0f);
+        float fwd = 0, strafe = 0, rise = 0;
+        if (ImGui::IsKeyDown(ImGuiKey_W)) fwd += 1; if (ImGui::IsKeyDown(ImGuiKey_S)) fwd -= 1;
+        if (ImGui::IsKeyDown(ImGuiKey_D)) strafe += 1; if (ImGui::IsKeyDown(ImGuiKey_A)) strafe -= 1;
+        if (ImGui::IsKeyDown(ImGuiKey_E)) rise += 1; if (ImGui::IsKeyDown(ImGuiKey_Q)) rise -= 1;
+        const float boost = io.KeyShift ? 3.0f : 1.0f;
+        if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
+    } else {
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+            if (io.KeyAlt) camera_.orbit(-dx * 0.008f, dy * 0.008f);
+            else { camera_.turn(-dx * 0.005f); camera_.dolly(-dy * 0.02f); }
+        }
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) camera_.pan(-dx * panK, dy * panK);
+        if (io.MouseWheel != 0 && viewportHovered_) camera_.dolly(io.MouseWheel);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.KeyCtrl && !ImGui::IsAnyItemActive()) frameMap();
+}
+
+void App::frameMap() {
+    if (!renderer_.hasMesh()) return;
+    const float w = float(previewScene_.mapWidth), h = float(previewScene_.mapHeight);
+    const float span = std::max({w, h, 8.0f});
+    camera_.lookAt(w * 0.5f, (previewScene_.minHeight + previewScene_.maxHeight) * 0.5f, -h * 0.5f, 0.8f, 0.62f, span * 0.95f);
 }
 
 void App::drawViewport(float width) {
@@ -834,19 +870,13 @@ void App::drawViewport(float width) {
             x += ImGui::GetItemRectSize().x + 6;
         }
         ImGui::SetCursorScreenPos(ImVec2(x + 8, y));
-        if (theme::chip("Reset view", false) && renderer_.hasMesh()) {
-            Camera c = camera_;
-            camera_.yaw = 0.8f; camera_.pitch = 0.62f;
-            camera_.targetX = c.targetX; // keep target; re-fit distance from scene bounds
-            const float span = std::max({float(previewScene_.mapWidth), float(previewScene_.mapHeight), 8.0f});
-            camera_.distance = span * 0.95f;
-        }
+        if (theme::chip("Frame  (F)", false)) frameMap();
         auto_.registerWidget("chip_reset");
         ImGui::SameLine(0, 6);
         if (theme::chip("Foliage", previewFoliage_)) setPreviewFoliage(!previewFoliage_);
         auto_.registerWidget("chip_foliage");
         x = ImGui::GetItemRectMax().x;
-        const char* hint = "Drag: orbit   Right-drag: pan   Wheel: zoom";
+        const char* hint = "RMB: look + WASD fly (Q/E, Shift)   LMB: dolly/turn   MMB: pan   Alt+LMB: orbit   Wheel: zoom   F: frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
         if (origin.x + size.x - hs.x - 16 > x + 20)
             dl->AddText(ImVec2(origin.x + size.x - hs.x - 16, y + 6), theme::col(theme::Faint), hint);
@@ -1101,12 +1131,60 @@ bool Automation::tick(App& app) {
     else if (cmd == "filter") { app.setFilter(rest); note("ok   " + line); ++pc_; }
     else if (cmd == "click") { clickTarget_ = rest; clickPhase_ = 0; note("..   " + line); ++pc_; }
     else if (cmd == "orbit") { float a = 0, b = 0; std::istringstream(rest) >> a >> b; app.camera().orbit(a, b); note("ok   " + line); ++pc_; }
-    else if (cmd == "zoom") { app.camera().zoom(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "zoom") { app.camera().dolly(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "fly") {   // fly <forward> <strafe> <rise> <seconds>
+        float f = 0, st = 0, r = 0, secs = 1; std::istringstream(rest) >> f >> st >> r >> secs;
+        app.camera().fly(f, st, r, secs); note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "mouse_move") {   // mouse_move <x> <y>  (window pixels) | mouse_move viewport
+        ImGuiIO& io = ImGui::GetIO();
+        if (rest == "viewport" && widgets_.count("viewport")) {
+            const ImVec4 r = widgets_["viewport"];
+            io.AddMousePosEvent((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
+        } else { float x = 0, y = 0; std::istringstream(rest) >> x >> y; io.AddMousePosEvent(x, y); }
+        note("ok   " + line); ++pc_; waitFrames_ = 1;
+    }
+    else if (cmd == "mouse_down" || cmd == "mouse_up") {
+        const int btn = rest == "right" ? 1 : rest == "middle" ? 2 : 0;
+        ImGui::GetIO().AddMouseButtonEvent(btn, cmd == "mouse_down");
+        note("ok   " + line); ++pc_; waitFrames_ = 1;
+    }
+    else if (cmd == "mouse_delta") {   // mouse_delta <dx> <dy>: move relative to the current position
+        ImGuiIO& io = ImGui::GetIO();
+        float x = 0, y = 0; std::istringstream(rest) >> x >> y;
+        io.AddMousePosEvent(io.MousePos.x + x, io.MousePos.y + y);
+        note("ok   " + line); ++pc_; waitFrames_ = 1;
+    }
+    else if (cmd == "key_down" || cmd == "key_up") {
+        static const std::map<std::string, ImGuiKey> keys = {
+            {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
+            {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
+            {"Ctrl", ImGuiKey_LeftCtrl}, {"Escape", ImGuiKey_Escape}};
+        auto it = keys.find(rest);
+        if (it == keys.end()) fail("unknown key " + rest);
+        else {
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddKeyEvent(it->second, cmd == "key_down");
+            if (it->second == ImGuiKey_LeftShift) io.AddKeyEvent(ImGuiMod_Shift, cmd == "key_down");
+            if (it->second == ImGuiKey_LeftAlt) io.AddKeyEvent(ImGuiMod_Alt, cmd == "key_down");
+            if (it->second == ImGuiKey_LeftCtrl) io.AddKeyEvent(ImGuiMod_Ctrl, cmd == "key_down");
+            note("ok   " + line);
+        }
+        ++pc_; waitFrames_ = 1;
+    }
+    else if (cmd == "snapshot_camera") { const Camera& c = app.camera(); camSnap_[0] = c.posX; camSnap_[1] = c.posY; camSnap_[2] = c.posZ; note("ok   " + line); ++pc_; }
+    else if (cmd == "assert_camera_moved") {
+        const Camera& c = app.camera();
+        const float d = std::sqrt((c.posX - camSnap_[0]) * (c.posX - camSnap_[0]) + (c.posY - camSnap_[1]) * (c.posY - camSnap_[1]) + (c.posZ - camSnap_[2]) * (c.posZ - camSnap_[2]));
+        const float minD = rest.empty() ? 0.01f : float(std::atof(rest.c_str()));
+        if (d < minD) fail("camera did not move enough: " + std::to_string(d)); else note("ok   " + line + "  (moved " + std::to_string(d) + ")");
+        ++pc_;
+    }
+    else if (cmd == "look") { float a = 0, b = 0; std::istringstream(rest) >> a >> b; app.camera().look(a, b); note("ok   " + line); ++pc_; }
     else if (cmd == "camera") {   // camera <fableX> <fableY> <fableZ> <yaw> <pitch> <distance>  (target in Fable map-local coords)
         float fx = 0, fy = 0, fz = 0, yaw = 0.8f, pitch = 0.6f, dist = 30;
         std::istringstream(rest) >> fx >> fy >> fz >> yaw >> pitch >> dist;
-        Camera& c = app.camera();
-        c.targetX = fx; c.targetY = fz; c.targetZ = -fy; c.yaw = yaw; c.pitch = pitch; c.distance = dist;
+        app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "mode") {

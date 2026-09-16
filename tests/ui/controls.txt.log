@@ -1,0 +1,75 @@
+ok   wait_maps
+ok   wait_ready
+ok   select Arena
+ok   wait_loaded
+ok   frames 2
+ok   screenshot build/ui/c0_start.png
+shot build/ui/c0_start.png
+ok   mouse_move viewport
+ok   snapshot_camera
+ok   mouse_down right
+ok   key_down W
+ok   frames 30
+ok   key_up W
+ok   assert_camera_moved 0.5  (moved 2.681546)
+ok   snapshot_camera
+ok   mouse_delta 80 0
+ok   frames 2
+ok   mouse_delta 80 0
+ok   frames 2
+ok   mouse_up right
+ok   screenshot build/ui/c1_after_fly_look.png
+shot build/ui/c1_after_fly_look.png
+ok   snapshot_camera
+ok   mouse_down middle
+ok   mouse_delta 60 40
+ok   frames 2
+ok   mouse_delta 60 40
+ok   frames 2
+ok   mouse_up middle
+ok   assert_camera_moved 0.5  (moved 17.363764)
+ok   key_down F
+ok   frames 2
+ok   key_up F
+ok   frames 2
+ok   screenshot build/ui/c2_framed.png
+shot build/ui/c2_framed.png
+ok   snapshot_camera
+ok   key_down Alt
+ok   mouse_down left
+ok   mouse_delta 120 0
+ok   frames 2
+ok   mouse_delta 120 0
+ok   frames 2
+ok   mouse_up left
+ok   key_up Alt
+ok   assert_camera_moved 0.5  (moved 81.073448)
+ok   screenshot build/ui/c3_orbited.png
+shot build/ui/c3_orbited.png
+     install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+     install_valid=1
+     maps=399
+     selected=Arena
+     preview_loaded=1
+     preview_textured=1
+     context_ready=1
+     mode=Textured
+     export_ok=0
+     export_path=
+     format=glb
+     textures=1
+     layers=0
+     walkable=0
+     texels=8
+     mesh_vertices=4225
+     batch_active=0
+     foliage_loaded=1
+     foliage_instances=0
+     preview_foliage=1
+     export_foliage=1
+     batch_done=0
+     batch_failed=0
+     filter=
+     camera=-12.54,130.33,-10.44
+ok   quit
+RESULT PASS

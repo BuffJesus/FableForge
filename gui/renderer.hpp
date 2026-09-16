@@ -14,16 +14,29 @@
 
 namespace albion::gui {
 
+// Free camera with Unreal-editor semantics. `distance` is the focus distance
+// used by orbit / dolly / pan speed; the eye is `pos`, looking along dir().
 struct Camera {
-    float targetX = 0, targetY = 0, targetZ = 0;  // orbit centre (render space, Y-up)
+    float posX = 0, posY = 0, posZ = 0;   // eye (render space, Y-up)
     float yaw = 0.8f;      // radians around Y
-    float pitch = 0.6f;    // radians above the horizon (0 = level)
-    float distance = 100;  // eye distance from target
+    float pitch = 0.6f;    // radians; positive looks DOWN (eye above the focus point)
+    float distance = 100;  // focus distance
     float fovY = 0.9f;
-    void orbit(float dYaw, float dPitch);
-    void pan(float dx, float dy);        // screen-relative pan in world units
-    void zoom(float steps);
-    void eye(float out[3]) const;
+    float flySpeed = 20;   // world units per second (WASD)
+
+    void dir(float out[3]) const;          // unit view direction
+    void right(float out[3]) const;
+    void up(float out[3]) const;
+    void eye(float out[3]) const { out[0] = posX; out[1] = posY; out[2] = posZ; }
+    void focus(float out[3]) const;        // pos + dir * distance
+    void lookAt(float tx, float ty, float tz, float yaw, float pitch, float dist);
+
+    void look(float dYaw, float dPitch);   // RMB: rotate in place
+    void orbit(float dYaw, float dPitch);  // Alt+LMB: rotate around the focus point
+    void pan(float dx, float dy);          // MMB: track in the view plane
+    void dolly(float steps);               // wheel: move along the view direction
+    void fly(float forward, float strafe, float rise, float dt); // WASD/QE while RMB
+    void turn(float dYaw) { yaw += dYaw; }
 };
 
 enum class ViewMode { Textured, Wireframe, Walkable, Height };

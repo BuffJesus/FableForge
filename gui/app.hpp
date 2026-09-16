@@ -70,6 +70,7 @@ private:
     std::vector<std::string> failures_;
     std::vector<std::string> log_;
     bool quit_ = false;
+    float camSnap_[3] = {0, 0, 0};
     std::string logPath_;
 };
 
@@ -135,6 +136,7 @@ private:
     void drawViewport(float width);
     void drawActions(float width);
     void handleViewportInput(const ImVec2& origin, const ImVec2& size);
+    void frameMap();
 
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;
@@ -200,6 +202,7 @@ private:
     char filterBuf_[128] = {};
     char outDirBuf_[512] = {};
     bool viewportHovered_ = false;
+    bool viewportCaptured_ = false;
     Automation auto_;
     friend class Automation;
 };

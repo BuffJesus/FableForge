@@ -136,28 +136,68 @@ struct GpuVertex { float px, py, pz, nx, ny, nz, u, v, walk; };
 
 } // namespace
 
-void Camera::orbit(float dYaw, float dPitch) {
+void Camera::dir(float out[3]) const {
+    // The eye sits at focus + distance * (cos p sin y, sin p, cos p cos y), so the
+    // view direction is the negative of that vector.
+    out[0] = -std::cos(pitch) * std::sin(yaw);
+    out[1] = -std::sin(pitch);
+    out[2] = -std::cos(pitch) * std::cos(yaw);
+}
+
+void Camera::right(float out[3]) const {
+    out[0] = std::cos(yaw); out[1] = 0; out[2] = -std::sin(yaw);
+}
+
+void Camera::up(float out[3]) const {
+    float d[3], r[3]; dir(d); right(r);
+    out[0] = r[1] * d[2] - r[2] * d[1];
+    out[1] = r[2] * d[0] - r[0] * d[2];
+    out[2] = r[0] * d[1] - r[1] * d[0];
+    if (out[1] < 0) { out[0] = -out[0]; out[1] = -out[1]; out[2] = -out[2]; }
+}
+
+void Camera::focus(float out[3]) const {
+    float d[3]; dir(d);
+    out[0] = posX + d[0] * distance; out[1] = posY + d[1] * distance; out[2] = posZ + d[2] * distance;
+}
+
+void Camera::lookAt(float tx, float ty, float tz, float y, float p, float dist) {
+    yaw = y; pitch = std::clamp(p, -1.55f, 1.55f); distance = std::max(dist, 0.5f);
+    float d[3]; dir(d);
+    posX = tx - d[0] * distance; posY = ty - d[1] * distance; posZ = tz - d[2] * distance;
+}
+
+void Camera::look(float dYaw, float dPitch) {
     yaw += dYaw;
-    pitch = std::clamp(pitch + dPitch, -0.05f, 1.55f);
+    pitch = std::clamp(pitch + dPitch, -1.55f, 1.55f);
+}
+
+void Camera::orbit(float dYaw, float dPitch) {
+    float f[3]; focus(f);
+    lookAt(f[0], f[1], f[2], yaw + dYaw, pitch + dPitch, distance);
 }
 
 void Camera::pan(float dx, float dy) {
-    // Move the target in the camera's screen plane (right and up vectors).
-    const float rx = std::cos(yaw), rz = -std::sin(yaw);
-    const float ux = -std::sin(yaw) * std::sin(pitch), uy = std::cos(pitch), uz = -std::cos(yaw) * std::sin(pitch);
-    targetX += rx * dx + ux * dy;
-    targetY += uy * dy;
-    targetZ += rz * dx + uz * dy;
+    float r[3], u[3]; right(r); up(u);
+    posX += r[0] * dx + u[0] * dy;
+    posY += r[1] * dx + u[1] * dy;
+    posZ += r[2] * dx + u[2] * dy;
 }
 
-void Camera::zoom(float steps) {
-    distance = std::clamp(distance * std::pow(0.85f, steps), 2.0f, 20000.0f);
+void Camera::dolly(float steps) {
+    const float newDist = std::clamp(distance * std::pow(0.85f, steps), 0.5f, 20000.0f);
+    float d[3]; dir(d);
+    const float move = distance - newDist;
+    posX += d[0] * move; posY += d[1] * move; posZ += d[2] * move;
+    distance = newDist;
 }
 
-void Camera::eye(float out[3]) const {
-    out[0] = targetX + distance * std::cos(pitch) * std::sin(yaw);
-    out[1] = targetY + distance * std::sin(pitch);
-    out[2] = targetZ + distance * std::cos(pitch) * std::cos(yaw);
+void Camera::fly(float forward, float strafe, float rise, float dt) {
+    float d[3], r[3]; dir(d); right(r);
+    const float k = flySpeed * dt;
+    posX += (d[0] * forward + r[0] * strafe) * k;
+    posY += (d[1] * forward + r[1] * strafe + rise) * k;
+    posZ += (d[2] * forward + r[2] * strafe) * k;
 }
 
 Renderer::~Renderer() {
@@ -345,12 +385,9 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera) {
         }
     }
     minH_ = mn[1]; maxH_ = mx[1];
-    camera.targetX = (mn[0] + mx[0]) * 0.5f;
-    camera.targetY = (mn[1] + mx[1]) * 0.5f;
-    camera.targetZ = (mn[2] + mx[2]) * 0.5f;
     const float span = std::max({mx[0] - mn[0], mx[2] - mn[2], 8.0f});
-    camera.distance = span * 0.95f;
-    camera.yaw = 0.8f; camera.pitch = 0.62f;
+    camera.lookAt((mn[0] + mx[0]) * 0.5f, (mn[1] + mx[1]) * 0.5f, (mn[2] + mx[2]) * 0.5f, 0.8f, 0.62f, span * 0.95f);
+    camera.flySpeed = std::max(span * 0.25f, 4.0f);
     return true;
 }
 
@@ -391,7 +428,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->RSSetViewports(1, &vp);
 
     float eye[3]; camera.eye(eye);
-    const float at[3] = {camera.targetX, camera.targetY, camera.targetZ};
+    float at[3]; camera.focus(at);
     float view[16], proj[16];
     lookAtRH(eye, at, view);
     const float zn = std::max(camera.distance * 0.01f, 0.05f), zf = camera.distance * 30.0f + 1000.0f;
