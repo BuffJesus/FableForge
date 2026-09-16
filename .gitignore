@@ -1,0 +1,7 @@
+build/
+build-*/
+out/
+*.glb
+*.obj
+*.mtl
+__pycache__/
