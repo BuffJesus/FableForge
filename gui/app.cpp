@@ -182,6 +182,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.foliage = j.value("foliage", settings_.foliage);
         settings_.things = j.value("things", settings_.things);
         settings_.water = j.value("water", settings_.water);
+        settings_.creatures = j.value("creatures", settings_.creatures);
         settings_.texSize = std::clamp(j.value("texSize", settings_.texSize), 0, 2);
         settings_.world = j.value("world", settings_.world);
     } catch (...) {}
@@ -195,7 +196,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"texSize", settings_.texSize}, {"world", settings_.world},
+            {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -471,6 +472,7 @@ void App::startExportOf(const MapEntry& entry) {
                 to.textures = o.textures;
                 to.up = o.up;
                 to.originX = o.originX; to.originY = o.originY;
+                to.creatures = s.creatures;
                 to.log = o.log;
                 thg = thingsexport::load(entry.name, to, *ctx);
             }
@@ -1113,6 +1115,11 @@ void App::drawActions(float width) {
     auto_.registerWidget("toggle_foliage");
     theme::toggle("Placed objects (fences, walls, rocks, buildings)", &settings_.things);
     auto_.registerWidget("toggle_things");
+    if (settings_.things) {
+        theme::toggle("Creatures placed in the map (bind pose)", &settings_.creatures);
+        auto_.registerWidget("toggle_creatures");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only creatures authored in the .tng (guards, bosses, the demon-door face).\nVillagers are spawned at runtime and are not in any file.");
+    }
     theme::toggle("Water (lakes, rivers, sea)", &settings_.water);
     auto_.registerWidget("toggle_water");
     ImGui::Dummy(ImVec2(0, S(2)));
@@ -1377,6 +1384,7 @@ bool Automation::tick(App& app) {
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "things") s.things = val == "1";
         else if (key == "water") s.water = val == "1";
+        else if (key == "creatures") s.creatures = val == "1";
         else if (key == "texsize") s.texSize = std::atoi(val.c_str());
         else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");
