@@ -34,6 +34,17 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `mode textured\|wireframe\|walkable\|height` | view mode |
 | `set <key> <value>` | export settings: `format glb\|obj`, `textures 0\|1`, `layers 0\|1`, `walkable 0\|1`, `texels n`, `tile f`, `gain f`, `up y\|z`, `world 0\|1`, `things 0\|1`, `outdir path` |
 | `export` / `export_all` / `export_region` | start a single / batch / region export (state path; use `click btn_export` for the UI path) |
+| `edit 0\|1` | switch the right panel between Export and Edit (opens the level document) |
+| `gizmo 0\|1\|2\|3` | select / move / rotate / scale tool |
+| `pick <u> <v>` | ray-pick at viewport-relative (u, v) in [0,1]; selects the hit thing |
+| `select_thing <index>` / `select_def <DEFINITION>` | select by .tng index / first thing with that DefinitionType |
+| `move_thing <dx> <dy> <dz>` / `rotate_thing <deg>` / `scale_thing <factor>` / `ground_thing` | edit the selection (one undo step each) |
+| `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits (the objects layer reloads; `wait_foliage` waits for it) |
+| `place <DEFINITION>` | place a new thing at the camera focus, on the ground |
+| `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
+| `frame_selected` | frame the camera on the selection |
+| `set saveroot <dir>` | where `save_level` / `deploy_level` write (default: the install) |
+| `save_level` / `deploy_level` | write the loose .tng / replace the WAD entry under saveroot |
 | `screenshot <png>` | save the next presented frame |
 | `assert_file <path>` | file exists and is non-empty |
 | `assert_state <key> <value>` | see `dump_state` for keys |
@@ -48,13 +59,19 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 `btn_change_install`, `input_filter`, `group_<Group>`, `row_<key>`, `row_selected`,
 `viewport`, `chip_textured|wireframe|walkable|height|reset`, `seg_format`, `seg_up`,
 `toggle_textures`, `toggle_layers`, `toggle_walkable`, `slider_texels`, `slider_tile`,
-`input_outdir`, `btn_export`, `btn_export_all`, `btn_cancel_batch`, `btn_open_folder`.
+`input_outdir`, `btn_export`, `btn_export_all`, `btn_cancel_batch`, `btn_open_folder`,
+`seg_panel`, and in Edit mode `seg_gizmo`, `toggle_snap`, `drag_px|py|pz|yaw|scale`,
+`btn_ground`, `btn_focus`, `btn_duplicate`, `btn_delete`, `input_thingsearch`,
+`input_defsearch`, `btn_place`, `btn_undo`, `btn_redo`, `btn_save`, `btn_deploy`,
+`btn_deploy_confirm`, `btn_revert`.
 
 A widget is only registered on frames where it was drawn, so expand a group
 (`click group_Arena`) before clicking one of its rows.
 
 ## Suites
 
+* `tests/ui/editor.txt` — Edit mode: select, move, rotate, scale, duplicate, undo back to
+  clean, place, delete, a real gizmo drag, save into `build/ui_editor_install`.
 * `tests/ui/smoke.txt` — happy path: install detected, textured preview, all view modes,
   orbit, filter, export via button. `tools/ui_smoke.py` runs it and adds GLB validation
   and screenshot pixel assertions.

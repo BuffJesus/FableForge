@@ -1,11 +1,12 @@
 # Albion Atlas
 
-Export **Fable: The Lost Chapters** maps — terrain, ground textures, grass, trees and
-placed objects — to `.glb` (glTF binary) or `.obj`, straight from your Steam install.
-Two small Windows executables, no dependencies:
+View, export and edit **Fable: The Lost Chapters** maps — terrain, ground textures,
+grass, trees, water and placed objects — straight from your Steam install. Export to
+`.glb` (glTF binary) or `.obj`, or move, add and remove the objects of a level and
+write the result back into the game. Two small Windows executables, no dependencies:
 
 * **`AlbionAtlasGUI.exe`** — pick your install, browse the 399 maps on the left,
-  see the textured terrain in 3D in the middle, export on the right. Drag a `.lev`
+  see the map in 3D in the middle, export or edit on the right. Drag a `.lev`
   onto the window to open a loose file. Export one map or all of them.
 * **`AlbionAtlas.exe`** — the same exporter as a command line tool.
 
@@ -121,6 +122,29 @@ export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
 are remembered in `%APPDATA%\AlbionAtlas`.
 The UI is DPI-aware and scales with the window (0.85x on small windows up to 1.25x on
 a 1440p one); it stays usable down to 1024 x 700.
+
+## Editing a level
+
+Switch the right panel to **Edit**. This is the part of Albion Atlas that replaces the
+leaked Lionhead debug editor for the everyday job of laying out a level, without the
+crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
+
+* **Click** an object in the viewport to select it (outlined). **Q/W/E/R** switch
+  between select, move, rotate and scale; drag the gizmo or type the position, yaw
+  and scale in the panel. **End** drops it onto the terrain, **F** frames it.
+* **Ctrl+D** duplicates, **Del** removes, **Ctrl+Z / Ctrl+Y** undo and redo.
+* *Objects in this map* lists every placed thing (filter by definition or script name;
+  double-click to fly to it). *Add an object* searches every `OBJECT_` / `BUILDING_`
+  definition in `game.bin` and places it where the camera looks, on the ground,
+  facing you.
+* *Changes* summarises what differs from the original by UID. **Save .tng** writes
+  the loose `data/Levels/FinalAlbion/<map>.tng`; **Write into FinalAlbion.wad** puts
+  the edited file into the archive the game actually loads. Both keep a one-time
+  `.atlas-orig` backup of what was there.
+
+Everything is written the way the game wrote it: untouched things stay byte-identical,
+moved things get their position/basis lines rewritten in retail float spelling, new
+things use retail field order and the per-file UID namespace.
 
 ## Building
 
