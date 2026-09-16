@@ -1038,7 +1038,7 @@ void App::drawActions(float width) {
     }
     theme::toggle("Walkability as vertex colours", &settings_.walkable);
     auto_.registerWidget("toggle_walkable");
-    if (theme::toggle("Cut out undrawn cells (caves, edges)", &settings_.holes)) { previewLoadedFor_.clear(); startPreviewLoad(); }
+    if (theme::toggle("Cut out undrawn cells  (experimental, over-cuts)", &settings_.holes)) { previewLoadedFor_.clear(); startPreviewLoad(); }
     auto_.registerWidget("toggle_holes");
     theme::endCard();
 

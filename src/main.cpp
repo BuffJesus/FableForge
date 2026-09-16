@@ -52,7 +52,7 @@ int usage() {
         "  --foliage           add the baked grass/plants/trees as mesh instances (needs install)\n"
         "  --things            add the placed objects (fences, walls, rocks, buildings) from the .tng\n"
         "  --creatures         with --things: include creature meshes in bind pose\n"
-        "  --no-holes          keep the full grid (default: cells the engine never draws are cut out)\n"
+        "  --holes             EXPERIMENTAL: cut out cells with no foreground triangles (known to over-cut)\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 4)\n"
@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false, holes = true;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false, holes = false;
     int texels = 8;
     float tile = 4.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -220,6 +220,7 @@ int main(int argc, char** argv) {
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
         else if (a == "--world") world = true;
+        else if (a == "--holes") holes = true;
         else if (a == "--no-holes") holes = false;
         else if (a == "--creatures") creatures = true;
         else if (a == "--layers") layers = true;

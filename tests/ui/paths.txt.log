@@ -73,7 +73,7 @@ ok   filter
      preview_things=1
      export_things=1
      world=0
-     holes=1
+     holes=0
      hidden_cells=0
      region=Loose files
      batch_done=3

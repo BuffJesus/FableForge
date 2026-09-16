@@ -61,8 +61,8 @@ ok   assert_file build/ui/StartOakValeWest.glb
      preview_things=1
      export_things=1
      world=0
-     holes=1
-     hidden_cells=7102
+     holes=0
+     hidden_cells=0
      region=StartOakVale
      batch_done=0
      batch_failed=0
