@@ -455,7 +455,14 @@ void App::drawExplorer(float width) {
     ImGui::SameLine();
     ImGui::PushFont(fontSmall_);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2);
-    ImGui::TextColored(theme::vec(theme::Faint), "%zu", maps_.size());
+    if (!filter_.empty()) {
+        size_t shownCount = 0;
+        const std::string lf = lower(filter_);
+        for (const auto& m : maps_) if (lower(m.name).find(lf) != std::string::npos) ++shownCount;
+        ImGui::TextColored(theme::vec(theme::Faint), "%zu / %zu", shownCount, maps_.size());
+    } else {
+        ImGui::TextColored(theme::vec(theme::Faint), "%zu", maps_.size());
+    }
     ImGui::PopFont();
 
     ImGui::SetCursorPosX(16);
@@ -517,7 +524,7 @@ void App::drawExplorer(float width) {
             }
             if (!groupVisible) continue;
             const bool selected = m.name == selectedName_;
-            ImGui::SetCursorPosX(single ? 12 : 26);
+            ImGui::SetCursorPosX(26);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
             ImGui::PushStyleColor(ImGuiCol_Header, theme::vec(theme::AccentSoft));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::vec(theme::Bg2));
