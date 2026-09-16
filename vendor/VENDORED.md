@@ -12,6 +12,11 @@ Local edits (keep when re-copying):
   decodes `WaterHeight` / `WaterType` (the water layer). Worth upstreaming.
 * `src/meshpreview.cpp` — static blocks use their own MaterialIndex (as EgoCore
   does) instead of the primitive's; fixes multi-material meshes. Worth upstreaming.
+* `include/forge/big.hpp` / `src/big.cpp` — `File::open` no longer slurps the
+  whole archive: it keeps the path, parses the directory + entry tables from the
+  tail of the file and `entryData` reads each payload from disk on demand
+  (textures.big + graphics.big = 780 MB that used to sit in RAM; export peak
+  1.26 GB -> 0.54 GB). `openFully` keeps the old behaviour. Worth upstreaming.
 
 ## `embedded_schema.hpp`
 Slice of FableForge `docs/re_reference/def_schema.json`: `CEngineThemeDef`

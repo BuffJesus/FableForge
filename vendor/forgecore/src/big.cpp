@@ -50,14 +50,34 @@ std::string asciizFrom(const std::vector<uint8_t>& b) {
 
 } // namespace
 
-File File::open(const std::filesystem::path& path) {
+namespace {
+std::vector<uint8_t> readRange(std::ifstream& f, uint64_t offset, uint64_t length) {
+    std::vector<uint8_t> out(static_cast<size_t>(length), uint8_t(0));
+    f.clear();
+    f.seekg(std::streamoff(offset));
+    if (length) f.read(reinterpret_cast<char*>(out.data()), std::streamsize(length));
+    if (uint64_t(f.gcount()) != length) throw std::runtime_error("big: short read");
+    return out;
+}
+} // namespace
+
+File File::openFully(const std::filesystem::path& path) {
+    File out = open(path);
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("big: cannot open " + path.string());
-    File out;
     out.raw_.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    const auto& d = out.raw_;
-    if (d.size() < 16) throw std::runtime_error("big: file too small");
+    return out;
+}
 
+File File::open(const std::filesystem::path& path) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) throw std::runtime_error("big: cannot open " + path.string());
+    File out;
+    out.path_ = path;
+    out.fileSize_ = uint64_t(f.tellg());
+    if (out.fileSize_ < 16) throw std::runtime_error("big: file too small");
+
+    const std::vector<uint8_t> d = readRange(f, 0, 16);
     // magic: "BIGB" or "B\0\0\0"
     if (!(d[0] == 'B' && ((d[1] == 'I' && d[2] == 'G' && d[3] == 'B') ||
                           (d[1] == 0 && d[2] == 0 && d[3] == 0))))
@@ -68,8 +88,31 @@ File File::open(const std::filesystem::path& path) {
     out.version_ = c.u32();
     uint32_t bankDirOffset = c.u32();
     out.contentType_ = c.u32();
+    if (bankDirOffset >= out.fileSize_) throw std::runtime_error("big: bad bank directory offset");
 
-    Cursor dir{d, bankDirOffset};
+    // Only the directory + entry tables are held in memory: a window from the
+    // lowest entry-table offset (the tables precede the directory in every retail
+    // bank, but the window is widened if one does not) to the end of the file.
+    uint64_t windowStart = bankDirOffset;
+    std::vector<uint8_t> tail = readRange(f, windowStart, out.fileSize_ - windowStart);
+    {
+        Cursor dir{tail, 0};
+        uint32_t bankCount = dir.u32();
+        for (uint32_t i = 0; i < bankCount; ++i) {
+            dir.asciiz(); dir.u32();
+            uint32_t entryCount = dir.u32();
+            uint32_t entryStart = dir.u32();
+            dir.u32(); dir.u32();
+            if (entryCount > 0 && entryStart < windowStart) windowStart = entryStart;
+        }
+    }
+    if (windowStart < bankDirOffset) tail = readRange(f, windowStart, out.fileSize_ - windowStart);
+    auto rel = [&](uint32_t abs) -> size_t {
+        if (abs < windowStart) throw std::runtime_error("big: offset outside directory window");
+        return size_t(abs - windowStart);
+    };
+
+    Cursor dir{tail, rel(bankDirOffset)};
     uint32_t bankCount = dir.u32();
     for (uint32_t i = 0; i < bankCount; ++i) {
         Bank bank;
@@ -81,7 +124,7 @@ File File::open(const std::filesystem::path& path) {
         bank.blockSize = dir.u32();
 
         if (entryCount > 0) {
-            Cursor e{d, entryStart};
+            Cursor e{tail, rel(entryStart)};
             uint32_t typeCount = e.u32();
             e.p += (size_t)typeCount * 8; // skip the type-count table
             for (uint32_t k = 0; k < entryCount; ++k) {
@@ -101,7 +144,8 @@ File File::open(const std::filesystem::path& path) {
                     en.devSources.push_back(e.str(sl));
                 }
                 uint32_t subLen = e.u32();
-                en.subHeader.assign(d.begin() + e.p, d.begin() + e.p + subLen);
+                e.need(subLen);
+                en.subHeader.assign(tail.begin() + e.p, tail.begin() + e.p + subLen);
                 e.p += subLen;
                 en.definition = asciizFrom(en.subHeader);
                 bank.entries.push_back(std::move(en));
@@ -126,10 +170,17 @@ Bank* File::findBank(const std::string& name) {
 
 std::vector<uint8_t> File::entryData(const Entry& e) const {
     if (!e.data.empty() || e.length == 0) return e.data;
-    if ((size_t)e.dataOffset + e.length > raw_.size())
+    if (!raw_.empty()) {
+        if ((size_t)e.dataOffset + e.length > raw_.size())
+            throw std::runtime_error("big: entry data out of range");
+        return std::vector<uint8_t>(raw_.begin() + e.dataOffset,
+                                    raw_.begin() + e.dataOffset + e.length);
+    }
+    if (uint64_t(e.dataOffset) + e.length > fileSize_)
         throw std::runtime_error("big: entry data out of range");
-    return std::vector<uint8_t>(raw_.begin() + e.dataOffset,
-                                raw_.begin() + e.dataOffset + e.length);
+    std::ifstream f(path_, std::ios::binary);
+    if (!f) throw std::runtime_error("big: cannot reopen " + path_.string());
+    return readRange(f, e.dataOffset, e.length);
 }
 
 Bank& File::addBank(const std::string& name, uint32_t id) {
