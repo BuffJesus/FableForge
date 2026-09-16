@@ -105,6 +105,7 @@ public:
     bool previewFoliage() const { return previewFoliage_; }
     void setPreviewThings(bool on);
     bool previewThings() const { return previewThings_; }
+    void setPreviewWater(bool on) { renderer_.showWater = on; }
     bool previewBusy() const { return previewFuture_.valid(); }
     bool exportBusy() const { return exportFuture_.valid(); }
     bool contextReady() const { return ctx_.ready(); }

@@ -8,6 +8,8 @@ at commit `8d5ab30` (working tree, 2026-09-15): `lev`, `terrain`, `terraintex`,
 Local edits (keep when re-copying):
 * `src/lzo.cpp` — decoding routed through `src/lzo1x.cpp` (clean-room MIT
   LZO1X) instead of GPL minilzo; compression throws (not needed here).
+* `include/forge/terraintex.hpp` / `src/terraintex.cpp` — `ThemeEntry` also
+  decodes `WaterHeight` / `WaterType` (the water layer). Worth upstreaming.
 * `src/meshpreview.cpp` — static blocks use their own MaterialIndex (as EgoCore
   does) instead of the primitive's; fixes multi-material meshes. Worth upstreaming.
 

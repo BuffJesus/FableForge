@@ -63,6 +63,7 @@ public:
     bool showLayer[kLayers] = {true, true};
     bool& showFoliage = showLayer[0];
     bool& showThings = showLayer[1];
+    bool showWater = true;
     // Back-compat names used by the app.
     bool uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up) { return uploadLayer(0, scene, up); }
     void clearFoliage() { clearLayer(0); }
@@ -94,6 +95,11 @@ private:
     ID3D11RasterizerState* wire_ = nullptr;
     ID3D11DepthStencilState* depth_ = nullptr;
     ID3D11BlendState* blend_ = nullptr;
+    ID3D11BlendState* alphaBlend_ = nullptr;
+    ID3D11DepthStencilState* depthNoWrite_ = nullptr;
+    ID3D11Buffer* waterVb_ = nullptr;
+    ID3D11Buffer* waterIb_ = nullptr;
+    uint32_t waterIndexCount_ = 0;
     ID3D11ShaderResourceView* albedo_ = nullptr;
     struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; };
     std::vector<FoliageBatch> layers_[kLayers];

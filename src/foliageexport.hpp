@@ -16,9 +16,12 @@
 //     parses as a CObjectCacheGroupCollection (the layout FableForge's STB baker
 //     writes and the engine's Load reads): type-1 RepeatedMesh batches (grass:
 //     16-byte A/B arrays) and type-0 Mesh primitives (trees/props: a full 3x4
-//     matrix). Type-2 ZSpriteBatch (distant impostor) bodies are not decoded;
-//     parsing of a frame stops there and the count is reported.
-//   * Only LOD0 geometry; fade/impostor (ZSprite) data is not exported.
+//     matrix) and type-2 ZSpriteBatch records (distant trees: the same 3x4
+//     matrix per object, grammar from CLocalDetailPrimitiveMeshZSpriteBatch::Load
+//     in the debug build). A z-sprite object that coincides with a type-0 object
+//     of the same type is its far-LOD twin and is dropped.
+//   * Only LOD0 geometry; z-sprite objects are exported as the full mesh, not as
+//     the impostor sprite the engine draws at distance.
 
 #include <cstdint>
 #include <filesystem>
@@ -91,8 +94,9 @@ struct Scene {
     int rejectedInstances = 0;        // implausible scale (parse false positives)
     int framesDecoded = 0;            // LZO frames decoded in the chunk
     int groupFrames = 0;              // frames that parsed as cache-group collections
-    int zspriteSkipped = 0;           // type-2 primitives not decoded
-    int treeInstances = 0;            // type-0 (single-mesh) instances placed
+    int zspriteInstances = 0;         // type-2 (distant impostor) placements decoded
+    int zspriteDuplicates = 0;        // ...of which coincide with a type-0 placement and were dropped
+    int treeInstances = 0;            // type-0/2 (single-mesh) instances placed
     std::vector<std::string> warnings;
     size_t triangleCount() const;
 };

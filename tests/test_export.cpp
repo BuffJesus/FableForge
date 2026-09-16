@@ -301,6 +301,55 @@ void testThingBasis() {
     CHECK(near(m[3], -1) && near(m[1], 1));
 }
 
+// Water: slot 1 (weight grows with x) is declared a lake 2 units deep; the
+// surface must appear only where the blended depth reaches the 0.05 threshold
+// and sit above the ground there.
+void testWater(const fs::path& dir) {
+    // Flat ground: on the 10-units-per-cell test slope the engine's 5x5 mean
+    // would (correctly) sink the sheet below the bank, which is not what this pins.
+    const fs::path lev = writeSyntheticLev(dir / "flat.lev", 4, 3, [](int, int) { return 5.0f; });
+    const auto level = forge::lev::File::open(lev);
+    te::Options o; o.textures = false;
+    te::Scene s = te::buildMesh(level, o);
+    te::ThemeLayer grass; grass.slot = 0; grass.resolved = true;
+    te::ThemeLayer lake; lake.slot = 1; lake.resolved = true; lake.waterType = 1; lake.waterHeight = 2.0f;
+    s.themes = {grass, lake};
+    te::buildWater(level, s, {{0, 0}, {1, 1}}, o);
+    const int cx = level.cellsX(), cy = level.cellsY();
+    int expectWet = 0;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const float w1 = float(level.themeStrengthAt(x, y, 1)) / 255.0f;
+            if (w1 > 0 && w1 * 2.0f >= 0.05f) ++expectWet;
+        }
+    CHECK(expectWet > 0);
+    CHECK(s.water.wetVertices == expectWet);
+    CHECK(!s.water.indices.empty() && s.water.iceIndices.empty());
+    CHECK(s.water.ice.size() == s.water.positions.size() / 3);
+    // Every water vertex sits above the ground under it (Y-up: py is height).
+    bool above = true;
+    for (size_t i = 0; i + 2 < s.water.positions.size(); i += 3) {
+        const int x = int(std::lround(s.water.positions[i])), y = int(std::lround(-s.water.positions[i + 2]));
+        if (x < 0 || y < 0 || x >= cx || y >= cy) { above = false; continue; }
+        const float w1 = float(level.themeStrengthAt(x, y, 1)) / 255.0f;
+        if (w1 * 2.0f >= 0.05f && s.water.positions[i + 1] < level.heightAt(x, y)) above = false;
+    }
+    CHECK(above);
+    // The fully wet column is exactly ground + 2 once smoothing sees only wet neighbours.
+    // (x = cx-1 has weight 255 -> depth 2; its 5x5 window mixes shallower columns, so only check >= ground + 1.)
+    bool deepEnough = true;
+    for (size_t i = 0; i + 2 < s.water.positions.size(); i += 3) {
+        const int x = int(std::lround(s.water.positions[i])), y = int(std::lround(-s.water.positions[i + 2]));
+        if (x == cx - 1 && y >= 0 && y < cy && s.water.positions[i + 1] < level.heightAt(x, y) + 1.0f) deepEnough = false;
+    }
+    CHECK(deepEnough);
+    // Dry map: no water at all.
+    te::Scene dry = te::buildMesh(level, o);
+    dry.themes = {grass, grass};
+    te::buildWater(level, dry, {{0, 0}, {1, 1}}, o);
+    CHECK(dry.water.empty() && dry.water.wetVertices == 0);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -313,6 +362,7 @@ int main() {
     testPng();
     testFoliageGlb(lev, dir);
     testThingBasis();
+    testWater(dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;

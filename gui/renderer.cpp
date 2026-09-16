@@ -19,7 +19,7 @@ cbuffer Frame : register(b0) {
     float4 lightDir;      // xyz normalized, towards the light
     float4 params;        // x = mode, y = minH, z = maxH, w = time
     float4 eye;
-    float4 flags;         // x = instance pass, y = alpha test (cutout materials)
+    float4 flags;         // x = pass (0 terrain, 1 instances, 2 water), y = alpha test (cutout materials)
 };
 Texture2D albedo : register(t0);
 SamplerState samp : register(s0);
@@ -53,6 +53,18 @@ float4 PS(VSOut i) : SV_Target {
     int mode = (int)params.x;
     float t = saturate((i.wpos.y - params.y) / max(params.z - params.y, 0.001));
     float3 base;
+    if (flags.x > 1.5) {
+        // water sheet: deep tint, brighter towards grazing angles, faint ripple
+        float3 v = normalize(eye.xyz - i.wpos);
+        float rim = pow(1.0 - saturate(dot(n, v)), 2.0);
+        float ripple = 0.5 + 0.5 * sin(i.wpos.x * 1.7 + params.w * 0.8) * sin(i.wpos.z * 1.3 - params.w * 0.6);
+        float3 deep = float3(0.10, 0.26, 0.40), shallow = float3(0.30, 0.55, 0.70);
+        if (i.walk < 0.5) { deep = float3(0.62, 0.70, 0.78); shallow = float3(0.86, 0.92, 0.97); ripple = 0.0; }   // ice
+        float3 col = lerp(deep, shallow, 0.35 * rim + 0.15 * ripple) * (0.55 + 0.6 * ndl);
+        float dist = distance(eye.xyz, i.wpos);
+        float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
+        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), (i.walk < 0.5 ? 0.9 : 0.62) + 0.2 * rim);
+    }
     if (flags.x > 0.5) {
         float4 tex = albedo.Sample(samp, i.uv);
         if (flags.y > 0.5 && tex.a < 0.5) discard;
@@ -205,7 +217,7 @@ Renderer::~Renderer() {
     releaseMesh();
     for (int i = 0; i < kLayers; ++i) clearLayer(i);
     release(white_);
-    release(blend_); release(depth_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
+    release(blend_); release(alphaBlend_); release(depth_); release(depthNoWrite_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
     release(cbuffer_); release(layout_); release(ps_); release(vs_);
 }
 
@@ -264,6 +276,15 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     bd.RenderTarget[0].BlendEnable = FALSE;
     bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     device_->CreateBlendState(&bd, &blend_);
+    bd.RenderTarget[0].BlendEnable = TRUE;
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
+    bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    device_->CreateBlendState(&bd, &alphaBlend_);
+    D3D11_DEPTH_STENCIL_DESC dw = {};
+    dw.DepthEnable = TRUE; dw.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO; dw.DepthFunc = D3D11_COMPARISON_LESS;
+    device_->CreateDepthStencilState(&dw, &depthNoWrite_);
 
     // 1x1 white fallback texture.
     const uint32_t white = 0xFF9A93A6u;  // neutral grey-violet for untextured maps (ABGR)
@@ -281,8 +302,8 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
 }
 
 void Renderer::releaseMesh() {
-    release(vb_); release(ib_); release(albedo_);
-    indexCount_ = 0;
+    release(vb_); release(ib_); release(albedo_); release(waterVb_); release(waterIb_);
+    indexCount_ = 0; waterIndexCount_ = 0;
 }
 
 void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearLayer(i); }
@@ -389,6 +410,26 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool fr
         if (SUCCEEDED(device_->CreateTexture2D(&td, &init, &tex))) {
             device_->CreateShaderResourceView(tex, nullptr, &albedo_);
             tex->Release();
+        }
+    }
+    if (!scene.water.empty()) {
+        const size_t wn = scene.water.positions.size() / 3;
+        std::vector<GpuVertex> wv(wn);
+        for (size_t i = 0; i < wn; ++i) {
+            const float* p = &scene.water.positions[i * 3];
+            wv[i] = {p[0], p[1], p[2], 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, scene.water.ice[i] ? 0.0f : 1.0f};   // walk = 0 marks ice
+            if (scene.up == terrainexport::UpAxis::Z) { wv[i].ny = 0.0f; wv[i].nz = 1.0f; }
+        }
+        D3D11_BUFFER_DESC wd = {};
+        wd.ByteWidth = UINT(wv.size() * sizeof(GpuVertex)); wd.Usage = D3D11_USAGE_IMMUTABLE; wd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        D3D11_SUBRESOURCE_DATA wsd = {wv.data(), 0, 0};
+        if (SUCCEEDED(device_->CreateBuffer(&wd, &wsd, &waterVb_))) {
+            std::vector<uint32_t> all(scene.water.indices);
+            all.insert(all.end(), scene.water.iceIndices.begin(), scene.water.iceIndices.end());
+            wd.ByteWidth = UINT(all.size() * 4); wd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+            wsd.pSysMem = all.data();
+            if (SUCCEEDED(device_->CreateBuffer(&wd, &wsd, &waterIb_))) waterIndexCount_ = uint32_t(all.size());
+            else release(waterVb_);
         }
     }
     minH_ = mn[1]; maxH_ = mx[1];
@@ -501,6 +542,19 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
                 }
             }
         }
+    }
+
+    if (showWater && waterIndexCount_ && mode != ViewMode::Wireframe) {
+        cb.flags[0] = 2.0f; cb.flags[1] = 0.0f;
+        if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
+        ctx_->IASetVertexBuffers(0, 1, &waterVb_, &stride, &offset);
+        ctx_->IASetIndexBuffer(waterIb_, DXGI_FORMAT_R32_UINT, 0);
+        ctx_->RSSetState(solid_);
+        ctx_->OMSetDepthStencilState(depthNoWrite_, 0);
+        ctx_->OMSetBlendState(alphaBlend_, bf, 0xFFFFFFFF);
+        ctx_->DrawIndexed(waterIndexCount_, 0, 0);
+        ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
+        ctx_->OMSetDepthStencilState(depth_, 0);
     }
 
     ID3D11ShaderResourceView* nullSrv = nullptr;

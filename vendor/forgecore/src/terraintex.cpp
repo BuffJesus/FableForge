@@ -398,6 +398,11 @@ ThemeLibrary ThemeLibrary::load(const bin::File& defs,
                 *slots[f] = uint32_t(value < 0 ? 0 : value);
             }
             theme.decoded = all;
+            bool found = false;
+            const int32_t type = fieldInt32(decoded, "WaterType", found);
+            if (found) theme.waterType = type;
+            for (const auto& f : decoded.fields)
+                if (f.name == "WaterHeight" && f.value.size() >= 4) { std::memcpy(&theme.waterHeight, f.value.data(), 4); break; }
         }
         lib.themes_.push_back(std::move(theme));
     }

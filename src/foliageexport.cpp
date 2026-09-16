@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <set>
+#include <tuple>
 #include <mutex>
 
 #include "forge/big.hpp"
@@ -282,7 +284,39 @@ bool parseGroupFrame(const std::vector<uint8_t>& d, const WorldBounds& wb,
             if (!inWorld(bb[0], bb[1], bb[2]) || !inWorld(bb[3], bb[4], bb[5]) || !sane(sp[3], 0.0f, 100000.0f)) {
                 out.resize(before); return false;
             }
-            if (primType == 2) { ++st.zsprite; return out.size() > before; }   // stop here, keep what parsed
+            if (primType == 2) {
+                // CLocalDetailPrimitiveMeshZSpriteBatch::Load (FableWin 0x02edf3d0): u32 count,
+                // then count x { CMatrix3x4 (12 floats, rows = local axes, row 3 = position),
+                // float, C3DBoundingSphere (4 floats) } = 0x44 bytes, then count x float4
+                // object entries (position + radius). Same placement matrix as type 0; the
+                // engine draws these as impostor sprites of the type's mesh at distance.
+                if (!have(4)) { out.resize(before); return false; }
+                const uint32_t N = u32();
+                if (N == 0 || N > 65536 || !have(size_t(N) * 0x44 + size_t(N) * 16)) { out.resize(before); return false; }
+                for (uint32_t i = 0; i < N; ++i) {
+                    float mtx[12];
+                    for (float& v : mtx) v = f32();
+                    const float aux = f32();
+                    float sph[4];
+                    for (float& v : sph) v = f32();
+                    RawPlacement r; r.type = int(typeIndex); r.prim = 2; r.hasMatrix = true;
+                    for (int k = 0; k < 9; ++k) r.m[k] = mtx[k];
+                    r.x = mtx[9]; r.y = mtx[10]; r.z = mtx[11];
+                    bool finite = std::isfinite(aux) && std::isfinite(sph[3]);
+                    for (float v : mtx) finite = finite && std::isfinite(v) && std::fabs(v) < 1e5f;
+                    if (!finite || !inWorld(r.x, r.y, r.z)) { out.resize(before); return false; }
+                    const float sx = std::sqrt(mtx[0] * mtx[0] + mtx[1] * mtx[1] + mtx[2] * mtx[2]);
+                    const float sy = std::sqrt(mtx[3] * mtx[3] + mtx[4] * mtx[4] + mtx[5] * mtx[5]);
+                    const float sz = std::sqrt(mtx[6] * mtx[6] + mtx[7] * mtx[7] + mtx[8] * mtx[8]);
+                    r.scale = (sx + sy + sz) / 3.0f;
+                    r.yaw = std::atan2(mtx[1], mtx[0]);
+                    if (!sane(r.scale, 1e-5f, 10000.0f)) { out.resize(before); return false; }
+                    out.push_back(r);
+                    ++st.zsprite;
+                }
+                p += size_t(N) * 16;
+                continue;
+            }
             if (primType == 1) {
                 if (!have(8)) { out.resize(before); return false; }
                 const uint32_t N = u32();
@@ -389,7 +423,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
             if (parseGroupFrame(frame, wb, raw, pst)) ++scene.groupFrames;
         });
         scene.framesDecoded = frames;
-        scene.zspriteSkipped = pst.zsprite;
+        scene.zspriteInstances = pst.zsprite;
         scene.found = true;
     } catch (const std::exception& e) {
         warn(options, scene, std::string("reading foliage: ") + e.what());
@@ -398,7 +432,27 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
     if (options.log) options.log(std::to_string(raw.size()) + " baked placements in " + std::to_string(scene.groupFrames) +
                                  " cache-group frames (" + std::to_string(scene.framesDecoded) + " frames decoded), " +
                                  std::to_string(palette.entries.size()) + " scenery types" +
-                                 (pst.zsprite ? ", " + std::to_string(pst.zsprite) + " z-sprite batch(es) skipped" : ""));
+                                 (pst.zsprite ? ", " + std::to_string(pst.zsprite) + " in z-sprite batches" : ""));
+    // A z-sprite batch is the far-LOD twin of the near single-mesh placements: the
+    // same tree usually appears in both. Keep the type-0 copy, drop the twin.
+    {
+        std::set<std::tuple<int, int, int, int>> near;
+        auto key = [](const RawPlacement& r) {
+            return std::make_tuple(r.type, int(std::lround(r.x * 4)), int(std::lround(r.y * 4)), int(std::lround(r.z * 4)));
+        };
+        for (const auto& r : raw) if (r.prim == 0) near.insert(key(r));
+        std::vector<RawPlacement> kept;
+        kept.reserve(raw.size());
+        for (const auto& r : raw) {
+            if (r.prim == 2 && near.count(key(r))) { ++scene.zspriteDuplicates; continue; }
+            kept.push_back(r);
+        }
+        raw.swap(kept);
+        if (options.log && scene.zspriteInstances)
+            options.log("  z-sprite batches: " + std::to_string(scene.zspriteInstances) + " placements, " +
+                        std::to_string(scene.zspriteDuplicates) + " duplicate near-LOD trees dropped, " +
+                        std::to_string(scene.zspriteInstances - scene.zspriteDuplicates) + " distant-only trees added");
+    }
 
     // Meshes for every palette type that has instances.
     fs::path graphics = options.gameRoot / "data" / "graphics" / "graphics.big";
@@ -445,7 +499,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
         out.scale = inst.scale;
         out.hasMatrix = inst.hasMatrix;
         std::memcpy(out.m, inst.m, sizeof out.m);
-        if (inst.prim == 0) ++scene.treeInstances;
+        if (inst.prim != 1) ++scene.treeInstances;
         scene.meshes[size_t(meshIndex)].instanceCount++;
         scene.instances.push_back(out);
     }

@@ -56,6 +56,7 @@ struct Options {
     float cliffStartSlope = 0.55f; // tan(angle) where cliff blending begins (~29 deg)
     float cliffFullSlope = 1.4f;   // tan(angle) where cliff fully replaces base (~54 deg)
     bool layers = false;           // also emit splat attributes + per-slot PNGs
+    bool water = true;             // water surface from the theme blend (needs textures/defs)
     bool walkableColor = false;    // COLOR_0 = walkable (white) / blocked (red)
     UpAxis up = UpAxis::Y;
     // Map-local -> world offset (Fable-space), for stitching maps by WLD placement.
@@ -93,6 +94,21 @@ struct ThemeLayer {
     size_t vertexReferences = 0;
     int baseImage = -1;             // index into Scene::layerImages, or -1
     int cliffImage = -1;
+    float waterHeight = 0;          // ENGINE_THEME WaterHeight: water depth above the ground
+    int waterType = 0;              // ENGINE_THEME WaterType: 0 = no water
+};
+
+// The water surface (lakes, rivers, sea): the engine's per-vertex water height
+// is ground + sum(blend * theme.WaterHeight), smoothed over a 5x5 window of
+// wet vertices (CWaterPatchMesh::FindCorrectWaterLevel). Cells with at least one
+// wet corner are drawn; dry corners take the cell's wet mean.
+struct WaterMesh {
+    std::vector<float> positions;     // xyz, already in the requested up-axis space
+    std::vector<uint8_t> ice;         // per vertex: 1 = frozen (EWaterType 8, Hook Coast ice)
+    std::vector<uint32_t> indices;    // liquid water triangles, CCW seen from above
+    std::vector<uint32_t> iceIndices; // frozen water triangles
+    int wetVertices = 0;
+    bool empty() const { return indices.empty() && iceIndices.empty(); }
 };
 
 struct Scene {
@@ -113,6 +129,7 @@ struct Scene {
     int nameResolvedThemes = 0;     // slots resolved by NAME because the stored def index was stale
     bool walkableColor = false;
     bool layers = false;
+    WaterMesh water;
 };
 
 // The map's world origin from data/Levels/FinalAlbion.wld (MapX/MapY); false
@@ -131,6 +148,10 @@ RegionIndex loadRegionIndex(const std::filesystem::path& gameRoot);
 
 // Geometry only (positions/normals/UVs/walkable/theme slots), no textures.
 Scene buildMesh(const forge::lev::File& level, const Options& options);
+
+// Water surface from a scene whose `themes` carry waterHeight/waterType
+// (buildScene calls this; exposed for tests). slotToLayer: LEV palette slot -> Scene::themes index.
+void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options);
 
 // Install-wide texture state that is expensive to build (ENGINE_THEME library
 // from game.bin, the textures.big index, decoded textures). Load once, reuse

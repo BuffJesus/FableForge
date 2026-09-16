@@ -27,18 +27,27 @@ Targets for the remaining gaps:
 - Texture tiling scale + cliff direction blend: `CEngineLandscapeMeshBuilder::GetPassFromTexture`
   `0x02cb0a10`, `BuildLayerMesh` `0x02cb12b0`, `GetMappingDirectionBlend` `0x02cae000`,
   `BuildMapDirMask` `0x02cae270`.
-- Water plane: `CWaterSeaGenerator::CalcSeaHeight` `0x02e5da10`, `GenerateBuffers` `0x02e5ace0`,
-  `CWaterGenerator::FindShorePointsInMap` `0x02e07490` (STB info block has ShorePointArray).
-- Z-sprite trees: `CLocalDetailPrimitiveMeshZSpriteBatch` ctor `0x02ede6c0` (Load is a vtable
-  slot, follow the thunk); retail ctor `0xBFAC70`.
+- DONE: water — `CEngineMap::PeekWaterHeight` `0x02d5dd80` = ground + `PeekWaterDepth`
+  (sum blend*WaterHeight over the 3 slots), `PeekHasWaterFast` `0x02d5d620` (any slot WaterType != 0),
+  `CWaterPatchMesh::FindCorrectWaterLevel` `0x02e67af0` (mean of non-zero heights in +-2 cells).
+  `CWaterSeaGenerator::CalcSeaHeight` is only the curved far-sea disc (not exported).
+- DONE: z-sprite trees — `CLocalDetailPrimitiveMeshZSpriteBatch::Load` `0x02edf3d0` gave the
+  record (0x30 CMatrix3x4 + float + sphere, then float4 entries); decoded in
+  `foliageexport.cpp::parseGroupFrame`. Side effect: type-0 placements after a type-2 primitive
+  in the same frame were previously lost (Oakvale West 12 -> 20 trees).
 - Any future placement doubt: `CalcObjectMatrix` `0x02ee3a00` / `Calc2DObjectMatrix` `0x02ee3850`.
 
 ## Correctness pass — remaining
-- Systematic screenshot sweep of every level with `--things --foliage` from a fixed camera
-  (only Arena, Oakvale West, Bowerstone Slums, Lookout Point, Hook Coast checked so far).
+- All-maps things audit (2026-09-16, `--things` on all 399 maps): 21,800 things, 12,434 placed,
+  0 unknown defs, 0 missing meshes; the 8,434 "without a model" are markers/cameras/nav/emitters,
+  the 113 "unplaced" are NAVIGATION_SEED (no physics block), 819 creatures skipped by default.
+  Every visible thing in the data is exported. Villagers/guards/animals are spawned at runtime
+  by the village system and quest scripts — not in any file, not exportable.
+- Screenshot sweep of every level from a fixed camera still only done for Arena, Oakvale West,
+  Bowerstone Slums, Lookout Point, Hook Coast, Greatwood_1, Bowerstone Bridge.
 - Meshes with helper points / dummy objects: not composed (no evidence they affect placement).
 
 ## Other
-- Texture tiling scale, water plane, creatures in bind pose (GUI toggle).
+- Texture tiling scale, creatures in bind pose (GUI toggle), water waves/shore.
 - The three synthetic-input UI suites (smoke/paths/controls) fail while retail `Fable.exe`
   is running (it holds the foreground); close the game before `check_all.py`.

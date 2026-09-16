@@ -390,6 +390,87 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
     return true;
 }
 
+// Water surface from the LEV theme blend + ENGINE_THEME WaterHeight/WaterType,
+// the way CEngineMap::PeekWaterHeight / PeekHasWaterFast and
+// CWaterPatchMesh::FindCorrectWaterLevel (debug build 0x02d5dd80 / 0x02d5d620 /
+// 0x02e67af0) compute it: per vertex, ground + sum(blend/255 * WaterHeight) when
+// any slot has WaterType != 0; the drawn level is the mean of the non-zero water
+// heights in the 5x5 neighbourhood.
+void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options) {
+    const int cx = level.cellsX(), cy = level.cellsY();
+    if (cx <= 1 || cy <= 1) return;
+    std::vector<float> raw(size_t(cx) * cy, 0.0f);   // absolute water height, 0 = dry
+    std::vector<uint8_t> ice(size_t(cx) * cy, 0);     // dominant water slot is EWaterType 8 (ice)
+    int wet = 0;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const Vertex& v = scene.vertices[size_t(y) * cx + x];
+            float depth = 0.0f;
+            bool hasWater = false;
+            int bestW = 0, bestType = 0;
+            for (int s = 0; s < 3; ++s) {
+                auto it = slotToLayer.find(v.themeIndex[s]);
+                if (it == slotToLayer.end()) continue;
+                const ThemeLayer& L = scene.themes[it->second];
+                if (L.waterType != 0 && v.themeWeight[s] > 0) {
+                    hasWater = true;
+                    if (v.themeWeight[s] > bestW) { bestW = v.themeWeight[s]; bestType = L.waterType; }
+                }
+                depth += float(v.themeWeight[s]) / 255.0f * L.waterHeight;
+            }
+            // A trace of a water theme in the blend (depth of a few mm) draws a
+            // sheet the in-game water shader fades to nothing; skip it.
+            if (hasWater && depth >= 0.05f) {
+                raw[size_t(y) * cx + x] = level.heightAt(x, y) + depth;
+                ice[size_t(y) * cx + x] = bestType == 8 ? 1 : 0;
+                ++wet;
+            }
+        }
+    if (wet == 0) return;
+    // FindCorrectWaterLevel: average of the non-zero heights within +-2 cells.
+    std::vector<float> lvl(raw.size(), 0.0f);
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            if (raw[size_t(y) * cx + x] <= 0.0f) continue;
+            float sum = 0.0f; int n = 0;
+            for (int j = std::max(0, y - 2); j <= std::min(cy - 1, y + 2); ++j)
+                for (int i = std::max(0, x - 2); i <= std::min(cx - 1, x + 2); ++i)
+                    if (raw[size_t(j) * cx + i] > 0.0f) { sum += raw[size_t(j) * cx + i]; ++n; }
+            lvl[size_t(y) * cx + x] = n ? sum / float(n) : raw[size_t(y) * cx + x];
+        }
+    // Cells with a wet corner are drawn; a dry corner takes the wet mean of its
+    // cell so the sheet reaches the bank instead of stopping one cell short.
+    WaterMesh& w = scene.water;
+    w.wetVertices = wet;
+    std::vector<int> vidx(raw.size(), -1);
+    auto emit = [&](int x, int y, float h, bool isIce) {
+        int& id = vidx[size_t(y) * cx + x];
+        if (id >= 0) return uint32_t(id);
+        float px, py, pz;
+        toUp(options.up, options.originX + float(x), options.originY + float(y), h, px, py, pz);
+        w.positions.insert(w.positions.end(), {px, py, pz});
+        w.ice.push_back(isIce ? 1 : 0);
+        id = int(w.positions.size() / 3 - 1);
+        return uint32_t(id);
+    };
+    for (int y = 0; y + 1 < cy; ++y)
+        for (int x = 0; x + 1 < cx; ++x) {
+            const int c[4] = {y * cx + x, y * cx + x + 1, (y + 1) * cx + x, (y + 1) * cx + x + 1};
+            float sum = 0.0f; int n = 0;
+            for (int k : c) if (lvl[size_t(k)] > 0.0f) { sum += lvl[size_t(k)]; ++n; }
+            if (n == 0) continue;
+            const float fill = sum / float(n);
+            int iceN = 0;
+            for (int k : c) if (lvl[size_t(k)] > 0.0f && ice[size_t(k)]) ++iceN;
+            const bool cellIce = iceN * 2 > n;
+            auto hAt = [&](int k) { return lvl[size_t(k)] > 0.0f ? lvl[size_t(k)] : fill; };
+            const uint32_t a = emit(x, y, hAt(c[0]), cellIce), b = emit(x + 1, y, hAt(c[1]), cellIce);
+            const uint32_t cc = emit(x, y + 1, hAt(c[2]), cellIce), d = emit(x + 1, y + 1, hAt(c[3]), cellIce);
+            auto& tri = cellIce ? w.iceIndices : w.indices;
+            tri.insert(tri.end(), {a, cc, b, b, cc, d});
+        }
+}
+
 Scene buildScene(const forge::lev::File& level, const Options& options, const Context* context) {
     Scene scene = buildMesh(level, options);
     if (!options.textures) return scene;
@@ -419,6 +500,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         if (r.resolved) {
             layer.baseTexture = r.textures.base[0];
             layer.cliffTexture = r.textures.cliff[0];
+            if (const auto* t = ctx.library.byDefIndex(r.defIndex)) { layer.waterHeight = t->waterHeight; layer.waterType = t->waterType; }
         } else if (const auto* byName = r.paletteName.empty() ? nullptr : ctx.library.byName(r.paletteName);
                    byName && byName->decoded) {
             // The LEV stores a GLOBAL def index that goes stale when game.bin changes
@@ -428,6 +510,8 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             layer.defIndex = byName->defIndex;
             layer.baseTexture = byName->textures.base[0];
             layer.cliffTexture = byName->textures.cliff[0];
+            layer.waterHeight = byName->waterHeight;
+            layer.waterType = byName->waterType;
             ++scene.nameResolvedThemes;
         } else {
             ++scene.unresolvedThemes;
@@ -438,6 +522,10 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         scene.themes.push_back(layer);
     }
     if (options.log) options.log(std::to_string(scene.themes.size()) + " ground themes in use");
+    if (options.water) buildWater(level, scene, slotToLayer, options);
+    if (options.log && !scene.water.empty())
+        options.log("water: " + std::to_string(scene.water.wetVertices) + " wet vertices, " +
+                    std::to_string(scene.water.indices.size() / 3) + " triangles");
 
     // Decode every referenced texture once.
     std::map<uint32_t, const Image*> imgs;
@@ -652,7 +740,32 @@ int appendTerrain(glb::Builder& b, const Scene& scene) {
     }
     const int mesh = b.mesh({{"name", "terrain"}, {"extras", extras},
                              {"primitives", {{{"attributes", attributes}, {"indices", aIdx}, {"material", mat}, {"mode", 4}}}}});
-    return b.node({{"name", fs::path(scene.sourceName).stem().string()}, {"mesh", mesh}});
+    json node = {{"name", fs::path(scene.sourceName).stem().string()}, {"mesh", mesh}};
+    if (!scene.water.empty()) {
+        const size_t wn = scene.water.positions.size() / 3;
+        std::vector<float> wnrm(wn * 3, 0.0f);
+        for (size_t i = 0; i < wn; ++i) { if (scene.up == UpAxis::Y) wnrm[i * 3 + 1] = 1.0f; else wnrm[i * 3 + 2] = 1.0f; }
+        json wattr = {{"POSITION", b.positions(scene.water.positions)}, {"NORMAL", b.vec3(wnrm)}};
+        json prims = json::array();
+        if (!scene.water.indices.empty()) {
+            const int wmat = b.material({{"name", "water"},
+                                         {"pbrMetallicRoughness", {{"baseColorFactor", {0.16, 0.36, 0.5, 0.62}}, {"metallicFactor", 0.0}, {"roughnessFactor", 0.15}}},
+                                         {"alphaMode", "BLEND"}, {"doubleSided", true}});
+            prims.push_back({{"attributes", wattr}, {"indices", b.indices(scene.water.indices)}, {"material", wmat}, {"mode", 4}});
+        }
+        if (!scene.water.iceIndices.empty()) {
+            const int imat = b.material({{"name", "ice"},
+                                         {"pbrMetallicRoughness", {{"baseColorFactor", {0.78, 0.86, 0.92, 0.9}}, {"metallicFactor", 0.0}, {"roughnessFactor", 0.3}}},
+                                         {"alphaMode", "BLEND"}, {"doubleSided", true}});
+            prims.push_back({{"attributes", wattr}, {"indices", b.indices(scene.water.iceIndices)}, {"material", imat}, {"mode", 4}});
+        }
+        const int wmesh = b.mesh({{"name", "water"},
+                                  {"extras", {{"wet_vertices", scene.water.wetVertices},
+                                              {"note", "ground + LEV theme blend * ENGINE_THEME WaterHeight, 5x5 mean (engine water level); ice = EWaterType 8"}}},
+                                  {"primitives", prims}});
+        node["children"] = {b.node({{"name", "Water"}, {"mesh", wmesh}})};
+    }
+    return b.node(node);
 }
 
 std::vector<uint8_t> buildGlb(const Scene& scene) {
@@ -703,10 +816,28 @@ std::vector<fs::path> writeObj(const Scene& scene, const fs::path& out) {
         std::snprintf(line, sizeof line, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, a, a, b, b, b, c, c, c);
         obj << line;
     }
+    if (!scene.water.empty()) {
+        const uint32_t base = uint32_t(scene.vertices.size());
+        obj << "o Water\n";
+        for (size_t i = 0; i + 2 < scene.water.positions.size(); i += 3) {
+            std::snprintf(line, sizeof line, "v %.4f %.4f %.4f\n", scene.water.positions[i], scene.water.positions[i + 1], scene.water.positions[i + 2]); obj << line;
+        }
+        for (int pass = 0; pass < 2; ++pass) {
+            const auto& tri = pass ? scene.water.iceIndices : scene.water.indices;
+            if (tri.empty()) continue;
+            obj << (pass ? "usemtl ice\n" : "usemtl water\n");
+            for (size_t i = 0; i + 2 < tri.size(); i += 3) {
+                std::snprintf(line, sizeof line, "f %u %u %u\n", base + tri[i] + 1, base + tri[i + 1] + 1, base + tri[i + 2] + 1);
+                obj << line;
+            }
+        }
+    }
     written.push_back(out);
 
     std::ofstream mtl(mtlPath);
     mtl << "newmtl terrain\nKa 1 1 1\nKd 1 1 1\nKs 0 0 0\nd 1\nillum 1\n";
+    if (!scene.water.empty()) mtl << "newmtl water\nKa 0.16 0.36 0.5\nKd 0.16 0.36 0.5\nKs 0.3 0.3 0.3\nd 0.62\nillum 2\n"
+                                   << "newmtl ice\nKa 0.78 0.86 0.92\nKd 0.78 0.86 0.92\nKs 0.2 0.2 0.2\nd 0.9\nillum 2\n";
     if (scene.hasAlbedo) {
         mtl << "map_Kd " << pngPath.filename().string() << "\n";
         const auto png = encodePng(scene.albedo);

@@ -32,6 +32,7 @@ AlbionAtlas export my_edited.lev --no-textures
 | Splat layers (`--layers`) | same, unbaked | `_THEME_INDEX` / `_THEME_WEIGHT` vertex attributes, one PNG per theme in `<name>_themes/`, and `<name>.themes.json` |
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
 | Foliage (`--foliage`) | baked local-detail instances in `FinalAlbion_RT.stb` — grass, flowers, bracken, bramble, stumps **and trees** (oaks, birches...) — + LOD0 meshes from `graphics.big` + their textures | one glTF mesh per plant (leaves/trunk as separate primitives), one node per instance under a `Foliage` root; cutout (`MASK`) materials. OBJ: baked into an extra object |
+| Water | LEV theme blend x `ENGINE_THEME` `WaterHeight` / `WaterType` (lakes, rivers, sea, Hook Coast ice) | `Water` child node with translucent `water` / `ice` materials; OBJ `o Water` |
 | Placed objects (`--things`) | the map's `.tng` — fences, walls, rocks, lamps, crates, buildings, chests — resolved through their `game.bin` definition's `Graphic` model id (or `GraphicOverride`) | same as foliage under a `Things` root; full orientation from `RHSetForward/Up`, `ObjectScale` honoured. Creatures only with `--creatures` (bind pose) |
 
 The exporter never embeds retail data; it reads the textures from **your** install.
@@ -63,8 +64,9 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   inputs for an exact shader.
 * **Foliage frames are found by grammar, not by directory** — every LZO frame
   in the map's STB chunk that parses as a cache-group collection is used (type-1
-  grass batches and type-0 single meshes incl. trees). Type-2 z-sprite batches
-  (distant impostors) are skipped and counted. Counts per mesh are in the log.
+  grass batches, type-0 single meshes incl. trees, and type-2 z-sprite batches —
+  distant trees the engine draws as impostors; exported as full meshes, far-LOD
+  twins of a near tree dropped). Counts per mesh are in the log.
 * **Terrain brightness** — Fable's ground textures are authored dark; the engine's
   own baked background patches are equally dark (checked with `AlbionAtlas ground <map>`),
   so the in-game look comes from lighting. The export keeps raw texels; `--gain` /
@@ -78,7 +80,11 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   export float in the data too: the Arena crowd sits 10 m above the outer sand with no
   stand mesh anywhere (no thing, def, script or region places one); the pit parapet hides
   the drop in-game.
-* **No water plane** — sea themes export as their seabed texture.
+* **Water** — a `Water` sheet (child of the terrain node; `water` + `ice` materials, OBJ
+  `o Water`) built the way the engine does it: ground + the LEV theme blend times each
+  `ENGINE_THEME`'s `WaterHeight`, averaged over the 5x5 neighbourhood
+  (`CEngineMap::PeekWaterHeight`, `CWaterPatchMesh::FindCorrectWaterLevel`). Flat colour
+  only — no waves, reflections or shore foam.
 * **No lights, particles, creatures (by default), scripts.**
 
 ## GUI

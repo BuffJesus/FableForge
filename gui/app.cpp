@@ -601,6 +601,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("export_foliage=" + std::string(settings_.foliage ? "1" : "0"));
     v.push_back("thing_instances=" + std::to_string(thingInstances_));
     v.push_back("preview_things=" + std::string(previewThings_ ? "1" : "0"));
+    v.push_back("preview_water=" + std::string(renderer_.showWater ? "1" : "0"));
     v.push_back("export_things=" + std::string(settings_.things ? "1" : "0"));
     v.push_back("world=" + std::string(settings_.world ? "1" : "0"));
     if (const MapEntry* e = findEntry(selectedName_)) v.push_back("region=" + e->group);
@@ -942,6 +943,9 @@ void App::drawViewport(float width) {
         ImGui::SameLine(0, 6);
         if (theme::chip("Objects", previewThings_)) setPreviewThings(!previewThings_);
         auto_.registerWidget("chip_things");
+        ImGui::SameLine(0, 6);
+        if (theme::chip("Water", renderer_.showWater)) renderer_.showWater = !renderer_.showWater;
+        auto_.registerWidget("chip_water");
         x = ImGui::GetItemRectMax().x;
         const char* hint = "RMB: look + WASD fly (Q/E, Shift)   LMB: dolly/turn   MMB: pan   Alt+LMB: orbit   Wheel: zoom   F: frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
@@ -1304,6 +1308,7 @@ bool Automation::tick(App& app) {
         else if (key == "things") s.things = val == "1";
         else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");
+        else if (key == "preview_water") app.setPreviewWater(val == "1");
         else if (key == "texels") s.texels = std::atoi(val.c_str());
         else if (key == "tile") s.tile = float(std::atof(val.c_str()));
         else if (key == "gain") { s.gain = float(std::atof(val.c_str())); app.previewLoadedFor_.clear(); app.startPreviewLoad(); }
