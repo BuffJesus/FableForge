@@ -54,7 +54,7 @@ int usage() {
         "  --creatures         with --things: include creature meshes in bind pose\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
-        "  --tile <units>      world units per texture repeat (default 4)\n"
+        "  --tile <units>      world units per texture repeat (default 8, the engine's)\n"
         "  --gain <f>          brighten the baked ground texture (1 = raw texels; ~2 looks like in-game)\n"
         "  --up <y|z>          up axis: y = glTF/Blender/Unreal-friendly (default), z = Fable native\n"
         "  --world             place the map at its world position (WLD MapX/MapY) so maps line up\n"
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
     std::string installArg, out, target, upArg = "y", originArg;
     bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false;
     int texels = 8;
-    float tile = 4.0f, gain = 1.0f;
+    float tile = 8.0f, gain = 1.0f;
     for (size_t i = 1; i < args.size(); ++i) {
         const std::string& a = args[i];
         auto next = [&]() -> std::string {

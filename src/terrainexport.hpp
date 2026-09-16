@@ -16,11 +16,13 @@
 //                 who want to rebuild the blend as a real shader.
 //
 // Honest boundaries (documented, not hidden):
-//   * The foreground texture TILING scale (world units per texture repeat) is not
-//     yet pinned from the engine; `Options::tileSize` is a user knob (default 4).
-//   * Cliff textures are applied by slope, not by the engine's four projection
-//     directions (mappingDirection 1..4 in the STB layer bake) -- a bake
-//     approximation; `layers` mode gives the exact inputs.
+//   * Texture tiling is the engine's: the landscape vertex shader maps u = x/8,
+//     v = y/8 (CEngineLandscapePatch::PositionToTextureUVTransformU/V, +-0.125),
+//     cliffs along one horizontal axis with v = -z/8. `Options::tileSize` (8)
+//     overrides the period for people who want a different look.
+//   * Cliff mapping direction is chosen here by slope, not by the engine's
+//     per-layer mappingDirection bake (1..4) -- an approximation; `layers`
+//     mode gives the exact inputs.
 //   * Grid topology only: every cell becomes two triangles. The engine's masked
 //     16x16 patches (holes/caves) live in the STB and are not consulted yet.
 //   * Textures come from the user's own install; nothing retail is embedded.
@@ -49,7 +51,8 @@ struct Options {
     std::filesystem::path gameRoot;
     std::filesystem::path texturesBig;
     int texelsPerCell = 8;         // baked albedo resolution per cell edge
-    float tileSize = 4.0f;         // world units per texture repeat (see header)
+    float tileSize = 8.0f;         // world units per texture repeat: the engine's vertex shader
+                                   // uses u = x/8, v = y/8 (cliffs: along/8, height/8) -- see header
     // Albedo gain. Fable's base textures are authored dark and the engine's
     // lighting brightens them by an unpinned factor; 1.0 keeps raw texels.
     float gain = 1.0f;

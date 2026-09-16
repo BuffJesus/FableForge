@@ -24,9 +24,12 @@ names in `D:\Documents\FableTLC\ghidra_out\fablewin_pdb_names.tsv`). Bodies read
 every call goes through one incremental-link `jmp` thunk, follow it once. A 30-line capstone
 script (`wdis.py <exe> <va> <len> [names.tsv]`) is enough — no Ghidra session needed.
 Targets for the remaining gaps:
-- Texture tiling scale + cliff direction blend: `CEngineLandscapeMeshBuilder::GetPassFromTexture`
-  `0x02cb0a10`, `BuildLayerMesh` `0x02cb12b0`, `GetMappingDirectionBlend` `0x02cae000`,
-  `BuildMapDirMask` `0x02cae270`.
+- DONE: texture tiling — foreground vertices carry no UVs; `CEngineLandscapePatch::RenderForeground`
+  `0x02dfa0a0` feeds vertex-shader constants c2/c3 from `PositionToTextureUVTransformU/V`
+  (initialisers `0x04008780` / `0x04008850`): dir 0 = (x/8, y/8); dirs 1-4 = (+-x or +-y)/8 with
+  v = -z/8; plus a per-patch integer offset of floor(bboxMin/8). Default `--tile` is now 8.
+  Still approximate: which of the 4 cliff directions a layer gets (`BuildMapDirMask` `0x02cae270`,
+  `GetMappingDirectionBlend` `0x02cae000`) is chosen here by slope.
 - DONE: water — `CEngineMap::PeekWaterHeight` `0x02d5dd80` = ground + `PeekWaterDepth`
   (sum blend*WaterHeight over the 3 slots), `PeekHasWaterFast` `0x02d5d620` (any slot WaterType != 0),
   `CWaterPatchMesh::FindCorrectWaterLevel` `0x02e67af0` (mean of non-zero heights in +-2 cells).
@@ -48,6 +51,6 @@ Targets for the remaining gaps:
 - Meshes with helper points / dummy objects: not composed (no evidence they affect placement).
 
 ## Other
-- Texture tiling scale, creatures in bind pose (GUI toggle), water waves/shore.
+- Creatures in bind pose (GUI toggle), water waves/shore foam, exact cliff mapping direction.
 - The three synthetic-input UI suites (smoke/paths/controls) fail while retail `Fable.exe`
   is running (it holds the foreground); close the game before `check_all.py`.

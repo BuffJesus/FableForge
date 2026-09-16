@@ -48,7 +48,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --creatures         with --things: include creature meshes in bind pose
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
---tile <units>      world units per texture repeat (default 4 — see "Known gaps")
+--tile <units>      world units per texture repeat (default 8 = the engine's)
 --up <y|z>          y = glTF/Blender/Unreal convention (default), z = Fable native
 --world             place the map at its WLD MapX/MapY so several exports line up in one scene
 --origin <x,y>      explicit offset instead
@@ -57,11 +57,13 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 
 ## Known gaps (honest list)
 
-* **Texture tiling scale** — how many world units one ground texture repeat
-  covers is not yet pinned from the engine. `--tile` defaults to 4; adjust to taste.
-* **Cliffs** — the engine projects cliff textures along four horizontal
-  directions; the bake approximates that by slope angle. `--layers` gives the raw
-  inputs for an exact shader.
+* **Texture tiling** — pinned from the engine: the landscape vertex shader maps
+  `u = x / 8, v = y / 8` (`CEngineLandscapePatch::PositionToTextureUVTransformU/V`,
+  ±0.125 per axis), so one ground texture covers 8 x 8 world units; `--tile` overrides.
+* **Cliffs** — the engine projects cliff textures along one of four horizontal
+  directions with height as the second coordinate (`v = -z / 8`); the bake picks the
+  direction from the slope and blends by slope angle. `--layers` gives the raw inputs
+  for an exact shader.
 * **Foliage frames are found by grammar, not by directory** — every LZO frame
   in the map's STB chunk that parses as a cache-group collection is used (type-1
   grass batches, type-0 single meshes incl. trees, and type-2 z-sprite batches —

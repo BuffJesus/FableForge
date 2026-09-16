@@ -37,7 +37,7 @@ struct ExportSettings {
     int format = 0;          // 0 = glb, 1 = obj
     bool textures = true;
     int texels = 8;
-    float tile = 4.0f;
+    float tile = 8.0f;
     float gain = 1.0f;
     bool layers = false;
     bool walkable = false;
