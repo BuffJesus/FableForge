@@ -689,12 +689,12 @@ void App::drawTitleBar() {
     const float titleEnd = ImGui::GetItemRectMax().x;
     ImGui::PopFont();
     const float btnW = S(92.0f);
-    const float subtitleW = ImGui::CalcTextSize("Fable: The Lost Chapters terrain exporter").x;
+    const float subtitleW = ImGui::CalcTextSize("v" ALBION_VERSION "   Fable: The Lost Chapters map exporter").x;
     if (w > S(760)) {
         ImGui::SameLine(0, S(12));
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(8));
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Faint), "Fable: The Lost Chapters terrain exporter");
+        ImGui::TextColored(theme::vec(theme::Faint), "v" ALBION_VERSION "   Fable: The Lost Chapters map exporter");
         ImGui::PopFont();
     }
 

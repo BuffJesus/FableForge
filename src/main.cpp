@@ -40,7 +40,7 @@ namespace {
 
 int usage() {
     std::puts(
-        "Albion Atlas -- Fable: The Lost Chapters terrain -> .glb / .obj\n"
+        "Albion Atlas " ALBION_VERSION " -- Fable: The Lost Chapters maps -> .glb / .obj\n"
         "\n"
         "usage:\n"
         "  AlbionAtlas list   [--install <fable-root>]\n"

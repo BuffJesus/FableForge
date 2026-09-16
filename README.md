@@ -12,8 +12,9 @@ Two small Windows executables, no dependencies:
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
-![Greatwood in Albion Atlas](docs/screenshot_greatwood.png)
+![The Arena in Albion Atlas](docs/screenshot_arena.png)
 ![Oakvale in Albion Atlas](docs/screenshot_oakvale.png)
+![Greatwood in Albion Atlas](docs/screenshot_greatwood.png)
 
 ```
 AlbionAtlas list                             # every map in FinalAlbion.wad

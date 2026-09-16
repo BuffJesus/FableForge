@@ -440,7 +440,13 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
         scene.zspriteInstances = pst.zsprite;
         scene.found = true;
     } catch (const std::exception& e) {
-        warn(options, scene, std::string("reading foliage: ") + e.what());
+        // A map without a local-detail palette (interiors, the Arena) simply has no
+        // baked foliage: say that plainly instead of surfacing the parser's throw.
+        const std::string what = e.what();
+        if (what.find("no local-detail palette") != std::string::npos) {
+            if (options.log) options.log(mapName + " has no baked foliage (no local-detail palette in the STB)");
+            scene.found = true;
+        } else warn(options, scene, "reading foliage: " + what);
         return scene;
     }
     if (options.log) options.log(std::to_string(raw.size()) + " baked placements in " + std::to_string(scene.groupFrames) +
