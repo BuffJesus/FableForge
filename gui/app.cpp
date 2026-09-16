@@ -481,7 +481,7 @@ void App::pollWorkers() {
             ctx_ = *ctxPending_;
             pushLog("Textures ready (game.bin themes + textures.big)", 3);
             if (reloadWhenContextReady_ && !selectedName_.empty()) startPreviewLoad();
-            else if (previewFoliage_ && previewLoaded() && !foliageLoaded()) startFoliageLoad();
+            else if ((previewFoliage_ || previewThings_) && previewLoaded() && !foliageLoaded()) startFoliageLoad();
         } else {
             ctxError_ = err;
             pushLog("Textures unavailable: " + err, 1);
@@ -501,7 +501,7 @@ void App::pollWorkers() {
             previewScene_.albedo = {};  // GPU owns it now; keep stats only
             previewLoadedFor_ = r.name;
             previewTextured_ = r.textured;
-            if (previewFoliage_ && ctx_.ready() && !foliageLoaded()) startFoliageLoad();
+            if ((previewFoliage_ || previewThings_) && ctx_.ready() && !foliageLoaded()) startFoliageLoad();
         }
         if (!previewPendingName_.empty()) {
             previewPendingName_.clear();

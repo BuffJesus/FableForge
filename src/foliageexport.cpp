@@ -135,7 +135,11 @@ Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label
                     }
                 }
                 part.image = img->second;
-                if (part.image >= 0) {
+                // Cut-out only when the MATERIAL says so: many opaque textures carry an
+                // alpha channel used as a specular/glow mask (roofs, walls), and
+                // discarding on it hollowed those objects out.
+                const bool materialAlpha = mat >= 0 && (geo.materials[size_t(mat)].alphaEnabled || geo.materials[size_t(mat)].unknown42 != 0);  // IsTransparent || BooleanAlpha (EgoCore field order)
+                if (part.image >= 0 && materialAlpha) {
                     const auto& px = images[size_t(part.image)].rgba;
                     for (size_t i = 3; i < px.size(); i += 4) if (px[i] < 250) { part.hasAlpha = true; break; }
                 }

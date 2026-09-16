@@ -19,7 +19,7 @@ cbuffer Frame : register(b0) {
     float4 lightDir;      // xyz normalized, towards the light
     float4 params;        // x = mode, y = minH, z = maxH, w = time
     float4 eye;
-    float4 flags;         // x = alpha test (foliage cutouts)
+    float4 flags;         // x = instance pass, y = alpha test (cutout materials)
 };
 Texture2D albedo : register(t0);
 SamplerState samp : register(s0);
@@ -55,7 +55,7 @@ float4 PS(VSOut i) : SV_Target {
     float3 base;
     if (flags.x > 0.5) {
         float4 tex = albedo.Sample(samp, i.uv);
-        if (tex.a < 0.5) discard;
+        if (flags.y > 0.5 && tex.a < 0.5) discard;
         // foliage: soften lighting so blades read as translucent-ish
         float3 col = tex.rgb * (0.45 + 0.65 * ndl + 0.2 * hemi);
         float dist = distance(eye.xyz, i.wpos);
@@ -315,13 +315,13 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
         if (up == terrainexport::UpAxis::Y) { ox = x; oy = z; oz = -y; } else { ox = x; oy = y; oz = z; }
     };
-    std::map<int, std::vector<GpuVertex>> byImage;   // image index (-1 = untextured)
+    std::map<std::pair<int, bool>, std::vector<GpuVertex>> byImage;   // (image index, cutout) ; -1 = untextured
     for (const auto& inst : scene.instances) {
         if (inst.mesh < 0) continue;
         const auto& m = scene.meshes[size_t(inst.mesh)];
         float col[3][3]; foliageexport::instanceBasis(inst, col);
         for (const auto& part : m.parts) {
-          auto& out = byImage[part.image];
+          auto& out = byImage[{part.image, part.hasAlpha}];
           for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
             const uint32_t ids[3] = {part.indices[k], part.indices[k + 1], part.indices[k + 2]};
             for (uint32_t id : ids) {
@@ -340,7 +340,8 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
           }
         }
     }
-    for (auto& [image, verts] : byImage) {
+    for (auto& [key, verts] : byImage) {
+        const int image = key.first;
         if (verts.empty()) continue;
         FoliageBatch b;
         D3D11_BUFFER_DESC bd = {};
@@ -350,7 +351,7 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
         if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) continue;
         b.count = uint32_t(verts.size());
         if (image >= 0 && size_t(image) < scene.images.size()) b.srv = makeTexture(scene.images[size_t(image)]);
-        b.alpha = true;
+        b.alpha = key.second;
         foliage_.push_back(b);
     }
     return !foliage_.empty();
@@ -477,16 +478,22 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
         bool any = false;
         for (int i = 0; i < kLayers; ++i) any = any || (showLayer[i] && !layers_[i].empty());
         if (any) {
-            cb.flags[0] = 1.0f;
+            cb.flags[0] = 1.0f; cb.flags[1] = 1.0f;   // instance pass; y = alpha test on
             if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
                 std::memcpy(map.pData, &cb, sizeof cb);
                 ctx_->Unmap(cbuffer_, 0);
             }
             ctx_->RSSetState(solid_);
             ctx_->PSSetSamplers(0, 1, &wrapSampler_);
+            bool currentAlpha = true;
             for (int i = 0; i < kLayers; ++i) {
                 if (!showLayer[i]) continue;
                 for (const auto& b : layers_[i]) {
+                    if (b.alpha != currentAlpha) {
+                        currentAlpha = b.alpha;
+                        cb.flags[0] = 1.0f; cb.flags[1] = currentAlpha ? 1.0f : 0.0f;
+                        if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
+                    }
                     ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
                     ctx_->PSSetShaderResources(0, 1, &t);
                     ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);

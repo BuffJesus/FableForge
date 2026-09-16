@@ -191,7 +191,11 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         const uint32_t sbc=c.u32(),abc=c.u32(),vc=c.u32(),tc=c.u32(),ic=c.u32(),format=c.u32(); c.skip(8);
         if(sbc>100000||abc>100000||vc>10000000||ic>30000000)throw std::runtime_error("meshpreview: unreasonable primitive");
         std::vector<Block> staticBlocks,animatedBlocks;staticBlocks.reserve(sbc);animatedBlocks.reserve(abc);
-        for(uint32_t i=0;i<sbc;++i){Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};c.skip(2);c.i32();staticBlocks.push_back(b);}
+        // Albion Atlas: a static block carries its OWN material index (EgoCore
+        // GltfExporter uses CStaticBlock.MaterialIndex); the primitive's material is
+        // only the fallback. Without this, multi-material meshes (roof + walls)
+        // render entirely with material 0.
+        for(uint32_t i=0;i<sbc;++i){Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};c.skip(2);const int32_t bm=c.i32();if(bm>=0)b.material=bm;staticBlocks.push_back(b);}
         for(uint32_t i=0;i<abc;++i){Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};c.skip(2);c.u32();c.u16();c.u8();uint8_t gc=c.u8();c.skip(gc);animatedBlocks.push_back(b);}
         float scale[4],off[4]; c.need(32);std::memcpy(scale,c.b.data()+c.p,16);std::memcpy(off,c.b.data()+c.p+16,16);c.p+=32;
         const uint32_t stride=c.u32();c.u32();
