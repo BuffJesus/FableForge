@@ -4,7 +4,7 @@ wait_ready
 select StartOakValeWest
 wait_loaded
 wait_foliage
-set saveroot build/ui/install
+set saveroot build/ui_editor_install
 edit 1
 frames 2
 assert_state edit_mode 1
@@ -65,7 +65,7 @@ select_def OBJECT_BARREL_BREAKABLE
 move_thing 0 0 1
 frames 1
 save_level
-assert_file build/ui/install/data/Levels/FinalAlbion/StartOakValeWest.tng
+assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
 assert_state doc_dirty 0
 click seg_panel
 frames 2
