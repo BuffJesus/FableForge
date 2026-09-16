@@ -28,6 +28,7 @@ static IDXGISwapChain* g_swapChain = nullptr;
 static ID3D11RenderTargetView* g_rtv = nullptr;
 static UINT g_resizeW = 0, g_resizeH = 0;
 static bool g_occluded = false;
+static albion::gui::App* g_app = nullptr;
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
@@ -105,6 +106,13 @@ static bool screenshot(const std::string& path) {
     return ok;
 }
 
+static std::string narrow(const wchar_t* w) {
+    const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+    std::string s(size_t(n > 0 ? n - 1 : 0), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
+    return s;
+}
+
 static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return true;
     switch (msg) {
@@ -115,18 +123,18 @@ static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SYSCOMMAND:
             if ((wp & 0xfff0) == SC_KEYMENU) return 0;
             break;
+        case WM_DROPFILES: {
+            HDROP drop = reinterpret_cast<HDROP>(wp);
+            wchar_t path[MAX_PATH];
+            if (g_app && DragQueryFileW(drop, 0, path, MAX_PATH)) g_app->openLooseLev(narrow(path));
+            DragFinish(drop);
+            return 0;
+        }
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-static std::string narrow(const wchar_t* w) {
-    const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    std::string s(size_t(n > 0 ? n - 1 : 0), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
-    return s;
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
@@ -167,11 +175,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     ImGui_ImplDX11_Init(g_device, g_context);
 
     albion::gui::App app;
-    app.init(g_device, g_context, hwnd, installOverride);
+    g_app = &app;
     if (!autoScript.empty()) {
         std::ofstream(autoScript + ".log", std::ios::trunc);
-        app.automation().load(autoScript);
+        app.automation().load(autoScript);   // before init: disables settings persistence
     }
+    app.init(g_device, g_context, hwnd, installOverride);
+    DragAcceptFiles(hwnd, TRUE);
     const bool automated = app.automation().active();
 
     auto last = std::chrono::steady_clock::now();
@@ -222,6 +232,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         if (app.wantsQuit()) running = false;
     }
 
+    g_app = nullptr;
+    if (!automated) app.saveSettings();
     const int code = automated ? app.automation().exitCode() : 0;
     if (automated) {
         std::ofstream log(autoScript + ".log", std::ios::app);

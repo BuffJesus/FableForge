@@ -18,6 +18,7 @@
 #include "forge/env.hpp"
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
+#include "nlohmann/json.hpp"
 #include "theme.hpp"
 
 namespace fs = std::filesystem;
@@ -126,8 +127,16 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
         pushLog(std::string("renderer: ") + renderer_.error(), 2);
     }
 
+    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionTerrain").string();
+    std::string savedInstall;
+    if (!auto_.active()) loadSettings(savedInstall);   // scripted runs stay deterministic
+    std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
+
     std::string root = installOverride;
-    installSource_ = "manual";
+    installSource_ = "command line";
+    if (root.empty() && !savedInstall.empty() && fs::exists(fs::path(savedInstall) / "data" / "Levels" / "FinalAlbion.wad")) {
+        root = savedInstall; installSource_ = "remembered";
+    }
     if (root.empty()) {
         try {
             const auto env = forge::env::Environment::detect();
@@ -136,10 +145,43 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
     }
     if (!root.empty()) scanInstall(root);
     else pushLog("No Fable install found. Point me at your 'Fable The Lost Chapters' folder.", 1);
-
-    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionTerrain").string();
-    std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
     return true;
+}
+
+std::string App::settingsPath() const {
+    const char* appdata = std::getenv("APPDATA");
+    const fs::path dir = fs::path(appdata ? appdata : ".") / "AlbionTerrain";
+    return (dir / "settings.json").string();
+}
+
+void App::loadSettings(std::string& savedInstall) {
+    std::ifstream f(settingsPath());
+    if (!f) return;
+    try {
+        const auto j = nlohmann::json::parse(f);
+        savedInstall = j.value("install", "");
+        settings_.outDir = j.value("out_dir", settings_.outDir);
+        settings_.format = j.value("format", settings_.format);
+        settings_.up = j.value("up", settings_.up);
+        settings_.textures = j.value("textures", settings_.textures);
+        settings_.texels = std::clamp(j.value("texels", settings_.texels), 2, 32);
+        settings_.tile = std::clamp(j.value("tile", settings_.tile), 1.0f, 16.0f);
+        settings_.layers = j.value("layers", settings_.layers);
+        settings_.walkable = j.value("walkable", settings_.walkable);
+    } catch (...) {}
+}
+
+void App::saveSettings() const {
+    if (auto_.active()) return;
+    try {
+        fs::create_directories(fs::path(settingsPath()).parent_path());
+        nlohmann::json j = {
+            {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
+            {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
+            {"tile", settings_.tile}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
+        };
+        std::ofstream(settingsPath()) << j.dump(2);
+    } catch (...) {}
 }
 
 void App::scanInstall(const std::string& root) {
@@ -157,7 +199,7 @@ void App::scanInstall(const std::string& root) {
         for (const auto& e : wad.entries()) {
             const fs::path p(e.name);
             if (lower(p.extension().string()) != ".lev") continue;
-            MapEntry m; m.name = p.stem().string(); m.group = groupOf(m.name); m.size = e.size;
+            MapEntry m; m.name = p.stem().string(); m.key = m.name; m.group = groupOf(m.name); m.size = e.size;
             const fs::path loose = fs::path(root) / "data" / "Levels" / "FinalAlbion" / (m.name + ".lev");
             if (fs::exists(loose)) m.loosePath = loose.string();
             maps_.push_back(std::move(m));
@@ -208,25 +250,54 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
     return {};
 }
 
-void App::selectMap(const std::string& name) {
-    if (name == selectedName_) return;
-    selectedName_ = name;
+bool App::openLooseLev(const std::string& path) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec) || lower(fs::path(path).extension().string()) != ".lev") {
+        pushLog("Not a .lev file: " + path, 2);
+        return false;
+    }
+    MapEntry m;
+    m.name = fs::path(path).stem().string();
+    m.key = "file:" + m.name;
+    m.group = "Loose files";
+    m.loosePath = fs::absolute(path).string();
+    m.size = uint32_t(fs::file_size(path, ec));
+    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& e) { return e.loosePath == m.loosePath; });
+    if (it == maps_.end()) maps_.insert(maps_.begin(), m);   // loose files first: visible without scrolling
+    groupOpen_["Loose files"] = true;
+    pushLog("Opened " + m.loosePath, 0);
+    selectedName_.clear();
+    selectMap(m.key);
+    return true;
+}
+
+void App::selectMap(const std::string& nameOrKey) {
+    if (nameOrKey == selectedName_) return;
+    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == nameOrKey; });
+    if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
+    if (it == maps_.end()) return;
+    selectedName_ = it->key;
     startPreviewLoad();
+}
+
+const MapEntry* App::findEntry(const std::string& key) const {
+    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == key; });
+    return it == maps_.end() ? nullptr : &*it;
 }
 
 void App::startPreviewLoad() {
     if (selectedName_.empty()) return;
     if (previewFuture_.valid()) { previewPendingName_ = selectedName_; return; }
-    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == selectedName_; });
-    if (it == maps_.end()) return;
-    const MapEntry entry = *it;
+    const MapEntry* found = findEntry(selectedName_);
+    if (!found) return;
+    const MapEntry entry = *found;
     const bool textured = ctx_.ready();
     reloadWhenContextReady_ = !textured;
     const te::Context* ctx = textured ? &ctx_ : nullptr;
     const int texels = previewTexels_;
     std::string installPath = installPath_;
     previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, texels]() {
-        PreviewResult r; r.name = entry.name; r.textured = textured;
+        PreviewResult r; r.name = entry.key; r.textured = textured;
         std::string err;
         const std::string lev = resolveLevPath(entry, err);
         if (lev.empty()) { r.error = err; return r; }
@@ -246,16 +317,42 @@ void App::startPreviewLoad() {
 
 void App::startExport() {
     if (exportFuture_.valid() || selectedName_.empty()) return;
-    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == selectedName_; });
-    if (it == maps_.end()) return;
-    const MapEntry entry = *it;
+    if (const MapEntry* e = findEntry(selectedName_)) startExportOf(*e);
+}
+
+std::vector<std::string> App::visibleMapNames() const {
+    std::vector<std::string> out;
+    const std::string f = lower(filter_);
+    for (const auto& m : maps_)
+        if (f.empty() || lower(m.name).find(f) != std::string::npos) out.push_back(m.key);
+    return out;
+}
+
+void App::startBatchExport(const std::vector<std::string>& names) {
+    if (names.empty() || batchActive()) return;
+    batchQueue_ = names;
+    batchTotal_ = int(names.size());
+    batchDone_ = batchFailed_ = 0;
+    pushLog("Batch export: " + std::to_string(batchTotal_) + " maps -> " + std::string(outDirBuf_), 0);
+    saveSettings();
+}
+
+void App::cancelBatch() {
+    if (!batchActive()) return;
+    pushLog("Batch cancelled after " + std::to_string(batchDone_) + " of " + std::to_string(batchTotal_), 1);
+    batchQueue_.clear();
+    batchTotal_ = 0;
+}
+
+void App::startExportOf(const MapEntry& entry) {
     settings_.outDir = outDirBuf_;
     const ExportSettings s = settings_;
     const te::Context* ctx = ctx_.ready() ? &ctx_ : nullptr;
     const std::string outPath = (fs::path(s.outDir) / (entry.name + (s.format == 0 ? ".glb" : ".obj"))).string();
     lastExportPath_ = outPath;
     lastExportOk_ = false;
-    pushLog("Exporting " + entry.name + " ...", 0);
+    batchCurrent_ = entry.name;
+    if (!batchActive()) { pushLog("Exporting " + entry.name + " ...", 0); saveSettings(); }
     exportFuture_ = std::async(std::launch::async, [this, entry, s, ctx, outPath]() {
         ExportResult r; r.path = outPath;
         const auto t0 = std::chrono::steady_clock::now();
@@ -327,8 +424,22 @@ void App::pollWorkers() {
             char buf[64]; std::snprintf(buf, sizeof buf, " (%.1fs)", r.seconds);
             pushLog("Wrote " + fs::path(r.path).filename().string() + " + " + std::to_string(r.files.size() - 1) + " file(s)" + buf, 3);
         } else {
-            pushLog("Export failed", 2);
+            pushLog("Export failed: " + batchCurrent_, 2);
         }
+        if (batchTotal_ > 0) {
+            ++batchDone_;
+            if (!r.ok) ++batchFailed_;
+            if (batchQueue_.empty()) {
+                pushLog("Batch done: " + std::to_string(batchDone_ - batchFailed_) + " ok, " + std::to_string(batchFailed_) + " failed", batchFailed_ ? 1 : 3);
+                batchTotal_ = 0;
+            }
+        }
+    }
+    if (batchTotal_ > 0 && !batchQueue_.empty() && !exportFuture_.valid()) {
+        const std::string next = batchQueue_.front();
+        batchQueue_.erase(batchQueue_.begin());
+        if (const MapEntry* e = findEntry(next)) startExportOf(*e);
+        else { ++batchDone_; ++batchFailed_; }
     }
     std::lock_guard<std::mutex> lock(logMutex_);
     for (auto& l : logPending_) log_.push_back(std::move(l));
@@ -364,6 +475,10 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("walkable=" + std::string(settings_.walkable ? "1" : "0"));
     v.push_back("texels=" + std::to_string(settings_.texels));
     v.push_back("mesh_vertices=" + std::to_string(previewScene_.vertices.size()));
+    v.push_back("batch_active=" + std::string(batchActive() ? "1" : "0"));
+    v.push_back("batch_done=" + std::to_string(batchDone_));
+    v.push_back("batch_failed=" + std::to_string(batchFailed_));
+    v.push_back("filter=" + filter_);
     return v;
 }
 
@@ -372,6 +487,12 @@ std::vector<std::string> App::stateDump() const {
 void App::frame(float dt) {
     time_ += dt;
     pollWorkers();
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E) && !exportFuture_.valid() && !selectedName_.empty()) startExport();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !filter_.empty() && !ImGui::IsAnyItemActive()) setFilter("");
+    }
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->Pos);
@@ -468,7 +589,8 @@ void App::drawExplorer(float width) {
     ImGui::SetCursorPosX(16);
     ImGui::SetNextItemWidth(width - 32);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 7));
-    if (ImGui::InputTextWithHint("##filter", "Search maps...", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
+    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
+    if (ImGui::InputTextWithHint("##filter", "Search maps...   (Ctrl+F)", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
     ImGui::PopStyleVar();
     auto_.registerWidget("input_filter");
     ImGui::Dummy(ImVec2(0, 6));
@@ -494,7 +616,7 @@ void App::drawExplorer(float width) {
         for (const auto& m : maps_) {
             if (!f.empty() && lower(m.name).find(f) == std::string::npos) continue;
             ++shown;
-            const bool single = groupCount[m.group] <= 1;
+            const bool single = groupCount[m.group] <= 1 && m.group != "Loose files";
             if (!single && m.group != currentGroup) {
                 currentGroup = m.group;
                 bool& open = groupOpen_[m.group];
@@ -523,20 +645,22 @@ void App::drawExplorer(float width) {
                 groupVisible = true;
             }
             if (!groupVisible) continue;
-            const bool selected = m.name == selectedName_;
+            const bool selected = m.key == selectedName_;
             ImGui::SetCursorPosX(26);
+            ImGui::PushID(m.key.c_str());
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
             ImGui::PushStyleColor(ImGuiCol_Header, theme::vec(theme::AccentSoft));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::vec(theme::Bg2));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::vec(theme::AccentSoft));
             if (selected) ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::AccentText));
-            if (ImGui::Selectable(m.name.c_str(), selected, ImGuiSelectableFlags_None, ImVec2(0, 24))) selectMap(m.name);
+            if (ImGui::Selectable(m.name.c_str(), selected, ImGuiSelectableFlags_None, ImVec2(0, 24))) selectMap(m.key);
             if (selected) ImGui::PopStyleColor();
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar();
             if (selected) auto_.registerWidget("row_selected");
-            auto_.registerWidget(("row_" + m.name).c_str());
-            if (!m.loosePath.empty() && ImGui::IsItemHovered()) ImGui::SetTooltip("Loose .lev overrides the WAD copy");
+            auto_.registerWidget(("row_" + m.key).c_str());
+            if (!m.loosePath.empty() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m.loosePath.c_str());
+            ImGui::PopID();
         }
         if (shown == 0) {
             ImGui::SetCursorPos(ImVec2(16, 20));
@@ -581,7 +705,8 @@ void App::drawViewport(float width) {
     const bool loading = previewFuture_.valid();
     if (!renderer_.hasMesh() || loading) {
         ImGui::PushFont(fontBold_);
-        std::string msg = loading ? "Loading " + (previewPendingName_.empty() ? selectedName_ : previewPendingName_) : "Pick a map on the left";
+        const MapEntry* pend = findEntry(previewPendingName_.empty() ? selectedName_ : previewPendingName_);
+        std::string msg = loading ? "Loading " + (pend ? pend->name : selectedName_) : "Pick a map on the left";
         if (loading) {
             const char* dots[] = {"", ".", "..", "..."};
             msg += dots[int(time_ * 3) % 4];
@@ -602,7 +727,15 @@ void App::drawViewport(float width) {
     if (renderer_.hasMesh() && previewLoaded()) {
         ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 14));
         ImGui::PushFont(fontTitle_);
-        ImGui::TextUnformatted(previewLoadedFor_.c_str());
+        const MapEntry* cur = findEntry(previewLoadedFor_);
+        ImGui::TextUnformatted(cur ? cur->name.c_str() : previewLoadedFor_.c_str());
+        if (cur && !cur->loosePath.empty()) {
+            ImGui::SameLine(0, 10);
+            ImGui::PushFont(fontSmall_);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 9);
+            ImGui::TextColored(theme::vec(theme::Faint), "%s", cur->loosePath.c_str());
+            ImGui::PopFont();
+        }
         ImGui::PopFont();
         ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 44));
         ImGui::PushFont(fontSmall_);
@@ -610,6 +743,11 @@ void App::drawViewport(float width) {
                            previewScene_.mapWidth, previewScene_.mapHeight, previewScene_.vertices.size(),
                            previewScene_.minHeight, previewScene_.maxHeight,
                            previewTextured_ ? "" : "   |   textures loading...");
+        if (previewTextured_ && previewScene_.unresolvedThemes > 0) {
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 64));
+            ImGui::TextColored(theme::vec(theme::Warn), "%d of %zu ground themes have no texture in this install (shown grey)",
+                               previewScene_.unresolvedThemes, previewScene_.themes.size());
+        }
         ImGui::PopFont();
     }
 
@@ -636,7 +774,8 @@ void App::drawViewport(float width) {
         auto_.registerWidget("chip_reset");
         const char* hint = "Drag: orbit   Right-drag: pan   Wheel: zoom";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
-        dl->AddText(ImVec2(origin.x + size.x - hs.x - 16, y + 6), theme::col(theme::Faint), hint);
+        if (origin.x + size.x - hs.x - 16 > x + 20)
+            dl->AddText(ImVec2(origin.x + size.x - hs.x - 16, y + 6), theme::col(theme::Faint), hint);
         ImGui::PopFont();
     }
     ImGui::EndChild();
@@ -649,6 +788,13 @@ void App::drawActions(float width) {
     const ImVec2 p0 = ImGui::GetWindowPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x, p0.y), ImVec2(p0.x, p0.y + ImGui::GetWindowHeight()), theme::col(theme::Border));
     const float inner = width - 32;
+    const float logHeight = 140.0f;
+    // Footer: primary Export + batch/open-folder rows. Always visible, never scrolls away.
+    const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
+    const float footerHeight = 42 + 8 + 32 + (showOpen ? 40 : 0) + (batchActive() ? 40 : 0) + 16;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
+    ImGui::BeginChild("##settings", ImVec2(width, ImGui::GetContentRegionAvail().y - logHeight - footerHeight - 30), ImGuiChildFlags_None);
+    ImGui::PopStyleColor();
 
     ImGui::SetCursorPos(ImVec2(16, 14));
     ImGui::PushFont(fontBold_);
@@ -667,7 +813,10 @@ void App::drawActions(float width) {
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, 6));
     theme::label("Up axis");
-    theme::segmented("##up", settings_.up, {"Y (glTF / Blender / Unreal)", "Z (Fable native)"}, inner - 24);
+    theme::segmented("##up", settings_.up, {"Y up  (glTF)", "Z up  (Fable)"}, inner - 24);
+    ImGui::PushFont(fontSmall_);
+    ImGui::TextColored(theme::vec(theme::Faint), settings_.up == 0 ? "Blender, Unreal, three.js and most viewers expect Y up." : "Raw Fable coordinates; heights on Z.");
+    ImGui::PopFont();
     auto_.registerWidget("seg_up");
     theme::endCard();
 
@@ -679,8 +828,9 @@ void App::drawActions(float width) {
     if (settings_.textures) {
         if (!ctx_.ready()) {
             ImGui::PushFont(fontSmall_);
-            ImGui::TextColored(theme::vec(ctxError_.empty() ? theme::Warn : theme::Error), "%s",
-                               ctxError_.empty() ? "loading game.bin + textures.big..." : "unavailable in this install");
+            ImGui::TextColored(theme::vec(ctxError_.empty() && installValid_ ? theme::Warn : theme::Error), "%s",
+                               !installValid_ ? "needs a Fable install (Change... above)"
+                               : ctxError_.empty() ? "loading game.bin + textures.big..." : "unavailable in this install");
             ImGui::PopFont();
         }
         ImGui::Dummy(ImVec2(0, 4));
@@ -694,7 +844,7 @@ void App::drawActions(float width) {
         ImGui::SliderFloat("##tile", &settings_.tile, 1.0f, 16.0f, "texture repeat every %.1f units");
         auto_.registerWidget("slider_tile");
         ImGui::Dummy(ImVec2(0, 4));
-        theme::toggle("Also write splat layers (per-theme PNGs + weights)", &settings_.layers);
+        theme::toggle("Splat layers (per-theme PNGs + weights)", &settings_.layers);
         auto_.registerWidget("toggle_layers");
     }
     theme::toggle("Walkability as vertex colours", &settings_.walkable);
@@ -717,20 +867,50 @@ void App::drawActions(float width) {
     }
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, 12));
+    ImGui::Dummy(ImVec2(0, 6));
+    ImGui::EndChild();  // ##settings
+
+    // ---- footer
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + 16, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - 16, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
+    ImGui::Dummy(ImVec2(0, 8));
     ImGui::SetCursorPosX(16);
     const bool canExport = !selectedName_.empty() && !exportFuture_.valid() && installValid_;
-    const std::string label = exportFuture_.valid() ? "Exporting..." : selectedName_.empty() ? "Select a map to export" : "Export " + selectedName_;
-    if (theme::primaryButton(label.c_str(), ImVec2(inner, 42), canExport)) startExport();
+    const MapEntry* selEntry = findEntry(selectedName_);
+    const std::string label = exportFuture_.valid() ? "Exporting..." : !selEntry ? "Select a map to export" : "Export " + selEntry->name;
+    if (theme::primaryButton(label.c_str(), ImVec2(inner, 42), canExport && !batchActive())) startExport();
     auto_.registerWidget("btn_export");
-    if (lastExportOk_ && !exportFuture_.valid()) {
+    if (ImGui::IsItemHovered() && canExport) ImGui::SetTooltip("Ctrl+E");
+    ImGui::SetCursorPosX(16);
+    if (batchActive()) {
+        char b[96];
+        std::snprintf(b, sizeof b, "Exporting %d / %d  -  %s", batchDone_ + 1, batchTotal_, batchCurrent_.c_str());
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Muted), "%s", b);
+        ImGui::PopFont();
         ImGui::SetCursorPosX(16);
-        if (theme::ghostButton("Open output folder", ImVec2(inner, 32))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
-        auto_.registerWidget("btn_open_folder");
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner, p.y + 6), theme::col(theme::Bg0), 3.0f);
+        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner * float(batchDone_) / float(std::max(batchTotal_, 1)), p.y + 6), theme::col(theme::Accent), 3.0f);
+        ImGui::Dummy(ImVec2(inner, 10));
+        ImGui::SetCursorPosX(16);
+        if (theme::ghostButton("Cancel batch", ImVec2(inner, 30))) cancelBatch();
+        auto_.registerWidget("btn_cancel_batch");
+    } else {
+        const auto visible = visibleMapNames();
+        char b[64];
+        if (filter_.empty()) std::snprintf(b, sizeof b, "Export all %zu maps", visible.size());
+        else std::snprintf(b, sizeof b, "Export %zu matching maps", visible.size());
+        if (theme::ghostButton(b, ImVec2(inner, 32)) && installValid_ && !exportFuture_.valid()) startBatchExport(visible);
+        auto_.registerWidget("btn_export_all");
+        if (lastExportOk_ && !exportFuture_.valid()) {
+            ImGui::SetCursorPosX(16);
+            if (theme::ghostButton("Open output folder", ImVec2(inner, 32))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
+            auto_.registerWidget("btn_open_folder");
+        }
     }
 
-    // Log
-    ImGui::Dummy(ImVec2(0, 10));
+
+    // Log (fixed height so it never gets squeezed out)
     ImGui::SetCursorPosX(16);
     ImGui::PushFont(fontBold_);
     ImGui::TextColored(theme::vec(theme::Muted), "ACTIVITY");
@@ -738,7 +918,7 @@ void App::drawActions(float width) {
     ImGui::SetCursorPosX(16);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-    ImGui::BeginChild("##log", ImVec2(inner, ImGui::GetContentRegionAvail().y - 12), ImGuiChildFlags_None);
+    ImGui::BeginChild("##log", ImVec2(inner, logHeight - 10), ImGuiChildFlags_None);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::PushFont(fontSmall_);
@@ -809,7 +989,12 @@ bool Automation::tick(App& app) {
     if (waitFrames_ > 0) { --waitFrames_; return true; }
     if (pc_ >= lines_.size()) { quit_ = true; return false; }
 
-    const std::string& line = lines_[pc_];
+    std::string line = lines_[pc_];
+    for (const char* var : {"TEMP", "USERPROFILE"}) {
+        const std::string key = std::string("${") + var + "}";
+        const char* val = std::getenv(var);
+        for (size_t at; (at = line.find(key)) != std::string::npos;) line.replace(at, key.size(), val ? val : "");
+    }
     std::istringstream ss(line);
     std::string cmd; ss >> cmd;
     std::string rest; std::getline(ss, rest);
@@ -853,6 +1038,9 @@ bool Automation::tick(App& app) {
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "export") { app.startExport(); note("ok   " + line); ++pc_; }
+    else if (cmd == "export_all") { app.startBatchExport(app.visibleMapNames()); note("ok   " + line); ++pc_; }
+    else if (cmd == "wait_batch") waitOn(!app.batchActive() && !app.exportBusy(), "batch export");
+    else if (cmd == "open") { if (!app.openLooseLev(rest)) fail("open failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "screenshot") { pendingShot_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 1; }
     else if (cmd == "assert_file") {
         std::error_code ec;

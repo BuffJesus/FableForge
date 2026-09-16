@@ -100,6 +100,8 @@ struct Scene {
     std::vector<ThemeLayer> themes;
     std::vector<Image> layerImages; // per-slot decoded textures (layers mode)
     std::vector<std::string> warnings;
+    int unresolvedThemes = 0;       // palette slots no ENGINE_THEME could be found for
+    int nameResolvedThemes = 0;     // slots resolved by NAME because the stored def index was stale
     bool walkableColor = false;
     bool layers = false;
 };

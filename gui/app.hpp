@@ -22,7 +22,8 @@
 namespace albion::gui {
 
 struct MapEntry {
-    std::string name;
+    std::string name;        // display + output file stem
+    std::string key;         // unique selection key (name, or "file:<stem>" for loose files)
     std::string group;
     uint32_t size = 0;
     std::string loosePath;   // set when a loose .lev overrides the WAD copy
@@ -92,6 +93,14 @@ public:
     std::string lastExportPath() const { return lastExportPath_; }
     bool lastExportOk() const { return lastExportOk_; }
     void startExport();
+    // Queue every map whose name is in `names` (sequential; reuses the export worker).
+    void startBatchExport(const std::vector<std::string>& names);
+    void cancelBatch();
+    bool batchActive() const { return !batchQueue_.empty() || batchTotal_ > 0; }
+    std::vector<std::string> visibleMapNames() const;
+    // Load a loose .lev from disk (drag & drop / automation) and select it.
+    bool openLooseLev(const std::string& path);
+    void saveSettings() const;
     ExportSettings& settings() { return settings_; }
     Camera& camera() { return camera_; }
     void setMode(ViewMode m) { mode_ = m; }
@@ -109,6 +118,10 @@ private:
     void pollWorkers();
     void pushLog(const std::string& line, int level = 0);
     std::string resolveLevPath(const MapEntry& e, std::string& err);
+    void startExportOf(const MapEntry& entry);
+    const MapEntry* findEntry(const std::string& key) const;
+    void loadSettings(std::string& savedInstall);
+    std::string settingsPath() const;
 
     void drawTitleBar();
     void drawExplorer(float width);
@@ -157,6 +170,10 @@ private:
     std::future<ExportResult> exportFuture_;
     std::string lastExportPath_;
     bool lastExportOk_ = false;
+    std::vector<std::string> batchQueue_;
+    int batchTotal_ = 0, batchDone_ = 0, batchFailed_ = 0;
+    std::string batchCurrent_;
+    bool focusFilter_ = false;
     std::vector<std::pair<int, std::string>> log_;   // level, line (0 info, 1 warn, 2 error, 3 success)
     std::mutex logMutex_;
     std::vector<std::pair<int, std::string>> logPending_;

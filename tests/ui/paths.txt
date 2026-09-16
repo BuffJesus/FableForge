@@ -1,0 +1,48 @@
+# Interaction paths: tree expand by click, row click, toggle click, OBJ +
+# untextured export, loose .lev open, small batch export with a filter.
+wait_maps
+wait_ready
+click group_Arena
+frames 3
+assert_widget row_Arena_Filler_01
+click row_Arena_Filler_01
+wait_loaded
+assert_state selected Arena_Filler_01
+screenshot build/ui/p1_tree_click.png
+set format obj
+set outdir build/ui
+click toggle_textures
+frames 2
+assert_state textures 0
+click btn_export
+frames 2
+wait_export
+assert_state export_ok 1
+assert_file build/ui/Arena_Filler_01.obj
+assert_file build/ui/Arena_Filler_01.mtl
+click toggle_textures
+frames 2
+assert_state textures 1
+set format glb
+# loose file: the WAD copy extracted for the preview above lives in %TEMP%
+open ${TEMP}/AlbionTerrain/Arena_Filler_01.lev
+wait_loaded
+assert_state selected file:Arena_Filler_01
+assert_widget group_Loose files
+assert_widget row_file:Arena_Filler_01
+screenshot build/ui/p2_loose.png
+# batch: everything matching "Arena_Filler" (2 WAD maps + the loose copy = 3)
+filter Arena_Filler
+frames 2
+click btn_export_all
+frames 2
+assert_state batch_active 1
+screenshot build/ui/p3_batch.png
+wait_batch
+assert_state batch_failed 0
+assert_state batch_done 3
+assert_file build/ui/Arena_Filler_01.glb
+assert_file build/ui/Arena_Filler_02.glb
+filter
+dump_state
+quit

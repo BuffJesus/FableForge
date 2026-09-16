@@ -1,0 +1,67 @@
+ok   wait_maps
+ok   wait_ready
+..   click group_Arena
+ok   frames 3
+ok   assert_widget row_Arena_Filler_01
+..   click row_Arena_Filler_01
+ok   wait_loaded
+ok   assert_state selected Arena_Filler_01
+ok   screenshot build/ui/p1_tree_click.png
+shot build/ui/p1_tree_click.png
+ok   set format obj
+ok   set outdir build/ui
+..   click toggle_textures
+ok   frames 2
+ok   assert_state textures 0
+..   click btn_export
+ok   frames 2
+ok   wait_export
+ok   assert_state export_ok 1
+ok   assert_file build/ui/Arena_Filler_01.obj
+ok   assert_file build/ui/Arena_Filler_01.mtl
+..   click toggle_textures
+ok   frames 2
+ok   assert_state textures 1
+ok   set format glb
+ok   open C:\Users\Cornelio\AppData\Local\Temp/AlbionTerrain/Arena_Filler_01.lev
+ok   wait_loaded
+ok   assert_state selected file:Arena_Filler_01
+ok   assert_widget group_Loose files
+ok   assert_widget row_file:Arena_Filler_01
+ok   screenshot build/ui/p2_loose.png
+shot build/ui/p2_loose.png
+ok   filter Arena_Filler
+ok   frames 2
+..   click btn_export_all
+ok   frames 2
+ok   assert_state batch_active 1
+ok   screenshot build/ui/p3_batch.png
+shot build/ui/p3_batch.png
+ok   wait_batch
+ok   assert_state batch_failed 0
+ok   assert_state batch_done 3
+ok   assert_file build/ui/Arena_Filler_01.glb
+ok   assert_file build/ui/Arena_Filler_02.glb
+ok   filter
+     install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+     install_valid=1
+     maps=400
+     selected=file:Arena_Filler_01
+     preview_loaded=1
+     preview_textured=1
+     context_ready=1
+     mode=Textured
+     export_ok=1
+     export_path=build/ui\Arena_Filler_02.glb
+     format=glb
+     textures=1
+     layers=0
+     walkable=0
+     texels=8
+     mesh_vertices=3201
+     batch_active=0
+     batch_done=3
+     batch_failed=0
+     filter=
+ok   quit
+RESULT PASS

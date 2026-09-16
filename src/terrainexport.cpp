@@ -340,9 +340,20 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         if (r.resolved) {
             layer.baseTexture = r.textures.base[0];
             layer.cliffTexture = r.textures.cliff[0];
+        } else if (const auto* byName = r.paletteName.empty() ? nullptr : ctx.library.byName(r.paletteName);
+                   byName && byName->decoded) {
+            // The LEV stores a GLOBAL def index that goes stale when game.bin changes
+            // (maps authored against an older bank). The palette also stores the
+            // name, and names are stable, so fall back to it.
+            layer.resolved = true;
+            layer.defIndex = byName->defIndex;
+            layer.baseTexture = byName->textures.base[0];
+            layer.cliffTexture = byName->textures.cliff[0];
+            ++scene.nameResolvedThemes;
         } else {
+            ++scene.unresolvedThemes;
             say(options, scene, "palette slot " + std::to_string(r.slot) + " (" + layer.name +
-                ") does not resolve to an ENGINE_THEME in this install", true);
+                ") is not an ENGINE_THEME in this install (stale def index, no theme of that name)", true);
         }
         slotToLayer[r.slot] = scene.themes.size();
         scene.themes.push_back(layer);

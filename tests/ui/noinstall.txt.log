@@ -1,0 +1,9 @@
+ok   frames 5
+ok   assert_state install_valid 0
+ok   assert_state maps 0
+ok   assert_widget btn_export
+ok   assert_widget btn_change_install
+ok   screenshot build/ui/n1_noinstall.png
+shot build/ui/n1_noinstall.png
+ok   quit
+RESULT PASS

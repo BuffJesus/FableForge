@@ -1,0 +1,8 @@
+# No install: honest empty state, export disabled, no crash.
+frames 5
+assert_state install_valid 0
+assert_state maps 0
+assert_widget btn_export
+assert_widget btn_change_install
+screenshot build/ui/n1_noinstall.png
+quit
