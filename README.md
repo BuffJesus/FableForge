@@ -141,6 +141,15 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   the loose `data/Levels/FinalAlbion/<map>.tng`; **Write into FinalAlbion.wad** puts
   the edited file into the archive the game actually loads. Both keep a one-time
   `.atlas-orig` backup of what was there.
+* **Terrain (T)**: raise / lower / flatten / smooth brushes and walkable / blocked
+  painting straight on the ground (hold LMB, Shift inverts, `[` `]` resize; each
+  stroke is one undo step). **Save terrain into the game** writes the `.lev`, replaces
+  it in `FinalAlbion.wad` and re-bakes the map's terrain chunk inside
+  `FinalAlbion_RT.stb` from the edited heights, with the neighbouring maps supplying
+  the shared-edge samples, so the visible mesh, collision and camera bounds all follow.
+  Same-size, patched in place, one-time `.atlas-orig` backups. Nav meshes are left as
+  they are (blocked paint changes the LEV flag the engine's nav bake reads, not the
+  shipped nav tree).
 
 Everything is written the way the game wrote it: untouched things stay byte-identical,
 moved things get their position/basis lines rewritten in retail float spelling, new

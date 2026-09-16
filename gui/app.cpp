@@ -299,6 +299,9 @@ bool App::openLooseLev(const std::string& path) {
 
 void App::selectMap(const std::string& nameOrKey) {
     if (nameOrKey == selectedName_) return;
+    if (hasUnsavedEdits() && !discardEdits_ && (!auto_.active() || promptInAuto_) && pendingSelect_.empty()) { pendingSelect_ = nameOrKey; return; }
+    pendingSelect_.clear();
+    discardEdits_ = false;
     auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == nameOrKey; });
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
@@ -724,6 +727,7 @@ void App::frame(float dt) {
     drawViewport(middle);
     ImGui::SameLine(0, 0);
     drawActions(right);
+    drawUnsavedPrompt();
 
     ImGui::End();
 }
@@ -1482,6 +1486,7 @@ bool Automation::tick(App& app) {
         else if (key == "up") s.up = lower(val) == "z" ? 1 : 0;
         else if (key == "outdir") { s.outDir = val; std::snprintf(app.outDirBuf_, sizeof app.outDirBuf_, "%s", val.c_str()); }
         else if (key == "saveroot") app.setSaveRoot(val);
+        else if (key == "unsaved_prompt") app.promptInAuto_ = val == "1";
         else fail("set: unknown key " + key);
         note("ok   " + line); ++pc_;
     }

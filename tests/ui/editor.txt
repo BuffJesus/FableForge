@@ -91,7 +91,18 @@ undo
 undo
 frames 2
 assert_state terrain_dirty 0
-click seg_panel
+# unsaved-changes prompt when switching maps with edits pending
+set unsaved_prompt 1
+select_def OBJECT_BARREL_BREAKABLE
+move_thing 0 0 0.5
+frames 1
+select Greatwood_1
 frames 2
+assert_widget btn_unsaved_cancel
+screenshot build/ui/e8_unsaved_prompt.png
+click btn_unsaved_discard
+frames 3
+assert_state selected Greatwood_1
+set unsaved_prompt 0
 dump_state
 quit

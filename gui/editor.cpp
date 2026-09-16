@@ -480,6 +480,47 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
     gizmoWasUsing_ = using_;
 }
 
+// ------------------------------------------------------------ unsaved-changes prompt
+
+void App::drawUnsavedPrompt() {
+    if (pendingSelect_.empty()) return;
+    using theme::S;
+    ImGui::OpenPopup("Unsaved changes");
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(S(420), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), S(16)));
+    if (ImGui::BeginPopupModal("Unsaved changes", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
+        const MapEntry* cur = findEntry(selectedName_);
+        ImGui::PushFont(fontBold_);
+        ImGui::TextUnformatted("Unsaved changes");
+        ImGui::PopFont();
+        ImGui::PushTextWrapPos(S(390));
+        ImGui::TextColored(theme::vec(theme::Muted), "%s has edits that have not been written (%s). Switching maps drops them.",
+                           cur ? cur->name.c_str() : selectedName_.c_str(),
+                           doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0, S(10)));
+        const float w = (S(390) - 2 * S(6)) / 3.0f;
+        if (theme::primaryButton("Save .tng", ImVec2(w, S(32)), doc_.dirty())) { saveDocument(); if (!hasUnsavedEdits()) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); } }
+        auto_.registerWidget("btn_unsaved_save");
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Discard", ImVec2(w, S(32)))) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
+        auto_.registerWidget("btn_unsaved_discard");
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Cancel", ImVec2(w, S(32)))) pendingSelect_.clear();
+        auto_.registerWidget("btn_unsaved_cancel");
+        if (doc_.hasTerrain() && doc_.terrainDirty()) {
+            ImGui::PushFont(fontSmall_);
+            theme::hint("Terrain edits are written with 'Save terrain into the game' in the Edit panel.");
+            ImGui::PopFont();
+        }
+        if (pendingSelect_.empty()) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+}
+
 // ------------------------------------------------------------ panel
 
 void App::drawEditPanel(float pad, float inner, float cardInner) {

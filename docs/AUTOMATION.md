@@ -43,6 +43,11 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `place <DEFINITION>` | place a new thing at the camera focus, on the ground |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |
+| `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |
+| `brush <radius> <strength>` / `terrain_stroke <x> <y> <seconds>` | brush size; one stroke at a map-local point |
+| `deploy_terrain` / `wait_terrain` | write .lev + WAD + STB chunk under saveroot (worker thread) |
+| `set unsaved_prompt 0\|1` | scripted runs skip the unsaved-changes prompt unless opted in |
+| `dump_log` | copy the activity log into the script log |
 | `set saveroot <dir>` | where `save_level` / `deploy_level` write (default: the install) |
 | `save_level` / `deploy_level` | write the loose .tng / replace the WAD entry under saveroot |
 | `screenshot <png>` | save the next presented frame |
@@ -63,7 +68,9 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 `seg_panel`, and in Edit mode `seg_gizmo`, `toggle_snap`, `drag_px|py|pz|yaw|scale`,
 `btn_ground`, `btn_focus`, `btn_duplicate`, `btn_delete`, `input_thingsearch`,
 `input_defsearch`, `btn_place`, `btn_undo`, `btn_redo`, `btn_save`, `btn_deploy`,
-`btn_deploy_confirm`, `btn_revert`.
+`btn_deploy_confirm`, `btn_revert`, `seg_terrain_mode`, `seg_terrain_walk`, `slider_radius`,
+`slider_strength`, `btn_terrain_deploy`, `btn_terrain_deploy_confirm`, `btn_unsaved_save`,
+`btn_unsaved_discard`, `btn_unsaved_cancel`.
 
 A widget is only registered on frames where it was drawn, so expand a group
 (`click group_Arena`) before clicking one of its rows.

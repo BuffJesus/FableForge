@@ -247,6 +247,11 @@ private:
     void startTerrainDeploy();
     bool clickArmed_ = false;
     ImVec2 clickPos_;
+    std::string pendingSelect_;      // map switch held back by the unsaved-changes prompt
+    bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
+    bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
+    void drawUnsavedPrompt();
+    bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
 
     ID3D11Device* device_ = nullptr;
