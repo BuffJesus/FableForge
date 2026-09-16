@@ -172,6 +172,65 @@ BackgroundAlbedo backgroundAlbedo(const fs::path& gameRoot, const std::string& m
     return out;
 }
 
+ForegroundLayers loadLayers(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+    ForegroundLayers out;
+    std::vector<uint8_t> chunk;
+    int worldX = 0, worldY = 0;
+    if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, out.note)) return out;
+    int frameIndex = 0;
+    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+        ++frameIndex;
+        // Same grammar as parseForeground, keeping everything.
+        size_t p = 0;
+        auto need = [&](size_t n) { return p + n <= b.size(); };
+        auto r8 = [&]() { return b[p++]; };
+        auto r16 = [&]() { const uint16_t v = uint16_t(b[p] | (b[p + 1] << 8)); p += 2; return v; };
+        auto r32 = [&]() { uint32_t v; std::memcpy(&v, b.data() + p, 4); p += 4; return v; };
+        auto rf = [&]() { float v; std::memcpy(&v, b.data() + p, 4); p += 4; return v; };
+        if (!need(2)) return;
+        const uint16_t layers = r16();
+        if (layers == 0 || layers > 64) return;
+        std::vector<ForegroundLayer> parsed;
+        for (uint16_t li = 0; li < layers; ++li) {
+            if (!need(2 + 2 + 1 + 12 + 1 + 4 + 4 + 4)) return;
+            ForegroundLayer L;
+            L.patchIndex = frameIndex - 1; L.layerIndex = li;
+            const uint16_t vc = r16();
+            const uint16_t pc = r16();
+            L.direction = r8();
+            if (vc == 0 || vc > 4096 || L.direction > 4) return;
+            L.texture = r32(); L.backgroundTexture = r32(); L.bumpTexture = r32();
+            if (L.texture > 100000 || L.backgroundTexture > 100000 || L.bumpTexture > 100000) return;
+            L.sharedIndexBuffer = r8() != 0;
+            r32(); r32();
+            L.selfIllumination = rf();
+            if (!need(size_t(vc) * 15)) return;
+            L.vertices.reserve(vc);
+            for (uint16_t vi = 0; vi < vc; ++vi) {
+                LayerVertex v;
+                v.x = int(r16()) - worldX; v.y = int(r16()) - worldY;
+                v.height = rf(); r32();
+                v.blend = r8(); v.b1 = r8(); v.b2 = r8();
+                if (v.x < 0 || v.y < 0 || v.x > mapWidth || v.y > mapHeight) return;
+                L.vertices.push_back(v);
+            }
+            if (!L.sharedIndexBuffer) {
+                if (pc > 20000 || !need((size_t(pc) + 2) * 2)) return;
+                L.strip.reserve(size_t(pc) + 2);
+                for (size_t i = 0; i < size_t(pc) + 2; ++i) L.strip.push_back(r16());
+                for (uint16_t idx : L.strip) if (idx >= vc) return;
+            }
+            parsed.push_back(std::move(L));
+        }
+        if (!need(1)) return;
+        ++out.frames;
+        for (auto& L : parsed) out.layers.push_back(std::move(L));
+    });
+    out.found = out.frames > 0;
+    if (!out.found) out.note = "no foreground frames matched";
+    return out;
+}
+
 CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
     CellMask m;
     m.width = mapWidth; m.height = mapHeight;

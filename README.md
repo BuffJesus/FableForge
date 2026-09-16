@@ -29,7 +29,7 @@ AlbionAtlas effects BRAZIERFIREFINAL         # what a particle effect is made of
 | Layer | Source | In the file |
 |---|---|---|
 | Heightmap mesh | `.lev` cell grid — one vertex per world unit, height = raw × 2048 | `POSITION` / `NORMAL` / `TEXCOORD_0`, two triangles per cell, Y-up (or `--up z`) |
-| Ground texture | the per-vertex 3-theme blend → `ENGINE_THEME` defs in `game.bin` → `textures.big` entries, DXT-decoded and baked into one albedo PNG | `baseColorTexture` on a rough, non-metallic material |
+| Ground texture | the engine's own texture passes from `FinalAlbion_RT.stb` (per 16x16 patch: texture id, mapping direction, per-vertex blend), composited with the engine's direction weights; loose `.lev` files without an STB entry fall back to the LEV 3-theme blend → `ENGINE_THEME` defs → `textures.big` | `baseColorTexture` on a rough, non-metallic material |
 | Splat layers (`--layers`) | same, unbaked | `_THEME_INDEX` / `_THEME_WEIGHT` vertex attributes, one PNG per theme in `<name>_themes/`, and `<name>.themes.json` |
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
 | Foliage (`--foliage`) | baked local-detail instances in `FinalAlbion_RT.stb` — grass, flowers, bracken, bramble, stumps **and trees** (oaks, birches...) — + LOD0 meshes from `graphics.big` + their textures | one glTF mesh per plant (leaves/trunk as separate primitives), one node per instance under a `Foliage` root; cutout (`MASK`) materials. OBJ: baked into an extra object |
@@ -63,10 +63,12 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 * **Texture tiling** — pinned from the engine: the landscape vertex shader maps
   `u = x / 8, v = y / 8` (`CEngineLandscapePatch::PositionToTextureUVTransformU/V`,
   ±0.125 per axis), so one ground texture covers 8 x 8 world units; `--tile` overrides.
-* **Cliffs** — the engine projects cliff textures along one of four horizontal
-  directions with height as the second coordinate (`v = -z / 8`); the bake picks the
-  direction from the slope and blends by slope angle. `--layers` gives the raw inputs
-  for an exact shader.
+* **Cliffs are the engine's** — for retail maps the albedo is composited from the STB
+  foreground passes: each pass carries its mapping direction (flat, or one of four
+  horizontal projections with `v = -z/8`) and per-vertex blend, weighted with
+  `GetMappingDirectionBlend` (flatness from `asin(n.z)`, direction falloff from the
+  horizontal normal). Loose `.lev` files without an STB entry use the older slope
+  heuristic. `--layers` still exports the LEV theme splat for people building a shader.
 * **Foliage frames are found by grammar, not by directory** — every LZO frame
   in the map's STB chunk that parses as a cache-group collection is used (type-1
   grass batches, type-0 single meshes incl. trees, and type-2 z-sprite batches —

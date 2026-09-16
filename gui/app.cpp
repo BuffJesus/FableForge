@@ -364,6 +364,7 @@ void App::startPreviewLoad() {
             o.texelsPerCell = texels;
             o.gain = gain;
             o.up = te::UpAxis::Y;
+            if (ctx) { o.gameRoot = ctx->gameRoot(); o.mapName = entry.key.rfind("file:", 0) == 0 ? std::string() : entry.name; }
             r.scene = te::buildScene(file, o, ctx);
         } catch (const std::exception& e) {
             r.error = e.what();
@@ -433,6 +434,7 @@ void App::startExportOf(const MapEntry& entry) {
             o.layers = s.layers;
             o.walkableColor = s.walkable;
             o.up = s.up == 0 ? te::UpAxis::Y : te::UpAxis::Z;
+            if (ctx) { o.gameRoot = ctx->gameRoot(); o.mapName = entry.key.rfind("file:", 0) == 0 ? std::string() : entry.name; }
             if (s.world && entry.hasWorld) { o.originX = entry.worldX; o.originY = entry.worldY; }
             else if (s.world) r.log.push_back("warning: no world placement known for " + entry.name + ", exporting map-local");
             o.log = [&](const std::string& m) { r.log.push_back(m); };

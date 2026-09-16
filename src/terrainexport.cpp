@@ -20,6 +20,7 @@
 #include "miniz/miniz.h"
 #include "nlohmann/json.hpp"
 #include "glbwriter.hpp"
+#include "stbterrain.hpp"
 #include "terrainexport_internal.hpp"
 
 #include "../vendor/embedded_schema.hpp"
@@ -564,7 +565,131 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         }
     }
 
-    // 4. Bake the albedo.
+    // 4a. The engine's own bake: STB foreground passes. Each 16x16 patch lists its
+    // texture passes; a pass has a mapping direction (0 flat: u = x/8, v = y/8;
+    // 1..4: u = -x, +x, +y, -y over 8, v = -z/8), a texture id and the vertices it
+    // covers with a per-vertex blend byte. The engine draws every pass over the
+    // low-res background patch with alpha = blend * GetMappingDirectionBlend(dir, n)
+    // (FableWin 0x02cae000: flatness t = clamp((asin(n.z)/(pi/2) - 0.5) / 0.25);
+    // dir 0 -> t; dir d -> (1 - t) * clamp(1 - (acos(dot(n.xy, D_d)) / (pi/2) - 0.25) / 0.5)
+    // with D_1..4 = (0,-1), (0,1), (-1,0), (1,0)). We composite the same passes as a
+    // normalised weighted sum, per texel, so the cliff projections land exactly
+    // where the engine puts them.
+    if (options.engineLayers && !options.mapName.empty()) {
+        const auto fl = stbterrain::loadLayers(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight);
+        if (fl.found && !fl.layers.empty()) {
+            const int tpc = std::max(options.texelsPerCell, 1);
+            const int cx = level.cellsX(), cy = level.cellsY();
+            const uint32_t W = uint32_t(scene.mapWidth) * tpc, H = uint32_t(scene.mapHeight) * tpc;
+            if (W == 0 || H == 0) return scene;
+            struct Pass { uint32_t tex; uint8_t dir; float alpha; };
+            std::vector<std::vector<Pass>> passes(size_t(cx) * cy);
+            std::map<uint32_t, const Image*> layerImgs;
+            int passCount = 0;
+            for (const auto& L : fl.layers) {
+                if (L.texture == 0) continue;
+                if (!layerImgs.count(L.texture)) layerImgs[L.texture] = cache.get(L.texture, scene, options);
+                ++passCount;
+                for (const auto& v : L.vertices) {
+                    if (v.x < 0 || v.y < 0 || v.x >= cx || v.y >= cy || v.blend == 0) continue;
+                    // Fable-space normal of the grid vertex (buildMesh stored it in the
+                    // requested up-axis space; undo that here).
+                    const Vertex& gv = scene.vertices[size_t(v.y) * cx + v.x];
+                    float nx = gv.nx, ny = gv.ny, nz = gv.nz;
+                    if (options.up == UpAxis::Y) { const float fy_ = -gv.nz, fz_ = gv.ny; ny = fy_; nz = fz_; }
+                    const float t = std::clamp((std::asin(std::clamp(nz, -1.0f, 1.0f)) / 1.5707963f - 0.5f) / 0.25f, 0.0f, 1.0f);
+                    float w;
+                    if (L.direction == 0) w = t;
+                    else if (t >= 1.0f) w = 0.0f;
+                    else {
+                        static const float D[5][2] = {{0, 0}, {0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+                        const float len = std::sqrt(nx * nx + ny * ny);
+                        float s = 1.0f;
+                        if (len > 1e-6f) {
+                            const float c = std::clamp((nx * D[L.direction][0] + ny * D[L.direction][1]) / len, -1.0f, 1.0f);
+                            s = std::clamp(1.0f - (std::acos(c) / 1.5707963f - 0.25f) / 0.5f, 0.0f, 1.0f);
+                        }
+                        w = (1.0f - t) * s;
+                    }
+                    const float alpha = w * float(v.blend) / 255.0f;
+                    if (alpha <= 0.0f) continue;
+                    auto& list = passes[size_t(v.y) * cx + v.x];
+                    bool merged = false;
+                    for (auto& pss : list) if (pss.tex == L.texture && pss.dir == L.direction) { pss.alpha = std::max(pss.alpha, alpha); merged = true; break; }
+                    if (!merged) list.push_back({L.texture, L.direction, alpha});
+                }
+            }
+            if (options.log) options.log("baking " + std::to_string(W) + "x" + std::to_string(H) + " albedo from " + std::to_string(passCount) +
+                                         " engine texture passes in " + std::to_string(fl.frames) + " patches");
+            scene.albedo = rgbaImage(W, H, std::vector<uint8_t>(size_t(W) * H * 4, 255), "albedo");
+            const float tile = options.tileSize > 0 ? options.tileSize : 8.0f;
+            const float gain = options.gain > 0 ? options.gain : 1.0f;
+            // Fallback colour where no pass covers a texel: the engine's background bake.
+            const auto bg = stbterrain::backgroundAlbedo(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight);
+            int uncovered = 0;
+            for (uint32_t py = 0; py < H; ++py) {
+                const float wy = (float(py) + 0.5f) / float(tpc);
+                const int iy = std::min(int(wy), scene.mapHeight - 1);
+                const float fy = wy - float(iy);
+                for (uint32_t px = 0; px < W; ++px) {
+                    const float wx = (float(px) + 0.5f) / float(tpc);
+                    const int ix = std::min(int(wx), scene.mapWidth - 1);
+                    const float fx = wx - float(ix);
+                    const int c[4] = {iy * cx + ix, iy * cx + ix + 1, (iy + 1) * cx + ix, (iy + 1) * cx + ix + 1};
+                    const float bw[4] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
+                    const float h00 = level.heightAt(ix, iy), h10 = level.heightAt(ix + 1, iy);
+                    const float h01 = level.heightAt(ix, iy + 1), h11 = level.heightAt(ix + 1, iy + 1);
+                    const float z = h00 + (h10 - h00) * fx + (h01 - h00) * fy + (h00 - h10 - h01 + h11) * fx * fy;
+                    float rgb[3] = {0, 0, 0}, total = 0;
+                    std::array<std::pair<uint64_t, float>, 24> acc{}; int n = 0;
+                    for (int k = 0; k < 4; ++k)
+                        for (const auto& pss : passes[size_t(c[k])]) {
+                            const float wgt = bw[k] * pss.alpha;
+                            if (wgt <= 0) continue;
+                            const uint64_t key = (uint64_t(pss.tex) << 8) | pss.dir;
+                            int j = 0;
+                            for (; j < n; ++j) if (acc[size_t(j)].first == key) { acc[size_t(j)].second += wgt; break; }
+                            if (j == n && n < int(acc.size())) acc[size_t(n++)] = {key, wgt};
+                        }
+                    for (int j = 0; j < n; ++j) {
+                        const uint32_t tex = uint32_t(acc[size_t(j)].first >> 8);
+                        const int dir = int(acc[size_t(j)].first & 0xff);
+                        const Image* img = layerImgs[tex];
+                        if (!img) continue;
+                        float u, v;
+                        switch (dir) {
+                            case 1: u = -wx / tile; v = -z / tile; break;
+                            case 2: u = wx / tile; v = -z / tile; break;
+                            case 3: u = wy / tile; v = -z / tile; break;
+                            case 4: u = -wy / tile; v = -z / tile; break;
+                            default: u = wx / tile; v = wy / tile; break;
+                        }
+                        float sb[4]; sampleWrap(*img, u, v, sb);
+                        for (int i = 0; i < 3; ++i) rgb[i] += sb[i] * acc[size_t(j)].second;
+                        total += acc[size_t(j)].second;
+                    }
+                    uint8_t* out = &scene.albedo.rgba[(size_t(py) * W + px) * 4];
+                    if (total > 0.02f) {
+                        for (int i = 0; i < 3; ++i) out[i] = uint8_t(std::clamp(rgb[i] / total * gain + 0.5f, 0.0f, 255.0f));
+                    } else if (bg.found && bg.image.width && bg.image.height) {
+                        const uint32_t bx = std::min(uint32_t(wx * bg.texelsPerCell), bg.image.width - 1), by = std::min(uint32_t(wy * bg.texelsPerCell), bg.image.height - 1);
+                        const uint8_t* src = &bg.image.rgba[(size_t(by) * bg.image.width + bx) * 4];
+                        for (int i = 0; i < 3; ++i) out[i] = uint8_t(std::clamp(src[i] * gain + 0.5f, 0.0f, 255.0f));
+                        ++uncovered;
+                    } else { out[0] = out[1] = out[2] = 128; ++uncovered; }
+                    out[3] = 255;
+                }
+            }
+            if (options.log && uncovered) options.log("  " + std::to_string(uncovered) + " texels had no pass and took the background bake");
+            scene.hasAlbedo = true;
+            scene.engineBake = true;
+            scene.enginePasses = passCount;
+            return scene;
+        }
+        if (options.log) options.log("no STB foreground passes for this map (" + fl.note + "); baking from the LEV theme blend");
+    }
+
+    // 4b. Bake the albedo from the LEV theme blend (loose .lev / no STB).
     const int tpc = std::max(options.texelsPerCell, 1);
     const int cx = level.cellsX();
     const uint32_t W = uint32_t(scene.mapWidth) * tpc, H = uint32_t(scene.mapHeight) * tpc;

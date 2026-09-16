@@ -60,6 +60,11 @@ struct Options {
     float cliffFullSlope = 1.4f;   // tan(angle) where cliff fully replaces base (~54 deg)
     bool layers = false;           // also emit splat attributes + per-slot PNGs
     bool water = true;             // water surface from the theme blend (needs textures/defs)
+    // Bake the ground from the engine's own STB foreground passes (per-patch texture
+    // layers with mapping direction and per-vertex blend) instead of the LEV theme
+    // blend + slope heuristic. Falls back to the LEV bake when the map has no STB entry.
+    bool engineLayers = true;
+    std::string mapName;           // STB lookup key (level stem); set by the CLI/GUI
     bool walkableColor = false;    // COLOR_0 = walkable (white) / blocked (red)
     UpAxis up = UpAxis::Y;
     // Map-local -> world offset (Fable-space), for stitching maps by WLD placement.
@@ -135,6 +140,8 @@ struct Scene {
     bool walkableColor = false;
     bool layers = false;
     WaterMesh water;
+    bool engineBake = false;        // albedo came from the STB foreground passes
+    int enginePasses = 0;           // texture passes composited
 };
 
 // The map's world origin from data/Levels/FinalAlbion.wld (MapX/MapY); false

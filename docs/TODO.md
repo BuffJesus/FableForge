@@ -41,8 +41,14 @@ Targets for the remaining gaps:
   `0x02dfa0a0` feeds vertex-shader constants c2/c3 from `PositionToTextureUVTransformU/V`
   (initialisers `0x04008780` / `0x04008850`): dir 0 = (x/8, y/8); dirs 1-4 = (+-x or +-y)/8 with
   v = -z/8; plus a per-patch integer offset of floor(bboxMin/8). Default `--tile` is now 8.
-  Still approximate: which of the 4 cliff directions a layer gets (`BuildMapDirMask` `0x02cae270`,
-  `GetMappingDirectionBlend` `0x02cae000`) is chosen here by slope.
+- DONE: cliff mapping direction — the STB foreground frames ARE the engine's layer bake: per
+  patch a list of passes {direction 0..4, texture, per-vertex blend + packed normal xy}.
+  `stbterrain::loadLayers` reads them (`AlbionAtlas layers <map>` dumps), `buildScene` composites
+  the passes with the engine's `GetMappingDirectionBlend` (FableWin `0x02cae000`: flatness
+  t = clamp((asin(n.z)/(pi/2) - 0.5)/0.25); dir 0 -> t; dir d -> (1-t) * clamp(1 - (acos(n.xy .
+  D_d)/(pi/2) - 0.25)/0.5), D = (0,-1),(0,1),(-1,0),(1,0)). `AlbionAtlas ground <map>` compares
+  both bakes to the engine background bake (engine-pass bake wins on every map tried; the
+  remaining MAE ~22-37 is the background's baked lighting, a known non-issue).
 - DONE: water — `CEngineMap::PeekWaterHeight` `0x02d5dd80` = ground + `PeekWaterDepth`
   (sum blend*WaterHeight over the 3 slots), `PeekHasWaterFast` `0x02d5d620` (any slot WaterType != 0),
   `CWaterPatchMesh::FindCorrectWaterLevel` `0x02e67af0` (mean of non-zero heights in +-2 cells).
@@ -56,9 +62,11 @@ Targets for the remaining gaps:
 ## Correctness pass — DONE 2026-09-16 (see docs/SWEEP.md)
 - All 399 maps screenshotted (contact sheets) + `tools/sweep_metrics.py` height-over-terrain
   audit. Fixed: texture-less physics-hull triangles rendering as black shells. Open: the two
-  ExecutionTree gate surrounds 31 m under the terrain; cliff mapping direction by slope.
+  ExecutionTree gate surrounds 31 m under the terrain.
 
 ## Other
-- Creatures in bind pose (GUI toggle), water waves/shore foam, exact cliff mapping direction.
+- Creatures in bind pose (GUI toggle), water waves/shore foam. The two extra per-vertex bytes
+  in the foreground frames (packed normal xy, 127 = 0) feed the runtime blend-table lookup and
+  are not needed for the bake.
 - The three synthetic-input UI suites (smoke/paths/controls) fail while retail `Fable.exe`
   is running (it holds the foreground); close the game before `check_all.py`.

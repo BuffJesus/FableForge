@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -278,19 +279,53 @@ int main(int argc, char** argv) {
             if (!bg.found) return 1;
             te::Context ctx; std::string err;
             if (!ctx.load(install.root, install.root / "data" / "graphics" / "pc" / "textures.big", err)) { std::fprintf(stderr, "%s\n", err.c_str()); return 1; }
-            te::Options o; o.texelsPerCell = bg.texelsPerCell; o.gain = gain;
+            te::Options o; o.texelsPerCell = bg.texelsPerCell; o.gain = gain; o.gameRoot = install.root; o.mapName = lev.stem().string(); o.tileSize = tile;
             const auto scene = te::buildScene(file, o, &ctx);
+            te::Options o2 = o; o2.engineLayers = false;
+            const auto sceneLev = te::buildScene(file, o2, &ctx);
             auto mean = [](const te::Image& im, double m[3]) {
                 m[0] = m[1] = m[2] = 0; size_t n = 0;
                 for (size_t i = 0; i + 3 < im.rgba.size(); i += 4) { if (im.rgba[i + 3] == 0) continue; m[0] += im.rgba[i]; m[1] += im.rgba[i + 1]; m[2] += im.rgba[i + 2]; ++n; }
                 if (n) { m[0] /= n; m[1] /= n; m[2] /= n; }
             };
-            double a[3], b[3]; mean(bg.image, a); mean(scene.albedo, b);
-            std::printf("engine background mean RGB %.1f %.1f %.1f   our bake (gain %.2f) %.1f %.1f %.1f   ratio %.2f %.2f %.2f\n",
-                        a[0], a[1], a[2], gain, b[0], b[1], b[2], a[0] / std::max(b[0], 1.0), a[1] / std::max(b[1], 1.0), a[2] / std::max(b[2], 1.0));
+            // Mean absolute error against the engine's background bake over the texels it covers.
+            auto mae = [&](const te::Image& im) {
+                double e = 0; size_t n = 0;
+                if (im.width != bg.image.width || im.height != bg.image.height) return -1.0;
+                for (size_t i = 0; i + 3 < im.rgba.size(); i += 4) { if (bg.image.rgba[i + 3] == 0) continue; for (int k = 0; k < 3; ++k) e += std::fabs(double(im.rgba[i + k]) - bg.image.rgba[i + k]); n += 3; }
+                return n ? e / n : -1.0;
+            };
+            double a[3], b[3], c[3]; mean(bg.image, a); mean(scene.albedo, b); mean(sceneLev.albedo, c);
+            std::printf("engine background mean RGB %.1f %.1f %.1f\n", a[0], a[1], a[2]);
+            std::printf("  engine-pass bake (gain %.2f): mean %.1f %.1f %.1f  MAE vs background %.1f  (%d passes)\n", gain, b[0], b[1], b[2], mae(scene.albedo), scene.enginePasses);
+            std::printf("  LEV-theme bake:               mean %.1f %.1f %.1f  MAE vs background %.1f\n", c[0], c[1], c[2], mae(sceneLev.albedo));
             const std::string stem = out.empty() ? lev.stem().string() : fs::path(out).stem().string();
             auto save = [&](const te::Image& im, const std::string& name) { const auto png = te::encodePng(im); std::ofstream(name, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size())); std::printf("wrote %s\n", name.c_str()); };
-            save(bg.image, stem + "_engine_bg.png"); save(scene.albedo, stem + "_our_bake.png");
+            save(bg.image, stem + "_engine_bg.png"); save(scene.albedo, stem + "_our_bake.png"); save(sceneLev.albedo, stem + "_lev_bake.png");
+            return 0;
+        }
+        if (cmd == "layers") {   // diagnostic: the engine's per-patch texture passes (direction, texture, vertex bytes)
+            const auto file = forge::lev::File::open(lev);
+            const auto fl = albion::stbterrain::loadLayers(install.root, lev.stem().string(), file.width(), file.height());
+            if (!fl.found) { std::printf("%s: %s\n", lev.stem().string().c_str(), fl.note.c_str()); return 1; }
+            std::map<int, int> dirs; std::map<uint32_t, int> texs;
+            int b1nz = 0, b2nz = 0, verts = 0; std::map<int, int> blendHist;
+            for (const auto& L : fl.layers) {
+                ++dirs[L.direction]; ++texs[L.texture];
+                for (const auto& v : L.vertices) { ++verts; if (v.b1) ++b1nz; if (v.b2) ++b2nz; ++blendHist[v.blend / 32]; }
+            }
+            std::printf("%s: %d patches, %zu layers; directions:", lev.stem().string().c_str(), fl.frames, fl.layers.size());
+            for (auto& [d, n] : dirs) std::printf(" %d:%d", d, n);
+            std::printf("\n  %zu textures used; %d vertices, b1 nonzero %d, b2 nonzero %d; blend/32 histogram:", texs.size(), verts, b1nz, b2nz);
+            for (auto& [k, n] : blendHist) std::printf(" [%d]=%d", k, n);
+            std::printf("\n");
+            int shown = 0;
+            for (const auto& L : fl.layers) {
+                if (L.patchIndex > 1 && shown > 12) break;
+                std::printf("  patch %d layer %d dir %u tex %u bg %u bump %u shared %d verts %zu strip %zu  bytes:", L.patchIndex, L.layerIndex, L.direction, L.texture, L.backgroundTexture, L.bumpTexture, L.sharedIndexBuffer ? 1 : 0, L.vertices.size(), L.strip.size());
+                for (size_t i = 0; i < std::min<size_t>(6, L.vertices.size()); ++i) std::printf(" (%d,%d %u,%u,%u)", L.vertices[i].x, L.vertices[i].y, L.vertices[i].blend, L.vertices[i].b1, L.vertices[i].b2);
+                std::printf("\n"); ++shown;
+            }
             return 0;
         }
         if (cmd == "coverage") {   // diagnostic: how many cells the STB foreground frames draw (expected: all)
@@ -316,6 +351,10 @@ int main(int argc, char** argv) {
         o.texelsPerCell = std::clamp(texels, 1, 64);
         o.tileSize = tile;
         o.gain = std::clamp(gain, 0.25f, 4.0f);
+        o.gameRoot = install.root;
+        // The STB bake is keyed by map name; a loose .lev given as a path is the user's
+        // own file and gets the LEV-theme bake even if it shares a retail name.
+        o.mapName = (install.valid && !(fs::exists(target) && fs::is_regular_file(target))) ? lev.stem().string() : std::string();
         o.up = upArg == "z" ? te::UpAxis::Z : te::UpAxis::Y;
         if (!originArg.empty()) {
             const size_t c = originArg.find(',');
