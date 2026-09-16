@@ -61,8 +61,9 @@ Targets for the remaining gaps:
 
 ## Correctness pass — DONE 2026-09-16 (see docs/SWEEP.md)
 - All 399 maps screenshotted (contact sheets) + `tools/sweep_metrics.py` height-over-terrain
-  audit. Fixed: texture-less physics-hull triangles rendering as black shells. Open: the two
-  ExecutionTree gate surrounds 31 m under the terrain.
+  audit. Fixed: texture-less physics-hull triangles rendering as black shells. The two
+  ExecutionTree gate surrounds 31 m under the terrain are authentic leftovers (STB heights ==
+  LEV heights there; docs/SWEEP.md).
 
 ## Other
 - Creatures in bind pose (GUI toggle), water waves/shore foam. The two extra per-vertex bytes

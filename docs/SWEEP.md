@@ -32,8 +32,12 @@ dummies excluded), plus the exporter's own skip counts.
   that is entirely canopy.
 - Filler maps that are flat sand with a sheet of sea: that is what they are.
 
-## Open
-- `ExecutionTree`: two `OBJECT_HANGING_TREE_GATE_SURROUND_01` at z 43.9 sit 31 m under
-  the terrain (75). Either the map has a carved passage we don't model or the gate is
-  authored below a placed cliff mesh; not checked in-game.
-- Cliff mapping direction is still chosen by slope, not the engine's per-layer bake.
+## Resolved after the sweep
+- `ExecutionTree`'s two `OBJECT_HANGING_TREE_GATE_SURROUND_01` at z 43.9 under a 75 m plateau:
+  authentic. The STB foreground vertex heights equal the LEV heightmap there (checked with
+  `AlbionAtlas layers ExecutionTree`: 23,831 vertices, only 2 edge vertices differ), every cell
+  is drawn, the gate mesh is 6.6 x 4.8 m with its pivot at the base, and the two copies sit
+  1 m apart at the identical height — leftovers parked under the map by the level designers,
+  never visible in-game. The export keeps them (data-faithful); they are hidden under the
+  terrain in any viewer.
+- Cliff mapping direction: now taken from the engine's own STB texture passes (see README).

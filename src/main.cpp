@@ -319,6 +319,17 @@ int main(int argc, char** argv) {
             std::printf("\n  %zu textures used; %d vertices, b1 nonzero %d, b2 nonzero %d; blend/32 histogram:", texs.size(), verts, b1nz, b2nz);
             for (auto& [k, n] : blendHist) std::printf(" [%d]=%d", k, n);
             std::printf("\n");
+            // Height check: STB foreground vertex heights vs the LEV heightmap.
+            {
+                double maxd = 0; int over = 0, n = 0; int mx = 0, my = 0;
+                for (const auto& L : fl.layers)
+                    for (const auto& v : L.vertices) {
+                        if (v.x < 0 || v.y < 0 || v.x > file.width() || v.y > file.height()) continue;
+                        const double dlt = std::fabs(double(v.height) - file.heightAt(v.x, v.y));
+                        ++n; if (dlt > 0.5) ++over; if (dlt > maxd) { maxd = dlt; mx = v.x; my = v.y; }
+                    }
+                std::printf("  STB vertex heights vs LEV: %d vertices, %d differ by > 0.5, max diff %.2f at (%d,%d)\n", n, over, maxd, mx, my);
+            }
             int shown = 0;
             for (const auto& L : fl.layers) {
                 if (L.patchIndex > 1 && shown > 12) break;
