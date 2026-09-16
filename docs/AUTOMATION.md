@@ -75,6 +75,13 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 A widget is only registered on frames where it was drawn, so expand a group
 (`click group_Arena`) before clicking one of its rows.
 
+## In-game (the retail engine as the oracle)
+
+`python tools/ingame/ingame_terrain_test.py` runs the real game and compares its ground
+heights with the LEV; see docs/EDITOR.md "Testing in the running game without a human".
+`python tools/verify_engine_lzo.py` (in `check_all`) decodes our LZO frames with the
+engine's own assembly decoder under emulation.
+
 ## Suites
 
 * `tests/ui/editor.txt` — Edit mode: select, move, rotate, scale, duplicate, undo back to

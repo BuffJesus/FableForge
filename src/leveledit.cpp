@@ -354,6 +354,9 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error) {
     try {
         fs::create_directories(path.parent_path());
         if (!backupOnce(path, error)) return false;
+        // a loose file that did not exist before gets a marker so tooling can
+        // tell it apart from the user's own loose levels
+        if (!fs::exists(path)) std::ofstream(path.string() + ".atlas-created") << "created by Albion Atlas\n";
         level_->save(path);
         savedTerrain_ = terrain_;
         return true;

@@ -60,8 +60,47 @@ the crashes. The engine formats are written by FableForge's `forgecore`
   all 94k vertices; baking the result again works (a second edit after a
   deploy). Structural checks pass (`forge stb foregroundinfo --verify-roundtrip`,
   `backgroundtreeinfo --validate-only`, directory spans == frame lengths).
-  **In-game verification is still to be done** -- start a new game or enter
-  the region fresh (saves cache region state).
+  **In-game verified** (2026-09-16) with `tools/ingame/ingame_terrain_test.py`:
+  a +6 hill deployed into the real install, the running engine's own ground
+  query (`CWorldMap::GetGroundSizeZAt`) returns the edited heights at 121/121
+  sample points and the hero teleported onto the hill stands at the new height.
+  Saves cache region state, so enter the region fresh to see an edit.
+
+## The engine's LZO decoder (why 0.4.0 crashed)
+
+The landscape loader does not use LZO's C decoder: `LoadCompressed`
+(0x00BE8920) calls `lzo1x_decompress_asm_fast` (0x00C069D0, LZO's i386
+assembly decoder). It differs from the C decoder in one place: after an
+*initial* literal run of 1..3 bytes (first byte 18..20) the C decoder reads a
+normal match token (so a token < 16 is a 2-byte M1 match) while the assembly
+decoder takes the after-literal-run path (a token < 16 is the 3-byte copy from
+2049+). Retail lzo1x-999 output never has an M1 there; our optimal parser did,
+minilzo accepted it, and the game decoded garbage and crashed in
+`SetupPrimitiveDesc`. The encoder now allows only M2/M3/M4 after an initial
+short run, and `tools/verify_engine_lzo.py` (part of `check_all`) decodes every
+frame we produce with the engine's real decoder under Unicorn emulation
+(`tools/ingame/retail_lzo_emu.py` maps `Fable.exe` and calls the function).
+
+## Testing in the running game without a human
+
+`tools/ingame/` drives the retail game end to end (fullscreen, DirectInput
+mouse via relative motion, keyboard):
+
+* `ingame_terrain_test.py` -- installs a Lua probe into ForgeFSE's PartyMode
+  quest, launches `FSE_Launcher.exe`, clicks through title -> profile `0atlas`
+  -> Continue Game -> AutoSave, waits for the probe (`ATLAS_PROBE|z|x|y|h`
+  lines from `Quest:GetGroundHeightAt`), screenshots, kills the game, restores
+  the script and the FSE log, and compares with the LEV. `--teleport` stands the
+  hero on the centre point; `--catch-crash` attaches the dbgeng crash catcher
+  (faulting address + stack scan in the report); `--trace-lzo` / `--trace-bp`
+  log decoder calls / a breakpoint's stack. Needs a `0atlas` save profile
+  whose AutoSave is in the target map.
+* `restore_install.sh` -- puts the `.atlas-orig` backups back and removes only
+  the loose files Atlas created (`.atlas-created` marker).
+* `patch_stb_chunk.sh` -- write a same-size chunk into `FinalAlbion_RT.stb`
+  (bisecting a bad bake: splice donor/baked regions and test each in-game).
+* `crash_catcher.py`, `trace_lzo_calls.py`, `trace_bp_stack.py`,
+  `gamewin.ps1` -- the pieces.
 * **Not done**: visible material (theme) painting still needs the layer
   topology rebuild (`--rebuild-topology` exists in the bake but wants theme
   materials wired through); nav trees are not regenerated (the terrain-only
@@ -85,11 +124,10 @@ reload the things layer from the in-memory `.tng` text.
 
 ## Next
 
-1. In-game verification of a deployed terrain edit (the user's run).
-2. Visible material paint: wire theme materials into the bake's topology
+1. Visible material paint: wire theme materials into the bake's topology
    rebuild so a painted theme region gets its own layer passes.
-3. Nav: regenerate only the cells a stroke touched, keeping the retail
+2. Nav: regenerate only the cells a stroke touched, keeping the retail
    collision lines elsewhere.
-4. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
-5. Live link to the running game through ForgeFSE (spawn/move/reload without a
+3. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
+4. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

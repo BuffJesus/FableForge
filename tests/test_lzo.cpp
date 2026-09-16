@@ -152,7 +152,7 @@ void checkChunk(const std::vector<uint8_t>& d, const std::string& name) {
                         const auto enc = albion::lzo1x::compress(body.data(), body.size());
                         g_retailComp += comp; g_oursComp += enc.size(); ++g_frameCmp; if (enc.size() <= comp) ++g_fits;
                         if (std::getenv("ALBION_LZO_VERBOSE")) std::printf("    frame unc=%u retail=%u ours=%zu %s\n", unc, comp, enc.size(), enc.size() > comp ? "OVER" : "");
-                        if (const char* dump = std::getenv("ALBION_LZO_DUMP"); dump && g_frameCmp <= 6) {
+                        if (const char* dump = std::getenv("ALBION_LZO_DUMP"); dump && g_frameCmp <= 2500) {
                             const std::string base = std::string(dump) + "/frame" + std::to_string(g_frameCmp);
                             std::ofstream(base + ".retail.lzo", std::ios::binary).write(reinterpret_cast<const char*>(d.data() + off + 8), std::streamsize(comp));
                             std::ofstream(base + ".ours.lzo", std::ios::binary).write(reinterpret_cast<const char*>(enc.data()), std::streamsize(enc.size()));

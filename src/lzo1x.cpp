@@ -314,7 +314,13 @@ std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
         if (rem <= 18) { const uint32_t v = runCost(rem) + 3; if (v < best) { best = v; bk = uint32_t(rem); } }
         if (B[0][i] < best) { best = B[0][i]; bk = 0; }
         for (size_t k = 1; k <= 18 && k < rem; ++k) {
-            const uint32_t v = runCost(k) + B[k <= 3 ? 1 : 2][i + k];
+            // The very first run of 1..3 literals ("17+k" byte) is followed by a
+            // plain match token in the C decoder but by an after-literal-run token
+            // in LZO's i386 assembly decoder (lzo1x_decompress_asm_fast, which
+            // Fable's landscape loader uses): the two disagree on tokens < 16
+            // there, so only M2/M3/M4 (class 0) are allowed after it.
+            const int cls = (i == 0 && k <= 3) ? 0 : (k <= 3 ? 1 : 2);
+            const uint32_t v = runCost(k) + B[cls][i + k];
             if (v < best) { best = v; bk = uint32_t(k); }
         }
         if (rem >= 19) {
@@ -393,7 +399,7 @@ std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
             while (j < n && 1 + L[j + 1] <= B[2][j]) ++j;
             runLen = j - i; cls = 2;
         } else {
-            runLen = k; cls = k == 0 ? 0 : (k <= 3 ? 1 : 2);
+            runLen = k; cls = k == 0 ? 0 : (k <= 3 ? ((i == 0) ? 0 : 1) : 2);
         }
         emitRun(i, runLen);
         i += runLen;

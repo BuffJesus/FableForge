@@ -26,6 +26,7 @@
 #include "forge/env.hpp"
 #include "forge/meshpreview.hpp"
 #include "forge/lev.hpp"
+#include "forge/lzo.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
 #include "forge/wad.hpp"
@@ -210,6 +211,53 @@ int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
+    if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas heights <map.lev> <x,y> ...\n"); return 2; }
+        try {
+            fs::path temp;
+            const fs::path levPath = fs::exists(args[1]) ? fs::path(args[1]) : resolveLevel(args[1], findInstall(""), temp);
+            const auto lev = forge::lev::File::open(levPath);
+            for (size_t i = 2; i < args.size(); ++i) {
+                float x = 0, y = 0;
+                if (std::sscanf(args[i].c_str(), "%f,%f", &x, &y) != 2) { std::fprintf(stderr, "bad point %s\n", args[i].c_str()); return 2; }
+                const int cx = lev.cellsX(), cy = lev.cellsY();
+                if (x < 0 || y < 0 || x > float(cx - 1) || y > float(cy - 1)) { std::printf("%g,%g outside\n", x, y); continue; }
+                const int x0 = std::min(int(x), cx - 1), y0 = std::min(int(y), cy - 1), x1 = std::min(x0 + 1, cx - 1), y1 = std::min(y0 + 1, cy - 1);
+                const float fx = x - float(x0), fy = y - float(y0);
+                const float h = (lev.heightAt(x0, y0) * (1 - fx) + lev.heightAt(x1, y0) * fx) * (1 - fy) + (lev.heightAt(x0, y1) * (1 - fx) + lev.heightAt(x1, y1) * fx) * fy;
+                std::printf("%g,%g %.4f\n", x, y, h);
+            }
+            return 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "recompress-chunk") {   // diagnostic: re-encode every frame's LZO with our encoder, bodies untouched
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas recompress-chunk <in.bin> <out.bin>\n"); return 2; }
+        try {
+            std::ifstream cf(args[1], std::ios::binary);
+            std::vector<uint8_t> raw((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+            const auto chunk = forge::stbbake::parseChunk(raw);
+            // in place: every frame whose re-encoded bytes fit its slot (frame + trailing pad) is
+            // rewritten with our LZO, bodies untouched; the rest keep the donor bytes
+            std::vector<uint8_t> out = raw;
+            size_t redone = 0, kept = 0;
+            for (size_t fi = 0; fi < chunk.frameIndices.size(); ++fi) {
+                const size_t si = chunk.frameIndices[fi];
+                const auto& seg = chunk.segments[si];
+                size_t slotEnd = seg.end;
+                for (size_t k = si + 1; k < chunk.segments.size() && chunk.segments[k].kind == forge::stbbake::SegKind::Pad; ++k) slotEnd = chunk.segments[k].end;
+                std::vector<uint8_t> body;
+                try { body = forge::stbbake::decodeFrame(chunk, fi); } catch (...) { ++kept; continue; }
+                const auto enc = forge::lzo::compressFramed999(body);
+                if (seg.start + enc.size() > slotEnd) { ++kept; continue; }
+                std::fill(out.begin() + seg.start, out.begin() + slotEnd, uint8_t(0));
+                std::copy(enc.begin(), enc.end(), out.begin() + seg.start);
+                ++redone;
+            }
+            std::ofstream(args[2], std::ios::binary).write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size()));
+            std::printf("wrote %s (%zu bytes, %zu frames re-encoded, %zu kept)\n", args[2].c_str(), out.size(), redone, kept);
+            return 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
     if (cmd == "bake-terrain") {   // diagnostic: stbbake::bakeHeightfield <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>
         if (args.size() < 6) { std::fprintf(stderr, "usage: AlbionAtlas bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>\n"); return 2; }
         try {
