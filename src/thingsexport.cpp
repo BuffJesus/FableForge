@@ -294,6 +294,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             c.z = parent.z + d[9] * parent.m[2] + d[10] * parent.m[5] + d[11] * parent.m[8];
             c.scale = parent.scale;
             c.yaw = std::atan2(c.m[4], c.m[3]);
+            c.tag = "child:" + arg;
             scene.meshes[size_t(meshIndex)].instanceCount++;
             scene.instances.push_back(c);
             ++st.placed;
@@ -363,6 +364,15 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     }
     scene.treeInstances = st.placed;
     if (options.log) {
+        size_t hull = 0; int hullMeshes = 0;
+        for (const auto& m : scene.meshes) if (m.hullTriangles) { hull += m.hullTriangles; ++hullMeshes; }
+        if (hull) options.log("  " + std::to_string(hull) + " collision-hull triangles on texture-less materials dropped from " + std::to_string(hullMeshes) + " meshes" +
+                              (std::getenv("ALBION_DEBUG") ? "" : " (ALBION_DEBUG=1 lists them)"));
+        if (std::getenv("ALBION_DEBUG"))
+            for (const auto& m : scene.meshes) if (m.hullTriangles) {
+                size_t kept = 0; for (const auto& part : m.parts) kept += part.indices.size() / 3;
+                options.log("    " + m.name + ": dropped " + std::to_string(m.hullTriangles) + ", kept " + std::to_string(kept));
+            }
         options.log(std::to_string(st.placed) + " placed objects from " + std::to_string(st.things) + " things (" +
                     std::to_string(scene.meshes.size()) + " meshes, " + std::to_string(scene.triangleCount()) + " triangles); skipped: " +
                     std::to_string(st.noGraphic) + " without a model, " + std::to_string(st.noDef) + " unknown defs, " +

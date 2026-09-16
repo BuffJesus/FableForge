@@ -115,9 +115,23 @@ Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label
         if (std::isfinite(du) && std::isfinite(dv) && (du != 0 || dv != 0))
             for (auto& v : m.geometry.vertices) { v.u -= du; v.v -= dv; }
     }
+    // A material with no textures at all (diffuse 0, flags 0) next to textured
+    // ones is the mesh's physics/collision hull riding along in the render
+    // list: Bowerstone's gatehouse carries a full second copy of its walls and
+    // towers on such a material (11,955 of 18,960 triangles), which renders as a
+    // black shell over the building. Drop those triangles when the mesh has any
+    // textured material; keep them for meshes that are entirely untextured.
+    bool anyTextured = false;
+    for (const auto& mt : geo.materials) if (mt.diffuseTexture > 0 || mt.textureFlags != 0) { anyTextured = true; break; }
+    auto isHull = [&](int mat) {
+        if (!anyTextured || mat < 0 || size_t(mat) >= geo.materials.size()) return false;
+        const auto& mt = geo.materials[size_t(mat)];
+        return mt.diffuseTexture <= 0 && mt.textureFlags == 0 && mt.bumpTexture <= 0 && mt.reflectionTexture <= 0;
+    };
     std::map<int, size_t> partByMaterial;
     for (const auto& t : geo.triangles) {
         const int mat = (t.material >= 0 && size_t(t.material) < geo.materials.size()) ? int(t.material) : -1;
+        if (isHull(mat)) { ++m.hullTriangles; continue; }
         auto it = partByMaterial.find(mat);
         if (it == partByMaterial.end()) {
             SubMesh part;

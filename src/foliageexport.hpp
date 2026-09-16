@@ -65,6 +65,7 @@ struct Mesh {
     int image = -1;                      // first part's image (convenience)
     bool hasAlpha = false;
     size_t instanceCount = 0;
+    size_t hullTriangles = 0;            // triangles on a texture-less material dropped as the collision hull
 };
 
 struct Instance {
