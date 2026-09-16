@@ -1,5 +1,5 @@
 #pragma once
-// AlbionTerrain GUI application state + ImGui drawing. Three-slot layout:
+// AlbionAtlas GUI application state + ImGui drawing. Three-slot layout:
 // explorer (left) | 3D preview (middle) | actions (right). All heavy work
 // (install scan, texture context, preview bake, export) runs on worker threads
 // and lands on the main thread through futures polled every frame.

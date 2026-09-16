@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""GUI smoke test: drive AlbionTerrainGUI with an automation script, then check
+"""GUI smoke test: drive AlbionAtlasGUI with an automation script, then check
 the script log (RESULT PASS), the exported GLB (structural validation shared
 with retail_smoke.py) and the screenshots (pixel assertions: the viewport
 actually shows terrain, view modes differ, the accent colour is present, the
 filter narrows the list).
 
-  python tools/ui_smoke.py [--exe build/AlbionTerrainGUI.exe] [--script tests/ui/smoke.txt]
+  python tools/ui_smoke.py [--exe build/AlbionAtlasGUI.exe] [--script tests/ui/smoke.txt]
 """
 import argparse, os, subprocess, sys, time
 
@@ -42,7 +42,7 @@ def diff_fraction(a, b, box):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exe", default=os.path.join("build", "AlbionTerrainGUI.exe"))
+    ap.add_argument("--exe", default=os.path.join("build", "AlbionAtlasGUI.exe"))
     ap.add_argument("--script", default=os.path.join("tests", "ui", "smoke.txt"))
     a = ap.parse_args()
     os.makedirs(os.path.join("build", "ui"), exist_ok=True)

@@ -1,4 +1,4 @@
-# AlbionTerrain GUI smoke: install detected, map loads, all view modes render,
+# Albion Atlas GUI smoke: install detected, map loads, all view modes render,
 # export via the real button, output validated by tools/ui_smoke.py.
 wait_maps
 frames 2

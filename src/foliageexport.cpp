@@ -572,7 +572,7 @@ std::vector<uint8_t> buildGlbWith(const te::Scene& terrain, const std::vector<co
     glb::Builder b;
     std::vector<int> roots{te::appendTerrain(b, terrain)};
     for (const Scene* layer : layers) if (layer) appendFoliage(b, *layer, terrain.up, roots);
-    return b.finish(terrain.sourceName, roots, "AlbionTerrain terrain exporter");
+    return b.finish(terrain.sourceName, roots, "Albion Atlas");
 }
 
 std::vector<fs::path> writeGlbWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {

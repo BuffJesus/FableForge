@@ -28,7 +28,7 @@ ok   assert_file build/ui/Arena_Filler_01.mtl
 ok   frames 2
 ok   assert_state textures 1
 ok   set format glb
-ok   open C:\Users\Cornelio\AppData\Local\Temp/AlbionTerrain/Arena_Filler_01.lev
+ok   open C:\Users\Cornelio\AppData\Local\Temp/AlbionAtlas/Arena_Filler_01.lev
 ok   wait_loaded
 ok   assert_state selected file:Arena_Filler_01
 ok   assert_widget group_Loose files

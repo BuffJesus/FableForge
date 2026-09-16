@@ -1,8 +1,8 @@
-// AlbionTerrain -- export Fable: The Lost Chapters terrain to .glb / .obj.
+// AlbionAtlas -- export Fable: The Lost Chapters terrain to .glb / .obj.
 //
-//   AlbionTerrain list   [--install <root>]
-//   AlbionTerrain info   <map|file.lev> [--install <root>]
-//   AlbionTerrain export <map|file.lev> [--out <file.glb|file.obj>] [options]
+//   AlbionAtlas list   [--install <root>]
+//   AlbionAtlas info   <map|file.lev> [--install <root>]
+//   AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]
 //
 // <map> is a level name (e.g. Greatwood_1) read from the install's
 // data/Levels/FinalAlbion.wad (a loose data/Levels/FinalAlbion/<map>.lev wins if
@@ -37,12 +37,12 @@ namespace {
 
 int usage() {
     std::puts(
-        "AlbionTerrain -- Fable: The Lost Chapters terrain -> .glb / .obj\n"
+        "Albion Atlas -- Fable: The Lost Chapters terrain -> .glb / .obj\n"
         "\n"
         "usage:\n"
-        "  AlbionTerrain list   [--install <fable-root>]\n"
-        "  AlbionTerrain info   <map|file.lev> [--install <fable-root>]\n"
-        "  AlbionTerrain export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
+        "  AlbionAtlas list   [--install <fable-root>]\n"
+        "  AlbionAtlas info   <map|file.lev> [--install <fable-root>]\n"
+        "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -109,13 +109,13 @@ fs::path resolveLevel(const std::string& arg, const Install& install, fs::path& 
         const std::string leaf = lower(fs::path(e.name).filename().string());
         if (leaf != want) continue;
         const auto bytes = wad.read(e);
-        const fs::path dir = fs::temp_directory_path() / "AlbionTerrain";
+        const fs::path dir = fs::temp_directory_path() / "Albion Atlas";
         fs::create_directories(dir);
         tempOut = dir / (name + ".lev");
         std::ofstream(tempOut, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         return tempOut;
     }
-    throw std::runtime_error("no map named '" + name + "' in " + wadPath.string() + " (try: AlbionTerrain list)");
+    throw std::runtime_error("no map named '" + name + "' in " + wadPath.string() + " (try: AlbionAtlas list)");
 }
 
 int cmdList(const Install& install) {

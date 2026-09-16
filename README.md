@@ -1,22 +1,22 @@
-# AlbionTerrain
+# Albion Atlas
 
 Export **Fable: The Lost Chapters** terrain to `.glb` (glTF binary) or `.obj`,
 straight from your Steam install. Two small Windows executables, no dependencies:
 
-* **`AlbionTerrainGUI.exe`** — pick your install, browse the 399 maps on the left,
+* **`AlbionAtlasGUI.exe`** — pick your install, browse the 399 maps on the left,
   see the textured terrain in 3D in the middle, export on the right. Drag a `.lev`
   onto the window to open a loose file. Export one map or all of them.
-* **`AlbionTerrain.exe`** — the same exporter as a command line tool.
+* **`AlbionAtlas.exe`** — the same exporter as a command line tool.
 
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
 ```
-AlbionTerrain list                             # every map in FinalAlbion.wad
-AlbionTerrain info   Greatwood_1               # size, height range, ground themes
-AlbionTerrain export Greatwood_1               # -> Greatwood_1.glb, textured
-AlbionTerrain export Oakvale_1 --out oak.obj   # OBJ + MTL + PNG instead
-AlbionTerrain export my_edited.lev --no-textures
+AlbionAtlas list                             # every map in FinalAlbion.wad
+AlbionAtlas info   Greatwood_1               # size, height range, ground themes
+AlbionAtlas export Greatwood_1               # -> Greatwood_1.glb, textured
+AlbionAtlas export Oakvale_1 --out oak.obj   # OBJ + MTL + PNG instead
+AlbionAtlas export my_edited.lev --no-textures
 ```
 
 ## What you get
@@ -69,7 +69,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 ## GUI
 
 ```
-AlbionTerrainGUI.exe [--install <fable-root>]
+AlbionAtlasGUI.exe [--install <fable-root>]
 ```
 
 Left: searchable map list grouped by the game's regions from `FinalAlbion.wld` (Ctrl+F);
@@ -80,14 +80,14 @@ Unreal-editor controls — hold **RMB** to look around and fly with **WASD**
 dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames
 the map. Textured / Wireframe / Walkable / Height views, Foliage toggle. Right:
 export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
-are remembered in `%APPDATA%\AlbionTerrain`.
+are remembered in `%APPDATA%\AlbionAtlas`.
 
 ## Building
 
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-build\albionterrain_tests.exe            # unit tests (synthetic .lev, no install needed)
+build\albionatlas_tests.exe            # unit tests (synthetic .lev, no install needed)
 python tools\retail_smoke.py --count 12  # exports real maps and validates every GLB
 python tools\ui_smoke.py                 # drives the GUI, validates output + screenshots
 python tools\check_all.py                # everything above

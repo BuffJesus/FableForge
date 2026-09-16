@@ -1,9 +1,9 @@
-// AlbionTerrain GUI — Win32 + Direct3D 11 host for Dear ImGui. Structure adapted
+// AlbionAtlas GUI — Win32 + Direct3D 11 host for Dear ImGui. Structure adapted
 // from the upstream Dear ImGui example_win32_directx11 (MIT). The application UI
 // lives in albion::gui::App; this file owns the window, swapchain, message loop
 // and the automation hooks (--auto <script>, screenshots of the backbuffer).
 //
-//   AlbionTerrainGUI [--install <fable-root>] [--auto <script.txt>] [--size WxH]
+//   AlbionAtlasGUI [--install <fable-root>] [--auto <script.txt>] [--size WxH]
 
 #include <chrono>
 #include <cstdio>
@@ -154,13 +154,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     }
 
     ImGui_ImplWin32_EnableDpiAwareness();
-    WNDCLASSEXW wc = {sizeof(wc), CS_CLASSDC, wndProc, 0L, 0L, hInstance, nullptr, nullptr, nullptr, nullptr, L"AlbionTerrain", nullptr};
+    WNDCLASSEXW wc = {sizeof(wc), CS_CLASSDC, wndProc, 0L, 0L, hInstance, nullptr, nullptr, nullptr, nullptr, L"Albion Atlas", nullptr};
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowW(wc.lpszClassName, L"AlbionTerrain", WS_OVERLAPPEDWINDOW, 80, 60, width, height,
+    HWND hwnd = CreateWindowW(wc.lpszClassName, L"Albion Atlas", WS_OVERLAPPEDWINDOW, 80, 60, width, height,
                               nullptr, nullptr, wc.hInstance, nullptr);
     if (!createDevice(hwnd)) {
         cleanupDevice();
-        MessageBoxW(nullptr, L"Direct3D 11 is not available on this machine.", L"AlbionTerrain", MB_OK);
+        MessageBoxW(nullptr, L"Direct3D 11 is not available on this machine.", L"Albion Atlas", MB_OK);
         return 1;
     }
     ShowWindow(hwnd, SW_SHOWDEFAULT);

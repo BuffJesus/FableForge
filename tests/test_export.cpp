@@ -274,7 +274,7 @@ void testPng() {
 } // namespace
 
 int main() {
-    const fs::path dir = fs::temp_directory_path() / "AlbionTerrainTests";
+    const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
     const fs::path lev = writeSyntheticLev(dir / "synthetic.lev", 4, 3,
                                            [](int x, int y) { return 10.0f * x + 3.0f * y; });
@@ -285,6 +285,6 @@ int main() {
     testPng();
     testFoliageGlb(lev, dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
-    std::cout << "albionterrain_tests: all passed\n";
+    std::cout << "albionatlas_tests: all passed\n";
     return 0;
 }

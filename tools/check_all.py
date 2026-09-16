@@ -19,10 +19,10 @@ def main():
     ok = True
     if not a.no_build:
         ok &= run("build", ["cmake", "--build", "build"], capture_output=True)
-    ok &= run("unit tests", [os.path.join("build", "albionterrain_tests.exe")], capture_output=True)
+    ok &= run("unit tests", [os.path.join("build", "albionatlas_tests.exe")], capture_output=True)
     ok &= run(f"retail smoke ({a.count} maps)", [sys.executable, "tools/retail_smoke.py", "--count", str(a.count)], capture_output=True)
     ok &= run("ui smoke", [sys.executable, "tools/ui_smoke.py"], capture_output=True)
-    gui = os.path.join("build", "AlbionTerrainGUI.exe")
+    gui = os.path.join("build", "AlbionAtlasGUI.exe")
     ok &= run("ui paths", [gui, "--auto", "tests/ui/paths.txt"])
     ok &= run("ui controls", [gui, "--auto", "tests/ui/controls.txt"])
     ok &= run("ui foliage", [gui, "--auto", "tests/ui/foliage.txt"])

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(AlbionTerrain VERSION 0.1.0 LANGUAGES C CXX)
+project(AlbionAtlas VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,17 +40,17 @@ target_include_directories(forgecore_slice PUBLIC
   vendor/third_party
 )
 
-add_library(albionterrain STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp)
-target_include_directories(albionterrain PUBLIC src)
-target_link_libraries(albionterrain PUBLIC forgecore_slice)
+add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp)
+target_include_directories(albionatlas PUBLIC src)
+target_link_libraries(albionatlas PUBLIC forgecore_slice)
 
-add_executable(AlbionTerrain src/main.cpp)
-target_link_libraries(AlbionTerrain PRIVATE albionterrain)
+add_executable(AlbionAtlas src/main.cpp)
+target_link_libraries(AlbionAtlas PRIVATE albionatlas)
 
 enable_testing()
-add_executable(albionterrain_tests tests/test_export.cpp)
-target_link_libraries(albionterrain_tests PRIVATE albionterrain)
-add_test(NAME albionterrain_tests COMMAND albionterrain_tests)
+add_executable(albionatlas_tests tests/test_export.cpp)
+target_link_libraries(albionatlas_tests PRIVATE albionatlas)
+add_test(NAME albionatlas_tests COMMAND albionatlas_tests)
 
 # ---------------------------------------------------------------- GUI (Windows)
 if(WIN32)
@@ -66,16 +66,16 @@ if(WIN32)
   target_include_directories(albion_imgui PUBLIC ${IMGUI_DIR})
   target_link_libraries(albion_imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi ole32 shell32 uuid)
 
-  add_executable(AlbionTerrainGUI WIN32
+  add_executable(AlbionAtlasGUI WIN32
     gui/main.cpp
     gui/app.cpp
     gui/theme.cpp
     gui/renderer.cpp
   )
-  target_include_directories(AlbionTerrainGUI PRIVATE gui)
-  target_link_libraries(AlbionTerrainGUI PRIVATE albionterrain albion_imgui)
+  target_include_directories(AlbionAtlasGUI PRIVATE gui)
+  target_link_libraries(AlbionAtlasGUI PRIVATE albionatlas albion_imgui)
   if(MINGW)
-    target_compile_options(AlbionTerrainGUI PRIVATE -municode)
-    target_link_options(AlbionTerrainGUI PRIVATE -municode -mwindows -static -static-libgcc -static-libstdc++)
+    target_compile_options(AlbionAtlasGUI PRIVATE -municode)
+    target_link_options(AlbionAtlasGUI PRIVATE -municode -mwindows -static -static-libgcc -static-libstdc++)
   endif()
 endif()

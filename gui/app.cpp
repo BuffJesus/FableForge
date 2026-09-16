@@ -127,7 +127,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
         pushLog(std::string("renderer: ") + renderer_.error(), 2);
     }
 
-    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionTerrain").string();
+    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionAtlas").string();
     std::string savedInstall;
     if (!auto_.active()) loadSettings(savedInstall);   // scripted runs stay deterministic
     std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
@@ -150,7 +150,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
 
 std::string App::settingsPath() const {
     const char* appdata = std::getenv("APPDATA");
-    const fs::path dir = fs::path(appdata ? appdata : ".") / "AlbionTerrain";
+    const fs::path dir = fs::path(appdata ? appdata : ".") / "AlbionAtlas";
     return (dir / "settings.json").string();
 }
 
@@ -247,7 +247,7 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
         for (const auto& en : wad.entries()) {
             if (lower(fs::path(en.name).filename().string()) != want) continue;
             const auto bytes = wad.read(en);
-            const fs::path dir = fs::temp_directory_path() / "AlbionTerrain";
+            const fs::path dir = fs::temp_directory_path() / "AlbionAtlas";
             fs::create_directories(dir);
             const fs::path out = dir / (e.name + ".lev");
             std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
@@ -658,7 +658,7 @@ void App::drawTitleBar() {
 
     ImGui::SetCursorScreenPos(ImVec2(p.x + 36, p.y + 11));
     ImGui::PushFont(fontTitle_);
-    ImGui::TextUnformatted("AlbionTerrain");
+    ImGui::TextUnformatted("Albion Atlas");
     ImGui::PopFont();
     ImGui::SameLine(0, 12);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8);

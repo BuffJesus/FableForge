@@ -3,7 +3,7 @@
 CLI and validate every GLB structurally (container, accessor ranges, embedded
 PNG, index bounds). Needs a Fable TLC install (auto-detected by the exe).
 
-  python tools/retail_smoke.py [--exe build/AlbionTerrain.exe] [--count 12] [--all]
+  python tools/retail_smoke.py [--exe build/AlbionAtlas.exe] [--count 12] [--all]
                                [--out build/smoke] [--no-textures]
 
 Exit code 1 on any failure. Prints one line per map.
@@ -60,7 +60,7 @@ def validate(doc, bin_, textured):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exe", default=os.path.join("build", "AlbionTerrain.exe"))
+    ap.add_argument("--exe", default=os.path.join("build", "AlbionAtlas.exe"))
     ap.add_argument("--count", type=int, default=12)
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--out", default=os.path.join("build", "smoke"))

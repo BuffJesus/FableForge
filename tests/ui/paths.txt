@@ -30,7 +30,7 @@ frames 2
 assert_state textures 1
 set format glb
 # loose file: the WAD copy extracted for the preview above lives in %TEMP%
-open ${TEMP}/AlbionTerrain/Arena_Filler_01.lev
+open ${TEMP}/AlbionAtlas/Arena_Filler_01.lev
 wait_loaded
 assert_state selected file:Arena_Filler_01
 assert_widget group_Loose files
