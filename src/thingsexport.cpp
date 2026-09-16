@@ -91,7 +91,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     auto warn = [&](const std::string& m) { scene.warnings.push_back(m); if (options.log) options.log("warning: " + m); };
 
     std::string err;
-    const std::string text = readTng(options.gameRoot, mapName, err);
+    const std::string text = options.tngText.empty() ? readTng(options.gameRoot, mapName, err) : options.tngText;
     if (text.empty()) { warn(err.empty() ? "empty .tng" : err); if (statsOut) *statsOut = st; return scene; }
     forge::tng::File tng;
     try { tng = forge::tng::File::parseText(text, mapName + ".tng"); }
@@ -295,6 +295,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             c.scale = parent.scale;
             c.yaw = std::atan2(c.m[4], c.m[3]);
             c.tag = "child:" + arg;
+            c.thing = parent.thing;
             scene.meshes[size_t(meshIndex)].instanceCount++;
             scene.instances.push_back(c);
             ++st.placed;
@@ -303,7 +304,8 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         }
     };
 
-    for (const auto& thing : tng.things()) {
+    for (size_t thingIndex = 0; thingIndex < tng.things().size(); ++thingIndex) {
+        const auto& thing = tng.things()[thingIndex];
         ++st.things;
         const std::string type = lower(thing.type);
         if (type == "marker") { ++st.noGraphic; continue; }
@@ -354,6 +356,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         const float fwd[3] = {propF(*phys, "RHSetForwardX", 1.0f), propF(*phys, "RHSetForwardY", 0.0f), propF(*phys, "RHSetForwardZ", 0.0f)};
         const float up[3] = {propF(*phys, "RHSetUpX", 0.0f), propF(*phys, "RHSetUpY", 0.0f), propF(*phys, "RHSetUpZ", 1.0f)};
         inst.hasMatrix = true;
+        inst.thing = int(thingIndex);
         thingBasis(fwd, up, s, inst.m);
         inst.scale = s;
         inst.yaw = std::atan2(inst.m[4], inst.m[3]);

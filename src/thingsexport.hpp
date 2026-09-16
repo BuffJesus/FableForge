@@ -56,6 +56,9 @@ struct Options {
     // Added to every position (TNG positions are map-local). Use the map's
     // WLD MapX/MapY to place several maps in one world.
     float originX = 0.0f, originY = 0.0f;
+    // When set, this .tng text is used instead of the one on disk / in the WAD
+    // (the editor previews unsaved edits this way).
+    std::string tngText;
     std::function<void(const std::string&)> log;
 };
 

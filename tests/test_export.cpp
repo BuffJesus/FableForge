@@ -18,6 +18,7 @@
 #include "foliageexport.hpp"
 #include "terrainexport.hpp"
 #include "thingsexport.hpp"
+#include "leveledit.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -339,6 +340,119 @@ void testWater(const fs::path& dir) {
     CHECK(dry.water.empty() && dry.water.wetVertices == 0);
 }
 
+// The level document: byte-exact round trip, frame edits in retail spelling,
+// duplicate/remove/place with undo, and the change summary.
+void testLevelDocument() {
+    auto near = [](float a, float b) { return std::fabs(a - b) < 1e-5f; };
+    const std::string tng =
+        "Version 2;\r\n"
+        "XXXSectionStart NULL;\r\n"
+        "\r\n"
+        "NewThing Object;\r\n"
+        "Player 4;\r\n"
+        "UID 18446744073709551615;\r\n"
+        "DefinitionType \"OBJECT_BARREL_01\";\r\n"
+        "ScriptName NULL;\r\n"
+        "StartCTCPhysicsStandard;\r\n"
+        "PositionX 10.5;\r\n"
+        "PositionY 20.25;\r\n"
+        "PositionZ 3.0;\r\n"
+        "RHSetForwardX 0.0;\r\n"
+        "RHSetForwardY 1.0;\r\n"
+        "RHSetForwardZ 0.0;\r\n"
+        "RHSetUpX 0.0;\r\n"
+        "RHSetUpY 0.0;\r\n"
+        "RHSetUpZ 1.0;\r\n"
+        "EndCTCPhysicsStandard;\r\n"
+        "Health 6000.0;\r\n"
+        "EndThing;\r\n"
+        "\r\n"
+        "NewThing Marker;\r\n"
+        "UID 18446744073709551614;\r\n"
+        "DefinitionType \"MARKER_BASIC\";\r\n"
+        "ScriptName \"Start\";\r\n"
+        "EndThing;\r\n"
+        "\r\n"
+        "XXXSectionEnd;\r\n";
+    albion::editor::Document doc;
+    std::string err;
+    CHECK(doc.openText("Synthetic", tng, err));
+    CHECK(doc.text() == tng);             // byte-exact while untouched
+    CHECK(!doc.dirty());
+    CHECK(doc.thingCount() == 2);
+    const auto s0 = doc.summary(0);
+    CHECK(s0.definition == "OBJECT_BARREL_01" && s0.hasFrame && s0.scriptName.empty());
+    CHECK(doc.summary(1).scriptName == "\"Start\"" || doc.summary(1).scriptName == "Start");
+    albion::editor::Frame f;
+    CHECK(doc.frameOf(0, f));
+    CHECK(near(f.pos[0], 10.5f) && near(f.forward[1], 1.0f) && near(f.up[2], 1.0f) && near(f.scale, 1.0f));
+
+    // frame <-> matrix agree with thingBasis' convention and invert each other
+    float m[16]; albion::editor::frameToMatrix(f, m);
+    float basis[9]; const float fwd[3] = {0, 1, 0}, up[3] = {0, 0, 1};
+    albion::thingsexport::thingBasis(fwd, up, 0.01f, basis);
+    for (int r = 0; r < 3; ++r) for (int c = 0; c < 3; ++c) CHECK(near(m[r * 4 + c], basis[r * 3 + c]));
+    albion::editor::Frame back; CHECK(albion::editor::matrixToFrame(m, back));
+    CHECK(near(back.pos[1], 20.25f) && near(back.forward[1], 1.0f) && near(back.scale, 1.0f));
+    float inv[16], id[16]; CHECK(albion::editor::invert(m, inv)); albion::editor::multiply(m, inv, id);
+    CHECK(near(id[0], 1) && near(id[5], 1) && near(id[10], 1) && near(id[15], 1) && near(id[12], 0));
+
+    // move + rotate + scale: only the touched lines change, retail spelling
+    f.pos[0] = 11.0f; f.forward[0] = 1; f.forward[1] = 0; f.scale = 2.5f;
+    doc.setFrame(0, f);
+    CHECK(doc.dirty());
+    const std::string t1 = doc.text();
+    CHECK(t1.find("PositionX 11.0;\r\n") != std::string::npos);
+    CHECK(t1.find("RHSetForwardX 1.0;\r\n") != std::string::npos);
+    CHECK(t1.find("ObjectScale 2.5;\r\n") != std::string::npos);
+    CHECK(t1.find("EndCTCPhysicsStandard;\r\nHealth 6000.0;") != std::string::npos);   // trailing field order kept
+    CHECK(t1.find("NewThing Marker;\r\nUID 18446744073709551614;") != std::string::npos);
+    auto ch = doc.changes();
+    CHECK(ch.size() == 1 && ch[0].rfind("moved OBJECT_BARREL_01", 0) == 0);
+
+    // undo restores the exact bytes; redo re-applies
+    CHECK(doc.undo()); CHECK(doc.text() == tng); CHECK(!doc.dirty());
+    CHECK(doc.redo()); CHECK(doc.text() == t1);
+
+    // duplicate: same block, fresh UID, right after the original
+    const size_t d = doc.duplicate(0);
+    CHECK(d == 1 && doc.thingCount() == 3);
+    CHECK(doc.uidOf(1) != doc.uidOf(0) && doc.uidOf(1) != 0);
+    CHECK(doc.summary(1).definition == "OBJECT_BARREL_01" && doc.summary(2).type == "Marker");
+    CHECK((doc.uidOf(1) >> 32) == 0xFFFFFE00ull);   // retail high dword
+    // remove the copy, undo brings it back at the same index
+    const uint64_t dupUid = doc.uidOf(1);
+    doc.remove(1);
+    CHECK(doc.thingCount() == 2 && !doc.indexOfUid(dupUid));
+    CHECK(doc.undo() && doc.thingCount() == 3 && doc.indexOfUid(dupUid) == 1);
+    doc.remove(1);
+
+    // place a new thing through thingplacer
+    forge::thingplacer::Placement pl;
+    pl.definitionType = "OBJECT_CRATE_01";
+    pl.position = {1.0f, 2.0f, 3.0f};
+    const size_t n = doc.place(pl);
+    CHECK(n == 2 && doc.summary(n).definition == "OBJECT_CRATE_01");
+    ch = doc.changes();
+    CHECK(ch.size() == 2);   // moved barrel + added crate
+    bool added = false; for (const auto& c : ch) added = added || c.rfind("added OBJECT_CRATE_01", 0) == 0;
+    CHECK(added);
+    // remove the original barrel: reported as removed
+    doc.remove(0);
+    ch = doc.changes();
+    bool removed = false; for (const auto& c : ch) removed = removed || c.rfind("removed OBJECT_BARREL_01", 0) == 0;
+    CHECK(removed);
+    // setProperty + markSaved
+    doc.setProperty(0, "ScriptName", "\"Exit\"");
+    CHECK(doc.text().find("ScriptName \"Exit\";") != std::string::npos);
+    doc.markSaved();
+    CHECK(!doc.dirty() && doc.changes().empty());
+    // undo depth survives many edits
+    for (int i = 0; i < 200; ++i) { f.pos[0] = float(i); doc.setFrame(1, f); }
+    int undone = 0; while (doc.undo()) ++undone;
+    CHECK(undone == 128);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -352,6 +466,7 @@ int main() {
     testFoliageGlb(lev, dir);
     testThingBasis();
     testWater(dir);
+    testLevelDocument();
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;

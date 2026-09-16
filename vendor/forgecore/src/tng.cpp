@@ -392,6 +392,44 @@ size_t File::insertThingBlock(std::string_view sectionName,
     return index;
 }
 
+std::string File::thingBlockText(size_t thingIndex) const {
+    const Thing& thing = thingAt(thingIndex);
+    std::string text;
+    for (size_t i = thing.startLine; i <= thing.endLine && i < rawLines_.size(); ++i) text += rawLines_[i];
+    return text;
+}
+
+std::string File::sectionOf(size_t thingIndex) const {
+    const Thing& thing = thingAt(thingIndex);
+    std::string name = "NULL";
+    for (size_t i = 0; i < thing.startLine && i < rawLines_.size(); ++i) {
+        std::string_view logical = trim(rawLines_[i]);
+        if (!logical.empty() && logical.back() == ';') logical = trim(logical.substr(0, logical.size() - 1));
+        if (logical.starts_with("XXXSectionStart")) name = std::string(trim(logical.substr(15)));
+    }
+    return name;
+}
+
+size_t File::insertThingBlockBefore(size_t thingIndex, std::string blockText) {
+    if (thingIndex >= things_.size()) {
+        const std::string section = things_.empty() ? std::string("NULL") : sectionOf(things_.size() - 1);
+        return insertThingBlock(section, std::move(blockText));
+    }
+    const std::string& eol = lineTerminator_;
+    std::string normalised;
+    normalised.reserve(blockText.size() + 16);
+    for (size_t i = 0; i < blockText.size(); ++i) {
+        if (blockText[i] == '\r') continue;
+        if (blockText[i] == '\n') { normalised += eol; continue; }
+        normalised += blockText[i];
+    }
+    if (!normalised.empty() && !normalised.ends_with(eol)) normalised += eol;
+    const size_t insertAt = thingAt(thingIndex).startLine;
+    insertLine(insertAt, normalised + eol);   // blank separator before the displaced thing
+    reindex();
+    return thingIndex;
+}
+
 void File::removeThing(size_t thingIndex) {
     const Thing& thing = thingAt(thingIndex);
     size_t first = thing.startLine;

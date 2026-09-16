@@ -97,6 +97,17 @@ public:
     // exists but the requested one is absent. Returns the new thing index.
     size_t insertThingBlock(std::string_view sectionName, std::string blockText);
 
+    // The exact NewThing..EndThing text of a thing (its own raw lines, verbatim).
+    std::string thingBlockText(size_t thingIndex) const;
+    // Name on the XXXSectionStart enclosing the thing ("NULL" when the file has
+    // no sections).
+    std::string sectionOf(size_t thingIndex) const;
+    // Insert a VERBATIM block so that it becomes thing number `thingIndex`
+    // (before the thing currently there; `thingIndex == things().size()`
+    // appends to the last section). Editors use it to undo a removal at the
+    // original position. Returns the new thing's index.
+    size_t insertThingBlockBefore(size_t thingIndex, std::string blockText);
+
     // Replace a thing's lines in place with a block reconstructed from `thing`
     // (its line fields ignored). Keeps the thing's position; every other thing
     // stays byte-exact. Used by cross-mod thing-level merge.

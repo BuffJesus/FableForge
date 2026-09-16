@@ -81,6 +81,7 @@ struct Instance {
     bool hasMatrix = false;
     float m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
     std::string tag;        // optional node name (particle proxies: the effect name)
+    int thing = -1;         // index of the .tng thing this instance belongs to (things layer; children inherit it)
 };
 
 // A point light spawned by a particle effect (CPSCLight): exported as a glTF

@@ -28,7 +28,7 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}")
-add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp)
+add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp)
 target_include_directories(albionatlas PUBLIC src)
 target_link_libraries(albionatlas PUBLIC forgecore_slice)
 
