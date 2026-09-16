@@ -32,7 +32,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `snapshot_camera` / `assert_camera_moved [min]` | camera position delta check |
 | `wait_foliage`, `set preview_foliage 0\|1`, `set foliage 0\|1` | foliage preview / export |
 | `mode textured\|wireframe\|walkable\|height` | view mode |
-| `set <key> <value>` | export settings: `format glb\|obj`, `textures 0\|1`, `layers 0\|1`, `walkable 0\|1`, `texels n`, `tile f`, `up y\|z`, `outdir path` |
+| `set <key> <value>` | export settings: `format glb\|obj`, `textures 0\|1`, `layers 0\|1`, `walkable 0\|1`, `texels n`, `tile f`, `gain f`, `up y\|z`, `world 0\|1`, `things 0\|1`, `outdir path` |
 | `export` / `export_all` / `export_region` | start a single / batch / region export (state path; use `click btn_export` for the UI path) |
 | `screenshot <png>` | save the next presented frame |
 | `assert_file <path>` | file exists and is non-empty |

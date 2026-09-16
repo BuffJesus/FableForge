@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "terrainexport.hpp"
+
 namespace albion::stbterrain {
 
 struct CellMask {
@@ -29,6 +31,20 @@ struct CellMask {
     bool found = false;                  // an STB entry with foreground frames existed
     std::string note;
 };
+
+// The engine's own low-resolution ground colour: every background patch frame
+// carries a 64x64 DXT1 texture of the blended themes for its 16x16 cells (what
+// the game draws at distance). Assembled into one image at 4 texels per cell,
+// row 0 = map y 0. `found` false when the STB has no usable frames.
+struct BackgroundAlbedo {
+    bool found = false;
+    int texelsPerCell = 4;
+    terrainexport::Image image;
+    int patches = 0;
+    std::string note;
+};
+BackgroundAlbedo backgroundAlbedo(const std::filesystem::path& gameRoot, const std::string& mapName,
+                                  int mapWidth, int mapHeight);
 
 // Builds the mask for a retail map. `found` false (and an all-present mask) when
 // the STB has no entry, so callers can always index `present`.

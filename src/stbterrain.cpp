@@ -92,35 +92,95 @@ void forEachFrame(const std::vector<uint8_t>& d, Fn&& onFrame) {
     }
 }
 
-} // namespace
-
-CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
-    CellMask m;
-    m.width = mapWidth; m.height = mapHeight;
-    m.present.assign(size_t(std::max(mapWidth, 0)) * size_t(std::max(mapHeight, 0)), 1);
-    m.presentCells = int(m.present.size());
+// Shared: locate the map's chunk + world origin.
+bool findChunk(const fs::path& gameRoot, const std::string& mapName, std::vector<uint8_t>& chunk,
+               int& worldX, int& worldY, std::string& note) {
     const fs::path stbPath = gameRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
-    if (!fs::exists(stbPath) || mapWidth <= 0 || mapHeight <= 0) { m.note = "no STB"; return m; }
-    std::vector<uint8_t> chunk;
-    int worldX = 0, worldY = 0;
+    if (!fs::exists(stbPath)) { note = "no STB"; return false; }
     try {
         const auto archive = forge::stb::Archive::open(stbPath);
         const std::string stem = lower(mapName);
         const forge::stb::StaticMap* map = nullptr;
         for (const auto& c : archive.staticMaps())
             if (lower(fs::path(c.levelName).stem().string()) == stem) { map = &c; break; }
-        if (!map) { m.note = "no STB entry"; return m; }
+        if (!map) { note = "no STB entry"; return false; }
         const auto record = archive.readStaticMapRecord(*map);
-        if (record.size() < forge::stbinfo::kInfoBlockSize) { m.note = "short record"; return m; }
+        if (record.size() < forge::stbinfo::kInfoBlockSize) { note = "short record"; return false; }
         const auto info = forge::stbinfo::readInfoBlock(record.data());
         worldX = info.worldX; worldY = info.worldY;
         for (const auto& e : archive.entries())
             if (int32_t(e.id) == info.bankFileIndex) { chunk = archive.read(e); break; }
-        if (chunk.empty()) { m.note = "no chunk"; return m; }
+        if (chunk.empty()) { note = "no chunk"; return false; }
+        return true;
     } catch (const std::exception& e) {
-        m.note = e.what();
-        return m;
+        note = e.what();
+        return false;
     }
+}
+
+} // namespace
+
+BackgroundAlbedo backgroundAlbedo(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+    BackgroundAlbedo out;
+    std::vector<uint8_t> chunk;
+    int worldX = 0, worldY = 0;
+    if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, out.note) || mapWidth <= 0 || mapHeight <= 0) return out;
+    const int tpc = out.texelsPerCell;
+    out.image.width = uint32_t(mapWidth * tpc);
+    out.image.height = uint32_t(mapHeight * tpc);
+    out.image.rgba.assign(size_t(out.image.width) * out.image.height * 4, 0);
+    out.image.name = "background";
+    std::vector<uint8_t> covered(size_t(mapWidth) * mapHeight, 0);
+    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+        // CLandscapeBackgroundPatch: 17-byte header, 19-byte inline texture header, DXT1 mip 0.
+        if (b.size() < 17 + 19) return;
+        auto r16 = [&](size_t o) { return uint16_t(b[o] | (b[o + 1] << 8)); };
+        auto r32 = [&](size_t o) { uint32_t v; std::memcpy(&v, b.data() + o, 4); return v; };
+        const uint16_t pw = r16(0), ph = r16(2), c0 = r16(4), c1 = r16(6);
+        const bool waterOnly = b[8] != 0;
+        const uint16_t vertexCount = r16(12);
+        const bool isDXT = b[16] != 0;
+        if (waterOnly || pw == 0 || ph == 0 || pw > 64 || ph > 64) return;
+        if (uint32_t(pw + 1) * uint32_t(ph + 1) != vertexCount) return;
+        const uint16_t tw = r16(17), th = r16(19);
+        const uint8_t levels = b[21];
+        const uint32_t fmt0 = r32(22);
+        if (!isDXT || levels != 1 || tw == 0 || th == 0 || tw > 512 || th > 512) return;
+        if ((fmt0 & 0xffu) != 3u && fmt0 != 3u) return;   // DXT1 only
+        const size_t mip0 = size_t(tw) * th / 2;
+        if (17 + 19 + mip0 > b.size()) return;
+        // Patch origin: world grid coords (subtract the map origin), else map-local.
+        int px = int(c0) - worldX, py = int(c1) - worldY;
+        if (px < 0 || py < 0 || px + pw > mapWidth || py + ph > mapHeight) { px = c0; py = c1; }
+        if (px < 0 || py < 0 || px + pw > mapWidth || py + ph > mapHeight) return;
+        const auto rgba = terrainexport::decodeBc1ToRgba(b.data() + 17 + 19, tw, th);
+        // Resample the patch texture onto the tpc grid of its pw x ph cells.
+        for (int y = 0; y < ph * tpc; ++y)
+            for (int x = 0; x < pw * tpc; ++x) {
+                const int sx = std::min(int(tw) - 1, x * int(tw) / (pw * tpc));
+                const int sy = std::min(int(th) - 1, y * int(th) / (ph * tpc));
+                const uint8_t* s = &rgba[(size_t(sy) * tw + sx) * 4];
+                uint8_t* d = &out.image.rgba[((size_t(py) * tpc + y) * out.image.width + size_t(px) * tpc + x) * 4];
+                d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = 255;
+            }
+        for (int y = 0; y < ph; ++y) for (int x = 0; x < pw; ++x) covered[size_t(py + y) * mapWidth + px + x] = 1;
+        ++out.patches;
+    });
+    const size_t cov = size_t(std::count(covered.begin(), covered.end(), uint8_t(1)));
+    out.found = out.patches > 0;
+    out.note = std::to_string(out.patches) + " background patches cover " + std::to_string(cov) + " of " + std::to_string(size_t(mapWidth) * mapHeight) + " cells";
+    return out;
+}
+
+CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+    CellMask m;
+    m.width = mapWidth; m.height = mapHeight;
+    m.present.assign(size_t(std::max(mapWidth, 0)) * size_t(std::max(mapHeight, 0)), 1);
+    m.presentCells = int(m.present.size());
+    if (mapWidth <= 0 || mapHeight <= 0) { m.note = "empty map"; return m; }
+    std::vector<uint8_t> chunk;
+    int worldX = 0, worldY = 0;
+    if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, m.note)) return m;
 
     std::vector<uint8_t> touched(m.present.size(), 0);
     int frames = 0;

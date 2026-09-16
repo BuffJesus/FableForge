@@ -65,10 +65,12 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   in the map's STB chunk that parses as a cache-group collection is used (type-1
   grass batches and type-0 single meshes incl. trees). Type-2 z-sprite batches
   (distant impostors) are skipped and counted. Counts per mesh are in the log.
-* **Terrain brightness** — Fable's base textures are authored dark (the engine's
-  lighting brightens them in-game by a factor that is not pinned down); the export
-  keeps the raw texels and offers `--gain` to brighten. Caves are heightfield floors
-  with mesh walls — there are no holes to cut (verified against the STB frames).
+* **Terrain brightness** — Fable's ground textures are authored dark; the engine's
+  own baked background patches are equally dark (checked with `AlbionAtlas ground <map>`),
+  so the in-game look comes from lighting. The export keeps raw texels; `--gain` /
+  the brightness slider brighten if you want a lit look baked in.
+* **Caves have no lid** — terrain is the cave floor; walls and ceilings are placed
+  meshes. Every cell of every map is drawn by the engine (`AlbionAtlas coverage <map>`).
 * **No water plane** — sea themes export as their seabed texture.
 * **No lights, particles, creatures (by default), scripts.**
 

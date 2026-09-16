@@ -245,6 +245,29 @@ int main(int argc, char** argv) {
         struct TempGuard { fs::path p; ~TempGuard() { if (!p.empty()) { std::error_code ec; fs::remove(p, ec); } } } guard{temp};
 
         if (cmd == "info") return cmdInfo(lev);
+        if (cmd == "ground") {   // diagnostic: engine background albedo vs our bake -> writes PNGs, prints mean colours
+            if (!install.valid) return usage();
+            const auto file = forge::lev::File::open(lev);
+            const auto bg = albion::stbterrain::backgroundAlbedo(install.root, lev.stem().string(), file.width(), file.height());
+            std::printf("%s: %s\n", lev.stem().string().c_str(), bg.note.c_str());
+            if (!bg.found) return 1;
+            te::Context ctx; std::string err;
+            if (!ctx.load(install.root, install.root / "data" / "graphics" / "pc" / "textures.big", err)) { std::fprintf(stderr, "%s\n", err.c_str()); return 1; }
+            te::Options o; o.texelsPerCell = bg.texelsPerCell; o.gain = gain;
+            const auto scene = te::buildScene(file, o, &ctx);
+            auto mean = [](const te::Image& im, double m[3]) {
+                m[0] = m[1] = m[2] = 0; size_t n = 0;
+                for (size_t i = 0; i + 3 < im.rgba.size(); i += 4) { if (im.rgba[i + 3] == 0) continue; m[0] += im.rgba[i]; m[1] += im.rgba[i + 1]; m[2] += im.rgba[i + 2]; ++n; }
+                if (n) { m[0] /= n; m[1] /= n; m[2] /= n; }
+            };
+            double a[3], b[3]; mean(bg.image, a); mean(scene.albedo, b);
+            std::printf("engine background mean RGB %.1f %.1f %.1f   our bake (gain %.2f) %.1f %.1f %.1f   ratio %.2f %.2f %.2f\n",
+                        a[0], a[1], a[2], gain, b[0], b[1], b[2], a[0] / std::max(b[0], 1.0), a[1] / std::max(b[1], 1.0), a[2] / std::max(b[2], 1.0));
+            const std::string stem = out.empty() ? lev.stem().string() : fs::path(out).stem().string();
+            auto save = [&](const te::Image& im, const std::string& name) { const auto png = te::encodePng(im); std::ofstream(name, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size())); std::printf("wrote %s\n", name.c_str()); };
+            save(bg.image, stem + "_engine_bg.png"); save(scene.albedo, stem + "_our_bake.png");
+            return 0;
+        }
         if (cmd == "coverage") {   // diagnostic: how many cells the STB foreground frames draw (expected: all)
             const auto file = forge::lev::File::open(lev);
             const auto mask = albion::stbterrain::load(install.root, lev.stem().string(), file.width(), file.height());
