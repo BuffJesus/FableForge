@@ -70,13 +70,15 @@ void thingBasis(const float forward[3], const float up[3], float scale, float m[
     if (u[0] * u[0] + u[1] * u[1] + u[2] * u[2] < 0.5f) { u[0] = 0; u[1] = 0; u[2] = 1; }
     float r[3] = {f[1] * u[2] - f[2] * u[1], f[2] * u[0] - f[0] * u[2], f[0] * u[1] - f[1] * u[0]};
     normalize(r);
-    // Mesh-local frame: +x = right, +y = forward, +z = up, so
-    // world = pos + lx*right + ly*forward + lz*up   (rows = images of local axes).
-    // Verified on the Arena: the oval pit's long axis and its two N/S entrance
-    // corridors only line up with the audience ring, the gate things and
-    // MINIMAP_ARENA this way (the previous -lx*forward + ly*right guess was a
-    // 90-degree yaw off, which turned Oakvale's fence lines into combs).
-    for (int k = 0; k < 3; ++k) { m[0 * 3 + k] = r[k] * scale; m[1 * 3 + k] = f[k] * scale; m[2 * 3 + k] = u[k] * scale; }
+    // Straight from the engine: CEngineInternalPrimitiveMeshBase::CalcObjectMatrix
+    // (retail Fable.exe 0x00bebaa0, FableWin.exe 0x02ee3a00) builds the row-vector
+    // CMatrix3x4 as rows { -(forward x up), -forward, up, pos } * scale, so
+    //   world = pos + lx*(-right) + ly*(-forward) + lz*up.
+    // Cross-checked on the Arena: the audience billboards' front face is local -y,
+    // and only this frame turns 31/34 of them towards the pit (the sign-flipped
+    // guess faced them away; the earlier -lx*forward + ly*right guess was a
+    // 90-degree yaw off and turned Oakvale's fence lines into combs).
+    for (int k = 0; k < 3; ++k) { m[0 * 3 + k] = -r[k] * scale; m[1 * 3 + k] = -f[k] * scale; m[2 * 3 + k] = u[k] * scale; }
 }
 
 fe::Scene load(const std::string& mapName, const Options& options, const te::Context& context, Stats* statsOut) {
