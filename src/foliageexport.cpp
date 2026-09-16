@@ -615,9 +615,19 @@ void appendFoliage(glb::Builder& b, const Scene& f, te::UpAxis up, std::vector<i
         float cy[3] = {-oc[1][0], -oc[1][1], -oc[1][2]};
         if (up == te::UpAxis::Y) quatFromColumns(oc[0], oc[2], cy, q);
         else { quatFromColumns(oc[0], oc[1], oc[2], q); sx = sc[0]; sy = sc[1]; sz = sc[2]; }
-        children.push_back(b.node({{"mesh", glMesh[size_t(inst.mesh)]},
-                                   {"translation", {tx, ty, tz}}, {"rotation", {q[0], q[1], q[2], q[3]}},
-                                   {"scale", {sx, sy, sz}}}));
+        json node = {{"mesh", glMesh[size_t(inst.mesh)]},
+                     {"translation", {tx, ty, tz}}, {"rotation", {q[0], q[1], q[2], q[3]}},
+                     {"scale", {sx, sy, sz}}};
+        if (!inst.tag.empty()) node["name"] = inst.tag;
+        children.push_back(b.node(node));
+    }
+    for (const Light& L : f.lights) {
+        float tx, ty, tz;
+        toUp(up, L.x, L.y, L.z, tx, ty, tz);
+        const int li = b.light({{"type", "point"}, {"name", L.name}, {"color", {L.r, L.g, L.b}},
+                                {"intensity", 20.0 * std::max(L.radius, 0.5f)}, {"range", L.radius}});
+        children.push_back(b.node({{"name", L.name}, {"translation", {tx, ty, tz}},
+                                   {"extensions", {{"KHR_lights_punctual", {{"light", li}}}}}}));
     }
     roots.push_back(b.node({{"name", f.rootName}, {"children", children},
                             {"extras", {{"instances", children.size()}, {"scenery_types", f.paletteTypes},

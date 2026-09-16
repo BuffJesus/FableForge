@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 
+#include "effects.hpp"
 #include "forge/tng.hpp"
 #include "forge/wad.hpp"
 
@@ -104,7 +105,10 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     std::map<uint32_t, int> meshIndexById;
     std::map<uint32_t, int> textureToImage;
     std::map<std::string, int> defWarned;
-
+    {
+        std::string ferr;
+        if (!effects::openBank(options.gameRoot, ferr)) warn("particle effects unavailable: " + ferr);
+    }
     // Mesh for a model id, decoded once per scene; -1 when it cannot be decoded.
     auto acquireMesh = [&](uint32_t modelId, const std::string& def) -> int {
         auto known = meshIndexById.find(modelId);
@@ -119,6 +123,118 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         const int idx = int(scene.meshes.size() - 1);
         meshIndexById[modelId] = idx;
         return idx;
+    };
+
+    // Proxy meshes for particle sprite systems, keyed by (sprite texture, tint).
+    std::map<std::string, int> proxyMeshes;
+    auto proxyMesh = [&](const effects::SpriteSystem& sp, const std::string& fxName) -> int {
+        char key[64];
+        std::snprintf(key, sizeof key, "%d:%02x%02x%02x:%d", sp.sprite, sp.colour[0], sp.colour[1], sp.colour[2], sp.blendMode == 3 ? 1 : 0);
+        auto hit = proxyMeshes.find(key);
+        if (hit != proxyMeshes.end()) return hit->second;
+        int imageIndex = -1;
+        if (options.textures && sp.sprite > 0) {
+            std::string twarn;
+            const te::Image* tex = context.texture(uint32_t(sp.sprite), twarn);
+            if (tex) {
+                te::Image tinted = *tex;
+                tinted.name = std::string("fx_sprite_") + std::to_string(sp.sprite);
+                // Additive sprites (blend 3, the fire/glow family) are authored on
+                // black with no useful alpha: their brightness IS their coverage.
+                const bool additive = sp.blendMode == 3;
+                for (size_t i = 0; i + 3 < tinted.rgba.size(); i += 4) {
+                    const int lum = std::max({int(tinted.rgba[i]), int(tinted.rgba[i + 1]), int(tinted.rgba[i + 2])});
+                    for (int k = 0; k < 3; ++k) tinted.rgba[i + k] = uint8_t(std::min(255, int(tinted.rgba[i + k]) * int(sp.colour[k]) / 255));
+                    if (additive) tinted.rgba[i + 3] = uint8_t(std::min(255, lum * 2));
+                }
+                scene.images.push_back(std::move(tinted));
+                imageIndex = int(scene.images.size() - 1);
+            }
+        }
+        // Two crossed vertical quads, 1 x 1 units, base at the origin, in Fable
+        // space (z up); the instance scales them to the effect's render size.
+        fe::Mesh m;
+        m.meshId = 0;
+        m.name = "FX_" + fxName + "_" + sp.system;
+        m.label = "particle proxy";
+        auto& g = m.geometry;
+        const float hw = 0.5f;
+        auto quad = [&](float ax, float ay, float bx, float by) {
+            const uint32_t base = uint32_t(g.vertices.size());
+            const float nx = -(by - ay), ny = bx - ax;
+            g.vertices.push_back({ax, ay, 0, nx, ny, 0, 0, 1});
+            g.vertices.push_back({bx, by, 0, nx, ny, 0, 1, 1});
+            g.vertices.push_back({bx, by, 1, nx, ny, 0, 1, 0});
+            g.vertices.push_back({ax, ay, 1, nx, ny, 0, 0, 0});
+            g.triangles.push_back({base, base + 1, base + 2, 0});
+            g.triangles.push_back({base, base + 2, base + 3, 0});
+        };
+        quad(-hw, 0, hw, 0);
+        quad(0, -hw, 0, hw);
+        forge::meshpreview::Material mat; mat.id = 0; mat.diffuseTexture = sp.sprite;
+        g.materials.push_back(mat);
+        fe::SubMesh part;
+        part.material = 0; part.diffuseTexture = sp.sprite > 0 ? uint32_t(sp.sprite) : 0; part.image = imageIndex; part.hasAlpha = true;
+        for (const auto& t : g.triangles) { part.indices.push_back(t.a); part.indices.push_back(t.b); part.indices.push_back(t.c); }
+        m.parts.push_back(std::move(part));
+        m.diffuseTexture = m.parts[0].diffuseTexture; m.image = imageIndex; m.hasAlpha = true;
+        scene.meshes.push_back(std::move(m));
+        const int idx = int(scene.meshes.size() - 1);
+        proxyMeshes[key] = idx;
+        return idx;
+    };
+    // One emitter: proxies for its sprite systems, lights for its CPSCLight components.
+    auto placeParticle = [&](const std::string& fxName, float x, float y, float z) {
+        ++st.particles;
+        const effects::Effect* fx = effects::byName(fxName);
+        if (!fx) { ++st.particlesUnknown; if (!defWarned["fx:" + fxName]++) warn("particle effect " + fxName + " is not in effects.big"); return; }
+        bool any = false;
+        for (const auto& sp : fx->sprites) {
+            const float size = std::max(std::max(sp.startSize, sp.endSize) * 2.0f, 0.1f);
+            const int meshIndex = proxyMesh(sp, fx->name);
+            fe::Instance c;
+            c.mesh = meshIndex; c.type = -1; c.prim = 0; c.hasMatrix = true;
+            c.x = x + sp.offset[0]; c.y = y + sp.offset[1]; c.z = z + sp.offset[2];
+            for (int k = 0; k < 9; ++k) c.m[k] = 0;
+            c.m[0] = size; c.m[4] = size; c.m[8] = size * 1.5f;   // flames are taller than wide
+            c.scale = size; c.yaw = 0;
+            c.tag = fx->name;
+            scene.meshes[size_t(meshIndex)].instanceCount++;
+            scene.instances.push_back(c);
+            any = true;
+        }
+        for (const auto& ms : fx->meshes) {
+            // CPSCRenderMesh: the effect draws a bank mesh (sun beams, dust cones,
+            // water sheets). Placed once, scaled so its largest extent equals the
+            // system's render size -- a static stand-in for an animated system.
+            if (ms.mesh <= 0) continue;
+            const int meshIndex = acquireMesh(uint32_t(ms.mesh), fx->name);
+            if (meshIndex < 0) continue;
+            const auto& g = scene.meshes[size_t(meshIndex)].geometry;
+            float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+            for (const auto& v : g.vertices) { lo[0] = std::min(lo[0], v.x); hi[0] = std::max(hi[0], v.x); lo[1] = std::min(lo[1], v.y); hi[1] = std::max(hi[1], v.y); lo[2] = std::min(lo[2], v.z); hi[2] = std::max(hi[2], v.z); }
+            const float extent = std::max({hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], 1e-3f});
+            const float k = std::max(std::max({ms.size[0], ms.size[1], ms.size[2]}), 0.01f) / extent;
+            fe::Instance c;
+            c.mesh = meshIndex; c.type = -1; c.prim = 0; c.hasMatrix = true;
+            c.x = x; c.y = y; c.z = z;
+            for (int i = 0; i < 9; ++i) c.m[i] = 0;
+            c.m[0] = k; c.m[4] = k; c.m[8] = k;
+            c.scale = k; c.yaw = 0; c.tag = fx->name;
+            scene.meshes[size_t(meshIndex)].instanceCount++;
+            scene.instances.push_back(c);
+            any = true;
+        }
+        for (const auto& l : fx->lights) {
+            fe::Light L;
+            L.x = x; L.y = y; L.z = z;
+            L.r = l.colour[0] / 255.0f; L.g = l.colour[1] / 255.0f; L.b = l.colour[2] / 255.0f;
+            L.radius = l.radius; L.name = fx->name + "_light";
+            scene.lights.push_back(L);
+            ++st.particleLights;
+            any = true;
+        }
+        if (any) ++st.particlesPlaced;
     };
 
     // Meshes carry 3ds-Max dummy objects whose NAME is an instruction. The
@@ -145,7 +261,16 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
                 while (i < h.name.size() && std::isspace((unsigned char)h.name[i])) ++i;
                 while (i < h.name.size() && !std::isspace((unsigned char)h.name[i])) arg += h.name[i++];
             }
-            if (verb == "CREATEPARTICLE") { ++st.childParticles; continue; }
+            if (verb == "CREATEPARTICLE") {
+                ++st.childParticles;
+                if (arg.empty()) continue;
+                const float* d = h.matrix;
+                placeParticle(arg,
+                              parent.x + d[9] * parent.m[0] + d[10] * parent.m[3] + d[11] * parent.m[6],
+                              parent.y + d[9] * parent.m[1] + d[10] * parent.m[4] + d[11] * parent.m[7],
+                              parent.z + d[9] * parent.m[2] + d[10] * parent.m[5] + d[11] * parent.m[8]);
+                continue;
+            }
             if (verb != "CREATEOBJECT" && verb != "CREATEBUILDING") continue;
             if (arg.empty()) continue;
             ++st.childThings;
@@ -186,6 +311,15 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         if (!phys) { ++st.noPosition; continue; }
 
         const std::string def = thing.definitionType();
+        if (const auto* pe = thing.findCtc("CTCDParticleEmitter")) {
+            std::string fxName;
+            for (const auto& p : pe->properties) if (lower(p.key) == "particletypename") fxName = unquote(p.value);
+            if (!fxName.empty() && fxName != "NULL") {
+                placeParticle(fxName, propF(*phys, "PositionX", 0.0f) + options.originX,
+                              propF(*phys, "PositionY", 0.0f) + options.originY, propF(*phys, "PositionZ", 0.0f));
+                continue;
+            }
+        }
         uint32_t modelId = 0;
         std::string overrideName;
         if (const auto ov = thing.find("GraphicOverride")) {
@@ -234,7 +368,8 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
                     std::to_string(st.noMesh) + " missing meshes, " + std::to_string(st.noPosition) + " unplaced, " +
                     std::to_string(st.skippedCreatures) + " creatures; " + std::to_string(st.childPlaced) + " of " +
                     std::to_string(st.childThings) + " mesh-dummy children (doors, windows, building parts) placed, " +
-                    std::to_string(st.childParticles) + " particle dummies ignored");
+                    std::to_string(st.particlesPlaced) + " of " + std::to_string(st.particles) + " particle emitters proxied (" +
+                    std::to_string(st.particleLights) + " lights, " + std::to_string(st.particlesUnknown) + " unknown effects)");
         std::vector<const fe::Mesh*> byCount;
         for (const auto& m : scene.meshes) byCount.push_back(&m);
         std::sort(byCount.begin(), byCount.end(), [](const fe::Mesh* a, const fe::Mesh* b) { return a->instanceCount > b->instanceCount; });

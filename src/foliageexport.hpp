@@ -79,6 +79,16 @@ struct Instance {
     // is authoritative; `yaw`/`scale` are then derived conveniences.
     bool hasMatrix = false;
     float m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::string tag;        // optional node name (particle proxies: the effect name)
+};
+
+// A point light spawned by a particle effect (CPSCLight): exported as a glTF
+// KHR_lights_punctual point light, ignored by the preview.
+struct Light {
+    float x = 0, y = 0, z = 0;   // Fable-space, same convention as Instance
+    float r = 1, g = 1, b = 1;   // 0..1
+    float radius = 0;            // world units
+    std::string name;
 };
 
 struct Scene {
@@ -89,6 +99,7 @@ struct Scene {
     std::vector<Mesh> meshes;
     std::vector<terrainexport::Image> images;
     std::vector<Instance> instances;
+    std::vector<Light> lights;
     int paletteTypes = 0;
     int unboundInstances = 0;         // instances whose type# had no palette entry / mesh
     int rejectedInstances = 0;        // implausible scale (parse false positives)

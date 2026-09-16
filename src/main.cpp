@@ -26,6 +26,7 @@
 #include "forge/meshpreview.hpp"
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
+#include "effects.hpp"
 #include "foliageexport.hpp"
 #include "stbterrain.hpp"
 #include "thingsexport.hpp"
@@ -238,6 +239,28 @@ int main(int argc, char** argv) {
         const Install install = findInstall(installArg);
         if (cmd == "list") return cmdList(install);
         if (cmd == "mesh") { if (!install.valid || target.empty()) return usage(); return cmdMesh(install, target); }
+        if (cmd == "effects") {   // diagnostic: walk every effects.big entry with the ported grammar
+            if (!install.valid) return usage();
+            std::string err;
+            if (!albion::effects::openBank(install.root, err)) { std::fprintf(stderr, "%s\n", err.c_str()); return 1; }
+            const auto bank = forge::big::File::open(install.root / "data" / "Misc" / "pc" / "effects.big");
+            int full = 0, partial = 0, sprites = 0, lights = 0, meshes = 0;
+            for (const auto& b : bank.banks())
+                for (const auto& e : b.entries) {
+                    const auto* fx = albion::effects::byName(e.name);
+                    if (!fx) continue;
+                    if (fx->parsedFully) ++full; else { ++partial; if (!target.empty() && target == "verbose") std::printf("partial: %s\n", e.name.c_str()); }
+                    sprites += int(fx->sprites.size()); lights += int(fx->lights.size()); meshes += int(fx->meshes.size());
+                    if (!target.empty() && target != "verbose" && lower(target) == lower(e.name)) {
+                        std::printf("%s (%s) id %u: %d systems, %zu sprite, %zu mesh, %zu light\n", fx->name.c_str(), fx->displayName.c_str(), fx->id, fx->systems, fx->sprites.size(), fx->meshes.size(), fx->lights.size());
+                        for (const auto& sp : fx->sprites) std::printf("  sprite %-16s tex %d rgba %d,%d,%d,%d size %.2f->%.2f blend %d %.1f/s life %.2fs offset %.2f,%.2f,%.2f%s\n", sp.system.c_str(), sp.sprite, sp.colour[0], sp.colour[1], sp.colour[2], sp.colour[3], sp.startSize, sp.endSize, sp.blendMode, sp.perSecond, sp.lifeSecs, sp.offset[0], sp.offset[1], sp.offset[2], sp.single ? " (single)" : "");
+                        for (const auto& l : fx->lights) std::printf("  light  %-16s rgba %d,%d,%d,%d radius %.2f\n", l.system.c_str(), l.colour[0], l.colour[1], l.colour[2], l.colour[3], l.radius);
+                        for (const auto& m : fx->meshes) std::printf("  mesh   %-16s mesh %d size %.2f,%.2f,%.2f\n", m.system.c_str(), m.mesh, m.size[0], m.size[1], m.size[2]);
+                    }
+                }
+            std::printf("effects.big: %d parsed fully, %d partially; %d sprite systems, %d lights, %d mesh systems\n", full, partial, sprites, lights, meshes);
+            return partial ? 1 : 0;
+        }
         if (target.empty()) return usage();
 
         fs::path temp;

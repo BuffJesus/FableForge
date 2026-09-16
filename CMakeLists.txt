@@ -41,7 +41,7 @@ target_include_directories(forgecore_slice PUBLIC
   src
 )
 
-add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp)
+add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp)
 target_include_directories(albionatlas PUBLIC src)
 target_link_libraries(albionatlas PUBLIC forgecore_slice)
 

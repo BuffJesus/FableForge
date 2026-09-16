@@ -24,6 +24,12 @@
 // entrances and stand sections, chained cave/hall interiors all come from these,
 // not from the .tng; they are followed recursively (depth 4).
 //
+// Particle effects: "CREATEPARTICLE <fx>" dummies and PARTICLE_EMITTER_PLACEABLE
+// things name an effects.big entry. A static file cannot animate them, so each
+// sprite system becomes a tinted crossed-quad proxy (its sprite texture, start
+// colour and render size) under the effect's name, and each CPSCLight becomes a
+// glTF point light. The real emitter parameters live in the node/mesh extras.
+//
 // Honest boundaries:
 //   * Creatures (AICreature) are skinned meshes; LOD0 is exported in bind pose
 //     only when `Options::creatures` is set.
@@ -62,7 +68,11 @@ struct Stats {
     int skippedCreatures = 0;
     int childThings = 0;     // CREATEOBJECT / CREATEBUILDING dummies seen in placed meshes
     int childPlaced = 0;     // ...of which produced an instance
-    int childParticles = 0;  // CREATEPARTICLE dummies (effects, not exported)
+    int childParticles = 0;  // CREATEPARTICLE dummies seen in placed meshes
+    int particles = 0;       // emitters found (mesh dummies + PARTICLE_EMITTER_PLACEABLE things)
+    int particlesPlaced = 0; // ...that produced at least one proxy or light
+    int particlesUnknown = 0;// effect name not in effects.big
+    int particleLights = 0;  // point lights exported from CPSCLight components
 };
 
 // Rows of `m` are the world images of the mesh-local x/y/z axes (times `scale`):

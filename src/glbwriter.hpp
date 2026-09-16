@@ -23,6 +23,7 @@ struct Builder {
     json materials = json::array();
     json meshes = json::array();
     json nodes = json::array();
+    json lights = json::array();     // KHR_lights_punctual
 
     void pad() { while (bytes.size() % 4) bytes.push_back(0); }
 
@@ -71,6 +72,7 @@ struct Builder {
     int material(json m) { materials.push_back(std::move(m)); return int(materials.size() - 1); }
     int mesh(json m) { meshes.push_back(std::move(m)); return int(meshes.size() - 1); }
     int node(json n) { nodes.push_back(std::move(n)); return int(nodes.size() - 1); }
+    int light(json l) { lights.push_back(std::move(l)); return int(lights.size() - 1); }
 
     std::vector<uint8_t> finish(const std::string& sceneName, const std::vector<int>& rootNodes,
                                 const std::string& generator) {
@@ -85,6 +87,10 @@ struct Builder {
             {"bufferViews", bufferViews},
         };
         if (!images.empty()) { doc["images"] = images; doc["textures"] = textures; doc["samplers"] = samplers; }
+        if (!lights.empty()) {
+            doc["extensionsUsed"] = {"KHR_lights_punctual"};
+            doc["extensions"] = {{"KHR_lights_punctual", {{"lights", lights}}}};
+        }
         pad();
         doc["buffers"] = {{{"byteLength", bytes.size()}}};
         std::string js = doc.dump();

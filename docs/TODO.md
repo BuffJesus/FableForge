@@ -23,7 +23,12 @@
   the vendored meshpreview already decoded them as `Geometry::helpers`.
   Composition used: child rows = dummyR * parentR, child pos = parent pos + parentR * dummy_t
   (mesh cm). Verified: Arena stands/awnings/banners assemble around the pit, Bowerstone
-  windows sit in their wall openings. Depth limit 4; CREATEPARTICLE counted, not exported.
+  windows sit in their wall openings. Depth limit 4.
+- DONE: particles — `src/effects.cpp` ports the effects.big grammar (1165/1165 parse fully,
+  `AlbionAtlas effects` validates); CREATEPARTICLE dummies + PARTICLE_EMITTER_PLACEABLE things
+  become tinted crossed-quad sprite proxies (additive sprites: luminance = alpha), RenderMesh
+  systems the bank mesh scaled to its render size, CPSCLight a KHR_lights_punctual point
+  light. Open question: RenderMesh size semantics (assumed: largest extent = size).
 - `MeshHeightOffset` is 0 on every OBJECT/BUILDING def sampled (400/400) — not a factor.
 
 ## Debug build as the oracle
