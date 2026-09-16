@@ -82,6 +82,7 @@ private:
     ID3D11Buffer* vb_ = nullptr;
     ID3D11Buffer* ib_ = nullptr;
     ID3D11SamplerState* sampler_ = nullptr;
+    ID3D11SamplerState* wrapSampler_ = nullptr;
     ID3D11RasterizerState* solid_ = nullptr;
     ID3D11RasterizerState* wire_ = nullptr;
     ID3D11DepthStencilState* depth_ = nullptr;

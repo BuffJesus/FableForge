@@ -205,7 +205,7 @@ Renderer::~Renderer() {
     releaseMesh();
     clearFoliage();
     release(white_);
-    release(blend_); release(depth_); release(wire_); release(solid_); release(sampler_);
+    release(blend_); release(depth_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
     release(cbuffer_); release(layout_); release(ps_); release(vs_);
 }
 
@@ -247,6 +247,8 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.MaxLOD = D3D11_FLOAT32_MAX;
     device_->CreateSamplerState(&sd, &sampler_);
+    sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    device_->CreateSamplerState(&sd, &wrapSampler_);
 
     D3D11_RASTERIZER_DESC rd = {};
     rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;
@@ -317,20 +319,25 @@ bool Renderer::uploadFoliage(const foliageexport::Scene& scene, terrainexport::U
     for (const auto& inst : scene.instances) {
         if (inst.mesh < 0) continue;
         const auto& m = scene.meshes[size_t(inst.mesh)];
-        auto& out = byImage[m.image];
-        const float cs = std::cos(inst.yaw), sn = std::sin(inst.yaw);
-        for (const auto& t : m.geometry.triangles) {
-            const uint32_t ids[3] = {t.a, t.b, t.c};
+        float col[3][3]; foliageexport::instanceBasis(inst, col);
+        for (const auto& part : m.parts) {
+          auto& out = byImage[part.image];
+          for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
+            const uint32_t ids[3] = {part.indices[k], part.indices[k + 1], part.indices[k + 2]};
             for (uint32_t id : ids) {
                 if (id >= m.geometry.vertices.size()) continue;
                 const auto& v = m.geometry.vertices[id];
-                const float lx = v.x * inst.scale, ly = v.y * inst.scale, lz = v.z * inst.scale;
                 GpuVertex g{};
-                toUp(inst.x + lx * cs - ly * sn, inst.y + lx * sn + ly * cs, inst.z + lz, g.px, g.py, g.pz);
-                toUp(v.nx * cs - v.ny * sn, v.nx * sn + v.ny * cs, v.nz, g.nx, g.ny, g.nz);
+                toUp(inst.x + v.x * col[0][0] + v.y * col[1][0] + v.z * col[2][0],
+                     inst.y + v.x * col[0][1] + v.y * col[1][1] + v.z * col[2][1],
+                     inst.z + v.x * col[0][2] + v.y * col[1][2] + v.z * col[2][2], g.px, g.py, g.pz);
+                toUp(v.nx * col[0][0] + v.ny * col[1][0] + v.nz * col[2][0],
+                     v.nx * col[0][1] + v.ny * col[1][1] + v.nz * col[2][1],
+                     v.nx * col[0][2] + v.ny * col[1][2] + v.nz * col[2][2], g.nx, g.ny, g.nz);
                 g.u = v.u; g.v = v.v; g.walk = 1.0f;
                 out.push_back(g);
             }
+          }
         }
     }
     for (auto& [image, verts] : byImage) {
@@ -472,6 +479,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
             ctx_->Unmap(cbuffer_, 0);
         }
         ctx_->RSSetState(solid_);
+        ctx_->PSSetSamplers(0, 1, &wrapSampler_);
         for (const auto& b : foliage_) {
             ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
             ctx_->PSSetShaderResources(0, 1, &t);

@@ -231,9 +231,13 @@ void testFoliageGlb(const fs::path& lev, const fs::path& dir) {
     m.geometry.triangles.push_back({0, 1, 3, 0}); m.geometry.triangles.push_back({0, 3, 2, 0});
     te::Image img; img.width = img.height = 2; img.rgba = {0,255,0,255, 0,255,0,0, 0,255,0,255, 0,255,0,0}; img.name = "blade";
     fol.images.push_back(img); m.image = 0; m.hasAlpha = true; m.instanceCount = 2;
+    fe::SubMesh part; part.material = 0; part.image = 0; part.hasAlpha = true; part.indices = {0, 1, 3, 0, 3, 2};
+    m.parts.push_back(part);
     fol.meshes.push_back(m);
-    fol.instances.push_back({0, 0, 1.0f, 2.0f, 5.0f, 0.0f, 0.01f});
-    fol.instances.push_back({0, 0, 3.0f, 1.0f, 6.0f, 3.14159265f / 2, 0.02f});
+    fe::Instance i0; i0.mesh = 0; i0.type = 0; i0.x = 1; i0.y = 2; i0.z = 5; i0.yaw = 0; i0.scale = 0.01f;
+    fe::Instance i1; i1.mesh = 0; i1.type = 0; i1.x = 3; i1.y = 1; i1.z = 6; i1.yaw = 3.14159265f / 2; i1.scale = 0.02f;
+    fol.instances.push_back(i0);
+    fol.instances.push_back(i1);
     const auto glb = fe::buildGlbWithFoliage(terrain, fol);
     json doc; std::vector<uint8_t> bin;
     CHECK(parseGlb(glb, doc, bin));

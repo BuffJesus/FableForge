@@ -12,11 +12,12 @@
 // their diffuse textures GBANK_MAIN_PC entries in textures.big.
 //
 // Honest boundaries:
-//   * The instance scanner is heuristic (maximal 16-byte-stride runs of plausible
-//     world coordinates in every decodable LZO frame). Instances it cannot bind
-//     to a scenery type are reported as `unboundInstances` and skipped.
-//   * Tree-type instances live in a separate pass in the engine; coverage of
-//     those depends on the scanner and is reported, not assumed.
+//   * Instances are read by GRAMMAR from every LZO frame in the chunk that
+//     parses as a CObjectCacheGroupCollection (the layout FableForge's STB baker
+//     writes and the engine's Load reads): type-1 RepeatedMesh batches (grass:
+//     16-byte A/B arrays) and type-0 Mesh primitives (trees/props: a full 3x4
+//     matrix). Type-2 ZSpriteBatch (distant impostor) bodies are not decoded;
+//     parsing of a frame stops there and the count is reported.
 //   * Only LOD0 geometry; fade/impostor (ZSprite) data is not exported.
 
 #include <cstdint>
@@ -41,23 +42,39 @@ struct Options {
     std::function<void(const std::string&)> log;
 };
 
+// One material's share of a mesh (trees are leaves + trunk, each its own texture).
+struct SubMesh {
+    int material = -1;                   // index into geometry.materials (-1 = none)
+    uint32_t diffuseTexture = 0;         // GBANK_MAIN_PC id (0 = none)
+    int image = -1;                      // index into Scene::images
+    bool hasAlpha = false;               // texture has an alpha channel -> cutout material
+    std::vector<uint32_t> indices;       // triangle list into geometry.vertices
+};
+
 struct Mesh {
     uint32_t meshId = 0;                 // MBANK_ALLMESHES entry id
     std::string name;                    // e.g. MESH_DANDELIONFLOWERS_01
     std::string label;                   // human label from the palette catalog, if known
-    forge::meshpreview::Geometry geometry;   // Fable-space LOD0
-    uint32_t diffuseTexture = 0;         // GBANK_MAIN_PC id (0 = none)
-    int image = -1;                      // index into Scene::images
-    bool hasAlpha = false;               // texture carries an alpha channel -> cutout material
+    forge::meshpreview::Geometry geometry;   // Fable-space LOD0 (UVs normalised into [0,1)-based range)
+    std::vector<SubMesh> parts;          // by material; every triangle is in exactly one part
+    uint32_t diffuseTexture = 0;         // first part's texture (convenience)
+    int image = -1;                      // first part's image (convenience)
+    bool hasAlpha = false;
     size_t instanceCount = 0;
 };
 
 struct Instance {
     int mesh = -1;          // index into Scene::meshes
     int type = -1;          // palette type#
+    int prim = 1;           // 0 = single mesh (tree/prop), 1 = repeated mesh (grass)
     float x = 0, y = 0, z = 0;   // Fable-space, map-local unless Options::mapLocal == false
-    float yaw = 0;          // radians about Fable +Z
-    float scale = 1;
+    float yaw = 0;          // radians about Fable +Z (type-1, or derived for type-0)
+    float scale = 1;        // uniform scale (type-1) / |column| average (type-0)
+    // Type-0 primitives carry a full rotation*scale 3x3 (row-major, rows are the
+    // transformed basis vectors as the engine stores them). `hasMatrix` says it
+    // is authoritative; `yaw`/`scale` are then derived conveniences.
+    bool hasMatrix = false;
+    float m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 };
 
 struct Scene {
@@ -68,12 +85,19 @@ struct Scene {
     std::vector<terrainexport::Image> images;
     std::vector<Instance> instances;
     int paletteTypes = 0;
-    int unboundInstances = 0;
-    int rejectedInstances = 0;        // implausible scale (scanner false positives)
-    int framesDecoded = 0;
+    int unboundInstances = 0;         // instances whose type# had no palette entry / mesh
+    int rejectedInstances = 0;        // implausible scale (parse false positives)
+    int framesDecoded = 0;            // LZO frames decoded in the chunk
+    int groupFrames = 0;              // frames that parsed as cache-group collections
+    int zspriteSkipped = 0;           // type-2 primitives not decoded
+    int treeInstances = 0;            // type-0 (single-mesh) instances placed
     std::vector<std::string> warnings;
     size_t triangleCount() const;
 };
+
+// Basis images of the instance's local axes in Fable space (col[k] = image of
+// local axis k, scale included): world = pos + lx*col[0] + ly*col[1] + lz*col[2].
+void instanceBasis(const Instance& i, float col[3][3]);
 
 // Loads everything for one map. Never throws for "no foliage": `found` is false
 // and `warnings` says why. `context` must be a ready terrainexport::Context

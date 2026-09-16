@@ -65,11 +65,12 @@ shot build/ui/08_exported.png
      mesh_vertices=18721
      batch_active=0
      foliage_loaded=1
-     foliage_instances=1602
+     foliage_instances=5111
      preview_foliage=1
      export_foliage=1
      batch_done=0
      batch_failed=0
      filter=
+     camera=166.58,100.27,-75.55
 ok   quit
 RESULT PASS

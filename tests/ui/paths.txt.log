@@ -67,5 +67,6 @@ ok   filter
      batch_done=3
      batch_failed=0
      filter=
+     camera=101.25,179.35,35.71
 ok   quit
 RESULT PASS

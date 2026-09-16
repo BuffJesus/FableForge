@@ -17,10 +17,13 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
+#include "forge/big.hpp"
 #include "forge/env.hpp"
+#include "forge/meshpreview.hpp"
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
 #include "foliageexport.hpp"
@@ -129,6 +132,42 @@ int cmdList(const Install& install) {
     return 0;
 }
 
+// Debug aid: materials / texture ids / UV ranges of one MBANK_ALLMESHES entry.
+int cmdMesh(const Install& install, const std::string& idOrName) {
+    fs::path graphics = install.root / "data" / "graphics" / "graphics.big";
+    if (!fs::exists(graphics)) graphics = install.root / "data" / "graphics" / "pc" / "graphics.big";
+    const auto big = forge::big::File::open(graphics);
+    const auto* bank = big.findBank("MBANK_ALLMESHES");
+    if (!bank) { std::fprintf(stderr, "no MBANK_ALLMESHES\n"); return 1; }
+    const auto tex = forge::big::File::open(install.root / "data" / "graphics" / "pc" / "textures.big");
+    std::map<uint32_t, std::string> texNames;
+    if (const auto* tb = tex.findBank("GBANK_MAIN_PC")) for (const auto& e : tb->entries) texNames[e.id] = e.name;
+    const uint32_t id = uint32_t(std::strtoul(idOrName.c_str(), nullptr, 10));
+    for (const auto& e : bank->entries) {
+        if (!(e.id == id || lower(e.name) == lower(idOrName))) continue;
+        const auto g = forge::meshpreview::decodeLod0(big.entryData(e), e.type);
+        std::printf("%s (id %u, type %u): %zu vertices, %zu triangles, %zu materials, %u primitives\n", e.name.c_str(), e.id, e.type,
+                    g.vertices.size(), g.triangles.size(), g.materials.size(), g.primitiveCount);
+        std::map<int32_t, size_t> perMat;
+        for (const auto& t : g.triangles) ++perMat[t.material];
+        for (size_t i = 0; i < g.materials.size(); ++i) {
+            const auto& m = g.materials[i];
+            auto nm = [&](int32_t t) { return t > 0 && texNames.count(uint32_t(t)) ? texNames[uint32_t(t)] : std::string("-"); };
+            std::printf("  material[%zu] id=%d diffuse=%d %s bump=%d %s alphaMap=%d alpha=%d flags=0x%x  triangles=%zu\n", i, m.id,
+                        m.diffuseTexture, nm(m.diffuseTexture).c_str(), m.bumpTexture, nm(m.bumpTexture).c_str(), m.alphaMapTexture,
+                        int(m.alphaEnabled), m.textureFlags, perMat.count(int32_t(i)) ? perMat[int32_t(i)] : 0);
+        }
+        for (const auto& [mat, cnt] : perMat) if (mat < 0 || size_t(mat) >= g.materials.size()) std::printf("  triangles with material %d (no such material): %zu\n", mat, cnt);
+        float umin = 1e9f, umax = -1e9f, vmin = 1e9f, vmax = -1e9f, zmin = 1e9f, zmax = -1e9f;
+        for (const auto& v : g.vertices) { umin = std::min(umin, v.u); umax = std::max(umax, v.u); vmin = std::min(vmin, v.v); vmax = std::max(vmax, v.v); zmin = std::min(zmin, v.z); zmax = std::max(zmax, v.z); }
+        std::printf("  uv u %.2f..%.2f v %.2f..%.2f   z %.1f..%.1f (mesh units)\n", umin, umax, vmin, vmax, zmin, zmax);
+        for (const auto& p : g.primitives) std::printf("  primitive: %u verts %u indices stride %u fmt 0x%x\n", p.vertexCount, p.indexCount, p.vertexStride, p.vertexFormat);
+        return 0;
+    }
+    std::fprintf(stderr, "mesh not found: %s\n", idOrName.c_str());
+    return 1;
+}
+
 int cmdInfo(const fs::path& lev) {
     const auto file = forge::lev::File::open(lev);
     float lo = 1e30f, hi = -1e30f;
@@ -188,6 +227,7 @@ int main(int argc, char** argv) {
     try {
         const Install install = findInstall(installArg);
         if (cmd == "list") return cmdList(install);
+        if (cmd == "mesh") { if (!install.valid || target.empty()) return usage(); return cmdMesh(install, target); }
         if (target.empty()) return usage();
 
         fs::path temp;
