@@ -98,13 +98,15 @@ struct ThemeLayer {
     int waterType = 0;              // ENGINE_THEME WaterType: 0 = no water
 };
 
-// The water surface (lakes, rivers, sea): the engine's per-vertex water height
-// is ground + sum(blend * theme.WaterHeight), smoothed over a 5x5 window of
-// wet vertices (CWaterPatchMesh::FindCorrectWaterLevel). Cells with at least one
-// wet corner are drawn; dry corners take the cell's wet mean.
+// The water surface (lakes, rivers, sea) as the engine's water patches draw it:
+// per vertex, ground + (theme blend * ENGINE_THEME WaterHeight) where any slot has
+// WaterType != 0, smoothed over the 5x5 window (and extended 2 cells onto the bank),
+// placed 0.1 below that level, with the in-game depth fade (0..2 units) kept per
+// vertex. Cells whose sheet is entirely below the ground are not emitted.
 struct WaterMesh {
     std::vector<float> positions;     // xyz, already in the requested up-axis space
     std::vector<uint8_t> ice;         // per vertex: 1 = frozen (EWaterType 8, Hook Coast ice)
+    std::vector<float> fade;          // per vertex: engine depth fade, 0 (shore) .. 1 (2+ units deep)
     std::vector<uint32_t> indices;    // liquid water triangles, CCW seen from above
     std::vector<uint32_t> iceIndices; // frozen water triangles
     int wetVertices = 0;

@@ -81,10 +81,15 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   stand mesh anywhere (no thing, def, script or region places one); the pit parapet hides
   the drop in-game.
 * **Water** — a `Water` sheet (child of the terrain node; `water` + `ice` materials, OBJ
-  `o Water`) built the way the engine does it: ground + the LEV theme blend times each
-  `ENGINE_THEME`'s `WaterHeight`, averaged over the 5x5 neighbourhood
-  (`CEngineMap::PeekWaterHeight`, `CWaterPatchMesh::FindCorrectWaterLevel`). Flat colour
+  `o Water`) built the way the engine's water patches are: ground + the LEV theme blend
+  times each `ENGINE_THEME`'s `WaterHeight` (a depth), averaged over the 5x5 neighbourhood
+  and extended two cells onto the bank, placed 0.1 below that level, with the in-game
+  depth fade (transparent at the shore, opaque 2 units down) exported as `COLOR_0` alpha
+  (`CEngineMap::PeekInterpolatedWaterHeight`, `CWaterPatchMesh::Build`). Flat colour
   only — no waves, reflections or shore foam.
+* **Stale theme indices** — retail LEVs store `game.bin` indices from an older bank
+  (Bowerstone Bridge's `WATER_BWLAKE_8` slot points at what is now `WATER_BWLAKE_1`);
+  the palette NAME wins whenever it disagrees with the index, for textures and water alike.
 * **No lights, particles, creatures (by default), scripts.**
 
 ## GUI

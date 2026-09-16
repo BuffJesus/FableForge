@@ -63,7 +63,8 @@ float4 PS(VSOut i) : SV_Target {
         float3 col = lerp(deep, shallow, 0.35 * rim + 0.15 * ripple) * (0.55 + 0.6 * ndl);
         float dist = distance(eye.xyz, i.wpos);
         float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
-        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), (i.walk < 0.5 ? 0.9 : 0.62) + 0.2 * rim);
+        float fade = i.walk < 0.5 ? 0.9 : saturate(i.uv.x);   // engine depth fade: transparent at the shore
+        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), fade * (0.7 + 0.25 * rim));
     }
     if (flags.x > 0.5) {
         float4 tex = albedo.Sample(samp, i.uv);
@@ -417,7 +418,7 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool fr
         std::vector<GpuVertex> wv(wn);
         for (size_t i = 0; i < wn; ++i) {
             const float* p = &scene.water.positions[i * 3];
-            wv[i] = {p[0], p[1], p[2], 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, scene.water.ice[i] ? 0.0f : 1.0f};   // walk = 0 marks ice
+            wv[i] = {p[0], p[1], p[2], 0.0f, 1.0f, 0.0f, scene.water.fade[i], 0.0f, scene.water.ice[i] ? 0.0f : 1.0f};   // u = depth fade, walk = 0 marks ice
             if (scene.up == terrainexport::UpAxis::Z) { wv[i].ny = 0.0f; wv[i].nz = 1.0f; }
         }
         D3D11_BUFFER_DESC wd = {};

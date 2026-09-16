@@ -301,48 +301,37 @@ void testThingBasis() {
     CHECK(near(m[3], -1) && near(m[1], 1));
 }
 
-// Water: slot 1 (weight grows with x) is declared a lake 2 units deep; the
-// surface must appear only where the blended depth reaches the 0.05 threshold
-// and sit above the ground there.
+// Water: ENGINE_THEME WaterHeight is a depth above the ground. On flat ground at
+// 5, slot 1 (weight grows with x) declared a lake 2 deep must put a sheet 0.1
+// below ground + smoothed depth over every vertex that carries the theme plus a
+// 2-cell bank, with the depth fade ending at 0 on the dry side.
 void testWater(const fs::path& dir) {
-    // Flat ground: on the 10-units-per-cell test slope the engine's 5x5 mean
-    // would (correctly) sink the sheet below the bank, which is not what this pins.
     const fs::path lev = writeSyntheticLev(dir / "flat.lev", 4, 3, [](int, int) { return 5.0f; });
     const auto level = forge::lev::File::open(lev);
     te::Options o; o.textures = false;
-    te::Scene s = te::buildMesh(level, o);
     te::ThemeLayer grass; grass.slot = 0; grass.resolved = true;
     te::ThemeLayer lake; lake.slot = 1; lake.resolved = true; lake.waterType = 1; lake.waterHeight = 2.0f;
+    te::Scene s = te::buildMesh(level, o);
     s.themes = {grass, lake};
     te::buildWater(level, s, {{0, 0}, {1, 1}}, o);
-    const int cx = level.cellsX(), cy = level.cellsY();
-    int expectWet = 0;
-    for (int y = 0; y < cy; ++y)
-        for (int x = 0; x < cx; ++x) {
-            const float w1 = float(level.themeStrengthAt(x, y, 1)) / 255.0f;
-            if (w1 > 0 && w1 * 2.0f >= 0.05f) ++expectWet;
-        }
-    CHECK(expectWet > 0);
-    CHECK(s.water.wetVertices == expectWet);
+    CHECK(s.water.wetVertices == 4 * 4);   // x = 1..4 carry slot-1 weight; x = 0 has none
     CHECK(!s.water.indices.empty() && s.water.iceIndices.empty());
-    CHECK(s.water.ice.size() == s.water.positions.size() / 3);
-    // Every water vertex sits above the ground under it (Y-up: py is height).
-    bool above = true;
+    CHECK(s.water.ice.size() == s.water.positions.size() / 3 && s.water.fade.size() == s.water.ice.size());
+    bool sane = true, sawRight = false;
     for (size_t i = 0; i + 2 < s.water.positions.size(); i += 3) {
-        const int x = int(std::lround(s.water.positions[i])), y = int(std::lround(-s.water.positions[i + 2]));
-        if (x < 0 || y < 0 || x >= cx || y >= cy) { above = false; continue; }
-        const float w1 = float(level.themeStrengthAt(x, y, 1)) / 255.0f;
-        if (w1 * 2.0f >= 0.05f && s.water.positions[i + 1] < level.heightAt(x, y)) above = false;
+        const int x = int(std::lround(s.water.positions[i]));
+        const float h = s.water.positions[i + 1], f = s.water.fade[i / 3];
+        // Column 4: window x 2..4, depths 1, 1.5, 2 -> level 6.5 -> vertex 6.4, fade (6.5-5)/2 = 0.75
+        if (x == 4) { sawRight = true; if (std::fabs(h - 6.4f) > 0.05f || std::fabs(f - 0.75f) > 0.05f) sane = false; }
+        if (h < 5.0f - 0.2f || h > 7.0f || f < 0.0f || f > 1.0f) sane = false;
     }
-    CHECK(above);
-    // The fully wet column is exactly ground + 2 once smoothing sees only wet neighbours.
-    // (x = cx-1 has weight 255 -> depth 2; its 5x5 window mixes shallower columns, so only check >= ground + 1.)
-    bool deepEnough = true;
-    for (size_t i = 0; i + 2 < s.water.positions.size(); i += 3) {
-        const int x = int(std::lround(s.water.positions[i])), y = int(std::lround(-s.water.positions[i + 2]));
-        if (x == cx - 1 && y >= 0 && y < cy && s.water.positions[i + 1] < level.heightAt(x, y) + 1.0f) deepEnough = false;
-    }
-    CHECK(deepEnough);
+    CHECK(sawRight && sane);
+    // A lake whose smoothed sheet is underground is not emitted.
+    te::Scene s2 = te::buildMesh(level, o);
+    te::ThemeLayer puddle = lake; puddle.waterHeight = 0.01f;
+    s2.themes = {grass, puddle};
+    te::buildWater(level, s2, {{0, 0}, {1, 1}}, o);
+    CHECK(s2.water.wetVertices > 0 && s2.water.empty());
     // Dry map: no water at all.
     te::Scene dry = te::buildMesh(level, o);
     dry.themes = {grass, grass};

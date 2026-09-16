@@ -390,83 +390,93 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
     return true;
 }
 
-// Water surface from the LEV theme blend + ENGINE_THEME WaterHeight/WaterType,
-// the way CEngineMap::PeekWaterHeight / PeekHasWaterFast and
-// CWaterPatchMesh::FindCorrectWaterLevel (debug build 0x02d5dd80 / 0x02d5d620 /
-// 0x02e67af0) compute it: per vertex, ground + sum(blend/255 * WaterHeight) when
-// any slot has WaterType != 0; the drawn level is the mean of the non-zero water
-// heights in the 5x5 neighbourhood.
+// Water surface, the way the engine builds a water patch (debug build):
+//   CEngineMap::PeekWaterDepth      0x02d5e000  depth = sum(slot blend/255 * theme.WaterHeight)
+//   CEngineMap::PeekHasWaterFast    0x02d5d620  any slot's theme has WaterType != 0
+//   CEngineMap::PeekInterpolatedWaterHeight 0x02d5db50  mean over the +-2 window of
+//       (ground + depth) for cells with depth > 0.001; a dry vertex re-centres the
+//       window on the first wet cell it finds within +-2 (the sheet reaches the bank)
+//   CWaterPatchMesh::Build / BuildVertexBuffer 0x02e689b0 / 0x02e68320  vertex z =
+//       level - 0.1; per-vertex fade = clamp(level + 0.1 - ground, 0, 2) / 2
+// So WaterHeight is a DEPTH above the ground and the drawn sheet is the smoothed
+// absolute surface. Where the smoothed sheet dips under the ground it is hidden;
+// where it is less than 2 units deep the in-game shader fades it out, which is
+// what makes shores read as shores. The fade is exported as COLOR_0 alpha.
 void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options) {
     const int cx = level.cellsX(), cy = level.cellsY();
     if (cx <= 1 || cy <= 1) return;
-    std::vector<float> raw(size_t(cx) * cy, 0.0f);   // absolute water height, 0 = dry
+    std::vector<float> depth(size_t(cx) * cy, 0.0f);
     std::vector<uint8_t> ice(size_t(cx) * cy, 0);     // dominant water slot is EWaterType 8 (ice)
     int wet = 0;
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
             const Vertex& v = scene.vertices[size_t(y) * cx + x];
-            float depth = 0.0f;
+            float d = 0.0f;
             bool hasWater = false;
             int bestW = 0, bestType = 0;
             for (int s = 0; s < 3; ++s) {
                 auto it = slotToLayer.find(v.themeIndex[s]);
                 if (it == slotToLayer.end()) continue;
                 const ThemeLayer& L = scene.themes[it->second];
-                if (L.waterType != 0 && v.themeWeight[s] > 0) {
+                if (L.waterType != 0) {
                     hasWater = true;
                     if (v.themeWeight[s] > bestW) { bestW = v.themeWeight[s]; bestType = L.waterType; }
                 }
-                depth += float(v.themeWeight[s]) / 255.0f * L.waterHeight;
+                d += float(v.themeWeight[s]) / 255.0f * L.waterHeight;
             }
-            // A trace of a water theme in the blend (depth of a few mm) draws a
-            // sheet the in-game water shader fades to nothing; skip it.
-            if (hasWater && depth >= 0.05f) {
-                raw[size_t(y) * cx + x] = level.heightAt(x, y) + depth;
-                ice[size_t(y) * cx + x] = bestType == 8 ? 1 : 0;
-                ++wet;
-            }
+            if (hasWater && d > 0.001f) { depth[size_t(y) * cx + x] = d; ice[size_t(y) * cx + x] = bestType == 8 ? 1 : 0; ++wet; }
         }
     if (wet == 0) return;
-    // FindCorrectWaterLevel: average of the non-zero heights within +-2 cells.
-    std::vector<float> lvl(raw.size(), 0.0f);
+    auto ground = [&](int x, int y) { return level.heightAt(x, y); };
+    // PeekInterpolatedWaterHeight(x, y, 2).
+    std::vector<float> lvl(depth.size(), 0.0f);
+    std::vector<uint8_t> cellIce(depth.size(), 0);
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
-            if (raw[size_t(y) * cx + x] <= 0.0f) continue;
-            float sum = 0.0f; int n = 0;
-            for (int j = std::max(0, y - 2); j <= std::min(cy - 1, y + 2); ++j)
-                for (int i = std::max(0, x - 2); i <= std::min(cx - 1, x + 2); ++i)
-                    if (raw[size_t(j) * cx + i] > 0.0f) { sum += raw[size_t(j) * cx + i]; ++n; }
-            lvl[size_t(y) * cx + x] = n ? sum / float(n) : raw[size_t(y) * cx + x];
+            int cxm = x, cym = y;
+            if (depth[size_t(y) * cx + x] <= 0.0f) {
+                bool found = false;
+                for (int j = std::max(0, y - 2); j <= std::min(cy - 1, y + 2) && !found; ++j)
+                    for (int i = std::max(0, x - 2); i <= std::min(cx - 1, x + 2) && !found; ++i)
+                        if (depth[size_t(j) * cx + i] > 0.0f) { cxm = i; cym = j; found = true; }
+                if (!found) continue;
+            }
+            float sum = 0.0f; int n = 0, iceN = 0;
+            for (int j = std::max(0, cym - 2); j <= std::min(cy - 1, cym + 2); ++j)
+                for (int i = std::max(0, cxm - 2); i <= std::min(cx - 1, cxm + 2); ++i)
+                    if (depth[size_t(j) * cx + i] > 0.001f) { sum += ground(i, j) + depth[size_t(j) * cx + i]; ++n; iceN += ice[size_t(j) * cx + i]; }
+            if (n) { lvl[size_t(y) * cx + x] = sum / float(n); cellIce[size_t(y) * cx + x] = iceN * 2 > n; }
         }
-    // Cells with a wet corner are drawn; a dry corner takes the wet mean of its
-    // cell so the sheet reaches the bank instead of stopping one cell short.
     WaterMesh& w = scene.water;
     w.wetVertices = wet;
-    std::vector<int> vidx(raw.size(), -1);
-    auto emit = [&](int x, int y, float h, bool isIce) {
+    std::vector<int> vidx(depth.size(), -1);
+    auto emit = [&](int x, int y) {
         int& id = vidx[size_t(y) * cx + x];
         if (id >= 0) return uint32_t(id);
+        const float L = lvl[size_t(y) * cx + x];
         float px, py, pz;
-        toUp(options.up, options.originX + float(x), options.originY + float(y), h, px, py, pz);
+        toUp(options.up, options.originX + float(x), options.originY + float(y), L - 0.1f, px, py, pz);
         w.positions.insert(w.positions.end(), {px, py, pz});
-        w.ice.push_back(isIce ? 1 : 0);
+        w.ice.push_back(cellIce[size_t(y) * cx + x]);
+        w.fade.push_back(std::clamp((L + 0.1f - ground(x, y)) / 2.0f, 0.0f, 1.0f));
         id = int(w.positions.size() / 3 - 1);
         return uint32_t(id);
     };
     for (int y = 0; y + 1 < cy; ++y)
         for (int x = 0; x + 1 < cx; ++x) {
             const int c[4] = {y * cx + x, y * cx + x + 1, (y + 1) * cx + x, (y + 1) * cx + x + 1};
-            float sum = 0.0f; int n = 0;
-            for (int k : c) if (lvl[size_t(k)] > 0.0f) { sum += lvl[size_t(k)]; ++n; }
-            if (n == 0) continue;
-            const float fill = sum / float(n);
+            const int xs[4] = {x, x + 1, x, x + 1}, ys[4] = {y, y, y + 1, y + 1};
+            bool all = true, visible = false;
+            for (int k = 0; k < 4; ++k) {
+                const float L = lvl[size_t(c[k])];
+                all = all && L > 0.0f;
+                visible = visible || (L > 0.0f && L - 0.1f > ground(xs[k], ys[k]));   // the vertex itself pokes out of the ground
+            }
+            if (!all || !visible) continue;
             int iceN = 0;
-            for (int k : c) if (lvl[size_t(k)] > 0.0f && ice[size_t(k)]) ++iceN;
-            const bool cellIce = iceN * 2 > n;
-            auto hAt = [&](int k) { return lvl[size_t(k)] > 0.0f ? lvl[size_t(k)] : fill; };
-            const uint32_t a = emit(x, y, hAt(c[0]), cellIce), b = emit(x + 1, y, hAt(c[1]), cellIce);
-            const uint32_t cc = emit(x, y + 1, hAt(c[2]), cellIce), d = emit(x + 1, y + 1, hAt(c[3]), cellIce);
-            auto& tri = cellIce ? w.iceIndices : w.indices;
+            for (int k : c) iceN += cellIce[size_t(k)];
+            const uint32_t a = emit(x, y), b = emit(x + 1, y), cc = emit(x, y + 1), d = emit(x + 1, y + 1);
+            auto& tri = iceN >= 2 ? w.iceIndices : w.indices;
             tri.insert(tri.end(), {a, cc, b, b, cc, d});
         }
 }
@@ -497,22 +507,27 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         layer.defIndex = r.defIndex;
         layer.resolved = r.resolved;
         layer.vertexReferences = r.cellCount;
-        if (r.resolved) {
-            layer.baseTexture = r.textures.base[0];
-            layer.cliffTexture = r.textures.cliff[0];
-            if (const auto* t = ctx.library.byDefIndex(r.defIndex)) { layer.waterHeight = t->waterHeight; layer.waterType = t->waterType; }
-        } else if (const auto* byName = r.paletteName.empty() ? nullptr : ctx.library.byName(r.paletteName);
-                   byName && byName->decoded) {
-            // The LEV stores a GLOBAL def index that goes stale when game.bin changes
-            // (maps authored against an older bank). The palette also stores the
-            // name, and names are stable, so fall back to it.
+        // The LEV stores a GLOBAL def index that goes stale when game.bin changes
+        // (maps authored against an older bank); the palette also stores the name
+        // and names are stable. Retail LEVs are stale: Bowerstone Bridge's slot
+        // "WATER_BWLAKE_8" points at index 1934, which is WATER_BWLAKE_1 in the
+        // shipped game.bin (and "WATER_BWLAKE_0" at 1929 is Hook Coast ICE). So
+        // when the name at the stored index disagrees with the palette name and the
+        // palette name exists, the NAME wins.
+        const auto* byName = r.paletteName.empty() ? nullptr : ctx.library.byName(r.paletteName);
+        if (byName && byName->decoded && (!r.resolved || !r.nameMatches)) {
+            if (r.resolved) ++scene.nameResolvedThemes;
             layer.resolved = true;
             layer.defIndex = byName->defIndex;
             layer.baseTexture = byName->textures.base[0];
             layer.cliffTexture = byName->textures.cliff[0];
             layer.waterHeight = byName->waterHeight;
             layer.waterType = byName->waterType;
-            ++scene.nameResolvedThemes;
+            if (!r.resolved) ++scene.nameResolvedThemes;
+        } else if (r.resolved) {
+            layer.baseTexture = r.textures.base[0];
+            layer.cliffTexture = r.textures.cliff[0];
+            if (const auto* t = ctx.library.byDefIndex(r.defIndex)) { layer.waterHeight = t->waterHeight; layer.waterType = t->waterType; }
         } else {
             ++scene.unresolvedThemes;
             say(options, scene, "palette slot " + std::to_string(r.slot) + " (" + layer.name +
@@ -746,6 +761,12 @@ int appendTerrain(glb::Builder& b, const Scene& scene) {
         std::vector<float> wnrm(wn * 3, 0.0f);
         for (size_t i = 0; i < wn; ++i) { if (scene.up == UpAxis::Y) wnrm[i * 3 + 1] = 1.0f; else wnrm[i * 3 + 2] = 1.0f; }
         json wattr = {{"POSITION", b.positions(scene.water.positions)}, {"NORMAL", b.vec3(wnrm)}};
+        {
+            // COLOR_0 alpha = the engine's depth fade (0 at the shore, 1 at 2+ units deep).
+            std::vector<uint8_t> col(wn * 4, 255);
+            for (size_t i = 0; i < wn; ++i) col[i * 4 + 3] = uint8_t(std::lround(255.0f * scene.water.fade[i]));
+            wattr["COLOR_0"] = b.accessor(b.view(col.data(), col.size(), 34962, 4), 5121, "VEC4", wn, {{"normalized", true}});
+        }
         json prims = json::array();
         if (!scene.water.indices.empty()) {
             const int wmat = b.material({{"name", "water"},
@@ -761,7 +782,7 @@ int appendTerrain(glb::Builder& b, const Scene& scene) {
         }
         const int wmesh = b.mesh({{"name", "water"},
                                   {"extras", {{"wet_vertices", scene.water.wetVertices},
-                                              {"note", "ground + LEV theme blend * ENGINE_THEME WaterHeight, 5x5 mean (engine water level); ice = EWaterType 8"}}},
+                                              {"note", "ground + LEV theme blend * ENGINE_THEME WaterHeight, 5x5 mean, at level - 0.1 (engine water patch); COLOR_0 alpha = depth fade over 2 units; ice = EWaterType 8"}}},
                                   {"primitives", prims}});
         node["children"] = {b.node({{"name", "Water"}, {"mesh", wmesh}})};
     }
