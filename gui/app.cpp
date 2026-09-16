@@ -1004,8 +1004,9 @@ void App::drawViewport(float width) {
         auto_.registerWidget("chip_water");
         const char* hint = "RMB look + WASD fly   LMB dolly/turn   MMB pan   Alt+LMB orbit   Wheel zoom   F frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
-        if (!twoRows && lx - hs.x - S(24) > modesEnd + S(16))
-            dl->AddText(ImVec2(lx - hs.x - S(24), yModes + (rowH - hs.y) * 0.5f), theme::col(theme::Faint), hint);
+        const float hintRight = lx - ImGui::CalcTextSize("Show:").x - S(8) - S(28);   // clear of the "Show:" caption
+        if (!twoRows && hintRight - hs.x > modesEnd + S(16))
+            dl->AddText(ImVec2(hintRight - hs.x, yModes + (rowH - hs.y) * 0.5f), theme::col(theme::Faint), hint);
         else if (renderer_.hasMesh() && previewLoaded() && size.y > S(300))
             dl->AddText(ImVec2(origin.x + S(16), origin.y + S(64) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)), theme::col(theme::Faint), hint);
         ImGui::PopFont();
