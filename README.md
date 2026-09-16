@@ -45,7 +45,6 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --foliage           add the baked grass/plants/trees as mesh instances (needs an install)
 --things            add the placed objects from the map's .tng (needs an install)
 --creatures         with --things: include creature meshes in bind pose
---holes             EXPERIMENTAL: cut out cells with no STB foreground triangles (over-cuts today)
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 4 — see "Known gaps")
@@ -66,8 +65,10 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   in the map's STB chunk that parses as a cache-group collection is used (type-1
   grass batches and type-0 single meshes incl. trees). Type-2 z-sprite batches
   (distant impostors) are skipped and counted. Counts per mesh are in the log.
-* **Holes / caves** — the mesh is the full grid. An experimental `--holes` mask
-  from the STB foreground frames exists but still over-cuts whole patches; off by default.
+* **Terrain brightness** — Fable's base textures are authored dark (the engine's
+  lighting brightens them in-game by a factor that is not pinned down); the export
+  keeps the raw texels and offers `--gain` to brighten. Caves are heightfield floors
+  with mesh walls — there are no holes to cut (verified against the STB frames).
 * **No water plane** — sea themes export as their seabed texture.
 * **No lights, particles, creatures (by default), scripts.**
 

@@ -11,7 +11,7 @@ ok   mouse_down right
 ok   key_down W
 ok   frames 30
 ok   key_up W
-ok   assert_camera_moved 0.5  (moved 2.696185)
+ok   assert_camera_moved 0.5  (moved 2.689712)
 ok   snapshot_camera
 ok   mouse_delta 80 0
 ok   frames 2
@@ -61,6 +61,7 @@ shot build/ui/c3_orbited.png
      layers=0
      walkable=0
      texels=8
+     gain=1.00
      mesh_vertices=4225
      batch_active=0
      foliage_loaded=1
@@ -71,8 +72,6 @@ shot build/ui/c3_orbited.png
      preview_things=1
      export_things=1
      world=0
-     holes=0
-     hidden_cells=0
      region=Arena
      batch_done=0
      batch_failed=0

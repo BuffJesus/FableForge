@@ -356,7 +356,7 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
     return !foliage_.empty();
 }
 
-bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera) {
+bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool frameCamera) {
     releaseMesh();
     if (scene.vertices.empty() || scene.indices.empty()) return false;
     std::vector<GpuVertex> verts(scene.vertices.size());
@@ -392,8 +392,10 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera) {
     }
     minH_ = mn[1]; maxH_ = mx[1];
     const float span = std::max({mx[0] - mn[0], mx[2] - mn[2], 8.0f});
-    camera.lookAt((mn[0] + mx[0]) * 0.5f, (mn[1] + mx[1]) * 0.5f, (mn[2] + mx[2]) * 0.5f, 0.8f, 0.62f, span * 0.95f);
-    camera.flySpeed = std::max(span * 0.25f, 4.0f);
+    if (frameCamera) {
+        camera.lookAt((mn[0] + mx[0]) * 0.5f, (mn[1] + mx[1]) * 0.5f, (mn[2] + mx[2]) * 0.5f, 0.8f, 0.62f, span * 0.95f);
+        camera.flySpeed = std::max(span * 0.25f, 4.0f);
+    }
     return true;
 }
 

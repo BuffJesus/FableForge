@@ -52,10 +52,10 @@ int usage() {
         "  --foliage           add the baked grass/plants/trees as mesh instances (needs install)\n"
         "  --things            add the placed objects (fences, walls, rocks, buildings) from the .tng\n"
         "  --creatures         with --things: include creature meshes in bind pose\n"
-        "  --holes             EXPERIMENTAL: cut out cells with no foreground triangles (known to over-cut)\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 4)\n"
+        "  --gain <f>          brighten the baked ground texture (1 = raw texels; ~2 looks like in-game)\n"
         "  --up <y|z>          up axis: y = glTF/Blender/Unreal-friendly (default), z = Fable native\n"
         "  --world             place the map at its world position (WLD MapX/MapY) so maps line up\n"
         "  --origin <x,y>      add an explicit offset (Fable units) to every vertex\n"
@@ -205,9 +205,9 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false, holes = false;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false;
     int texels = 8;
-    float tile = 4.0f;
+    float tile = 4.0f, gain = 1.0f;
     for (size_t i = 1; i < args.size(); ++i) {
         const std::string& a = args[i];
         auto next = [&]() -> std::string {
@@ -220,12 +220,11 @@ int main(int argc, char** argv) {
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
         else if (a == "--world") world = true;
-        else if (a == "--holes") holes = true;
-        else if (a == "--no-holes") holes = false;
         else if (a == "--creatures") creatures = true;
         else if (a == "--layers") layers = true;
         else if (a == "--texels") texels = std::atoi(next().c_str());
         else if (a == "--tile") tile = float(std::atof(next().c_str()));
+        else if (a == "--gain") gain = float(std::atof(next().c_str()));
         else if (a == "--up") upArg = lower(next());
         else if (a == "--origin") originArg = next();
         else if (a == "--walkable-colors") walkable = true;
@@ -246,6 +245,13 @@ int main(int argc, char** argv) {
         struct TempGuard { fs::path p; ~TempGuard() { if (!p.empty()) { std::error_code ec; fs::remove(p, ec); } } } guard{temp};
 
         if (cmd == "info") return cmdInfo(lev);
+        if (cmd == "coverage") {   // diagnostic: how many cells the STB foreground frames draw (expected: all)
+            const auto file = forge::lev::File::open(lev);
+            const auto mask = albion::stbterrain::load(install.root, lev.stem().string(), file.width(), file.height());
+            std::printf("%s: %d of %d cells drawn by %d foreground frames%s\n", lev.stem().string().c_str(), mask.presentCells,
+                        file.width() * file.height(), mask.frames, mask.found ? "" : (" (" + mask.note + ")").c_str());
+            return mask.found && mask.presentCells == file.width() * file.height() ? 0 : 1;
+        }
         if (cmd != "export") return usage();
 
         if (out.empty()) out = lev.stem().string() + ".glb";
@@ -261,6 +267,7 @@ int main(int argc, char** argv) {
         o.walkableColor = walkable;
         o.texelsPerCell = std::clamp(texels, 1, 64);
         o.tileSize = tile;
+        o.gain = std::clamp(gain, 0.25f, 4.0f);
         o.up = upArg == "z" ? te::UpAxis::Z : te::UpAxis::Y;
         if (!originArg.empty()) {
             const size_t c = originArg.find(',');
@@ -297,14 +304,6 @@ int main(int argc, char** argv) {
             std::string err;
             if (!ctx.load(install.root, install.root / "data" / "graphics" / "pc" / "textures.big", err))
                 std::fprintf(stderr, "warning: %s\n", err.c_str());
-        }
-        albion::stbterrain::CellMask mask;
-        if (holes && install.valid) {
-            mask = albion::stbterrain::load(install.root, lev.stem().string(), file.width(), file.height());
-            if (mask.found) {
-                o.cellMask = &mask.present;
-                if (!quiet) std::printf("  engine draws %d of %d cells (%d foreground frames); the rest are cut out\n", mask.presentCells, file.width() * file.height(), mask.frames);
-            } else if (!quiet) std::printf("  no patch mask (%s): full grid\n", mask.note.c_str());
         }
         const te::Scene scene = te::buildScene(file, o, &ctx);
         albion::foliageexport::Scene fol;

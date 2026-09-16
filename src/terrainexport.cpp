@@ -469,6 +469,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     if (options.log) options.log("baking " + std::to_string(W) + "x" + std::to_string(H) + " albedo");
     scene.albedo = rgbaImage(W, H, std::vector<uint8_t>(size_t(W) * H * 4, 255), "albedo");
     const float tile = options.tileSize > 0 ? options.tileSize : 4.0f;
+    const float gain = options.gain > 0 ? options.gain : 1.0f;
 
     struct Acc { int slot; float w; };
     for (uint32_t py = 0; py < H; ++py) {
@@ -538,7 +539,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             uint8_t* out = &scene.albedo.rgba[(size_t(py) * W + px) * 4];
             if (total > 0)
                 for (int i = 0; i < 3; ++i)
-                    out[i] = uint8_t(std::clamp(rgb[i] / total + 0.5f, 0.0f, 255.0f));
+                    out[i] = uint8_t(std::clamp(rgb[i] / total * gain + 0.5f, 0.0f, 255.0f));
             else out[0] = out[1] = out[2] = 128;
             out[3] = 255;
         }

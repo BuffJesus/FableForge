@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -122,16 +124,35 @@ CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth
 
     std::vector<uint8_t> touched(m.present.size(), 0);
     int frames = 0;
+    const bool debug = std::getenv("ALBION_DEBUG") != nullptr;
+    int total = 0, fgParsed = 0, rejected = 0;
     forEachFrame(chunk, [&](const std::vector<uint8_t>& body) {
+        ++total;
         std::vector<Layer> layers;
         if (!parseForeground(body, layers)) return;
+        ++fgParsed;
+        if (debug) {
+            int minx = 1 << 30, maxx = -(1 << 30), miny = 1 << 30, maxy = -(1 << 30); size_t verts = 0, strips = 0;
+            for (const auto& L : layers) { for (auto [x, y] : L.xy) { minx = std::min<int>(minx, x); maxx = std::max<int>(maxx, x); miny = std::min<int>(miny, y); maxy = std::max<int>(maxy, y); ++verts; } strips += L.strip.size(); }
+            std::fprintf(stderr, "fg frame %zu bytes: %zu layers, %zu verts, %zu strip idx, x %d..%d y %d..%d (local %d..%d, %d..%d)\n",
+                         body.size(), layers.size(), verts, strips, minx, maxx, miny, maxy, minx - worldX, maxx - worldX, miny - worldY, maxy - worldY);
+        }
         // Vertices are stored in WORLD grid units; sanity-check against the map box.
-        const std::vector<uint16_t>* lastStrip = nullptr;
         bool any = false;
         for (const auto& L : layers) {
-            const std::vector<uint16_t>* strip = L.shared ? lastStrip : &L.strip;
-            if (!L.shared) lastStrip = &L.strip;
-            if (!strip || strip->size() < 3) continue;
+            if (L.shared) {
+                // sharedIndexBuffer = the engine's canonical full-grid index buffer for
+                // this vertex grid (a 17x17 layer is a complete 16x16 patch): every
+                // cell inside the layer's vertex box is drawn.
+                int minx = 1 << 30, maxx = -(1 << 30), miny = 1 << 30, maxy = -(1 << 30);
+                for (auto [vx, vy] : L.xy) { minx = std::min<int>(minx, int(vx) - worldX); maxx = std::max<int>(maxx, int(vx) - worldX); miny = std::min<int>(miny, int(vy) - worldY); maxy = std::max<int>(maxy, int(vy) - worldY); }
+                if (minx < 0 || miny < 0 || maxx > mapWidth || maxy > mapHeight || maxx - minx > 64 || maxy - miny > 64) { ++rejected; continue; }
+                for (int y = miny; y < maxy && y < mapHeight; ++y)
+                    for (int x = minx; x < maxx && x < mapWidth; ++x) { touched[size_t(y) * mapWidth + x] = 1; any = true; }
+                continue;
+            }
+            const std::vector<uint16_t>* strip = &L.strip;
+            if (strip->size() < 3) continue;
             for (size_t i = 2; i < strip->size(); ++i) {
                 const uint16_t a = (*strip)[i - 2], b = (*strip)[i - 1], c = (*strip)[i];
                 if (a == b || b == c || a == c) continue;   // degenerate bridge
@@ -139,7 +160,7 @@ CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth
                 int ys[3] = {int(L.xy[a].second) - worldY, int(L.xy[b].second) - worldY, int(L.xy[c].second) - worldY};
                 const int x0 = std::min({xs[0], xs[1], xs[2]}), x1 = std::max({xs[0], xs[1], xs[2]});
                 const int y0 = std::min({ys[0], ys[1], ys[2]}), y1 = std::max({ys[0], ys[1], ys[2]});
-                if (x0 < 0 || y0 < 0 || x1 > mapWidth || y1 > mapHeight || x1 - x0 > 32 || y1 - y0 > 32) return;  // not this map's frame
+                if (x0 < 0 || y0 < 0 || x1 > mapWidth || y1 > mapHeight || x1 - x0 > 32 || y1 - y0 > 32) { ++rejected; if (debug) std::fprintf(stderr, "  rejected tri local (%d..%d, %d..%d)\n", x0, x1, y0, y1); continue; }  // out of this map box: skip the triangle
                 // Decimated patches span several cells per triangle: mark the box.
                 for (int y = y0; y < std::max(y1, y0 + 1) && y < mapHeight; ++y)
                     for (int x = x0; x < std::max(x1, x0 + 1) && x < mapWidth; ++x) { touched[size_t(y) * mapWidth + x] = 1; any = true; }
@@ -148,6 +169,7 @@ CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth
         if (any) ++frames;
     });
     m.frames = frames;
+    if (debug) std::fprintf(stderr, "frames total %d, foreground-parsed %d, used %d, rejected %d\n", total, fgParsed, frames, rejected);
     if (frames == 0) { m.note = "no foreground frames matched"; return m; }
     m.found = true;
     m.present = std::move(touched);

@@ -63,6 +63,7 @@ ok   filter
      layers=0
      walkable=0
      texels=8
+     gain=1.00
      mesh_vertices=3201
      batch_active=0
      foliage_loaded=1
@@ -73,8 +74,6 @@ ok   filter
      preview_things=1
      export_things=1
      world=0
-     holes=0
-     hidden_cells=0
      region=Loose files
      batch_done=3
      batch_failed=0

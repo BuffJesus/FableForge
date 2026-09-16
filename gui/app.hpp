@@ -18,7 +18,6 @@
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "renderer.hpp"
-#include "stbterrain.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 
@@ -39,12 +38,12 @@ struct ExportSettings {
     bool textures = true;
     int texels = 8;
     float tile = 4.0f;
+    float gain = 1.0f;
     bool layers = false;
     bool walkable = false;
     bool foliage = true;     // export baked grass/plants as instances
     bool things = true;      // export placed objects (.tng)
     bool world = false;      // place at WLD MapX/MapY so maps line up
-    bool holes = false;      // EXPERIMENTAL: cut out cells with no foreground triangles (over-cuts; off by default)
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;
 };
@@ -210,6 +209,8 @@ private:
     std::string batchCurrent_;
     bool focusFilter_ = false;
     bool scrollToSelected_ = false;
+    bool gainDirty_ = false;
+    std::string lastFramedFor_;
     std::vector<std::pair<int, std::string>> log_;   // level, line (0 info, 1 warn, 2 error, 3 success)
     std::mutex logMutex_;
     std::vector<std::pair<int, std::string>> logPending_;

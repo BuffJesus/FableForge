@@ -51,7 +51,7 @@ public:
     bool init(ID3D11Device* device, ID3D11DeviceContext* context);
     // Upload a scene (positions/normals/uv already in the scene's up-axis
     // space; the renderer expects Y-up). Frames the camera on the map.
-    bool upload(const terrainexport::Scene& scene, Camera& camera);
+    bool upload(const terrainexport::Scene& scene, Camera& camera, bool frameCamera = true);
     void clear();
     bool hasMesh() const { return indexCount_ > 0; }
     // Instance layers (0 = foliage, 1 = placed things): every instance baked

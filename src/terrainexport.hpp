@@ -50,6 +50,9 @@ struct Options {
     std::filesystem::path texturesBig;
     int texelsPerCell = 8;         // baked albedo resolution per cell edge
     float tileSize = 4.0f;         // world units per texture repeat (see header)
+    // Albedo gain. Fable's base textures are authored dark and the engine's
+    // lighting brightens them by an unpinned factor; 1.0 keeps raw texels.
+    float gain = 1.0f;
     float cliffStartSlope = 0.55f; // tan(angle) where cliff blending begins (~29 deg)
     float cliffFullSlope = 1.4f;   // tan(angle) where cliff fully replaces base (~54 deg)
     bool layers = false;           // also emit splat attributes + per-slot PNGs
