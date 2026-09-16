@@ -304,7 +304,7 @@ void App::selectMap(const std::string& nameOrKey) {
     scrollToSelected_ = true;
     groupOpen_[it->group] = true;
     renderer_.clearLayer(0);
-    renderer_.clearLayer(1);
+    renderer_.clearThings();
     foliageLoadedFor_.clear();
     foliageInstances_ = 0;
     thingInstances_ = 0;
@@ -542,7 +542,7 @@ void App::pollWorkers() {
                 foliageStatus_ = r.scene.found ? "no baked foliage" : "no foliage bank entry";
             }
             if (!r.things.instances.empty()) {
-                renderer_.uploadLayer(1, r.things, te::UpAxis::Y);
+                renderer_.uploadThings(r.things, te::UpAxis::Y);
                 foliageStatus_ += ", " + std::to_string(r.things.instances.size()) + " objects";
             } else if (r.things.found) {
                 foliageStatus_ += ", no placed objects";

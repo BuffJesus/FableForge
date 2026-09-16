@@ -69,6 +69,36 @@ public:
     void clearFoliage() { clearLayer(0); }
     bool hasFoliage() const { return hasLayer(0); }
 
+    // Placed things are drawn per instance (one world matrix each) so the
+    // editor can move them without re-baking: meshes live on the GPU once,
+    // instances are a CPU list of (mesh, world) that setInstanceWorld updates.
+    // World matrices are 4x4 row-vector Fable-space (rows = local axes incl.
+    // the cm scale, row 3 = position); the up-axis swap is applied here.
+    struct InstanceDraw {
+        int mesh = -1;
+        int thing = -1;          // .tng thing index (selection / highlight)
+        float world[16] = {};    // render space
+        bool visible = true;
+    };
+    bool uploadThings(const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    void clearThings();
+    bool hasThings() const { return !instances_.empty(); }
+    size_t instanceCount() const { return instances_.size(); }
+    const InstanceDraw& instance(size_t i) const { return instances_[i]; }
+    void setInstanceWorld(size_t i, const float fableWorld[16]);
+    void setInstanceVisible(size_t i, bool on) { if (i < instances_.size()) instances_[i].visible = on; }
+    int selectedThing = -1;  // instances of this thing are outlined
+    // Ray (render space) against every visible instance's mesh; returns the
+    // instance index or -1, with `t` the hit distance.
+    int pick(const float origin[3], const float dir[3], float& t) const;
+    // Ray through viewport-relative (u, v) in [0,1] for the last rendered frame.
+    void screenRay(float u, float v, float origin[3], float dir[3]) const;
+    // Matrices of the last rendered frame (row-vector layout, translation at 12..14).
+    const float* viewMatrix() const { return lastView_; }
+    const float* projMatrix() const { return lastProj_; }
+    // Bounding sphere of one instance in render space (for framing the camera).
+    bool instanceBounds(size_t i, float center[3], float& radius) const;
+
     // Renders into the offscreen target at the given size and returns its SRV
     // (valid until the next render call).
     ID3D11ShaderResourceView* render(uint32_t width, uint32_t height, const Camera& camera,
@@ -103,6 +133,20 @@ private:
     ID3D11ShaderResourceView* albedo_ = nullptr;
     struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; };
     std::vector<FoliageBatch> layers_[kLayers];
+    struct GpuMesh {
+        std::vector<FoliageBatch> parts;   // vertex buffers in mesh-local Fable axes (cm)
+        std::vector<float> tris;           // CPU copy for picking: 9 floats per triangle
+        float bmin[3] = {0, 0, 0}, bmax[3] = {0, 0, 0};
+    };
+    std::vector<GpuMesh> meshes_;
+    std::vector<InstanceDraw> instances_;
+    terrainexport::UpAxis thingsUp_ = terrainexport::UpAxis::Y;
+    ID3D11Buffer* ocbuffer_ = nullptr;     // per-object constants (world, tint)
+    ID3D11DepthStencilState* depthOverlay_ = nullptr;
+    void setObject(const float world[16], const float tint[4]);
+    float lastView_[16] = {}, lastProj_[16] = {};
+    Camera lastCamera_;
+    float lastAspect_ = 1.0f;
     ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img);
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;

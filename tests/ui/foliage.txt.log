@@ -55,11 +55,12 @@ ok   assert_file build/ui/StartOakValeWest.glb
      mesh_vertices=29025
      batch_active=0
      foliage_loaded=1
-     foliage_instances=4437
+     foliage_instances=4446
      preview_foliage=1
      export_foliage=1
-     thing_instances=600
+     thing_instances=725
      preview_things=1
+     preview_water=1
      export_things=1
      world=0
      region=StartOakVale

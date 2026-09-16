@@ -72,6 +72,7 @@ ok   filter
      export_foliage=1
      thing_instances=0
      preview_things=1
+     preview_water=1
      export_things=1
      world=0
      region=Loose files
