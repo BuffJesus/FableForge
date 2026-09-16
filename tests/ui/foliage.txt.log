@@ -75,5 +75,7 @@ ok   assert_file build/ui/StartOakValeWest.glb
      doc_changes=0
      selected_thing=-1
      gizmo=1
+     terrain_dirty=0
+     terrain_center_height=13.874
 ok   quit
 RESULT PASS

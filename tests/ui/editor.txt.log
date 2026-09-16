@@ -3,7 +3,7 @@ ok   wait_ready
 ok   select StartOakValeWest
 ok   wait_loaded
 ok   wait_foliage
-ok   set saveroot build/ui/install
+ok   set saveroot build/ui_editor_install
 ok   edit 1
 ok   frames 2
 ok   assert_state edit_mode 1
@@ -69,15 +69,51 @@ ok   select_def OBJECT_BARREL_BREAKABLE -> 6
 ok   move_thing 0 0 1
 ok   frames 1
 ok   save_level
-ok   assert_file build/ui/install/data/Levels/FinalAlbion/StartOakValeWest.tng
+ok   assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
 ok   assert_state doc_dirty 0
-..   click seg_panel
+ok   edit 1
+ok   terrain_mode 0
+ok   brush 8 6
 ok   frames 2
+ok   assert_widget seg_terrain_mode
+ok   assert_state terrain_dirty 0
+ok   terrain_stroke 64 112 1
+ok   frames 2
+ok   assert_state terrain_dirty 1
+ok   camera 64 112 20 0.8 0.9 60
+ok   frames 2
+ok   screenshot build/ui/e6_terrain_hill.png
+shot build/ui/e6_terrain_hill.png
+ok   mode walkable
+ok   terrain_mode 5
+ok   brush 10 1
+ok   terrain_stroke 64 112 1
+ok   frames 2
+ok   screenshot build/ui/e7_terrain_blocked.png
+shot build/ui/e7_terrain_blocked.png
+ok   mode textured
+ok   undo
+ok   undo
+ok   frames 2
+ok   assert_state terrain_dirty 0
+ok   set unsaved_prompt 1
+ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+ok   move_thing 0 0 0.5
+ok   frames 1
+ok   select Greatwood_1
+ok   frames 2
+ok   assert_widget btn_unsaved_cancel
+ok   screenshot build/ui/e8_unsaved_prompt.png
+shot build/ui/e8_unsaved_prompt.png
+..   click btn_unsaved_discard
+ok   frames 3
+ok   assert_state selected Greatwood_1
+ok   set unsaved_prompt 0
      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
      install_valid=1
      maps=399
-     selected=StartOakValeWest
-     preview_loaded=1
+     selected=Greatwood_1
+     preview_loaded=0
      preview_textured=1
      context_ready=1
      mode=Textured
@@ -91,29 +127,28 @@ ok   frames 2
      gain=1.00
      mesh_vertices=29025
      batch_active=0
-     foliage_loaded=1
-     foliage_instances=4446
+     foliage_loaded=0
+     foliage_instances=0
      preview_foliage=1
      export_foliage=1
-     thing_instances=725
+     thing_instances=0
      preview_things=1
      preview_water=1
      export_things=1
      world=0
-     region=StartOakVale
+     region=GreatwoodEntrance
      batch_done=0
      batch_failed=0
      filter=
-     camera=108.66,14.48,-89.77
+     camera=90.75,67.00,-86.02
      edit_mode=1
      doc_loaded=1
-     doc_things=874
+     doc_things=313
      doc_dirty=0
      doc_changes=0
-     selected_thing=6
-     selected_def=OBJECT_BARREL_BREAKABLE
-     selected_pos=103.993,94.307,10.115
-     selected_scale=1.000
-     gizmo=1
+     selected_thing=-1
+     gizmo=4
+     terrain_dirty=0
+     terrain_center_height=42.442
 ok   quit
 RESULT PASS

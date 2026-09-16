@@ -37,6 +37,8 @@
 
 #include "forge/lev.hpp"
 
+namespace forge::terraintex { class ThemeLibrary; }
+
 namespace albion::terrainexport {
 
 // Which axis is "up" in the exported file. Fable is Z-up right-handed; glTF is
@@ -191,6 +193,8 @@ public:
     // Names of every game.bin definition whose type is one of `types` (e.g.
     // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
     std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;
+    // The install's ENGINE_THEME library (palette slot -> textures); nullptr until ready().
+    const forge::terraintex::ThemeLibrary* themeLibrary() const;
     struct Impl;
     Impl& impl() const { return *impl_; }
 private:

@@ -164,10 +164,14 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
         const int cx = level_->cellsX(), cy = level_->cellsY();
         t->heights.resize(size_t(cx) * cy);
         t->walkable.resize(size_t(cx) * cy);
+        t->themeIndex.resize(size_t(cx) * cy);
+        t->themeStrength.resize(size_t(cx) * cy);
         for (int y = 0; y < cy; ++y)
             for (int x = 0; x < cx; ++x) {
-                t->heights[size_t(y) * cx + x] = level_->heightAt(x, y);
-                t->walkable[size_t(y) * cx + x] = level_->walkableAt(x, y) ? 1 : 0;
+                const size_t i = size_t(y) * cx + x;
+                t->heights[i] = level_->heightAt(x, y);
+                t->walkable[i] = level_->walkableAt(x, y) ? 1 : 0;
+                for (int k = 0; k < 3; ++k) { t->themeIndex[i][k] = level_->themeIndexAt(x, y, k); t->themeStrength[i][k] = level_->themeStrengthAt(x, y, k); }
             }
         terrain_ = t;
         savedTerrain_ = t;
@@ -253,9 +257,11 @@ void Document::restore(const Snapshot& s) {
     file_ = forge::tng::File::parseText(s.tng, mapName_ + ".tng");
     ++revision_;
     if (s.terrain && s.terrain != terrain_) {
+        const bool themes = s.terrain->themeIndex != terrain_->themeIndex || s.terrain->themeStrength != terrain_->themeStrength;
         terrain_ = s.terrain;
         writeTerrainToLevel();
         ++terrainRev_;
+        if (themes) ++themeRev_;
     }
 }
 
@@ -267,6 +273,9 @@ void Document::writeTerrainToLevel() {
             const size_t i = size_t(y) * cx + x;
             if (level_->heightAt(x, y) != terrain_->heights[i]) level_->setHeightAt(x, y, terrain_->heights[i]);
             if (level_->walkableAt(x, y) != (terrain_->walkable[i] != 0)) level_->setWalkableAt(x, y, terrain_->walkable[i] != 0);
+            bool sameTheme = true;
+            for (int k = 0; k < 3; ++k) sameTheme = sameTheme && level_->themeIndexAt(x, y, k) == terrain_->themeIndex[i][k] && level_->themeStrengthAt(x, y, k) == terrain_->themeStrength[i][k];
+            if (!sameTheme) level_->setThemeBlendAt(x, y, terrain_->themeIndex[i], terrain_->themeStrength[i]);
         }
 }
 
@@ -297,6 +306,23 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
+    if (brush.mode == Mode::Theme) {
+        // paint straight into the level (the library brush keeps the 3-slot invariant), then mirror the touched cells
+        forge::terrain::ThemeBrush tb;
+        tb.centerX = brush.x; tb.centerY = brush.y; tb.radius = brush.radius;
+        tb.opacity = std::clamp(brush.strength * dt, 0.0f, 1.0f);
+        tb.themeIndex = brush.themeIndex;
+        forge::terrain::applyThemeBrush(*level_, tb);
+        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius)) - 1), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)) + 1);
+        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius)) - 1), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)) + 1);
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const size_t i = size_t(y) * cx + x;
+                for (int k = 0; k < 3; ++k) { working_->themeIndex[i][k] = level_->themeIndexAt(x, y, k); working_->themeStrength[i][k] = level_->themeStrengthAt(x, y, k); }
+            }
+        ++terrainRev_;
+        return;
+    }
     forge::terrain::Brush b;
     b.centerX = brush.x; b.centerY = brush.y; b.radius = brush.radius;
     switch (brush.mode) {
@@ -315,17 +341,25 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
 void Document::endStroke() {
     if (!stroke_) return;
     stroke_ = false;
+    const bool themes = working_->themeIndex != terrain_->themeIndex || working_->themeStrength != terrain_->themeStrength;
     terrain_ = std::shared_ptr<const TerrainState>(working_.release());
     hf_.reset();
     writeTerrainToLevel();
     ++revision_;
     ++terrainRev_;
+    if (themes) ++themeRev_;
+}
+
+bool Document::themesDirty() const {
+    if (!terrain_ || !savedTerrain_ || terrain_ == savedTerrain_) return false;
+    return terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength;
 }
 
 bool Document::terrainDirty() const {
     if (!terrain_ || !savedTerrain_) return false;
     if (terrain_ == savedTerrain_) return false;
-    return terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable;
+    return terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable ||
+           terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength;
 }
 
 std::optional<float> Document::terrainHeight(float x, float y) const {
@@ -363,8 +397,11 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error) {
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
-bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error) {
+bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                             const forge::terraintex::ThemeLibrary* library) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
+    const bool themesChanged = themesDirty();
+    if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
     try {
         // 1. loose .lev (also the bytes for the WAD)
         if (!saveTerrainLoose(gameRoot, error)) return false;
@@ -414,6 +451,16 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         if (!wm) { error = mapName_ + " is not placed in FinalAlbion.wld"; return false; }
         forge::stbbake::HeightfieldBakeOptions opt;
         opt.requireCanonicalSize = false;
+        if (themesChanged) {
+            // regenerate every foreground layer mesh from the LEV themes (the
+            // editor's ReadThemesAndCreateLayers): new material regions get
+            // their own passes, direction masks come from the new normals
+            opt.rebuildTopology = true;
+            opt.rebuildDirectionMask = true;
+            opt.themes = forge::terraintex::paletteMaterials(*level_, *library);
+            opt.themes.resize(256);
+            notes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette");
+        }
         // Neighbouring maps (every map a region owning this one contains or
         // sees, whose placement touches ours) supply the shared-edge samples,
         // as the retail bake did. Their LEVs come from the WAD (loose copies

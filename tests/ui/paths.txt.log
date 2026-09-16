@@ -87,5 +87,7 @@ ok   filter
      doc_changes=0
      selected_thing=-1
      gizmo=1
+     terrain_dirty=0
+     terrain_center_height=120.421
 ok   quit
 RESULT PASS

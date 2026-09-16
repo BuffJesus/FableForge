@@ -328,8 +328,34 @@ void App::revertDocument() {
 
 // ------------------------------------------------------------ terrain tool
 
+void App::startThemeRebake() {
+    if (!documentLoaded() || !doc_.hasTerrain() || !ctx_.ready()) return;
+    if (previewFuture_.valid()) { rebakePending_ = true; return; }
+    rebakePending_ = false;
+    const MapEntry* found = findEntry(selectedName_);
+    if (!found) return;
+    const MapEntry entry = *found;
+    const te::Context* ctx = &ctx_;
+    const int texels = previewTexels_;
+    const float gain = settings_.gain;
+    auto level = std::make_shared<forge::lev::File>(*doc_.level());   // snapshot: strokes may continue meanwhile
+    previewFuture_ = std::async(std::launch::async, [entry, ctx, texels, gain, level]() {
+        PreviewResult r; r.name = entry.key; r.textured = true;
+        try {
+            te::Options o;
+            o.textures = true; o.texelsPerCell = texels; o.gain = gain; o.up = te::UpAxis::Y;
+            o.gameRoot = ctx->gameRoot();
+            o.engineLayers = false;   // painted themes only exist in the LEV; bake from it
+            r.scene = te::buildScene(*level, o, ctx);
+        } catch (const std::exception& e) { r.error = e.what(); }
+        return r;
+    });
+}
+
 void App::syncTerrain() {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
+    if (doc_.themeRevision() != syncedThemeRev_) { syncedThemeRev_ = doc_.themeRevision(); if (syncedThemeRev_ > 1 || doc_.themesDirty()) startThemeRebake(); }
+    if (rebakePending_ && !previewFuture_.valid()) startThemeRebake();
     if (doc_.terrainRevision() == syncedTerrainRev_) return;
     const auto& t = doc_.liveTerrain();
     if (renderer_.updateTerrain(t.heights.data(), t.walkable.data(), doc_.cellsX(), doc_.cellsY()))
@@ -355,9 +381,10 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     int mode = terrainMode_;
     if (io.KeyShift && (mode == 0 || mode == 1)) mode = 1 - mode;
     if (io.KeyShift && (mode == 4 || mode == 5)) mode = 9 - mode;
-    b.mode = mode == 0 ? M::Raise : mode == 1 ? M::Lower : mode == 2 ? M::Flatten : mode == 3 ? M::Smooth : mode == 4 ? M::Walkable : M::Blocked;
+    b.mode = mode == 0 ? M::Raise : mode == 1 ? M::Lower : mode == 2 ? M::Flatten : mode == 3 ? M::Smooth : mode == 4 ? M::Walkable : mode == 5 ? M::Blocked : M::Theme;
     b.x = brushFable_[0]; b.y = brushFable_[1];
     b.radius = brushRadius_; b.strength = brushStrength_;
+    b.themeIndex = uint8_t(paintTheme_);
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
     if (!doc_.strokeActive() && lmb && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && brushHit_ && !io.KeyAlt) {
         doc_.beginStroke(b);
@@ -373,8 +400,9 @@ void App::terrainStroke(float x, float y, float seconds) {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
     editor::TerrainBrush b;
     using M = editor::TerrainBrush::Mode;
-    b.mode = terrainMode_ == 0 ? M::Raise : terrainMode_ == 1 ? M::Lower : terrainMode_ == 2 ? M::Flatten : terrainMode_ == 3 ? M::Smooth : terrainMode_ == 4 ? M::Walkable : M::Blocked;
+    b.mode = terrainMode_ == 0 ? M::Raise : terrainMode_ == 1 ? M::Lower : terrainMode_ == 2 ? M::Flatten : terrainMode_ == 3 ? M::Smooth : terrainMode_ == 4 ? M::Walkable : terrainMode_ == 5 ? M::Blocked : M::Theme;
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
+    b.themeIndex = uint8_t(paintTheme_);
     doc_.beginStroke(b);
     doc_.applyBrush(b, seconds);
     doc_.endStroke();
@@ -395,7 +423,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         if (!renderer_.project(p, u, v)) return;
         pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
     }
-    const ImU32 col = terrainMode_ >= 4 ? (terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : IM_COL32(230, 80, 90, 230)) : theme::col(theme::Accent);
+    const ImU32 col = terrainMode_ == 6 ? IM_COL32(240, 200, 80, 230) : terrainMode_ >= 4 ? (terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : IM_COL32(230, 80, 90, 230)) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     // centre dot
     const auto hc = doc_.terrainHeight(brushFable_[0], brushFable_[1]);
@@ -409,10 +437,11 @@ void App::startTerrainDeploy() {
     if (doc_.strokeActive()) doc_.endStroke();
     editor::Document* doc = &doc_;
     const std::string root = saveRoot();
+    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
     pushLog("terrain: writing .lev, FinalAlbion.wad and re-baking the FinalAlbion_RT.stb chunk...", 0);
-    terrainDeployFuture_ = std::async(std::launch::async, [doc, root]() {
+    terrainDeployFuture_ = std::async(std::launch::async, [doc, root, lib]() {
         TerrainDeployResult r;
-        r.ok = doc->deployTerrain(root, r.notes, r.error);
+        r.ok = doc->deployTerrain(root, r.notes, r.error, lib);
         return r;
     });
 }
@@ -553,9 +582,26 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         int shape = terrainMode_ < 4 ? terrainMode_ : -1;
         if (theme::segmented("##tmode", shape, {"Raise", "Lower", "Flatten", "Smooth"}, cardInner) && shape >= 0) terrainMode_ = shape;
         auto_.registerWidget("seg_terrain_mode");
-        int walk = terrainMode_ >= 4 ? terrainMode_ - 4 : -1;
-        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
+        int walk = (terrainMode_ >= 4 && terrainMode_ <= 6) ? terrainMode_ - 4 : -1;
+        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked", "Paint ground"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
         auto_.registerWidget("seg_terrain_walk");
+        if (terrainMode_ == 6) {
+            // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name)
+            const char* current = "(pick a ground theme)";
+            for (const auto& t : previewScene_.themes) if (t.slot == paintTheme_) current = t.name.c_str();
+            ImGui::SetNextItemWidth(cardInner);
+            if (ImGui::BeginCombo("##paintTheme", current)) {
+                for (const auto& t : previewScene_.themes) {
+                    char lbl[160]; std::snprintf(lbl, sizeof lbl, "%d  %s", t.slot, t.name.c_str());
+                    if (ImGui::Selectable(lbl, t.slot == paintTheme_)) paintTheme_ = t.slot;
+                }
+                ImGui::EndCombo();
+            }
+            auto_.registerWidget("combo_paint_theme");
+            ImGui::PushFont(fontSmall_);
+            theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material.");
+            ImGui::PopFont();
+        }
         char val[48];
         std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
         theme::labelValue("Radius   ( [ ] )", val, cardInner);

@@ -1509,6 +1509,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
     else if (cmd == "terrain_mode") { app.setTerrainMode(std::atoi(rest.c_str())); app.setGizmoOp(4); note("ok   " + line); ++pc_; }
+    else if (cmd == "paint_theme") { app.setPaintTheme(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
     else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }

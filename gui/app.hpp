@@ -161,6 +161,7 @@ public:
     // terrain tool (scripted tests): one brush application at a map-local point
     void terrainStroke(float x, float y, float seconds);
     void setTerrainMode(int m) { terrainMode_ = m; }
+    void setPaintTheme(int slot) { paintTheme_ = slot; }
     void setBrush(float radius, float strength) { brushRadius_ = radius; brushStrength_ = strength; }
     bool terrainDeployBusy() const { return terrainDeployFuture_.valid(); }
     void deployTerrain() { startTerrainDeploy(); }
@@ -232,7 +233,11 @@ private:
     char thingSearch_[64] = {};
     bool confirmDeploy_ = false;
     // terrain tool (gizmoOp_ == 4)
-    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked
+    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme
+    int paintTheme_ = 0;             // LEV palette slot for mode 6
+    uint64_t syncedThemeRev_ = 0;
+    bool rebakePending_ = false;     // a theme stroke ended: re-bake the ground albedo from the LEV
+    void startThemeRebake();
     float brushRadius_ = 6.0f;
     float brushStrength_ = 4.0f;
     bool brushHit_ = false;

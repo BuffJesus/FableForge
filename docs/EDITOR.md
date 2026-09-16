@@ -32,7 +32,12 @@ the crashes. The engine formats are written by FableForge's `forgecore`
 
 * **Brushes**: raise / lower / flatten / smooth on the LEV heightfield
   (`forge::terrain::applyBrush`, smooth radial falloff), walkable / blocked
-  cell painting. Live preview: the renderer rebuilds the terrain vertex buffer
+  cell painting, and **ground-theme paint** (`Paint ground` + a picker over
+  the map's LEV palette): `forge::terrain::applyThemeBrush` blends the chosen
+  slot into the cell's three blend slots keeping the retail invariant
+  (weights sum to 255). After a theme stroke the preview re-bakes the ground
+  albedo from the LEV (`engineLayers=false`) so the painted material shows.
+  Live preview: the renderer rebuilds the terrain vertex buffer
   in place with recomputed normals every frame of a stroke; the brush ring is
   projected onto the ground. One undo step per stroke, on the same stack as
   the object edits.
@@ -65,6 +70,13 @@ the crashes. The engine formats are written by FableForge's `forgecore`
   query (`CWorldMap::GetGroundSizeZAt`) returns the edited heights at 121/121
   sample points and the hero teleported onto the hill stands at the new height.
   Saves cache region state, so enter the region fresh to see an edit.
+* **Theme paint deploy**: when ground themes were painted the bake runs with `rebuildTopology`
+  (`ReadThemesAndCreateLayers`: every foreground layer mesh is regenerated
+  from the LEV themes so a new material region gets its own passes) and
+  `rebuildDirectionMask`; the palette's ENGINE_THEME materials come from the
+  texture context's `ThemeLibrary`. **In-game verified** (2026-09-16):
+  GROUND_PATH_DRYMUD_GREEN painted into Oakvale West, deployed, the harness
+  loads the region without a crash and ground heights still match 121/121.
 
 ## The engine's LZO decoder (why 0.4.0 crashed)
 
@@ -129,10 +141,8 @@ reload the things layer from the in-memory `.tng` text.
 
 ## Next
 
-1. Visible material paint: wire theme materials into the bake's topology
-   rebuild so a painted theme region gets its own layer passes.
-2. Nav: regenerate only the cells a stroke touched, keeping the retail
+1. Nav: regenerate only the cells a stroke touched, keeping the retail
    collision lines elsewhere.
-3. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
-4. Live link to the running game through ForgeFSE (spawn/move/reload without a
+2. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
+3. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

@@ -483,12 +483,31 @@ void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.terrain().walkable[size_t(1) * 5 + 1] == 0 && !doc.level()->walkableAt(1, 1));
     CHECK(doc.level()->walkableAt(2, 2));   // even rows are walkable in the synthetic map
+    // ground-theme paint: slot 1 painted over the slot-0 left edge keeps the 3-slot invariant
+    CHECK(!doc.themesDirty());
+    const uint64_t themeRev0 = doc.themeRevision();
+    b.mode = albion::editor::TerrainBrush::Mode::Theme; b.themeIndex = 1; b.radius = 0.6f; b.x = 0; b.y = 0; b.strength = 10.0f;
+    doc.beginStroke(b); doc.applyBrush(b, 1.0f); doc.endStroke();
+    CHECK(doc.themesDirty() && doc.terrainDirty() && doc.themeRevision() == themeRev0 + 1);
+    {
+        const auto& t = doc.terrain();
+        int sum = 0; bool hasSlot1 = false;
+        for (int k = 0; k < 3; ++k) { sum += t.themeStrength[0][k]; hasSlot1 = hasSlot1 || (t.themeIndex[0][k] == 1 && t.themeStrength[0][k] > 0); }
+        CHECK(sum == 255 && hasSlot1);
+        CHECK(doc.level()->themeStrengthAt(0, 0, 0) == t.themeStrength[0][0]);   // mirrored into the .lev
+        CHECK(t.themeIndex[size_t(3) * 5 + 4] == doc.terrain().themeIndex[size_t(3) * 5 + 4]);
+    }
+    CHECK(doc.undo() && !doc.themesDirty() && doc.themeRevision() == themeRev0 + 2);
+    CHECK(doc.redo() && doc.themesDirty());
     // loose save under a scratch root, then reopen and compare
     const fs::path root = dir / "terrain_root";
     CHECK(doc.saveTerrainLoose(root, err));
     CHECK(!doc.terrainDirty());
     const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "Synthetic.lev");
     CHECK(near(saved.heightAt(2, 2), h0 + 2.0f) && !saved.walkableAt(1, 1) && saved.walkableAt(2, 2));
+    bool savedSlot1 = false;
+    for (int k = 0; k < 3; ++k) savedSlot1 = savedSlot1 || (saved.themeIndexAt(0, 0, k) == 1 && saved.themeStrengthAt(0, 0, k) > 0);
+    CHECK(savedSlot1);
 }
 
 int main() {

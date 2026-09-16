@@ -480,6 +480,10 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
     return out;
 }
 
+const forge::terraintex::ThemeLibrary* Context::themeLibrary() const {
+    return ready() ? &impl_->library : nullptr;
+}
+
 Context::Context() : impl_(std::make_shared<Impl>()) {}
 bool Context::ready() const { return impl_ && impl_->ready; }
 fs::path Context::gameRoot() const { return impl_ ? impl_->gameRoot : fs::path(); }

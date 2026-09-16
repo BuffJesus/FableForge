@@ -84,6 +84,15 @@ function AtlasProbe(questObject)
         end
     end
     if ATLAS_TELEPORT then
+        -- wait until the opening scenes are over (the harness keeps pressing Esc) so the screenshot shows the spot
+        for i = 1, 90 do
+            local cok, ctrl = pcall(function() return Q:IsHeroControlledByPlayer() end)
+            if i == 1 or i %% 10 == 0 then Q:Log("ATLAS_PROBE|waitcontrol|" .. tostring(cok) .. "|" .. tostring(ctrl)) end
+            if cok and ctrl then break end
+            Q:Pause(1.0)
+            if not Q:NewScriptFrame() then Q:Log("ATLAS_PROBE|error|thread ended while waiting for control"); return end
+        end
+        Q:Log("ATLAS_PROBE|control")
         local tz = 0
         pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
         local tok, terr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}, 0.0) end)
@@ -285,12 +294,16 @@ def main() -> int:
         # ---- wait for the probe
         deadline = time.time() + a.timeout
         done = False
+        last_esc = 0.0
         while time.time() < deadline:
             text = log.read_text(errors="ignore") if log.exists() else ""
             if "ATLAS_PROBE|done" in text or "ATLAS_PROBE|error" in text:
                 done = True; break
             if not game_running():
                 result["notes"].append("game exited before the probe finished"); break
+            if a.teleport and "ATLAS_PROBE|control" not in text and time.time() - last_esc > 6:
+                ps("-Action", "key", "-Keys", "ESC")   # skip whatever scene is playing until the hero is ours
+                last_esc = time.time()
             time.sleep(2)
         ps("-Action", "capture", "-Output", str(shots / "04_after_probe.png"))
         text = log.read_text(errors="ignore") if log.exists() else ""

@@ -29,6 +29,7 @@
 
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
+#include "forge/terraintex.hpp"
 #include "forge/thingplacer.hpp"
 #include "forge/tng.hpp"
 
@@ -56,14 +57,17 @@ bool invert(const float m[16], float out[16]);
 struct TerrainState {
     std::vector<float> heights;
     std::vector<uint8_t> walkable;
+    std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
+    std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
 };
 
 struct TerrainBrush {
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked };
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
-    float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth)
+    float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth/theme)
+    uint8_t themeIndex = 0;    // Theme: LEV palette slot to paint
 };
 
 struct ThingSummary {
@@ -150,11 +154,16 @@ public:
     void endStroke();
     uint64_t terrainRevision() const { return terrainRev_; }
     bool terrainDirty() const;
+    bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
+    uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
     // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
     // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,
     // patched in place; one-time .atlas-orig backups). `notes` gets the bake log.
-    bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error);
+    // `library` (the install's ENGINE_THEME defs) is needed when themes were
+    // painted: the layer meshes are regenerated from the LEV themes then.
+    bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                       const forge::terraintex::ThemeLibrary* library = nullptr);
     bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error);
 
 private:
@@ -174,6 +183,7 @@ private:
     bool stroke_ = false;
     float flattenTarget_ = 0;
     uint64_t terrainRev_ = 0;
+    uint64_t themeRev_ = 0;
     uint64_t revision_ = 0;
     mutable uint64_t dirtyRev_ = ~0ull;
     mutable bool dirtyValue_ = false;
