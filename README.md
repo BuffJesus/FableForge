@@ -116,6 +116,8 @@ dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames
 the map. Textured / Wireframe / Walkable / Height views, Foliage toggle. Right:
 export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
 are remembered in `%APPDATA%\AlbionAtlas`.
+The UI is DPI-aware and scales with the window (0.85x on small windows up to 1.25x on
+a 1440p one); it stays usable down to 1024 x 700.
 
 ## Building
 

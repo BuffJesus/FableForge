@@ -97,20 +97,14 @@ const char* kModeNames[] = {"Textured", "Wireframe", "Walkable", "Height"};
 
 // ------------------------------------------------------------------ App
 
-App::App() = default;
-App::~App() = default;
-
-bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
-               const std::string& installOverride) {
-    device_ = device; context_ = context; hwnd_ = hwnd;
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
+void App::buildFonts(float scale) {
     ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
     const char* fontsDir = "C:\\Windows\\Fonts\\";
     auto tryFont = [&](const char* file, float size) -> ImFont* {
         const std::string p = std::string(fontsDir) + file;
         if (!fs::exists(p)) return nullptr;
-        return io.Fonts->AddFontFromFileTTF(p.c_str(), size);
+        return io.Fonts->AddFontFromFileTTF(p.c_str(), std::round(size * scale));
     };
     fontBody_ = tryFont("segoeui.ttf", 17.0f);
     fontBold_ = tryFont("seguisb.ttf", 17.0f);
@@ -121,7 +115,23 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
     if (!fontTitle_) fontTitle_ = fontBody_;
     if (!fontSmall_) fontSmall_ = fontBody_;
     io.FontDefault = fontBody_;
+    io.Fonts->Build();
+    uiScale_ = wantScale_ = scale;
+    theme::setScale(scale);
     theme::applyTheme();
+}
+
+void App::rebuildFonts() { buildFonts(wantScale_); }
+
+App::App() = default;
+App::~App() = default;
+
+bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
+               const std::string& installOverride) {
+    device_ = device; context_ = context; hwnd_ = hwnd;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+    buildFonts(dpiScale_);
 
     if (!renderer_.init(device_, context_)) {
         pushLog(std::string("renderer: ") + renderer_.error(), 2);
@@ -629,6 +639,13 @@ void App::frame(float dt) {
     }
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
+    {
+        // Size factor: a 1200 px tall window is 1.0; 1080p runs at 0.9, 1440p at 1.2,
+        // anything shorter than ~1000 px at 0.85. Snapped to 0.05 so a resize does not
+        // rebuild fonts every frame.
+        const float sizeFactor = std::clamp(vp->Size.y / 1200.0f, 0.85f, 1.25f);
+        wantScale_ = std::round(dpiScale_ * sizeFactor * 20.0f) / 20.0f;
+    }
     ImGui::SetNextWindowPos(vp->Pos);
     ImGui::SetNextWindowSize(vp->Size);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -642,9 +659,9 @@ void App::frame(float dt) {
     drawTitleBar();
 
     const float total = ImGui::GetContentRegionAvail().x;
-    const float left = std::clamp(total * 0.22f, 240.0f, 320.0f);
-    const float right = std::clamp(total * 0.25f, 300.0f, 380.0f);
-    const float middle = std::max(total - left - right, 200.0f);
+    const float left = std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f));
+    const float right = std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f));
+    const float middle = std::max(total - left - right, theme::S(200.0f));
 
     drawExplorer(left);
     ImGui::SameLine(0, 0);
@@ -657,38 +674,48 @@ void App::frame(float dt) {
 
 void App::drawTitleBar() {
     const ImVec2 p = ImGui::GetCursorScreenPos();
+    using theme::S;
     const float w = ImGui::GetContentRegionAvail().x;
-    const float h = 52.0f;
+    const float h = S(52.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::col(theme::Bg1));
     dl->AddLine(ImVec2(p.x, p.y + h), ImVec2(p.x + w, p.y + h), theme::col(theme::Border));
     // accent mark
-    dl->AddRectFilled(ImVec2(p.x + 18, p.y + 14), ImVec2(p.x + 24, p.y + h - 14), theme::col(theme::Accent), 3.0f);
+    dl->AddRectFilled(ImVec2(p.x + S(18), p.y + S(14)), ImVec2(p.x + S(24), p.y + h - S(14)), theme::col(theme::Accent), S(3.0f));
 
-    ImGui::SetCursorScreenPos(ImVec2(p.x + 36, p.y + 11));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + S(36), p.y + S(11)));
     ImGui::PushFont(fontTitle_);
     ImGui::TextUnformatted("Albion Atlas");
+    const float titleEnd = ImGui::GetItemRectMax().x;
     ImGui::PopFont();
-    ImGui::SameLine(0, 12);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8);
-    ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), "Fable: The Lost Chapters terrain exporter");
-    ImGui::PopFont();
+    const float btnW = S(92.0f);
+    const float subtitleW = ImGui::CalcTextSize("Fable: The Lost Chapters terrain exporter").x;
+    if (w > S(760)) {
+        ImGui::SameLine(0, S(12));
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(8));
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Faint), "Fable: The Lost Chapters terrain exporter");
+        ImGui::PopFont();
+    }
 
-    // install status (right side)
+    // install status (right side), shortened from the left when there is no room
     ImGui::PushFont(fontSmall_);
     std::string status = installValid_ ? installPath_ : "no install selected";
+    const float statusMax = std::max(S(120.0f), p.x + w - btnW - S(70) - (titleEnd + (w > S(760) ? subtitleW + S(24) : S(12))));
+    if (ImGui::CalcTextSize(status.c_str()).x > statusMax) {
+        while (status.size() > 4 && ImGui::CalcTextSize(("..." + status).c_str()).x > statusMax) status.erase(0, 1);
+        status = "..." + status;
+    }
     const float statusW = ImGui::CalcTextSize(status.c_str()).x;
-    const float btnW = 92.0f;
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - statusW - btnW - 40, p.y + 17));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + w - statusW - btnW - S(40), p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
     const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn))
                                     : theme::col(theme::Error);
-    dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - 12, ImGui::GetCursorScreenPos().y + 9), 4.0f, dot);
+    dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - S(12), ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
     ImGui::TextColored(theme::vec(theme::Muted), "%s", status.c_str());
+    if (installValid_ && ImGui::IsItemHovered()) ImGui::SetTooltip("%s  (%s)", installPath_.c_str(), installSource_.c_str());
     ImGui::PopFont();
-    ImGui::SameLine(0, 12);
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - 18, p.y + 11));
-    if (theme::ghostButton("Change...", ImVec2(btnW, 30))) {
+    ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18), p.y + (h - S(30)) * 0.5f));
+    if (theme::ghostButton("Change...", ImVec2(btnW, S(30)))) {
         const std::string picked = pickFolder(hwnd_, installPath_);
         if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
     }
@@ -703,7 +730,8 @@ void App::drawExplorer(float width) {
     const ImVec2 p0 = ImGui::GetWindowPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + width - 1, p0.y), ImVec2(p0.x + width - 1, p0.y + ImGui::GetWindowHeight()), theme::col(theme::Border));
 
-    ImGui::SetCursorPos(ImVec2(16, 14));
+    using theme::S;
+    ImGui::SetCursorPos(ImVec2(S(16), S(14)));
     ImGui::PushFont(fontBold_);
     ImGui::TextColored(theme::vec(theme::Muted), "MAPS");
     ImGui::PopFont();
@@ -720,21 +748,21 @@ void App::drawExplorer(float width) {
     }
     ImGui::PopFont();
 
-    ImGui::SetCursorPosX(16);
-    ImGui::SetNextItemWidth(width - 32);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 7));
+    ImGui::SetCursorPosX(S(16));
+    ImGui::SetNextItemWidth(width - S(32));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(7)));
     if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     if (ImGui::InputTextWithHint("##filter", "Search maps...   (Ctrl+F)", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
     ImGui::PopStyleVar();
     auto_.registerWidget("input_filter");
-    ImGui::Dummy(ImVec2(0, 6));
+    ImGui::Dummy(ImVec2(0, S(6)));
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
     ImGui::BeginChild("##maplist", ImVec2(0, 0), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
     if (maps_.empty()) {
-        ImGui::SetCursorPos(ImVec2(16, 20));
-        ImGui::PushTextWrapPos(width - 24);
+        ImGui::SetCursorPos(ImVec2(S(16), S(20)));
+        ImGui::PushTextWrapPos(width - S(24));
         ImGui::TextColored(theme::vec(theme::Faint),
                            installValid_ ? "Reading FinalAlbion.wad..." :
                            "No install found.\n\nClick \"Change...\" and pick your\n\"Fable The Lost Chapters\" folder.");
@@ -755,8 +783,8 @@ void App::drawExplorer(float width) {
                 currentGroup = m.group;
                 bool& open = groupOpen_[m.group];
                 if (!f.empty()) open = true;          // searching expands
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
-                ImGui::SetCursorPosX(8);
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(5)));
+                ImGui::SetCursorPosX(S(8));
                 ImGui::PushFont(fontBold_);
                 ImGui::PushStyleColor(ImGuiCol_Header, theme::vec(theme::Bg1));
                 ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::vec(theme::Bg2));
@@ -766,7 +794,7 @@ void App::drawExplorer(float width) {
                 groupVisible = ImGui::TreeNodeEx(m.group.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_FramePadding, "%s", m.group.c_str());
                 ImGui::SameLine();
                 ImGui::PushFont(fontSmall_);
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(3));
                 ImGui::TextColored(theme::vec(theme::Faint), "%d", groupCount[m.group]);
                 ImGui::PopFont();
                 open = groupVisible;
@@ -780,14 +808,14 @@ void App::drawExplorer(float width) {
             }
             if (!groupVisible) continue;
             const bool selected = m.key == selectedName_;
-            ImGui::SetCursorPosX(26);
+            ImGui::SetCursorPosX(S(26));
             ImGui::PushID(m.key.c_str());
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(8), S(5)));
             ImGui::PushStyleColor(ImGuiCol_Header, theme::vec(theme::AccentSoft));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, theme::vec(theme::Bg2));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, theme::vec(theme::AccentSoft));
             if (selected) ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::AccentText));
-            if (ImGui::Selectable(m.name.c_str(), selected, ImGuiSelectableFlags_None, ImVec2(0, 24))) selectMap(m.key);
+            if (ImGui::Selectable(m.name.c_str(), selected, ImGuiSelectableFlags_None, ImVec2(0, S(24)))) selectMap(m.key);
             if (selected) ImGui::PopStyleColor();
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar();
@@ -798,7 +826,7 @@ void App::drawExplorer(float width) {
             ImGui::PopID();
         }
         if (shown == 0) {
-            ImGui::SetCursorPos(ImVec2(16, 20));
+            ImGui::SetCursorPos(ImVec2(S(16), S(20)));
             ImGui::TextColored(theme::vec(theme::Faint), "No map matches \"%s\"", filter_.c_str());
         }
     }
@@ -869,6 +897,7 @@ void App::drawViewport(float width) {
     }
     auto_.registerWidget("viewport");
 
+    using theme::S;
     // Empty state / loading overlay.
     const bool loading = previewFuture_.valid();
     if (!renderer_.hasMesh() || loading) {
@@ -883,29 +912,29 @@ void App::drawViewport(float width) {
         const ImVec2 c(origin.x + (size.x - ts.x) * 0.5f, origin.y + (size.y - ts.y) * 0.5f);
         if (!renderer_.hasMesh()) {
             // soft accent ring
-            dl->AddCircle(ImVec2(origin.x + size.x * 0.5f, c.y - 44), 26.0f, theme::col(theme::AccentSoft), 48, 6.0f);
-            dl->AddCircle(ImVec2(origin.x + size.x * 0.5f, c.y - 44), 26.0f, theme::col(theme::Accent), 48, 2.0f);
+            dl->AddCircle(ImVec2(origin.x + size.x * 0.5f, c.y - S(44)), S(26.0f), theme::col(theme::AccentSoft), 48, S(6.0f));
+            dl->AddCircle(ImVec2(origin.x + size.x * 0.5f, c.y - S(44)), S(26.0f), theme::col(theme::Accent), 48, S(2.0f));
         }
-        if (loading) dl->AddRectFilled(ImVec2(c.x - 14, c.y - 8), ImVec2(c.x + ts.x + 14, c.y + ts.y + 8), theme::col(theme::Bg1) | 0xE0000000, 8.0f);
+        if (loading) dl->AddRectFilled(ImVec2(c.x - S(14), c.y - S(8)), ImVec2(c.x + ts.x + S(14), c.y + ts.y + S(8)), theme::col(theme::Bg1) | 0xE0000000, S(8.0f));
         dl->AddText(c, theme::col(loading ? theme::Text : theme::Muted), msg.c_str());
         ImGui::PopFont();
     }
 
     // HUD: map name + stats (top-left)
     if (renderer_.hasMesh() && previewLoaded()) {
-        ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 14));
+        ImGui::SetCursorScreenPos(ImVec2(origin.x + S(16), origin.y + S(14)));
         ImGui::PushFont(fontTitle_);
         const MapEntry* cur = findEntry(previewLoadedFor_);
         ImGui::TextUnformatted(cur ? cur->name.c_str() : previewLoadedFor_.c_str());
         if (cur && !cur->loosePath.empty()) {
-            ImGui::SameLine(0, 10);
+            ImGui::SameLine(0, S(10));
             ImGui::PushFont(fontSmall_);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 9);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(9));
             ImGui::TextColored(theme::vec(theme::Faint), "%s", cur->loosePath.c_str());
             ImGui::PopFont();
         }
         ImGui::PopFont();
-        ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 44));
+        ImGui::SetCursorScreenPos(ImVec2(origin.x + S(16), origin.y + S(44)));
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells   |   %zu vertices   |   height %.1f .. %.1f%s",
                            previewScene_.mapWidth, previewScene_.mapHeight,
@@ -917,97 +946,113 @@ void App::drawViewport(float width) {
             else if (!foliageStatus_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "   |   %s", foliageStatus_.c_str());
         }
         if (previewTextured_ && previewScene_.unresolvedThemes > 0) {
-            ImGui::SetCursorScreenPos(ImVec2(origin.x + 16, origin.y + 64));
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + S(16), origin.y + S(64)));
             ImGui::TextColored(theme::vec(theme::Warn), "%d of %zu ground themes have no texture in this install (shown grey)",
                                previewScene_.unresolvedThemes, previewScene_.themes.size());
         }
         ImGui::PopFont();
     }
 
-    // Mode chips (bottom-left) and hints (bottom-right)
+    // Chips along the bottom: view modes on the left, layers on the right. When the
+    // viewport is too narrow for one row the layer chips move up onto a second row.
     {
         ImGui::PushFont(fontSmall_);
-        float x = origin.x + 14;
-        const float y = origin.y + size.y - 38;
+        const float gap = S(6), rowH = ImGui::GetFrameHeight() + S(2);
+        auto chipW = [&](const char* t) { return ImGui::CalcTextSize(t).x + S(24); };
+        float modesW = 0; for (int i = 0; i < 4; ++i) modesW += chipW(kModeNames[i]) + gap;
+        modesW += chipW("Frame  (F)") + S(8);
+        const char* layerNames[3] = {"Foliage", "Objects", "Water"};
+        float layersW = 0; for (const char* n : layerNames) layersW += chipW(n) + gap;
+        const bool twoRows = modesW + layersW + S(32) > size.x;
+        const float yModes = origin.y + size.y - rowH - S(10);
+        const float yLayers = twoRows ? yModes - rowH - S(4) : yModes;
+        float x = origin.x + S(14);
         for (int i = 0; i < 4; ++i) {
-            ImGui::SetCursorScreenPos(ImVec2(x, y));
+            ImGui::SetCursorScreenPos(ImVec2(x, yModes));
             const bool on = int(mode_) == i;
             if (theme::chip(kModeNames[i], on)) mode_ = ViewMode(i);
             auto_.registerWidget((std::string("chip_") + lower(kModeNames[i])).c_str());
-            x += ImGui::GetItemRectSize().x + 6;
+            x += ImGui::GetItemRectSize().x + gap;
         }
-        ImGui::SetCursorScreenPos(ImVec2(x + 8, y));
+        ImGui::SetCursorScreenPos(ImVec2(x + S(8), yModes));
         if (theme::chip("Frame  (F)", false)) frameMap();
         auto_.registerWidget("chip_reset");
-        ImGui::SameLine(0, 6);
+        const float modesEnd = ImGui::GetItemRectMax().x;
+        // layer chips, right-aligned
+        float lx = origin.x + size.x - S(14) - layersW + gap;
+        if (!twoRows && lx < modesEnd + S(16)) lx = modesEnd + S(16);
+        ImGui::SetCursorScreenPos(ImVec2(lx, yLayers));
         if (theme::chip("Foliage", previewFoliage_)) setPreviewFoliage(!previewFoliage_);
         auto_.registerWidget("chip_foliage");
-        ImGui::SameLine(0, 6);
+        ImGui::SameLine(0, gap);
         if (theme::chip("Objects", previewThings_)) setPreviewThings(!previewThings_);
         auto_.registerWidget("chip_things");
-        ImGui::SameLine(0, 6);
+        ImGui::SameLine(0, gap);
         if (theme::chip("Water", renderer_.showWater)) renderer_.showWater = !renderer_.showWater;
         auto_.registerWidget("chip_water");
-        x = ImGui::GetItemRectMax().x;
-        const char* hint = "RMB: look + WASD fly (Q/E, Shift)   LMB: dolly/turn   MMB: pan   Alt+LMB: orbit   Wheel: zoom   F: frame";
+        const char* hint = "RMB look + WASD fly   LMB dolly/turn   MMB pan   Alt+LMB orbit   Wheel zoom   F frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
-        if (origin.x + size.x - hs.x - 16 > x + 20)
-            dl->AddText(ImVec2(origin.x + size.x - hs.x - 16, y + 6), theme::col(theme::Faint), hint);
+        if (!twoRows && lx - hs.x - S(24) > modesEnd + S(16))
+            dl->AddText(ImVec2(lx - hs.x - S(24), yModes + (rowH - hs.y) * 0.5f), theme::col(theme::Faint), hint);
+        else if (renderer_.hasMesh() && previewLoaded() && size.y > S(300))
+            dl->AddText(ImVec2(origin.x + S(16), origin.y + S(64) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)), theme::col(theme::Faint), hint);
         ImGui::PopFont();
     }
     ImGui::EndChild();
 }
 
 void App::drawActions(float width) {
+    using theme::S;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
     ImGui::BeginChild("##actions", ImVec2(width, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor();
     const ImVec2 p0 = ImGui::GetWindowPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x, p0.y), ImVec2(p0.x, p0.y + ImGui::GetWindowHeight()), theme::col(theme::Border));
-    const float inner = width - 32;
-    const float logHeight = 140.0f;
+    const float pad = S(16), inner = width - 2 * pad;
     // Footer: primary Export + batch/open-folder rows. Always visible, never scrolls away.
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = 42 + 8 + 32 + (showOpen ? 40 : 0) + (showRegion ? 40 : 0) + (batchActive() ? 40 : 0) + 16;
+    const float footerHeight = S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    // The settings stack takes what it needs (measured last frame); the activity log
+    // takes the rest, never less than a few lines. On a short window the settings
+    // scroll instead of pushing the export button off screen.
+    const float availH = ImGui::GetContentRegionAvail().y;
+    const float logMin = S(72), logHeader = S(30);
+    float settingsH = settingsContentH_ > 0 ? settingsContentH_ + S(8) : availH * 0.6f;
+    settingsH = std::min(settingsH, availH - footerHeight - logHeader - logMin);
+    settingsH = std::max(settingsH, S(120));
+    const float logHeight = std::max(logMin, availH - settingsH - footerHeight - logHeader);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
-    ImGui::BeginChild("##settings", ImVec2(width, ImGui::GetContentRegionAvail().y - logHeight - footerHeight - 30), ImGuiChildFlags_None);
+    ImGui::BeginChild("##settings", ImVec2(width, settingsH), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
 
-    ImGui::SetCursorPos(ImVec2(16, 14));
+    ImGui::SetCursorPos(ImVec2(pad, S(14)));
     ImGui::PushFont(fontBold_);
     ImGui::TextColored(theme::vec(theme::Muted), "EXPORT");
     ImGui::PopFont();
-    ImGui::Dummy(ImVec2(0, 4));
+    ImGui::Dummy(ImVec2(0, S(4)));
 
-    ImGui::SetCursorPosX(16);
+    const float cardInner = inner - S(24);
+    ImGui::SetCursorPosX(pad);
     theme::beginCard("##fmt", inner);
     theme::label("Format");
-    if (theme::segmented("##format", settings_.format, {"GLB", "OBJ"}, inner - 24)) {}
+    if (theme::segmented("##format", settings_.format, {"GLB", "OBJ"}, cardInner)) {}
     auto_.registerWidget("seg_format");
-    ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), settings_.format == 0 ? "One self-contained .glb, textures embedded. Blender, Unreal, three.js."
-                                                                       : ".obj + .mtl + albedo .png next to it.");
-    ImGui::PopFont();
-    ImGui::Dummy(ImVec2(0, 6));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", settings_.format == 0 ? "One self-contained .glb, textures embedded. Blender, Unreal, three.js." : ".obj + .mtl + albedo .png next to it.");
+    ImGui::Dummy(ImVec2(0, S(2)));
     theme::label("Up axis");
-    theme::segmented("##up", settings_.up, {"Y up  (glTF)", "Z up  (Fable)"}, inner - 24);
-    ImGui::Dummy(ImVec2(0, 4));
+    theme::segmented("##up", settings_.up, {"Y up  (glTF)", "Z up  (Fable)"}, cardInner);
+    auto_.registerWidget("seg_up");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", settings_.up == 0 ? "Blender, Unreal, three.js and most viewers expect Y up." : "Raw Fable coordinates; heights on Z.");
+    ImGui::Dummy(ImVec2(0, S(2)));
     theme::toggle("World coordinates (maps line up)", &settings_.world);
     auto_.registerWidget("toggle_world");
-    ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), settings_.world ? "Placed at the map's WLD position: export a whole region and it assembles itself."
-                                                                  : "Map-local: the map's corner sits at the origin.");
-    ImGui::PopFont();
-    ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), settings_.up == 0 ? "Blender, Unreal, three.js and most viewers expect Y up." : "Raw Fable coordinates; heights on Z.");
-    ImGui::PopFont();
-    auto_.registerWidget("seg_up");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", settings_.world ? "Placed at the map's WLD position: export a whole region and it assembles itself." : "Map-local: the map's corner sits at the origin.");
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, 8));
-    ImGui::SetCursorPosX(16);
+    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::SetCursorPosX(pad);
     theme::beginCard("##tex", inner);
     theme::toggle("Ground textures", &settings_.textures);
     auto_.registerWidget("toggle_textures");
@@ -1019,24 +1064,31 @@ void App::drawActions(float width) {
                                : ctxError_.empty() ? "loading game.bin + textures.big..." : "unavailable in this install");
             ImGui::PopFont();
         }
-        ImGui::Dummy(ImVec2(0, 4));
-        theme::label("Texture detail");
-        ImGui::SetNextItemWidth(inner - 24);
+        ImGui::Dummy(ImVec2(0, S(4)));
+        // Sliders: label + value on one line, the bare slider under it (ImGui's own
+        // centred value text collides with the grab).
+        char val[64];
         const char* detail = settings_.texels <= 4 ? "fast" : settings_.texels <= 8 ? "balanced" : settings_.texels <= 16 ? "high" : "extreme";
-        char fmt[48]; std::snprintf(fmt, sizeof fmt, "%d texels / cell  (%s)", settings_.texels, detail);
-        ImGui::SliderInt("##texels", &settings_.texels, 2, 32, fmt);
+        std::snprintf(val, sizeof val, "%d texels / cell  (%s)", settings_.texels, detail);
+        theme::labelValue("Texture detail", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderInt("##texels", &settings_.texels, 2, 32, "");
         auto_.registerWidget("slider_texels");
-        ImGui::SetNextItemWidth(inner - 24);
-        ImGui::SliderFloat("##tile", &settings_.tile, 1.0f, 16.0f, "texture repeat every %.1f units");
+        std::snprintf(val, sizeof val, "every %.1f units", settings_.tile);
+        theme::labelValue("Texture repeat", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat("##tile", &settings_.tile, 1.0f, 16.0f, "");
         auto_.registerWidget("slider_tile");
-        ImGui::SetNextItemWidth(inner - 24);
-        if (ImGui::SliderFloat("##gain", &settings_.gain, 0.5f, 3.0f, "brightness x%.2f")) gainDirty_ = true;
+        std::snprintf(val, sizeof val, "x%.2f", settings_.gain);
+        theme::labelValue("Brightness", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        if (ImGui::SliderFloat("##gain", &settings_.gain, 0.5f, 3.0f, "")) gainDirty_ = true;
         if (gainDirty_ && !ImGui::IsItemActive()) { gainDirty_ = false; previewLoadedFor_.clear(); startPreviewLoad(); }
         auto_.registerWidget("slider_gain");
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Faint), "Fable's ground textures are authored dark; the game lights them up. 1.0 = raw texels.");
+        theme::hint("Fable's ground textures are authored dark; the game lights them up. 1.0 = raw texels.");
         ImGui::PopFont();
-        ImGui::Dummy(ImVec2(0, 4));
+        ImGui::Dummy(ImVec2(0, S(4)));
         theme::toggle("Splat layers (per-theme PNGs + weights)", &settings_.layers);
         auto_.registerWidget("toggle_layers");
     }
@@ -1044,110 +1096,109 @@ void App::drawActions(float width) {
     auto_.registerWidget("toggle_walkable");
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, 8));
-    ImGui::SetCursorPosX(16);
+    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::SetCursorPosX(pad);
     theme::beginCard("##fol", inner);
     theme::toggle("Foliage (grass, plants, trees)", &settings_.foliage);
     auto_.registerWidget("toggle_foliage");
     theme::toggle("Placed objects (fences, walls, rocks, buildings)", &settings_.things);
     auto_.registerWidget("toggle_things");
-    ImGui::PushFont(fontSmall_);
-    ImGui::TextColored(theme::vec(theme::Faint), "Foliage: baked instances in FinalAlbion_RT.stb.  Objects: the map's .tng.\nBoth as mesh instances with their textures; creatures are skipped.");
-    ImGui::PopFont();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The map's .tng, plus the doors, windows and building parts their meshes spawn.\nMesh instances with textures; creatures are skipped.");
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, 8));
-    ImGui::SetCursorPosX(16);
+    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::SetCursorPosX(pad);
     theme::beginCard("##out", inner);
     theme::label("Output folder");
-    ImGui::SetNextItemWidth(inner - 24 - 40);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 7));
+    const float browseW = S(34);
+    ImGui::SetNextItemWidth(cardInner - browseW - S(6));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(7)));
     ImGui::InputText("##outdir", outDirBuf_, sizeof outDirBuf_);
     ImGui::PopStyleVar();
     auto_.registerWidget("input_outdir");
-    ImGui::SameLine(0, 6);
-    if (theme::ghostButton("...", ImVec2(34, 0))) {
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("...", ImVec2(browseW, 0))) {
         const std::string picked = pickFolder(hwnd_, outDirBuf_);
         if (!picked.empty()) std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", picked.c_str());
     }
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, 6));
+    ImGui::Dummy(ImVec2(0, S(6)));
+    settingsContentH_ = ImGui::GetCursorPosY();
     ImGui::EndChild();  // ##settings
 
     // ---- footer
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + 16, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - 16, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
-    ImGui::Dummy(ImVec2(0, 8));
-    ImGui::SetCursorPosX(16);
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + pad, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - pad, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
+    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::SetCursorPosX(pad);
     const bool canExport = !selectedName_.empty() && !exportFuture_.valid() && installValid_;
     const MapEntry* selEntry = findEntry(selectedName_);
     const std::string label = exportFuture_.valid() ? "Exporting..." : !selEntry ? "Select a map to export" : "Export " + selEntry->name;
-    if (theme::primaryButton(label.c_str(), ImVec2(inner, 42), canExport && !batchActive())) startExport();
+    if (theme::primaryButton(label.c_str(), ImVec2(inner, S(42)), canExport && !batchActive())) startExport();
     auto_.registerWidget("btn_export");
     if (ImGui::IsItemHovered() && canExport) ImGui::SetTooltip("Ctrl+E");
-    ImGui::SetCursorPosX(16);
+    ImGui::SetCursorPosX(pad);
     if (batchActive()) {
         char b[96];
         std::snprintf(b, sizeof b, "Exporting %d / %d  -  %s", batchDone_ + 1, batchTotal_, batchCurrent_.c_str());
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Muted), "%s", b);
         ImGui::PopFont();
-        ImGui::SetCursorPosX(16);
+        ImGui::SetCursorPosX(pad);
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner, p.y + 6), theme::col(theme::Bg0), 3.0f);
-        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner * float(batchDone_) / float(std::max(batchTotal_, 1)), p.y + 6), theme::col(theme::Accent), 3.0f);
-        ImGui::Dummy(ImVec2(inner, 10));
-        ImGui::SetCursorPosX(16);
-        if (theme::ghostButton("Cancel batch", ImVec2(inner, 30))) cancelBatch();
+        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner, p.y + S(6)), theme::col(theme::Bg0), S(3.0f));
+        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + inner * float(batchDone_) / float(std::max(batchTotal_, 1)), p.y + S(6)), theme::col(theme::Accent), S(3.0f));
+        ImGui::Dummy(ImVec2(inner, S(10)));
+        ImGui::SetCursorPosX(pad);
+        if (theme::ghostButton("Cancel batch", ImVec2(inner, S(30)))) cancelBatch();
         auto_.registerWidget("btn_cancel_batch");
     } else {
         const auto visible = visibleMapNames();
         char b[64];
         if (filter_.empty()) std::snprintf(b, sizeof b, "Export all %zu maps", visible.size());
         else std::snprintf(b, sizeof b, "Export %zu matching maps", visible.size());
-        if (theme::ghostButton(b, ImVec2(inner, 32)) && installValid_ && !exportFuture_.valid()) startBatchExport(visible);
+        if (theme::ghostButton(b, ImVec2(inner, S(32))) && installValid_ && !exportFuture_.valid()) startBatchExport(visible);
         auto_.registerWidget("btn_export_all");
         if (selEntry && regions_.loaded && regions_.mapsOfRegion.count(selEntry->group)) {
             const auto keys = regionMapKeys(selEntry->group);
             if (keys.size() > 1) {
-                ImGui::SetCursorPosX(16);
+                ImGui::SetCursorPosX(pad);
                 char rb[96];
                 std::snprintf(rb, sizeof rb, "Export region %s (%zu maps)", selEntry->group.c_str(), keys.size());
-                if (theme::ghostButton(rb, ImVec2(inner, 32)) && !exportFuture_.valid()) { settings_.world = true; startBatchExport(keys); }
+                if (theme::ghostButton(rb, ImVec2(inner, S(32))) && !exportFuture_.valid()) { settings_.world = true; startBatchExport(keys); }
                 auto_.registerWidget("btn_export_region");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Exports every map of the region in world coordinates");
             }
         }
         if (lastExportOk_ && !exportFuture_.valid()) {
-            ImGui::SetCursorPosX(16);
-            if (theme::ghostButton("Open output folder", ImVec2(inner, 32))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
+            ImGui::SetCursorPosX(pad);
+            if (theme::ghostButton("Open output folder", ImVec2(inner, S(32)))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
             auto_.registerWidget("btn_open_folder");
         }
     }
 
-
-    // Log (fixed height so it never gets squeezed out)
-    ImGui::SetCursorPosX(16);
+    // Activity log takes whatever height is left.
+    ImGui::SetCursorPosX(pad);
     ImGui::PushFont(fontBold_);
     ImGui::TextColored(theme::vec(theme::Muted), "ACTIVITY");
     ImGui::PopFont();
-    ImGui::SetCursorPosX(16);
+    ImGui::SetCursorPosX(pad);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-    ImGui::BeginChild("##log", ImVec2(inner, logHeight - 10), ImGuiChildFlags_None);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(8.0f));
+    ImGui::BeginChild("##log", ImVec2(inner, std::max(ImGui::GetContentRegionAvail().y - S(10), logMin - S(10))), ImGuiChildFlags_None);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::PushFont(fontSmall_);
-    ImGui::Dummy(ImVec2(0, 4));
+    ImGui::Dummy(ImVec2(0, S(4)));
     for (const auto& [level, line] : log_) {
         const ImVec4 c = level == 1 ? theme::vec(theme::Warn) : level == 2 ? theme::vec(theme::Error)
                        : level == 3 ? theme::vec(theme::Success) : theme::vec(theme::Muted);
-        ImGui::SetCursorPosX(10);
-        ImGui::PushTextWrapPos(inner - 10);
+        ImGui::SetCursorPosX(S(10));
+        ImGui::PushTextWrapPos(inner - S(10));
         ImGui::TextColored(c, "%s", line.c_str());
         ImGui::PopTextWrapPos();
     }
-    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 30) ImGui::SetScrollHereY(1.0f);
+    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - S(30)) ImGui::SetScrollHereY(1.0f);
     ImGui::PopFont();
     ImGui::EndChild();
     ImGui::EndChild();

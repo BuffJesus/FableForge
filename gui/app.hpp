@@ -4,6 +4,7 @@
 // (install scan, texture context, preview bake, export) runs on worker threads
 // and lands on the main thread through futures polled every frame.
 
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -217,6 +218,18 @@ private:
     std::vector<std::pair<int, std::string>> logPending_;
 
     // ui
+    // UI scale = monitor DPI x window-size factor; fonts are rebuilt when it changes.
+    float dpiScale_ = 1.0f;
+    float uiScale_ = 1.0f;
+    float wantScale_ = 1.0f;
+    float settingsContentH_ = 0;   // measured last frame; lets the activity log take the slack
+    void buildFonts(float scale);
+public:
+    // Main loop hook: true when the font atlas must be rebuilt before the next frame.
+    bool fontsDirty() const { return std::fabs(wantScale_ - uiScale_) > 0.01f; }
+    void rebuildFonts();
+    void setDpiScale(float s) { dpiScale_ = s; }
+private:
     ImFont* fontBody_ = nullptr;
     ImFont* fontBold_ = nullptr;
     ImFont* fontTitle_ = nullptr;

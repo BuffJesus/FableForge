@@ -14,7 +14,16 @@ enum Color {
 
 ImU32 col(Color c);
 ImVec4 vec(Color c);
+// UI scale: monitor DPI x a window-size factor. Every hand-placed pixel value in
+// the app goes through S(); applyTheme() scales ImGui's own style with it.
+void setScale(float s);
+float scale();
+inline float S(float px) { return px * scale(); }
 void applyTheme();
+// Faint helper text that wraps inside the current content width.
+void hint(const char* text);
+// Muted label with a right-aligned value on the same line (used above sliders).
+void labelValue(const char* text, const char* value, float width);
 
 // Widgets. All return true when activated / changed.
 bool primaryButton(const char* label, const ImVec2& size, bool enabled = true);

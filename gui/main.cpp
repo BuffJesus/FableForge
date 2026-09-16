@@ -176,6 +176,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
 
     albion::gui::App app;
     g_app = &app;
+    app.setDpiScale(ImGui_ImplWin32_GetDpiScaleForHwnd(hwnd));
     if (!autoScript.empty()) {
         std::ofstream(autoScript + ".log", std::ios::trunc);
         app.automation().load(autoScript);   // before init: disables settings persistence
@@ -209,6 +210,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         const float dt = std::chrono::duration<float>(now - last).count();
         last = now;
 
+        if (app.fontsDirty()) {   // window height or DPI moved the UI scale: rebuild the atlas
+            app.rebuildFonts();
+            ImGui_ImplDX11_InvalidateDeviceObjects();
+            ImGui_ImplDX11_CreateDeviceObjects();
+        }
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         if (automated) {   // scripted mouse wins over the backend's real-cursor fallback
