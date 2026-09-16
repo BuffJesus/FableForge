@@ -58,6 +58,22 @@ def validate(doc, bin_, textured):
         return n, ia["count"] // 3, (w, h)
     return n, ia["count"] // 3, None
 
+def trimesh_check(path, textured):
+    """Independent loader check (optional): trimesh must open the GLB and see a textured terrain."""
+    try:
+        import trimesh
+    except ImportError:
+        return "trimesh n/a"
+    s = trimesh.load(path, force="scene")
+    assert "terrain" in s.geometry, "trimesh: no 'terrain' geometry"
+    g = s.geometry["terrain"]
+    assert len(g.faces) > 0 and len(g.vertices) > 0
+    if textured:
+        mat = g.visual.material
+        img = getattr(mat, "baseColorTexture", None) or getattr(mat, "image", None)
+        assert img is not None, "trimesh: terrain material has no base colour texture"
+    return f"trimesh ok ({len(s.geometry)} geom, {len(s.graph.nodes_geometry)} nodes)"
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=os.path.join("build", "AlbionAtlas.exe"))
@@ -79,7 +95,8 @@ def main():
     t_all = time.time()
     for m in maps:
         out = os.path.join(a.out, m + ".glb")
-        cmd = [a.exe, "export", m, "--out", out, "--quiet"] + (["--no-textures"] if a.no_textures else [])
+        full = (maps.index(m) % 4 == 0) and not a.no_textures   # every 4th map with foliage + objects
+        cmd = [a.exe, "export", m, "--out", out, "--quiet"] + (["--no-textures"] if a.no_textures else []) + (["--foliage", "--things"] if full else [])
         t0 = time.time()
         r = subprocess.run(cmd, capture_output=True, text=True)
         dt = time.time() - t0
@@ -90,7 +107,8 @@ def main():
         try:
             doc, bin_ = parse_glb(out)
             n, tris, tex = validate(doc, bin_, not a.no_textures)
-            print(f"ok   {m:40s} {n:7d} verts {tris:7d} tris {str(tex or '-'):12s} {os.path.getsize(out)/1e6:6.2f} MB {dt:5.2f}s")
+            tm = trimesh_check(out, not a.no_textures)
+            print(f"ok   {m:40s} {n:7d} verts {tris:7d} tris {str(tex or '-'):12s} {os.path.getsize(out)/1e6:6.2f} MB {dt:5.2f}s  {tm}")
         except AssertionError as e:
             failures += 1
             print(f"FAIL {m:40s} {e}")

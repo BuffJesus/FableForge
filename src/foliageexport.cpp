@@ -418,7 +418,8 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
                 const auto* geo = meshCache().get(type.meshIdx, merr);
                 if (!geo) { warn(options, scene, merr); meshIdToIndex[type.meshIdx] = -1; typeToMesh[inst.type] = -1; continue; }
                 std::vector<std::string> mw;
-                Mesh m = makeMesh(type.meshIdx, type.meshName.empty() ? meshName(type.meshIdx) : type.meshName, type.label,
+                const std::string bankName = meshName(type.meshIdx);
+                Mesh m = makeMesh(type.meshIdx, bankName.empty() ? type.meshName : bankName, type.label,
                                   *geo, options.textures, context, scene.images, textureToImage, mw);
                 for (const auto& w : mw) warn(options, scene, w);
                 scene.meshes.push_back(std::move(m));
