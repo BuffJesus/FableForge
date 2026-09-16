@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -106,10 +107,29 @@ struct Scene {
 // Geometry only (positions/normals/UVs/walkable/theme slots), no textures.
 Scene buildMesh(const forge::lev::File& level, const Options& options);
 
+// Install-wide texture state that is expensive to build (ENGINE_THEME library
+// from game.bin, the textures.big index, decoded textures). Load once, reuse
+// for every map; thread-safe for concurrent buildScene calls after load().
+class Context {
+public:
+    Context();
+    // Returns false and fills `error` when the install cannot be read.
+    bool load(const std::filesystem::path& gameRoot,
+              const std::filesystem::path& texturesBig, std::string& error);
+    bool ready() const;
+    std::filesystem::path gameRoot() const;
+    struct Impl;
+    Impl& impl() const { return *impl_; }
+private:
+    std::shared_ptr<Impl> impl_;
+};
+
 // Full pipeline: buildMesh + theme resolution + albedo bake (+ layer images).
 // Texture failures degrade to warnings and an untextured scene, never throw,
-// so the plain heightmap always comes out.
-Scene buildScene(const forge::lev::File& level, const Options& options);
+// so the plain heightmap always comes out. Without a ready `context`, one is
+// built from `options.gameRoot` / `options.texturesBig` for this call.
+Scene buildScene(const forge::lev::File& level, const Options& options,
+                 const Context* context = nullptr);
 
 // GPU-format mip -> straight RGBA8. Exposed for tests and the GUI preview.
 std::vector<uint8_t> decodeBc1ToRgba(const uint8_t* blocks, uint32_t w, uint32_t h);

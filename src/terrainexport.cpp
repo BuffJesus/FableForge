@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 
@@ -239,9 +240,11 @@ struct TextureCache {
     std::map<uint32_t, const forge::big::Entry*> byId;
     std::map<uint32_t, Image> decoded;
     std::set<uint32_t> failed;
+    std::mutex mutex;
 
     const Image* get(uint32_t id, Scene& scene, const Options& o) {
         if (id == 0) return nullptr;
+        std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
         if (hit != decoded.end()) return &hit->second;
         if (failed.count(id)) return nullptr;
@@ -269,38 +272,61 @@ struct TextureCache {
 
 } // namespace
 
-Scene buildScene(const forge::lev::File& level, const Options& options) {
+struct Context::Impl {
+    bool ready = false;
+    fs::path gameRoot;
+    forge::terraintex::ThemeLibrary library;
+    forge::big::File big;
+    TextureCache cache;
+};
+
+Context::Context() : impl_(std::make_shared<Impl>()) {}
+bool Context::ready() const { return impl_ && impl_->ready; }
+fs::path Context::gameRoot() const { return impl_ ? impl_->gameRoot : fs::path(); }
+
+bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::string& error) {
+    auto impl = std::make_shared<Impl>();
+    try {
+        const fs::path defsDir = gameRoot / "data" / "CompiledDefs";
+        const auto defs = forge::bin::File::open(defsDir / "names.bin", defsDir / "game.bin");
+        const auto schema = forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded");
+        impl->library = forge::terraintex::ThemeLibrary::load(defs, schema);
+    } catch (const std::exception& e) {
+        error = std::string("cannot load ENGINE_THEME defs: ") + e.what();
+        return false;
+    }
+    try {
+        impl->big = forge::big::File::open(texturesBig);
+        const auto* bank = impl->big.findBank("GBANK_MAIN_PC");
+        if (!bank) throw std::runtime_error("no GBANK_MAIN_PC bank in " + texturesBig.string());
+        impl->cache.big = &impl->big;
+        for (const auto& e : bank->entries) impl->cache.byId[e.id] = &e;
+    } catch (const std::exception& e) {
+        error = std::string("cannot open textures.big: ") + e.what();
+        return false;
+    }
+    impl->gameRoot = gameRoot;
+    impl->ready = true;
+    impl_ = std::move(impl);
+    return true;
+}
+
+Scene buildScene(const forge::lev::File& level, const Options& options, const Context* context) {
     Scene scene = buildMesh(level, options);
     if (!options.textures) return scene;
 
-    // 1. Theme library from the install's game.bin (+ the embedded schema).
-    forge::terraintex::ThemeLibrary library;
-    try {
-        const fs::path defsDir = options.gameRoot / "data" / "CompiledDefs";
-        const auto defs = forge::bin::File::open(defsDir / "names.bin", defsDir / "game.bin");
-        const auto schema = forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded");
-        library = forge::terraintex::ThemeLibrary::load(defs, schema);
-    } catch (const std::exception& e) {
-        say(options, scene, std::string("cannot load ENGINE_THEME defs: ") + e.what() +
-            " -- exporting untextured", true);
-        return scene;
+    Context local;
+    if (!context || !context->ready()) {
+        std::string error;
+        if (!local.load(options.gameRoot, options.texturesBig, error)) {
+            say(options, scene, error + " -- exporting untextured", true);
+            return scene;
+        }
+        context = &local;
     }
-    const auto rows = forge::terraintex::resolvePalette(level, library);
-
-    // 2. textures.big, MAIN bank only (GUI bank ids collide with it).
-    forge::big::File big;
-    TextureCache cache;
-    try {
-        big = forge::big::File::open(options.texturesBig);
-        const auto* bank = big.findBank("GBANK_MAIN_PC");
-        if (!bank) throw std::runtime_error("no GBANK_MAIN_PC bank in " + options.texturesBig.string());
-        cache.big = &big;
-        for (const auto& e : bank->entries) cache.byId[e.id] = &e;
-    } catch (const std::exception& e) {
-        say(options, scene, std::string("cannot open textures.big: ") + e.what() +
-            " -- exporting untextured", true);
-        return scene;
-    }
+    Context::Impl& ctx = context->impl();
+    TextureCache& cache = ctx.cache;
+    const auto rows = forge::terraintex::resolvePalette(level, ctx.library);
 
     // 3. Per-slot layers.
     std::map<int, size_t> slotToLayer;

@@ -44,3 +44,31 @@ enable_testing()
 add_executable(albionterrain_tests tests/test_export.cpp)
 target_link_libraries(albionterrain_tests PRIVATE albionterrain)
 add_test(NAME albionterrain_tests COMMAND albionterrain_tests)
+
+# ---------------------------------------------------------------- GUI (Windows)
+if(WIN32)
+  set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/imgui)
+  add_library(albion_imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_impl_win32.cpp
+    ${IMGUI_DIR}/imgui_impl_dx11.cpp
+  )
+  target_include_directories(albion_imgui PUBLIC ${IMGUI_DIR})
+  target_link_libraries(albion_imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi ole32 shell32 uuid)
+
+  add_executable(AlbionTerrainGUI WIN32
+    gui/main.cpp
+    gui/app.cpp
+    gui/theme.cpp
+    gui/renderer.cpp
+  )
+  target_include_directories(AlbionTerrainGUI PRIVATE gui)
+  target_link_libraries(AlbionTerrainGUI PRIVATE albionterrain albion_imgui)
+  if(MINGW)
+    target_compile_options(AlbionTerrainGUI PRIVATE -municode)
+    target_link_options(AlbionTerrainGUI PRIVATE -municode -mwindows -static -static-libgcc -static-libstdc++)
+  endif()
+endif()

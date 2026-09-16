@@ -1,0 +1,67 @@
+ok   wait_maps
+ok   frames 2
+ok   screenshot build/ui/01_empty.png
+shot build/ui/01_empty.png
+ok   assert_widget btn_export
+ok   assert_widget input_filter
+ok   assert_state install_valid 1
+ok   select Greatwood_1
+ok   wait_ready
+ok   wait_loaded
+ok   frames 3
+ok   assert_state preview_loaded 1
+ok   assert_state preview_textured 1
+ok   screenshot build/ui/02_textured.png
+shot build/ui/02_textured.png
+..   click chip_wireframe
+ok   frames 3
+ok   assert_state mode Wireframe
+ok   screenshot build/ui/03_wireframe.png
+shot build/ui/03_wireframe.png
+..   click chip_walkable
+ok   frames 3
+ok   screenshot build/ui/04_walkable.png
+shot build/ui/04_walkable.png
+..   click chip_height
+ok   frames 3
+ok   screenshot build/ui/05_height.png
+shot build/ui/05_height.png
+..   click chip_textured
+ok   orbit 0.6 -0.2
+ok   zoom 2
+ok   frames 2
+ok   screenshot build/ui/06_orbited.png
+shot build/ui/06_orbited.png
+ok   filter oakvale
+ok   frames 2
+ok   screenshot build/ui/07_filtered.png
+shot build/ui/07_filtered.png
+ok   filter
+ok   set outdir build/ui
+ok   set texels 4
+..   click btn_export
+ok   frames 2
+ok   wait_export
+ok   frames 2
+ok   assert_state export_ok 1
+ok   assert_file build/ui/Greatwood_1.glb
+ok   screenshot build/ui/08_exported.png
+shot build/ui/08_exported.png
+     install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+     install_valid=1
+     maps=399
+     selected=Greatwood_1
+     preview_loaded=1
+     preview_textured=1
+     context_ready=1
+     mode=Textured
+     export_ok=1
+     export_path=build/ui\Greatwood_1.glb
+     format=glb
+     textures=1
+     layers=0
+     walkable=0
+     texels=4
+     mesh_vertices=18721
+ok   quit
+RESULT PASS

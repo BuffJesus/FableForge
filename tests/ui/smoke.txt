@@ -1,0 +1,45 @@
+# AlbionTerrain GUI smoke: install detected, map loads, all view modes render,
+# export via the real button, output validated by tools/ui_smoke.py.
+wait_maps
+frames 2
+screenshot build/ui/01_empty.png
+assert_widget btn_export
+assert_widget input_filter
+assert_state install_valid 1
+select Greatwood_1
+wait_ready
+wait_loaded
+frames 3
+assert_state preview_loaded 1
+assert_state preview_textured 1
+screenshot build/ui/02_textured.png
+click chip_wireframe
+frames 3
+assert_state mode Wireframe
+screenshot build/ui/03_wireframe.png
+click chip_walkable
+frames 3
+screenshot build/ui/04_walkable.png
+click chip_height
+frames 3
+screenshot build/ui/05_height.png
+click chip_textured
+orbit 0.6 -0.2
+zoom 2
+frames 2
+screenshot build/ui/06_orbited.png
+filter oakvale
+frames 2
+screenshot build/ui/07_filtered.png
+filter
+set outdir build/ui
+set texels 4
+click btn_export
+frames 2
+wait_export
+frames 2
+assert_state export_ok 1
+assert_file build/ui/Greatwood_1.glb
+screenshot build/ui/08_exported.png
+dump_state
+quit
