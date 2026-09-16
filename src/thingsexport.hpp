@@ -18,6 +18,12 @@
 // Oakvale (fence segments join end-to-end). The old ChocolateBox-derived guess
 // (-lx*forward + ly*right) was a 90-degree yaw off.
 //
+// Composite objects: a mesh's 3ds-Max dummies named "CREATEOBJECT <def>" /
+// "CREATEBUILDING <def>" spawn child things at the dummy transform (the engine's
+// CTCMeshAutomaticEntityCreator). Doors, windows, weathervanes, the Arena's
+// entrances and stand sections, chained cave/hall interiors all come from these,
+// not from the .tng; they are followed recursively (depth 4).
+//
 // Honest boundaries:
 //   * Creatures (AICreature) are skinned meshes; LOD0 is exported in bind pose
 //     only when `Options::creatures` is set.
@@ -54,6 +60,9 @@ struct Stats {
     int noMesh = 0;          // model id not in graphics.big / undecodable
     int noPosition = 0;      // no physics block
     int skippedCreatures = 0;
+    int childThings = 0;     // CREATEOBJECT / CREATEBUILDING dummies seen in placed meshes
+    int childPlaced = 0;     // ...of which produced an instance
+    int childParticles = 0;  // CREATEPARTICLE dummies (effects, not exported)
 };
 
 // Rows of `m` are the world images of the mesh-local x/y/z axes (times `scale`):

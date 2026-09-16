@@ -33,7 +33,7 @@ AlbionAtlas export my_edited.lev --no-textures
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
 | Foliage (`--foliage`) | baked local-detail instances in `FinalAlbion_RT.stb` — grass, flowers, bracken, bramble, stumps **and trees** (oaks, birches...) — + LOD0 meshes from `graphics.big` + their textures | one glTF mesh per plant (leaves/trunk as separate primitives), one node per instance under a `Foliage` root; cutout (`MASK`) materials. OBJ: baked into an extra object |
 | Water | LEV theme blend x `ENGINE_THEME` `WaterHeight` / `WaterType` (lakes, rivers, sea, Hook Coast ice) | `Water` child node with translucent `water` / `ice` materials; OBJ `o Water` |
-| Placed objects (`--things`) | the map's `.tng` — fences, walls, rocks, lamps, crates, buildings, chests — resolved through their `game.bin` definition's `Graphic` model id (or `GraphicOverride`) | same as foliage under a `Things` root; full orientation from `RHSetForward/Up`, `ObjectScale` honoured. Creatures only with `--creatures` (bind pose) |
+| Placed objects (`--things`) | the map's `.tng` — fences, walls, rocks, lamps, crates, buildings, chests — resolved through their `game.bin` definition's `Graphic` model id (or `GraphicOverride`), **plus the parts a mesh spawns itself**: 3ds-Max dummies named `CREATEOBJECT <def>` / `CREATEBUILDING <def>` inside a mesh place doors, windows, weathervanes, the Arena's stands and entrances, chained cave/hall interiors (the engine's `CTCMeshAutomaticEntityCreator`) | same as foliage under a `Things` root; full orientation from `RHSetForward/Up`, `ObjectScale` honoured; children follow their parent's transform, recursively. Creatures only with `--creatures` (bind pose) |
 
 The exporter never embeds retail data; it reads the textures from **your** install.
 
@@ -79,9 +79,9 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   `CalcObjectMatrix` does: `pos + lx*(-right) + ly*(-forward) + lz*up` (`right = forward x up`),
   cross-checked against the Arena (oval pit, N/S corridors, gates, audience ring and
   billboard facing, `MINIMAP_ARENA`) and Oakvale's fence lines. Objects that float in the
-  export float in the data too: the Arena crowd sits 10 m above the outer sand with no
-  stand mesh anywhere (no thing, def, script or region places one); the pit parapet hides
-  the drop in-game.
+  export float in the data too — except for parts a mesh spawns through its own
+  `CREATEOBJECT` / `CREATEBUILDING` dummies (see the table), which are now followed.
+  `CREATEPARTICLE` dummies (braziers, candles, fountains) are counted and skipped.
 * **Water** — a `Water` sheet (child of the terrain node; `water` + `ice` materials, OBJ
   `o Water`) built the way the engine's water patches are: ground + the LEV theme blend
   times each `ENGINE_THEME`'s `WaterHeight` (a depth), averaged over the 5x5 neighbourhood

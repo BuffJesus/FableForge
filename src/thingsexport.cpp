@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <map>
 
 #include "forge/tng.hpp"
@@ -104,6 +105,77 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     std::map<uint32_t, int> textureToImage;
     std::map<std::string, int> defWarned;
 
+    // Mesh for a model id, decoded once per scene; -1 when it cannot be decoded.
+    auto acquireMesh = [&](uint32_t modelId, const std::string& def) -> int {
+        auto known = meshIndexById.find(modelId);
+        if (known != meshIndexById.end()) return known->second;
+        std::string merr;
+        const auto* geo = fe::cachedMesh(modelId, merr);
+        if (!geo) { meshIndexById[modelId] = -1; if (!defWarned[def]++) warn(def + ": " + merr); return -1; }
+        std::vector<std::string> mw;
+        fe::Mesh m = fe::makeMesh(modelId, fe::meshName(modelId), def, *geo, options.textures, context, scene.images, textureToImage, mw);
+        for (const auto& w : mw) warn(w);
+        scene.meshes.push_back(std::move(m));
+        const int idx = int(scene.meshes.size() - 1);
+        meshIndexById[modelId] = idx;
+        return idx;
+    };
+
+    // Meshes carry 3ds-Max dummy objects whose NAME is an instruction. The
+    // engine's CTCMeshAutomaticEntityCreator::CreateChildThings (FableWin 0x02570910)
+    // walks every dummy of a thing's mesh and, for "CREATEOBJECT <def>" /
+    // "CREATEBUILDING <def>", spawns a child thing of that def at the dummy's
+    // transform ("CREATEPARTICLE <fx>" spawns an effect). That is how doors,
+    // windows, weathervanes, the Arena's entrances / stand sections and chained
+    // interiors (Hall of Heroes, Hobbe cave throne room...) get into the world:
+    // none of them are in the .tng. Child = dummy matrix (mesh-local, cm) composed
+    // with the parent's world transform; children may carry dummies of their own.
+    std::function<void(uint32_t, const fe::Instance&, int)> spawnChildren;
+    spawnChildren = [&](uint32_t parentModel, const fe::Instance& parent, int depth) {
+        if (depth > 4) return;
+        std::string merr;
+        const auto* geo = fe::cachedMesh(parentModel, merr);
+        if (!geo) return;
+        for (const auto& h : geo->helpers) {
+            if (h.name.empty()) continue;
+            std::string verb, arg;
+            {
+                size_t i = 0;
+                while (i < h.name.size() && !std::isspace((unsigned char)h.name[i])) verb += h.name[i++];
+                while (i < h.name.size() && std::isspace((unsigned char)h.name[i])) ++i;
+                while (i < h.name.size() && !std::isspace((unsigned char)h.name[i])) arg += h.name[i++];
+            }
+            if (verb == "CREATEPARTICLE") { ++st.childParticles; continue; }
+            if (verb != "CREATEOBJECT" && verb != "CREATEBUILDING") continue;
+            if (arg.empty()) continue;
+            ++st.childThings;
+            uint32_t modelId = 0;
+            const int code = context.graphicModelId(arg, modelId);
+            if (code == 0) { if (!defWarned[arg]++) warn(arg + " (child of a mesh dummy): not in game.bin"); ++st.noDef; continue; }
+            if (code < 0 || modelId == 0) { ++st.noGraphic; continue; }
+            const int meshIndex = acquireMesh(modelId, arg);
+            if (meshIndex < 0) { ++st.noMesh; continue; }
+            // Dummy transform: rows 0..2 = local axes, row 3 = translation (cm),
+            // row-vector convention like every CMatrix3x4 -> child = dummy * parent.
+            const float* d = h.matrix;
+            fe::Instance c;
+            c.mesh = meshIndex; c.type = -1; c.prim = 0; c.hasMatrix = true;
+            for (int r = 0; r < 3; ++r)
+                for (int k = 0; k < 3; ++k)
+                    c.m[r * 3 + k] = d[r * 3 + 0] * parent.m[0 * 3 + k] + d[r * 3 + 1] * parent.m[1 * 3 + k] + d[r * 3 + 2] * parent.m[2 * 3 + k];
+            c.x = parent.x + d[9] * parent.m[0] + d[10] * parent.m[3] + d[11] * parent.m[6];
+            c.y = parent.y + d[9] * parent.m[1] + d[10] * parent.m[4] + d[11] * parent.m[7];
+            c.z = parent.z + d[9] * parent.m[2] + d[10] * parent.m[5] + d[11] * parent.m[8];
+            c.scale = parent.scale;
+            c.yaw = std::atan2(c.m[4], c.m[3]);
+            scene.meshes[size_t(meshIndex)].instanceCount++;
+            scene.instances.push_back(c);
+            ++st.placed;
+            ++st.childPlaced;
+            spawnChildren(modelId, c, depth + 1);
+        }
+    };
+
     for (const auto& thing : tng.things()) {
         ++st.things;
         const std::string type = lower(thing.type);
@@ -128,20 +200,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             if (modelId == 0) { ++st.noGraphic; continue; }
         }
 
-        int meshIndex = -1;
-        auto known = meshIndexById.find(modelId);
-        if (known != meshIndexById.end()) meshIndex = known->second;
-        else {
-            std::string merr;
-            const auto* geo = fe::cachedMesh(modelId, merr);
-            if (!geo) { meshIndexById[modelId] = -1; ++st.noMesh; if (!defWarned[def]++) warn(def + ": " + merr); continue; }
-            std::vector<std::string> mw;
-            fe::Mesh m = fe::makeMesh(modelId, fe::meshName(modelId), def, *geo, options.textures, context, scene.images, textureToImage, mw);
-            for (const auto& w : mw) warn(w);
-            scene.meshes.push_back(std::move(m));
-            meshIndex = int(scene.meshes.size() - 1);
-            meshIndexById[modelId] = meshIndex;
-        }
+        const int meshIndex = acquireMesh(modelId, def);
         if (meshIndex < 0) { ++st.noMesh; continue; }
 
         float objectScale = 1.0f;
@@ -165,6 +224,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         scene.meshes[size_t(meshIndex)].instanceCount++;
         scene.instances.push_back(inst);
         ++st.placed;
+        spawnChildren(modelId, inst, 0);
     }
     scene.treeInstances = st.placed;
     if (options.log) {
@@ -172,7 +232,9 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
                     std::to_string(scene.meshes.size()) + " meshes, " + std::to_string(scene.triangleCount()) + " triangles); skipped: " +
                     std::to_string(st.noGraphic) + " without a model, " + std::to_string(st.noDef) + " unknown defs, " +
                     std::to_string(st.noMesh) + " missing meshes, " + std::to_string(st.noPosition) + " unplaced, " +
-                    std::to_string(st.skippedCreatures) + " creatures");
+                    std::to_string(st.skippedCreatures) + " creatures; " + std::to_string(st.childPlaced) + " of " +
+                    std::to_string(st.childThings) + " mesh-dummy children (doors, windows, building parts) placed, " +
+                    std::to_string(st.childParticles) + " particle dummies ignored");
         std::vector<const fe::Mesh*> byCount;
         for (const auto& m : scene.meshes) byCount.push_back(&m);
         std::sort(byCount.begin(), byCount.end(), [](const fe::Mesh* a, const fe::Mesh* b) { return a->instanceCount > b->instanceCount; });

@@ -10,12 +10,20 @@
   of forming combs; the 180-degree sign is pinned by the audience billboards (front face =
   local -y) facing the pit 31/34 only with the engine's signs. Bowerstone Slums / Hook Coast /
   Oakvale eyeballed after the fix.
-- The Arena "missing stands": there is NO stand geometry in the data. Checked: Arena.tng
-  (loose + WAD) places only the centre building, gates, traps and 140 audience things;
-  `BUILDING_HERO_ARENA` has one Graphic (MESH_HERO_ARENA_CENTRE_01, r <= 22 m, no
-  terraces in its radial section); `MESH_HERO_ARENA_SECTION_*` / `BUILDING_ARENA_INTERIOR_SECTION_*`
-  defs are referenced by no .tng, not by Fable.exe strings, and the Arena region contains
-  one map. The crowd (z 102.3 / 106.2) floats over sand at 92.5 behind the 2 m parapet.
+- The Arena "missing stands" — SOLVED (the earlier "no stand geometry exists" conclusion was
+  wrong): meshes carry 3ds-Max dummy objects whose NAME is an instruction. The engine's
+  `CTCMeshAutomaticEntityCreator::CreateChildThings` (FableWin `0x02570910`, retail
+  `CreateObject` `0x0072ddb0`) parses every dummy name with CStringParser: `CREATEOBJECT <def>`,
+  `CREATEBUILDING <def>`, `CREATEPARTICLE <fx>` and spawns the child at the dummy transform
+  (`GetDummyObjectAssumingObjectAt` `0x01d0d7d0`). MESH_HERO_ARENA_CENTRE_01 carries dummies for
+  BUILDING_ARENA_COMBAT_ENTRANCE_01, the podium entrance and the four INTERIOR_SECTIONs — all at
+  identity (co-authored in the arena frame). 89 retail meshes use this (doors, windows,
+  weathervanes, prison exterior sections, chained interiors). Dummy record = EgoCore
+  `CDummyObject` {nameCRC, CMatrix3x4, bone}; names in the packed-names block by Fable CRC;
+  the vendored meshpreview already decoded them as `Geometry::helpers`.
+  Composition used: child rows = dummyR * parentR, child pos = parent pos + parentR * dummy_t
+  (mesh cm). Verified: Arena stands/awnings/banners assemble around the pit, Bowerstone
+  windows sit in their wall openings. Depth limit 4; CREATEPARTICLE counted, not exported.
 - `MeshHeightOffset` is 0 on every OBJECT/BUILDING def sampled (400/400) — not a factor.
 
 ## Debug build as the oracle
@@ -44,8 +52,8 @@ Targets for the remaining gaps:
 - All-maps things audit (2026-09-16, `--things` on all 399 maps): 21,800 things, 12,434 placed,
   0 unknown defs, 0 missing meshes; the 8,434 "without a model" are markers/cameras/nav/emitters,
   the 113 "unplaced" are NAVIGATION_SEED (no physics block), 819 creatures skipped by default.
-  Every visible thing in the data is exported. Villagers/guards/animals are spawned at runtime
-  by the village system and quest scripts — not in any file, not exportable.
+  Every .tng thing with a mesh is exported, plus mesh-dummy children (above). Villagers/guards/
+  animals are spawned at runtime by the village system and quest scripts — not exportable.
 - Screenshot sweep of every level from a fixed camera still only done for Arena, Oakvale West,
   Bowerstone Slums, Lookout Point, Hook Coast, Greatwood_1, Bowerstone Bridge.
 - Meshes with helper points / dummy objects: not composed (no evidence they affect placement).
