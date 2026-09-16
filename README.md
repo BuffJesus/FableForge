@@ -1,7 +1,15 @@
 # AlbionTerrain
 
 Export **Fable: The Lost Chapters** terrain to `.glb` (glTF binary) or `.obj`,
-straight from your Steam install. One small Windows executable, no dependencies.
+straight from your Steam install. Two small Windows executables, no dependencies:
+
+* **`AlbionTerrainGUI.exe`** — pick your install, browse the 399 maps on the left,
+  see the textured terrain in 3D in the middle, export on the right. Drag a `.lev`
+  onto the window to open a loose file. Export one map or all of them.
+* **`AlbionTerrain.exe`** — the same exporter as a command line tool.
+
+Runs on anything with Direct3D 10-class graphics (falls back to the software
+rasterizer if it has to).
 
 ```
 AlbionTerrain list                             # every map in FinalAlbion.wad
@@ -48,6 +56,17 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 * **Foliage and props** are not exported yet (planned: baked local-detail
   instances + TNG things as glTF nodes).
 
+## GUI
+
+```
+AlbionTerrainGUI.exe [--install <fable-root>]
+```
+
+Left: searchable map list grouped by area (Ctrl+F). Middle: orbit with the left
+mouse button, pan with the right, zoom with the wheel; Textured / Wireframe /
+Walkable / Height views. Right: export settings, `Export <map>` (Ctrl+E),
+`Export all`, activity log. Settings are remembered in `%APPDATA%\AlbionTerrain`.
+
 ## Building
 
 ```
@@ -55,7 +74,12 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 build\albionterrain_tests.exe            # unit tests (synthetic .lev, no install needed)
 python tools\retail_smoke.py --count 12  # exports real maps and validates every GLB
+python tools\ui_smoke.py                 # drives the GUI, validates output + screenshots
+python tools\check_all.py                # everything above
 ```
+
+The GUI is tested by scripting itself (`--auto`, see `docs/AUTOMATION.md`): real
+clicks on real widgets, state assertions, and pixel checks on backbuffer screenshots.
 
 MinGW-w64 (WinLibs) or MSVC, C++20. The format parsers are a pinned snapshot
 of [FableForge](https://github.com/BuffJesus)'s `forgecore` (see `vendor/VENDORED.md`).
