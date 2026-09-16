@@ -53,15 +53,10 @@ Targets for the remaining gaps:
   in the same frame were previously lost (Oakvale West 12 -> 20 trees).
 - Any future placement doubt: `CalcObjectMatrix` `0x02ee3a00` / `Calc2DObjectMatrix` `0x02ee3850`.
 
-## Correctness pass — remaining
-- All-maps things audit (2026-09-16, `--things` on all 399 maps): 21,800 things, 12,434 placed,
-  0 unknown defs, 0 missing meshes; the 8,434 "without a model" are markers/cameras/nav/emitters,
-  the 113 "unplaced" are NAVIGATION_SEED (no physics block), 819 creatures skipped by default.
-  Every .tng thing with a mesh is exported, plus mesh-dummy children (above). Villagers/guards/
-  animals are spawned at runtime by the village system and quest scripts — not exportable.
-- Screenshot sweep of every level from a fixed camera still only done for Arena, Oakvale West,
-  Bowerstone Slums, Lookout Point, Hook Coast, Greatwood_1, Bowerstone Bridge.
-- Meshes with helper points / dummy objects: not composed (no evidence they affect placement).
+## Correctness pass — DONE 2026-09-16 (see docs/SWEEP.md)
+- All 399 maps screenshotted (contact sheets) + `tools/sweep_metrics.py` height-over-terrain
+  audit. Fixed: texture-less physics-hull triangles rendering as black shells. Open: the two
+  ExecutionTree gate surrounds 31 m under the terrain; cliff mapping direction by slope.
 
 ## Other
 - Creatures in bind pose (GUI toggle), water waves/shore foam, exact cliff mapping direction.
