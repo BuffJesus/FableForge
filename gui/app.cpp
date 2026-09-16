@@ -170,6 +170,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.walkable = j.value("walkable", settings_.walkable);
         settings_.foliage = j.value("foliage", settings_.foliage);
         settings_.things = j.value("things", settings_.things);
+        settings_.world = j.value("world", settings_.world);
     } catch (...) {}
 }
 
@@ -181,7 +182,7 @@ void App::saveSettings() const {
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
-            {"foliage", settings_.foliage}, {"things", settings_.things},
+            {"foliage", settings_.foliage}, {"things", settings_.things}, {"world", settings_.world},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -197,17 +198,23 @@ void App::scanInstall(const std::string& root) {
         pushLog("Not a Fable TLC install: " + root, 2);
         return;
     }
+    regions_ = te::loadRegionIndex(root);
     try {
         const auto wad = forge::wad::Archive::open(wadPath);
         for (const auto& e : wad.entries()) {
             const fs::path p(e.name);
             if (lower(p.extension().string()) != ".lev") continue;
-            MapEntry m; m.name = p.stem().string(); m.key = m.name; m.group = groupOf(m.name); m.size = e.size;
+            MapEntry m; m.name = p.stem().string(); m.key = m.name; m.size = e.size;
+            auto rg = regions_.regionOfMap.find(lower(m.name));
+            m.group = rg != regions_.regionOfMap.end() ? rg->second : groupOf(m.name);
+            auto og = regions_.originOfMap.find(lower(m.name));
+            if (og != regions_.originOfMap.end()) { m.worldX = og->second.first; m.worldY = og->second.second; m.hasWorld = true; }
             const fs::path loose = fs::path(root) / "data" / "Levels" / "FinalAlbion" / (m.name + ".lev");
             if (fs::exists(loose)) m.loosePath = loose.string();
             maps_.push_back(std::move(m));
         }
         std::sort(maps_.begin(), maps_.end(), [](const MapEntry& a, const MapEntry& b) {
+            if (lower(a.group) != lower(b.group)) return lower(a.group) < lower(b.group);
             return lower(a.name) < lower(b.name);
         });
         pushLog(std::to_string(maps_.size()) + " maps in FinalAlbion.wad", 0);
@@ -280,6 +287,8 @@ void App::selectMap(const std::string& nameOrKey) {
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
     selectedName_ = it->key;
+    scrollToSelected_ = true;
+    groupOpen_[it->group] = true;
     renderer_.clearLayer(0);
     renderer_.clearLayer(1);
     foliageLoadedFor_.clear();
@@ -366,6 +375,12 @@ void App::startExport() {
     if (const MapEntry* e = findEntry(selectedName_)) startExportOf(*e);
 }
 
+std::vector<std::string> App::regionMapKeys(const std::string& region) const {
+    std::vector<std::string> out;
+    for (const auto& m : maps_) if (m.group == region && m.loosePath.empty()) out.push_back(m.key);
+    return out;
+}
+
 std::vector<std::string> App::visibleMapNames() const {
     std::vector<std::string> out;
     const std::string f = lower(filter_);
@@ -415,6 +430,8 @@ void App::startExportOf(const MapEntry& entry) {
             o.layers = s.layers;
             o.walkableColor = s.walkable;
             o.up = s.up == 0 ? te::UpAxis::Y : te::UpAxis::Z;
+            if (s.world && entry.hasWorld) { o.originX = entry.worldX; o.originY = entry.worldY; }
+            else if (s.world) r.log.push_back("warning: no world placement known for " + entry.name + ", exporting map-local");
             o.log = [&](const std::string& m) { r.log.push_back(m); };
             if (s.textures && ctx == nullptr) r.log.push_back("warning: textures not loaded yet, exporting untextured");
             const auto scene = te::buildScene(file, o, ctx);
@@ -424,7 +441,7 @@ void App::startExportOf(const MapEntry& entry) {
                 fo.gameRoot = ctx->gameRoot();
                 fo.textures = o.textures;
                 fo.up = o.up;
-                fo.mapLocal = true;
+                fo.mapLocal = !(s.world && entry.hasWorld);
                 fo.log = o.log;
                 fol = foliageexport::load(entry.name, fo, *ctx);
             }
@@ -434,6 +451,7 @@ void App::startExportOf(const MapEntry& entry) {
                 to.gameRoot = ctx->gameRoot();
                 to.textures = o.textures;
                 to.up = o.up;
+                to.originX = o.originX; to.originY = o.originY;
                 to.log = o.log;
                 thg = thingsexport::load(entry.name, to, *ctx);
             }
@@ -578,6 +596,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("thing_instances=" + std::to_string(thingInstances_));
     v.push_back("preview_things=" + std::string(previewThings_ ? "1" : "0"));
     v.push_back("export_things=" + std::string(settings_.things ? "1" : "0"));
+    v.push_back("world=" + std::string(settings_.world ? "1" : "0"));
+    if (const MapEntry* e = findEntry(selectedName_)) v.push_back("region=" + e->group);
     v.push_back("batch_done=" + std::to_string(batchDone_));
     v.push_back("batch_failed=" + std::to_string(batchFailed_));
     v.push_back("filter=" + filter_);
@@ -763,6 +783,7 @@ void App::drawExplorer(float width) {
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar();
             if (selected) auto_.registerWidget("row_selected");
+            if (selected && scrollToSelected_) { ImGui::SetScrollHereY(0.5f); scrollToSelected_ = false; }
             auto_.registerWidget(("row_" + m.key).c_str());
             if (!m.loosePath.empty() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m.loosePath.c_str());
             ImGui::PopID();
@@ -935,7 +956,9 @@ void App::drawActions(float width) {
     const float logHeight = 140.0f;
     // Footer: primary Export + batch/open-folder rows. Always visible, never scrolls away.
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
-    const float footerHeight = 42 + 8 + 32 + (showOpen ? 40 : 0) + (batchActive() ? 40 : 0) + 16;
+    const MapEntry* footerEntry = findEntry(selectedName_);
+    const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
+    const float footerHeight = 42 + 8 + 32 + (showOpen ? 40 : 0) + (showRegion ? 40 : 0) + (batchActive() ? 40 : 0) + 16;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
     ImGui::BeginChild("##settings", ImVec2(width, ImGui::GetContentRegionAvail().y - logHeight - footerHeight - 30), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
@@ -958,6 +981,13 @@ void App::drawActions(float width) {
     ImGui::Dummy(ImVec2(0, 6));
     theme::label("Up axis");
     theme::segmented("##up", settings_.up, {"Y up  (glTF)", "Z up  (Fable)"}, inner - 24);
+    ImGui::Dummy(ImVec2(0, 4));
+    theme::toggle("World coordinates (maps line up)", &settings_.world);
+    auto_.registerWidget("toggle_world");
+    ImGui::PushFont(fontSmall_);
+    ImGui::TextColored(theme::vec(theme::Faint), settings_.world ? "Placed at the map's WLD position: export a whole region and it assembles itself."
+                                                                  : "Map-local: the map's corner sits at the origin.");
+    ImGui::PopFont();
     ImGui::PushFont(fontSmall_);
     ImGui::TextColored(theme::vec(theme::Faint), settings_.up == 0 ? "Blender, Unreal, three.js and most viewers expect Y up." : "Raw Fable coordinates; heights on Z.");
     ImGui::PopFont();
@@ -1058,6 +1088,17 @@ void App::drawActions(float width) {
         else std::snprintf(b, sizeof b, "Export %zu matching maps", visible.size());
         if (theme::ghostButton(b, ImVec2(inner, 32)) && installValid_ && !exportFuture_.valid()) startBatchExport(visible);
         auto_.registerWidget("btn_export_all");
+        if (selEntry && regions_.loaded && regions_.mapsOfRegion.count(selEntry->group)) {
+            const auto keys = regionMapKeys(selEntry->group);
+            if (keys.size() > 1) {
+                ImGui::SetCursorPosX(16);
+                char rb[96];
+                std::snprintf(rb, sizeof rb, "Export region %s (%zu maps)", selEntry->group.c_str(), keys.size());
+                if (theme::ghostButton(rb, ImVec2(inner, 32)) && !exportFuture_.valid()) { settings_.world = true; startBatchExport(keys); }
+                auto_.registerWidget("btn_export_region");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Exports every map of the region in world coordinates");
+            }
+        }
         if (lastExportOk_ && !exportFuture_.valid()) {
             ImGui::SetCursorPosX(16);
             if (theme::ghostButton("Open output folder", ImVec2(inner, 32))) openInExplorer(fs::path(lastExportPath_).parent_path().string());
@@ -1248,6 +1289,7 @@ bool Automation::tick(App& app) {
         else if (key == "foliage") s.foliage = val == "1";
         else if (key == "preview_foliage") app.setPreviewFoliage(val == "1");
         else if (key == "things") s.things = val == "1";
+        else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");
         else if (key == "texels") s.texels = std::atoi(val.c_str());
         else if (key == "tile") s.tile = float(std::atof(val.c_str()));
@@ -1258,6 +1300,12 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "export") { app.startExport(); note("ok   " + line); ++pc_; }
     else if (cmd == "export_all") { app.startBatchExport(app.visibleMapNames()); note("ok   " + line); ++pc_; }
+    else if (cmd == "export_region") {
+        const MapEntry* e = app.findEntry(app.selectedName());
+        if (!e) fail("export_region: nothing selected");
+        else { app.settings().world = true; app.startBatchExport(app.regionMapKeys(e->group)); note("ok   " + line); }
+        ++pc_;
+    }
     else if (cmd == "wait_batch") waitOn(!app.batchActive() && !app.exportBusy(), "batch export");
     else if (cmd == "open") { if (!app.openLooseLev(rest)) fail("open failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "screenshot") { pendingShot_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 1; }

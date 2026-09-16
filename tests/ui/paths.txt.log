@@ -1,13 +1,18 @@
 ok   wait_maps
 ok   wait_ready
-..   click group_Arena
+ok   filter Arena_Filler
+ok   frames 2
+ok   assert_widget group_Filler_Arena_01
+..   click group_Filler_Arena_01
 ok   frames 3
 ok   assert_widget row_Arena_Filler_01
 ..   click row_Arena_Filler_01
 ok   wait_loaded
 ok   assert_state selected Arena_Filler_01
+ok   assert_state region Filler_Arena_01
 ok   screenshot build/ui/p1_tree_click.png
 shot build/ui/p1_tree_click.png
+ok   filter
 ok   set format obj
 ok   set outdir build/ui
 ..   click toggle_textures
@@ -67,6 +72,8 @@ ok   filter
      thing_instances=0
      preview_things=1
      export_things=1
+     world=0
+     region=Loose files
      batch_done=3
      batch_failed=0
      filter=

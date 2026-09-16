@@ -2,13 +2,18 @@
 # untextured export, loose .lev open, small batch export with a filter.
 wait_maps
 wait_ready
-click group_Arena
+filter Arena_Filler
+frames 2
+assert_widget group_Filler_Arena_01
+click group_Filler_Arena_01
 frames 3
 assert_widget row_Arena_Filler_01
 click row_Arena_Filler_01
 wait_loaded
 assert_state selected Arena_Filler_01
+assert_state region Filler_Arena_01
 screenshot build/ui/p1_tree_click.png
+filter
 set format obj
 set outdir build/ui
 click toggle_textures

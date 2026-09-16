@@ -35,6 +35,9 @@ struct Options {
     bool textures = true;
     bool creatures = false;
     terrainexport::UpAxis up = terrainexport::UpAxis::Y;
+    // Added to every position (TNG positions are map-local). Use the map's
+    // WLD MapX/MapY to place several maps in one world.
+    float originX = 0.0f, originY = 0.0f;
     std::function<void(const std::string&)> log;
 };
 

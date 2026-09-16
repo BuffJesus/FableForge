@@ -29,6 +29,8 @@ struct MapEntry {
     std::string group;
     uint32_t size = 0;
     std::string loosePath;   // set when a loose .lev overrides the WAD copy
+    float worldX = 0, worldY = 0;
+    bool hasWorld = false;
 };
 
 struct ExportSettings {
@@ -40,6 +42,7 @@ struct ExportSettings {
     bool walkable = false;
     bool foliage = true;     // export baked grass/plants as instances
     bool things = true;      // export placed objects (.tng)
+    bool world = false;      // place at WLD MapX/MapY so maps line up
     int up = 0;              // 0 = Y, 1 = Z
     std::string outDir;
 };
@@ -164,6 +167,8 @@ private:
     std::vector<MapEntry> maps_;
     std::string filter_;
     std::map<std::string, bool> groupOpen_;
+    terrainexport::RegionIndex regions_;
+    std::vector<std::string> regionMapKeys(const std::string& region) const;
     std::string lastError_;
 
     // texture context
@@ -202,6 +207,7 @@ private:
     int batchTotal_ = 0, batchDone_ = 0, batchFailed_ = 0;
     std::string batchCurrent_;
     bool focusFilter_ = false;
+    bool scrollToSelected_ = false;
     std::vector<std::pair<int, std::string>> log_;   // level, line (0 info, 1 warn, 2 error, 3 success)
     std::mutex logMutex_;
     std::vector<std::pair<int, std::string>> logPending_;

@@ -16,6 +16,7 @@
 #include "forge/defdecode.hpp"
 #include "forge/defschema.hpp"
 #include "forge/terraintex.hpp"
+#include "forge/wld.hpp"
 #include "miniz/miniz.h"
 #include "nlohmann/json.hpp"
 #include "glbwriter.hpp"
@@ -72,6 +73,46 @@ Image rgbaImage(uint32_t w, uint32_t h, std::vector<uint8_t> rgba, std::string n
 }
 
 } // namespace
+
+// ----------------------------------------------------------------- world
+
+namespace {
+std::string lowerStr(std::string s) { for (char& c : s) c = char(std::tolower((unsigned char)c)); return s; }
+std::string stemOf(const std::string& levelName) {
+    std::string s = levelName;
+    const size_t slash = s.find_last_of("/\\");
+    if (slash != std::string::npos) s = s.substr(slash + 1);
+    const size_t dot = s.rfind('.');
+    if (dot != std::string::npos) s = s.substr(0, dot);
+    return s;
+}
+} // namespace
+
+RegionIndex loadRegionIndex(const fs::path& gameRoot) {
+    RegionIndex idx;
+    const fs::path wldPath = gameRoot / "data" / "Levels" / "FinalAlbion.wld";
+    if (!fs::exists(wldPath)) return idx;
+    try {
+        const auto wld = forge::wld::File::parse(wldPath);
+        for (const auto& m : wld.maps()) idx.originOfMap[lowerStr(stemOf(m.levelName))] = {float(m.mapX), float(m.mapY)};
+        for (const auto& r : wld.regions())
+            for (const auto& lvl : r.containsMaps) {
+                const std::string stem = stemOf(lvl);
+                idx.regionOfMap[lowerStr(stem)] = r.regionName;
+                idx.mapsOfRegion[r.regionName].push_back(stem);
+            }
+        idx.loaded = true;
+    } catch (...) {}
+    return idx;
+}
+
+bool worldOrigin(const fs::path& gameRoot, const std::string& mapName, float& x, float& y) {
+    const auto idx = loadRegionIndex(gameRoot);
+    auto it = idx.originOfMap.find(lowerStr(mapName));
+    if (it == idx.originOfMap.end()) return false;
+    x = it->second.first; y = it->second.second;
+    return true;
+}
 
 // ----------------------------------------------------------------- geometry
 

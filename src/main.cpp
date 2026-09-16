@@ -55,7 +55,8 @@ int usage() {
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 4)\n"
         "  --up <y|z>          up axis: y = glTF/Blender/Unreal-friendly (default), z = Fable native\n"
-        "  --origin <x,y>      add a world offset (Fable units) to every vertex\n"
+        "  --world             place the map at its world position (WLD MapX/MapY) so maps line up\n"
+        "  --origin <x,y>      add an explicit offset (Fable units) to every vertex\n"
         "  --walkable-colors   COLOR_0 vertex colours: white = walkable, red = blocked\n"
         "  --quiet             only print errors\n");
     return 2;
@@ -202,7 +203,7 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false;
     int texels = 8;
     float tile = 4.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -216,6 +217,7 @@ int main(int argc, char** argv) {
         else if (a == "--no-textures") textures = false;
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
+        else if (a == "--world") world = true;
         else if (a == "--creatures") creatures = true;
         else if (a == "--layers") layers = true;
         else if (a == "--texels") texels = std::atoi(next().c_str());
@@ -261,6 +263,12 @@ int main(int argc, char** argv) {
             if (c == std::string::npos) { std::fprintf(stderr, "--origin needs X,Y\n"); return 2; }
             o.originX = float(std::atof(originArg.substr(0, c).c_str()));
             o.originY = float(std::atof(originArg.substr(c + 1).c_str()));
+        } else if (world) {
+            if (!install.valid || !te::worldOrigin(install.root, lev.stem().string(), o.originX, o.originY)) {
+                std::fprintf(stderr, "--world: no WLD placement found for %s (is it a retail map name?)\n", lev.stem().string().c_str());
+                return 1;
+            }
+            if (!quiet) std::printf("world origin: %.0f, %.0f\n", o.originX, o.originY);
         }
         if (!quiet) o.log = [](const std::string& m) { std::printf("  %s\n", m.c_str()); };
         if ((foliage || things) && !install.valid) {
@@ -293,7 +301,7 @@ int main(int argc, char** argv) {
             fo.gameRoot = install.root;
             fo.textures = textures;
             fo.up = o.up;
-            fo.mapLocal = originArg.empty();
+            fo.mapLocal = originArg.empty() && !world;
             fo.log = o.log;
             fol = albion::foliageexport::load(lev.stem().string(), fo, ctx);
         }
@@ -305,6 +313,7 @@ int main(int argc, char** argv) {
             to.textures = textures;
             to.creatures = creatures;
             to.up = o.up;
+            to.originX = o.originX; to.originY = o.originY;
             to.log = o.log;
             thg = albion::thingsexport::load(lev.stem().string(), to, ctx, &thingStats);
         }

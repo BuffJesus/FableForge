@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -105,6 +106,20 @@ struct Scene {
     bool walkableColor = false;
     bool layers = false;
 };
+
+// The map's world origin from data/Levels/FinalAlbion.wld (MapX/MapY); false
+// when the WLD or the map is missing. World = origin + map-local.
+bool worldOrigin(const std::filesystem::path& gameRoot, const std::string& mapName, float& x, float& y);
+
+// Region membership from the WLD: region name for a map ("" when unknown) and
+// the maps of a region, in WLD order.
+struct RegionIndex {
+    std::map<std::string, std::string> regionOfMap;               // map stem -> region name
+    std::map<std::string, std::vector<std::string>> mapsOfRegion;  // region name -> map stems
+    std::map<std::string, std::pair<float, float>> originOfMap;    // map stem -> MapX, MapY
+    bool loaded = false;
+};
+RegionIndex loadRegionIndex(const std::filesystem::path& gameRoot);
 
 // Geometry only (positions/normals/UVs/walkable/theme slots), no textures.
 Scene buildMesh(const forge::lev::File& level, const Options& options);

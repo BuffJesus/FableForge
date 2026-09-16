@@ -45,7 +45,8 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 4 — see "Known gaps")
 --up <y|z>          y = glTF/Blender/Unreal convention (default), z = Fable native
---origin <x,y>      add a world offset to every vertex (for stitching maps)
+--world             place the map at its WLD MapX/MapY so several exports line up in one scene
+--origin <x,y>      explicit offset instead
 --walkable-colors   COLOR_0 vertex colours
 ```
 
@@ -71,7 +72,9 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 AlbionTerrainGUI.exe [--install <fable-root>]
 ```
 
-Left: searchable map list grouped by area (Ctrl+F). Middle: the 3D view with
+Left: searchable map list grouped by the game's regions from `FinalAlbion.wld` (Ctrl+F);
+`Export region` writes every map of the selected map's region in world coordinates so
+they assemble themselves in Blender. Middle: the 3D view with
 Unreal-editor controls — hold **RMB** to look around and fly with **WASD**
 (**Q/E** down/up, **Shift** faster, wheel changes fly speed); **LMB** drag
 dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames

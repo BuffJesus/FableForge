@@ -31,6 +31,7 @@ add_library(forgecore_slice STATIC
   vendor/forgecore/src/stbinfo.cpp
   vendor/forgecore/src/rangecodec.cpp
   vendor/forgecore/src/tng.cpp
+  vendor/forgecore/src/wld.cpp
   vendor/third_party/miniz/miniz.c
   vendor/third_party/minilzo/minilzo.c
 )

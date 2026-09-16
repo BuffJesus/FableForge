@@ -134,8 +134,8 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         inst.mesh = meshIndex;
         inst.type = -1;
         inst.prim = 0;
-        inst.x = propF(*phys, "PositionX", 0.0f);
-        inst.y = propF(*phys, "PositionY", 0.0f);
+        inst.x = propF(*phys, "PositionX", 0.0f) + options.originX;
+        inst.y = propF(*phys, "PositionY", 0.0f) + options.originY;
         inst.z = propF(*phys, "PositionZ", 0.0f);
         float fwd[3] = {propF(*phys, "RHSetForwardX", 1.0f), propF(*phys, "RHSetForwardY", 0.0f), propF(*phys, "RHSetForwardZ", 0.0f)};
         float up[3] = {propF(*phys, "RHSetUpX", 0.0f), propF(*phys, "RHSetUpY", 0.0f), propF(*phys, "RHSetUpZ", 1.0f)};
