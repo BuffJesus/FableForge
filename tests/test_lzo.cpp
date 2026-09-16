@@ -15,6 +15,8 @@
 #include "forge/big.hpp"
 #include "forge/env.hpp"
 #include "forge/stb.hpp"
+#include "forge/rangecodec.hpp"
+#include "forge/stbbake.hpp"
 #include "lzo1x.hpp"
 #include "minilzo/minilzo.h"
 
@@ -25,6 +27,7 @@ namespace {
 int g_frames = 0, g_textures = 0, g_fail = 0, g_roundtrips = 0;
 size_t g_rtIn = 0, g_rtOut = 0;
 size_t g_retailComp = 0, g_oursComp = 0; int g_fits = 0, g_frameCmp = 0;
+int g_vbExact = 0, g_vbDiff = 0, g_vbSmaller = 0, g_vbLarger = 0, g_vbBad = 0;
 
 // Encoder check: our stream must decode to the input through minilzo AND our
 // decoder, and consume exactly the stream.
@@ -103,6 +106,49 @@ void checkChunk(const std::vector<uint8_t>& d, const std::string& name) {
                     std::vector<uint8_t> body(unc); size_t bl = unc;
                     if (albion::lzo1x::decompress(d.data() + off + 8, comp, body.data(), &bl) == albion::lzo1x::Status::Ok) {
                         roundTrip(body, name.c_str());
+                        // CRangeCompressor fidelity: the patch VB block must re-encode byte-exact
+                        try {
+                            const auto h = forge::stbbake::parsePatchHeader(body);
+                            if (h.valid && !h.isWaterOnly) {
+                                const auto pb = forge::stbbake::parsePatchBody(body);
+                                if (pb.valid && !pb.waterOnly && pb.vbBlock.size() > 4) {
+                                    const size_t blockLen = pb.vbBlock.size() - 4;
+                                    const auto elems = forge::rangecodec::decode(&pb.vbBlock[4], blockLen, h.vertexCount, 16);
+                                    const auto re = forge::rangecodec::encodeNative(elems.data(), h.vertexCount, 16);
+                                    if (re.size() == blockLen && std::memcmp(re.data(), &pb.vbBlock[4], blockLen) == 0) ++g_vbExact;
+                                    else {
+                                        ++g_vbDiff;
+                                        if (re.size() < blockLen) ++g_vbSmaller; else if (re.size() > blockLen) ++g_vbLarger;
+                                        const auto back = forge::rangecodec::decode(re.data(), re.size(), h.vertexCount, 16);
+                                        if (back != elems) ++g_vbBad;
+                                        if (std::getenv("ALBION_LZO_VERBOSE")) std::printf("    VB differs: %s verts=%u donor=%zu ours=%zu%s\n", name.c_str(), h.vertexCount, blockLen, re.size(), back != elems ? " DECODE-MISMATCH" : "");
+                                        if (std::getenv("ALBION_LZO_VERBOSE") && g_vbDiff <= 6) {
+                                            auto dump = [&](const uint8_t* q, size_t n) {
+                                                std::printf("      [%02x]", q[0]);
+                                                size_t pos = 1;
+                                                while (pos < n) {
+                                                    const uint8_t f = q[pos]; if (f & 0x80) { std::printf(" END"); break; }
+                                                    const size_t b = (f & 0x40) ? 4 : (f & 0x20) ? 2 : 1;
+                                                    const uint8_t bits = q[pos + 1]; pos += 2;
+                                                    std::printf(" {f=%02x bits=%u", f, bits);
+                                                    auto rd = [&](const char* nm) { uint32_t v = 0; for (size_t i = 0; i < b; ++i) v |= uint32_t(q[pos + i]) << (8 * i); pos += b; std::printf(" %s=%x", nm, v); };
+                                                    if (f & 0x11) rd("bias");
+                                                    if (f & 0x02) { std::printf(" shift=%u", q[pos]); ++pos; }
+                                                    if (f & 0x08) rd("or");
+                                                    if (f & 0x04) rd("strip");
+                                                    std::printf("}");
+                                                    pos += bits == 0 ? 0 : (((size_t(bits) * h.vertexCount + 31) >> 5) << 2);
+                                                }
+                                                std::printf("\n");
+                                            };
+                                            if (const char* dd = std::getenv("ALBION_LZO_DUMP")) { std::ofstream(std::string(dd) + "/vb" + std::to_string(g_vbDiff) + ".bin", std::ios::binary).write(reinterpret_cast<const char*>(elems.data()), std::streamsize(elems.size())); std::ofstream(std::string(dd) + "/vb" + std::to_string(g_vbDiff) + ".donor", std::ios::binary).write(reinterpret_cast<const char*>(&pb.vbBlock[4]), std::streamsize(blockLen)); }
+                                            std::printf("      donor:"); dump(&pb.vbBlock[4], blockLen);
+                                            std::printf("      ours: "); dump(re.data(), re.size());
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (const std::exception&) {}
                         const auto enc = albion::lzo1x::compress(body.data(), body.size());
                         g_retailComp += comp; g_oursComp += enc.size(); ++g_frameCmp; if (enc.size() <= comp) ++g_fits;
                         if (std::getenv("ALBION_LZO_VERBOSE")) std::printf("    frame unc=%u retail=%u ours=%zu %s\n", unc, comp, enc.size(), enc.size() > comp ? "OVER" : "");
@@ -203,6 +249,8 @@ int main() {
             if (int32_t(e.id) == bankIndex) { checkChunk(archive.read(e), stem); break; }
     }
     checkTextures(root / "data" / "graphics" / "pc" / "textures.big");
+    std::printf("  CRangeCompressor VB blocks: %d byte-exact, %d differ (%d smaller, %d larger, %d decode mismatches)\n", g_vbExact, g_vbDiff, g_vbSmaller, g_vbLarger, g_vbBad);
+    if (g_vbBad) ++g_fail;
     std::printf("  retail lzo1x_999 frames: %zu bytes; ours: %zu bytes (%.1f%%), %d of %d frames fit their retail slot\n",
                 g_retailComp, g_oursComp, g_retailComp ? 100.0 * double(g_oursComp) / double(g_retailComp) : 0.0, g_fits, g_frameCmp);
     std::printf("albionatlas_lzo_tests: %d chunk frames + texture chunks compared, %d encoder round trips (%.1f%% of input), %d failures\n",

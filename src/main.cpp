@@ -26,6 +26,8 @@
 #include "forge/env.hpp"
 #include "forge/meshpreview.hpp"
 #include "forge/lev.hpp"
+#include "forge/stbbake.hpp"
+#include "forge/stbheightbake.hpp"
 #include "forge/wad.hpp"
 #include "effects.hpp"
 #include "foliageexport.hpp"
@@ -208,6 +210,60 @@ int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
+    if (cmd == "bake-terrain") {   // diagnostic: stbbake::bakeHeightfield <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>
+        if (args.size() < 6) { std::fprintf(stderr, "usage: AlbionAtlas bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>\n"); return 2; }
+        try {
+            std::ifstream cf(args[1], std::ios::binary);
+            std::vector<uint8_t> chunk((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+            const auto lev = forge::lev::File::open(args[2]);
+            forge::stbbake::HeightfieldBakeOptions opt;
+            opt.requireCanonicalSize = false;
+            const auto r = forge::stbbake::bakeHeightfield(chunk, lev, std::atoi(args[3].c_str()), std::atoi(args[4].c_str()), opt);
+            for (const auto& n : r.notes) std::printf("%s\n", n.c_str());
+            std::ofstream(args[5], std::ios::binary).write(reinterpret_cast<const char*>(r.chunk.data()), std::streamsize(r.chunk.size()));
+            std::printf("wrote %s (%zu bytes, %zu patches, %zu foreground frames)\n", args[5].c_str(), r.chunk.size(), r.patches, r.foregroundFrames);
+            // verify: every foreground vertex and composed-patch vertex height must equal the LEV height
+            {
+                const auto out = forge::stbbake::parseChunk(r.chunk);
+                double fgMax = 0, bgMax = 0; size_t fgN = 0, bgN = 0;
+                const int wx = std::atoi(args[3].c_str()), wy = std::atoi(args[4].c_str());
+                auto levH = [&](int lx, int ly) {
+                    const int cx = std::min(lx, lev.width() - 1), cy = std::min(ly, lev.height() - 1);
+                    return double(forge::stbbake::quantizeEngineHeight(lev.heightAt(cx, cy)));
+                };
+                for (size_t fi = 0; fi < out.frameIndices.size(); ++fi) {
+                    std::vector<uint8_t> body;
+                    try { body = forge::stbbake::decodeFrame(out, fi); } catch (...) { continue; }
+                    bool isForeground = false;
+                    try {
+                        const auto fg = forge::stbbake::parseForegroundFrame(body);
+                        if (forge::stbbake::serializeForegroundFrame(fg) == body) {
+                            isForeground = true;
+                            for (const auto& layer : fg.layers) for (const auto& v : layer.vertices) {
+                                const int lx = int(v.x) - wx, ly = int(v.y) - wy;
+                                if (lx < 0 || ly < 0 || lx >= lev.cellsX() || ly >= lev.cellsY()) continue;
+                                fgMax = std::max(fgMax, std::fabs(double(v.height) - levH(lx, ly))); ++fgN;
+                            }
+                        }
+                    } catch (...) {}
+                    if (isForeground) continue;
+                    try {
+                        const auto h = forge::stbbake::parsePatchHeader(body);
+                        if (!h.valid || h.isWaterOnly) continue;
+                        const auto pb = forge::stbbake::parsePatchBody(body);
+                        if (!pb.valid || pb.waterOnly) continue;
+                        for (const auto& v : forge::stbbake::decodePatchVertices(pb)) {
+                            const int lx = int(v.gridX) - wx, ly = int(v.gridY) - wy;
+                            if (lx < 0 || ly < 0 || lx >= lev.cellsX() || ly >= lev.cellsY()) continue;
+                            bgMax = std::max(bgMax, std::fabs(double(v.height) - levH(lx, ly))); ++bgN;
+                        }
+                    } catch (...) {}
+                }
+                std::printf("verify: foreground %zu vertices max |dh| = %.4f; composed patches %zu vertices max |dh| = %.4f\n", fgN, fgMax, bgN, bgMax);
+            }
+            return 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
 
     std::string installArg, out, target, upArg = "y", originArg;
     bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, particles = false, world = false, water = true;

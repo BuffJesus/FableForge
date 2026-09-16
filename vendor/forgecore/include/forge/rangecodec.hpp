@@ -66,4 +66,10 @@ std::vector<uint8_t> addColumnConstant(const uint8_t* block, size_t blockLen,
                                        size_t columnOffset, size_t columnWidth,
                                        int32_t delta);
 
+// The editor's own compressor, ported from FableWin CRangeCompressor::Compress
+// (column split search, five per-column transforms, dword bit-packing, RAW
+// fallback). Reproduces retail landscape VB/IB blocks byte-for-byte from their
+// decoded elements, so an edited block packs exactly like the donor did.
+std::vector<uint8_t> encodeNative(const uint8_t* elems, size_t count, size_t stride);
+
 } // namespace forge::rangecodec

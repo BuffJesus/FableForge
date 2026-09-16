@@ -1,6 +1,8 @@
 // forge::rangecodec — port of CRangeCompressor::Decompress @0x00f39ed0.
 #include "forge/rangecodec.hpp"
 
+#include <algorithm>
+
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -529,6 +531,228 @@ std::vector<uint8_t> addColumnConstant(const uint8_t* block, size_t blockLen,
         if (readValue(after, base + columnOffset) != expected)
             throw std::runtime_error("rangecodec: bias edit verification failed");
     }
+    return out;
+}
+
+// ---------------------------------------------------------------- native encoder
+//
+// CRangeCompressor::Compress as the editor runs it (FableWin.exe, PDB-named,
+// decompiled 2026-09-16: Compress @0x033165b0 / @0x03316f60,
+// CalcCompressionScript @0x03319190, CalcBestCompressionForBlock @0x03319590,
+// TestRedundantBitStrip @0x03315f90, TestRangeBias @0x03315c00,
+// CalcBitsNeeded @0x03316250, CalcHeaderSizeNeeded @0x033194f0).
+//
+// Script search: a stride is cut into 4-byte blocks (last one shorter; a 3-byte
+// block is 2 + 1). Each block is either coded whole or split in halves; the
+// split is taken only when its total (packed bits + descriptor bytes) is
+// strictly smaller. For one column five candidates are costed and the first
+// cheapest wins: raw, strip constant bits, strip then bias, bias, bias then
+// strip. Values are bit-packed LSB-first into little-endian dwords, one run of
+// dwords per column. If the whole script is not strictly smaller than the raw
+// element bytes plus one, the block is stored RAW.
+
+namespace {
+
+struct ScriptEntry {
+    uint32_t flags = 0;      // 0x01 post-bias, 0x02 shift, 0x04 strip mask, 0x08 OR mask, 0x10 pre-bias, 0x20 2-byte, 0x40 4-byte
+    uint32_t bits = 0;
+    uint32_t bias = 0;
+    uint32_t shift = 0;
+    uint32_t strip = 0;
+    uint32_t orMask = 0;
+};
+
+// The debug editor's TestRangeBias (@0x03315c00) also tries the signed minimum
+// when the signed range is narrower. The shipped FinalAlbion_RT.stb was NOT
+// written that way: with unsigned-minimum bias only, all 325 sampled retail
+// patch vertex blocks re-encode byte-identically (with the signed variant 38
+// of them differ). Keep the data's behaviour.
+constexpr bool kSignedBias = false;
+inline uint32_t blockMask(size_t b) { return b == 4 ? 0xFFFFFFFFu : b == 2 ? 0xFFFFu : 0xFFu; }
+inline size_t blockOf(uint32_t flags) { return (flags & 0x40) ? 4 : (flags & 0x20) ? 2 : 1; }
+
+uint32_t readVar(const uint8_t* p, size_t b) {
+    uint32_t v = 0;
+    for (size_t i = 0; i < b; ++i) v |= uint32_t(p[i]) << (8 * i);
+    return v;
+}
+void writeVar(std::vector<uint8_t>& out, uint32_t v, size_t b) {
+    for (size_t i = 0; i < b; ++i) out.push_back(uint8_t(v >> (8 * i)));
+}
+
+int calcBitsNeeded(const std::vector<uint32_t>& v) {
+    uint32_t all = v.empty() ? 0 : v[0];
+    for (uint32_t x : v) all |= x;
+    for (int b = 31; b >= 0; --b) if (all & (1u << b)) return b + 1;
+    return 0;
+}
+size_t memoryBitCompressed(const std::vector<uint32_t>& v) {
+    return ((size_t(calcBitsNeeded(v)) * v.size() + 31) >> 5) << 2;
+}
+size_t headerSize(const ScriptEntry& e) {
+    const size_t b = blockOf(e.flags);
+    size_t n = 2;
+    if (e.flags & 0x11) n += b;
+    if (e.flags & 0x02) n += 1;
+    if (e.flags & 0x04) n += b;
+    if (e.flags & 0x08) n += b;
+    return n;
+}
+
+// TestRedundantBitStrip: drop bits that are constant over the column.
+void testRedundantBitStrip(const std::vector<uint32_t>& in, std::vector<uint32_t>& out, ScriptEntry& e, size_t b) {
+    const uint32_t mask = blockMask(b);
+    uint32_t zeroMask = mask, oneMask = mask;
+    for (uint32_t v : in) { zeroMask &= ~v; oneMask &= v; }
+    const uint32_t constMask = zeroMask | oneMask;
+    out.resize(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        uint32_t packed = 0, bit = 1;
+        for (size_t k = 0; k < b * 8; ++k) {
+            const uint32_t src = 1u << k;
+            if (!(constMask & src)) { if (in[i] & src) packed |= bit; bit <<= 1; }
+        }
+        out[i] = packed;
+    }
+    if (oneMask) { e.flags |= 0x08; e.orMask = oneMask; }
+    bool seenConst = false, seenVar = false, gap = false, shiftSet = false;
+    for (size_t k = 0; k < b * 8; ++k) {
+        if (!(constMask & (1u << k))) {
+            if (seenConst && !shiftSet) { e.flags |= 0x02; e.shift = uint32_t(k); shiftSet = true; }
+            if (gap) { e.flags |= 0x04; e.strip = ~constMask & mask; e.flags &= ~0x02u; return; }
+            seenVar = true;
+        } else {
+            seenConst = true;
+            if (seenVar) gap = true;
+        }
+    }
+}
+
+// TestRangeBias: subtract the smaller of the unsigned / signed minimum.
+void testRangeBias(const std::vector<uint32_t>& in, std::vector<uint32_t>& out, ScriptEntry& e, size_t b) {
+    const uint32_t mask = blockMask(b);
+    const unsigned sh = unsigned(32 - b * 8) & 31;
+    auto sext = [&](uint32_t v) { return int32_t(v << sh) >> sh; };
+    uint32_t uMin = in[0], uMax = in[0];
+    int32_t sMin = sext(in[0]), sMax = sext(in[0]);
+    for (uint32_t v : in) {
+        const int32_t s = sext(v);
+        uMin = std::min(uMin, v); uMax = std::max(uMax, v);
+        sMin = std::min(sMin, s); sMax = std::max(sMax, s);
+    }
+    const uint32_t bias = (kSignedBias && uint32_t(sMax - sMin) < uMax - uMin) ? (uint32_t(sMin) & mask) : uMin;
+    out.resize(in.size());
+    for (size_t i = 0; i < in.size(); ++i) out[i] = (in[i] - bias) & mask;
+    if (!(e.flags & 0x10)) e.flags |= 0x01;
+    e.bias = bias;
+}
+
+size_t bestCompressionForBlock(const std::vector<uint32_t>& values, size_t b, ScriptEntry& best) {
+    ScriptEntry e[5];
+    std::vector<uint32_t> a[5];
+    const uint32_t sizeFlag = b == 2 ? 0x20u : b == 4 ? 0x40u : 0u;
+    for (auto& x : e) x.flags = sizeFlag;
+    a[0] = values;
+    e[1] = e[0]; testRedundantBitStrip(a[0], a[1], e[1], b);
+    e[2] = e[1]; testRangeBias(a[1], a[2], e[2], b);
+    e[3] = e[0]; e[3].flags = (e[3].flags & ~0x1u) | 0x10u; testRangeBias(a[0], a[3], e[3], b);
+    e[4] = e[3]; testRedundantBitStrip(a[3], a[4], e[4], b);
+    size_t bestCost = 0x7fffffff; int pick = 0;
+    for (int i = 0; i < 5; ++i) {
+        const size_t c = memoryBitCompressed(a[i]) + headerSize(e[i]);
+        if (c < bestCost) { bestCost = c; pick = i; }
+    }
+    best = e[pick];
+    best.bits = uint32_t(calcBitsNeeded(a[pick]));
+    return bestCost;
+}
+
+size_t calcCompressionScript(std::vector<ScriptEntry>& script, const uint8_t* data, size_t count, size_t stride, size_t offset, size_t blockSize) {
+    if (blockSize >= 5) {
+        size_t total = 0;
+        for (size_t o = 0; o < blockSize; o += 4)
+            total += calcCompressionScript(script, data, count, stride, offset + o, std::min<size_t>(4, blockSize - o));
+        return total;
+    }
+    if (blockSize == 3)
+        return calcCompressionScript(script, data, count, stride, offset, 2) +
+               calcCompressionScript(script, data, count, stride, offset + 2, 1);
+    std::vector<uint32_t> values(count);
+    for (size_t i = 0; i < count; ++i) values[i] = readVar(data + stride * i + offset, blockSize);
+    ScriptEntry whole;
+    const size_t wholeCost = bestCompressionForBlock(values, blockSize, whole);
+    if (blockSize == 1) { script.push_back(whole); return wholeCost; }
+    std::vector<ScriptEntry> sub;
+    const size_t subCost = calcCompressionScript(sub, data, count, stride, offset, blockSize / 2) +
+                           calcCompressionScript(sub, data, count, stride, offset + blockSize / 2, blockSize / 2);
+    if (subCost < wholeCost) { script.insert(script.end(), sub.begin(), sub.end()); return subCost; }
+    script.push_back(whole);
+    return wholeCost;
+}
+
+void compactStrip(uint32_t stripMask, uint32_t v, uint32_t& out) {
+    // CalcShuffleOperations + the writer's gather: runs of mask bits packed LSB-first
+    uint32_t packed = 0, consumed = 0;
+    for (int i = 0; i < 32;) {
+        if (!(stripMask & (1u << i))) { ++i; continue; }
+        int j = i; uint32_t run = 0;
+        while (j < 32 && (stripMask & (1u << j))) { run |= 1u << j; ++j; }
+        packed |= (v & run) >> (uint32_t(i) - consumed);
+        consumed += uint32_t(j - i);
+        i = j;
+    }
+    out = packed;
+}
+
+} // namespace
+
+std::vector<uint8_t> encodeNative(const uint8_t* elems, size_t count, size_t stride) {
+    std::vector<uint8_t> out;
+    if (count == 0) { out.push_back(0); return out; }
+    std::vector<ScriptEntry> script;
+    const size_t scriptCost = calcCompressionScript(script, elems, count, stride, 0, stride) + 2;
+    const size_t rawSize = count * stride;
+    if (rawSize + 1 <= scriptCost) {
+        out.push_back(0);
+        out.insert(out.end(), elems, elems + rawSize);
+        return out;
+    }
+    out.push_back(1);
+    size_t colOffset = 0;
+    for (const auto& e : script) {
+        const size_t b = blockOf(e.flags);
+        const uint32_t mask = blockMask(b);
+        out.push_back(uint8_t(e.flags));
+        out.push_back(uint8_t(e.bits));
+        if (e.flags & 0x11) writeVar(out, e.bias, b);
+        if (e.flags & 0x02) out.push_back(uint8_t(e.shift));
+        if (e.flags & 0x08) writeVar(out, e.orMask, b);
+        if (e.flags & 0x04) writeVar(out, e.strip, b);
+        if (e.bits > 0) {
+            uint32_t acc = 0; int accBits = 0;
+            auto flush = [&]() { writeVar(out, acc, 4); };
+            for (size_t i = 0; i < count; ++i) {
+                uint32_t v = readVar(elems + i * stride + colOffset, b);
+                if (e.flags & 0x10) v = (v - e.bias) & mask;
+                if (e.flags & 0x08) v &= ~e.orMask;
+                if (e.flags & 0x02) v >>= e.shift;
+                else if (e.flags & 0x04) compactStrip(e.strip, v, v);
+                if (e.flags & 0x01) v = (v - e.bias) & mask;
+                if (e.bits == 32) { writeVar(out, v, 4); continue; }
+                acc |= v << accBits;
+                accBits += int(e.bits);
+                if (accBits >= 32) {
+                    flush();
+                    const int over = accBits - 32;
+                    acc = v >> (e.bits - uint32_t(over));
+                    accBits = over;
+                }
+            }
+            if (accBits > 0) flush();
+        }
+        colOffset += b;
+    }
+    out.push_back(0x80);
     return out;
 }
 

@@ -3633,7 +3633,10 @@ std::vector<uint8_t> assemblePatchBodyVerticesFixedSpan(
         {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2}
     };
     std::vector<std::vector<uint8_t>> authoredCandidates;
-    authoredCandidates.reserve(layouts.size() + 1);
+    authoredCandidates.reserve(layouts.size() + 2);
+    // The editor's own compressor first: it reproduces retail blocks byte-exact
+    // from their decoded elements, so an unchanged block keeps its donor size.
+    authoredCandidates.push_back(forge::rangecodec::encodeNative(vb.data(), vertices.size(), 16));
     for (const auto& layout : layouts) {
         authoredCandidates.push_back(forge::rangecodec::encodeFieldColumns(
             vb.data(), vertices.size(), 16, layout));
@@ -3919,12 +3922,23 @@ EmitResult emitChunk(const Chunk& chunk, const EmitOptions& opt) {
     std::vector<std::pair<size_t, size_t>> startMap; // (oldStart,newStart)
     startMap.reserve(nFrames);
     bool physicalLayoutFits = true;
+    auto lastFrameNote = [&]() {
+        std::string n; int shown = 0;
+        for (const auto& m : frameMoves) {
+            if (m.newSpan <= m.oldSpan) continue;
+            char b[128];
+            std::snprintf(b, sizeof b, " [frame @0x%zx grew %zu -> %zu]", m.oldStart, m.oldSpan, m.newSpan);
+            n += b;
+            if (++shown >= 8) { n += " ..."; break; }
+        }
+        return n;
+    };
 
     for (const Segment& s : chunk.segments) {
         if (opt.preservePhysicalLayout && s.kind == SegKind::Pad) {
             if (out.size() > s.end) {
                 physicalLayoutFits = false;
-                r.notes.push_back("edited frame crosses the donor PAD allocation");
+                r.notes.push_back("edited frame crosses the donor PAD allocation" + lastFrameNote());
             } else {
                 out.insert(out.end(), s.end - out.size(), uint8_t(0));
             }
@@ -3933,7 +3947,7 @@ EmitResult emitChunk(const Chunk& chunk, const EmitOptions& opt) {
         if (opt.preservePhysicalLayout) {
             if (out.size() > s.start) {
                 physicalLayoutFits = false;
-                r.notes.push_back("edited frame overlaps the next donor segment");
+                r.notes.push_back("edited frame overlaps the next donor segment" + lastFrameNote());
             } else {
                 out.insert(out.end(), s.start - out.size(), uint8_t(0));
             }
