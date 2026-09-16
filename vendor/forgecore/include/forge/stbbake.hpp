@@ -783,8 +783,8 @@ std::vector<uint8_t> assemblePatchBodyVerticesFixedSpan(
 
 // --- Foreground patch-header directory -------------------------------------
 // A flat array of 0x24-byte CEngineLandscapePatch::SaveHeader records living in
-// the first HDR block (retail base 0x800). Each entry is {u32 flags,
-// u32 frameOffset, u32 frameSpan, 6*f32 AABB}. This is the FOREGROUND patch
+// the first HDR block (retail base 0x800). Each entry is {u32 frameOffset,
+// u32 frameSpan, 6*f32 AABB, u32 flags} (every retail entry: frameSpan == 8 + compLen at frameOffset). This is the FOREGROUND patch
 // directory, not the variable-length background-tree control structure. The
 // array is terminated by one entirely zero record.
 struct QuadEntry {

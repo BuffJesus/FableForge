@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "forge/lev.hpp"
+#include "forge/terrain.hpp"
 #include "forge/thingplacer.hpp"
 #include "forge/tng.hpp"
 
@@ -49,6 +50,22 @@ bool matrixToFrame(const float m[16], Frame& f);
 void multiply(const float a[16], const float b[16], float out[16]);   // out = a * b (row-vector order)
 bool invert(const float m[16], float out[16]);
 
+// Editable terrain state: vertex heights and per-cell walkability, both on the
+// LEV's (width+1) x (height+1) grid (walkability of the extra row/column is
+// carried but meaningless, like the file's).
+struct TerrainState {
+    std::vector<float> heights;
+    std::vector<uint8_t> walkable;
+};
+
+struct TerrainBrush {
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked };
+    Mode mode = Mode::Raise;
+    float x = 0, y = 0;        // map-local centre
+    float radius = 6.0f;
+    float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth)
+};
+
 struct ThingSummary {
     size_t index = 0;
     uint64_t uid = 0;
@@ -67,6 +84,8 @@ public:
               const std::filesystem::path& levPath, std::string& error);
     // In-memory document (tests, scratch levels).
     bool openText(const std::string& mapName, std::string tngText, std::string& error);
+    // Attach a .lev (ground heights + terrain editing); open() does this itself.
+    bool loadLevel(const std::filesystem::path& levPath, std::string& error);
 
     const std::string& mapName() const { return mapName_; }
     const forge::tng::File& file() const { return file_; }
@@ -115,13 +134,46 @@ public:
     // Marks the current text as the saved baseline.
     void markSaved() { original_ = file_.serialize(); dirtyRev_ = ~0ull; }
 
+    // ---- terrain (needs the .lev) ----
+    bool hasTerrain() const { return level_ != nullptr && terrain_ != nullptr; }
+    int cellsX() const { return level_ ? level_->cellsX() : 0; }
+    int cellsY() const { return level_ ? level_->cellsY() : 0; }
+    const TerrainState& terrain() const { return *terrain_; }
+    // The state being drawn: the stroke's working copy while one is active.
+    const TerrainState& liveTerrain() const { return stroke_ && working_ ? *working_ : *terrain_; }
+    // Strokes: beginStroke snapshots for undo, applyBrush edits the working
+    // copy (call every frame while the mouse is down), endStroke writes the
+    // result into the .lev and closes the undo step.
+    void beginStroke(const TerrainBrush& brush);
+    void applyBrush(const TerrainBrush& brush, float dt);
+    bool strokeActive() const { return stroke_; }
+    void endStroke();
+    uint64_t terrainRevision() const { return terrainRev_; }
+    bool terrainDirty() const;
+    std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
+    // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
+    // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,
+    // patched in place; one-time .atlas-orig backups). `notes` gets the bake log.
+    bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error);
+    bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error);
+
 private:
+    struct Snapshot { std::string tng; std::shared_ptr<const TerrainState> terrain; };
     void pushUndo();
-    void restore(const std::string& text);
+    void restore(const Snapshot& s);
+    Snapshot snapshot() const;
+    void writeTerrainToLevel();
     std::string mapName_;
     forge::tng::File file_;
     std::string original_;
-    std::vector<std::string> undo_, redo_;
+    std::vector<Snapshot> undo_, redo_;
+    std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
+    std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
+    std::unique_ptr<TerrainState> working_;              // during a stroke
+    std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke
+    bool stroke_ = false;
+    float flattenTarget_ = 0;
+    uint64_t terrainRev_ = 0;
     uint64_t revision_ = 0;
     mutable uint64_t dirtyRev_ = ~0ull;
     mutable bool dirtyValue_ = false;

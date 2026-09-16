@@ -158,6 +158,12 @@ public:
     int gizmoOp() const { return gizmoOp_; }
     // Ray pick at viewport-relative (u, v) in [0,1]; selects the hit thing.
     int pickAt(float u, float v);
+    // terrain tool (scripted tests): one brush application at a map-local point
+    void terrainStroke(float x, float y, float seconds);
+    void setTerrainMode(int m) { terrainMode_ = m; }
+    void setBrush(float radius, float strength) { brushRadius_ = radius; brushStrength_ = strength; }
+    bool terrainDeployBusy() const { return terrainDeployFuture_.valid(); }
+    void deployTerrain() { startTerrainDeploy(); }
     void moveSelected(float dx, float dy, float dz);   // map-local Fable units
     void rotateSelected(float degrees);                // yaw about the up axis
     void scaleSelected(float factor);
@@ -225,6 +231,20 @@ private:
     std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
     char thingSearch_[64] = {};
     bool confirmDeploy_ = false;
+    // terrain tool (gizmoOp_ == 4)
+    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked
+    float brushRadius_ = 6.0f;
+    float brushStrength_ = 4.0f;
+    bool brushHit_ = false;
+    float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
+    uint64_t syncedTerrainRev_ = 0;
+    struct TerrainDeployResult { bool ok = false; std::string error; std::vector<std::string> notes; };
+    std::future<TerrainDeployResult> terrainDeployFuture_;
+    bool confirmTerrainDeploy_ = false;
+    void terrainInput(const ImVec2& origin, const ImVec2& size);
+    void drawBrushCursor(const ImVec2& origin, const ImVec2& size);
+    void syncTerrain();
+    void startTerrainDeploy();
     bool clickArmed_ = false;
     ImVec2 clickPos_;
     ImVec2 viewportOrigin_, viewportSize_;

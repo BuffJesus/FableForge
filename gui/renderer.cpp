@@ -512,6 +512,98 @@ int Renderer::pick(const float origin[3], const float dir[3], float& tBest) cons
     return best;
 }
 
+bool Renderer::rebuildTerrainBuffer() {
+    if (!cellsX_ || !cellsY_ || heights_.size() != size_t(cellsX_) * cellsY_) return false;
+    std::vector<GpuVertex> verts(heights_.size());
+    const int cx = cellsX_, cy = cellsY_;
+    auto h = [&](int x, int y) { x = std::clamp(x, 0, cx - 1); y = std::clamp(y, 0, cy - 1); return heights_[size_t(y) * cx + x]; };
+    minH_ = 1e30f; maxH_ = -1e30f;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const size_t i = size_t(y) * cx + x;
+            const float z = heights_[i];
+            minH_ = std::min(minH_, z); maxH_ = std::max(maxH_, z);
+            const float dx0 = x > 0 ? 1.0f : 0.0f, dx1 = x < cx - 1 ? 1.0f : 0.0f;
+            const float dy0 = y > 0 ? 1.0f : 0.0f, dy1 = y < cy - 1 ? 1.0f : 0.0f;
+            const float dzdx = (h(x + 1, y) - h(x - 1, y)) / std::max(dx0 + dx1, 1.0f);
+            const float dzdy = (h(x, y + 1) - h(x, y - 1)) / std::max(dy0 + dy1, 1.0f);
+            float nx = -dzdx, ny = -dzdy, nz = 1.0f;
+            const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            nx /= len; ny /= len; nz /= len;
+            GpuVertex& g = verts[i];
+            const float fx = originX_ + float(x), fy = originY_ + float(y);
+            if (terrainYUp_) { g.px = fx; g.py = z; g.pz = -fy; g.nx = nx; g.ny = nz; g.nz = -ny; }
+            else { g.px = fx; g.py = fy; g.pz = z; g.nx = nx; g.ny = ny; g.nz = nz; }
+            g.u = terrainUv_[i * 2]; g.v = terrainUv_[i * 2 + 1];
+            g.walk = walk_[i] ? 1.0f : 0.0f;
+        }
+    release(vb_);
+    D3D11_BUFFER_DESC bd = {};
+    bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    D3D11_SUBRESOURCE_DATA sd = {verts.data(), 0, 0};
+    return SUCCEEDED(device_->CreateBuffer(&bd, &sd, &vb_));
+}
+
+bool Renderer::updateTerrain(const float* heights, const uint8_t* walkable, int cellsX, int cellsY) {
+    if (cellsX != cellsX_ || cellsY != cellsY_ || !indexCount_) return false;
+    std::memcpy(heights_.data(), heights, heights_.size() * sizeof(float));
+    if (walkable) std::memcpy(walk_.data(), walkable, walk_.size());
+    return rebuildTerrainBuffer();
+}
+
+bool Renderer::rayTerrain(const float origin[3], const float dir[3], float hit[3]) const {
+    if (!cellsX_ || !cellsY_) return false;
+    // march along the ray; convert each sample to grid space and compare with the bilinear height
+    auto heightAt = [&](float gx, float gy, float& out) {
+        if (gx < 0 || gy < 0 || gx > float(cellsX_ - 1) || gy > float(cellsY_ - 1)) return false;
+        const int x0 = std::min(int(gx), cellsX_ - 1), y0 = std::min(int(gy), cellsY_ - 1);
+        const int x1 = std::min(x0 + 1, cellsX_ - 1), y1 = std::min(y0 + 1, cellsY_ - 1);
+        const float fx = gx - float(x0), fy = gy - float(y0);
+        auto h = [&](int x, int y) { return heights_[size_t(y) * cellsX_ + x]; };
+        out = (h(x0, y0) * (1 - fx) + h(x1, y0) * fx) * (1 - fy) + (h(x0, y1) * (1 - fx) + h(x1, y1) * fx) * fy;
+        return true;
+    };
+    auto sample = [&](float t, float& gx, float& gy, float& z) {
+        const float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
+        if (terrainYUp_) { gx = px - originX_; gy = -pz - originY_; z = py; }
+        else { gx = px - originX_; gy = py - originY_; z = pz; }
+    };
+    const float maxT = 20000.0f;
+    float step = 0.5f, tPrev = 0, gx, gy, z, hz;
+    bool prevAbove = true, havePrev = false;
+    for (float t = 0; t < maxT; t += step) {
+        sample(t, gx, gy, z);
+        if (!heightAt(gx, gy, hz)) { havePrev = false; step = std::min(step * 1.5f, 8.0f); continue; }
+        step = 0.5f;
+        const bool above = z > hz;
+        if (havePrev && prevAbove && !above) {
+            // refine between tPrev and t
+            float lo = tPrev, hi = t;
+            for (int k = 0; k < 12; ++k) {
+                const float mid = (lo + hi) * 0.5f;
+                sample(mid, gx, gy, z);
+                if (heightAt(gx, gy, hz) && z > hz) lo = mid; else hi = mid;
+            }
+            const float th = (lo + hi) * 0.5f;
+            hit[0] = origin[0] + dir[0] * th; hit[1] = origin[1] + dir[1] * th; hit[2] = origin[2] + dir[2] * th;
+            return true;
+        }
+        prevAbove = above; havePrev = true; tPrev = t;
+    }
+    return false;
+}
+
+bool Renderer::project(const float p[3], float& u, float& v) const {
+    float e[4], c[4];
+    const float q[4] = {p[0], p[1], p[2], 1.0f};
+    for (int j = 0; j < 4; ++j) e[j] = q[0] * lastView_[j] + q[1] * lastView_[4 + j] + q[2] * lastView_[8 + j] + q[3] * lastView_[12 + j];
+    for (int j = 0; j < 4; ++j) c[j] = e[0] * lastProj_[j] + e[1] * lastProj_[4 + j] + e[2] * lastProj_[8 + j] + e[3] * lastProj_[12 + j];
+    if (c[3] <= 1e-6f) return false;
+    u = c[0] / c[3] * 0.5f + 0.5f; v = 0.5f - c[1] / c[3] * 0.5f;
+    return true;
+}
+
 void Renderer::screenRay(float u, float v, float origin[3], float dir[3]) const {
     lastCamera_.eye(origin);
     float f[3], r[3], up[3];
@@ -603,6 +695,20 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
 bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool frameCamera) {
     releaseMesh();
     if (scene.vertices.empty() || scene.indices.empty()) return false;
+    // CPU grid copy for in-place height edits (the scene is a regular (w+1)x(h+1) grid)
+    cellsX_ = scene.mapWidth + 1; cellsY_ = scene.mapHeight + 1;
+    terrainYUp_ = scene.up == terrainexport::UpAxis::Y;
+    if (size_t(cellsX_) * size_t(cellsY_) == scene.vertices.size()) {
+        heights_.resize(scene.vertices.size()); walk_.resize(scene.vertices.size()); terrainUv_.resize(scene.vertices.size() * 2);
+        for (size_t i = 0; i < scene.vertices.size(); ++i) {
+            const auto& s = scene.vertices[i];
+            heights_[i] = terrainYUp_ ? s.py : s.pz;
+            walk_[i] = s.walkable ? 1 : 0;
+            terrainUv_[i * 2] = s.u; terrainUv_[i * 2 + 1] = s.v;
+        }
+        originX_ = scene.vertices[0].px;
+        originY_ = terrainYUp_ ? -scene.vertices[0].pz : scene.vertices[0].py;
+    } else { cellsX_ = cellsY_ = 0; heights_.clear(); walk_.clear(); }
     std::vector<GpuVertex> verts(scene.vertices.size());
     float mn[3] = {1e30f, 1e30f, 1e30f}, mx[3] = {-1e30f, -1e30f, -1e30f};
     for (size_t i = 0; i < verts.size(); ++i) {

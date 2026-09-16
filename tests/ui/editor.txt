@@ -67,6 +67,30 @@ frames 1
 save_level
 assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
 assert_state doc_dirty 0
+# terrain brush: raise a hill at the map centre, check the height, undo
+edit 1
+terrain_mode 0
+brush 8 6
+frames 2
+assert_widget seg_terrain_mode
+assert_state terrain_dirty 0
+terrain_stroke 64 112 1
+frames 2
+assert_state terrain_dirty 1
+camera 64 112 20 0.8 0.9 60
+frames 2
+screenshot build/ui/e6_terrain_hill.png
+mode walkable
+terrain_mode 5
+brush 10 1
+terrain_stroke 64 112 1
+frames 2
+screenshot build/ui/e7_terrain_blocked.png
+mode textured
+undo
+undo
+frames 2
+assert_state terrain_dirty 0
 click seg_panel
 frames 2
 dump_state

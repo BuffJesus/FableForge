@@ -453,6 +453,44 @@ void testLevelDocument() {
     CHECK(undone == 128);
 }
 
+// Terrain strokes on the synthetic LEV: raise, undo, walkable paint, loose save.
+void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
+    auto near = [](float a, float b) { return std::fabs(a - b) < 1e-4f; };
+    albion::editor::Document doc;
+    std::string err;
+    CHECK(doc.openText("Synthetic", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(lev, err));
+    CHECK(doc.hasTerrain() && doc.cellsX() == 5 && doc.cellsY() == 4);
+    const float h0 = doc.terrain().heights[size_t(2) * 5 + 2];
+    CHECK(near(*doc.terrainHeight(2.0f, 2.0f), h0));
+    albion::editor::TerrainBrush b;
+    b.mode = albion::editor::TerrainBrush::Mode::Raise; b.x = 2; b.y = 2; b.radius = 1.5f; b.strength = 4.0f;
+    doc.beginStroke(b);
+    CHECK(doc.strokeActive());
+    doc.applyBrush(b, 0.5f);   // +2 units at the centre
+    CHECK(near(*doc.terrainHeight(2.0f, 2.0f), h0 + 2.0f));
+    doc.endStroke();
+    CHECK(!doc.strokeActive() && doc.terrainDirty());
+    CHECK(near(doc.terrain().heights[size_t(2) * 5 + 2], h0 + 2.0f));
+    CHECK(near(doc.terrain().heights[0], 0.0f));   // far corner untouched
+    // the .lev sees it too
+    CHECK(near(doc.level()->heightAt(2, 2), h0 + 2.0f));
+    // undo restores heights and the level; redo re-applies
+    CHECK(doc.undo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0) && near(doc.level()->heightAt(2, 2), h0) && !doc.terrainDirty());
+    CHECK(doc.redo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0 + 2.0f));
+    // walkable paint
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.6f; b.x = 1.5f; b.y = 1.5f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    CHECK(doc.terrain().walkable[size_t(1) * 5 + 1] == 0 && !doc.level()->walkableAt(1, 1));
+    CHECK(doc.level()->walkableAt(2, 2));   // even rows are walkable in the synthetic map
+    // loose save under a scratch root, then reopen and compare
+    const fs::path root = dir / "terrain_root";
+    CHECK(doc.saveTerrainLoose(root, err));
+    CHECK(!doc.terrainDirty());
+    const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "Synthetic.lev");
+    CHECK(near(saved.heightAt(2, 2), h0 + 2.0f) && !saved.walkableAt(1, 1) && saved.walkableAt(2, 2));
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -467,6 +505,7 @@ int main() {
     testThingBasis();
     testWater(dir);
     testLevelDocument();
+    testTerrainEditing(lev, dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;

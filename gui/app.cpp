@@ -661,6 +661,14 @@ std::vector<std::string> App::stateDump() const {
         }
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
+    v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
+    if (documentLoaded() && doc_.hasTerrain()) {
+        char h[64];
+        const auto& t = doc_.terrain();
+        const int cx = doc_.cellsX(), cy = doc_.cellsY();
+        std::snprintf(h, sizeof h, "%.3f", t.heights[size_t(cy / 2) * cx + cx / 2]);
+        v.push_back(std::string("terrain_center_height=") + h);
+    }
     return v;
 }
 
@@ -671,7 +679,14 @@ void App::frame(float dt) {
     pollWorkers();
     ImGuizmo::BeginFrame();
     syncInstances();
+    syncTerrain();
     editorShortcuts();
+    if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        const TerrainDeployResult r = terrainDeployFuture_.get();
+        for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
+        if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
+        else pushLog("terrain save failed: " + r.error, 2);
+    }
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
@@ -903,7 +918,8 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
         const float boost = io.KeyShift ? 3.0f : 1.0f;
         if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
     } else {
-        const bool gizmo = editMode_ && (ImGuizmo::IsOver() || ImGuizmo::IsUsing());
+        const bool terrainTool = editMode_ && gizmoOp_ == 4 && documentLoaded() && doc_.hasTerrain();
+        const bool gizmo = editMode_ && (ImGuizmo::IsOver() || ImGuizmo::IsUsing() || terrainTool);
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && !gizmo) { clickArmed_ = true; clickPos_ = io.MousePos; }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) && !gizmo) {
             if (io.KeyAlt) camera_.orbit(-dx * 0.008f, dy * 0.008f);
@@ -943,7 +959,9 @@ void App::drawViewport(float width) {
         viewportOrigin_ = origin; viewportSize_ = size;
         viewportHovered_ = ImGui::IsItemHovered();
         handleViewportInput(origin, size);
+        terrainInput(origin, size);
         drawGizmo(origin, size);
+        drawBrushCursor(origin, size);
     }
     auto_.registerWidget("viewport");
 
@@ -1484,6 +1502,11 @@ bool Automation::tick(App& app) {
     else if (cmd == "save_level") { if (!app.saveDocument()) fail("save failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
+    else if (cmd == "terrain_mode") { app.setTerrainMode(std::atoi(rest.c_str())); app.setGizmoOp(4); note("ok   " + line); ++pc_; }
+    else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
+    else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
+    else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }
+    else if (cmd == "wait_terrain") waitOn(!app.terrainDeployBusy(), "terrain deploy");
     else if (cmd == "frame_selected") { app.frameSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "export") { app.startExport(); note("ok   " + line); ++pc_; }
     else if (cmd == "export_all") { app.startBatchExport(app.visibleMapNames()); note("ok   " + line); ++pc_; }
@@ -1517,6 +1540,7 @@ bool Automation::tick(App& app) {
         ++pc_;
     }
     else if (cmd == "dump_state") { for (const auto& kv : app.stateDump()) note("     " + kv); ++pc_; }
+    else if (cmd == "dump_log") { for (const auto& [lvl, ln] : app.log_) note("     log: " + ln); ++pc_; }
     else if (cmd == "quit") { quit_ = true; note("ok   quit"); return false; }
     else { fail("unknown command: " + line); ++pc_; }
     return true;

@@ -326,6 +326,97 @@ void App::revertDocument() {
     while (doc_.undo()) {}
 }
 
+// ------------------------------------------------------------ terrain tool
+
+void App::syncTerrain() {
+    if (!documentLoaded() || !doc_.hasTerrain()) return;
+    if (doc_.terrainRevision() == syncedTerrainRev_) return;
+    const auto& t = doc_.liveTerrain();
+    if (renderer_.updateTerrain(t.heights.data(), t.walkable.data(), doc_.cellsX(), doc_.cellsY()))
+        syncedTerrainRev_ = doc_.terrainRevision();
+}
+
+void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
+    brushHit_ = false;
+    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) { if (doc_.strokeActive()) doc_.endStroke(); return; }
+    ImGuiIO& io = ImGui::GetIO();
+    if (size.x <= 0 || size.y <= 0) return;
+    const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
+    if (viewportHovered_ || doc_.strokeActive()) {
+        float o[3], d[3], hit[3];
+        renderer_.screenRay(u, v, o, d);
+        if (renderer_.rayTerrain(o, d, hit)) {
+            brushHit_ = true;
+            brushFable_[0] = hit[0]; brushFable_[1] = -hit[2];
+        }
+    }
+    editor::TerrainBrush b;
+    using M = editor::TerrainBrush::Mode;
+    int mode = terrainMode_;
+    if (io.KeyShift && (mode == 0 || mode == 1)) mode = 1 - mode;
+    if (io.KeyShift && (mode == 4 || mode == 5)) mode = 9 - mode;
+    b.mode = mode == 0 ? M::Raise : mode == 1 ? M::Lower : mode == 2 ? M::Flatten : mode == 3 ? M::Smooth : mode == 4 ? M::Walkable : M::Blocked;
+    b.x = brushFable_[0]; b.y = brushFable_[1];
+    b.radius = brushRadius_; b.strength = brushStrength_;
+    const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    if (!doc_.strokeActive() && lmb && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && brushHit_ && !io.KeyAlt) {
+        doc_.beginStroke(b);
+        clickArmed_ = false;
+    }
+    if (doc_.strokeActive()) {
+        if (lmb) { if (brushHit_) doc_.applyBrush(b, std::min(io.DeltaTime, 0.1f)); }
+        else doc_.endStroke();
+    }
+}
+
+void App::terrainStroke(float x, float y, float seconds) {
+    if (!documentLoaded() || !doc_.hasTerrain()) return;
+    editor::TerrainBrush b;
+    using M = editor::TerrainBrush::Mode;
+    b.mode = terrainMode_ == 0 ? M::Raise : terrainMode_ == 1 ? M::Lower : terrainMode_ == 2 ? M::Flatten : terrainMode_ == 3 ? M::Smooth : terrainMode_ == 4 ? M::Walkable : M::Blocked;
+    b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
+    doc_.beginStroke(b);
+    doc_.applyBrush(b, seconds);
+    doc_.endStroke();
+}
+
+void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
+    if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const int n = 48;
+    ImVec2 pts[n];
+    int got = 0;
+    for (int i = 0; i < n; ++i) {
+        const float a = float(i) / n * 6.2831853f;
+        const float fx = brushFable_[0] + brushRadius_ * std::cos(a), fy = brushFable_[1] + brushRadius_ * std::sin(a);
+        const auto h = doc_.terrainHeight(fx, fy);
+        const float p[3] = {fx, h.value_or(0.0f) + 0.05f, -fy};
+        float u, v;
+        if (!renderer_.project(p, u, v)) return;
+        pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
+    }
+    const ImU32 col = terrainMode_ >= 4 ? (terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : IM_COL32(230, 80, 90, 230)) : theme::col(theme::Accent);
+    dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    // centre dot
+    const auto hc = doc_.terrainHeight(brushFable_[0], brushFable_[1]);
+    const float c[3] = {brushFable_[0], hc.value_or(0.0f) + 0.05f, -brushFable_[1]};
+    float cu, cv;
+    if (renderer_.project(c, cu, cv)) dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
+}
+
+void App::startTerrainDeploy() {
+    if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
+    if (doc_.strokeActive()) doc_.endStroke();
+    editor::Document* doc = &doc_;
+    const std::string root = saveRoot();
+    pushLog("terrain: writing .lev, FinalAlbion.wad and re-baking the FinalAlbion_RT.stb chunk...", 0);
+    terrainDeployFuture_ = std::async(std::launch::async, [doc, root]() {
+        TerrainDeployResult r;
+        r.ok = doc->deployTerrain(root, r.notes, r.error);
+        return r;
+    });
+}
+
 // ------------------------------------------------------------ viewport
 
 void App::editorShortcuts() {
@@ -338,6 +429,11 @@ void App::editorShortcuts() {
         if (ImGui::IsKeyPressed(ImGuiKey_W)) gizmoOp_ = 1;
         if (ImGui::IsKeyPressed(ImGuiKey_E)) gizmoOp_ = 2;
         if (ImGui::IsKeyPressed(ImGuiKey_R)) gizmoOp_ = 3;
+        if (ImGui::IsKeyPressed(ImGuiKey_T) && doc_.hasTerrain()) gizmoOp_ = 4;
+        if (gizmoOp_ == 4) {
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) brushRadius_ = std::max(1.0f, brushRadius_ - 1.0f);
+            if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) brushRadius_ = std::min(60.0f, brushRadius_ + 1.0f);
+        }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedThing_ >= 0) deleteSelected();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
@@ -397,7 +493,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     // ---- tool
     theme::beginCard("##tool", inner);
     theme::label("Tool");
-    theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R"}, cardInner);
+    if (doc_.hasTerrain()) theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R", "Terrain  T"}, cardInner);
+    else theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R"}, cardInner);
     auto_.registerWidget("seg_gizmo");
     theme::toggle("Snap (0.5 units / 15 deg / 0.1x)", &gizmoSnap_);
     auto_.registerWidget("toggle_snap");
@@ -406,6 +503,35 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+
+    // ---- terrain brush
+    if (gizmoOp_ == 4 && doc_.hasTerrain()) {
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##terrain", inner);
+        theme::label("Terrain brush");
+        int shape = terrainMode_ < 4 ? terrainMode_ : -1;
+        if (theme::segmented("##tmode", shape, {"Raise", "Lower", "Flatten", "Smooth"}, cardInner) && shape >= 0) terrainMode_ = shape;
+        auto_.registerWidget("seg_terrain_mode");
+        int walk = terrainMode_ >= 4 ? terrainMode_ - 4 : -1;
+        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
+        auto_.registerWidget("seg_terrain_walk");
+        char val[48];
+        std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
+        theme::labelValue("Radius   ( [ ] )", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat("##radius", &brushRadius_, 1.0f, 60.0f, "");
+        auto_.registerWidget("slider_radius");
+        std::snprintf(val, sizeof val, "%.1f", brushStrength_);
+        theme::labelValue("Strength", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat("##strength", &brushStrength_, 0.5f, 20.0f, "");
+        auto_.registerWidget("slider_strength");
+        ImGui::PushFont(fontSmall_);
+        theme::hint("Hold LMB on the ground to paint. Shift inverts (lower / walkable). Switch the view to Walkable to see the paint. Each stroke is one undo step.");
+        ImGui::PopFont();
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
+    }
 
     // ---- selection
     ImGui::SetCursorPosX(pad);
@@ -557,7 +683,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::beginCard("##changes", inner);
     const auto changes = doc_.changes();
     char head[64];
-    std::snprintf(head, sizeof head, "Changes  (%zu)", changes.size());
+    std::snprintf(head, sizeof head, "Changes  (%zu%s)", changes.size(), doc_.terrainDirty() ? " + terrain" : "");
     theme::label(head);
     const float half = (cardInner - S(6)) * 0.5f;
     if (theme::ghostButton(doc_.canUndo() ? "Undo  (Ctrl+Z)" : "Undo", ImVec2(half, S(28))) && doc_.canUndo()) editUndo();
@@ -588,6 +714,25 @@ void App::drawEditFooter(float pad, float inner) {
         return;
     }
     const bool dirty = doc_.dirty();
+    if (doc_.hasTerrain() && (doc_.terrainDirty() || terrainDeployFuture_.valid())) {
+        ImGui::SetCursorPosX(pad);
+        if (terrainDeployFuture_.valid()) {
+            theme::primaryButton("Baking terrain...", ImVec2(inner, S(36)), false);
+        } else if (!confirmTerrainDeploy_) {
+            if (theme::primaryButton("Save terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
+            auto_.registerWidget("btn_terrain_deploy");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .atlas-orig backups of all three files.");
+        } else {
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Warn), "Rewrite %s's terrain in the .lev, .wad and .stb?", doc_.mapName().c_str());
+            ImGui::PopFont();
+            const float half2 = (inner - S(6)) * 0.5f;
+            if (theme::primaryButton("Yes, bake it", ImVec2(half2, S(30)))) { confirmTerrainDeploy_ = false; startTerrainDeploy(); }
+            auto_.registerWidget("btn_terrain_deploy_confirm");
+            ImGui::SameLine(0, S(6));
+            if (theme::ghostButton("Cancel", ImVec2(half2, S(30)))) confirmTerrainDeploy_ = false;
+        }
+    }
     ImGui::SetCursorPosX(pad);
     if (theme::primaryButton(dirty ? "Save .tng (loose file)" : "Saved", ImVec2(inner, S(42)), dirty)) saveDocument();
     auto_.registerWidget("btn_save");

@@ -99,6 +99,18 @@ public:
     // Bounding sphere of one instance in render space (for framing the camera).
     bool instanceBounds(size_t i, float center[3], float& radius) const;
 
+    // Terrain editing: replace the heightfield (cellsX*cellsY vertex heights,
+    // Fable z) and walkability of the uploaded terrain in place; normals are
+    // recomputed. The grid must match the uploaded scene.
+    bool updateTerrain(const float* heights, const uint8_t* walkable, int cellsX, int cellsY);
+    // Ray (render space) against the uploaded heightfield; `hit` is the render-
+    // space point. Marches the ray, so it is exact enough for a brush cursor.
+    bool rayTerrain(const float origin[3], const float dir[3], float hit[3]) const;
+    // Project a render-space point to viewport-relative (u, v) in [0,1]; false when behind the eye.
+    bool project(const float p[3], float& u, float& v) const;
+    int terrainCellsX() const { return cellsX_; }
+    int terrainCellsY() const { return cellsY_; }
+
     // Renders into the offscreen target at the given size and returns its SRV
     // (valid until the next render call).
     ID3D11ShaderResourceView* render(uint32_t width, uint32_t height, const Camera& camera,
@@ -157,6 +169,13 @@ private:
     uint32_t width_ = 0, height_ = 0;
     uint32_t indexCount_ = 0;
     float minH_ = 0, maxH_ = 1;
+    std::vector<float> heights_;        // CPU copy of the terrain grid (Fable z), row-major y*cellsX+x
+    std::vector<uint8_t> walk_;
+    std::vector<float> terrainUv_;      // u,v per vertex (kept across height updates)
+    int cellsX_ = 0, cellsY_ = 0;
+    float originX_ = 0, originY_ = 0;   // world offset of vertex (0,0) in Fable x/y
+    bool terrainYUp_ = true;
+    bool rebuildTerrainBuffer();
     const char* error_ = "";
     std::string errorText_;
 };

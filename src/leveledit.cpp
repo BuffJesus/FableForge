@@ -6,9 +6,15 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <set>
 #include <stdexcept>
 
+#include "forge/stb.hpp"
+#include "forge/stbbake.hpp"
+#include "forge/stbheightbake.hpp"
+#include "forge/stbinfo.hpp"
 #include "forge/wad.hpp"
+#include "forge/wld.hpp"
 
 namespace fs = std::filesystem;
 
@@ -146,9 +152,26 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
         if (text.empty()) { error = "no " + mapName + ".tng loose or in FinalAlbion.wad"; return false; }
     }
     if (!openText(mapName, std::move(text), error)) return false;
-    if (!levPath.empty()) {
-        try { level_ = std::make_shared<forge::lev::File>(forge::lev::File::open(levPath)); }
-        catch (const std::exception& e) { level_.reset(); error = std::string("level heights unavailable: ") + e.what(); }
+    if (!levPath.empty()) loadLevel(levPath, error);
+    return true;
+}
+
+bool Document::loadLevel(const fs::path& levPath, std::string& error) {
+    try { level_ = std::make_shared<forge::lev::File>(forge::lev::File::open(levPath)); }
+    catch (const std::exception& e) { level_.reset(); error = std::string("level heights unavailable: ") + e.what(); return false; }
+    if (level_) {
+        auto t = std::make_shared<TerrainState>();
+        const int cx = level_->cellsX(), cy = level_->cellsY();
+        t->heights.resize(size_t(cx) * cy);
+        t->walkable.resize(size_t(cx) * cy);
+        for (int y = 0; y < cy; ++y)
+            for (int x = 0; x < cx; ++x) {
+                t->heights[size_t(y) * cx + x] = level_->heightAt(x, y);
+                t->walkable[size_t(y) * cx + x] = level_->walkableAt(x, y) ? 1 : 0;
+            }
+        terrain_ = t;
+        savedTerrain_ = t;
+        ++terrainRev_;
     }
     return true;
 }
@@ -218,15 +241,247 @@ std::optional<float> Document::groundHeight(float x, float y) const {
     catch (...) { return std::nullopt; }
 }
 
+Document::Snapshot Document::snapshot() const { return Snapshot{file_.serialize(), terrain_}; }
+
 void Document::pushUndo() {
-    undo_.push_back(file_.serialize());
+    undo_.push_back(snapshot());
     if (undo_.size() > kUndoDepth) undo_.erase(undo_.begin());
     redo_.clear();
 }
 
-void Document::restore(const std::string& text) {
-    file_ = forge::tng::File::parseText(text, mapName_ + ".tng");
+void Document::restore(const Snapshot& s) {
+    file_ = forge::tng::File::parseText(s.tng, mapName_ + ".tng");
     ++revision_;
+    if (s.terrain && s.terrain != terrain_) {
+        terrain_ = s.terrain;
+        writeTerrainToLevel();
+        ++terrainRev_;
+    }
+}
+
+void Document::writeTerrainToLevel() {
+    if (!level_ || !terrain_) return;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const size_t i = size_t(y) * cx + x;
+            if (level_->heightAt(x, y) != terrain_->heights[i]) level_->setHeightAt(x, y, terrain_->heights[i]);
+            if (level_->walkableAt(x, y) != (terrain_->walkable[i] != 0)) level_->setWalkableAt(x, y, terrain_->walkable[i] != 0);
+        }
+}
+
+// ---------------------------------------------------------------- terrain
+
+void Document::beginStroke(const TerrainBrush& brush) {
+    if (!hasTerrain() || stroke_) return;
+    pushUndo();
+    working_ = std::make_unique<TerrainState>(*terrain_);
+    hf_ = std::make_unique<forge::terrain::Heightfield>(forge::terrain::Heightfield::fromLev(*level_));
+    stroke_ = true;
+    flattenTarget_ = terrainHeight(brush.x, brush.y).value_or(0.0f);
+}
+
+void Document::applyBrush(const TerrainBrush& brush, float dt) {
+    if (!stroke_ || !working_) return;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    using Mode = TerrainBrush::Mode;
+    if (brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
+        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
+        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
+                if (dx * dx + dy * dy <= brush.radius * brush.radius)
+                    working_->walkable[size_t(y) * cx + x] = brush.mode == Mode::Walkable ? 1 : 0;
+            }
+        ++terrainRev_;
+        return;
+    }
+    forge::terrain::Brush b;
+    b.centerX = brush.x; b.centerY = brush.y; b.radius = brush.radius;
+    switch (brush.mode) {
+        case Mode::Raise:   b.mode = forge::terrain::BrushMode::RaiseLower; b.amount = brush.strength * dt; break;
+        case Mode::Lower:   b.mode = forge::terrain::BrushMode::RaiseLower; b.amount = -brush.strength * dt; break;
+        case Mode::Flatten: b.mode = forge::terrain::BrushMode::Flatten; b.amount = std::clamp(brush.strength * dt, 0.0f, 1.0f); b.targetHeight = flattenTarget_; break;
+        case Mode::Smooth:  b.mode = forge::terrain::BrushMode::Smooth; b.amount = std::clamp(brush.strength * dt, 0.0f, 1.0f); break;
+        default: break;
+    }
+    forge::terrain::applyBrush(*hf_, b);
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) working_->heights[size_t(y) * cx + x] = hf_->at(x, y);
+    ++terrainRev_;
+}
+
+void Document::endStroke() {
+    if (!stroke_) return;
+    stroke_ = false;
+    terrain_ = std::shared_ptr<const TerrainState>(working_.release());
+    hf_.reset();
+    writeTerrainToLevel();
+    ++revision_;
+    ++terrainRev_;
+}
+
+bool Document::terrainDirty() const {
+    if (!terrain_ || !savedTerrain_) return false;
+    if (terrain_ == savedTerrain_) return false;
+    return terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable;
+}
+
+std::optional<float> Document::terrainHeight(float x, float y) const {
+    const TerrainState* t = stroke_ && working_ ? working_.get() : terrain_.get();
+    if (!t || !level_) return std::nullopt;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    if (!(x >= 0 && y >= 0) || x > float(cx - 1) || y > float(cy - 1)) return std::nullopt;
+    const int x0 = std::min(int(x), cx - 1), y0 = std::min(int(y), cy - 1);
+    const int x1 = std::min(x0 + 1, cx - 1), y1 = std::min(y0 + 1, cy - 1);
+    const float fx = x - float(x0), fy = y - float(y0);
+    auto h = [&](int xx, int yy) { return t->heights[size_t(yy) * cx + xx]; };
+    return (h(x0, y0) * (1 - fx) + h(x1, y0) * fx) * (1 - fy) + (h(x0, y1) * (1 - fx) + h(x1, y1) * fx) * fy;
+}
+
+namespace {
+bool backupOnce(const fs::path& p, std::string& error) {
+    const fs::path b = p.string() + ".atlas-orig";
+    try { if (fs::exists(p) && !fs::exists(b)) fs::copy_file(p, b); return true; }
+    catch (const std::exception& e) { error = e.what(); return false; }
+}
+} // namespace
+
+bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error) {
+    if (!hasTerrain()) { error = "no terrain loaded"; return false; }
+    const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+    try {
+        fs::create_directories(path.parent_path());
+        if (!backupOnce(path, error)) return false;
+        level_->save(path);
+        savedTerrain_ = terrain_;
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error) {
+    if (!hasTerrain()) { error = "no terrain loaded"; return false; }
+    try {
+        // 1. loose .lev (also the bytes for the WAD)
+        if (!saveTerrainLoose(gameRoot, error)) return false;
+        const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+        const std::string levBytes = readFile(loose);
+        notes.push_back("wrote " + loose.string());
+
+        // 2. FinalAlbion.wad entry (same size: patched in place by repack)
+        const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
+        if (fs::exists(wad)) {
+            const auto archive = forge::wad::Archive::open(wad);
+            std::string entryName;
+            const std::string want = lower(mapName_) + ".lev";
+            for (const auto& e : archive.entries())
+                if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
+            if (entryName.empty()) { error = mapName_ + ".lev is not in FinalAlbion.wad"; return false; }
+            if (!backupOnce(wad, error)) return false;
+            std::map<std::string, std::vector<uint8_t>> rep;
+            rep[entryName] = std::vector<uint8_t>(levBytes.begin(), levBytes.end());
+            const fs::path temp = wad.string() + ".atlas-tmp";
+            forge::wad::repack(wad, rep, temp);
+            fs::rename(temp, wad);
+            notes.push_back("replaced " + entryName + " in FinalAlbion.wad");
+        }
+
+        // 3. the terrain chunk in FinalAlbion_RT.stb, re-baked from the edited heights
+        const fs::path stb = gameRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
+        if (!fs::exists(stb)) { error = "no " + stb.string(); return false; }
+        const auto archive = forge::stb::Archive::open(stb);
+        const forge::stb::StaticMap* map = nullptr;
+        const std::string wantLev = lower(mapName_) + ".lev";
+        for (const auto& m : archive.staticMaps())
+            if (lower(fs::path(m.levelName).filename().string()) == wantLev) { map = &m; break; }
+        if (!map) { error = mapName_ + " has no static map in FinalAlbion_RT.stb"; return false; }
+        const auto record = archive.readStaticMapRecord(*map);
+        if (record.size() < forge::stbinfo::kInfoBlockSize) { error = "static-map record too short"; return false; }
+        uint32_t bankIndex = 0; std::memcpy(&bankIndex, record.data() + 4, 4);
+        const forge::stb::Entry* entry = nullptr;
+        for (const auto& e : archive.entries()) if (e.id == bankIndex) { entry = &e; break; }
+        if (!entry) { error = "static-map bank entry " + std::to_string(bankIndex) + " not found"; return false; }
+        const auto chunk = archive.read(*entry);
+        // world placement from the WLD
+        const auto world = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
+        const forge::wld::Map* wm = nullptr;
+        for (const auto& m : world.maps())
+            if (lower(fs::path(m.levelName).filename().string()) == wantLev) { wm = &m; break; }
+        if (!wm) { error = mapName_ + " is not placed in FinalAlbion.wld"; return false; }
+        forge::stbbake::HeightfieldBakeOptions opt;
+        opt.requireCanonicalSize = false;
+        // Neighbouring maps (every map a region owning this one contains or
+        // sees, whose placement touches ours) supply the shared-edge samples,
+        // as the retail bake did. Their LEVs come from the WAD (loose copies
+        // win, like everywhere else) via a temp folder because lev::File is
+        // path based.
+        std::vector<std::unique_ptr<forge::lev::File>> neighbourFiles;
+        {
+            std::set<std::string> candidates;
+            const std::string mine = lower(wm->levelName);
+            for (const auto& region : world.regions()) {
+                bool owns = false;
+                for (const auto& n : region.containsMaps) owns = owns || lower(n) == mine;
+                if (!owns) continue;
+                for (const auto& n : region.containsMaps) candidates.insert(lower(n));
+                for (const auto& n : region.seesMaps) candidates.insert(lower(n));
+            }
+            candidates.erase(mine);
+            const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "neighbours";
+            fs::create_directories(tmp);
+            std::unique_ptr<forge::wad::Archive> wadArchive;
+            for (const auto& name : candidates) {
+                const forge::wld::Map* nm = nullptr;
+                for (const auto& m : world.maps()) if (lower(m.levelName) == name) { nm = &m; break; }
+                if (!nm) continue;
+                // quick placement test with the WLD alone (LEV sizes are unknown until loaded; use a generous window)
+                if (nm->mapX > wm->mapX + level_->width() + 1 || nm->mapY > wm->mapY + level_->height() + 1) continue;
+                if (nm->mapX + 512 < wm->mapX - 1 || nm->mapY + 512 < wm->mapY - 1) continue;
+                const std::string leaf = fs::path(nm->levelName).filename().string();
+                fs::path levFile = gameRoot / "data" / "Levels" / "FinalAlbion" / leaf;
+                if (!fs::exists(levFile)) {
+                    if (!wadArchive) wadArchive = std::make_unique<forge::wad::Archive>(forge::wad::Archive::open(wad));
+                    const std::string wantLeaf = lower(leaf);
+                    for (const auto& e : wadArchive->entries())
+                        if (lower(fs::path(e.name).filename().string()) == wantLeaf) {
+                            const auto bytes = wadArchive->read(e);
+                            levFile = tmp / leaf;
+                            std::ofstream(levFile, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+                            break;
+                        }
+                }
+                if (!fs::exists(levFile)) continue;
+                try {
+                    auto nf = std::make_unique<forge::lev::File>(forge::lev::File::open(levFile));
+                    const int right = nm->mapX + nf->width() - 1, bottom = nm->mapY + nf->height() - 1;
+                    if (right < wm->mapX - 1 || nm->mapX > wm->mapX + level_->width() || bottom < wm->mapY - 1 || nm->mapY > wm->mapY + level_->height()) continue;
+                    opt.neighbors.push_back({nf.get(), nm->mapX, nm->mapY});
+                    neighbourFiles.push_back(std::move(nf));
+                    notes.push_back("neighbour " + leaf + " at (" + std::to_string(nm->mapX) + "," + std::to_string(nm->mapY) + ")");
+                } catch (const std::exception&) {}
+            }
+        }
+        const auto baked = forge::stbbake::bakeHeightfield(chunk, *level_, wm->mapX, wm->mapY, opt);
+        for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) notes.push_back(n);
+        if (baked.chunk.size() != chunk.size()) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
+        // camera height bounds in the common record
+        float minH = 1e30f, maxH = -1e30f;
+        for (float h : terrain_->heights) { minH = std::min(minH, h); maxH = std::max(maxH, h); }
+        auto info = forge::stbinfo::readInfoBlock(record.data());
+        forge::stbbake::setRetailCameraHeightBounds(info, minH, maxH);
+        const auto encoded = forge::stbinfo::writeInfoBlock(info);
+        if (!backupOnce(stb, error)) return false;
+        std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
+        if (!io) { error = "cannot open " + stb.string() + " for writing"; return false; }
+        io.seekp(std::streamoff(entry->offset));
+        io.write(reinterpret_cast<const char*>(baked.chunk.data()), std::streamsize(baked.chunk.size()));
+        io.seekp(std::streamoff(map->absoluteOffset));
+        io.write(reinterpret_cast<const char*>(encoded.data()), std::streamsize(encoded.size()));
+        if (!io) { error = "write to " + stb.string() + " failed"; return false; }
+        notes.push_back("re-baked terrain chunk " + std::to_string(baked.chunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb");
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 void Document::setFrame(size_t index, const Frame& frame) {
@@ -289,16 +544,16 @@ void Document::remove(size_t index) {
 }
 
 bool Document::undo() {
-    if (undo_.empty()) return false;
-    redo_.push_back(file_.serialize());
+    if (undo_.empty() || stroke_) return false;
+    redo_.push_back(snapshot());
     restore(undo_.back());
     undo_.pop_back();
     return true;
 }
 
 bool Document::redo() {
-    if (redo_.empty()) return false;
-    undo_.push_back(file_.serialize());
+    if (redo_.empty() || stroke_) return false;
+    undo_.push_back(snapshot());
     restore(redo_.back());
     redo_.pop_back();
     return true;

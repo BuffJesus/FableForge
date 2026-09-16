@@ -611,9 +611,10 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     for (const auto& entry : forge::stbbake::parseQuadDir(chunk)) {
         for (const auto& move : foregroundMoves) {
             if (entry.frameOffset != move.oldStart) continue;
-            put32At(authoredChunk, entry.dirOffset + 4,
+            // record layout (retail, parseQuadDir): {frameOffset @0, frameSpan @4, aabb @8, flags @32}
+            put32At(authoredChunk, entry.dirOffset + 0,
                     static_cast<uint32_t>(move.newStart));
-            put32At(authoredChunk, entry.dirOffset + 8,
+            put32At(authoredChunk, entry.dirOffset + 4,
                     static_cast<uint32_t>(move.newSpan));
             ++foregroundDirectoryRewired;
             break;
