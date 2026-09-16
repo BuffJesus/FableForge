@@ -51,6 +51,7 @@ struct Options {
     std::filesystem::path gameRoot;
     bool textures = true;
     bool creatures = false;
+    bool particles = false;    // static stand-ins for particle emitters (off: out of scope for a map exporter)
     terrainexport::UpAxis up = terrainexport::UpAxis::Y;
     // Added to every position (TNG positions are map-local). Use the map's
     // WLD MapX/MapY to place several maps in one world.

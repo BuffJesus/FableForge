@@ -53,6 +53,7 @@ int usage() {
         "  --foliage           add the baked grass/plants/trees as mesh instances (needs install)\n"
         "  --things            add the placed objects (fences, walls, rocks, buildings) from the .tng\n"
         "  --creatures         with --things: include creature meshes in bind pose\n"
+        "  --particles         with --things: static stand-ins for particle emitters (flames, sun beams, lights)\n"
         "  --layers            also write splat attributes + one PNG per ground theme\n"
         "  --texels <n>        baked albedo texels per cell edge (default 8)\n"
         "  --tile <units>      world units per texture repeat (default 8, the engine's)\n"
@@ -206,7 +207,7 @@ int main(int argc, char** argv) {
     const std::string cmd = args[0];
 
     std::string installArg, out, target, upArg = "y", originArg;
-    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, world = false;
+    bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, particles = false, world = false;
     int texels = 8;
     float tile = 8.0f, gain = 1.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -222,6 +223,7 @@ int main(int argc, char** argv) {
         else if (a == "--things") things = true;
         else if (a == "--world") world = true;
         else if (a == "--creatures") creatures = true;
+        else if (a == "--particles") particles = true;
         else if (a == "--layers") layers = true;
         else if (a == "--texels") texels = std::atoi(next().c_str());
         else if (a == "--tile") tile = float(std::atof(next().c_str()));
@@ -369,6 +371,7 @@ int main(int argc, char** argv) {
             to.gameRoot = install.root;
             to.textures = textures;
             to.creatures = creatures;
+            to.particles = particles;
             to.up = o.up;
             to.originX = o.originX; to.originY = o.originY;
             to.log = o.log;

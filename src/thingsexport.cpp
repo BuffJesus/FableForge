@@ -105,7 +105,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     std::map<uint32_t, int> meshIndexById;
     std::map<uint32_t, int> textureToImage;
     std::map<std::string, int> defWarned;
-    {
+    if (options.particles) {
         std::string ferr;
         if (!effects::openBank(options.gameRoot, ferr)) warn("particle effects unavailable: " + ferr);
     }
@@ -186,6 +186,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     // One emitter: proxies for its sprite systems, lights for its CPSCLight components.
     auto placeParticle = [&](const std::string& fxName, float x, float y, float z) {
         ++st.particles;
+        if (!options.particles) return;
         const effects::Effect* fx = effects::byName(fxName);
         if (!fx) { ++st.particlesUnknown; if (!defWarned["fx:" + fxName]++) warn("particle effect " + fxName + " is not in effects.big"); return; }
         bool any = false;
@@ -368,8 +369,9 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
                     std::to_string(st.noMesh) + " missing meshes, " + std::to_string(st.noPosition) + " unplaced, " +
                     std::to_string(st.skippedCreatures) + " creatures; " + std::to_string(st.childPlaced) + " of " +
                     std::to_string(st.childThings) + " mesh-dummy children (doors, windows, building parts) placed, " +
-                    std::to_string(st.particlesPlaced) + " of " + std::to_string(st.particles) + " particle emitters proxied (" +
-                    std::to_string(st.particleLights) + " lights, " + std::to_string(st.particlesUnknown) + " unknown effects)");
+                    (options.particles ? std::to_string(st.particlesPlaced) + " of " + std::to_string(st.particles) + " particle emitters proxied (" +
+                                             std::to_string(st.particleLights) + " lights, " + std::to_string(st.particlesUnknown) + " unknown effects)"
+                                       : std::to_string(st.particles) + " particle emitters skipped (--particles)"));
         std::vector<const fe::Mesh*> byCount;
         for (const auto& m : scene.meshes) byCount.push_back(&m);
         std::sort(byCount.begin(), byCount.end(), [](const fe::Mesh* a, const fe::Mesh* b) { return a->instanceCount > b->instanceCount; });

@@ -34,7 +34,7 @@ AlbionAtlas effects BRAZIERFIREFINAL         # what a particle effect is made of
 | Walkability (`--walkable-colors`) | `.lev` walkable byte | `COLOR_0`: white = walkable, red = blocked |
 | Foliage (`--foliage`) | baked local-detail instances in `FinalAlbion_RT.stb` — grass, flowers, bracken, bramble, stumps **and trees** (oaks, birches...) — + LOD0 meshes from `graphics.big` + their textures | one glTF mesh per plant (leaves/trunk as separate primitives), one node per instance under a `Foliage` root; cutout (`MASK`) materials. OBJ: baked into an extra object |
 | Water | LEV theme blend x `ENGINE_THEME` `WaterHeight` / `WaterType` (lakes, rivers, sea, Hook Coast ice) | `Water` child node with translucent `water` / `ice` materials; OBJ `o Water` |
-| Particle effects (with `--things`) | `CREATEPARTICLE <fx>` mesh dummies and `PARTICLE_EMITTER_PLACEABLE` things name an entry of `data/Misc/pc/effects.big` (1,165 emitters, fully parsed) | each sprite system → a tinted crossed-quad proxy (its sprite texture, start colour, render size) named after the effect; mesh systems (sun beams, dust) → the mesh scaled to its render size; `CPSCLight` → `KHR_lights_punctual` point light. Static stand-ins — no animation |
+| Particle effects (`--things --particles`, off by default) | `CREATEPARTICLE <fx>` mesh dummies and `PARTICLE_EMITTER_PLACEABLE` things name an entry of `data/Misc/pc/effects.big` (1,165 emitters, fully parsed) | each sprite system → a tinted crossed-quad proxy (its sprite texture, start colour, render size) named after the effect; mesh systems (sun beams, dust) → the mesh scaled to its render size; `CPSCLight` → `KHR_lights_punctual` point light. Static stand-ins — no animation |
 | Placed objects (`--things`) | the map's `.tng` — fences, walls, rocks, lamps, crates, buildings, chests — resolved through their `game.bin` definition's `Graphic` model id (or `GraphicOverride`), **plus the parts a mesh spawns itself**: 3ds-Max dummies named `CREATEOBJECT <def>` / `CREATEBUILDING <def>` inside a mesh place doors, windows, weathervanes, the Arena's stands and entrances, chained cave/hall interiors (the engine's `CTCMeshAutomaticEntityCreator`) | same as foliage under a `Things` root; full orientation from `RHSetForward/Up`, `ObjectScale` honoured; children follow their parent's transform, recursively. Creatures only with `--creatures` (bind pose) |
 
 The exporter never embeds retail data; it reads the textures from **your** install.
@@ -48,6 +48,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --foliage           add the baked grass/plants/trees as mesh instances (needs an install)
 --things            add the placed objects from the map's .tng (needs an install)
 --creatures         with --things: include creature meshes in bind pose
+--particles         with --things: static stand-ins for particle emitters (off by default)
 --layers            also write splat attributes + one PNG per ground theme
 --texels <n>        baked albedo texels per cell edge (default 8)
 --tile <units>      world units per texture repeat (default 8 = the engine's)
@@ -83,9 +84,9 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   billboard facing, `MINIMAP_ARENA`) and Oakvale's fence lines. Objects that float in the
   export float in the data too — except for parts a mesh spawns through its own
   `CREATEOBJECT` / `CREATEBUILDING` dummies (see the table), which are now followed.
-* **Particles are stand-ins** — a flame is a small tinted sprite quad, a fountain a
-  stack of them, a sun beam its mesh; the real emitter parameters are in the effect
-  name (look it up with `AlbionAtlas effects <NAME>`). Nothing moves.
+* **Particles are off by default** (`--particles` opts in) — a flame is a small tinted
+  sprite quad, a fountain a stack of them, a sun beam its mesh; nothing moves. The real
+  emitter parameters are in the effect name (`AlbionAtlas effects <NAME>`).
 * **Water** — a `Water` sheet (child of the terrain node; `water` + `ice` materials, OBJ
   `o Water`) built the way the engine's water patches are: ground + the LEV theme blend
   times each `ENGINE_THEME`'s `WaterHeight` (a depth), averaged over the 5x5 neighbourhood
