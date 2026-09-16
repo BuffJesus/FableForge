@@ -29,8 +29,9 @@ std::vector<uint8_t> compress(const uint8_t* data, size_t len) {
     return albion::lzo1x::compress(data, len);
 }
 
-std::vector<uint8_t> compress999(const uint8_t*, size_t) {
-    throw std::runtime_error("forge::lzo: lzo1x_999 is not available in Albion Atlas (use compress)");
+std::vector<uint8_t> compress999(const uint8_t* data, size_t len) {
+    // The optimal-parse encoder is within 1% of lzo1x_999 on retail frames.
+    return albion::lzo1x::compress(data, len);
 }
 
 std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLen) {

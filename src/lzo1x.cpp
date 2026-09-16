@@ -1,5 +1,8 @@
 #include "lzo1x.hpp"
 
+#include <algorithm>
+#include <cstdint>
+
 // LZO1X stream grammar (as documented by the format's public specifications):
 //   first byte > 17            : (t-17) literals follow; then a match token
 //   token < 16 after literals  : M1 match, 3 bytes, distance 2049..3072
@@ -151,65 +154,210 @@ Status decompress(const uint8_t* in, size_t inLen, uint8_t* out, size_t* outLen)
 }
 
 // ---------------------------------------------------------------- encoder
+//
+// Two stages. A hash-chain match finder records, for every position, the
+// longest match overall and the longest within each cheaper distance class
+// (M2 <= 2048, M3 <= 16384), the nearest 3-byte match in the M1L band
+// (2049..3072) and whether a 2-byte match exists within 1024 (M1). Then a
+// backward dynamic programme over the exact grammar: literal runs cost their
+// bytes plus the run token (free for 0..3 literals riding in the previous
+// match token, +1 for 4..18, +1 and length extension beyond), and the token
+// that may follow a run depends on the run's length class:
+//   after 0 literals    : M2 / M3 / M4
+//   after 1..3 literals : also M1  (2 bytes at distance 1..1024, 2 bytes)
+//   after a run >= 4    : also M1L (3 bytes at distance 2049..3072, 2 bytes)
+// which is exactly why lzo1x_999 output is smaller than a plain parse. The
+// forward pass emits tokens in that grammar. The point is size: retail STB
+// frames were written with lzo1x_999 and an edited frame must fit its slot.
 
-std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
-    std::vector<uint8_t> out;
-    out.reserve(n / 2 + 16);
-    constexpr size_t kHashBits = 15;
-    constexpr size_t kMaxDist = 0xBFFF;      // M4 ceiling
-    std::vector<uint32_t> table(size_t(1) << kHashBits, 0xFFFFFFFFu);
+namespace {
+
+struct Cand { uint32_t dist = 0, len = 0; };
+struct Cands {
+    Cand best, m2, m3;      // longest overall / within 2048 / within 16384
+    uint32_t m1lDist = 0;   // 3-byte match at 2049..3072 (0 = none)
+    uint32_t m1Dist = 0;    // 2-byte match at 1..1024 (0 = none)
+};
+
+constexpr size_t kMaxDist = 0xBFFF;
+constexpr size_t kMinLen = 3;
+constexpr size_t kNiceLen = 512;
+constexpr uint32_t kChainDepth = 400;
+constexpr uint32_t kInf = 0x3FFFFFFFu;
+
+inline uint32_t extBytes(size_t rem) { return uint32_t((rem - 1) / 255 + 1); }
+
+// bytes for an M2/M3/M4 token of `len` at `dist` (no literal-run bytes)
+inline uint32_t tokenCost(size_t len, size_t dist) {
+    if (dist <= 2048 && len <= 8) return 2;
+    if (dist <= 16384) { const size_t t = len - 2; return 3 + (t > 31 ? extBytes(t - 31) : 0); }
+    const size_t t = len - 2;
+    return 3 + (t > 7 ? extBytes(t - 7) : 0);
+}
+
+void findMatches(const uint8_t* in, size_t n, std::vector<Cands>& out) {
+    out.assign(n, Cands{});
+    if (n < 2) return;
+    // 2-byte pairs: last position of each pair, for M1
+    std::vector<uint32_t> pairLast(65536, 0xFFFFFFFFu);
+    for (size_t i = 0; i + 2 <= n; ++i) {
+        const uint32_t key = uint32_t(in[i]) | (uint32_t(in[i + 1]) << 8);
+        const uint32_t p = pairLast[key];
+        if (p != 0xFFFFFFFFu && i - p <= 1024) out[i].m1Dist = uint32_t(i - p);
+        pairLast[key] = uint32_t(i);
+    }
+    if (n < kMinLen) return;
+    constexpr size_t kHashBits = 16;
+    std::vector<uint32_t> head(size_t(1) << kHashBits, 0xFFFFFFFFu);
+    std::vector<uint32_t> next(n, 0xFFFFFFFFu);
     auto hash = [&](size_t i) {
         const uint32_t v = uint32_t(in[i]) | (uint32_t(in[i + 1]) << 8) | (uint32_t(in[i + 2]) << 16);
         return size_t((v * 0x9E3779B1u) >> (32 - kHashBits));
     };
-    auto extend = [&](size_t rem) {        // zero-run length continuation
-        while (rem > 255) { out.push_back(0); rem -= 255; }
-        out.push_back(uint8_t(rem));
+    for (size_t i = 0; i + kMinLen <= n; ++i) {
+        const size_t h = hash(i);
+        uint32_t p = head[h];
+        Cands& c = out[i];
+        uint32_t depth = 0;
+        const size_t maxLen = n - i;
+        while (p != 0xFFFFFFFFu && depth++ < kChainDepth) {
+            const size_t dist = i - p;
+            if (dist > kMaxDist) break;
+            const bool canImprove = c.best.len < maxLen && in[p + c.best.len] == in[i + c.best.len];
+            const bool wantClass = (dist <= 16384 && c.m3.len < maxLen) || (dist >= 2049 && dist <= 3072 && !c.m1lDist);
+            if (canImprove || wantClass) {
+                size_t len = 0;
+                while (len < maxLen && in[p + len] == in[i + len]) ++len;
+                if (len >= kMinLen) {
+                    if (len > c.best.len) c.best = {uint32_t(dist), uint32_t(len)};
+                    if (dist <= 2048 && len > c.m2.len) c.m2 = {uint32_t(dist), uint32_t(len)};
+                    if (dist <= 16384 && len > c.m3.len) c.m3 = {uint32_t(dist), uint32_t(len)};
+                    if (dist >= 2049 && dist <= 3072 && !c.m1lDist) c.m1lDist = uint32_t(dist);
+                    if (len >= kNiceLen) break;
+                }
+            }
+            p = next[p];
+        }
+        next[i] = head[h];
+        head[h] = uint32_t(i);
+    }
+}
+
+} // namespace
+
+std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
+    std::vector<uint8_t> out;
+    out.reserve(n / 2 + 16);
+    if (n == 0) { out = {0x11, 0x00, 0x00}; return out; }
+
+    std::vector<Cands> cands;
+    findMatches(in, n, cands);
+
+    // A[i]  : cheapest cost of in[i..n) starting right after a match token (0 literals so far)
+    // B[c][i]: cheapest cost of in[i..n) starting with a match token in literal context c
+    //          (0: no literals before, 1: 1..3 literals before, 2: run >= 4 before)
+    // L[i]  : cheapest cost of in[i..n) while inside a literal run that is already
+    //          >= 19 long (each further literal costs 1; ending it means a class-2 match)
+    // Choices are packed for the forward pass.
+    struct Choice { uint32_t len = 0, dist = 0; uint8_t kind = 0; };   // kind: 0 M2/3/4, 1 M1, 2 M1L
+    std::vector<uint32_t> A(n + 1, kInf), L(n + 1, kInf);
+    std::vector<uint32_t> B[3] = {std::vector<uint32_t>(n + 1, kInf), std::vector<uint32_t>(n + 1, kInf), std::vector<uint32_t>(n + 1, kInf)};
+    std::vector<Choice> Bc[3] = {std::vector<Choice>(n + 1), std::vector<Choice>(n + 1), std::vector<Choice>(n + 1)};
+    std::vector<uint32_t> Ak(n + 1, 0);        // literal count chosen at A[i]; 0xFFFFFFFF = long run
+    constexpr uint32_t kLong = 0xFFFFFFFFu;
+    // end marker costs 3 in every context; the tail literals are a plain run
+    A[n] = 3; L[n] = 3;
+    for (int c = 0; c < 3; ++c) B[c][n] = 3;
+
+    auto runCost = [](size_t k) -> uint32_t {   // bytes for a literal run of k (token + literals)
+        if (k == 0) return 0;
+        if (k <= 3) return uint32_t(k);
+        if (k <= 18) return uint32_t(k + 1);
+        return uint32_t(k + 1 + extBytes(k - 18));
     };
 
-    size_t litStart = 0;
-    size_t litBitsPos = SIZE_MAX;            // byte whose low 2 bits hold the next 0..3 literal count
-    bool first = true;
+    for (size_t i = n; i-- > 0;) {
+        // ---- B: a match starts at i
+        const Cands& c = cands[i];
+        Choice bestCh[3]; uint32_t bestV[3] = {kInf, kInf, kInf};
+        auto consider = [&](const Cand& cd) {
+            if (cd.len < kMinLen) return;
+            auto tryLen = [&](size_t Lm) {
+                if (Lm < kMinLen || Lm > cd.len) return;
+                const uint32_t v = tokenCost(Lm, cd.dist) + A[i + Lm];
+                for (int k = 0; k < 3; ++k) if (v < bestV[k]) { bestV[k] = v; bestCh[k] = {uint32_t(Lm), cd.dist, 0}; }
+            };
+            tryLen(cd.len);
+            const size_t lo = cd.len > 24 ? cd.len - 24 : kMinLen;
+            for (size_t Lm = lo; Lm < cd.len; ++Lm) tryLen(Lm);
+            static const size_t thresholds[] = {3, 4, 8, 9, 33};
+            for (size_t t : thresholds) if (t < lo) tryLen(t);
+        };
+        consider(c.best); consider(c.m2); consider(c.m3);
+        if (c.m1Dist && i + 2 <= n) {            // class 1 only
+            const uint32_t v = 2 + A[i + 2];
+            if (v < bestV[1]) { bestV[1] = v; bestCh[1] = {2, c.m1Dist, 1}; }
+        }
+        if (c.m1lDist && i + 3 <= n) {           // class 2 only
+            const uint32_t v = 2 + A[i + 3];
+            if (v < bestV[2]) { bestV[2] = v; bestCh[2] = {3, c.m1lDist, 2}; }
+        }
+        for (int k = 0; k < 3; ++k) { B[k][i] = bestV[k]; Bc[k][i] = bestCh[k]; }
 
-    auto flushLiterals = [&](size_t end) {
-        const size_t L = end - litStart;
+        // ---- L: inside a long literal run
+        L[i] = std::min(1 + L[i + 1], B[2][i]);
+
+        // ---- A: choose how many literals precede the next match (or the end)
+        uint32_t best = kInf, bk = 0;
+        const size_t rem = n - i;
+        // finish with literals only
+        if (rem <= 18) { const uint32_t v = runCost(rem) + 3; if (v < best) { best = v; bk = uint32_t(rem); } }
+        if (B[0][i] < best) { best = B[0][i]; bk = 0; }
+        for (size_t k = 1; k <= 18 && k < rem; ++k) {
+            const uint32_t v = runCost(k) + B[k <= 3 ? 1 : 2][i + k];
+            if (v < best) { best = v; bk = uint32_t(k); }
+        }
+        if (rem >= 19) {
+            // long run: 19 literals (+ token + first extension byte) then keep going or match
+            const uint32_t v = 19 + 2 + L[i + 19];
+            if (v < best) { best = v; bk = kLong; }
+        }
+        A[i] = best; Ak[i] = bk;
+    }
+
+    // ---- forward emission
+    auto extend = [&](size_t remv) { while (remv > 255) { out.push_back(0); remv -= 255; } out.push_back(uint8_t(remv)); };
+    size_t litBitsPos = SIZE_MAX;
+    bool first = true;
+    auto emitRun = [&](size_t start, size_t k) {   // k literals in[start..start+k)
         if (first) {
             first = false;
-            if (L == 0) { /* cannot happen: a match needs history */ }
-            else if (L <= 3) out.push_back(uint8_t(17 + L));
-            else if (L <= 18) out.push_back(uint8_t(L - 3));
-            else { out.push_back(0); extend(L - 18); }
-        } else if (L == 0) {
-            // nothing: previous token's literal bits stay 0
-        } else if (L <= 3) {
-            out[litBitsPos] |= uint8_t(L);
-        } else if (L <= 18) {
-            out.push_back(uint8_t(L - 3));
+            if (k <= 3) out.push_back(uint8_t(17 + k));
+            else if (k <= 18) out.push_back(uint8_t(k - 3));
+            else { out.push_back(0); extend(k - 18); }
+        } else if (k == 0) {
+        } else if (k <= 3) {
+            out[litBitsPos] |= uint8_t(k);
+        } else if (k <= 18) {
+            out.push_back(uint8_t(k - 3));
         } else {
-            out.push_back(0); extend(L - 18);
+            out.push_back(0); extend(k - 18);
         }
-        out.insert(out.end(), in + litStart, in + end);
-        litStart = end;
+        out.insert(out.end(), in + start, in + start + k);
     };
-
-    size_t i = 0;
-    while (i + 3 <= n) {
-        const size_t h = hash(i);
-        const uint32_t cand = table[h];
-        table[h] = uint32_t(i);
-        size_t len = 0, dist = 0;
-        if (cand != 0xFFFFFFFFu && i - cand <= kMaxDist &&
-            in[cand] == in[i] && in[cand + 1] == in[i + 1] && in[cand + 2] == in[i + 2]) {
-            dist = i - cand;
-            len = 3;
-            const size_t maxLen = n - i;
-            while (len < maxLen && in[cand + len] == in[i + len]) ++len;
-        }
-        // A 3-byte match beyond M2 range costs as much as it saves; skip it.
-        if (len < 3 || (dist > 2048 && len < 4)) { ++i; continue; }
-
-        flushLiterals(i);
-        if (dist <= 2048 && len <= 8) {                       // M2
+    auto emitMatch = [&](const Choice& ch) {
+        const size_t len = ch.len, dist = ch.dist;
+        if (ch.kind == 1) {                                   // M1: 2 bytes, dist 1..1024
+            const size_t d = dist - 1;
+            litBitsPos = out.size();
+            out.push_back(uint8_t((d & 3) << 2));
+            out.push_back(uint8_t(d >> 2));
+        } else if (ch.kind == 2) {                            // M1L: 3 bytes, dist 2049..3072
+            const size_t d = dist - 0x801;
+            litBitsPos = out.size();
+            out.push_back(uint8_t((d & 3) << 2));
+            out.push_back(uint8_t(d >> 2));
+        } else if (dist <= 2048 && len <= 8) {                // M2
             litBitsPos = out.size();
             out.push_back(uint8_t(((len - 1) << 5) | (((dist - 1) & 7) << 2)));
             out.push_back(uint8_t((dist - 1) >> 3));
@@ -222,8 +370,8 @@ std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
             out.push_back(uint8_t((d & 0x3F) << 2));
             out.push_back(uint8_t(d >> 6));
         } else {                                              // M4
-            const size_t d = dist - 0x4000;                   // 1..0x7FFF
-            uint8_t t0 = uint8_t(0x10 | ((d >> 11) & 8));
+            const size_t d = dist - 0x4000;
+            const uint8_t t0 = uint8_t(0x10 | ((d >> 11) & 8));
             const size_t t = len - 2;
             if (t <= 7) out.push_back(uint8_t(t0 | t));
             else { out.push_back(t0); extend(t - 7); }
@@ -232,12 +380,31 @@ std::vector<uint8_t> compress(const uint8_t* in, size_t n) {
             out.push_back(uint8_t((d14 & 0x3F) << 2));
             out.push_back(uint8_t(d14 >> 6));
         }
-        // index the matched bytes so the next search can reach into them
-        for (size_t k = i + 1; k < i + len && k + 3 <= n; ++k) table[hash(k)] = uint32_t(k);
-        i += len;
-        litStart = i;
+    };
+
+    size_t i = 0;
+    while (i < n) {
+        uint32_t k = Ak[i];
+        size_t runLen;
+        int cls;
+        if (k == kLong) {
+            // extend the run while L says "one more literal" is the choice
+            size_t j = i + 19;
+            while (j < n && 1 + L[j + 1] <= B[2][j]) ++j;
+            runLen = j - i; cls = 2;
+        } else {
+            runLen = k; cls = k == 0 ? 0 : (k <= 3 ? 1 : 2);
+        }
+        emitRun(i, runLen);
+        i += runLen;
+        if (i >= n) break;
+        const Choice ch = Bc[cls][i];
+        if (ch.len == 0) {   // no match possible here (B == inf): cannot happen when A chose it; guard
+            emitRun(i, n - i); i = n; break;
+        }
+        emitMatch(ch);
+        i += ch.len;
     }
-    flushLiterals(n);   // trailing literals (empty input: nothing but the end marker)
     out.push_back(0x11); out.push_back(0x00); out.push_back(0x00);   // end marker
     return out;
 }

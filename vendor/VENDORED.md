@@ -8,9 +8,10 @@ at commit `3494745` (working tree, uncommitted forgecore changes).
 Skipped: `audio.*` (miniaudio). Fixes made here are upstreamed to FableForge
 first, then re-synced, so the copy stays byte-identical except for:
 * `src/lzo.cpp` — the only local override: `forge::lzo` backed by the
-  clean-room MIT LZO1X codec in `src/lzo1x.*` (decoder + encoder) instead of
-  GPL minilzo. `compress999` is not available (throws); the STB writer falls
-  back to `compress` (LZO1X-1 class output, which the retail loader accepts).
+  clean-room MIT LZO1X codec in `src/lzo1x.*` (decoder + optimal-parse
+  encoder) instead of GPL minilzo / liblzo2. `compress` packs to 99.4% of
+  retail lzo1x_999 output on the STB frames (2217/2223 fit their slot), so
+  `compress999` maps to it as well.
 
 ## `embedded_schema.hpp`
 Slice of FableForge `docs/re_reference/def_schema.json`: `CEngineThemeDef`

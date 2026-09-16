@@ -5,7 +5,9 @@
 // Skips (exit 0 with a note) when no install is present.
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -22,6 +24,7 @@ namespace {
 
 int g_frames = 0, g_textures = 0, g_fail = 0, g_roundtrips = 0;
 size_t g_rtIn = 0, g_rtOut = 0;
+size_t g_retailComp = 0, g_oursComp = 0; int g_fits = 0, g_frameCmp = 0;
 
 // Encoder check: our stream must decode to the input through minilzo AND our
 // decoder, and consume exactly the stream.
@@ -98,7 +101,18 @@ void checkChunk(const std::vector<uint8_t>& d, const std::string& name) {
                 ++g_frames; ++local;
                 {   // re-encode the decoded body with our encoder and check both decoders read it back
                     std::vector<uint8_t> body(unc); size_t bl = unc;
-                    if (albion::lzo1x::decompress(d.data() + off + 8, comp, body.data(), &bl) == albion::lzo1x::Status::Ok) roundTrip(body, name.c_str());
+                    if (albion::lzo1x::decompress(d.data() + off + 8, comp, body.data(), &bl) == albion::lzo1x::Status::Ok) {
+                        roundTrip(body, name.c_str());
+                        const auto enc = albion::lzo1x::compress(body.data(), body.size());
+                        g_retailComp += comp; g_oursComp += enc.size(); ++g_frameCmp; if (enc.size() <= comp) ++g_fits;
+                        if (std::getenv("ALBION_LZO_VERBOSE")) std::printf("    frame unc=%u retail=%u ours=%zu %s\n", unc, comp, enc.size(), enc.size() > comp ? "OVER" : "");
+                        if (const char* dump = std::getenv("ALBION_LZO_DUMP"); dump && g_frameCmp <= 6) {
+                            const std::string base = std::string(dump) + "/frame" + std::to_string(g_frameCmp);
+                            std::ofstream(base + ".retail.lzo", std::ios::binary).write(reinterpret_cast<const char*>(d.data() + off + 8), std::streamsize(comp));
+                            std::ofstream(base + ".ours.lzo", std::ios::binary).write(reinterpret_cast<const char*>(enc.data()), std::streamsize(enc.size()));
+                            std::ofstream(base + ".raw", std::ios::binary).write(reinterpret_cast<const char*>(body.data()), std::streamsize(body.size()));
+                        }
+                    }
                 }
                 off = ((off + 8 + comp + 3) & ~size_t(3)) - 4;
                 break;
@@ -189,6 +203,8 @@ int main() {
             if (int32_t(e.id) == bankIndex) { checkChunk(archive.read(e), stem); break; }
     }
     checkTextures(root / "data" / "graphics" / "pc" / "textures.big");
+    std::printf("  retail lzo1x_999 frames: %zu bytes; ours: %zu bytes (%.1f%%), %d of %d frames fit their retail slot\n",
+                g_retailComp, g_oursComp, g_retailComp ? 100.0 * double(g_oursComp) / double(g_retailComp) : 0.0, g_fits, g_frameCmp);
     std::printf("albionatlas_lzo_tests: %d chunk frames + texture chunks compared, %d encoder round trips (%.1f%% of input), %d failures\n",
                 g_frames, g_roundtrips, g_rtIn ? 100.0 * double(g_rtOut) / double(g_rtIn) : 0.0, g_fail);
     return g_fail ? 1 : 0;
