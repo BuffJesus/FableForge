@@ -86,6 +86,13 @@ public:
     // source line byte-for-byte.
     void relocateMap(std::string_view levelName, int mapX, int mapY);
 
+    // Repurposing a region in place (its slot/index is kept): rewrite one of
+    // its string keys (RegionName, NewDisplayName, RegionDef, MiniMapGraphic --
+    // inserted after RegionName when the block lacks it), or drop a map from
+    // its ContainsMap / SeesMap lists.
+    void setRegionText(std::string_view regionName, std::string_view key, std::string_view value);
+    void removeMapFromRegion(std::string_view regionName, std::string_view levelName, bool alsoSees);
+
     // Byte-identical to the parsed input while unmodified.
     std::string serialize() const;
 

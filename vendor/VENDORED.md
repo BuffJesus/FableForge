@@ -4,7 +4,7 @@
 Full copy of the FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/
 STB bake/nav/world workspace/defs/quests), synced from `D:\Code\FableForge`
 with `python tools/sync_forgecore.py` (`--check` reports drift). Last synced
-at commit `37ac74e` (working tree, uncommitted forgecore changes)
+at commit `ab5d354` (working tree, uncommitted forgecore changes)
 Skipped: `audio.*` (miniaudio). Fixes made here are upstreamed to FableForge
 first, then re-synced, so the copy stays byte-identical except for:
 * `src/lzo.cpp` — the only local override: `forge::lzo` backed by the

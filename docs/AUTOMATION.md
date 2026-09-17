@@ -46,6 +46,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |
 | `brush <radius> <strength>` / `terrain_stroke <x> <y> <seconds>` | brush size; one stroke at a map-local point |
 | `new_level <name> <x> <y> [region]` / `wait_new_level` | fill the "New level" card and install (BWD/WLD/WAD/STB under the install), wait for it |
+| `new_level_own_region 0\|1` | take over a filler region slot (+ minimap bake) with the next `new_level` |
 | `new_level_blank <theme slot> <height> [<w> <h>]` | switch the card to Blank with that ground theme / height (and a retail size) before `new_level` |
 | `deploy_terrain` / `wait_terrain` | write .lev + WAD + STB chunk under saveroot (worker thread) |
 | `set unsaved_prompt 0\|1` | scripted runs skip the unsaved-changes prompt unless opted in |

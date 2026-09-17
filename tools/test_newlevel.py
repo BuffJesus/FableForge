@@ -72,6 +72,10 @@ def main() -> int:
     r = subprocess.run([cli, "layers", "AtlasCliBlank", "--install", scratch], capture_output=True, text=True)
     if "16 patches" not in r.stdout or "0 differ" not in r.stdout:
         print("blank level layers do not match its LEV:", r.stdout[:400]); ok = False
+    # own region (takes over a filler slot; no minimap bake on the scratch, it has no textures.big)
+    r = subprocess.run([cli, "blank-level", "AtlasCliOwn", "--install", scratch, "--template", a.donor, "--own-region", "--no-minimap", "--display", "Atlas Own"], capture_output=True, text=True)
+    if r.returncode != 0 or "taken over from" not in r.stdout:
+        print("CLI own-region blank-level failed:", r.stderr, r.stdout[-400:]); ok = False
     # a retail-sized one (128x224, the template is picked automatically) and a non-power-of-two one
     for name, size, patches in (("AtlasCliBig", "128x224", "112 patches"), ("AtlasCliOdd", "96x96", "36 patches")):
         r = subprocess.run([cli, "blank-level", name, "--install", scratch, "--size", size, "--height", "20"], capture_output=True, text=True)

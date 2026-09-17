@@ -24,10 +24,29 @@ struct DonorInfo {
 // Reads the WLD/BWD/STB for the donor. Errors are returned, not thrown.
 bool donorInfo(const std::filesystem::path& gameRoot, const std::string& donor, DonorInfo& out, std::string& error);
 
+// Own region for a new level: the engine keeps only the first 141 regions, so
+// a new region is made by taking over a retail *filler* slot (a region that
+// only owns decorative, never-entered maps): its maps are re-owned by another
+// filler, the slot is renamed and gets the level's minimap texture.
+struct OwnRegion {
+    bool wanted = false;
+    std::string takeOver;       // filler region to repurpose (see reusableRegions)
+    std::string mergeInto;      // filler region that receives its maps
+    std::string displayName;    // shown on the map screen; default = level name
+    std::string regionDef;      // "" like the retail fillers
+    bool minimap = true;        // bake a MINIMAP_<NAME> texture into textures.big
+};
+
+struct ReusableRegion { int slot = 0; std::string name; int maps = 0; };
+// Filler regions (no def, no minimap graphic) that can be taken over, sorted
+// by map count; the first is the suggested victim, the last the merge target.
+std::vector<ReusableRegion> reusableRegions(const std::filesystem::path& gameRoot, std::string& error);
+
 struct NewLevelRequest {
     std::string donor;          // existing level (stem)
     std::string name;           // new level stem: letters, digits, '_'
     std::string hostRegion;     // existing region to own the map; "" = dedicated region (unreachable past slot 141)
+    OwnRegion ownRegion;        // wins over hostRegion when wanted
     int worldX = 0, worldY = 0; // 32-aligned origin
     bool rebakeChunk = true;    // re-bake the STB chunk for the new origin (recommended; otherwise donor geometry)
 };
@@ -52,6 +71,7 @@ struct BlankLevelRequest {
     int worldX = 0, worldY = 0;
     int width = 64, height = 64;
     std::string templateLevel;   // retail map of exactly width x height whose palette/header are reused; "" = auto
+    OwnRegion ownRegion;
     int themeSlot = -1;          // palette slot of the ground theme (-1 = the template's most used)
     float groundHeight = 20.0f;  // flat height of the plane
     uint16_t backgroundRgb565 = 0x4C89;   // distant-LOD colour (a mid green)
@@ -65,6 +85,15 @@ std::vector<MapSize> retailMapSizes(const std::filesystem::path& gameRoot, std::
 
 bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelRequest& request,
                       const forge::terraintex::ThemeLibrary& library, NewLevelResult& out, std::string& error);
+
+// Bake the level's minimap (top-down albedo + hillshade, north up, the retail
+// circular vignette) from its LEV bytes and put it into textures.big as a
+// 256x256 DXT3 entry MINIMAP_<NAME> (the retail minimap format). Uses the
+// FableTLC texture writer through forgecore's import driver. One-time
+// .atlas-orig backup of textures.big.
+bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string& levelName,
+                        const std::vector<uint8_t>& levBytes, const forge::terraintex::ThemeLibrary* library,
+                        std::string& entryName, std::vector<std::string>& notes, std::string& error);
 
 // One-time .atlas-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
 // then the staged atomic install. The new level's LEV/TNG are the donor's

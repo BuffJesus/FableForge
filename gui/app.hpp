@@ -257,6 +257,9 @@ private:
     int newLevelMode_ = 0;                 // 0 copy of this map, 1 blank 64x64
     std::string blankTemplate_;            // retail map (of the chosen size) whose palette/header a blank level reuses
     std::vector<editor::MapSize> blankSizes_;
+    bool newLevelOwnRegion_ = false;       // take over a filler region slot + bake a minimap
+    std::vector<editor::ReusableRegion> reusableRegions_;
+    char newLevelDisplay_[64] = "";
     int blankSize_ = -1;                   // index into blankSizes_
     std::vector<std::string> blankPalette_;
     int blankTheme_ = -1;
@@ -265,6 +268,7 @@ private:
     std::future<NewLevelJob> newLevelFuture_;
     void drawNewLevelCard(float pad, float inner, float cardInner);
     void startNewLevel();
+    void setNewLevelOwnRegion(bool on) { newLevelOwnRegion_ = on; }
     void setNewLevelBlank(int theme, float height, int w = 0, int h = 0) { newLevelMode_ = 1; blankTheme_ = theme; blankHeight_ = height; if (w > 0) selectBlankSize(w, h); }
     void selectBlankSize(int w, int h);
     void setNewLevel(const std::string& name, int x, int y, const std::string& region) { std::snprintf(newLevelName_, sizeof newLevelName_, "%s", name.c_str()); newLevelX_ = x; newLevelY_ = y; newLevelRegion_ = region; }

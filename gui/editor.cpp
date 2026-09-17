@@ -452,6 +452,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
             std::string serr;
             blankSizes_ = editor::retailMapSizes(saveRoot(), serr);
             selectBlankSize(newLevelInfo_.width, newLevelInfo_.height);
+            reusableRegions_ = editor::reusableRegions(saveRoot(), serr);
         } else {
             pushLog("new level: " + err, 1);
         }
@@ -510,8 +511,22 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("combo_new_level_region");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map (the game only reaches maps owned by one of the first 141 regions, so a copy joins an existing region).");
+    theme::toggle("Own region + minimap", &newLevelOwnRegion_);
+    auto_.registerWidget("toggle_new_level_own_region");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game keeps only 141 regions, so a new region takes over a retail filler slot\n(a region owning only decorative maps; they move to another filler). The level gets its own\nname on the map screen and a minimap baked from its terrain (replaces an unreferenced\nMINIMAP_* texture in textures.big; one-time .atlas-orig backup).");
+    if (newLevelOwnRegion_) {
+        ImGui::PushFont(fontSmall_);
+        if (reusableRegions_.size() >= 2)
+            theme::hint(("Takes over " + reusableRegions_.front().name + " (slot " + std::to_string(reusableRegions_.front().slot) + ", " + std::to_string(reusableRegions_.front().maps) + " map(s) -> " + reusableRegions_.back().name + ").").c_str());
+        else
+            ImGui::TextColored(theme::vec(theme::Warn), "No filler region slot is free to take over.");
+        ImGui::PopFont();
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::InputTextWithHint("##newleveldisplay", "Display name on the map screen (default: level name)", newLevelDisplay_, sizeof newLevelDisplay_);
+    }
     const bool gridOk = newLevelX_ % 32 == 0 && newLevelY_ % 32 == 0;
-    const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && !newLevelRegion_.empty() && !newLevelFuture_.valid() &&
+    const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && (!newLevelRegion_.empty() || newLevelOwnRegion_) && !newLevelFuture_.valid() &&
+                     (!newLevelOwnRegion_ || reusableRegions_.size() >= 2) &&
                      (newLevelMode_ == 0 || (blankTheme_ >= 0 && ctx_.themeLibrary()));
     if (newLevelMode_ == 1 && !ctx_.themeLibrary()) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Waiting for the ENGINE_THEME library (textures loading)."); ImGui::PopFont(); }
     if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
@@ -547,6 +562,7 @@ void App::startNewLevel() {
         req.hostRegion = newLevelRegion_;
         req.worldX = newLevelX_; req.worldY = newLevelY_;
         req.templateLevel = blankTemplate_;
+        req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.displayName = newLevelDisplay_;
         if (blankSize_ >= 0 && blankSize_ < int(blankSizes_.size())) { req.width = blankSizes_[size_t(blankSize_)].width; req.height = blankSizes_[size_t(blankSize_)].height; }
         req.themeSlot = blankTheme_;
         req.groundHeight = blankHeight_;
@@ -564,6 +580,7 @@ void App::startNewLevel() {
     req.donor = doc_.mapName();
     req.name = newLevelName_;
     req.hostRegion = newLevelRegion_;
+    req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.displayName = newLevelDisplay_;
     req.worldX = newLevelX_; req.worldY = newLevelY_;
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
     newLevelFuture_ = std::async(std::launch::async, [req, root]() {

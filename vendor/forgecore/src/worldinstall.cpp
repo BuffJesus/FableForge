@@ -36,6 +36,8 @@ bool overlaps(const Box& a, int left, int top, int right, int bottom) {
     return a.left < right && left < a.right && a.top < bottom && top < a.bottom;
 }
 
+bool iequalsName(const std::string& a, const std::string& b) { return lowered(a) == lowered(b); }
+
 std::vector<Box> mapBoxes(const bwd::File& bwd) {
     std::vector<Box> boxes;
     for (const auto& m : bwd.maps()) {
@@ -136,7 +138,65 @@ Result installLevel(const Request& req) {
 
     const uint64_t uid = [&]() { uint64_t m = 0; for (const auto& x : bwd.maps()) m = std::max(m, x.mapUid); return m + 1; }();
     result.mapUid = uid;
-    if (!req.hostRegion.empty()) {
+    if (!req.takeOverRegion.empty()) {
+        bwd::Region* victim = bwd.findRegion(req.takeOverRegion);
+        const wld::Region* wv = wld.findRegion(req.takeOverRegion);
+        if (!victim || !wv) throw std::runtime_error("worldinstall: region '" + req.takeOverRegion + "' not found in the BWD/WLD");
+        if (req.mergeMapsInto.empty() && !victim->contains.empty())
+            throw std::runtime_error("worldinstall: region '" + req.takeOverRegion + "' owns maps; name a region to merge them into");
+        bwd::Region* sink = req.mergeMapsInto.empty() ? nullptr : bwd.findRegion(req.mergeMapsInto);
+        const wld::Region* ws = req.mergeMapsInto.empty() ? nullptr : wld.findRegion(req.mergeMapsInto);
+        if (!req.mergeMapsInto.empty() && (!sink || !ws)) throw std::runtime_error("worldinstall: merge region '" + req.mergeMapsInto + "' not found");
+        if (sink == victim) throw std::runtime_error("worldinstall: cannot merge a region into itself");
+        const std::string newName = req.regionName.empty() ? req.newLevelName : req.regionName;
+        if (!iequalsName(newName, req.takeOverRegion) && (bwd.findRegion(newName) || wld.findRegion(newName)))
+            throw std::runtime_error("worldinstall: a region named '" + newName + "' already exists");
+        int slot = 0;
+        for (size_t i = 0; i < bwd.regions().size(); ++i) if (&bwd.regions()[i] == victim) slot = int(i + 1);
+        if (slot > 141) result.notes.push_back("region slot " + std::to_string(slot) + " is past the engine's 141-region cap; the map may be unreachable");
+        // the victim's maps move to the sink (ownership only; sees lists elsewhere stay)
+        std::vector<std::string> moved;
+        for (int32_t m : victim->contains) {
+            if (sink && std::find(sink->contains.begin(), sink->contains.end(), m) == sink->contains.end()) sink->contains.push_back(m);
+            if (m >= 1 && size_t(m) <= bwd.maps().size()) {
+                const std::string lv = "FinalAlbion\\" + bwd.maps()[size_t(m - 1)].scriptName + ".lev";
+                if (wld.findMap(lv)) {
+                    wld.removeMapFromRegion(req.takeOverRegion, lv, true);
+                    if (ws) wld.addMapToRegion(req.mergeMapsInto, lv, false);
+                    moved.push_back(bwd.maps()[size_t(m - 1)].scriptName);
+                }
+            }
+        }
+        victim->contains.clear(); victim->sees.clear();
+        // repurpose in place
+        bwd::MapInfo m;
+        m.levelName = newLev; m.scriptName = req.newLevelName;
+        m.used = 1; m.loadedOnProximity = req.loadedOnProximity ? 1 : 0; m.isSea = req.isSea ? 1 : 0;
+        m.left = req.worldX; m.top = req.worldY; m.right = right; m.bottom = bottom;
+        m.flag2 = 1; m.mapUid = uid;
+        result.mapSlot = bwd.addMap(std::move(m));
+        victim = bwd.findRegion(req.takeOverRegion);
+        victim->name = newName;
+        victim->displayName = req.regionDisplayName.empty() ? newName : req.regionDisplayName;
+        victim->regionDef = req.regionDef;
+        victim->minimapGraphic = req.minimapGraphic;
+        victim->contains = {result.mapSlot};
+        victim->sees = {result.mapSlot};
+        wld::Map wm;
+        wm.index = result.mapSlot; wm.mapX = req.worldX; wm.mapY = req.worldY;
+        wm.levelName = wldLevel; wm.levelScriptName = req.newLevelName;
+        wm.mapUid = static_cast<uint32_t>(uid); wm.isSea = req.isSea; wm.loadedOnPlayerProximity = req.loadedOnProximity;
+        wld.addMap(wm);
+        wld.setRegionText(req.takeOverRegion, "NewDisplayName", victim->displayName);
+        wld.setRegionText(req.takeOverRegion, "RegionDef", req.regionDef);
+        wld.setRegionText(req.takeOverRegion, "MiniMapGraphic", req.minimapGraphic);
+        wld.setRegionText(req.takeOverRegion, "RegionName", newName);   // last: the name is the key
+        wld.addMapToRegion(newName, wldLevel, true);
+        result.regionSlot = slot;
+        result.notes.push_back("map slot " + std::to_string(result.mapSlot) + " owned by region '" + newName + "' (slot " + std::to_string(slot) + ", taken over from '" + req.takeOverRegion + "'" +
+                               (moved.empty() ? "" : ", its " + std::to_string(moved.size()) + " map(s) now owned by '" + req.mergeMapsInto + "'") + ")" +
+                               (req.minimapGraphic.empty() ? "" : ", minimap " + req.minimapGraphic));
+    } else if (!req.hostRegion.empty()) {
         bwd::Region* host = bwd.findRegion(req.hostRegion);
         const wld::Region* wr = wld.findRegion(req.hostRegion);
         if (!host || !wr) throw std::runtime_error("worldinstall: host region '" + req.hostRegion + "' not found in the BWD/WLD");
@@ -242,6 +302,18 @@ Result installLevel(const Request& req) {
             }
         };
         commit(bwdTmp, bwdPath);
+        // The engine reads the compiled world from more than one place (the
+        // retail install carries FinalAlbion.bwd at the root and under
+        // data/Levels/FinalAlbion as well; the region name of a repurposed
+        // slot came back stale when only data/Levels was updated). Mirror.
+        for (const fs::path mirror : {req.gameRoot / "FinalAlbion.bwd", levelsDir / "FinalAlbion" / "FinalAlbion.bwd"}) {
+            std::error_code ec;
+            if (!fs::exists(mirror, ec)) continue;
+            if (!req.backupSuffix.empty()) { const fs::path bak = mirror.string() + req.backupSuffix; if (!fs::exists(bak)) fs::copy_file(mirror, bak, ec); }
+            fs::copy_file(bwdPath, mirror, fs::copy_options::overwrite_existing, ec);
+            if (ec) throw std::runtime_error("cannot mirror the BWD to " + mirror.string() + ": " + ec.message());
+            result.notes.push_back("BWD mirrored to " + mirror.string());
+        }
         commit(wldTmp, wldPath);
         commit(wadFinal, wadPath);
         commit(stbTmp, stbPath);

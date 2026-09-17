@@ -29,9 +29,17 @@ struct Request {
     std::string newLevelName;           // bare stem; must be unused everywhere
     int worldX = 0, worldY = 0;         // origin, 32-aligned
     std::string hostRegion;             // existing region that owns the map; "" = dedicated new region
-    std::string regionName;             // dedicated region only (default: newLevelName)
-    std::string regionDisplayName;      // dedicated region only
-    std::string regionDef;              // dedicated region only
+    // Own region under the cap: take over an existing (filler) region slot in
+    // place -- its maps move to `mergeMapsInto`'s contains list (their sees
+    // references elsewhere are untouched), it is renamed to `regionName` /
+    // `regionDisplayName`, gets `regionDef` and `minimapGraphic`, and owns only
+    // the new map. Wins over hostRegion when set.
+    std::string takeOverRegion;
+    std::string mergeMapsInto;
+    std::string minimapGraphic;         // texture name (GBANK_MAIN_PC MINIMAP_*) for a taken-over or dedicated region
+    std::string regionName;             // dedicated / taken-over region (default: newLevelName)
+    std::string regionDisplayName;      // dedicated / taken-over region
+    std::string regionDef;              // dedicated / taken-over region
     bool loadedOnProximity = false;
     bool isSea = false;
     bool allowOverlap = false;          // let the new box overlap existing map boxes
@@ -45,7 +53,7 @@ struct Request {
 
 struct Result {
     int mapSlot = 0;
-    int regionSlot = 0;                 // 0 when attached to a host region
+    int regionSlot = 0;                 // 0 when attached to a host region; the reused slot when taken over
     int left = 0, top = 0, right = 0, bottom = 0;
     uint64_t mapUid = 0;
     bool chunkRetargeted = false;

@@ -412,6 +412,73 @@ void File::setMapOwner(std::string_view regionName, std::string_view levelName) 
     }
 }
 
+void File::setRegionText(std::string_view regionName, std::string_view key, std::string_view value) {
+    size_t target = regions_.size();
+    for (size_t i = 0; i < regions_.size(); ++i)
+        if (iequals(regions_[i].regionName, regionName)) { target = i; break; }
+    if (target == regions_.size())
+        throw std::runtime_error("wld: unknown region " + std::string(regionName));
+    Region& region = regions_[target];
+    const bool quoted = !(tf::equalsIgnoreCase(key, "MiniMapGraphic"));   // the graphic is a bare token in retail
+    std::string eol = "\r\n";
+    int activeRegion = -1;
+    size_t nameLine = rawLines_.size();
+    bool written = false;
+    for (size_t i = 0; i < rawLines_.size(); ++i) {
+        if (!rawLines_[i].empty() && rawLines_[i].back() == '\n')
+            eol = rawLines_[i].size() >= 2 && rawLines_[i][rawLines_[i].size() - 2] == '\r' ? "\r\n" : "\n";
+        std::string k, v;
+        if (!tf::parseLogicalLine(rawLines_[i], k, v)) continue;
+        if (tf::equalsIgnoreCase(k, "NewRegion")) { activeRegion = std::atoi(v.c_str()); continue; }
+        if (activeRegion != region.index) continue;
+        if (tf::equalsIgnoreCase(k, "RegionName")) nameLine = i;
+        if (tf::equalsIgnoreCase(k, key)) {
+            rawLines_[i] = std::string(key) + " " + (quoted ? quoteWld(value) : std::string(value)) + ";" + eol;
+            written = true;
+            break;
+        }
+        if (tf::equalsIgnoreCase(k, "EndRegion")) break;
+    }
+    if (!written) {
+        if (nameLine == rawLines_.size())
+            throw std::runtime_error("wld: region " + std::string(regionName) + " has no RegionName line");
+        rawLines_.insert(rawLines_.begin() + static_cast<ptrdiff_t>(nameLine) + 1,
+                         std::string(key) + " " + (quoted ? quoteWld(value) : std::string(value)) + ";" + eol);
+    }
+    if (tf::equalsIgnoreCase(key, "RegionName")) region.regionName = std::string(value);
+    else if (tf::equalsIgnoreCase(key, "NewDisplayName")) region.displayName = std::string(value);
+    else if (tf::equalsIgnoreCase(key, "RegionDef")) region.regionDef = std::string(value);
+    else if (tf::equalsIgnoreCase(key, "MiniMapGraphic")) region.minimapGraphic = std::string(value);
+}
+
+void File::removeMapFromRegion(std::string_view regionName, std::string_view levelName, bool alsoSees) {
+    size_t target = regions_.size();
+    for (size_t i = 0; i < regions_.size(); ++i)
+        if (iequals(regions_[i].regionName, regionName)) { target = i; break; }
+    if (target == regions_.size())
+        throw std::runtime_error("wld: unknown region " + std::string(regionName));
+    Region& region = regions_[target];
+    auto drop = [&](std::vector<std::string>& values) {
+        values.erase(std::remove_if(values.begin(), values.end(), [&](const std::string& v) { return iequals(v, levelName); }), values.end());
+    };
+    drop(region.containsMaps);
+    if (alsoSees) drop(region.seesMaps);
+    int activeRegion = -1;
+    for (size_t i = 0; i < rawLines_.size();) {
+        std::string k, v;
+        if (!tf::parseLogicalLine(rawLines_[i], k, v)) { ++i; continue; }
+        if (tf::equalsIgnoreCase(k, "NewRegion")) { activeRegion = std::atoi(v.c_str()); ++i; continue; }
+        if (activeRegion == region.index &&
+            ((tf::equalsIgnoreCase(k, "ContainsMap") || (alsoSees && tf::equalsIgnoreCase(k, "SeesMap"))) &&
+             iequals(tf::stripQuotes(v), levelName))) {
+            rawLines_.erase(rawLines_.begin() + static_cast<ptrdiff_t>(i));
+            continue;
+        }
+        if (tf::equalsIgnoreCase(k, "EndRegion")) activeRegion = -1;
+        ++i;
+    }
+}
+
 void File::relocateMap(std::string_view levelName, int mapX, int mapY) {
     Map* target = nullptr;
     for (auto& map : maps_)

@@ -1547,6 +1547,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "new_level") {   // new_level <name> <x> <y> [region]: fill the card and start the install
         std::istringstream rs(rest); std::string name, region; int x = 0, y = 0; rs >> name >> x >> y >> region;
         app.setNewLevel(name, x, y, region); app.startNewLevel(); note("..   " + line); ++pc_; }
+    else if (cmd == "new_level_own_region") { app.setNewLevelOwnRegion(std::atoi(rest.c_str()) != 0); note("ok   " + line); ++pc_; }
     else if (cmd == "wait_new_level") { if (!app.newLevelBusy()) { note("ok   " + line); ++pc_; } }
     else if (cmd == "new_level_blank") {   // new_level_blank <theme slot> <height>: the next new_level makes a blank level
         std::istringstream rs(rest); int theme = -1; float h = 20; int w = 0, hh = 0; rs >> theme >> h >> w >> hh;

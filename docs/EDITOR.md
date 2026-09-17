@@ -241,25 +241,44 @@ containers get one-time `.atlas-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
-### Minimap (open)
+### Own region + minimap
 
-The in-game minimap is per *region*: a level attached to a host region shows
-that region's `MiniMapGraphic` (a `MINIMAP_*` entry in textures.big). Retail
-`InitialiseMiniMapFileLoading_Region` (0x829d90) only consults
-`Data\Levels\Maps\Artist|Progmr\<Region>.tga` (the debug editor's
-`CRegionMinimap::CreateRegionMinimapTGAFile` output) for a region without a
-graphic, and a quick test with a TGA for a graphic-less filler region did
-not pick it up. The proven route (ForgeTest64) is a dedicated region -- which
-means repurposing an unused retail region slot <= 141, this install has
-none left (141 already hosts ForgeTest64) -- plus overwriting an unreferenced
-`MINIMAP_*` texture with a top-down bake. `--transition` in the harness
-(ForgeFSE `GoToMapSlotRetailTransition`) is how to test it: it performs a real
-region load (`GetRegionName` changes, the minimap re-initialises).
+The in-game minimap is per *region*, and the engine keeps only the first 141
+regions (live probe, 2026-08), so a level that wants its own name on the map
+screen and its own minimap takes over a retail **filler** region slot ("Own
+region + minimap" toggle / `--own-region [<filler>] [--merge-into <filler>]
+[--display <name>] [--no-minimap]`):
+
+1. the filler's decorative maps are re-owned by another filler (their `sees`
+   references elsewhere are untouched), the slot is renamed and re-labelled
+   in place in the BWD and the WLD (`wld::File::setRegionText`), and it owns
+   only the new map. The BWD is mirrored to the two other copies the engine
+   reads (`FinalAlbion.bwd` at the root and under `data/Levels/FinalAlbion`).
+2. the minimap is baked from the level (top-down albedo, north up, the
+   region box stretched onto the square like retail's, a hillshade and the
+   retail circular vignette) into a 256x256 DXT3 entry of `textures.big`. It
+   **replaces an unreferenced retail `MINIMAP_*` slot** (retail ships a few
+   that no region uses, e.g. `MINIMAP_PRISONCOURTYARD2`): an entry *appended*
+   past the retail ids crashed the game at start-up (the engine indexes
+   `GBANK_MAIN_PC` by a fixed-size table). The encoder is FableTLC's
+   `texture_build.py` through forgecore's import driver.
+
+**In-game verified** (2026-09-16): `AtlasOwn` (own region over slot 73,
+`MINIMAP_PRISONCOURTYARD2` replaced) reached with `--transition`; the minimap
+disc shows the baked terrain. `GetRegionName` still reported the filler's old
+name -- the '0atlas' *save* caches the region table, so a renamed region
+shows its new name from a new game.
+
+Orientation was pinned on retail data: `MINIMAP_BARROWFIELDS` /
+`MINIMAP_HOOKCOAST` match the LEV walkable mask with map +Y at the top and
+the whole region box stretched to the 256x256 square (HookCoast is 160x256).
+`CMiniMapDisplay::GetRelativePosOnMap` (landed byte-exact in FableTLC)
+confirms the mapping: `(pos - regionMin) / regionExtent`.
 
 ## Next
 
-1. Minimap for new levels (above) and a baked distant-LOD texture instead of
-   the solid colour.
+1. A baked distant-LOD texture instead of the solid colour (the green band at
+   the horizon of a blank level).
 2. The cloned-chunk white-out (engine map-open texture resolution) -- RE
    `CEngineLandscapeMap::OpenStaticMap` 0x00BDD0E0 against a working
    from-scratch chunk.

@@ -1,12 +1,15 @@
 #include "worldedit.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <set>
 #include <stdexcept>
 
+#include "forge/big.hpp"
 #include "forge/bwd.hpp"
 #include "forge/lev.hpp"
 #include "forge/stb.hpp"
@@ -20,6 +23,7 @@
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
 #include "forge/worldinstall.hpp"
+#include "terrainexport.hpp"
 
 namespace albion::editor {
 namespace {
@@ -54,6 +58,8 @@ std::vector<uint8_t> levelBytes(const fs::path& gameRoot, const forge::wad::Arch
     throw std::runtime_error(stem + ext + " is neither loose nor in FinalAlbion.wad");
 }
 
+bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
+                    forge::worldinstall::Request& ir, std::string& error);
 } // namespace
 
 bool donorInfo(const fs::path& gameRoot, const std::string& donor, DonorInfo& out, std::string& error) {
@@ -92,13 +98,18 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.donorLevelName = req.donor;
         ir.newLevelName = req.name;
         ir.worldX = req.worldX; ir.worldY = req.worldY;
-        ir.hostRegion = req.hostRegion;
+        if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();   // Atlas keeps its own .atlas-orig copies
 
         // the donor's current bytes (loose edits included) become the new level's
         const auto wad = forge::wad::Archive::open(wadPath);
         ir.levBytes = levelBytes(gameRoot, wad, req.donor, ".lev");
         ir.tngBytes = levelBytes(gameRoot, wad, req.donor, ".tng");
+        if (req.ownRegion.wanted && req.ownRegion.minimap) {
+            std::string entry;
+            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, out.notes, error)) return false;
+            ir.minimapGraphic = entry;
+        }
 
         if (req.rebakeChunk) {
             // re-bake the donor's terrain chunk for the new origin: same LEV, no
@@ -131,6 +142,8 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
 
         for (const char* f : {"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"})
             if (!backupOnce(levels / f, error)) return false;
+        for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
+            if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
@@ -156,6 +169,136 @@ std::vector<MapSize> retailMapSizes(const fs::path& gameRoot, std::string& error
         std::sort(out.begin(), out.end(), [](const MapSize& a, const MapSize& b) { return a.width * a.height != b.width * b.height ? a.width * a.height < b.width * b.height : a.width < b.width; });
     } catch (const std::exception& e) { error = e.what(); }
     return out;
+}
+
+std::vector<ReusableRegion> reusableRegions(const fs::path& gameRoot, std::string& error) {
+    std::vector<ReusableRegion> out;
+    try {
+        const auto bwd = forge::bwd::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.bwd");
+        const auto wld = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
+        for (size_t i = 0; i < bwd.regions().size() && i < 141; ++i) {
+            const auto& r = bwd.regions()[i];
+            if (r.name.rfind("Filler", 0) != 0 || !r.regionDef.empty() || !r.minimapGraphic.empty()) continue;
+            if (!wld.findRegion(r.name)) continue;
+            out.push_back({int(i + 1), r.name, int(r.contains.size())});
+        }
+        std::sort(out.begin(), out.end(), [](const ReusableRegion& a, const ReusableRegion& b) { return a.maps != b.maps ? a.maps < b.maps : a.slot < b.slot; });
+    } catch (const std::exception& e) { error = e.what(); }
+    return out;
+}
+
+namespace {
+// Fill the worldinstall request's region fields from the Atlas request.
+bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
+                    forge::worldinstall::Request& ir, std::string& error) {
+    ir.hostRegion = hostRegion;
+    if (!own.wanted) return true;
+    std::string rerr;
+    const auto regions = reusableRegions(gameRoot, rerr);
+    if (regions.size() < 2) { error = "no filler region slots left to take over (" + rerr + ")"; return false; }
+    ir.takeOverRegion = own.takeOver.empty() ? regions.front().name : own.takeOver;
+    ir.mergeMapsInto = own.mergeInto;
+    if (ir.mergeMapsInto.empty()) for (auto it = regions.rbegin(); it != regions.rend(); ++it) if (it->name != ir.takeOverRegion) { ir.mergeMapsInto = it->name; break; }
+    if (ir.mergeMapsInto == ir.takeOverRegion) { error = "the merge region must differ from the one taken over"; return false; }
+    ir.hostRegion.clear();
+    ir.regionName = levelName;
+    ir.regionDisplayName = own.displayName.empty() ? levelName : own.displayName;
+    ir.regionDef = own.regionDef;
+    return true;
+}
+} // namespace
+
+bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, const std::vector<uint8_t>& levBytes,
+                        const forge::terraintex::ThemeLibrary* library, std::string& entryName,
+                        std::vector<std::string>& notes, std::string& error) {
+    try {
+        (void)library;
+        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "minimap";
+        fs::create_directories(tmp);
+        const fs::path levTmp = tmp / (levelName + ".lev");
+        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
+        const auto lev = forge::lev::File::open(levTmp);
+        // top-down albedo from the LEV themes (no STB needed), lit by a simple hillshade
+        albion::terrainexport::Context ctx;
+        std::string cerr;
+        const bool textured = ctx.load(gameRoot, gameRoot / "data" / "graphics" / "pc" / "textures.big", cerr);
+        albion::terrainexport::Options o;
+        o.textures = textured; o.texelsPerCell = 4; o.gain = 2.0f; o.engineLayers = false; o.gameRoot = gameRoot;
+        const auto scene = albion::terrainexport::buildScene(lev, o, textured ? &ctx : nullptr);
+        const int size = 256;
+        albion::terrainexport::Image img;
+        img.width = img.height = uint32_t(size);
+        img.rgba.assign(size_t(size) * size * 4, 0);
+        const int cx = lev.cellsX(), cy = lev.cellsY();
+        auto heightAt = [&](float fx, float fy) {
+            const int x0 = std::clamp(int(fx), 0, cx - 1), y0 = std::clamp(int(fy), 0, cy - 1);
+            return lev.heightAt(x0, y0);
+        };
+        for (int py = 0; py < size; ++py)
+            for (int px = 0; px < size; ++px) {
+                // texture row 0 is the map's north edge (max Y); the box is stretched onto the square like retail
+                const float u = (px + 0.5f) / size, v = 1.0f - (py + 0.5f) / size;
+                const float mx = u * lev.width(), my = v * lev.height();
+                float r = 120, g = 130, b = 80;
+                if (scene.hasAlbedo && scene.albedo.width && scene.albedo.height) {
+                    const uint32_t ax = std::min(uint32_t(u * scene.albedo.width), scene.albedo.width - 1);
+                    const uint32_t ay = std::min(uint32_t(v * scene.albedo.height), scene.albedo.height - 1);
+                    const uint8_t* p = &scene.albedo.rgba[(size_t(ay) * scene.albedo.width + ax) * 4];
+                    r = p[0]; g = p[1]; b = p[2];
+                }
+                // hillshade from the LEV (light from the north-west)
+                const float d = 2.0f;
+                const float hx = heightAt(mx + d, my) - heightAt(mx - d, my);
+                const float hy = heightAt(mx, my + d) - heightAt(mx, my - d);
+                const float shade = std::clamp(1.0f + 0.06f * (-hx + hy), 0.55f, 1.35f);
+                // the retail vignette: an opaque disc that fades out at the corners
+                const float dx = u - 0.5f, dy = v - 0.5f;
+                const float rad = std::sqrt(dx * dx + dy * dy);
+                const float alpha = std::clamp((0.5f - rad) / 0.06f, 0.0f, 1.0f);
+                uint8_t* q = &img.rgba[(size_t(py) * size + px) * 4];
+                q[0] = uint8_t(std::clamp(r * shade, 0.0f, 255.0f));
+                q[1] = uint8_t(std::clamp(g * shade, 0.0f, 255.0f));
+                q[2] = uint8_t(std::clamp(b * shade, 0.0f, 255.0f));
+                q[3] = uint8_t(alpha * 255.0f);
+            }
+        const fs::path png = tmp / (levelName + "_minimap.png");
+        {
+            const auto bytes = albion::terrainexport::encodePng(img);
+            std::ofstream(png, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        }
+        // The engine indexes GBANK_MAIN_PC by a fixed-size table: an entry appended
+        // past the retail ids crashed the game at start-up, so the minimap goes
+        // into an existing MINIMAP_* slot that no region references (retail ships
+        // a few), keeping its name and id. `entryName` is the slot chosen.
+        const fs::path big = gameRoot / "data" / "graphics" / "pc" / "textures.big";
+        std::set<std::string> referenced;
+        {
+            const auto bwd = forge::bwd::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.bwd");
+            for (const auto& r : bwd.regions()) if (!r.minimapGraphic.empty()) referenced.insert(r.minimapGraphic);
+        }
+        std::vector<std::string> candidates;
+        {
+            const auto tex = forge::big::File::open(big);
+            const auto* bank = tex.findBank("GBANK_MAIN_PC");
+            if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
+            for (const auto& e : bank->entries) {
+                if (e.name.rfind("MINIMAP_", 0) != 0 || e.name.find("ICON") != std::string::npos || e.name.find("BORDER") != std::string::npos) continue;
+                if (!referenced.count(e.name)) candidates.push_back(e.name);
+            }
+        }
+        if (candidates.empty()) { error = "no unreferenced MINIMAP_* texture slot is left in textures.big for the minimap"; return false; }
+        if (!entryName.empty() && std::find(candidates.begin(), candidates.end(), entryName) == candidates.end()) entryName.clear();
+        if (entryName.empty()) entryName = candidates.front();
+        if (!backupOnce(big, error)) return false;
+        forge::terraintex::ImportRequest ir;
+        ir.png = png; ir.srcBig = big; ir.outBig = big.string() + ".atlas-tmp";
+        ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = false;
+        const auto r = forge::terraintex::importPng(ir);
+        if (!r.ok) { error = "minimap texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
+        fs::rename(ir.outBig, big);
+        notes.push_back("minimap: replaced the unreferenced retail slot " + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3) in textures.big with " + png.string());
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 bool templatePalette(const fs::path& gameRoot, const std::string& level, std::vector<std::string>& names, std::string& error) {
@@ -258,15 +401,22 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         ir.donorLevelName = templateLevel;   // supplies the WAD clone base and the STB name; every payload is ours
         ir.newLevelName = req.name;
         ir.worldX = req.worldX; ir.worldY = req.worldY;
-        ir.hostRegion = req.hostRegion;
+        if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();
         ir.levBytes = readFile(levTmp);
+        if (req.ownRegion.wanted && req.ownRegion.minimap) {
+            std::string entry;
+            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, &library, entry, out.notes, error)) return false;
+            ir.minimapGraphic = entry;
+        }
         const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
         ir.tngBytes.assign(tng.begin(), tng.end());
         ir.chunkBytes = built.chunk;
         ir.commonRecord = record;
         for (const char* f : {"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"})
             if (!backupOnce(levels / f, error)) return false;
+        for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
+            if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
