@@ -169,8 +169,8 @@ in-game harness run (`tools/ingame`).
    owner + sees editing in the panel and CLI; seam stitching 2026-09-17:
    `src/stitch.cpp`, opt-in, auto feather; retail seams are exact except at
    three-map corners). Placed things follow stitched/sculpted ground
-   (`reseatThings`, also the editor's *Re-seat objects* button); the chunk's own
-   foliage keeps its Z -- open.
+   (`reseatThings`, also the editor's *Re-seat objects* button) and so does the
+   chunk's foliage (`reseatFoliageZ`, in-game verified).
 2. ~~Distant-LOD bake~~ DONE 2026-09-17: blank levels get a 64x64 DXT1 tile per
    background node baked from the level's own albedo (`src/lodbake`, forgecore
    `BackgroundTextureProvider`), and a theme-paint deploy re-bakes them in place
@@ -225,6 +225,17 @@ in-game harness run (`tools/ingame`).
    `relocateChunk` into the donor-copy path.
 
 ## Known gotchas to keep
+
+* **A chunk's local-detail section is only "the last thing" in retail.** After a
+  relocation appended foreground frames or LOD blocks behind it, the section's
+  room ends at the first foreign frame; `ldLayout` now measures that (`limit`)
+  and moves the whole section to the end of the chunk when it no longer fits
+  (every triple is absolute, so the tree just follows; old foliage slots are
+  zeroed). Before the fix, a grown section overwrote the appended frames and the
+  second edit of a moved map broke its foliage tree ("implausible local-detail
+  group count"). Chunks grow by the old section on such a move; the STB grows by
+  a whole chunk per variable-size replace anyway. `chunk-zcheck <map> 10 --seam`
+  is the regression check (a seam-shaped Z ride on a twice-moved chunk).
 
 * A new level hosted by the hero's *starting* region loads with the game and
   crashed it; host it elsewhere.

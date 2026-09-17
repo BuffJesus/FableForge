@@ -27,6 +27,7 @@ struct StitchReport {
     int feather = 0;          // cells the correction was feathered over (the auto choice when asked for)
     bool stitched = false;    // false when the seam was already tight or no edge is shared
     size_t thingsReseated = 0;   // placed things moved to the new ground (both maps)
+    int foliageGroups = 0;       // foliage cache groups whose points rode the ground change
 };
 
 // The shared edge of two placed boxes as a vertex run: false when they do not

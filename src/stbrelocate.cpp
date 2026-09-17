@@ -64,6 +64,26 @@ struct Walk {
     // an (x, y) float pair
     void f32xy(uint8_t* p, const char* what) { f32(p, true, what); f32(p + 4, false, what); }
     void u16xy(uint8_t* p, const char* what) { u16(p, true, what); u16(p + 2, false, what); }
+
+    // z mode (reseatFoliageZ): every foliage point rides the ground change at
+    // its own XY; bounding spheres/boxes follow their centre and grow by the
+    // largest change anywhere so they stay conservative. No-ops otherwise.
+    std::function<float(float, float)> dz;
+    float zSlack = 0;
+    float rd(const uint8_t* p) const { float v; std::memcpy(&v, p, 4); return v; }
+    void add(uint8_t* p, float d) { float v = rd(p) + d; std::memcpy(p, &v, 4); }
+    void zPoint(uint8_t* pxy, uint8_t* pz) { if (dz && !audit) add(pz, dz(rd(pxy), rd(pxy + 4))); }
+    void zSphere(uint8_t* p) {   // x, y, z, r
+        if (!dz || audit) return;
+        add(p + 8, dz(rd(p), rd(p + 4)));
+        add(p + 12, zSlack);
+    }
+    void zBox(uint8_t* pmin, uint8_t* pmax) {   // (x, y, z) twice
+        if (!dz || audit) return;
+        const float d = dz(0.5f * (rd(pmin) + rd(pmax)), 0.5f * (rd(pmin + 4) + rd(pmax + 4)));
+        add(pmin + 8, d - zSlack);
+        add(pmax + 8, d + zSlack);
+    }
 };
 
 struct Cursor {
@@ -238,10 +258,12 @@ void groupBody(Walk& w, std::vector<uint8_t>& body) {
             c.need(40, "primitive bounds");
             w.f32xy(c.at(), "primitive box min"); w.f32xy(c.at() + 12, "primitive box max");
             w.f32xy(c.at() + 24, "primitive sphere");
+            w.zBox(c.at(), c.at() + 12); w.zSphere(c.at() + 24);
             c.p += 40;
             if (primType == 0) {   // CLocalDetailPrimitiveMesh: 3x4 matrix (row 3 = position), f32
                 c.need(52, "mesh primitive");
                 w.f32xy(c.at() + 36, "mesh position");
+                w.zPoint(c.at() + 36, c.at() + 44);
                 c.p += 52;
             } else if (primType == 1) {   // CLocalDetailPrimitiveRepeatedMesh
                 const uint32_t n = c.u32("instance count");
@@ -249,7 +271,7 @@ void groupBody(Walk& w, std::vector<uint8_t>& body) {
                 if (n > 4096) throw std::runtime_error("implausible instance count");
                 c.need(size_t(n) * 32, "instance arrays");
                 c.p += size_t(n) * 16;   // A = (rotX, rotY, 0, 0)
-                for (uint32_t i = 0; i < n; ++i) { w.f32xy(c.at(), "instance position"); c.p += 16; }
+                for (uint32_t i = 0; i < n; ++i) { w.f32xy(c.at(), "instance position"); w.zPoint(c.at(), c.at() + 8); c.p += 16; }
                 if (c.u8("normals flag")) { const size_t P = (size_t(n) + 3) & ~size_t(3); c.need(P * 12, "normals"); c.p += P * 12; }
                 if (c.u8("wind flag")) { c.need(n, "wind"); c.p += n; }
                 if (c.u8("subsection flag")) {
@@ -269,8 +291,12 @@ void groupBody(Walk& w, std::vector<uint8_t>& body) {
                 const uint32_t n = c.u32("z-sprite count");
                 if (n > 65536) throw std::runtime_error("implausible z-sprite count");
                 c.need(size_t(n) * 0x44 + size_t(n) * 16, "z-sprite arrays");
-                for (uint32_t i = 0; i < n; ++i) { w.f32xy(c.at() + 36, "z-sprite position"); w.f32xy(c.at() + 52, "z-sprite sphere"); c.p += 0x44; }
-                for (uint32_t i = 0; i < n; ++i) { w.f32xy(c.at(), "z-sprite object"); c.p += 16; }
+                for (uint32_t i = 0; i < n; ++i) {
+                    w.f32xy(c.at() + 36, "z-sprite position"); w.f32xy(c.at() + 52, "z-sprite sphere");
+                    w.zPoint(c.at() + 36, c.at() + 44); w.zSphere(c.at() + 52);
+                    c.p += 0x44;
+                }
+                for (uint32_t i = 0; i < n; ++i) { w.f32xy(c.at(), "z-sprite object"); w.zPoint(c.at(), c.at() + 8); c.p += 16; }
             } else throw std::runtime_error("unknown primitive type " + std::to_string(primType));
         }
     }
@@ -286,6 +312,7 @@ struct Ctx {
     forge::stbbake::Chunk parsed;
     std::map<size_t, FrameSlot> frames;      // by absolute start
     std::set<size_t> done;                   // frames already handled
+    std::set<size_t> ldFrames;               // the local-detail (foliage) group frames
 };
 
 void rewriteFrame(Ctx& ctx, const FrameSlot& fs, const std::vector<uint8_t>& body, const char* what) {
@@ -344,7 +371,7 @@ void ldParse(Ctx& ctx, LdNode& node, const LdNode* parent, int depth) {
     if (node.fbPos <= 0 || node.offIn < 0 || size_t(node.fbPos) + size_t(node.offIn) + 4 > chunk.size()) throw std::runtime_error("local-detail node file block out of range");
     size_t p = size_t(node.fbPos) + size_t(node.offIn);
     const uint32_t groups = rd32(chunk, p); p += 4;
-    if (groups > 4096) throw std::runtime_error("implausible local-detail group count");
+    if (groups > 4096) throw std::runtime_error("implausible local-detail group count " + std::to_string(groups) + " at " + std::to_string(p - 4) + " (fbPos " + std::to_string(node.fbPos) + " size " + std::to_string(node.fbSize) + " off " + std::to_string(node.offIn) + ", depth " + std::to_string(depth) + ")");
     ++ctx.w.rep->detailNodes;
     for (uint32_t g = 0; g < groups; ++g) {
         if (p + 0x28 > chunk.size()) throw std::runtime_error("truncated local-detail group header");
@@ -354,12 +381,14 @@ void ldParse(Ctx& ctx, LdNode& node, const LdNode* parent, int depth) {
         grp.own = grp.fbPos != node.fbPos;
         ctx.w.where = "detail group @" + std::to_string(p);
         ctx.w.f32xy(grp.header.data() + 12, "group sphere");
+        ctx.w.zSphere(grp.header.data() + 12);
         ctx.w.mix(grp.header.data() + 12, 0x28 - 12);
         ++ctx.w.rep->detailGroups;
         const size_t at = size_t(grp.fbPos) + size_t(grp.offIn);
         const FrameSlot& fs = frameAt(ctx, at, "local-detail group");
         if (ctx.done.count(fs.start)) throw std::runtime_error("local-detail group frame referenced twice");
         ctx.done.insert(fs.start);
+        ctx.ldFrames.insert(fs.start);
         grp.body = forge::stbbake::decodeFrame(ctx.parsed, frameIndexOf(ctx, fs));
         ctx.w.where = "cache group frame @" + std::to_string(fs.start);
         groupBody(ctx.w, grp.body);
@@ -376,6 +405,7 @@ void ldParse(Ctx& ctx, LdNode& node, const LdNode* parent, int depth) {
         child->header.assign(chunk.begin() + std::ptrdiff_t(p), chunk.begin() + std::ptrdiff_t(p + 0x2c));
         ctx.w.where = "detail node @" + std::to_string(p);
         ctx.w.f32xy(child->header.data(), "node sphere");
+        ctx.w.zSphere(child->header.data());
         ctx.w.mix(child->header.data(), 24); ctx.w.mix(child->header.data() + 36, 8);
         p += 0x2c;
         ldParse(ctx, *child, &node, depth + 1);
@@ -482,20 +512,51 @@ void ldLayout(Ctx& ctx, LdNode& root) {
     compressAll(root);
     const size_t sectionStart = ldSectionStart(root);
     if (sectionStart % 2048) throw std::runtime_error("local-detail section does not start on a page boundary");
+    // In a retail chunk the section is the last thing; after an earlier
+    // relocation appended foreground frames or LOD blocks behind it, the room
+    // ends at the first foreign frame past the section start.
+    size_t limit = chunk.size();
     for (const auto& [start, fs] : ctx.frames)
-        if (start >= sectionStart && !ctx.done.count(start)) throw std::runtime_error("a non-foliage frame lies inside the local-detail section");
-    LdOut out; out.base = sectionStart;
-    std::vector<LdDirSite> dirs;
-    root.own = true;
-    ldTree(root, out, dirs);
-    ldPatch(out, dirs);
-    const size_t oldEnd = chunk.size(), newEnd = sectionStart + out.bytes.size();
-    if (newEnd > oldEnd) {
+        if (start >= sectionStart && !ctx.ldFrames.count(start)) limit = std::min(limit, start);
+    auto emit = [&](size_t base) {
+        LdOut out; out.base = base;
+        std::vector<LdDirSite> dirs;
+        root.own = true;
+        ldTree(root, out, dirs);
+        ldPatch(out, dirs);
+        return out;
+    };
+    LdOut out = emit(sectionStart);
+    const size_t oldEnd = chunk.size();
+    // every old foliage frame slot is cleared first (some may sit past a
+    // foreign frame after earlier re-layouts; nothing must look like a frame there)
+    for (size_t start : ctx.ldFrames) {
+        const FrameSlot& fs = ctx.frames.at(start);
+        std::fill(chunk.begin() + std::ptrdiff_t(fs.start), chunk.begin() + std::ptrdiff_t(fs.slotEnd), uint8_t(0));
+    }
+    if (sectionStart + out.bytes.size() <= limit) {
+        // in place; the rest of the old room is cleared (only foliage frames lived there)
+        std::copy(out.bytes.begin(), out.bytes.end(), chunk.begin() + std::ptrdiff_t(sectionStart));
+        std::fill(chunk.begin() + std::ptrdiff_t(sectionStart + out.bytes.size()), chunk.begin() + std::ptrdiff_t(limit), uint8_t(0));
+        return;
+    }
+    if (limit == oldEnd) {
+        // last thing in the chunk: grow it
+        const size_t newEnd = sectionStart + out.bytes.size();
         ctx.w.rep->notes.push_back("local-detail section grew: chunk " + std::to_string(oldEnd) + " -> " + std::to_string(newEnd) + " bytes");
         chunk.resize(newEnd);
+        std::copy(out.bytes.begin(), out.bytes.end(), chunk.begin() + std::ptrdiff_t(sectionStart));
+        return;
     }
-    std::copy(out.bytes.begin(), out.bytes.end(), chunk.begin() + std::ptrdiff_t(sectionStart));
-    std::fill(chunk.begin() + std::ptrdiff_t(newEnd), chunk.end(), uint8_t(0));   // the section is the last thing in a retail chunk
+    // no room before the foreign frames: the whole section moves to the end of
+    // the chunk (page aligned; every triple is absolute so the tree just follows)
+    size_t base = oldEnd;
+    while (base % 2048) ++base;
+    out = emit(base);
+    chunk.resize(base + out.bytes.size(), 0);
+    std::copy(out.bytes.begin(), out.bytes.end(), chunk.begin() + std::ptrdiff_t(base));
+    std::fill(chunk.begin() + std::ptrdiff_t(sectionStart), chunk.begin() + std::ptrdiff_t(limit), uint8_t(0));
+    ctx.w.rep->notes.push_back("local-detail section moved to the end of the chunk (" + std::to_string(sectionStart) + " -> " + std::to_string(base) + ", chunk " + std::to_string(oldEnd) + " -> " + std::to_string(chunk.size()) + " bytes)");
 }
 
 // Background-LOD tree: node AABBs are world space (mapX/mapY are map-local);
@@ -609,7 +670,7 @@ bool run(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, Walk w, Relo
             ctx.w.slackScale = 2.0;
             ctx.w.where = "local-detail root (record)";
             float radius; std::memcpy(&radius, record.data() + 0x7d + 12, 4);
-            if (radius > 0) ctx.w.f32xy(record.data() + 0x7d, "root sphere");   // a map without foliage keeps a zero sphere
+            if (radius > 0) { ctx.w.f32xy(record.data() + 0x7d, "root sphere"); ctx.w.zSphere(record.data() + 0x7d); }   // a map without foliage keeps a zero sphere
             LdNode root;
             root.header.assign(record.begin() + 0x7d, record.begin() + 0x7d + 0x2c);
             ldParse(ctx, root, nullptr, 0);
@@ -737,6 +798,12 @@ bool run(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, Walk w, Relo
 bool relocateChunk(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, int dx, int dy,
                    RelocateReport& report, std::string& error) {
     Walk w; w.audit = false; w.dx = dx; w.dy = dy;
+    return run(chunk, record, w, report, error);
+}
+
+bool reseatFoliageZ(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, std::function<float(float, float)> dz,
+                    float zSlack, RelocateReport& report, std::string& error) {
+    Walk w; w.audit = false; w.dx = 0; w.dy = 0; w.dz = std::move(dz); w.zSlack = zSlack;
     return run(chunk, record, w, report, error);
 }
 

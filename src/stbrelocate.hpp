@@ -24,6 +24,7 @@
 // outside the map's box: the grammar check that runs over all retail maps.
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -44,6 +45,15 @@ struct RelocateReport {
 // grammar break or when a re-encoded frame no longer fits its slot.
 bool relocateChunk(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, int dx, int dy,
                    RelocateReport& report, std::string& error);
+
+// Ride the ground: every local-detail (foliage) point gets dz(worldX, worldY)
+// added to its Z (mesh matrices, repeated-mesh instances, z-sprites); node,
+// group and primitive bounds follow their centre and grow by `zSlack` (pass the
+// largest |dz| over the map). Ground/patch data is re-encoded unchanged. The
+// chunk may grow (LZO frames re-laid), so write it back with the size-aware
+// replace.
+bool reseatFoliageZ(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, std::function<float(float, float)> dz,
+                    float zSlack, RelocateReport& report, std::string& error);
 
 // Read-only walk: every coordinate must lie within [x0-slack, x0+w+slack] etc.
 bool auditChunk(const std::vector<uint8_t>& chunk, const std::vector<uint8_t>& record,

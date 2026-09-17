@@ -206,9 +206,15 @@ x=0 to the float) *except at corners where a third map meets* (steps of 2-4 unit
 there, hidden by the map's own geometry), so a moved map's fresh seam is the only
 thing worth stitching; `--dry-run` reports every seam's largest step. Placed things that stood on
 the old ground (within 1 unit) follow it, keeping their offset
-(`Document::reseatThings`; the `.tng` goes loose + into the WAD); the chunk's
-own trees and grass keep their Z (TeleporterGreatwood | OrchardFarm, a 19.6-unit
-step, lifted OrchardFarm's edge into its own tree canopy -- open). A map whose region does not *see* the neighbour
+(`Document::reseatThings`; the `.tng` goes loose + into the WAD), and so do the
+chunk's own trees and grass: `stbrelocate::reseatFoliageZ` walks the
+local-detail quadtree and adds the ground change at each point's XY to every
+mesh matrix, repeated-mesh instance and z-sprite, while node/group/primitive
+spheres and boxes follow their centre and grow by the largest change on the map
+(conservative culling bounds). **In-game verified** (2026-09-17): with a
+19.6-unit seam TeleporterGreatwood | OrchardFarm, OrchardFarm's edge trees stand
+on the new slope, the fence (a re-seated thing) sits on it, the hero walks the
+ramp (49/49 ground samples). A map whose region does not *see* the neighbour
 still ends at a void beyond the seam -- tick the neighbour toggles too. The
 engine's ground query answers 0 on the seam column itself when the neighbour is
 not loaded (its cell belongs to the other map).
@@ -275,7 +281,7 @@ grid edge and `checkMove` refuses anything past it.
 | Scripted tests | `tests/ui/editor.txt`, commands in `docs/AUTOMATION.md` |
 | Distant-LOD textures | `src/lodbake.{hpp,cpp}` + `src/dxt1.hpp` (albedo at 16 texels/cell box-filtered to 64x64 DXT1 per background node; blank levels and theme-paint deploys); `AlbionAtlas lod-check <map>` compares against retail tiles |
 | Overworld layout + moves | `src/overworld.{hpp,cpp}` (layout, `checkMove`, `applyMoves`), chunk translation `src/stbrelocate.{hpp,cpp}` (`relocateChunk`, `auditChunk`); GUI `gui/world.cpp`; `tools/test_overworld.py` + `tests/ui/world.txt`; diagnostics `chunk-audit`, `chunk-relocate`, `chunk-dump`, `chunk-extract` |
-| Seam stitching | `src/stitch.{hpp,cpp}` (`sharedEdge`, `stitchEdges`, `stitchNeighbours`) over `Document::setVertexHeights` + `deployTerrain`; GUI toggle in `gui/world.cpp` (`world_stitch <0|1> [feather]`, `assert_log`); `world-stitch`, `world-move --stitch` |
+| Seam stitching | `src/stitch.{hpp,cpp}` (`sharedEdge`, `stitchEdges`, `stitchNeighbours`) over `Document::setVertexHeights` + `deployTerrain` + `reseatThings` + `stbrelocate::reseatFoliageZ`; GUI toggle in `gui/world.cpp` (`world_stitch <0|1> [feather]`, `assert_log`); `world-stitch`, `world-move --stitch`; diagnostic `chunk-zcheck <map> <dz> [--seam] [--slack v] [--bake <lev>] [--write]` |
 
 Instance matrices are kept as `local * thingWorld`: a move recomputes the
 world matrices of every instance of that thing (including spawned children)
@@ -399,7 +405,7 @@ See `docs/PLAN.md` (2026-09-16) for the ordered plan and the open
 investigations (texture append resolution, region cap, villagers).
 
 1. ~~Overworld: region editing, seam stitching, the extent question~~ done
-   (2026-09-17). Open: re-seat the chunk's foliage Z after a stitch (things do).
+   (2026-09-17), things and foliage follow the stitched ground.
 2. A baked distant-LOD texture instead of the solid colour (the green band at
    the horizon of a blank level).
 3. Cloned levels: run the donor chunk through `relocateChunk` (the white-out was

@@ -600,6 +600,81 @@ int main(int argc, char** argv) {
             return bad ? 1 : 0;
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
+    if (cmd == "chunk-zcheck") {   // diagnostic: chunk-zcheck <map> <dz> [--install <root>]: foliage Z ride by a constant, audit, ride back, compare digests
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-zcheck <map> <dz> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const float dz = float(std::atof(args[2].c_str()));
+        try {
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            for (const auto& m : archive.staticMaps()) {
+                if (lower(fs::path(m.levelName).stem().string()) != lower(args[1])) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                const auto info = forge::stbinfo::readInfoBlock(record.data());
+                const forge::stb::Entry* entry = nullptr;
+                for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+                if (!entry) { std::fprintf(stderr, "no bank entry\n"); return 1; }
+                auto chunk = archive.read(*entry);
+                albion::editor::RelocateReport rep; std::string err;
+                for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--bake") {   // --bake <lev|map>: bakeHeightfield first (identity), audit
+                    fs::path temp;
+                    const auto lev = forge::lev::File::open(resolveLevel(args[i + 1], install, temp));
+                    forge::stbbake::HeightfieldBakeOptions opt; opt.requireCanonicalSize = false;
+                    const auto baked = forge::stbbake::bakeHeightfield(chunk, lev, info.worldX, info.worldY, opt);
+                    chunk = baked.chunk;
+                    albion::editor::RelocateReport ba; auto rc = record;
+                    const bool ok = albion::editor::auditChunk(chunk, rc, info.worldX, info.worldY, info.mapWidth, info.mapHeight, ba, err);
+                    std::printf("after bake: %zu bytes, audit %s (%zu issues) groups %d\n", chunk.size(), ok ? "ok" : err.c_str(), ba.issues.size(), ba.groupFrames);
+                }
+                auto moved = chunk; auto movedRecord = record;
+                float slack = 0; bool seam = false;   // --slack <v>: grow bounds; --seam: dz only within 20 units of the map's left edge (a seam-like ride)
+                for (size_t i = 3; i < args.size(); ++i) { if (args[i] == "--slack" && i + 1 < args.size()) slack = float(std::atof(args[i + 1].c_str())); if (args[i] == "--seam") seam = true; }
+                const float edgeX = float(info.worldX);
+                auto rideFn = [dz, seam, edgeX](float x, float) { return seam ? (x < edgeX + 20.0f ? dz * (1.0f - (x - edgeX) / 20.0f) : 0.0f) : dz; };
+                if (!albion::editor::reseatFoliageZ(moved, movedRecord, rideFn, slack, rep, err)) { std::fprintf(stderr, "z ride failed: %s\n", err.c_str()); return 1; }
+                std::printf("rode z by %g: %zu -> %zu bytes, groups %d detail %d/%d\n", dz, chunk.size(), moved.size(), rep.groupFrames, rep.detailNodes, rep.detailGroups);
+                for (const auto& n : rep.notes) std::printf("  %s\n", n.c_str());
+                albion::editor::RelocateReport audit;
+                if (!albion::editor::auditChunk(moved, movedRecord, info.worldX, info.worldY, info.mapWidth, info.mapHeight, audit, err)) { std::fprintf(stderr, "audit failed: %s\n", err.c_str()); return 1; }
+                std::printf("audit: %zu issue(s), groups %d\n", audit.issues.size(), audit.groupFrames);
+                for (size_t i = 0; i < audit.issues.size() && i < 10; ++i) std::printf("    %s\n", audit.issues[i].c_str());
+                auto back = moved; auto backRecord = movedRecord;
+                albion::editor::RelocateReport rep2;
+                if (!albion::editor::reseatFoliageZ(back, backRecord, [rideFn](float x, float y) { return -rideFn(x, y); }, -slack, rep2, err)) { std::fprintf(stderr, "z ride back failed: %s\n", err.c_str()); return 1; }
+                albion::editor::RelocateReport da, db;
+                if (!albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, da, err)) { std::fprintf(stderr, "audit failed: %s\n", err.c_str()); return 1; }
+                if (!albion::editor::auditChunk(back, backRecord, info.worldX, info.worldY, info.mapWidth, info.mapHeight, db, err)) { std::fprintf(stderr, "audit of the round-tripped chunk failed: %s\n", err.c_str()); return 1; }
+                std::printf("round trip: %s (digest %016llx vs %016llx)\n", da.digest == db.digest ? "byte-equal data" : "DIFFERS (expected for float z within rounding)", (unsigned long long)da.digest, (unsigned long long)db.digest);
+                for (size_t i = 3; i < args.size(); ++i) if (args[i] == "--write") {   // write the ridden chunk back (same-size in place / relayout) and audit it from the file
+                    const fs::path stbPath = install.root / "data" / "Levels" / "FinalAlbion_RT.stb";
+                    std::vector<forge::stb::StaticMapAppend> batch;
+                    batch.push_back({m.levelName, entry->name, moved, movedRecord});
+                    const fs::path tmp = stbPath.string() + ".atlas-tmp";
+                    if (moved.size() == chunk.size()) forge::stb::replaceStaticMaps(stbPath, tmp, batch);
+                    else forge::stb::replaceStaticMapsRelayout(stbPath, tmp, batch);
+                    fs::rename(tmp, stbPath);
+                    const auto a2 = forge::stb::Archive::open(stbPath);
+                    for (const auto& m2 : a2.staticMaps()) {
+                        if (lower(fs::path(m2.levelName).stem().string()) != lower(args[1])) continue;
+                        const auto r2 = a2.readStaticMapRecord(m2);
+                        const auto i2 = forge::stbinfo::readInfoBlock(r2.data());
+                        const forge::stb::Entry* e2 = nullptr;
+                        for (const auto& e : a2.entries()) if (int32_t(e.id) == i2.bankFileIndex) { e2 = &e; break; }
+                        const auto c2 = a2.read(*e2);
+                        albion::editor::RelocateReport wa;
+                        const bool ok = albion::editor::auditChunk(c2, r2, i2.worldX, i2.worldY, i2.mapWidth, i2.mapHeight, wa, err);
+                        std::printf("written (%s): %zu bytes, record equal %d, chunk equal %d, audit %s (%zu issues)\n", moved.size() == chunk.size() ? "in place" : "relayout", c2.size(), int(r2 == movedRecord), int(c2 == moved), ok ? "ok" : err.c_str(), wa.issues.size());
+                        if (r2 != movedRecord) { for (size_t k = 0; k < r2.size() && k < movedRecord.size(); ++k) if (r2[k] != movedRecord[k]) { std::printf("  first record diff at 0x%zx\n", k); break; } }
+                    }
+                }
+                return 0;
+            }
+            std::fprintf(stderr, "no static map named %s\n", args[1].c_str());
+            return 1;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
     if (cmd == "chunk-relocate") {   // diagnostic: chunk-relocate <map> <dx> <dy> [--install <root>]: translate + audit at the new box, then translate back and compare
         if (args.size() < 4) { std::fprintf(stderr, "usage: AlbionAtlas chunk-relocate <map> <dx> <dy> [--install <root>]\n"); return 2; }
         std::string installArg;
