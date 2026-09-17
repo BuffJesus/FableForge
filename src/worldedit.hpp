@@ -88,7 +88,7 @@ bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelReq
 
 // Bake the level's minimap (top-down albedo + hillshade, north up, the retail
 // circular vignette) from its LEV bytes, append it to textures.big as a
-// 256x256 DXT3 entry MINIMAP_<NAME> (raw mip 0) and register the name in the
+// 256x256 DXT3 entry MINIMAP_<NAME> and register the name in the
 // PLAYER_GUI defs (registerMinimapGraphic) so the engine resolves it. Uses the
 // FableTLC texture writer through forgecore's import driver. One-time
 // .atlas-orig backups of textures.big and game.bin/names.bin. `entryName` may

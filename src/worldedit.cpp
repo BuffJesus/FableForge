@@ -276,9 +276,9 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
         }
         // Retail resolves a region's MiniMapGraphic through PLAYER_GUI.MiniMapGraphics
         // (name -> GBANK_MAIN_PC id), so a new texture is appended under its own
-        // name and registered there; nothing retail is touched. Mip 0 is stored
-        // raw: the python importer's compressed streams do not always decode in
-        // the engine (an appended minimap never drew until stored raw).
+        // name and registered there; nothing retail is touched. (A 256x256 mip 0
+        // needs the 0xFFFF+u32 chunk header the importer now writes for >= 64 KiB
+        // raw chunks; with the short header the engine dropped the texture.)
         const fs::path big = gameRoot / "data" / "graphics" / "pc" / "textures.big";
         std::string upper = levelName;
         for (char& c : upper) c = char(std::toupper(static_cast<unsigned char>(c)));
@@ -293,11 +293,11 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
         if (!backupOnce(big, error)) return false;
         forge::terraintex::ImportRequest ir;
         ir.png = png; ir.srcBig = big; ir.outBig = big.string() + ".atlas-tmp";
-        ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = !exists; ir.rawMip0 = true;
+        ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = !exists;
         const auto r = forge::terraintex::importPng(ir);
         if (!r.ok) { error = "minimap texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
         fs::rename(ir.outBig, big);
-        notes.push_back(std::string("minimap: ") + (exists ? "replaced " : "appended ") + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3, raw mip 0) in textures.big from " + png.string());
+        notes.push_back(std::string("minimap: ") + (exists ? "replaced " : "appended ") + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3) in textures.big from " + png.string());
         if (!registerMinimapGraphic(gameRoot, entryName, uint32_t(r.entryId), notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }

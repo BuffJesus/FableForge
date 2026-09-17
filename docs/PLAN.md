@@ -30,11 +30,11 @@ in-game harness run (`tools/ingame`).
 * A new name registered there resolves (proved with a retail id, then with an
   appended id): `AlbionAtlas minimap-register <name> <id>` /
   `editor::registerMinimapGraphic` (forgecore `defedit::setFieldBytes`, upstreamed).
-* The appended texture itself must be written with **raw mip 0**: texture_build.py's
-  own LZO compressor emits streams the engine's asm decoder misreads on some images
-  (the compressed minimap never drew; the same image `--raw-mip0` drew) --
-  `ImportRequest.rawMip0`, upstreamed. FableForge's earlier appended entries
-  (MINIMAP_FORGETEST64) load fine once registered.
+* The appended texture's mip-0 chunk header must use the `[0xFFFF][u32 clen]`
+  escape form when the raw chunk is >= 64 KiB (retail: 3082 of 3542 such chunks;
+  the short `[u16 clen]` header made the engine drop the texture -- the LZO stream
+  itself decodes fine in the emulated asm decoder). Fixed in FableTLC
+  `tools/lionhead_lz_compress.py`; `ImportRequest.rawMip0` stays as an escape hatch.
 * Atlas now appends `MINIMAP_<LEVEL>` + registers it for every own-region level
   (in-game: blank level AtlasMM's disc shows its bake); no retail slot is taken.
   The same recipe should unblock card art and ground splats: append + register in

@@ -320,7 +320,7 @@ CLI and the card against a scratch copy of the install.
 ### Own region + minimap
 
 **2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
-name `MINIMAP_<LEVEL>` (raw mip 0) and registered in the `PLAYER_GUI_PC` /
+name `MINIMAP_<LEVEL>` and registered in the `PLAYER_GUI_PC` /
 `PLAYER_GUI_DEFAULT` defs' `MiniMapGraphics` map in `game.bin` -- that map is what
 retail resolves a region's `MiniMapGraphic` through (`CTCInventoryBase::
 GetMiniMapGraphic`). No retail slot is taken any more; `AlbionAtlas minimap-register
