@@ -118,7 +118,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=307 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=319 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -153,6 +153,8 @@ ok   set unsaved_prompt 0
      world_maps=0
      world_selected=
      world_pending=0
+     world_pending_owners=0
+     world_pending_sees=0
      world_ok=0
      doc_loaded=1
      doc_things=313

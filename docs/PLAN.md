@@ -191,9 +191,16 @@ in-game harness run (`tools/ingame`).
    `CWorld::IsCreatureGenerationEnabled` 0x49ea40 and a hero-level family band:
    the family def's level at +0x48, highest <= heroLevel+1, else the lowest),
    while an Atlas-placed one next to them stayed silent with WASPS/HOBBE
-   families. Next: decompile `CreateCreatures` 0x74b2b0 + the creator's tail
-   (what it does after picking the band) and test with an adult save. Villages
-   untouched.
+   families -- and so did a VERBATIM copy of the map's own working hobbe
+   generator (new UID, new position, script name): whatever activates retail
+   generators is external to the TNG block (a quest / population-sim registry
+   keyed by UID, `CQuestManager::SetCreatureGeneratorState` 0x4b3810 /
+   `CGameScriptInterface::SetCreatureGeneratorsEnabled` 0x892cf0 are the
+   script-side entry points; `CWorld::IsCreatureGenerationEnabled` 0x49ea40
+   consults a name/UID lookup on the thing). Next: find who calls
+   SetCreatureGeneratorState for GreatwoodTeleport's generators (retail quest
+   scripts / Aeon's Lua ports) -- an Atlas spawner will need the same
+   registration, probably via a ForgeFSE companion quest. Villages untouched.
 4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
 5. **Splat texture paint** (STB foreground layers: texture triple +
    per-vertex blend) -- the real "paint any texture on the ground".

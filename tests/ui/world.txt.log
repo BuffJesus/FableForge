@@ -17,10 +17,10 @@ ok   assert_widget btn_world_move
 ok   world_move_refused TeleporterGreatwood 3104 2880
 ok   world_move_refused TeleporterGreatwead 1000 1000
 ok   assert_state world_pending 0
-ok   world_move TeleporterGreatwood 1024 9024
+ok   world_move TeleporterGreatwood 2048 8064
 ok   frames 2
 ok   assert_state world_pending 1
-ok   assert_state world_selected_pos 1024,9024
+ok   assert_state world_selected_pos 2048,8064
 ok   screenshot build/ui/w2_pending.png
 shot build/ui/w2_pending.png
 ok   assert_widget btn_world_putback
@@ -30,14 +30,14 @@ ok   assert_state world_pending 0
 ok   assert_state world_selected_pos 3072,2880
 ok   mouse_move viewport
 ok   frames 1
-ok   world_move TeleporterGreatwood 1024 9024
+ok   world_move TeleporterGreatwood 2048 8064
 ok   frames 1
 ok   assert_state world_pending 1
 ok   world_revert
 ok   frames 1
 ok   assert_state world_pending 0
-ok   world_move TeleporterGreatwood 1024 9024
-ok   world_move OrchardFarm 1024 9280
+ok   world_move TeleporterGreatwood 2048 8064
+ok   world_move OrchardFarm 2176 8064
 ok   frames 2
 ok   assert_state world_pending 2
 ok   assert_widget btn_world_apply
@@ -51,7 +51,7 @@ ok   assert_state world_ok 1
 ok   assert_state world_pending 0
 ok   world_select TeleporterGreatwood
 ok   frames 2
-ok   assert_state world_selected_pos 1024,9024
+ok   assert_state world_selected_pos 2048,8064
 ok   screenshot build/ui/w3_applied.png
 shot build/ui/w3_applied.png
 ok   world_move TeleporterGreatwood 3072 2880
@@ -63,6 +63,34 @@ ok   assert_state world_ok 1
 ok   world_select OrchardFarm
 ok   frames 1
 ok   assert_state world_selected_pos 3200,3168
+ok   world_select OrchardFarm
+ok   frames 2
+ok   assert_state world_selected_owner OrchardFarm
+ok   assert_widget combo_world_owner
+ok   world_sees Greatwood OrchardFarm 1
+ok   world_owner OrchardFarmEast Greatwood
+ok   frames 2
+ok   assert_state world_pending_sees 1
+ok   assert_state world_pending_owners 1
+ok   screenshot build/ui/w4_region_pending.png
+shot build/ui/w4_region_pending.png
+..   world_apply
+ok   wait_world
+ok   frames 3
+ok   assert_state world_ok 1
+ok   assert_state world_pending_sees 0
+ok   world_select OrchardFarmEast
+ok   frames 1
+ok   assert_state world_selected_owner Greatwood
+ok   world_owner OrchardFarmEast OrchardFarm
+ok   world_sees Greatwood OrchardFarm 0
+..   world_apply
+ok   wait_world
+ok   frames 3
+ok   assert_state world_ok 1
+ok   world_select OrchardFarmEast
+ok   frames 1
+ok   assert_state world_selected_owner OrchardFarm
 ok   world_tab 0
 ok   frames 2
 ok   assert_state world_mode 0
