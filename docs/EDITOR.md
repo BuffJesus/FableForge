@@ -32,7 +32,8 @@ the crashes. The engine formats are written by FableForge's `forgecore`
 
 * **Brushes**: raise / lower / flatten / smooth on the LEV heightfield
   (`forge::terrain::applyBrush`, smooth radial falloff), walkable / blocked
-  cell painting, and **ground-theme paint** (`Paint ground` + a picker over
+  cell painting (saving patches the map's navigation quadtree for exactly
+  those cells, see "Navigation" below), and **ground-theme paint** (`Paint ground` + a picker over
   the map's LEV palette): `forge::terrain::applyThemeBrush` blends the chosen
   slot into the cell's three blend slots keeping the retail invariant
   (weights sum to 255). After a theme stroke the preview re-bakes the ground
@@ -118,16 +119,54 @@ mouse via relative motion, keyboard):
   (bisecting a bad bake: splice donor/baked regions and test each in-game).
 * `crash_catcher.py`, `trace_lzo_calls.py`, `trace_bp_stack.py`,
   `gamewin.ps1` -- the pieces.
-* **Not done**: visible material (theme) painting still needs the layer
-  topology rebuild (`--rebuild-topology` exists in the bake but wants theme
-  materials wired through); nav trees are not regenerated (the terrain-only
-  generator would drop the retail collision lines).
+* `--follow x,y` (with `--teleport`): the navigation probe. A creature is
+  spawned at the map-local point and a second quest thread issues
+  `GainControlAndMoveToPosition` to the hero's spot while the probe samples
+  its distance every second; `--follow-expect near|far` turns that into the
+  verdict (`min_distance` <= 2 / >= 2.5).
+
+## Navigation (walkable paint reaches the engine)
+
+The LEV walkable byte does nothing at runtime; the engine moves creatures on
+the **CNavQuadTree** stored in the LEV's navigation sections (proven below).
+`forge::navmesh::parseNavigation` / `emitNavigation` (`vendor/forgecore`
+`navpatch.cpp`, upstreamed to FableForge) read and write those sections
+node-for-node -- every layer, the 3-byte blocked-root markers, switchable
+(door) leaves with their thing UIDs, the half-cell leaves carved around
+placed objects, region ids, neighbour order -- and reproduce all 399 retail
+LEVs byte-exactly (`forge_navpatch_tests`). The layout was read off
+FableWin's `CNavQuadTree::SaveToFile/LoadFromFile` and the leaf overrides:
+the loader reads `total` records in a flat loop and resolves indices through
+a map, so indices only have to be unique; region ids are the connected
+components of the leaf graph with the switchable leaves taken out.
+
+When a walkable/blocked stroke is saved, `patchWalkability` edits only the
+cells whose byte changed: a blocked cell loses its layer-0 leaves (bigger
+leaves are split first, an emptied root becomes a marker), an opened cell
+gets one full-cell leaf hooked into the tree, the touched leaves get their
+neighbour lists recomputed as the edge-sharing leaves (the retail rule,
+checked on every retail map) and the regions are re-derived so a cut-off
+pocket gets its own id. Everything else stays as the retail build wrote it.
+The LEV grows or shrinks, so the WAD entry is relocated by `wad::repack`.
+
+**In-game verified** (2026-09-16), three runs of the harness with a creature
+told to walk to the hero standing at Oakvale West (68.5, 196.5):
+
+| install | creature's closest approach |
+|---|---|
+| retail | 1.25 (arrives) |
+| 7x7 blocked ring painted around the hero, nav patched | 8.47 (never enters) |
+| same ring in the LEV bytes, retail nav (control) | 1.22 (arrives) |
+
+The control run is what shows the walkable byte alone is inert and the patched
+tree is what the engine follows.
 
 ## Implementation map
 
 | Piece | Where |
 |---|---|
 | Document, commands, undo, diff, save/deploy | `src/leveledit.{hpp,cpp}` (headless; `tests/test_export.cpp::testLevelDocument`, `testTerrainEditing`) |
+| Navigation patch | `vendor/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
 | Terrain bake | `vendor/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `AlbionAtlas bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
 | Per-instance rendering, picking, outline | `gui/renderer.{hpp,cpp}` (`uploadThings`, `pick`, `screenRay`) |
 | Gizmo, panel, shortcuts, instance sync | `gui/editor.cpp` |
@@ -141,8 +180,6 @@ reload the things layer from the in-memory `.tng` text.
 
 ## Next
 
-1. Nav: regenerate only the cells a stroke touched, keeping the retail
-   collision lines elsewhere.
-2. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
-3. Live link to the running game through ForgeFSE (spawn/move/reload without a
+1. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
+2. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

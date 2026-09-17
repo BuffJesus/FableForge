@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "forge/lev.hpp"
+#include "forge/navmesh.hpp"
+#include "forge/navpatch.hpp"
 #include "nlohmann/json.hpp"
 #include "foliageexport.hpp"
 #include "terrainexport.hpp"
@@ -510,6 +512,70 @@ void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
     CHECK(savedSlot1);
 }
 
+// A walkable-paint stroke patches the level's navigation quadtree for the
+// touched cells only: a 32x32 synthetic map gets a generated tree, one cell is
+// painted blocked and one opened, and the saved .lev's tree must drop / gain
+// exactly those leaves while the rest of the records stay put.
+void testNavPatch(const fs::path& dir) {
+    // 32x32 map, every cell walkable except column 5 (a wall with a gap), flat
+    const fs::path base = writeSyntheticLev(dir / "nav32.lev", 32, 32, [](int, int) { return 1.0f; });
+    auto lev = forge::lev::File::open(base);
+    for (int y = 0; y < lev.cellsY(); ++y)
+        for (int x = 0; x < lev.cellsX(); ++x) lev.setWalkableAt(x, y, x != 5 || y == 25);   // wall with one gap, so both sides are one component
+    lev.save(base);
+    const auto generated = forge::navmesh::generateTerrain(forge::lev::File::open(base));
+    { std::ofstream(base, std::ios::binary | std::ios::trunc).write(reinterpret_cast<const char*>(generated.levBytes.data()), std::streamsize(generated.levBytes.size())); }
+    const auto before = forge::navmesh::parseNavigation(forge::lev::File::open(base));
+    CHECK(before.sections.size() == 1 && before.sections[0].layerCount == 1);
+    const size_t recordsBefore = before.sections[0].nodes.size();
+
+    albion::editor::Document doc;
+    std::string err;
+    CHECK(doc.openText("nav32", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(base, err));
+    albion::editor::TerrainBrush b;
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.4f; b.x = 20.5f; b.y = 12.5f; b.strength = 1;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    b.mode = albion::editor::TerrainBrush::Mode::Walkable; b.x = 5.5f; b.y = 7.5f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    CHECK(!doc.terrain().walkable[size_t(12) * 33 + 20] && doc.terrain().walkable[size_t(7) * 33 + 5]);
+    const fs::path root = dir / "nav_root";
+    std::vector<std::string> notes;
+    CHECK(doc.saveTerrainLoose(root, err, &notes));
+    CHECK(!notes.empty() && notes[0].rfind("navigation: 2 cell(s) changed", 0) == 0);
+    const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "nav32.lev");
+    CHECK(!saved.walkableAt(20, 12) && saved.walkableAt(5, 7));
+    const auto after = forge::navmesh::parseNavigation(saved);
+    auto coveredBy = [&](float x, float y) {
+        int hits = 0;
+        for (const auto& n : after.sections[0].nodes) {
+            if (n.marker || !n.leaf) continue;
+            const float half = 32.0f / float(1 << n.level) * 0.5f;
+            if (x > n.cx - half && x < n.cx + half && y > n.cy - half && y < n.cy + half) ++hits;
+        }
+        return hits;
+    };
+    CHECK(coveredBy(20.5f, 12.5f) == 0);   // the blocked cell lost its leaf
+    CHECK(coveredBy(5.5f, 7.5f) == 1);     // the opened wall cell has exactly one
+    CHECK(coveredBy(20.5f, 13.5f) == 1 && coveredBy(4.5f, 7.5f) == 1);
+    // the opened cell joins its neighbours' region and links both sides of the wall
+    int32_t regionLeft = 0, regionRight = 0, regionNew = 0; size_t newNeighbours = 0;
+    for (const auto& n : after.sections[0].nodes) {
+        if (n.marker || !n.leaf) continue;
+        const float half = 32.0f / float(1 << n.level) * 0.5f;
+        auto has = [&](float x, float y) { return x > n.cx - half && x < n.cx + half && y > n.cy - half && y < n.cy + half; };
+        if (has(4.5f, 7.5f)) regionLeft = n.region;
+        if (has(6.5f, 7.5f)) regionRight = n.region;
+        if (has(5.5f, 7.5f)) { regionNew = n.region; newNeighbours = n.neighbours.size(); }
+    }
+    CHECK(regionNew == regionLeft && regionNew == regionRight && newNeighbours == 2);
+    // a second save with nothing changed is byte-stable
+    CHECK(doc.saveTerrainLoose(root, err, &notes));
+    const auto again = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "nav32.lev");
+    CHECK(again.originalBytes() == saved.originalBytes());
+    CHECK(after.sections[0].nodes.size() + 0 >= recordsBefore - 1);   // one leaf lost, one gained (+ any split internals)
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -525,6 +591,7 @@ int main() {
     testWater(dir);
     testLevelDocument();
     testTerrainEditing(lev, dir);
+    testNavPatch(dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;

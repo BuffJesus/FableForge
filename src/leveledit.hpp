@@ -164,7 +164,12 @@ public:
     // painted: the layer meshes are regenerated from the LEV themes then.
     bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                        const forge::terraintex::ThemeLibrary* library = nullptr);
-    bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error);
+    // Writes the loose .lev. Cells whose walkable byte changed since the
+    // navigation was last consistent get the retail CNavQuadTree patched in
+    // place (only those cells; door nodes, stacked layers and the rest of the
+    // tree stay as retail wrote them). `notes` gets a line about the patch.
+    bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error,
+                          std::vector<std::string>* notes = nullptr);
 
 private:
     struct Snapshot { std::string tng; std::shared_ptr<const TerrainState> terrain; };
@@ -190,6 +195,7 @@ private:
     bool fromWad_ = false;
     std::filesystem::path loosePath_;
     std::shared_ptr<forge::lev::File> level_;
+    std::vector<uint8_t> navWalkable_;   // walkable bytes the level's navigation tree agrees with
 };
 
 // Retail float spelling ("0.0", "-0.000102", "96.063965").

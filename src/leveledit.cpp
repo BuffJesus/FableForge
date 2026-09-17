@@ -9,6 +9,7 @@
 #include <set>
 #include <stdexcept>
 
+#include "forge/navpatch.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
@@ -175,6 +176,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
             }
         terrain_ = t;
         savedTerrain_ = t;
+        navWalkable_ = t->walkable;
         ++terrainRev_;
     }
     return true;
@@ -382,7 +384,7 @@ bool backupOnce(const fs::path& p, std::string& error) {
 }
 } // namespace
 
-bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error) {
+bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     try {
@@ -393,6 +395,33 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error) {
         if (!fs::exists(path)) std::ofstream(path.string() + ".atlas-created") << "created by Albion Atlas\n";
         level_->save(path);
         savedTerrain_ = terrain_;
+
+        // navigation: patch the retail quadtree for the cells whose walkable byte changed
+        std::vector<std::pair<int, int>> changed;
+        const int cx = level_->cellsX(), cy = level_->cellsY();
+        if (navWalkable_.size() == terrain_->walkable.size())
+            for (int y = 0; y < cy; ++y)
+                for (int x = 0; x < cx; ++x)
+                    if (navWalkable_[size_t(y) * cx + x] != terrain_->walkable[size_t(y) * cx + x]) changed.push_back({x, y});
+        if (!changed.empty() && !level_->navSections().empty()) {
+            const auto saved = forge::lev::File::open(path);
+            auto nav = forge::navmesh::parseNavigation(saved);
+            const auto st = forge::navmesh::patchWalkability(nav, saved, changed);
+            const auto bytes = forge::navmesh::emitNavigation(saved, nav);
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            if (!out) throw std::runtime_error("cannot write " + path.string());
+            out.close();
+            *level_ = forge::lev::File::open(path);   // the nav suffix is part of the bytes later saves copy
+            navWalkable_ = terrain_->walkable;
+            if (notes) {
+                char line[256];
+                std::snprintf(line, sizeof line, "navigation: %zu cell(s) changed -> %zu leaves removed, %zu added, %zu split, %zu region(s) added, %zu merged (%zu section(s))",
+                              changed.size(), st.leavesRemoved, st.leavesAdded, st.nodesSplit, st.regionsAdded, st.regionsMerged, nav.sections.size());
+                notes->push_back(line);
+                if (st.cellsSkipped) notes->push_back("navigation: " + std::to_string(st.cellsSkipped) + " opened cell(s) already had nav coverage");
+            }
+        }
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
@@ -404,12 +433,13 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
     if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
     try {
         // 1. loose .lev (also the bytes for the WAD)
-        if (!saveTerrainLoose(gameRoot, error)) return false;
+        if (!saveTerrainLoose(gameRoot, error, &notes)) return false;
         const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
         const std::string levBytes = readFile(loose);
         notes.push_back("wrote " + loose.string());
 
-        // 2. FinalAlbion.wad entry (same size: patched in place by repack)
+        // 2. FinalAlbion.wad entry (patched in place when the size is unchanged,
+        //    relocated to the end of the payload after a navigation patch)
         const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
         if (fs::exists(wad)) {
             const auto archive = forge::wad::Archive::open(wad);

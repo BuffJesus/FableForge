@@ -48,6 +48,9 @@ ATLAS_TARGET_MAP = "%(map)s"
 ATLAS_POINTS = { %(points)s }
 ATLAS_TELEPORT = %(teleport)s   -- {x, y} world point to stand the hero on for the screenshot, or nil
 ATLAS_THINGS = { %(things)s }   -- ScriptNames whose world position is reported
+ATLAS_FOLLOW = %(follow)s       -- {x, y} world point: spawn a creature there and make it follow the hero, or nil
+ATLAS_FOLLOW_DEF = "%(follow_def)s"
+ATLAS_FOLLOW_SECONDS = %(follow_seconds)d
 
 function AtlasProbe(questObject)
     local Q = questObject
@@ -101,8 +104,43 @@ function AtlasProbe(questObject)
         if not Q:NewScriptFrame() then return end
         local p2ok, p2 = pcall(function() return hero:GetPos() end)
         if p2ok and p2 then Q:Log(string.format("ATLAS_PROBE|hero2|%%.3f|%%.3f|%%.3f", p2.x or 0, p2.y or 0, p2.z or 0)) end
+        if ATLAS_FOLLOW then
+            -- navigation probe: a creature spawned at ATLAS_FOLLOW follows the hero; where it
+            -- ends up tells whether the nav tree lets it reach the hero's cell
+            local fz = 0
+            pcall(function() fz = Q:GetGroundHeightAt(ATLAS_FOLLOW[1], ATLAS_FOLLOW[2]) end)
+            local cok, cre = pcall(function() return Q:CreateCreature(ATLAS_FOLLOW_DEF, {x = ATLAS_FOLLOW[1], y = ATLAS_FOLLOW[2], z = fz + 0.5}, "AtlasFollower") end)
+            Q:Log("ATLAS_PROBE|create|" .. tostring(cok) .. "|" .. tostring(cre))
+            if cok and cre ~= nil then
+                Q:Pause(1.0)
+                if not Q:NewScriptFrame() then return end
+                -- a second thread takes script control of the creature and issues the
+                -- (blocking) move so this thread can keep sampling positions
+                ATLAS_CRE = cre
+                ATLAS_MOVE_TARGET = {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}
+                local fok, ferr = pcall(function() Q:CreateThread("AtlasMover", {}) end)
+                Q:Log("ATLAS_PROBE|follow|" .. tostring(fok) .. "|" .. tostring(ferr))
+                for i = 1, ATLAS_FOLLOW_SECONDS do
+                    Q:Pause(1.0)
+                    if not Q:NewScriptFrame() then return end
+                    local pk, cp = pcall(function() return cre:GetPos() end)
+                    local hk, hp = pcall(function() return hero:GetPos() end)
+                    if pk and cp and hk and hp then
+                        local d = math.sqrt((cp.x - hp.x) * (cp.x - hp.x) + (cp.y - hp.y) * (cp.y - hp.y))
+                        Q:Log(string.format("ATLAS_PROBE|followpos|%%d|%%.3f|%%.3f|%%.3f|%%.3f", i, cp.x or 0, cp.y or 0, cp.z or 0, d))
+                    end
+                end
+            end
+        end
     end
     Q:Log("ATLAS_PROBE|done")
+end
+
+function AtlasMover(questObject)
+    local Q = questObject
+    if ATLAS_CRE == nil then return end
+    local ok, err = pcall(function() ATLAS_CRE:GainControlAndMoveToPosition(ATLAS_MOVE_TARGET, 1.0, 1) end)
+    Q:Log("ATLAS_PROBE|moved|" .. tostring(ok) .. "|" .. tostring(err))
 end
 '''
 
@@ -179,6 +217,10 @@ def main() -> int:
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
     ap.add_argument("--things", default="", help="comma-separated ScriptNames: the probe reports their in-game positions, compared with the loose .tng")
+    ap.add_argument("--follow", default="", help="map-local x,y: spawn a creature there after the teleport and make it follow the hero (navigation probe; needs --teleport)")
+    ap.add_argument("--follow-def", default="CREATURE_BOWERSTONE_POSH_VILLAGER_FEMALE_UNEMPLOYED")
+    ap.add_argument("--follow-seconds", type=int, default=25)
+    ap.add_argument("--follow-expect", choices=["", "near", "far"], default="", help="near: the creature must get within 2 units of the hero; far: it must never get closer than 2.5")
     ap.add_argument("--trace-bp", default="", help="break on this Fable.exe address during the run and dump a stack scan (tools/ingame/trace_bp_stack.py)")
     ap.add_argument("--trace-lzo", action="store_true", help="log every lzo1x_decompress call during the run (tools/ingame/trace_lzo_calls.py)")
     ap.add_argument("--catch-crash", action="store_true", help="attach the dbgeng crash catcher once the game window is up (report gets the faulting address)")
@@ -227,9 +269,12 @@ def main() -> int:
     master_backup = master.read_bytes()
     log_backup = log.read_bytes() if log.exists() else b""
     thing_names = [t for t in a.things.split(",") if t]
+    follow_pt = tuple(float(v) for v in a.follow.split(",")) if a.follow else None
     probe.write_text(PROBE_LUA % {"map": a.map, "points": ", ".join("{%g, %g}" % p for p in world_pts),
                                   "teleport": ("{%g, %g}" % (mx + cx, my + cy)) if a.teleport else "nil",
-                                  "things": ", ".join('"%s"' % t for t in thing_names)}, encoding="utf-8")
+                                  "things": ", ".join('"%s"' % t for t in thing_names),
+                                  "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",
+                                  "follow_def": a.follow_def, "follow_seconds": a.follow_seconds}, encoding="utf-8")
     # The probe thread is started BEFORE the host's own Main (which may loop forever).
     hook = (f"\n{HOOK_TAG} (installed by Albion Atlas tools/ingame; removed after the run)\n"
             f"local _atlasMain = Main\n"
@@ -302,7 +347,11 @@ def main() -> int:
             if not game_running():
                 result["notes"].append("game exited before the probe finished"); break
             if a.teleport and "ATLAS_PROBE|control" not in text and time.time() - last_esc > 6:
-                ps("-Action", "key", "-Keys", "ESC")   # skip whatever scene is playing until the hero is ours
+                # skip whatever scene is playing until the hero is ours; tutorial boxes
+                # ("Press Tab to talk..." with a Next button) only go away on a click
+                ps("-Action", "key", "-Keys", "ESC")
+                time.sleep(1.5)
+                ps("-Action", "click", "-X", "512", "-Y", "600")
                 last_esc = time.time()
             time.sleep(2)
         ps("-Action", "capture", "-Output", str(shots / "04_after_probe.png"))
@@ -348,7 +397,24 @@ def main() -> int:
                 okt = dxy <= 0.05 and dz <= 0.5
                 result["things"][name] = {"found": True, "engine": got, "expected_world": [mx + exp[0], my + exp[1], exp[2]], "ok": okt}
                 things_ok = things_ok and okt
-        result["ok"] = done and compared == len(pts) and not result["mismatches"] and things_ok
+        follow_ok = True
+        if follow_pt:
+            samples = [(int(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4)), float(m.group(5)))
+                       for m in re.finditer(r"ATLAS_PROBE\|followpos\|(\d+)\|([-\d.]+)\|([-\d.]+)\|([-\d.]+)\|([-\d.]+)", text)]
+            created = re.search(r"ATLAS_PROBE\|create\|(\w+)", text)
+            result["follow"] = {"created": bool(created and created.group(1) == "true"), "samples": len(samples),
+                                "expect": a.follow_expect or None}
+            if samples:
+                tail = sorted(d for _, _, _, _, d in samples[-5:])
+                final = tail[len(tail) // 2]
+                result["follow"]["final_distance"] = final
+                result["follow"]["min_distance"] = min(d for _, _, _, _, d in samples)
+                result["follow"]["track"] = [[t, round(x, 2), round(y, 2), round(d, 2)] for t, x, y, _, d in samples]
+                if a.follow_expect == "near": follow_ok = result["follow"]["min_distance"] <= 2.0
+                elif a.follow_expect == "far": follow_ok = result["follow"]["min_distance"] >= 2.5
+            else:
+                follow_ok = not a.follow_expect
+        result["ok"] = done and compared == len(pts) and not result["mismatches"] and things_ok and follow_ok
     finally:
         crash = shots / "crash.json"
         if a.catch_crash:
