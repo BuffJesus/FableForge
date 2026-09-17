@@ -177,6 +177,22 @@ misaligned spot is refused (red outline, reason on the canvas). Moves queue up
 (orange outlines, *Pending moves* card) and **Move N maps in the game** writes them
 all at once; *Revert all* / *Put back* drop them.
 
+**Regions** live in the same panel: *Owned by region* changes the region that
+loads the map (WLD `ContainsMap`; exactly one owner, the retail partition), and the
+*Neighbours* card lists every map touching the selected one with two toggles per
+row -- *seen from mine* (the selected map's region draws that neighbour) and *sees
+me* (the neighbour's region draws the selected map; WLD `SeesMap` = loaded and
+drawn while the player is in that region). A map moved next to new neighbours
+wants both ticked across the new edge. Region edits queue with the moves and are
+written by the same button; the WLD is edited line-precisely (`SeesMap` lines
+stay grouped) and the BWD keeps every on-disk field except the `contains`/`sees`
+slot lists, which are resolved from the edited WLD (forgecore's
+`compileFromWld`; refused when the WLD and BWD already disagree on some region's
+maps). CLI: `world-owner <map> <region>`, `world-sees <region> <map> <0|1>`,
+`world --regions`. Note: the BWD keys maps by LEV stem; ten retail maps carry a
+different script name (`BowerstoneSlumsWarehouses.lev` is scripted
+"BowerstoneSlums") and Atlas keys on the stem everywhere.
+
 What a move writes -- `AlbionAtlas world-move <map> <x> <y> [...]` is the same
 path from the command line, `AlbionAtlas world` lists the layout:
 

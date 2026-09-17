@@ -61,7 +61,8 @@ int usage() {
         "      (own region = take over a retail filler slot under the 141-region cap, with a baked MINIMAP_<NAME> texture)\n"
         "  AlbionAtlas world  [--install <root>]                      every map's box, region and baked origin\n"
         "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
-        "      (relocate maps: WLD/BWD placement + STB chunks re-baked for the new origins, touching neighbours too)\n"
+        "      (relocate maps: WLD/BWD placement + STB chunks translated to the new origins, touching neighbours re-baked)\n"
+        "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -312,18 +313,45 @@ int main(int argc, char** argv) {
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
         return 0;
     }
-    if (cmd == "world" || cmd == "world-move") {   // world: list the layout; world-move <map> <x> <y> [...]: relocate maps
+    if (cmd == "world" || cmd == "world-move" || cmd == "world-owner" || cmd == "world-sees") {
+        // world [--regions]: list the layout; world-move <map> <x> <y> [...]: relocate maps;
+        // world-owner <map> <region>: change the owning region; world-sees <region> <map> <0|1>: visibility
         std::string installArg;
         std::vector<albion::editor::MapMove> moves;
+        std::vector<albion::editor::OwnerEdit> owners;
+        std::vector<albion::editor::SeesEdit> sees;
+        bool regionsList = false;
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (cmd == "world" && args[i] == "--regions") regionsList = true;
             else if (cmd == "world-move" && i + 2 < args.size()) { moves.push_back({args[i], std::atoi(args[i + 1].c_str()), std::atoi(args[i + 2].c_str())}); i += 2; }
-            else { std::fprintf(stderr, "usage: AlbionAtlas world-move <map> <x> <y> [...] [--install <root>]\n"); return 2; }
+            else if (cmd == "world-owner" && i + 1 < args.size()) { owners.push_back({args[i], args[i + 1]}); i += 1; }
+            else if (cmd == "world-sees" && i + 2 < args.size()) { sees.push_back({args[i], args[i + 1], args[i + 2] != "0"}); i += 2; }
+            else { std::fprintf(stderr, "usage: AlbionAtlas world [--regions] | world-move <map> <x> <y> [...] | world-owner <map> <region> | world-sees <region> <map> <0|1>  [--install <root>]\n"); return 2; }
+        }
+        if (cmd == "world-owner" || cmd == "world-sees") {
+            const Install install = findInstall(installArg);
+            if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+            std::vector<std::string> notes; std::string err;
+            if (!albion::editor::applyWorldEdits(install.root, {}, owners, sees, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+            for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+            return 0;
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         albion::editor::WorldLayout layout; std::string err;
         if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (cmd == "world" && regionsList) {
+            for (const auto& r : layout.regionInfo) {
+                std::printf("%4d  %-32s owns %zu, sees %zu\n", r.slot, r.name.c_str(), r.contains.size(), r.sees.size());
+                std::string c, v;
+                for (const auto& m : r.contains) c += (c.empty() ? "" : ", ") + m;
+                for (const auto& m : r.sees) v += (v.empty() ? "" : ", ") + m;
+                if (!c.empty()) std::printf("        owns: %s\n", c.c_str());
+                if (!v.empty()) std::printf("        sees: %s\n", v.c_str());
+            }
+            return 0;
+        }
         if (cmd == "world") {
             std::printf("%zu maps, %zu regions, world box (%d,%d)-(%d,%d)\n", layout.maps.size(), layout.regions.size(), layout.minX, layout.minY, layout.maxX, layout.maxY);
             for (const auto& m : layout.maps) {

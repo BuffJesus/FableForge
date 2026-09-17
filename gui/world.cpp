@@ -41,6 +41,8 @@ void App::loadWorld() {
     worldLoaded_ = editor::loadWorldLayout(root, world_, err);
     worldLoadedFrom_ = root;
     worldPending_.clear();
+    worldOwnerEdits_.clear();
+    worldSeesEdits_.clear();
     worldSelected_.clear();
     worldZoom_ = 0;
     if (!worldLoaded_) pushLog("world: " + err, 2);
@@ -81,19 +83,53 @@ bool App::worldMove(const std::string& map, int x, int y) {
     return true;
 }
 
+std::string App::worldOwnerOf(const std::string& map) const {
+    for (const auto& e : worldOwnerEdits_) if (e.map == map) return e.region;
+    const auto* b = world_.find(map);
+    return b ? b->region : std::string();
+}
+
+bool App::worldSees(const std::string& region, const std::string& map) const {
+    for (const auto& e : worldSeesEdits_) if (e.region == region && e.map == map) return e.sees;
+    const auto* r = world_.region(region);
+    return r && r->sees_(map);
+}
+
+bool App::worldSetOwner(const std::string& map, const std::string& region) {
+    const auto* b = world_.find(map);
+    if (!b) { pushLog("world: no map " + map, 2); return false; }
+    if (!world_.region(region)) { pushLog("world: no region " + region, 2); return false; }
+    worldOwnerEdits_.erase(std::remove_if(worldOwnerEdits_.begin(), worldOwnerEdits_.end(), [&](const editor::OwnerEdit& e) { return e.map == b->name; }), worldOwnerEdits_.end());
+    if (region != b->region) worldOwnerEdits_.push_back({b->name, region});
+    return true;
+}
+
+bool App::worldSetSees(const std::string& region, const std::string& map, bool sees) {
+    const auto* b = world_.find(map);
+    const auto* r = world_.region(region);
+    if (!b || !r) { pushLog("world: no such map/region " + region + " / " + map, 2); return false; }
+    worldSeesEdits_.erase(std::remove_if(worldSeesEdits_.begin(), worldSeesEdits_.end(), [&](const editor::SeesEdit& e) { return e.region == r->name && e.map == b->name; }), worldSeesEdits_.end());
+    if (sees != r->sees_(b->name)) worldSeesEdits_.push_back({r->name, b->name, sees});
+    return true;
+}
+
 void App::worldRevert() {
     worldPending_.clear();
+    worldOwnerEdits_.clear();
+    worldSeesEdits_.clear();
     if (!worldSelected_.empty()) worldSelect(worldSelected_);
 }
 
 void App::worldApply() {
-    if (worldPending_.empty() || worldFuture_.valid()) return;
+    if (worldPendingCount() == 0 || worldFuture_.valid()) return;
     const std::string root = saveRoot();
     const std::vector<editor::MapMove> moves = worldPending_;
-    pushLog("world: moving " + std::to_string(moves.size()) + " map(s): WLD/BWD placement + terrain chunks translated in FinalAlbion_RT.stb...", 0);
-    worldFuture_ = std::async(std::launch::async, [root, moves]() {
+    const std::vector<editor::OwnerEdit> owners = worldOwnerEdits_;
+    const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
+    pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + "...", 0);
+    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees]() {
         WorldJob r;
-        r.ok = editor::applyMoves(root, moves, r.notes, r.error);
+        r.ok = editor::applyWorldEdits(root, moves, owners, sees, r.notes, r.error);
         return r;
     });
 }
@@ -278,8 +314,8 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     {
         ImGui::PushFont(fontSmall_);
         char t[200];
-        std::snprintf(t, sizeof t, "%zu maps  |  drag a map to move it (snaps to 32)  |  wheel zooms, right-drag pans, F fits  |  %zu pending move%s",
-                      world_.maps.size(), worldPending_.size(), worldPending_.size() == 1 ? "" : "s");
+        std::snprintf(t, sizeof t, "%zu maps  |  drag a map to move it (snaps to 32)  |  wheel zooms, right-drag pans, F fits  |  %zu pending change%s",
+                      world_.maps.size(), worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
         dl->AddText(ImVec2(origin.x + S(12), origin.y + S(10)), theme::col(theme::Muted), t);
         ImGui::PopFont();
     }
@@ -326,20 +362,88 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
             if (theme::ghostButton("Put back", ImVec2(cardInner, S(26)))) worldMove(box->name, box->x, box->y);
             auto_.registerWidget("btn_world_putback");
         }
+        // owning region: the region a map is loaded with (exactly one)
+        ImGui::Dummy(ImVec2(0, S(6)));
+        theme::labelValue("Owned by region", "", cardInner);
+        const std::string owner = worldOwnerOf(box->name);
+        ImGui::SetNextItemWidth(cardInner);
+        if (ImGui::BeginCombo("##owner", owner.empty() ? "(no region)" : owner.c_str())) {
+            for (const auto& r : world_.regions)
+                if (ImGui::Selectable(r.c_str(), r == owner)) worldSetOwner(box->name, r);
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_world_owner");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that loads this map (WLD ContainsMap; retail keeps exactly one owner per map).");
+        if (owner != box->region) {
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Warn), "pending: %s -> %s", box->region.empty() ? "(none)" : box->region.c_str(), owner.c_str());
+            ImGui::PopFont();
+        }
     }
     theme::endCard();
 
-    if (!worldPending_.empty()) {
+    // neighbours: which of them this map's region draws, and which of their
+    // regions draw this map (WLD SeesMap = loaded/visible while in that region)
+    if (box) {
+        int sx, sy; worldPlacement(box->name, sx, sy);
+        editor::WorldLayout current = world_;
+        for (auto& b : current.maps) for (const auto& mv : worldPending_) if (mv.name == b.name) { b.x = mv.x; b.y = mv.y; }
+        const auto touching = current.touching(*box, sx, sy);
+        ImGui::Dummy(ImVec2(0, S(8)));
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##worldnb", inner);
+        theme::label("Neighbours");
+        const std::string mine = worldOwnerOf(box->name);
+        ImGui::PushFont(fontSmall_);
+        if (touching.empty()) theme::hint("No map touches this one at its current place.");
+        else theme::hint("Which regions draw which maps across this edge: 'seen' = loaded and drawn while the player is in that region (WLD SeesMap).");
+        ImGui::PopFont();
+        int row = 0;
+        for (const auto* n : touching) {
+            ImGui::PushID(row++);
+            const std::string theirs = worldOwnerOf(n->name);
+            ImGui::TextUnformatted(n->name.c_str());
+            ImGui::PushFont(fontSmall_);
+            ImGui::SameLine();
+            ImGui::TextColored(theme::vec(theme::Muted), "(%s)", theirs.empty() ? "no region" : theirs.c_str());
+            bool a = !mine.empty() && worldSees(mine, n->name);
+            bool b = !theirs.empty() && worldSees(theirs, box->name);
+            if (!mine.empty()) {
+                if (ImGui::Checkbox("seen from mine", &a)) worldSetSees(mine, n->name, a);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s sees %s", mine.c_str(), n->name.c_str());
+                if (!theirs.empty()) ImGui::SameLine();
+            }
+            if (!theirs.empty()) {
+                if (ImGui::Checkbox("sees me", &b)) worldSetSees(theirs, box->name, b);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s sees %s", theirs.c_str(), box->name.c_str());
+            }
+            ImGui::PopFont();
+            ImGui::PopID();
+        }
+        theme::endCard();
+    }
+
+    if (worldPendingCount() > 0) {
         ImGui::Dummy(ImVec2(0, S(8)));
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##worldpending", inner);
-        theme::label("Pending moves");
+        theme::label("Pending changes");
         ImGui::PushFont(fontSmall_);
         for (const auto& mv : worldPending_) {
             const auto* b = world_.find(mv.name);
             ImGui::TextColored(theme::vec(theme::Text), "%s", mv.name.c_str());
             ImGui::SameLine();
             ImGui::TextColored(theme::vec(theme::Muted), "%d,%d -> %d,%d", b ? b->x : 0, b ? b->y : 0, mv.x, mv.y);
+        }
+        for (const auto& e : worldOwnerEdits_) {
+            ImGui::TextColored(theme::vec(theme::Text), "%s", e.map.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(theme::vec(theme::Muted), "owned by %s", e.region.c_str());
+        }
+        for (const auto& e : worldSeesEdits_) {
+            ImGui::TextColored(theme::vec(theme::Text), "%s", e.region.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(theme::vec(theme::Muted), "%s %s", e.sees ? "sees" : "no longer sees", e.map.c_str());
         }
         ImGui::PopFont();
         theme::endCard();
@@ -362,10 +466,11 @@ void App::drawWorldFooter(float pad, float inner) {
         theme::primaryButton("Moving maps...", ImVec2(inner, S(42)), false);
         return;
     }
-    const bool any = !worldPending_.empty();
+    const bool any = worldPendingCount() > 0;
     if (!confirmWorldApply_) {
         char label[96];
-        std::snprintf(label, sizeof label, any ? "Move %zu map%s in the game" : "No pending moves", worldPending_.size(), worldPending_.size() == 1 ? "" : "s");
+        if (worldPending_.empty()) std::snprintf(label, sizeof label, any ? "Write %zu region change%s to the game" : "No pending changes", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
+        else std::snprintf(label, sizeof label, "Move %zu map%s in the game%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
         if (theme::primaryButton(label, ImVec2(inner, S(42)), any)) confirmWorldApply_ = true;
         auto_.registerWidget("btn_world_apply");
         if (any) {
@@ -375,10 +480,10 @@ void App::drawWorldFooter(float pad, float inner) {
         }
     } else {
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Warn), "Rewrite the world files and the terrain chunks?");
+        ImGui::TextColored(theme::vec(theme::Warn), "%s", worldPending_.empty() ? "Rewrite FinalAlbion.wld/.bwd?" : "Rewrite the world files and the terrain chunks?");
         ImGui::PopFont();
         const float half = (inner - S(6)) * 0.5f;
-        if (theme::primaryButton("Yes, move them", ImVec2(half, S(32)))) { confirmWorldApply_ = false; worldApply(); }
+        if (theme::primaryButton(worldPending_.empty() ? "Yes, write them" : "Yes, move them", ImVec2(half, S(32)))) { confirmWorldApply_ = false; worldApply(); }
         auto_.registerWidget("btn_world_apply_confirm");
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Cancel", ImVec2(half, S(32)))) confirmWorldApply_ = false;

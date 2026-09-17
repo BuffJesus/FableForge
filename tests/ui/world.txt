@@ -70,6 +70,34 @@ assert_state world_ok 1
 world_select OrchardFarm
 frames 1
 assert_state world_selected_pos 3200,3168
+# region edits: a visibility toggle and an owner change, written and undone
+world_select OrchardFarm
+frames 2
+assert_state world_selected_owner OrchardFarm
+assert_widget combo_world_owner
+world_sees Greatwood OrchardFarm 1
+world_owner OrchardFarmEast Greatwood
+frames 2
+assert_state world_pending_sees 1
+assert_state world_pending_owners 1
+screenshot build/ui/w4_region_pending.png
+world_apply
+wait_world
+frames 3
+assert_state world_ok 1
+assert_state world_pending_sees 0
+world_select OrchardFarmEast
+frames 1
+assert_state world_selected_owner Greatwood
+world_owner OrchardFarmEast OrchardFarm
+world_sees Greatwood OrchardFarm 0
+world_apply
+wait_world
+frames 3
+assert_state world_ok 1
+world_select OrchardFarmEast
+frames 1
+assert_state world_selected_owner OrchardFarm
 world_tab 0
 frames 2
 assert_state world_mode 0

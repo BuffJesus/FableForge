@@ -155,8 +155,9 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours
   highlighted), queue as many moves as you like, then **Move N maps in the game**:
   the WLD/BWD placement and the map's terrain chunk (ground, LOD, water, trees and
-  grass) are rewritten for the new origin. Same thing from the shell:
-  `AlbionAtlas world` / `AlbionAtlas world-move <map> <x> <y>`.
+  grass) are rewritten for the new origin. The same panel sets which region owns a
+  map and which regions draw it across each edge. Same thing from the shell:
+  `AlbionAtlas world` / `world-move <map> <x> <y>` / `world-owner` / `world-sees`.
 
 Everything is written the way the game wrote it: untouched things stay byte-identical,
 moved things get their position/basis lines rewritten in retail float spelling, new

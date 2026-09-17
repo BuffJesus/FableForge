@@ -289,7 +289,12 @@ public:
     void worldRevert();
     void worldApply();
     bool worldBusy() const { return worldFuture_.valid(); }
-    size_t worldPendingCount() const { return worldPending_.size(); }
+    size_t worldPendingCount() const { return worldPending_.size() + worldOwnerEdits_.size() + worldSeesEdits_.size(); }
+    // region edits (queued like moves): the owning region of a map, and whether a region sees a map
+    bool worldSetOwner(const std::string& map, const std::string& region);
+    bool worldSetSees(const std::string& region, const std::string& map, bool sees);
+    std::string worldOwnerOf(const std::string& map) const;            // pending edit or the layout's owner
+    bool worldSees(const std::string& region, const std::string& map) const;
     bool worldLastOk() const { return worldLastOk_; }
 private:
     void loadWorld();
@@ -302,6 +307,8 @@ private:
     std::string worldLoadedFrom_;
     editor::WorldLayout world_;
     std::vector<editor::MapMove> worldPending_;
+    std::vector<editor::OwnerEdit> worldOwnerEdits_;
+    std::vector<editor::SeesEdit> worldSeesEdits_;
     std::string worldSelected_;
     std::string worldHover_;
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)

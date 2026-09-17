@@ -79,3 +79,6 @@ endif()
 
 add_executable(probe_trailer EXCLUDE_FROM_ALL tools/probe_trailer.cpp)
 target_link_libraries(probe_trailer PRIVATE albionatlas)
+
+add_executable(probe_bwd EXCLUDE_FROM_ALL tools/probe_bwd.cpp)
+target_link_libraries(probe_bwd PRIVATE albionatlas)

@@ -130,9 +130,9 @@ in-game harness run (`tools/ingame`).
 
 ## Order of work
 
-1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid). Left over:
-   seam stitching between newly adjacent maps (`forge lev stitch` semantics),
-   region ownership editing.
+1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid; region
+   owner + sees editing in the panel and CLI). Left over: seam stitching between
+   newly adjacent maps (`forge lev stitch` semantics).
 2. **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.

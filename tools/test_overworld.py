@@ -148,6 +148,38 @@ def main() -> int:
     if r.returncode != 0 or open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:
         print("batch move back did not restore the WLD/BWD"); ok = False
 
+    # region edits: visibility add/remove is byte-exact on the WLD/BWD; an owner
+    # change lands in the layout and comes back
+    r = subprocess.run([cli, "world-sees", "Greatwood", "OrchardFarm", "1", "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or "now sees" not in r.stdout:
+        print("sees edit failed:", r.stderr); ok = False
+    r = subprocess.run([cli, "world", "--regions", "--install", scratch], capture_output=True, text=True)
+    if "OrchardFarm" not in [l for l in r.stdout.splitlines() if "sees:" in l][4]:
+        print("Greatwood does not see OrchardFarm after the edit"); ok = False
+    r = subprocess.run([cli, "world-sees", "Greatwood", "OrchardFarm", "0", "--install", scratch], capture_output=True, text=True)
+    if open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:
+        print("sees add + remove is not byte-identical"); ok = False
+    r = subprocess.run([cli, "world-owner", "OrchardFarm", "Greatwood", "--install", scratch], capture_output=True, text=True)
+    r = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True)
+    if not any(l.split()[1] == "OrchardFarm" and "Greatwood" in l for l in r.stdout.splitlines()[1:]):
+        print("owner change did not land"); ok = False
+    r = subprocess.run([cli, "world-owner", "OrchardFarm", "OrchardFarm", "--install", scratch], capture_output=True, text=True)
+    r = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True)
+    if not any(l.split()[1] == "OrchardFarm" and l.split()[5] == "OrchardFarm" for l in r.stdout.splitlines()[1:]):
+        print("owner change back did not land"); ok = False
+    def semantic():
+        # placement/owner listing + region lists with order-insensitive map sets
+        a = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True).stdout
+        b = subprocess.run([cli, "world", "--regions", "--install", scratch], capture_output=True, text=True).stdout
+        norm = []
+        for l in b.splitlines():
+            t = l.strip()
+            if t.startswith(("owns:", "sees:")):
+                k, v = t.split(":", 1); norm.append(k + ":" + ",".join(sorted(x.strip() for x in v.split(","))))
+            else: norm.append(t)
+        return a + chr(10).join(norm)
+    semantic_before = semantic()
+
     # the GUI's World tab on the same scratch tree (queued moves, refusal, apply, undo)
     gui = os.path.join(ROOT, "build", "AlbionAtlasGUI.exe")
     if os.path.exists(gui):
@@ -160,8 +192,8 @@ def main() -> int:
             ok = False
         else:
             print("GUI world script PASS")
-        if open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:
-            print("GUI moves did not restore the WLD/BWD"); ok = False
+        if semantic() != semantic_before:
+            print("GUI moves/region edits did not restore the world layout"); ok = False
 
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)

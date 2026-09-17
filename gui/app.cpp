@@ -661,6 +661,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_maps=" + std::to_string(world_.maps.size()));
     v.push_back("world_selected=" + worldSelected_);
     v.push_back("world_pending=" + std::to_string(worldPending_.size()));
+    v.push_back("world_pending_owners=" + std::to_string(worldOwnerEdits_.size()));
+    v.push_back("world_pending_sees=" + std::to_string(worldSeesEdits_.size()));
+    if (!worldSelected_.empty()) v.push_back("world_selected_owner=" + worldOwnerOf(worldSelected_));
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
     if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
@@ -1574,6 +1577,8 @@ bool Automation::tick(App& app) {
         if (app.worldMove(m, x, y)) fail("world_move_refused: the move was accepted: " + rest); else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "world_owner") { std::istringstream rs(rest); std::string m, r; rs >> m >> r; if (!app.worldSetOwner(m, r)) fail("world_owner refused: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "world_sees") { std::istringstream rs(rest); std::string r, m; int v = 1; rs >> r >> m >> v; if (!app.worldSetSees(r, m, v != 0)) fail("world_sees refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_revert") { app.worldRevert(); note("ok   " + line); ++pc_; }
     else if (cmd == "world_apply") { app.worldApply(); note("..   " + line); ++pc_; }
     else if (cmd == "wait_world") waitOn(!app.worldBusy(), "world move");

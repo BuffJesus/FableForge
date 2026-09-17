@@ -84,6 +84,22 @@ bool boxesOverlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh
 
 } // namespace
 
+bool WorldRegion::sees_(const std::string& stem) const {
+    const std::string w = lower(stem);
+    for (const auto& m : sees) if (lower(m) == w) return true;
+    return false;
+}
+bool WorldRegion::owns(const std::string& stem) const {
+    const std::string w = lower(stem);
+    for (const auto& m : contains) if (lower(m) == w) return true;
+    return false;
+}
+const WorldRegion* WorldLayout::region(const std::string& name) const {
+    const std::string w = lower(name);
+    for (const auto& r : regionInfo) if (lower(r.name) == w) return &r;
+    return nullptr;
+}
+
 const WorldMapBox* WorldLayout::find(const std::string& name) const {
     const std::string want = lower(name);
     for (const auto& m : maps) if (lower(m.name) == want) return &m;
@@ -115,14 +131,23 @@ bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& er
                 stbOrigins[lower(stemOf(m.levelName))] = {info.worldX, info.worldY};
             }
         }
-        for (const auto& r : wld.regions()) out.regions.push_back(r.regionName);
+        for (const auto& r : wld.regions()) {
+            out.regions.push_back(r.regionName);
+            WorldRegion info; info.slot = int(out.regions.size()); info.name = r.regionName;
+            for (const auto& n : r.containsMaps) info.contains.push_back(stemOf(n));
+            for (const auto& n : r.seesMaps) info.sees.push_back(stemOf(n));
+            out.regionInfo.push_back(std::move(info));
+        }
         int slot = 0;
         for (const auto& m : bwd.maps()) {
             ++slot;
             if (!m.used) continue;
             WorldMapBox b;
             b.slot = slot;
-            b.name = m.scriptName.empty() ? stemOf(m.levelName) : m.scriptName;
+            // key on the LEV stem: ten retail maps carry a different script name
+            // (BowerstoneSlumsWarehouses.lev is scripted as "BowerstoneSlums" ...)
+            b.name = stemOf(m.levelName);
+            b.scriptName = m.scriptName;
             b.x = m.left; b.y = m.top; b.w = m.right - m.left; b.h = m.bottom - m.top;
             b.isSea = m.isSea != 0; b.loadedOnProximity = m.loadedOnProximity != 0;
             const std::string key = lower(b.name);
@@ -147,6 +172,47 @@ bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& er
         }
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+// Add or drop one `SeesMap "<level>";` line in a region block of the WLD text.
+// Line-precise: the file is otherwise untouched (its own EOL kept).
+std::string editSeesLine(const std::string& text, const forge::wld::File& wld, const std::string& regionName,
+                         const std::string& levelName, bool sees) {
+    const forge::wld::Region* region = wld.findRegion(regionName);
+    if (!region) throw std::runtime_error("unknown region " + regionName);
+    const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+    std::vector<std::string> lines;
+    size_t p = 0;
+    while (p < text.size()) {
+        size_t q = text.find('\n', p);
+        if (q == std::string::npos) q = text.size() - 1;
+        lines.push_back(text.substr(p, q - p + 1));
+        p = q + 1;
+    }
+    auto trimmed = [](const std::string& l) {
+        size_t a = l.find_first_not_of(" \t\r\n"), b = l.find_last_not_of(" \t\r\n");
+        return a == std::string::npos ? std::string() : l.substr(a, b - a + 1);
+    };
+    const std::string wantLine = "SeesMap \"" + levelName + "\";";
+    int active = -1;
+    size_t lastSees = SIZE_MAX;   // retail keeps the SeesMap lines together, last in the block
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const std::string t = trimmed(lines[i]);
+        if (t.rfind("NewRegion", 0) == 0) { active = std::atoi(t.c_str() + 9); continue; }
+        if (active != region->index) continue;
+        if (lower(t) == lower(wantLine)) {
+            if (!sees) lines.erase(lines.begin() + std::ptrdiff_t(i));
+            break;   // present: dropped, or nothing to add
+        }
+        if (t.rfind("SeesMap", 0) == 0) lastSees = i;
+        if (t == "EndRegion;") {
+            if (sees) lines.insert(lines.begin() + std::ptrdiff_t(lastSees == SIZE_MAX ? i : lastSees + 1), wantLine + eol);
+            break;
+        }
+    }
+    std::string out;
+    for (const auto& l : lines) out += l;
+    return out;
 }
 
 bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, const MapMove& move, std::string& why) {
@@ -174,10 +240,11 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
     return true;
 }
 
-bool applyMoves(const fs::path& gameRoot, const std::vector<MapMove>& moves,
-                std::vector<std::string>& notes, std::string& error) {
+bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves,
+                     const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& seesEdits,
+                     std::vector<std::string>& notes, std::string& error) {
     try {
-        if (moves.empty()) { error = "nothing to move"; return false; }
+        if (moves.empty() && owners.empty() && seesEdits.empty()) { error = "nothing to do"; return false; }
         WorldLayout before;
         if (!loadWorldLayout(gameRoot, before, error)) return false;
         for (const auto& mv : moves) {
@@ -304,24 +371,65 @@ bool applyMoves(const fs::path& gameRoot, const std::vector<MapMove>& moves,
             }
         }
 
-        // 2. WLD placement
+        // 2. WLD: placement, owners, visibility (line-precise edits)
+        // 3. BWD: the on-disk records with the boxes patched for the moves and
+        //    the contains/sees lists taken from the edited WLD (forgecore's
+        //    compileFromWld resolves them to slots). Every other BWD field is
+        //    kept from disk: an install can carry regions whose def/minimap in
+        //    the BWD differ from the WLD text (FableForge wrote them that way),
+        //    and the engine reads the BWD.
         {
             auto wld = forge::wld::File::parse(wldPath);
+            auto bwd = forge::bwd::File::parse(bwdPath);
+            const forge::bwd::DimSource dims = [&](const std::string& levelName, int& w, int& h) {
+                for (const auto& b : before.maps)
+                    if (lower(b.name) == lower(stemOf(levelName))) { w = b.w; h = b.h; return true; }
+                return false;
+            };
+            if (!owners.empty() || !seesEdits.empty()) {
+                // the WLD must describe this BWD's ownership before it is trusted to rewrite it
+                forge::bwd::File check;
+                try { check = forge::bwd::compileFromWld(wld, dims); }
+                catch (const std::exception& e) { error = std::string("the WLD does not compile: ") + e.what(); return false; }
+                if (check.regions().size() != bwd.regions().size() || check.maps().size() != bwd.maps().size()) { error = "FinalAlbion.wld and FinalAlbion.bwd disagree on the map/region count"; return false; }
+                for (size_t i = 0; i < bwd.regions().size(); ++i)
+                    if (check.regions()[i].contains != bwd.regions()[i].contains || check.regions()[i].sees != bwd.regions()[i].sees) {
+                        error = "FinalAlbion.wld and FinalAlbion.bwd disagree on region " + bwd.regions()[i].name + "'s maps; region edits refused";
+                        return false;
+                    }
+            }
             for (const auto& [slot, mv] : moveOf) {
                 const WorldMapBox* box = nullptr;
                 for (const auto& b : after.maps) if (b.slot == slot) box = &b;
                 wld.relocateMap(box->levelName, mv.x, mv.y);
             }
-            const std::string text = wld.serialize();
+            for (const auto& o : owners) {
+                const WorldMapBox* box = before.find(o.map);
+                if (!box) { error = "unknown map " + o.map; return false; }
+                if (!wld.findRegion(o.region)) { error = "unknown region " + o.region; return false; }
+                wld.setMapOwner(o.region, box->levelName);
+                notes.push_back(o.map + " is now owned by " + o.region);
+            }
+            std::string text = wld.serialize();
+            for (const auto& se : seesEdits) {
+                const WorldMapBox* box = before.find(se.map);
+                if (!box) { error = "unknown map " + se.map; return false; }
+                text = editSeesLine(text, wld, se.region, box->levelName, se.sees);
+                notes.push_back(se.region + (se.sees ? " now sees " : " no longer sees ") + se.map);
+            }
             writeFile(wldPath, text.data(), text.size());
-        }
-        // 3. BWD boxes, in every copy the engine reads
-        {
-            auto bwd = forge::bwd::File::parse(bwdPath);
             for (const auto& [slot, mv] : moveOf) {
                 auto& m = bwd.maps().at(size_t(slot - 1));
                 const int w = m.right - m.left, h = m.bottom - m.top;
                 m.left = mv.x; m.top = mv.y; m.right = mv.x + w; m.bottom = mv.y + h;
+            }
+            if (!owners.empty() || !seesEdits.empty()) {
+                const auto edited = forge::wld::File::parse(wldPath);
+                const auto compiled = forge::bwd::compileFromWld(edited, dims);
+                for (size_t i = 0; i < bwd.regions().size(); ++i) {
+                    bwd.regions()[i].contains = compiled.regions()[i].contains;
+                    bwd.regions()[i].sees = compiled.regions()[i].sees;
+                }
             }
             bwd.write(bwdPath);
             for (const auto& m : mirrors) if (fs::exists(m)) bwd.write(m);
@@ -334,7 +442,7 @@ bool applyMoves(const fs::path& gameRoot, const std::vector<MapMove>& moves,
             fs::rename(tmp, stbPath);
             notes.push_back(std::string("FinalAlbion_RT.stb: ") + std::to_string(batch.size()) + " chunk(s) " + (sameSize ? "replaced in place" : "re-laid (sizes changed)"));
         }
-        notes.push_back("FinalAlbion.wld + FinalAlbion.bwd (" + std::to_string(1 + std::count_if(std::begin(mirrors), std::end(mirrors), [](const fs::path& p) { return fs::exists(p); })) + " copies) updated for " + std::to_string(moveOf.size()) + " map(s)");
+        notes.push_back("FinalAlbion.wld + FinalAlbion.bwd (" + std::to_string(1 + std::count_if(std::begin(mirrors), std::end(mirrors), [](const fs::path& p) { return fs::exists(p); })) + " copies) updated: " + std::to_string(moveOf.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(seesEdits.size()) + " visibility change(s)");
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
