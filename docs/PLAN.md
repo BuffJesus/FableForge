@@ -201,6 +201,17 @@ in-game harness run (`tools/ingame`).
    SetCreatureGeneratorState for GreatwoodTeleport's generators (retail quest
    scripts / Aeon's Lua ports) -- an Atlas spawner will need the same
    registration, probably via a ForgeFSE companion quest. Villages untouched.
+   UPDATE (debug build `CWorld::IsCreatureGenerationEnabled` 0x1b46fa0, named):
+   a thing may generate when (world flag && no quest in CQuestManager's
+   "disabled during script" list is active && region flag && no active quest in
+   the region), OR when the quest named like the thing's TNG *section* is
+   active, OR when its def has flag +0x4a bit 0. Childhood keeps a disabling
+   quest active, so the test profile can never spawn from a NULL-section
+   generator; the Greatwood spawns come from the `V_RandomPopulationSim`
+   section (Gameflow activates it after the intro). Probes tried without
+   success: activating `CreatureGenerators`, `SetCreatureGeneratorsEnabled(region)`,
+   `SetCreatureGeneratorsEnabledDuringScript(<childhood quests>, true)`. Needs an
+   adult save (none on this machine: every profile is the same childhood autosave).
 4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
 5. **Splat texture paint** (STB foreground layers: texture triple +
    per-vertex blend) -- the real "paint any texture on the ground".

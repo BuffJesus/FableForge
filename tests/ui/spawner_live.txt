@@ -1,15 +1,15 @@
-# Live-install probe (not in check_all): place an enemy spawner in GreatwoodTeleport and deploy it.
+# Live-install probe (not in check_all): place an enemy spawner in the blank level AtlasMM and deploy it.
 wait_maps
 wait_ready
-select GreatwoodTeleport
+select AtlasMM
 wait_loaded
 wait_foliage
 edit 1
 frames 2
 assert_state doc_loaded 1
-camera 85 30 60 0 -60 30
+camera 32 32 20 0 -60 30
 frames 2
-place_spawner 15 4 HOBBE_FAMILY_01,HOBBE_FAMILY_02
+place_spawner 15 4 WASPS_01,WASPS_02 AtlasSpawner
 frames 2
 assert_state doc_changes 1
 save_level

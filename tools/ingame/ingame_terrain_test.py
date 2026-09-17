@@ -53,6 +53,8 @@ ATLAS_THINGS = { %(things)s }   -- ScriptNames whose world position is reported
 ATLAS_FOLLOW = %(follow)s       -- {x, y} world point: spawn a creature there and make it follow the hero, or nil
 ATLAS_CREATURES = %(creatures)d -- >0: after this many seconds, list every creature within 60 units of the hero (spawner probe)
 ATLAS_WALK = %(walk)s           -- {x, y} world point the hero walks to (script control) before the creature listing, or nil
+ATLAS_ENABLE_GEN = %(enable_gen)s -- region name: call SetCreatureGeneratorsEnabled(region, true) before the walk, or nil
+ATLAS_ACTIVATE_QUESTS = %(activate_quests)s -- quest names to ActivateMultipleQuestsWithoutLoadingResources before the walk, or nil
 ATLAS_FOLLOW_DEF = "%(follow_def)s"
 ATLAS_FOLLOW_SECONDS = %(follow_seconds)d
 
@@ -117,6 +119,21 @@ function AtlasProbe(questObject)
         local ok, z = pcall(function() return Q:GetGroundHeightAt(pt[1], pt[2]) end)
         if ok then Q:Log(string.format("ATLAS_PROBE|z|%%.3f|%%.3f|%%.4f", pt[1], pt[2], z))
         else Q:Log(string.format("ATLAS_PROBE|zerr|%%.3f|%%.3f|%%s", pt[1], pt[2], tostring(z))) end
+    end
+    if ATLAS_ACTIVATE_QUESTS then
+        local aok, aerr = pcall(function() Q:ActivateMultipleQuestsWithoutLoadingResources(ATLAS_ACTIVATE_QUESTS) end)
+        Q:Log("ATLAS_PROBE|activatequests|" .. tostring(aok) .. "|" .. tostring(aerr))
+        Q:Pause(5.0)
+        if not Q:NewScriptFrame() then return end
+    end
+    if ATLAS_ENABLE_GEN then
+        local gok, gerr = pcall(function() Q:SetCreatureGeneratorsEnabled(ATLAS_ENABLE_GEN, true) end)
+        Q:Log("ATLAS_PROBE|enablegen|" .. tostring(gok) .. "|" .. tostring(gerr))
+        -- quests that disabled generation while they run (CQuestManager's during-script list)
+        for _, qn in ipairs({"Q_NewOakValeIntro", "Q_NewOakValeIntro_PreAttack", "Q__OakValeIntro_PostAttack", "Q_OakValeIntro", "Q_SunnyvaleMaster", "ChapterAndSceneManager", "PersonalScriptMain", "Gameflow", "LUAGameflow", "PartyMode", "NewOakValeIntro"}) do
+            local dok, derr = pcall(function() Q:SetCreatureGeneratorsEnabledDuringScript(qn, true) end)
+            Q:Log("ATLAS_PROBE|enableduring|" .. qn .. "|" .. tostring(dok) .. "|" .. tostring(derr))
+        end
     end
     if ATLAS_WALK then
         local wz = 0
@@ -304,6 +321,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
+    ap.add_argument("--activate-quests", default="", help="comma-separated quest names the probe activates (ActivateMultipleQuestsWithoutLoadingResources) before the walk, e.g. CreatureGenerators")
+    ap.add_argument("--enable-gen", default="", help="region name: the probe calls SetCreatureGeneratorsEnabled(region, true) before the walk")
     ap.add_argument("--walk", default="", help="map-local x,y the hero walks to after the teleport (before the --creatures listing)")
     ap.add_argument("--creatures", type=int, default=0, help="after N seconds in the target map, list every creature within 60 units of the hero (spawner probe; report gets 'creatures')")
     ap.add_argument("--things", default="", help="comma-separated ScriptNames: the probe reports their in-game positions, compared with the loose .tng")
@@ -368,6 +387,8 @@ def main() -> int:
                                   "things": ", ".join('"%s"' % t for t in thing_names),
                                   "creatures": a.creatures,
                                   "walk": ("{%g, %g}" % (mx + walk_xy[0], my + walk_xy[1])) if walk_xy else "nil",
+                                  "enable_gen": ('"%s"' % a.enable_gen) if a.enable_gen else "nil",
+                                  "activate_quests": ("{" + ", ".join('"%s"' % q for q in a.activate_quests.split(",")) + "}") if a.activate_quests else "nil",
                                   "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",
                                   "follow_def": a.follow_def, "follow_seconds": a.follow_seconds}, encoding="utf-8")
     # The probe thread is started BEFORE the host's own Main (which may loop forever).
