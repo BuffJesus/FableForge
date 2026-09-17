@@ -1,14 +1,14 @@
 ok   wait_maps
 ok   wait_ready
-ok   select GreatwoodTeleport
+ok   select AtlasMM
 ok   wait_loaded
 ok   wait_foliage
 ok   edit 1
 ok   frames 2
 ok   assert_state doc_loaded 1
-ok   camera 85 30 60 0 -60 30
+ok   camera 32 32 20 0 -60 30
 ok   frames 2
-ok   place_spawner 15 4 HOBBE_FAMILY_01,HOBBE_FAMILY_02
+ok   place_spawner 15 4 WASPS_01,WASPS_02 AtlasSpawner
 ok   frames 2
 ok   assert_state doc_changes 1
 ok   save_level

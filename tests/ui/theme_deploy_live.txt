@@ -1,0 +1,23 @@
+# Live-install probe (not in check_all): a theme added from the game, painted onto Greatwood_1, deployed into the real game.
+wait_maps
+wait_ready
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+terrain_mode 6
+add_theme BEACH_SAND
+frames 1
+assert_log in palette slot
+brush 8 10
+terrain_stroke 40 60 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 3
+assert_state terrain_dirty 0
+assert_log ground themes painted: layer meshes rebuilt
+assert_log re-baked terrain chunk
+quit

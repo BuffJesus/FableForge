@@ -173,6 +173,8 @@ public:
     void scaleSelected(float factor);
     void snapSelectedToGround();
     void reseatThings();             // objects on ground that changed since the last save follow it
+    bool addPaintTheme(const std::string& name);   // ENGINE_THEME -> a free LEV palette slot, selected for painting
+    char themeSearch_[64] = {};
     void duplicateSelected();
     void deleteSelected();
     void editUndo();

@@ -671,6 +671,8 @@ std::vector<std::string> App::stateDump() const {
     if (!worldSelected_.empty()) v.push_back("world_selected_owner=" + worldOwnerOf(worldSelected_));
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
     v.push_back("world_stitch=" + std::string(worldStitch_ ? "1" : "0"));
+    v.push_back("paint_theme=" + std::to_string(paintTheme_));
+    if (documentLoaded() && doc_.level()) { size_t named = 0; for (const auto& g : doc_.level()->groundThemes()) named += !g.name.empty(); v.push_back("palette_named=" + std::to_string(named)); }
     if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
@@ -1607,6 +1609,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "scale_thing") { app.scaleSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "ground_thing") { app.snapSelectedToGround(); note("ok   " + line); ++pc_; }
     else if (cmd == "reseat_things") { app.reseatThings(); note("ok   " + line); ++pc_; }
+    else if (cmd == "add_theme") { if (!app.addPaintTheme(rest)) fail("add_theme failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }

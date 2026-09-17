@@ -176,6 +176,14 @@ public:
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
+    // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
+    // map). Painting is limited to it, so any ENGINE_THEME of the game can be
+    // added to a free slot: returns the slot (the existing one when the name is
+    // already there), -1 when the palette is full or no terrain is loaded. Not
+    // an undo step (an unused slot is harmless) and written with the next
+    // terrain save.
+    int addGroundTheme(const std::string& name, uint32_t defIndex);
+    int paletteSlotOf(const std::string& name) const;
     // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
     // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,
     // patched in place; one-time .atlas-orig backups). `notes` gets the bake log.

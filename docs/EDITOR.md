@@ -79,6 +79,18 @@ the crashes. The engine formats are written by FableForge's `forgecore`
   heights 121/121 and trunks rooted on the new slope. Placed objects are
   re-seated on request (*Re-seat objects on the new ground*), not silently.
   `tests/ui/terrain_deploy.txt` (scratch) / `terrain_deploy_live.txt` (real install).
+* **Any ground theme of the game** (2026-09-17): the paint picker lists the map's
+  LEV palette (named slots) and a search box adds any ENGINE_THEME from game.bin
+  to a free palette slot (`Document::addGroundTheme`; slots 0 and 1 are reserved
+  on every retail map -- 0 is "no theme", 1 INVALID_THEME_STANDIN -- and a theme
+  put in slot 0 does not draw, tried; allocation starts at 2). The theme-paint
+  deploy then rebuilds the layer meshes with the new material's global texture
+  ids (the retail chunk's texture palette is external/direct, ids ==
+  GBANK_MAIN_PC entries). **In-game verified**: BEACH_SAND (not in Greatwood_1's
+  palette) painted at (40,60) draws as a smooth sand surface where retail shows
+  the reddish path (screenshots on/off). Scripts: `add_theme <ENGINE_THEME>`,
+  state `paint_theme` / `palette_named`; `tests/ui/theme_deploy.txt` (scratch,
+  in test_overworld) and `theme_deploy_live.txt`.
 * **Theme paint deploy**: when ground themes were painted the bake runs with `rebuildTopology`
   (`ReadThemesAndCreateLayers`: every foreground layer mesh is regenerated
   from the LEV themes so a new material region gets its own passes) and

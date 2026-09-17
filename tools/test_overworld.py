@@ -228,6 +228,22 @@ def main() -> int:
         r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
         if "0 with findings" not in r.stdout:
             print("Greatwood_1 chunk does not audit after the sculpt deploy:", r.stdout[-400:]); ok = False
+        # a ground theme added from the game, painted and deployed (layer meshes rebuilt)
+        r = subprocess.run([gui, "--auto", "tests/ui/theme_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
+        log = os.path.join(ROOT, "tests", "ui", "theme_deploy.txt.log")
+        if r.returncode != 0:
+            print("GUI theme deploy script failed:")
+            if os.path.exists(log):
+                print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+            ok = False
+        else:
+            print("GUI theme deploy script PASS")
+        r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
+        if "0 with findings" not in r.stdout:
+            print("Greatwood_1 chunk does not audit after the theme deploy:", r.stdout[-400:]); ok = False
+        r = subprocess.run([cli, "info", os.path.join(sl, "FinalAlbion", "Greatwood_1.lev")], capture_output=True, text=True)
+        if "BEACH_SAND" not in r.stdout:
+            print("the added theme is not in the deployed LEV palette"); ok = False
 
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)

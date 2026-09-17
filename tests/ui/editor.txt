@@ -91,6 +91,21 @@ undo
 undo
 frames 2
 assert_state terrain_dirty 0
+# a ground theme from the game joins the LEV palette (free slot) and paints
+terrain_mode 6
+frames 1
+assert_widget combo_paint_theme
+assert_widget input_themesearch
+add_theme PATH_COBBLES_IRREGULAR_ET
+frames 1
+assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
+brush 6 10
+terrain_stroke 64 112 1
+frames 2
+assert_state terrain_dirty 1
+undo
+frames 2
+assert_state terrain_dirty 0
 # objects follow sculpted ground: a barrel placed on the ground at the centre,
 # a hill raised under it, re-seat puts it back on the surface (its offset kept)
 camera 64 112 20 0.8 0.9 60

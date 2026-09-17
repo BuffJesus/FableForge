@@ -96,6 +96,39 @@ ok   undo
 ok   undo
 ok   frames 2
 ok   assert_state terrain_dirty 0
+ok   terrain_mode 6
+ok   frames 1
+ok   assert_widget combo_paint_theme
+ok   assert_widget input_themesearch
+ok   add_theme PATH_COBBLES_IRREGULAR_ET
+ok   frames 1
+ok   assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
+ok   brush 6 10
+ok   terrain_stroke 64 112 1
+ok   frames 2
+ok   assert_state terrain_dirty 1
+ok   undo
+ok   frames 2
+ok   assert_state terrain_dirty 0
+ok   camera 64 112 20 0.8 0.9 60
+ok   place OBJECT_BARREL_BREAKABLE
+ok   frames 1
+ok   assert_state selected_ground_delta 0.00
+ok   terrain_mode 0
+ok   brush 8 6
+ok   terrain_stroke 64 112 1
+ok   frames 2
+ok   assert_state terrain_dirty 1
+ok   reseat_things
+ok   frames 1
+ok   assert_log object(s) re-seated on the sculpted ground
+ok   assert_state selected_ground_delta 0.00
+ok   undo
+ok   undo
+ok   undo
+ok   frames 2
+ok   assert_state terrain_dirty 0
+ok   assert_state doc_dirty 0
 ok   set unsaved_prompt 1
 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
 ok   move_thing 0 0 0.5
@@ -118,7 +151,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=319 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=387 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -156,6 +189,9 @@ ok   set unsaved_prompt 0
      world_pending_owners=0
      world_pending_sees=0
      world_ok=0
+     world_stitch=0
+     paint_theme=0
+     palette_named=29
      doc_loaded=1
      doc_things=313
      doc_dirty=0

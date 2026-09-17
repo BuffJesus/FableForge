@@ -1,0 +1,24 @@
+ok   wait_maps
+ok   wait_ready
+ok   set saveroot build/ui_overworld_install
+ok   select Greatwood_1
+ok   wait_loaded
+ok   edit 1
+ok   frames 2
+ok   assert_state doc_loaded 1
+ok   terrain_mode 6
+ok   add_theme PATH_COBBLES_IRREGULAR_ET
+ok   frames 1
+ok   assert_log in palette slot
+ok   brush 8 10
+ok   terrain_stroke 40 60 1
+ok   frames 2
+ok   assert_state terrain_dirty 1
+..   deploy_terrain
+ok   wait_terrain
+ok   frames 3
+ok   assert_state terrain_dirty 0
+ok   assert_log ground themes painted: layer meshes rebuilt
+ok   assert_log re-baked terrain chunk
+ok   quit
+RESULT PASS

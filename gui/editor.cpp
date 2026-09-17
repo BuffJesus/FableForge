@@ -233,6 +233,18 @@ void App::scaleSelected(float factor) {
     commitFrame(f);
 }
 
+bool App::addPaintTheme(const std::string& name) {
+    if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("editor: no terrain loaded", 1); return false; }
+    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+    const auto* th = lib ? lib->byName(name) : nullptr;
+    if (!th) { pushLog("editor: no ENGINE_THEME named " + name + " (library not loaded?)", 1); return false; }
+    const int slot = doc_.addGroundTheme(th->name, th->defIndex);
+    if (slot < 0) { pushLog("editor: the palette has no free slot for " + name, 1); return false; }
+    paintTheme_ = slot;
+    pushLog("ground theme " + name + " in palette slot " + std::to_string(slot), 0);
+    return true;
+}
+
 void App::reseatThings() {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
     const size_t n = doc_.reseatThingsSinceSave();
@@ -825,20 +837,51 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked", "Paint ground"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
         auto_.registerWidget("seg_terrain_walk");
         if (terrainMode_ == 6) {
-            // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name)
+            // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name), named slots
+            const forge::lev::File* lev = doc_.level();
             const char* current = "(pick a ground theme)";
-            for (const auto& t : previewScene_.themes) if (t.slot == paintTheme_) current = t.name.c_str();
+            if (lev && paintTheme_ >= 0 && size_t(paintTheme_) < lev->groundThemes().size() && !lev->groundThemes()[size_t(paintTheme_)].name.empty())
+                current = lev->groundThemes()[size_t(paintTheme_)].name.c_str();
             ImGui::SetNextItemWidth(cardInner);
             if (ImGui::BeginCombo("##paintTheme", current)) {
-                for (const auto& t : previewScene_.themes) {
-                    char lbl[160]; std::snprintf(lbl, sizeof lbl, "%d  %s", t.slot, t.name.c_str());
-                    if (ImGui::Selectable(lbl, t.slot == paintTheme_)) paintTheme_ = t.slot;
-                }
+                if (lev)
+                    for (size_t i = 0; i < lev->groundThemes().size(); ++i) {
+                        const auto& g = lev->groundThemes()[i];
+                        if (g.name.empty()) continue;
+                        char lbl[160]; std::snprintf(lbl, sizeof lbl, "%zu  %s", i, g.name.c_str());
+                        if (ImGui::Selectable(lbl, int(i) == paintTheme_)) paintTheme_ = int(i);
+                    }
                 ImGui::EndCombo();
             }
             auto_.registerWidget("combo_paint_theme");
+            // any ENGINE_THEME of the game can join the palette (a free slot of the 256)
+            ImGui::SetNextItemWidth(cardInner);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+            ImGui::InputTextWithHint("##themesearch", "Add a ground theme from the game (GRASS, COBBLES, SNOW...)", themeSearch_, sizeof themeSearch_);
+            ImGui::PopStyleVar();
+            auto_.registerWidget("input_themesearch");
+            if (themeSearch_[0]) {
+                const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                ImGui::BeginChild("##themelist", ImVec2(cardInner, S(110)), ImGuiChildFlags_None);
+                ImGui::PopStyleColor();
+                ImGui::PushFont(fontSmall_);
+                int shown = 0;
+                if (!lib) ImGui::TextColored(theme::vec(theme::Faint), "ENGINE_THEME library not loaded yet");
+                else
+                    for (const auto& th : lib->themes()) {
+                        if (!th.decoded || !contains(th.name, themeSearch_)) continue;
+                        const int have = doc_.paletteSlotOf(th.name);
+                        char lbl[200]; std::snprintf(lbl, sizeof lbl, have >= 0 ? "%s  (slot %d)" : "%s", th.name.c_str(), have);
+                        if (ImGui::Selectable(lbl, have >= 0 && have == paintTheme_)) addPaintTheme(th.name);
+                        if (++shown >= 200) break;
+                    }
+                if (lib && !shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+                ImGui::PopFont();
+                ImGui::EndChild();
+            }
             ImGui::PushFont(fontSmall_);
-            theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material.");
+            theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material. A theme added from the game takes a free palette slot and is written with the next terrain save.");
             ImGui::PopFont();
         }
         char val[48];

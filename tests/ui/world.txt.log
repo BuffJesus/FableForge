@@ -36,24 +36,28 @@ ok   assert_state world_pending 1
 ok   world_revert
 ok   frames 1
 ok   assert_state world_pending 0
-ok   world_move TeleporterGreatwood 2048 8064
-ok   world_move OrchardFarm 2176 8064
+ok   world_move TeleporterGreatwood 2048 8032
+ok   world_move OrchardFarm 2112 8064
 ok   frames 2
 ok   assert_state world_pending 2
 ok   assert_widget btn_world_apply
 ..   click btn_world_apply
 ok   frames 2
 ok   assert_widget btn_world_apply_confirm
+ok   world_stitch 1 -1
+ok   assert_state world_stitch 1
 ..   world_apply
 ok   wait_world
 ok   frames 3
 ok   assert_state world_ok 1
 ok   assert_state world_pending 0
+ok   assert_log 1 stitched
 ok   world_select TeleporterGreatwood
 ok   frames 2
-ok   assert_state world_selected_pos 2048,8064
+ok   assert_state world_selected_pos 2048,8032
 ok   screenshot build/ui/w3_applied.png
 shot build/ui/w3_applied.png
+ok   world_stitch 0
 ok   world_move TeleporterGreatwood 3072 2880
 ok   world_move OrchardFarm 3200 3168
 ..   world_apply

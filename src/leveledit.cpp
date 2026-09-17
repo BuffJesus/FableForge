@@ -402,6 +402,29 @@ std::optional<float> Document::terrainHeight(float x, float y) const {
     return sampleHeight(*t, level_->cellsX(), level_->cellsY(), x, y);
 }
 
+int Document::paletteSlotOf(const std::string& name) const {
+    if (!level_) return -1;
+    const auto& pal = level_->groundThemes();
+    for (size_t i = 0; i < pal.size(); ++i) if (pal[i].name == name) return int(i);
+    return -1;
+}
+
+int Document::addGroundTheme(const std::string& name, uint32_t defIndex) {
+    if (!level_ || name.empty() || name.size() >= 128) return -1;
+    if (const int have = paletteSlotOf(name); have >= 0) return have;
+    const auto& pal = level_->groundThemes();
+    // slot 0 is "no theme" and slot 1 INVALID_THEME_STANDIN on every retail map
+    // (the debug editor's CMap::AddThemeDefIndexToPalette starts at 2; a theme
+    // put in slot 0 does not draw in-game -- tried)
+    for (size_t i = 2; i < pal.size(); ++i) {
+        if (!pal[i].name.empty()) continue;
+        level_->setGroundTheme(i, name, defIndex);
+        ++revision_;
+        return int(i);
+    }
+    return -1;
+}
+
 size_t Document::reseatThings(const TerrainState& before, float tolerance) {
     if (!hasTerrain() || stroke_) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
