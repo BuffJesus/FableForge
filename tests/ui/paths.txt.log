@@ -57,7 +57,7 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=163 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=157 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1

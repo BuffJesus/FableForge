@@ -447,12 +447,11 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
             newLevelX_ = newLevelInfo_.suggestedX; newLevelY_ = newLevelInfo_.suggestedY;
             newLevelRegion_ = newLevelInfo_.owningRegion;
             if (newLevelName_[0] == 0) std::snprintf(newLevelName_, sizeof newLevelName_, "%s_Copy", donor.c_str());
-            // blank levels reuse a 64x64 palette: this map's when it is 64x64, else the stock template
-            blankTemplate_ = (newLevelInfo_.width == 64 && newLevelInfo_.height == 64) ? donor : std::string("TeleporterGreatwood");
-            std::string perr;
-            if (!editor::templatePalette(saveRoot(), blankTemplate_, blankPalette_, perr)) { blankPalette_.clear(); pushLog("new level: " + perr, 1); }
-            if (blankTheme_ < 0 || blankTheme_ >= int(blankPalette_.size()) || blankPalette_[size_t(blankTheme_)].empty())
-                for (size_t i = 0; i < blankPalette_.size(); ++i) if (blankPalette_[i].rfind("GROUND_", 0) == 0) { blankTheme_ = int(i); break; }
+            // blank levels come in the retail sizes; the palette/header come from a retail map of
+            // that size -- this map when the size matches, else the first one of that size
+            std::string serr;
+            blankSizes_ = editor::retailMapSizes(saveRoot(), serr);
+            selectBlankSize(newLevelInfo_.width, newLevelInfo_.height);
         } else {
             pushLog("new level: " + err, 1);
         }
@@ -460,13 +459,25 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##newlevel", inner);
     theme::label("New level");
-    theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank 64x64"}, cardInner);
+    theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank"}, cardInner);
     auto_.registerWidget("seg_new_level_mode");
     ImGui::PushFont(fontSmall_);
     if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain re-baked for the new origin) into the world as a new level owned by an existing region. Cloned terrain currently draws WHITE in-game (an engine map-open issue); use Blank for a playable level. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
-    else theme::hint(("A flat 64x64 level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
+    else theme::hint(("A flat level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
     ImGui::PopFont();
     if (newLevelMode_ == 1) {
+        ImGui::SetNextItemWidth(cardInner);
+        char szLabel[64] = "(size)";
+        if (blankSize_ >= 0 && blankSize_ < int(blankSizes_.size())) std::snprintf(szLabel, sizeof szLabel, "%d x %d cells", blankSizes_[size_t(blankSize_)].width, blankSizes_[size_t(blankSize_)].height);
+        if (ImGui::BeginCombo("##blanksize", szLabel)) {
+            for (size_t i = 0; i < blankSizes_.size(); ++i) {
+                char lbl[96]; std::snprintf(lbl, sizeof lbl, "%d x %d   (%d retail map%s)", blankSizes_[i].width, blankSizes_[i].height, blankSizes_[i].count, blankSizes_[i].count == 1 ? "" : "s");
+                if (ImGui::Selectable(lbl, int(i) == blankSize_)) selectBlankSize(blankSizes_[i].width, blankSizes_[i].height);
+            }
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_blank_size");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Any size a retail map has (the LEV header and palette are taken from one of them).");
         ImGui::SetNextItemWidth(cardInner);
         const char* cur = (blankTheme_ >= 0 && blankTheme_ < int(blankPalette_.size())) ? blankPalette_[size_t(blankTheme_)].c_str() : "(ground theme)";
         if (ImGui::BeginCombo("##blanktheme", cur)) {
@@ -510,6 +521,23 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     ImGui::Dummy(ImVec2(0, S(8)));
 }
 
+void App::selectBlankSize(int w, int h) {
+    blankSize_ = -1;
+    for (size_t i = 0; i < blankSizes_.size(); ++i) if (blankSizes_[i].width == w && blankSizes_[i].height == h) blankSize_ = int(i);
+    if (blankSize_ < 0) for (size_t i = 0; i < blankSizes_.size(); ++i) if (blankSizes_[i].width == 64 && blankSizes_[i].height == 64) blankSize_ = int(i);
+    if (blankSize_ < 0 && !blankSizes_.empty()) blankSize_ = 0;
+    if (blankSize_ < 0) return;
+    const auto& sz = blankSizes_[size_t(blankSize_)];
+    const std::string donor = documentLoaded() ? doc_.mapName() : std::string();
+    blankTemplate_ = (newLevelInfo_.width == sz.width && newLevelInfo_.height == sz.height && !donor.empty()) ? donor : sz.templateLevel;
+    std::string perr;
+    if (!editor::templatePalette(saveRoot(), blankTemplate_, blankPalette_, perr)) { blankPalette_.clear(); pushLog("new level: " + perr, 1); }
+    if (blankTheme_ < 0 || blankTheme_ >= int(blankPalette_.size()) || blankPalette_[size_t(blankTheme_)].empty()) {
+        blankTheme_ = -1;
+        for (size_t i = 0; i < blankPalette_.size(); ++i) if (blankPalette_[i].rfind("GROUND_", 0) == 0) { blankTheme_ = int(i); break; }
+    }
+}
+
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
     const std::string root = saveRoot();
@@ -519,6 +547,7 @@ void App::startNewLevel() {
         req.hostRegion = newLevelRegion_;
         req.worldX = newLevelX_; req.worldY = newLevelY_;
         req.templateLevel = blankTemplate_;
+        if (blankSize_ >= 0 && blankSize_ < int(blankSizes_.size())) { req.width = blankSizes_[size_t(blankSize_)].width; req.height = blankSizes_[size_t(blankSize_)].height; }
         req.themeSlot = blankTheme_;
         req.groundHeight = blankHeight_;
         const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();

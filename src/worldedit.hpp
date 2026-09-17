@@ -38,17 +38,20 @@ struct NewLevelResult {
     std::vector<std::string> notes;
 };
 
-// A level authored from scratch: a flat (or gently varied) 64x64 heightfield
-// carrying one ground theme, every cell walkable, an empty .tng, and a terrain
-// chunk assembled by forgecore's buildTerrainChunk64 (no donor geometry -- the
-// path that is known to render in-game; cloned donor chunks currently draw
-// white). The LEV skeleton (palette, header) comes from `templateLevel`, a
-// retail 64x64 map; the ground theme is one of that palette's slots.
+// A level authored from scratch: a flat heightfield of any retail size (sides
+// multiples of 16, the shipped maps run 32x32 .. 160x256) carrying one ground
+// theme, every cell walkable, an empty .tng, and a terrain chunk assembled by
+// forgecore's builder (no donor geometry -- the path that is known to render
+// in-game; cloned donor chunks currently draw white). The LEV skeleton
+// (header, palette) comes from `templateLevel`, a retail map of the same size
+// ("" = the first retail map of that size); the ground theme is one of that
+// palette's slots.
 struct BlankLevelRequest {
     std::string name;
     std::string hostRegion;
     int worldX = 0, worldY = 0;
-    std::string templateLevel = "TeleporterGreatwood";   // retail 64x64 map whose palette/header are reused
+    int width = 64, height = 64;
+    std::string templateLevel;   // retail map of exactly width x height whose palette/header are reused; "" = auto
     int themeSlot = -1;          // palette slot of the ground theme (-1 = the template's most used)
     float groundHeight = 20.0f;  // flat height of the plane
     uint16_t backgroundRgb565 = 0x4C89;   // distant-LOD colour (a mid green)
@@ -56,6 +59,9 @@ struct BlankLevelRequest {
 
 // Palette of a retail level (slot -> ground theme name, empty = unused), for the picker.
 bool templatePalette(const std::filesystem::path& gameRoot, const std::string& level, std::vector<std::string>& names, std::string& error);
+// The retail map sizes in the world (BWD boxes), each with one template map of that size.
+struct MapSize { int width = 0, height = 0; std::string templateLevel; int count = 0; };
+std::vector<MapSize> retailMapSizes(const std::filesystem::path& gameRoot, std::string& error);
 
 bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelRequest& request,
                       const forge::terraintex::ThemeLibrary& library, NewLevelResult& out, std::string& error);

@@ -119,6 +119,11 @@ mouse via relative motion, keyboard):
   (bisecting a bad bake: splice donor/baked regions and test each in-game).
 * `crash_catcher.py`, `trace_lzo_calls.py`, `trace_bp_stack.py`,
   `gamewin.ps1` -- the pieces.
+* `--start-map M` / `--transition`: begin in map M (the save's) and jump to
+  the target map; `--transition` goes through ForgeFSE's
+  `GoToMapSlotRetailTransition` (a real region load) instead of a bare
+  entity teleport. The probe logs `region0`/`region` (`GetRegionName`)
+  before and after.
 * `--follow x,y` (with `--teleport`): the navigation probe. A creature is
   spawned at the map-local point and a second quest thread issues
   `GainControlAndMoveToPosition` to the hero's spot while the probe samples
@@ -186,19 +191,27 @@ The Edit panel's **New level** card adds a level to the world; a free
 owning region defaults to the selected map's, the name must be a bare stem.
 Two modes:
 
-* **Blank 64x64** (`AlbionAtlas blank-level <name> [--theme <slot|name>]
-  [--height h] [--template <64x64 map>] ...`): a level authored from scratch.
-  The LEV skeleton (header, palette) comes from a retail 64x64 template
-  (the selected map when it is 64x64, else TeleporterGreatwood) with the
-  palette rebased to this install's game.bin by name; every cell gets the
-  chosen ground theme, the flat height and walkable=1; the navigation tree is
-  generated fresh; the `.tng` is empty; and the terrain chunk is built by
-  forgecore's `buildTerrainChunk64` (the from-scratch builder ForgeTest64
+* **Blank** (`AlbionAtlas blank-level <name> [--size WxH] [--theme
+  <slot|name>] [--height h] [--template <map>] ...`): a level authored from
+  scratch in any size a retail map has (32x32 .. 160x256; the size combo
+  lists them). The LEV skeleton (header, palette) comes from a retail map of
+  that size (the selected map when the size matches, else the first one)
+  with the palette rebased to this install's game.bin by name; every cell
+  gets the chosen ground theme, the flat height and walkable=1; the
+  navigation tree is generated fresh; the `.tng` is empty; and the terrain
+  chunk is built by forgecore's from-scratch builder (the one ForgeTest64
   proved in-game) from the LEV heights + palette materials with a solid
-  distant-LOD colour. **In-game verified** (2026-09-16): the hero teleported
-  from Oakvale into `AtlasBlank` stands on a textured (GROUND_FOREST_LEAVES)
-  plane at the authored height, 25/25 ground samples match. Sculpt, paint,
-  place and deploy work on it like on any map.
+  distant-LOD colour. The builder's background LOD tree now follows the
+  shape every retail chunk uses (non-power-of-two sides split off their
+  largest power of two and carry no payload; power-of-two rectangles halve
+  down to 16x16 leaves), so the size limit is gone. **In-game verified**
+  (2026-09-16): a 64x64 `AtlasBlank` and a 128x224 `AtlasBig` both load,
+  render textured (GROUND_FOREST_LEAVES / GROUND_GRASS_NO_LOCAL_DETAIL) and
+  put the hero at the authored height (25/25 and 49/49 ground samples).
+  Sculpt, paint, place and deploy work on them like on any map. A level in
+  the hero's *starting* region loads with the game and must not be there
+  while the region is being played (AtlasBig in StartOakVale exited the game
+  at load; hosted by Greatwood it is fine).
 * **Copy of this map** (`AlbionAtlas new-level <donor> <name> ...`): clones
   the selected map's current `.lev`/`.tng` and re-bakes its terrain chunk for
   the new origin. It installs and loads (hero at the right heights, 25/25),
@@ -228,10 +241,25 @@ containers get one-time `.atlas-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
+### Minimap (open)
+
+The in-game minimap is per *region*: a level attached to a host region shows
+that region's `MiniMapGraphic` (a `MINIMAP_*` entry in textures.big). Retail
+`InitialiseMiniMapFileLoading_Region` (0x829d90) only consults
+`Data\Levels\Maps\Artist|Progmr\<Region>.tga` (the debug editor's
+`CRegionMinimap::CreateRegionMinimapTGAFile` output) for a region without a
+graphic, and a quick test with a TGA for a graphic-less filler region did
+not pick it up. The proven route (ForgeTest64) is a dedicated region -- which
+means repurposing an unused retail region slot <= 141, this install has
+none left (141 already hosts ForgeTest64) -- plus overwriting an unreferenced
+`MINIMAP_*` texture with a top-down bake. `--transition` in the harness
+(ForgeFSE `GoToMapSlotRetailTransition`) is how to test it: it performs a real
+region load (`GetRegionName` changes, the minimap re-initialises).
+
 ## Next
 
-1. Blank levels beyond 64x64 (the from-scratch builder is 32/64 only today)
-   and a baked distant-LOD texture instead of the solid colour.
+1. Minimap for new levels (above) and a baked distant-LOD texture instead of
+   the solid colour.
 2. The cloned-chunk white-out (engine map-open texture resolution) -- RE
    `CEngineLandscapeMap::OpenStaticMap` 0x00BDD0E0 against a working
    from-scratch chunk.

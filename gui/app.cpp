@@ -1549,8 +1549,8 @@ bool Automation::tick(App& app) {
         app.setNewLevel(name, x, y, region); app.startNewLevel(); note("..   " + line); ++pc_; }
     else if (cmd == "wait_new_level") { if (!app.newLevelBusy()) { note("ok   " + line); ++pc_; } }
     else if (cmd == "new_level_blank") {   // new_level_blank <theme slot> <height>: the next new_level makes a blank level
-        std::istringstream rs(rest); int theme = -1; float h = 20; rs >> theme >> h;
-        app.setNewLevelBlank(theme, h); note("ok   " + line); ++pc_; }
+        std::istringstream rs(rest); int theme = -1; float h = 20; int w = 0, hh = 0; rs >> theme >> h >> w >> hh;
+        app.setNewLevelBlank(theme, h, w, hh); note("ok   " + line); ++pc_; }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
     else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }

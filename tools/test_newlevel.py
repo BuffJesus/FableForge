@@ -72,6 +72,14 @@ def main() -> int:
     r = subprocess.run([cli, "layers", "AtlasCliBlank", "--install", scratch], capture_output=True, text=True)
     if "16 patches" not in r.stdout or "0 differ" not in r.stdout:
         print("blank level layers do not match its LEV:", r.stdout[:400]); ok = False
+    # a retail-sized one (128x224, the template is picked automatically) and a non-power-of-two one
+    for name, size, patches in (("AtlasCliBig", "128x224", "112 patches"), ("AtlasCliOdd", "96x96", "36 patches")):
+        r = subprocess.run([cli, "blank-level", name, "--install", scratch, "--size", size, "--height", "20"], capture_output=True, text=True)
+        if r.returncode != 0 or "authored from scratch" not in r.stdout:
+            print(f"CLI blank-level {size} failed:", r.stderr, r.stdout[-300:]); ok = False; continue
+        r = subprocess.run([cli, "layers", name, "--install", scratch], capture_output=True, text=True)
+        if patches not in r.stdout or "0 differ" not in r.stdout:
+            print(f"{size} blank level layers do not match its LEV:", r.stdout[:400]); ok = False
 
     # GUI: the card installs a second copy (suggested origin) and opens it
     script = os.path.join(ROOT, "build", "ui_newlevel.txt")

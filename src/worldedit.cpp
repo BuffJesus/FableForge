@@ -139,6 +139,25 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
+std::vector<MapSize> retailMapSizes(const fs::path& gameRoot, std::string& error) {
+    std::vector<MapSize> out;
+    try {
+        const auto bwd = forge::bwd::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.bwd");
+        const auto wld = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
+        for (const auto& m : bwd.maps()) {
+            if (!m.used) continue;
+            if (!wld.findMap("FinalAlbion\\" + m.scriptName + ".lev")) continue;   // a template must be placed in the WLD too
+            const int w = m.right - m.left, h = m.bottom - m.top;
+            if (w < 16 || h < 16 || w % 16 || h % 16) continue;
+            auto it = std::find_if(out.begin(), out.end(), [&](const MapSize& s) { return s.width == w && s.height == h; });
+            if (it == out.end()) out.push_back({w, h, m.scriptName, 1});
+            else ++it->count;
+        }
+        std::sort(out.begin(), out.end(), [](const MapSize& a, const MapSize& b) { return a.width * a.height != b.width * b.height ? a.width * a.height < b.width * b.height : a.width < b.width; });
+    } catch (const std::exception& e) { error = e.what(); }
+    return out;
+}
+
 bool templatePalette(const fs::path& gameRoot, const std::string& level, std::vector<std::string>& names, std::string& error) {
     try {
         const auto wad = forge::wad::Archive::open(gameRoot / "data" / "Levels" / "FinalAlbion.wad");
@@ -148,7 +167,6 @@ bool templatePalette(const fs::path& gameRoot, const std::string& level, std::ve
         const fs::path levTmp = tmp / (level + ".palette.lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         const auto lev = forge::lev::File::open(levTmp);
-        if (lev.width() != 64 || lev.height() != 64) { error = level + " is not 64x64"; return false; }
         names.assign(256, "");
         for (size_t i = 0; i < lev.groundThemes().size() && i < 256; ++i) names[i] = lev.groundThemes()[i].name;
         return true;
@@ -159,14 +177,24 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
                       const forge::terraintex::ThemeLibrary& library, NewLevelResult& out, std::string& error) {
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
+        if (req.width < 16 || req.height < 16 || req.width % 16 || req.height % 16) { error = "level sides must be multiples of 16"; return false; }
+        std::string templateLevel = req.templateLevel;
+        if (templateLevel.empty()) {
+            // a retail LEV of exactly this size supplies the header/palette skeleton
+            std::string serr;
+            for (const auto& s : retailMapSizes(gameRoot, serr))
+                if (s.width == req.width && s.height == req.height) { templateLevel = s.templateLevel; break; }
+            if (templateLevel.empty()) { error = "no retail map is " + std::to_string(req.width) + "x" + std::to_string(req.height) + " (a template LEV of that size is needed)"; return false; }
+        }
         const auto wad = forge::wad::Archive::open(levels / "FinalAlbion.wad");
-        const auto templateBytes = levelBytes(gameRoot, wad, req.templateLevel, ".lev");
+        const auto templateBytes = levelBytes(gameRoot, wad, templateLevel, ".lev");
         const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "newlevel";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (req.name + ".lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(templateBytes.data()), std::streamsize(templateBytes.size()));
         auto lev = forge::lev::File::open(levTmp);
-        if (lev.width() != 64 || lev.height() != 64) { error = "template " + req.templateLevel + " is " + std::to_string(lev.width()) + "x" + std::to_string(lev.height()) + "; the from-scratch terrain builder wants 64x64"; return false; }
+        if (lev.width() != req.width || lev.height() != req.height) { error = "template " + templateLevel + " is " + std::to_string(lev.width()) + "x" + std::to_string(lev.height()) + ", not " + std::to_string(req.width) + "x" + std::to_string(req.height); return false; }
+        out.notes.push_back("template " + templateLevel + " (" + std::to_string(lev.width()) + "x" + std::to_string(lev.height()) + ")");
 
         // ground theme: the requested slot, else the template's most used
         int slot = req.themeSlot;
@@ -227,7 +255,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
 
         forge::worldinstall::Request ir;
         ir.gameRoot = gameRoot;
-        ir.donorLevelName = req.templateLevel;   // supplies the WAD clone base and the STB name; every payload is ours
+        ir.donorLevelName = templateLevel;   // supplies the WAD clone base and the STB name; every payload is ours
         ir.newLevelName = req.name;
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         ir.hostRegion = req.hostRegion;

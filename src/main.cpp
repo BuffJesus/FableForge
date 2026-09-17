@@ -51,7 +51,7 @@ int usage() {
         "  AlbionAtlas info   <map|file.lev> [--install <fable-root>]\n"
         "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
         "  AlbionAtlas new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
-        "  AlbionAtlas blank-level <name> [--at x,y] [--region <host>] [--template <64x64 map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
+        "  AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
     if (cmd == "blank-level") {   // blank-level <name> [--at x,y] [--region <host>] [--template <64x64 map>] [--theme <slot|name>] [--height h] [--install <root>]
-        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas blank-level <name> [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
+        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
         albion::editor::BlankLevelRequest req;
         req.name = args[1];
         std::string installArg, at, theme;
@@ -226,11 +226,18 @@ int main(int argc, char** argv) {
             else if (args[i] == "--template" && i + 1 < args.size()) req.templateLevel = args[++i];
             else if (args[i] == "--theme" && i + 1 < args.size()) theme = args[++i];
             else if (args[i] == "--height" && i + 1 < args.size()) req.groundHeight = float(std::atof(args[++i].c_str()));
+            else if (args[i] == "--size" && i + 1 < args.size()) { if (std::sscanf(args[++i].c_str(), "%dx%d", &req.width, &req.height) != 2) { std::fprintf(stderr, "bad --size %s (WxH)\n", args[i].c_str()); return 2; } }
             else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         albion::editor::DonorInfo info; std::string err;
+        if (req.templateLevel.empty()) {
+            std::string serr;
+            for (const auto& s : albion::editor::retailMapSizes(install.root, serr))
+                if (s.width == req.width && s.height == req.height) { req.templateLevel = s.templateLevel; break; }
+            if (req.templateLevel.empty()) { std::fprintf(stderr, "no retail map is %dx%d; sizes available:", req.width, req.height); for (const auto& s : albion::editor::retailMapSizes(install.root, serr)) std::fprintf(stderr, " %dx%d", s.width, s.height); std::fprintf(stderr, "\n"); return 2; }
+        }
         if (!albion::editor::donorInfo(install.root, req.templateLevel, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         req.worldX = info.suggestedX; req.worldY = info.suggestedY;
         if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }

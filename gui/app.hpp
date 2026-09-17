@@ -255,7 +255,9 @@ private:
     editor::DonorInfo newLevelInfo_;
     bool newLevelInfoOk_ = false;
     int newLevelMode_ = 0;                 // 0 copy of this map, 1 blank 64x64
-    std::string blankTemplate_;            // 64x64 retail map whose palette/header a blank level reuses
+    std::string blankTemplate_;            // retail map (of the chosen size) whose palette/header a blank level reuses
+    std::vector<editor::MapSize> blankSizes_;
+    int blankSize_ = -1;                   // index into blankSizes_
     std::vector<std::string> blankPalette_;
     int blankTheme_ = -1;
     float blankHeight_ = 20.0f;
@@ -263,7 +265,8 @@ private:
     std::future<NewLevelJob> newLevelFuture_;
     void drawNewLevelCard(float pad, float inner, float cardInner);
     void startNewLevel();
-    void setNewLevelBlank(int theme, float height) { newLevelMode_ = 1; blankTheme_ = theme; blankHeight_ = height; }
+    void setNewLevelBlank(int theme, float height, int w = 0, int h = 0) { newLevelMode_ = 1; blankTheme_ = theme; blankHeight_ = height; if (w > 0) selectBlankSize(w, h); }
+    void selectBlankSize(int w, int h);
     void setNewLevel(const std::string& name, int x, int y, const std::string& region) { std::snprintf(newLevelName_, sizeof newLevelName_, "%s", name.c_str()); newLevelX_ = x; newLevelY_ = y; newLevelRegion_ = region; }
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;

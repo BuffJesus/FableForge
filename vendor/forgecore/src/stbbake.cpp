@@ -230,16 +230,27 @@ BackgroundTreeNode parseBackgroundTree(
     return parseNode(parseNode, rootHeaderOffset);
 }
 
+// Fixed tree shape for any map whose sides are multiples of 16 (the retail
+// sizes run 32x32 .. 160x256). Rules read off every retail chunk
+// (backgroundtreeinfo over 397 maps, 2026-09-16):
+//  * a rectangle with a non-power-of-two side carries no LOD payload
+//    (bands 8,8,8) and splits off the largest power of two below that side
+//    (96 -> 64+32, 160 -> 128+32, 224 -> 128+96 -> 128+64+32);
+//  * a power-of-two rectangle carries payload for bands firstNonSplit..last
+//    and halves its longer side until the 16x16 leaves; sides of 8192 cells
+//    and more only carry the coarsest band (retail 64x128/128x128: 1,7,7);
+//  * the 32/64 band tables below are the ones the engine already accepted
+//    in-game (ForgeTest64) and stay as they were.
 BackgroundTreeNode buildBackgroundTreeShape(
     const terrain::Heightfield& hf, int worldX, int worldY) {
     const int mapWidth = hf.width(), mapHeight = hf.height();
-    const bool supported = (mapWidth == 32 || mapWidth == 64) &&
-                           (mapHeight == 32 || mapHeight == 64);
-    if (!supported)
-        throw std::invalid_argument("background tree shape requires 32/64-cell dimensions");
+    if (mapWidth < 16 || mapHeight < 16 || mapWidth % 16 != 0 || mapHeight % 16 != 0)
+        throw std::invalid_argument("background tree shape requires sides that are multiples of 16");
     if (worldX < 0 || worldY < 0 || worldX + mapWidth > 0xffff ||
         worldY + mapHeight > 0xffff)
         throw std::invalid_argument("background tree world rectangle exceeds UWORD space");
+    auto isPow2 = [](int v) { return v > 0 && (v & (v - 1)) == 0; };
+    auto powBelow = [](int v) { int p = 1; while (p <= v / 2) p <<= 1; return p; };
 
     auto build = [&](auto&& self, int x, int y, int width, int height,
                      bool splitX, bool root) -> BackgroundTreeNode {
@@ -249,23 +260,6 @@ BackgroundTreeNode buildBackgroundTreeShape(
         h.mapY = static_cast<uint16_t>(y);
         h.width = static_cast<uint16_t>(width);
         h.height = static_cast<uint16_t>(height);
-        h.firstBand = 1;
-        const int area = width * height;
-        if (root) {
-            h.firstNonSplitBand = area == 4096 ? 5 : area >= 2048 ? 4 : 3;
-            h.lastBand = 7;
-        } else if (area == 256) {
-            h.firstNonSplitBand = 1; h.lastBand = 3;
-        } else if (area <= 1024) {
-            h.firstNonSplitBand = 3;
-            h.lastBand = area == 512 ? 3 : 4;
-        } else if (area == 2048) {
-            h.firstNonSplitBand = 4; h.lastBand = 5;
-        } else if (area == 4096) {
-            h.firstNonSplitBand = 5; h.lastBand = 7;
-        } else {
-            throw std::runtime_error("unsupported authored background node dimensions");
-        }
         float minZ = std::numeric_limits<float>::max();
         float maxZ = -std::numeric_limits<float>::max();
         for (int py = y; py <= y + height; ++py)
@@ -276,13 +270,48 @@ BackgroundTreeNode buildBackgroundTreeShape(
         h.aabb[0] = float(worldX + x); h.aabb[1] = float(worldY + y); h.aabb[2] = minZ;
         h.aabb[3] = float(worldX + x + width);
         h.aabb[4] = float(worldY + y + height); h.aabb[5] = maxZ;
+        const bool nonPowX = !isPow2(width), nonPowY = !isPow2(height);
+        if (nonPowX || nonPowY) {
+            // no payload; split the largest power of two off the non-power side
+            h.firstBand = h.firstNonSplitBand = h.lastBand = 8;
+            const bool cutX = nonPowX && (!nonPowY || width >= height);
+            if (cutX) {
+                const int cut = powBelow(width);
+                node.children.push_back(self(self, x, y, cut, height, false, false));
+                node.children.push_back(self(self, x + cut, y, width - cut, height, false, false));
+            } else {
+                const int cut = powBelow(height);
+                node.children.push_back(self(self, x, y, width, cut, true, false));
+                node.children.push_back(self(self, x, y + cut, width, height - cut, true, false));
+            }
+            return node;
+        }
+        h.firstBand = 1;
+        const int area = width * height;
+        if (area >= 8192) {
+            h.firstNonSplitBand = 7; h.lastBand = 7;
+        } else if (root) {
+            h.firstNonSplitBand = area == 4096 ? 5 : area >= 2048 ? 4 : 3;
+            h.lastBand = 7;
+        } else if (area == 256) {
+            h.firstNonSplitBand = 1; h.lastBand = 3;
+        } else if (area <= 1024) {
+            h.firstNonSplitBand = 3;
+            h.lastBand = area == 512 ? 3 : 4;
+        } else if (area == 2048) {
+            h.firstNonSplitBand = 4; h.lastBand = 5;
+        } else {   // 4096
+            h.firstNonSplitBand = 5; h.lastBand = 7;
+        }
         for (unsigned band = h.firstNonSplitBand; band <= h.lastBand; ++band) {
             BackgroundLodRecord lod;
             lod.optimizedBandRemap = static_cast<uint8_t>(band);
             h.lod.push_back(lod);
         }
         if (width > 16 || height > 16) {
-            if (splitX) {
+            // halve the longer side (a square alternates, starting as the caller asked)
+            const bool doX = width > height ? true : height > width ? false : splitX;
+            if (doX) {
                 const int half = width / 2;
                 node.children.push_back(self(self, x, y, half, height, false, false));
                 node.children.push_back(self(self, x + half, y, width - half, height, false, false));
@@ -633,8 +662,11 @@ BackgroundTreeLayout layoutBackgroundTree(
     };
     std::vector<PendingPayload> payloads;
     auto buildPayloads = [&](auto&& self, BackgroundTreeNode& node) -> void {
-        if (node.header.lod.empty())
-            throw std::runtime_error("background authored node has no LOD records");
+        if (node.header.lod.empty()) {
+            // a non-power-of-two rectangle (bands 8,8,8): structure only, like retail
+            for (auto& child : node.children) self(self, child);
+            return;
+        }
         const auto body = buildBackgroundPatchRect(
             hf, node.header.mapX, node.header.mapY,
             node.header.width, node.header.height,
@@ -2223,9 +2255,8 @@ TerrainChunk64Result buildTerrainChunk64(
         throw std::invalid_argument(
             "terrain chunk currently requires FinalAlbion_RT.stb bank alignment 2048");
     const int mapWidth = hf.width(), mapHeight = hf.height();
-    if ((mapWidth != 32 && mapWidth != 64) ||
-        (mapHeight != 32 && mapHeight != 64))
-        throw std::invalid_argument("terrain chunk requires shipped 32/64-cell dimensions");
+    if (mapWidth < 16 || mapHeight < 16 || mapWidth % 16 != 0 || mapHeight % 16 != 0)
+        throw std::invalid_argument("terrain chunk requires sides that are multiples of 16");
     if (authorFoliage && (mapWidth != 64 || mapHeight != 64))
         throw std::invalid_argument(
             "authored local detail is not yet proven for non-64x64 terrain");
@@ -2248,11 +2279,17 @@ TerrainChunk64Result buildTerrainChunk64(
             ? buildLayeredForeground(hf, worldX, worldY, foregroundMaterial,
                                      slopeMaterial, heightMaterial)
             : buildSingleMaterialForeground(hf, worldX, worldY, foregroundMaterial);
-    const auto foregroundLayout = layoutForegroundFrames(foreground, 0x1000, alignment);
+    // 36 bytes per 16x16 patch: a 64x64 map's directory fits the first page,
+    // a 128x224 one (112 patches) runs past it like retail's does, so the
+    // frames start on the next aligned boundary after the directory
+    const size_t directoryBytes = (foreground.size() + 1) * 0x24;
+    size_t frameStart = 0x1000;
+    while (out.foregroundDirectoryOffset + directoryBytes > frameStart) frameStart += 0x1000;
+    const auto foregroundLayout = layoutForegroundFrames(foreground, frameStart, alignment);
     const auto directory = generateQuadDir(foregroundLayout.entries);
-    if (out.foregroundDirectoryOffset + directory.size() > 0x1000)
-        throw std::runtime_error("foreground directory exceeds reserved control page");
-    out.chunk.resize(0x1000, 0);
+    if (out.foregroundDirectoryOffset + directory.size() > frameStart)
+        throw std::runtime_error("foreground directory exceeds its reserved pages");
+    out.chunk.resize(frameStart, 0);
     std::copy(palette.begin(), palette.end(), out.chunk.begin() + paletteOffset);
     std::copy(directory.begin(), directory.end(),
               out.chunk.begin() + out.foregroundDirectoryOffset);
@@ -3225,10 +3262,10 @@ PatchBody buildBackgroundPatchRect(const terrain::Heightfield& hf,
         patchX + patchWidth > hf.width() || patchY + patchHeight > hf.height() ||
         worldX + patchX < 0 || worldY + patchY < 0 ||
         worldX + patchX + patchWidth > 0xffff ||
-        worldY + patchY + patchHeight > 0xffff ||
-        int64_t(patchWidth) * patchHeight * 2 > 0xffff ||
-        int64_t(patchWidth + 1) * (patchHeight + 1) > 0xffff)
+        worldY + patchY + patchHeight > 0xffff)
         throw std::invalid_argument("buildBackgroundPatchRect: invalid patch bounds/counts");
+    // the vertex/index counts that must fit u16 are those of the decimated
+    // (<=16x16) grid below, not the world extent: retail carries 128x256 nodes
     PatchBody pb;
     pb.valid = true;
     pb.header.pw = static_cast<uint16_t>(patchWidth);

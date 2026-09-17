@@ -46,6 +46,7 @@ PROBE_LUA = r'''-- Albion Atlas in-game terrain probe (installed by tools/ingame
 -- removed after the run). Logs the engine's ground height at a grid of world points.
 ATLAS_TARGET_MAP = "%(map)s"
 ATLAS_START_MAP = "%(start_map)s"   -- where the hero begins; the teleport (if any) takes him to the target map
+ATLAS_TRANSITION_SLOT = %(transition_slot)d   -- >0: use ForgeFSE's GoToMapSlotRetailTransition (a real region load) instead of a bare teleport
 ATLAS_POINTS = { %(points)s }
 ATLAS_TELEPORT = %(teleport)s   -- {x, y} world point to stand the hero on for the screenshot, or nil
 ATLAS_THINGS = { %(things)s }   -- ScriptNames whose world position is reported
@@ -72,6 +73,7 @@ function AtlasProbe(questObject)
     if not Q:NewScriptFrame() then return end
     local pok, p = pcall(function() return hero:GetPos() end)
     if pok and p then Q:Log(string.format("ATLAS_PROBE|hero|%%.3f|%%.3f|%%.3f", p.x or 0, p.y or 0, p.z or 0)) end
+    do local rok, rname = pcall(function() return Q:GetRegionName() end); Q:Log("ATLAS_PROBE|region0|" .. tostring(rok) .. "|" .. tostring(rname)) end
     local tz = 0
     if ATLAS_TELEPORT then
         -- wait until the opening scenes are over (the harness keeps pressing Esc) so the screenshot shows the spot
@@ -84,8 +86,14 @@ function AtlasProbe(questObject)
         end
         Q:Log("ATLAS_PROBE|control")
         pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
-        local tok, terr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}, 0.0) end)
-        Q:Log("ATLAS_PROBE|teleport|" .. tostring(tok) .. "|" .. tostring(terr))
+        local tok, terr
+        if ATLAS_TRANSITION_SLOT > 0 then
+            tok, terr = pcall(function() Q:GoToMapSlotRetailTransition(ATLAS_TRANSITION_SLOT, ATLAS_TELEPORT[1], ATLAS_TELEPORT[2], tz + 0.5) end)
+            Q:Log("ATLAS_PROBE|transition|" .. ATLAS_TRANSITION_SLOT .. "|" .. tostring(tok) .. "|" .. tostring(terr))
+        else
+            tok, terr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}, 0.0) end)
+            Q:Log("ATLAS_PROBE|teleport|" .. tostring(tok) .. "|" .. tostring(terr))
+        end
         -- a teleport into another map streams that map in: wait for the hero to report it
         for i = 1, 60 do
             Q:Pause(1.0)
@@ -100,6 +108,8 @@ function AtlasProbe(questObject)
         pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
         local p2ok, p2 = pcall(function() return hero:GetPos() end)
         if p2ok and p2 then Q:Log(string.format("ATLAS_PROBE|hero2|%%.3f|%%.3f|%%.3f", p2.x or 0, p2.y or 0, p2.z or 0)) end
+        local rok, rname = pcall(function() return Q:GetRegionName() end)
+        Q:Log("ATLAS_PROBE|region|" .. tostring(rok) .. "|" .. tostring(rname))
     end
     for _, pt in ipairs(ATLAS_POINTS) do
         local ok, z = pcall(function() return Q:GetGroundHeightAt(pt[1], pt[2]) end)
@@ -175,6 +185,11 @@ def kill_game() -> None:
 
 
 def wld_placement(root: Path, map_name: str) -> tuple[int, int]:
+    return wld_map(root, map_name)[:2]
+
+
+def wld_map(root: Path, map_name: str) -> tuple[int, int, int]:
+    """(MapX, MapY, 1-based slot) of a map from FinalAlbion.wld."""
     text = (root / "data" / "Levels" / "FinalAlbion.wld").read_text(errors="ignore")
     for block in text.split("NewMap"):
         m = re.search(r'LevelName\s+"FinalAlbion\\%s\.lev"' % re.escape(map_name), block, re.I)
@@ -182,8 +197,9 @@ def wld_placement(root: Path, map_name: str) -> tuple[int, int]:
             continue
         mx = re.search(r"MapX\s+(-?\d+)", block)
         my = re.search(r"MapY\s+(-?\d+)", block)
+        slot = re.match(r"\s*(\d+)\s*;", block)
         if mx and my:
-            return int(mx.group(1)), int(my.group(1))
+            return int(mx.group(1)), int(my.group(1)), int(slot.group(1)) if slot else 0
     raise SystemExit(f"{map_name} not placed in FinalAlbion.wld")
 
 
@@ -230,6 +246,7 @@ def main() -> int:
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
     ap.add_argument("--things", default="", help="comma-separated ScriptNames: the probe reports their in-game positions, compared with the loose .tng")
+    ap.add_argument("--transition", action="store_true", help="with --teleport: go through ForgeFSE's GoToMapSlotRetailTransition (a real region load: minimap, region state) instead of a bare entity teleport")
     ap.add_argument("--start-map", default="", help="map the hero starts in (default: --map); with --teleport the probe jumps to the target map and waits for it to stream in")
     ap.add_argument("--follow", default="", help="map-local x,y: spawn a creature there after the teleport and make it follow the hero (navigation probe; needs --teleport)")
     ap.add_argument("--follow-def", default="CREATURE_BOWERSTONE_POSH_VILLAGER_FEMALE_UNEMPLOYED")
@@ -264,7 +281,7 @@ def main() -> int:
         print("Fable.exe is already running; close it first", file=sys.stderr)
         return 2
 
-    mx, my = wld_placement(root, a.map)
+    mx, my, map_slot = wld_map(root, a.map)
     cx, cy = (float(v) for v in a.centre.split(","))
     pts: list[tuple[float, float]] = []
     r, s = a.radius, a.step
@@ -284,7 +301,7 @@ def main() -> int:
     log_backup = log.read_bytes() if log.exists() else b""
     thing_names = [t for t in a.things.split(",") if t]
     follow_pt = tuple(float(v) for v in a.follow.split(",")) if a.follow else None
-    probe.write_text(PROBE_LUA % {"map": a.map, "start_map": a.start_map or a.map, "points": ", ".join("{%g, %g}" % p for p in world_pts),
+    probe.write_text(PROBE_LUA % {"map": a.map, "start_map": a.start_map or a.map, "transition_slot": map_slot if a.transition else 0, "points": ", ".join("{%g, %g}" % p for p in world_pts),
                                   "teleport": ("{%g, %g}" % (mx + cx, my + cy)) if a.teleport else "nil",
                                   "things": ", ".join('"%s"' % t for t in thing_names),
                                   "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",
@@ -368,6 +385,8 @@ def main() -> int:
                 ps("-Action", "click", "-X", "512", "-Y", "600")
                 last_esc = time.time()
             time.sleep(2)
+        if a.transition:
+            time.sleep(12)   # let the region state machine finish (loading screen, minimap init) before the shot
         ps("-Action", "capture", "-Output", str(shots / "04_after_probe.png"))
         text = log.read_text(errors="ignore") if log.exists() else ""
         (shots / "fse_probe.log").write_text("\n".join(l for l in text.splitlines() if "ATLAS_PROBE" in l or "GetGroundHeightAt" in l), encoding="utf-8")
