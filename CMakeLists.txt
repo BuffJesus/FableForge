@@ -28,7 +28,7 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}")
-add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/worldedit.cpp)
+add_library(albionatlas STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp)
 target_include_directories(albionatlas PUBLIC src)
 target_link_libraries(albionatlas PUBLIC forgecore_slice)
 
@@ -75,3 +75,6 @@ if(WIN32)
     target_link_options(AlbionAtlasGUI PRIVATE -municode -mwindows -static -static-libgcc -static-libstdc++)
   endif()
 endif()
+
+add_executable(probe_trailer EXCLUDE_FROM_ALL tools/probe_trailer.cpp)
+target_link_libraries(probe_trailer PRIVATE albionatlas)

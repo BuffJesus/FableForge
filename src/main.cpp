@@ -18,6 +18,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -27,6 +28,7 @@
 #include "forge/meshpreview.hpp"
 #include "forge/lev.hpp"
 #include "forge/lzo.hpp"
+#include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
 #include "forge/wad.hpp"
@@ -36,6 +38,9 @@
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
+#include "overworld.hpp"
+#include "stbrelocate.hpp"
+#include "forge/stbinfo.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -54,6 +59,9 @@ int usage() {
         "  AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
         "      new-level / blank-level: [--own-region [<filler region>]] [--merge-into <filler>] [--display <name>] [--no-minimap]\n"
         "      (own region = take over a retail filler slot under the 141-region cap, with a baked MINIMAP_<NAME> texture)\n"
+        "  AlbionAtlas world  [--install <root>]                      every map's box, region and baked origin\n"
+        "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
+        "      (relocate maps: WLD/BWD placement + STB chunks re-baked for the new origins, touching neighbours too)\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -304,6 +312,40 @@ int main(int argc, char** argv) {
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
         return 0;
     }
+    if (cmd == "world" || cmd == "world-move") {   // world: list the layout; world-move <map> <x> <y> [...]: relocate maps
+        std::string installArg;
+        std::vector<albion::editor::MapMove> moves;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (cmd == "world-move" && i + 2 < args.size()) { moves.push_back({args[i], std::atoi(args[i + 1].c_str()), std::atoi(args[i + 2].c_str())}); i += 2; }
+            else { std::fprintf(stderr, "usage: AlbionAtlas world-move <map> <x> <y> [...] [--install <root>]\n"); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::WorldLayout layout; std::string err;
+        if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (cmd == "world") {
+            std::printf("%zu maps, %zu regions, world box (%d,%d)-(%d,%d)\n", layout.maps.size(), layout.regions.size(), layout.minX, layout.minY, layout.maxX, layout.maxY);
+            for (const auto& m : layout.maps) {
+                std::string baked = m.inStb ? "stb" : "-";
+                if (m.inStb && (m.stbX != m.x || m.stbY != m.y)) baked += " (baked at " + std::to_string(m.stbX) + "," + std::to_string(m.stbY) + ")";
+                std::printf("%4d  %-40s %5d %5d  %4dx%-4d %-28s %s\n", m.slot, m.name.c_str(), m.x, m.y, m.w, m.h, m.region.c_str(), baked.c_str());
+            }
+            return 0;
+        }
+        if (moves.empty()) { std::fprintf(stderr, "usage: AlbionAtlas world-move <map> <x> <y> [...] [--install <root>]\n"); return 2; }
+        for (const auto& mv : moves) {
+            std::string why;
+            if (!albion::editor::checkMove(layout, moves, mv, why)) { std::fprintf(stderr, "error: %s: %s\n", mv.name.c_str(), why.c_str()); return 1; }
+            const auto* b = layout.find(mv.name);
+            std::printf("%s: (%d,%d) -> (%d,%d)\n", b->name.c_str(), b->x, b->y, mv.x, mv.y);
+        }
+        std::vector<std::string> notes;
+        if (!albion::editor::applyMoves(install.root, moves, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+        std::printf("moved %zu map(s)\n", moves.size());
+        return 0;
+    }
     if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas heights <map.lev> <x,y> ...\n"); return 2; }
         try {
@@ -348,6 +390,178 @@ int main(int argc, char** argv) {
             }
             std::ofstream(args[2], std::ios::binary).write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size()));
             std::printf("wrote %s (%zu bytes, %zu frames re-encoded, %zu kept)\n", args[2].c_str(), out.size(), redone, kept);
+            return 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "chunk-extract") {   // diagnostic: chunk-extract <map> <out.bin> [--install <root>]: the map's terrain chunk from FinalAlbion_RT.stb (+ <out.bin>.record)
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-extract <map> <out.bin> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        try {
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            const std::string want = lower(args[1]) + ".lev";
+            for (const auto& m : archive.staticMaps()) {
+                if (lower(fs::path(m.levelName).filename().string()) != want) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                uint32_t bankIndex = 0; std::memcpy(&bankIndex, record.data() + 4, 4);
+                for (const auto& e : archive.entries()) if (e.id == bankIndex) {
+                    const auto chunk = archive.read(e);
+                    std::ofstream(args[2], std::ios::binary).write(reinterpret_cast<const char*>(chunk.data()), std::streamsize(chunk.size()));
+                    std::ofstream(args[2] + ".record", std::ios::binary).write(reinterpret_cast<const char*>(record.data()), std::streamsize(record.size()));
+                    std::printf("wrote %s (%zu bytes, entry %s) + .record (%zu bytes)\n", args[2].c_str(), chunk.size(), e.name.c_str(), record.size());
+                    return 0;
+                }
+            }
+            std::fprintf(stderr, "%s has no static map\n", args[1].c_str()); return 1;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "chunk-audit") {   // diagnostic: chunk-audit <map>|--all [--install <root>]: every world coordinate in the chunk must lie in the map's box
+        std::string installArg, target;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else target = args[i];
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid || target.empty()) { std::fprintf(stderr, "usage: AlbionAtlas chunk-audit <map>|--all [--install <root>]\n"); return 2; }
+        try {
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            int maps = 0, bad = 0;
+            for (const auto& m : archive.staticMaps()) {
+                const std::string stem = fs::path(m.levelName).stem().string();
+                if (target != "--all" && lower(stem) != lower(target)) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                const auto info = forge::stbinfo::readInfoBlock(record.data());
+                const forge::stb::Entry* entry = nullptr;
+                for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+                if (!entry) { std::printf("%-36s no bank entry\n", stem.c_str()); continue; }
+                const auto chunk = archive.read(*entry);
+                albion::editor::RelocateReport rep; std::string err;
+                const bool ok = albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, rep, err);
+                ++maps;
+                if (!ok || !rep.issues.empty()) ++bad;
+                std::printf("%-36s %s fg %d patches %d groups %d tree %d detail %d/%d blocks %d unclassified %d%s%s\n", stem.c_str(), ok ? "ok " : "ERR",
+                            rep.foregroundFrames, rep.patchFrames, rep.groupFrames, rep.treeNodes, rep.detailNodes, rep.detailGroups, rep.rangeBlocks, rep.unclassifiedFrames,
+                            ok ? "" : (" : " + err).c_str(), rep.issues.empty() ? "" : (" issues " + std::to_string(rep.issues.size())).c_str());
+                for (size_t i = 0; i < rep.issues.size() && i < (target == "--all" ? 3u : 40u); ++i) std::printf("    %s\n", rep.issues[i].c_str());
+                for (const auto& n : rep.notes) std::printf("    note: %s\n", n.c_str());
+            }
+            std::printf("%d map(s), %d with findings\n", maps, bad);
+            return bad ? 1 : 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "chunk-relocate") {   // diagnostic: chunk-relocate <map> <dx> <dy> [--install <root>]: translate + audit at the new box, then translate back and compare
+        if (args.size() < 4) { std::fprintf(stderr, "usage: AlbionAtlas chunk-relocate <map> <dx> <dy> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 4; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const int dx = std::atoi(args[2].c_str()), dy = std::atoi(args[3].c_str());
+        try {
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            for (const auto& m : archive.staticMaps()) {
+                if (lower(fs::path(m.levelName).stem().string()) != lower(args[1])) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                const auto info = forge::stbinfo::readInfoBlock(record.data());
+                const forge::stb::Entry* entry = nullptr;
+                for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+                if (!entry) { std::fprintf(stderr, "no bank entry\n"); return 1; }
+                const auto chunk = archive.read(*entry);
+                auto moved = chunk; auto movedRecord = record;
+                albion::editor::RelocateReport rep; std::string err;
+                const auto t0 = std::chrono::steady_clock::now();
+                if (!albion::editor::relocateChunk(moved, movedRecord, dx, dy, rep, err)) { std::fprintf(stderr, "relocate failed: %s\n", err.c_str()); return 1; }
+                const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                std::printf("relocated by (%d,%d) in %.1fs: fg %d patches %d groups %d tree %d detail %d/%d range blocks %d (%d resized)\n", dx, dy, secs,
+                            rep.foregroundFrames, rep.patchFrames, rep.groupFrames, rep.treeNodes, rep.detailNodes, rep.detailGroups, rep.rangeBlocks, rep.rangeBlocksResized);
+                albion::editor::RelocateReport audit;
+                if (!albion::editor::auditChunk(moved, movedRecord, info.worldX + dx, info.worldY + dy, info.mapWidth, info.mapHeight, audit, err)) { std::fprintf(stderr, "audit failed: %s\n", err.c_str()); return 1; }
+                std::printf("audit at the new box: %zu issue(s)\n", audit.issues.size());
+                for (size_t i = 0; i < audit.issues.size() && i < 10; ++i) std::printf("    %s\n", audit.issues[i].c_str());
+                auto back = moved; auto backRecord = movedRecord;
+                albion::editor::RelocateReport rep2;
+                if (!albion::editor::relocateChunk(back, backRecord, -dx, -dy, rep2, err)) { std::fprintf(stderr, "relocate back failed: %s\n", err.c_str()); return 1; }
+                // compare the DATA, not the bytes: range blocks re-encode to
+                // slightly different sizes and the foliage section is re-laid,
+                // so the oracle is the audit walk's digest of every decoded
+                // record/body (foreground, patches, tree, foliage) in walk order
+                albion::editor::RelocateReport da, db;
+                if (!albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, da, err)) { std::fprintf(stderr, "audit failed: %s\n", err.c_str()); return 1; }
+                if (!albion::editor::auditChunk(back, backRecord, info.worldX, info.worldY, info.mapWidth, info.mapHeight, db, err)) { std::fprintf(stderr, "audit of the round-tripped chunk failed: %s\n", err.c_str()); return 1; }
+                const bool counts = da.foregroundFrames == db.foregroundFrames && da.patchFrames == db.patchFrames && da.groupFrames == db.groupFrames && da.treeNodes == db.treeNodes && da.detailNodes == db.detailNodes && da.detailGroups == db.detailGroups;
+                // the translation itself: every coordinate site of the moved chunk
+                // must equal the original's + the shift (u16 exactly; floats to
+                // within their precision), in the same walk order
+                size_t bad = 0, checked = 0;
+                if (audit.sites.size() != da.sites.size()) { std::printf("    site count differs: %zu vs %zu\n", da.sites.size(), audit.sites.size()); ++bad; }
+                else for (size_t i = 0; i < da.sites.size(); ++i) {
+                    const float d = da.siteIsX[i] ? float(dx) : float(dy);
+                    const float want = da.sites[i] + d, got = audit.sites[i];
+                    const float tol = std::max(0.002f, std::fabs(want) * 1e-6f * 4);
+                    ++checked;
+                    if (std::fabs(want - got) > tol) { if (++bad <= 5) std::printf("    site %zu: %g + %g = %g, chunk has %g\n", i, da.sites[i], d, want, got); }
+                }
+                std::printf("translation: %zu coordinate(s) checked, %zu wrong; round-trip digest %s; counts %s; chunk %zu -> %zu bytes; back-audit issues %zu\n",
+                            checked, bad, da.digest == db.digest ? "identical" : "differs (float precision at a power-of-two boundary is expected)", counts ? "match" : "DIFFER", chunk.size(), moved.size(), db.issues.size());
+                return bad || !counts || !audit.issues.empty() || !db.issues.empty() ? 1 : 0;
+            }
+            std::fprintf(stderr, "%s has no static map\n", args[1].c_str()); return 1;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "chunk-dump") {   // diagnostic: chunk-dump <chunk.bin> <outdir>: every segment as a file (frames decoded), plus segments.txt
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-dump <chunk.bin> <outdir>\n"); return 2; }
+        try {
+            std::ifstream cf(args[1], std::ios::binary);
+            std::vector<uint8_t> raw((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+            const auto chunk = forge::stbbake::parseChunk(raw);
+            fs::create_directories(args[2]);
+            std::ofstream index(fs::path(args[2]) / "segments.txt");
+            size_t frame = 0;
+            for (size_t si = 0; si < chunk.segments.size(); ++si) {
+                const auto& s = chunk.segments[si];
+                char name[64];
+                if (s.kind == forge::stbbake::SegKind::Frame) {
+                    const auto body = forge::stbbake::decodeFrame(chunk, frame);
+                    std::snprintf(name, sizeof name, "%03zu_frame%03zu.bin", si, frame);
+                    std::ofstream(fs::path(args[2]) / name, std::ios::binary).write(reinterpret_cast<const char*>(body.data()), std::streamsize(body.size()));
+                    index << name << " raw " << s.start << ".." << s.end << " decoded " << body.size();
+                    try {
+                        const auto h = forge::stbbake::parsePatchHeader(body);
+                        if (h.valid || h.isWaterOnly) {
+                            const auto pb = forge::stbbake::parsePatchBody(body);
+                            index << " patch " << h.pw << "x" << h.ph << " at " << h.coord0 << "," << h.coord1 << (h.isWaterOnly ? " water-only" : "")
+                                  << " tex " << pb.texture.size() << " vb " << pb.vbBlock.size() << " ib " << pb.ibBlock.size() << " trailer " << pb.trailer.size();
+                            std::ofstream(fs::path(args[2]) / (std::string(name) + ".trailer"), std::ios::binary).write(reinterpret_cast<const char*>(pb.trailer.data()), std::streamsize(pb.trailer.size()));
+                        }
+                    } catch (...) {}
+                    index << "\n";
+                    ++frame;
+                } else if (s.kind == forge::stbbake::SegKind::Hdr) {
+                    std::snprintf(name, sizeof name, "%03zu_hdr.bin", si);
+                    std::ofstream(fs::path(args[2]) / name, std::ios::binary).write(reinterpret_cast<const char*>(raw.data() + s.start), std::streamsize(s.end - s.start));
+                    index << name << " raw " << s.start << ".." << s.end << "\n";
+                } else index << "pad raw " << s.start << ".." << s.end << "\n";
+            }
+            std::printf("%zu segments, %zu frames -> %s\n", chunk.segments.size(), frame, args[2].c_str());
+            // the background-LOD tree with its file-block references (needs the record next to the chunk)
+            if (fs::exists(args[1] + ".record")) {
+                std::ifstream rf(args[1] + ".record", std::ios::binary);
+                std::vector<uint8_t> record((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
+                uint32_t rootPos = 0; std::memcpy(&rootPos, record.data() + 0x68, 4);
+                std::ofstream tree(fs::path(args[2]) / "tree.txt");
+                std::function<void(const forge::stbbake::BackgroundTreeNode&, int)> dump = [&](const forge::stbbake::BackgroundTreeNode& n, int depth) {
+                    const auto& h = n.header;
+                    tree << std::string(size_t(depth) * 2, ' ') << "node @" << n.headerOffset << " map " << h.mapX << "," << h.mapY << " " << h.width << "x" << h.height
+                         << " bands " << int(h.firstBand) << "/" << int(h.firstNonSplitBand) << "/" << int(h.lastBand)
+                         << " fb " << h.fileBlockPos << "+" << h.fileBlockSize << " @" << h.offsetIntoFileBlock
+                         << " aabb " << h.aabb[0] << "," << h.aabb[1] << ".." << h.aabb[3] << "," << h.aabb[4] << "\n";
+                    for (const auto& l : h.lod)
+                        tree << std::string(size_t(depth) * 2 + 4, ' ') << "lod remap " << int(l.optimizedBandRemap) << " fb " << l.fileBlockPos << "+" << l.fileBlockSize << " @" << l.offsetIntoFileBlock << " -> frame at " << (l.fileBlockPos + l.offsetIntoFileBlock) << "\n";
+                    for (const auto& c : n.children) dump(c, depth + 1);
+                };
+                dump(forge::stbbake::parseBackgroundTree(raw, rootPos), 0);
+            }
             return 0;
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }

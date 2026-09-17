@@ -371,6 +371,7 @@ def main() -> int:
         deadline = time.time() + a.timeout
         done = False
         last_esc = 0.0
+        stalled_len, stalled_since = -1, time.time()
         while time.time() < deadline:
             text = log.read_text(errors="ignore") if log.exists() else ""
             if "ATLAS_PROBE|done" in text or "ATLAS_PROBE|error" in text:
@@ -384,6 +385,15 @@ def main() -> int:
                 time.sleep(1.5)
                 ps("-Action", "click", "-X", "512", "-Y", "600")
                 last_esc = time.time()
+            elif a.teleport and "ATLAS_PROBE|control" in text:
+                # after the transition a tutorial box ("You have committed your first bad
+                # deed" ... Next) pauses the script thread: when the probe log stops
+                # growing, click the box's Next button
+                if len(text) != stalled_len:
+                    stalled_len, stalled_since = len(text), time.time()
+                elif time.time() - stalled_since > 10 and time.time() - last_esc > 6:
+                    ps("-Action", "click", "-X", "660", "-Y", "398")
+                    last_esc = time.time()
             time.sleep(2)
         if a.transition:
             time.sleep(12)   # let the region state machine finish (loading screen, minimap init) before the shot
