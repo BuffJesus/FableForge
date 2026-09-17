@@ -208,6 +208,31 @@ def ps(*args: str, timeout: int = 60) -> str:
     return (r.stdout or "") + (r.stderr or "")
 
 
+def screen_diff(a: Path, b: Path) -> float:
+    """Mean absolute pixel difference (0..255) between two captures; 0 when PIL is missing."""
+    try:
+        from PIL import Image, ImageChops, ImageStat
+        ia, ib = Image.open(a).convert("L"), Image.open(b).convert("L")
+        if ia.size != ib.size:
+            ib = ib.resize(ia.size)
+        return float(ImageStat.Stat(ImageChops.difference(ia, ib)).mean[0])
+    except Exception:
+        return 0.0
+
+
+def click_until_change(x: int, y: int, before: Path, shots: Path, tag: str, wait: float = 4.0, attempts: int = 3) -> None:
+    """The DirectInput frontend drops a click now and then: click, wait, and click
+    again while the screen still looks like `before`."""
+    for i in range(attempts):
+        ps("-Action", "click", "-X", str(x), "-Y", str(y))
+        time.sleep(wait)
+        after = shots / f"{tag}_try{i}.png"
+        ps("-Action", "capture", "-Output", str(after))
+        if screen_diff(before, after) > 6.0:
+            return
+        print(f"  click ({x},{y}) did not change the screen (try {i + 1}); retrying", flush=True)
+
+
 def game_running() -> bool:
     r = subprocess.run(["powershell", "-NoProfile", "-Command", "(Get-Process Fable -ErrorAction SilentlyContinue) -ne $null"],
                        capture_output=True, text=True)
@@ -398,10 +423,10 @@ def main() -> int:
             ps("-Action", "click", "-X", "512", "-Y", "254")  # profile '0atlas' (first row)
             time.sleep(4)
             ps("-Action", "capture", "-Output", str(shots / "02_menu.png"))
-            ps("-Action", "click", "-X", "512", "-Y", "337")  # '0atlas - Continue Game'
-            time.sleep(4)
-            ps("-Action", "click", "-X", "207", "-Y", "161")  # AutoSave
-            time.sleep(35)                                   # load + opening movie
+            click_until_change(512, 337, shots / "02_menu.png", shots, "continue")   # '0atlas - Continue Game'
+            ps("-Action", "capture", "-Output", str(shots / "02b_saves.png"))
+            click_until_change(207, 161, shots / "02b_saves.png", shots, "autosave")  # AutoSave
+            time.sleep(31)                                   # load + opening movie
             ps("-Action", "key", "-Keys", "ESC")             # skip movie / scene
             time.sleep(6)
             ps("-Action", "key", "-Keys", "ESC")
