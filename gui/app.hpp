@@ -268,6 +268,17 @@ private:
     struct NewLevelJob { bool ok = false; std::string error; std::string name; editor::NewLevelResult result; };
     std::future<NewLevelJob> newLevelFuture_;
     void drawNewLevelCard(float pad, float inner, float cardInner);
+    // enemy spawner card: CREATURE_GENERATION_FAMILY picker + radius/limit, placed at the view centre
+    void drawSpawnerCard(float pad, float inner, float cardInner);
+    std::vector<std::string> familyList_;
+    std::vector<std::string> spawnerFamilies_;   // chosen families
+    char familySearch_[64] = {};
+    float spawnerRadius_ = 12.0f;
+    int spawnerLimit_ = 3;
+public:
+    // scripted: place a spawner at the view centre with these families
+    bool placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName = "");
+private:
     void startNewLevel();
     void setNewLevelOwnRegion(bool on) { newLevelOwnRegion_ = on; }
     void setNewLevelBlank(int theme, float height, int w = 0, int h = 0) { newLevelMode_ = 1; blankTheme_ = theme; blankHeight_ = height; if (w > 0) selectBlankSize(w, h); }

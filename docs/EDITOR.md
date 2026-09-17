@@ -261,6 +261,17 @@ world matrices of every instance of that thing (including spawned children)
 without touching the GPU meshes. Structural edits (add/remove/undo of those)
 reload the things layer from the in-memory `.tng` text.
 
+## Enemy spawners (experimental)
+
+The Edit panel's **Enemy spawner** card places a `MARKER_CREATURE_GENERATOR` thing
+carrying the retail self-triggering `CTCCreatureGenerator` block (families from the
+game's `CREATURE_GENERATION_FAMILY` defs, trigger radius, creature limit) at the view
+centre, on the ground, in the TNG's NULL section. The data matches retail generators
+byte for byte in shape, but generation itself has not been observed in the automated
+childhood-profile tests yet (retail generators spawn on region load through
+`CTCCreatureGeneratorCreator`, gated by the hero's level band); see `docs/PLAN.md`.
+Scripted: `place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]`.
+
 ## New levels
 
 The Edit panel's **New level** card adds a level to the world; a free

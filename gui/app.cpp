@@ -1596,6 +1596,14 @@ bool Automation::tick(App& app) {
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
     else if (cmd == "place") { if (!app.placeDefinition(rest)) fail("place failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "place_spawner") {   // place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]
+        std::istringstream rs(rest); float radius = 12; int limit = 3; std::string fams, sn; rs >> radius >> limit >> fams >> sn;
+        std::vector<std::string> families; std::string cur;
+        for (char c : fams) { if (c == ',') { if (!cur.empty()) families.push_back(cur); cur.clear(); } else cur += c; }
+        if (!cur.empty()) families.push_back(cur);
+        if (!app.placeSpawner(families, radius, limit, sn)) fail("place_spawner failed: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "save_level") { if (!app.saveDocument()) fail("save failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }

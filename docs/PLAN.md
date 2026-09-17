@@ -180,8 +180,20 @@ in-game harness run (`tools/ingame`).
 2 (old). **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
-3. **Villages & creature generators** as thing presets (section 3), verified
-   with the harness on a new game.
+3. **Villages & creature generators** as thing presets (section 3). Spawner
+   card shipped 2026-09-17 (MARKER_CREATURE_GENERATOR with the retail
+   self-triggering CTCCreatureGenerator block, family picker from the
+   CREATURE_GENERATION_FAMILY defs; inserted into the NULL section -- the last
+   section of a retail TNG is a quest-loaded one the engine never loads by
+   default, found the hard way). **Not yet observed spawning** in the childhood
+   test profile: retail generators on the same map spawn on region load through
+   `CTCCreatureGeneratorCreator::FrameUpdate` 0x7c99f0 (gated by
+   `CWorld::IsCreatureGenerationEnabled` 0x49ea40 and a hero-level family band:
+   the family def's level at +0x48, highest <= heroLevel+1, else the lowest),
+   while an Atlas-placed one next to them stayed silent with WASPS/HOBBE
+   families. Next: decompile `CreateCreatures` 0x74b2b0 + the creator's tail
+   (what it does after picking the band) and test with an adult save. Villages
+   untouched.
 4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
 5. **Splat texture paint** (STB foreground layers: texture triple +
    per-vertex blend) -- the real "paint any texture on the ground".

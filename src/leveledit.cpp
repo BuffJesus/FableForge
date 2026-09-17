@@ -14,6 +14,7 @@
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
 #include "forge/stbinfo.hpp"
+#include "forge/bin.hpp"
 #include "lodbake.hpp"
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
@@ -620,6 +621,76 @@ size_t Document::place(forge::thingplacer::Placement placement) {
         restore(undo_.back()); undo_.pop_back();
         throw;
     }
+}
+
+size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
+                                        float radius, int activeLimit, const std::string& scriptName) {
+    if (families.empty()) throw std::invalid_argument("a spawner needs at least one creature family");
+    pushUndo();
+    try {
+        // the retail block (Darkwood_8 / Graveyard_1 self-triggering generators),
+        // retail float spelling, per-file UID namespace
+        const std::string eol = "\r\n";
+        std::string b;
+        b += "NewThing Marker;" + eol;
+        b += "Player -1;" + eol;
+        b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
+        b += "DefinitionType \"MARKER_CREATURE_GENERATOR\";" + eol;
+        b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
+        b += "ScriptData \"NULL\";" + eol;
+        b += "ThingGamePersistent FALSE;" + eol;
+        b += "ThingLevelPersistent TRUE;" + eol;
+        b += "StartCTCPhysicsStandard;" + eol;
+        b += "PositionX " + formatFloat(pos[0]) + ";" + eol;
+        b += "PositionY " + formatFloat(pos[1]) + ";" + eol;
+        b += "PositionZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "RHSetForwardX 0.0;" + eol + "RHSetForwardY 0.999994;" + eol + "RHSetForwardZ 0.0;" + eol;
+        b += "RHSetUpX 0.0;" + eol + "RHSetUpY 0.0;" + eol + "RHSetUpZ 0.999994;" + eol;
+        b += "EndCTCPhysicsStandard;" + eol;
+        b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
+        b += "StartCTCCreatureGenerator;" + eol;
+        for (size_t i = 0; i < families.size(); ++i) b += "CreatureFamilies[" + std::to_string(i) + "] \"" + families[i] + "\";" + eol;
+        b += "GenerationRadius " + formatFloat(radius) + ";" + eol;
+        b += "SelfTriggerRadius " + formatFloat(radius) + ";" + eol;
+        b += "SelfTrigger TRUE;" + eol;
+        b += "SelfTriggerResetInterval 0;" + eol;
+        b += "TriggerOnActivate FALSE;" + eol;
+        b += "ActiveCreatureLimit " + std::to_string(activeLimit) + ";" + eol;
+        b += "TotalGenerationLimit -1;" + eol;
+        b += "NumTriggers -1;" + eol;
+        b += "ScriptNameOfAllGeneratedCreatures \"\";" + eol;
+        b += "EndCTCCreatureGenerator;" + eol;
+        b += "StartCTCActivationReceptorCreatureGenerator;" + eol;
+        b += "DeactivateAfterSetTime TRUE;" + eol;
+        b += "FramesAfterActivationToDeactivate 150;" + eol;
+        b += "ActivateOnActivate FALSE;" + eol;
+        b += "TriggerOnActivate TRUE;" + eol;
+        b += "EndCTCActivationReceptorCreatureGenerator;" + eol;
+        b += "StartCTCActivationTrigger;" + eol + "ReceptorUID 0;" + eol + "EndCTCActivationTrigger;" + eol;
+        b += "StartCTCCreatureGeneratorCreator;" + eol + "EndCTCCreatureGeneratorCreator;" + eol;
+        b += "Health 1.0;" + eol;
+        b += "EndThing;" + eol;
+        // into the NULL section (insertThingBlock places it there); appending after the
+        // last thing would land in a quest-loaded section that the engine never loads
+        const size_t n = file_.insertThingBlock("NULL", b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
+std::vector<std::string> creatureFamilies(const fs::path& gameRoot, std::string& error) {
+    std::vector<std::string> out;
+    try {
+        const fs::path defs = gameRoot / "data" / "CompiledDefs";
+        const auto file = forge::bin::File::open(defs / "names.bin", defs / "game.bin");
+        for (const auto& e : file.entries())
+            if (e.definition == "CREATURE_GENERATION_FAMILY" && !e.name.empty() && e.name.rfind("NULLDEF", 0) != 0) out.push_back(e.name);
+        std::sort(out.begin(), out.end());
+    } catch (const std::exception& e) { error = e.what(); }
+    return out;
 }
 
 void Document::remove(size_t index) {

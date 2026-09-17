@@ -51,6 +51,8 @@ ATLAS_POINTS = { %(points)s }
 ATLAS_TELEPORT = %(teleport)s   -- {x, y} world point to stand the hero on for the screenshot, or nil
 ATLAS_THINGS = { %(things)s }   -- ScriptNames whose world position is reported
 ATLAS_FOLLOW = %(follow)s       -- {x, y} world point: spawn a creature there and make it follow the hero, or nil
+ATLAS_CREATURES = %(creatures)d -- >0: after this many seconds, list every creature within 60 units of the hero (spawner probe)
+ATLAS_WALK = %(walk)s           -- {x, y} world point the hero walks to (script control) before the creature listing, or nil
 ATLAS_FOLLOW_DEF = "%(follow_def)s"
 ATLAS_FOLLOW_SECONDS = %(follow_seconds)d
 
@@ -115,6 +117,38 @@ function AtlasProbe(questObject)
         local ok, z = pcall(function() return Q:GetGroundHeightAt(pt[1], pt[2]) end)
         if ok then Q:Log(string.format("ATLAS_PROBE|z|%%.3f|%%.3f|%%.4f", pt[1], pt[2], z))
         else Q:Log(string.format("ATLAS_PROBE|zerr|%%.3f|%%.3f|%%s", pt[1], pt[2], tostring(z))) end
+    end
+    if ATLAS_WALK then
+        local wz = 0
+        pcall(function() wz = Q:GetGroundHeightAt(ATLAS_WALK[1], ATLAS_WALK[2]) end)
+        -- GainControlAndMoveToPosition does not move the hero (tried: no motion, no error);
+        -- a second teleport after a pause still counts as entering a trigger radius
+        Q:Pause(3.0)
+        if not Q:NewScriptFrame() then return end
+        local wok, werr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_WALK[1], y = ATLAS_WALK[2], z = wz + 0.5}, 0.0) end)
+        Q:Log("ATLAS_PROBE|walk|" .. tostring(wok) .. "|" .. tostring(werr))
+    end
+    if ATLAS_CREATURES > 0 then
+        Q:Pause(ATLAS_CREATURES)
+        if not Q:NewScriptFrame() then return end
+        local hok, hp = pcall(function() return hero:GetPos() end)
+        if hok and hp then Q:Log(string.format("ATLAS_PROBE|hero3|%%.3f|%%.3f|%%.3f", hp.x or 0, hp.y or 0, hp.z or 0)) end
+        local cok, list = pcall(function() return Q:GetAllCreaturesExcludingHero() end)
+        local n = 0
+        if cok and list then
+            for _, c in ipairs(list) do
+                local pok, cp = pcall(function() return c:GetPos() end)
+                local dok, dn = pcall(function() return c:GetDefName() end)
+                if pok and cp and hok and hp then
+                    local dx, dy = (cp.x or 0) - (hp.x or 0), (cp.y or 0) - (hp.y or 0)
+                    if dx * dx + dy * dy <= 100 * 100 then
+                        n = n + 1
+                        Q:Log(string.format("ATLAS_PROBE|creature|%%s|%%.2f|%%.2f|%%.2f", tostring(dok and dn or "?"), cp.x or 0, cp.y or 0, cp.z or 0))
+                    end
+                end
+            end
+        end
+        Q:Log("ATLAS_PROBE|creatures|" .. tostring(n))
     end
     for _, name in ipairs(ATLAS_THINGS) do
         local tok, thing = pcall(function() return Q:GetThingWithScriptName(name) end)
@@ -245,6 +279,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
+    ap.add_argument("--walk", default="", help="map-local x,y the hero walks to after the teleport (before the --creatures listing)")
+    ap.add_argument("--creatures", type=int, default=0, help="after N seconds in the target map, list every creature within 60 units of the hero (spawner probe; report gets 'creatures')")
     ap.add_argument("--things", default="", help="comma-separated ScriptNames: the probe reports their in-game positions, compared with the loose .tng")
     ap.add_argument("--transition", action="store_true", help="with --teleport: go through ForgeFSE's GoToMapSlotRetailTransition (a real region load: minimap, region state) instead of a bare entity teleport")
     ap.add_argument("--start-map", default="", help="map the hero starts in (default: --map); with --teleport the probe jumps to the target map and waits for it to stream in")
@@ -282,6 +318,7 @@ def main() -> int:
         return 2
 
     mx, my, map_slot = wld_map(root, a.map)
+    walk_xy = tuple(float(v) for v in a.walk.split(",")) if a.walk else None
     cx, cy = (float(v) for v in a.centre.split(","))
     pts: list[tuple[float, float]] = []
     r, s = a.radius, a.step
@@ -304,6 +341,8 @@ def main() -> int:
     probe.write_text(PROBE_LUA % {"map": a.map, "start_map": a.start_map or a.map, "transition_slot": map_slot if a.transition else 0, "points": ", ".join("{%g, %g}" % p for p in world_pts),
                                   "teleport": ("{%g, %g}" % (mx + cx, my + cy)) if a.teleport else "nil",
                                   "things": ", ".join('"%s"' % t for t in thing_names),
+                                  "creatures": a.creatures,
+                                  "walk": ("{%g, %g}" % (mx + walk_xy[0], my + walk_xy[1])) if walk_xy else "nil",
                                   "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",
                                   "follow_def": a.follow_def, "follow_seconds": a.follow_seconds}, encoding="utf-8")
     # The probe thread is started BEFORE the host's own Main (which may loop forever).
@@ -428,6 +467,9 @@ def main() -> int:
         things_ok = True
         if thing_names:
             expected_things = tng_positions(root, a.map, thing_names)
+            creatures = re.findall(r"ATLAS_PROBE\|creature\|([^|]*)\|([-\d.]+)\|([-\d.]+)\|([-\d.]+)", text)
+            if a.creatures:
+                result["creatures"] = [{"def": c[0], "pos": [float(c[1]), float(c[2]), float(c[3])]} for c in creatures]
             result["things"] = {}
             for name in thing_names:
                 m = re.search(r"ATLAS_PROBE\|thing\|%s\|([-\d.]+)\|([-\d.]+)\|([-\d.]+)" % re.escape(name), text)

@@ -116,6 +116,12 @@ public:
     // after the original. Returns the new index.
     size_t duplicate(size_t index);
     size_t place(forge::thingplacer::Placement placement);
+    // An enemy spawner: a MARKER_CREATURE_GENERATOR thing carrying the retail
+    // CTCCreatureGenerator block (self-triggering when the hero comes within
+    // `radius`, `activeLimit` creatures at once, -1 = unlimited) drawing from
+    // the given CREATURE_GENERATION_FAMILY names. Position is map-local.
+    size_t placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
+                                  float radius, int activeLimit, const std::string& scriptName = "");
     void remove(size_t index);
 
     bool canUndo() const { return !undo_.empty(); }
@@ -200,5 +206,8 @@ private:
 
 // Retail float spelling ("0.0", "-0.000102", "96.063965").
 std::string formatFloat(float v);
+
+// Every CREATURE_GENERATION_FAMILY name in the install's game.bin (the spawner picker).
+std::vector<std::string> creatureFamilies(const std::filesystem::path& gameRoot, std::string& error);
 
 } // namespace albion::editor

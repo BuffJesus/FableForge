@@ -434,6 +434,80 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
 
 // ---- new level from the selected map
 
+bool App::placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName) {
+    if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
+    if (families.empty()) { pushLog("editor: pick at least one creature family", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    float pos[3] = {focus[0], -focus[2], focus[1]};
+    if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
+    try {
+        const size_t n = doc_.placeCreatureGenerator(pos, families, radius, limit, scriptName);
+        selectedUid_ = doc_.uidOf(n);
+        selectedThing_ = int(n);
+        renderer_.selectedThing = selectedThing_;
+        std::string list;
+        for (const auto& f : families) list += (list.empty() ? "" : ", ") + f;
+        pushLog("placed an enemy spawner (" + list + ", radius " + std::to_string(int(radius)) + ", limit " + std::to_string(limit) + ")", 0);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
+}
+
+void App::drawSpawnerCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##spawner", inner);
+    theme::label("Enemy spawner");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A MARKER_CREATURE_GENERATOR that spawns creatures from the chosen families when the hero comes within the radius (the retail self-triggering generator). Families are the game's CREATURE_GENERATION_FAMILY defs.");
+    ImGui::PopFont();
+    if (familyList_.empty()) { std::string err; familyList_ = editor::creatureFamilies(saveRoot(), err); if (familyList_.empty()) familyList_ = editor::creatureFamilies(installPath_, err); }
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::InputTextWithHint("##familysearch", "Search families (HOBBES, BANDITS, BALVERINES...)", familySearch_, sizeof familySearch_);
+    ImGui::PopStyleVar();
+    auto_.registerWidget("input_familysearch");
+    if (familySearch_[0]) {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+        ImGui::BeginChild("##familylist", ImVec2(cardInner, S(110)), ImGuiChildFlags_None);
+        ImGui::PopStyleColor();
+        ImGui::PushFont(fontSmall_);
+        int shown = 0;
+        for (const auto& name : familyList_) {
+            if (!contains(name, familySearch_)) continue;
+            const bool on = std::find(spawnerFamilies_.begin(), spawnerFamilies_.end(), name) != spawnerFamilies_.end();
+            if (ImGui::Selectable(name.c_str(), on)) {
+                if (on) spawnerFamilies_.erase(std::remove(spawnerFamilies_.begin(), spawnerFamilies_.end(), name), spawnerFamilies_.end());
+                else spawnerFamilies_.push_back(name);
+            }
+            if (++shown >= 200) break;
+        }
+        if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+        ImGui::PopFont();
+        ImGui::EndChild();
+    }
+    if (!spawnerFamilies_.empty()) {
+        ImGui::PushFont(fontSmall_);
+        std::string list;
+        for (const auto& f : spawnerFamilies_) list += (list.empty() ? "" : ", ") + f;
+        ImGui::TextWrapped("%s", list.c_str());
+        ImGui::PopFont();
+        if (theme::ghostButton("Clear families", ImVec2(cardInner, S(24)))) spawnerFamilies_.clear();
+    }
+    char val[64];
+    std::snprintf(val, sizeof val, "%.0f units", spawnerRadius_);
+    theme::labelValue("Trigger radius", val, cardInner);
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::SliderFloat("##spawnradius", &spawnerRadius_, 4.0f, 40.0f, "");
+    std::snprintf(val, sizeof val, spawnerLimit_ < 0 ? "unlimited" : "%d at once", spawnerLimit_);
+    theme::labelValue("Creatures", val, cardInner);
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::SliderInt("##spawnlimit", &spawnerLimit_, -1, 12, "");
+    if (theme::ghostButton("Place spawner at view centre", ImVec2(cardInner, S(30))) && !spawnerFamilies_.empty()) placeSpawner(spawnerFamilies_, spawnerRadius_, spawnerLimit_);
+    auto_.registerWidget("btn_place_spawner");
+    theme::endCard();
+}
+
 void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     using theme::S;
     if (!documentLoaded()) return;
@@ -923,6 +997,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
+    drawSpawnerCard(pad, inner, cardInner);
+    ImGui::Dummy(ImVec2(0, S(8)));
     drawNewLevelCard(pad, inner, cardInner);
 
     // ---- changes / save
