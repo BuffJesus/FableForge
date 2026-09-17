@@ -42,25 +42,30 @@ assert_state world_pending 1
 world_revert
 frames 1
 assert_state world_pending 0
-# queue two moves and write them into the scratch install
-world_move TeleporterGreatwood 2048 8064
-world_move OrchardFarm 2176 8064
+# queue two moves (side by side: a shared edge at x=2112) and write them into
+# the scratch install with seam stitching on
+world_move TeleporterGreatwood 2048 8032
+world_move OrchardFarm 2112 8064
 frames 2
 assert_state world_pending 2
 assert_widget btn_world_apply
 click btn_world_apply
 frames 2
 assert_widget btn_world_apply_confirm
+world_stitch 1 -1
+assert_state world_stitch 1
 world_apply
 wait_world
 frames 3
 assert_state world_ok 1
 assert_state world_pending 0
+assert_log 1 stitched
 world_select TeleporterGreatwood
 frames 2
-assert_state world_selected_pos 2048,8064
+assert_state world_selected_pos 2048,8032
 screenshot build/ui/w3_applied.png
 # and back, so the scratch tree ends where it started
+world_stitch 0
 world_move TeleporterGreatwood 3072 2880
 world_move OrchardFarm 3200 3168
 world_apply

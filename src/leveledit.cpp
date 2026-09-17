@@ -354,6 +354,26 @@ void Document::endStroke() {
     if (themes) ++themeRev_;
 }
 
+bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
+    if (!hasTerrain() || stroke_) return false;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    auto next = std::make_unique<TerrainState>(*terrain_);
+    bool changed = false;
+    for (const auto& e : edits) {
+        if (e.x < 0 || e.y < 0 || e.x >= cx || e.y >= cy) continue;
+        float& dst = next->heights[size_t(e.y) * cx + e.x];
+        if (dst != e.h) { dst = e.h; changed = true; }
+    }
+    if (!changed) return true;
+    pushUndo();
+    terrain_ = std::shared_ptr<const TerrainState>(next.release());
+    hf_.reset();
+    writeTerrainToLevel();
+    ++revision_;
+    ++terrainRev_;
+    return true;
+}
+
 bool Document::themesDirty() const {
     if (!terrain_ || !savedTerrain_ || terrain_ == savedTerrain_) return false;
     return terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength;

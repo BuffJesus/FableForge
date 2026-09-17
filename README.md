@@ -162,8 +162,10 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   highlighted), queue as many moves as you like, then **Move N maps in the game**:
   the WLD/BWD placement and the map's terrain chunk (ground, LOD, water, trees and
   grass) are rewritten for the new origin. The same panel sets which region owns a
-  map and which regions draw it across each edge. Same thing from the shell:
-  `AlbionAtlas world` / `world-move <map> <x> <y>` / `world-owner` / `world-sees`.
+  map and which regions draw it across each edge, and can stitch the shared
+  edge heights of newly adjacent maps. Same thing from the shell:
+  `AlbionAtlas world` / `world-move <map> <x> <y> [--stitch]` / `world-owner` /
+  `world-sees` / `world-stitch`.
 
 Everything is written the way the game wrote it: untouched things stay byte-identical,
 moved things get their position/basis lines rewritten in retail float spelling, new

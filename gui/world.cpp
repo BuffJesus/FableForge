@@ -4,6 +4,7 @@
 // go: WLD MapX/MapY, BWD boxes (all three copies) and the STB chunks
 // translated to their new origins (src/overworld + src/stbrelocate).
 #include "app.hpp"
+#include "stitch.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -126,10 +127,23 @@ void App::worldApply() {
     const std::vector<editor::MapMove> moves = worldPending_;
     const std::vector<editor::OwnerEdit> owners = worldOwnerEdits_;
     const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
-    pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + "...", 0);
-    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees]() {
+    const bool stitch = worldStitch_ && !moves.empty();
+    const int feather = worldStitchFeather_;
+    pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
+    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees, stitch, feather]() {
         WorldJob r;
         r.ok = editor::applyWorldEdits(root, moves, owners, sees, r.notes, r.error);
+        if (r.ok && stitch) {
+            // every moved map's seams at its new placement: shared-edge heights
+            // averaged into both LEVs, both chunks re-baked
+            editor::WorldLayout after;
+            if (!editor::loadWorldLayout(root, after, r.error)) { r.ok = false; return r; }
+            editor::StitchOptions so; so.feather = feather;
+            std::vector<editor::StitchReport> reports;
+            for (const auto& mv : moves) r.ok = editor::stitchNeighbours(root, after, mv.name, so, reports, r.notes, r.error) && r.ok;
+            size_t done = 0; for (const auto& rep : reports) done += rep.stitched;
+            r.notes.push_back(std::to_string(reports.size()) + " seam(s) checked, " + std::to_string(done) + " stitched");
+        }
         return r;
     });
 }
@@ -447,6 +461,22 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
             ImGui::TextColored(theme::vec(theme::Muted), "%s %s", e.sees ? "sees" : "no longer sees", e.map.c_str());
         }
         ImGui::PopFont();
+        if (!worldPending_.empty()) {
+            ImGui::Dummy(ImVec2(0, S(4)));
+            ImGui::Checkbox("Stitch edges with neighbours", &worldStitch_);
+            auto_.registerWidget("chk_world_stitch");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("After the move, average the shared edge heights of each moved map and every map it now touches\n(feathered a few cells into both), then re-bake both terrain chunks. Off: the seams stay as the LEVs have them.");
+            if (worldStitch_) {
+                ImGui::PushFont(fontSmall_);
+                char val[48];
+                if (worldStitchFeather_ < 0) std::snprintf(val, sizeof val, "auto (one cell per unit of step)");
+                else std::snprintf(val, sizeof val, "%d cells", worldStitchFeather_);
+                theme::labelValue("Feather", val, inner - S(24));
+                ImGui::PopFont();
+                ImGui::SetNextItemWidth(inner - S(24));
+                ImGui::SliderInt("##stitchfeather", &worldStitchFeather_, -1, 32, "");
+            }
+        }
         theme::endCard();
     }
 

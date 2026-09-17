@@ -605,6 +605,11 @@ void App::pollWorkers() {
     if (log_.size() > 400) log_.erase(log_.begin(), log_.begin() + long(log_.size() - 400));
 }
 
+bool App::logContains(const std::string& needle) const {
+    for (const auto& l : log_) if (l.second.find(needle) != std::string::npos) return true;
+    return false;
+}
+
 void App::pushLog(const std::string& line, int level) {
     std::lock_guard<std::mutex> lock(logMutex_);
     logPending_.emplace_back(level, line);
@@ -665,6 +670,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_pending_sees=" + std::to_string(worldSeesEdits_.size()));
     if (!worldSelected_.empty()) v.push_back("world_selected_owner=" + worldOwnerOf(worldSelected_));
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
+    v.push_back("world_stitch=" + std::string(worldStitch_ ? "1" : "0"));
     if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
@@ -1581,6 +1587,10 @@ bool Automation::tick(App& app) {
     else if (cmd == "world_owner") { std::istringstream rs(rest); std::string m, r; rs >> m >> r; if (!app.worldSetOwner(m, r)) fail("world_owner refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_sees") { std::istringstream rs(rest); std::string r, m; int v = 1; rs >> r >> m >> v; if (!app.worldSetSees(r, m, v != 0)) fail("world_sees refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_revert") { app.worldRevert(); note("ok   " + line); ++pc_; }
+    else if (cmd == "world_stitch") {   // world_stitch <0|1> [feather]: stitch seams after the next apply
+        std::istringstream rs(rest); int on = 1, feather = -1; rs >> on >> feather;
+        app.setWorldStitch(on != 0, feather); note("ok   " + line); ++pc_;
+    }
     else if (cmd == "world_apply") { app.worldApply(); note("..   " + line); ++pc_; }
     else if (cmd == "wait_world") waitOn(!app.worldBusy(), "world move");
     else if (cmd == "gizmo") { app.setGizmoOp(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
@@ -1648,6 +1658,10 @@ bool Automation::tick(App& app) {
         if (!found) fail("assert_state: unknown key " + key);
         else if (!match) { std::string cur; for (const auto& kv : app.stateDump()) if (kv.rfind(key + "=", 0) == 0) cur = kv; fail("assert_state: " + cur + " != " + val); }
         else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_log") {   // assert_log <text>: some app log line contains the text
+        if (!app.logContains(rest)) fail("assert_log: no log line contains '" + rest + "'"); else note("ok   " + line);
         ++pc_;
     }
     else if (cmd == "assert_widget") {

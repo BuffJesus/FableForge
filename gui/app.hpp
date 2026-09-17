@@ -144,6 +144,7 @@ public:
     std::string lastError() const { return lastError_; }
     void requestQuit() { quit_ = true; }
     std::vector<std::string> stateDump() const;
+    bool logContains(const std::string& needle) const;   // any drained log line holding `needle` (scripted assert_log)
 
     // ---- editor (placed things). The document is the source of truth; the
     // preview instances follow it (fast path for moves, reload for structure).
@@ -307,6 +308,7 @@ public:
     std::string worldOwnerOf(const std::string& map) const;            // pending edit or the layout's owner
     bool worldSees(const std::string& region, const std::string& map) const;
     bool worldLastOk() const { return worldLastOk_; }
+    void setWorldStitch(bool on, int feather) { worldStitch_ = on; worldStitchFeather_ = feather; }
 private:
     void loadWorld();
     void drawWorldCanvas(const ImVec2& origin, const ImVec2& size);
@@ -332,6 +334,8 @@ private:
     int worldEditX_ = 0, worldEditY_ = 0;    // the panel's X/Y fields
     std::string worldEditFor_;
     bool confirmWorldApply_ = false;
+    bool worldStitch_ = false;               // average shared-edge heights with every neighbour after a move (off: retail leaves seams as they are)
+    int worldStitchFeather_ = -1;            // cells the seam correction fades over (-1 = auto: one per unit of step, 4..32)
     bool worldLastOk_ = false;
     struct WorldJob { bool ok = false; std::string error; std::vector<std::string> notes; };
     std::future<WorldJob> worldFuture_;

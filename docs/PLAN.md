@@ -20,6 +20,7 @@ in-game harness run (`tools/ingame`).
 | Region editing (owner, per-neighbour sees) in the World tab / CLI | shipped (2026-09-17) |
 | Minimap textures appended + registered (PLAYER_GUI.MiniMapGraphics); no retail slot taken | shipped (2026-09-17) |
 | Distant-LOD textures baked from the level albedo (blank levels, theme-paint deploys) | shipped (2026-09-17) |
+| Seam stitching between newly adjacent maps (World toggle, `world-stitch`, `world-move --stitch`) | shipped (2026-09-17, in-game verified both sides) |
 
 ## Rocks turned today
 
@@ -165,8 +166,10 @@ in-game harness run (`tools/ingame`).
 ## Order of work
 
 1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid; region
-   owner + sees editing in the panel and CLI). Left over: seam stitching between
-   newly adjacent maps (`forge lev stitch` semantics).
+   owner + sees editing in the panel and CLI; seam stitching 2026-09-17:
+   `src/stitch.cpp`, opt-in, auto feather; retail seams are exact except at
+   three-map corners). Left over: things/foliage keep their Z when the ground
+   under them is stitched.
 2. ~~Distant-LOD bake~~ DONE 2026-09-17: blank levels get a 64x64 DXT1 tile per
    background node baked from the level's own albedo (`src/lodbake`, forgecore
    `BackgroundTextureProvider`), and a theme-paint deploy re-bakes them in place

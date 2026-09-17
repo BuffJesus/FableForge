@@ -167,6 +167,27 @@ def main() -> int:
     r = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True)
     if not any(l.split()[1] == "OrchardFarm" and l.split()[5] == "OrchardFarm" for l in r.stdout.splitlines()[1:]):
         print("owner change back did not land"); ok = False
+    # seam stitching: the two maps placed side by side get a shared vertical
+    # edge (x = 2112, 65 vertices); --stitch averages it into both LEVs
+    r = subprocess.run([cli, "world-move", a.map, "2048", "8064", other, "2112", "8064", "--stitch", "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or "1 stitched" not in r.stdout:
+        print("stitched move failed:", r.stderr, r.stdout[-800:]); ok = False
+    else:
+        def edge(stem, x, ys):
+            lev = os.path.join(sl, "FinalAlbion", stem + ".lev")
+            out = subprocess.run([cli, "heights", lev] + [f"{x},{y}" for y in ys], capture_output=True, text=True).stdout
+            return [float(l.split()[1]) for l in out.splitlines() if len(l.split()) == 2]
+        ys = [0, 7, 20, 33, 47, 64]
+        ha, hb = edge(a.map, 64, ys), edge(other, 0, ys)
+        if len(ha) != len(ys) or ha != hb:
+            print("seam heights differ after stitching:", ha, hb); ok = False
+        r = subprocess.run([cli, "world-stitch", a.map, other, "--dry-run", "--install", scratch], capture_output=True, text=True)
+        if "already tight" not in r.stdout:
+            print("stitched seam not reported tight:", r.stdout); ok = False
+    r = subprocess.run([cli, "world-move", a.map, str(before[0]), str(before[1]), other, str(op[0]), str(op[1]), "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or wld_pos(wld, other) != op:
+        print("move back after stitching failed:", r.stderr); ok = False
+
     def semantic():
         # placement/owner listing + region lists with order-insensitive map sets
         a = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True).stdout

@@ -40,6 +40,7 @@
 #include "worldedit.hpp"
 #include "overworld.hpp"
 #include "stbrelocate.hpp"
+#include "stitch.hpp"
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
@@ -65,6 +66,8 @@ int usage() {
         "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
         "      (relocate maps: WLD/BWD placement + STB chunks translated to the new origins, touching neighbours re-baked)\n"
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
+        "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
+        "      (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -315,6 +318,28 @@ int main(int argc, char** argv) {
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
         return 0;
     }
+    if (cmd == "world-stitch") {   // world-stitch <map> [<map2>] [--feather n] [--dry-run] [--install root]
+        std::string installArg; std::vector<std::string> maps; albion::editor::StitchOptions so;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--feather" && i + 1 < args.size()) { ++i; so.feather = args[i] == "auto" ? -1 : std::atoi(args[i].c_str()); }
+            else if (args[i] == "--dry-run") so.deploy = false;
+            else maps.push_back(args[i]);
+        }
+        if (maps.empty() || maps.size() > 2) { std::fprintf(stderr, "usage: AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>] [--dry-run] [--install <root>]\n"); return 2; }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::WorldLayout layout; std::string err; std::vector<std::string> notes; std::vector<albion::editor::StitchReport> reports;
+        if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        bool ok;
+        if (maps.size() == 2) { albion::editor::StitchReport r; ok = albion::editor::stitchEdges(install.root, layout, maps[0], maps[1], so, r, notes, err); reports.push_back(r); }
+        else ok = albion::editor::stitchNeighbours(install.root, layout, maps[0], so, reports, notes, err);
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+        if (!ok) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        size_t done = 0; for (const auto& r : reports) done += r.stitched;
+        std::printf("%zu seam(s) checked, %zu stitched\n", reports.size(), done);
+        return 0;
+    }
     if (cmd == "world" || cmd == "world-move" || cmd == "world-owner" || cmd == "world-sees") {
         // world [--regions]: list the layout; world-move <map> <x> <y> [...]: relocate maps;
         // world-owner <map> <region>: change the owning region; world-sees <region> <map> <0|1>: visibility
@@ -322,9 +347,10 @@ int main(int argc, char** argv) {
         std::vector<albion::editor::MapMove> moves;
         std::vector<albion::editor::OwnerEdit> owners;
         std::vector<albion::editor::SeesEdit> sees;
-        bool regionsList = false;
+        bool regionsList = false, stitch = false;
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (cmd == "world-move" && args[i] == "--stitch") stitch = true;
             else if (cmd == "world" && args[i] == "--regions") regionsList = true;
             else if (cmd == "world-move" && i + 2 < args.size()) { moves.push_back({args[i], std::atoi(args[i + 1].c_str()), std::atoi(args[i + 2].c_str())}); i += 2; }
             else if (cmd == "world-owner" && i + 1 < args.size()) { owners.push_back({args[i], args[i + 1]}); i += 1; }
@@ -374,6 +400,17 @@ int main(int argc, char** argv) {
         if (!albion::editor::applyMoves(install.root, moves, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());
         std::printf("moved %zu map(s)\n", moves.size());
+        if (stitch) {
+            // the seams of every moved map at its new placement
+            albion::editor::WorldLayout after; std::vector<std::string> snotes; std::vector<albion::editor::StitchReport> reports;
+            if (!albion::editor::loadWorldLayout(install.root, after, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+            bool ok = true;
+            for (const auto& mv : moves) ok = albion::editor::stitchNeighbours(install.root, after, mv.name, {}, reports, snotes, err) && ok;
+            for (const auto& n : snotes) std::printf("  %s\n", n.c_str());
+            if (!ok) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+            size_t done = 0; for (const auto& r : reports) done += r.stitched;
+            std::printf("%zu seam(s) checked, %zu stitched\n", reports.size(), done);
+        }
         return 0;
     }
     if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)

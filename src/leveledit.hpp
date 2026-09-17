@@ -158,6 +158,10 @@ public:
     void applyBrush(const TerrainBrush& brush, float dt);
     bool strokeActive() const { return stroke_; }
     void endStroke();
+    // One undo step that sets vertex heights directly (the seam stitcher; no
+    // brush). Out-of-range vertices are ignored. False when no terrain is loaded.
+    struct VertexHeight { int x = 0, y = 0; float h = 0; };
+    bool setVertexHeights(const std::vector<VertexHeight>& edits);
     uint64_t terrainRevision() const { return terrainRev_; }
     bool terrainDirty() const;
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
