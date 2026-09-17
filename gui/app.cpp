@@ -725,6 +725,7 @@ void App::frame(float dt) {
         if (r.ok) {
             pushLog("new level " + r.name + " installed (map slot " + std::to_string(r.result.mapSlot) + ", origin " + std::to_string(r.result.worldX) + "," + std::to_string(r.result.worldY) + ")", 3);
             newLevelDonor_.clear();
+            worldLoaded_ = false;   // the World tab re-reads the layout with the new map
             if (saveRoot_.empty() || saveRoot_ == installPath_) {
                 // the WAD has a new entry: rescan, then open the copy (the texture context is unchanged)
                 const std::string root = installPath_;
