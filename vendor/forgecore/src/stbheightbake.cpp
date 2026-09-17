@@ -162,15 +162,24 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         foreground.push_back(ForegroundCandidate{
             fi, std::move(body), std::move(parsed), {}});
     }
-    const size_t expectedForegroundFrames =
-        static_cast<size_t>(lev.width() / 16) *
-        static_cast<size_t>(lev.height() / 16);
+    // one foreground frame per 16x16 cell that HAS one: the directory marks
+    // cells without a foreground mesh with a zero frame pointer (fillers)
+    size_t expectedForegroundFrames = 0;
+    {
+        const auto dir = forge::stbbake::parseQuadDir(chunk);
+        for (const auto& e : dir) if (e.frameOffset != 0) ++expectedForegroundFrames;
+        if (dir.empty())
+            expectedForegroundFrames = static_cast<size_t>(lev.width() / 16) *
+                                       static_cast<size_t>(lev.height() / 16);
+    }
     if (foreground.size() != expectedForegroundFrames)
         throw std::runtime_error("expected " + std::to_string(expectedForegroundFrames) +
                                  " CLandscapeLayerMesh foreground frames, found " +
                                  std::to_string(foreground.size()));
-    if (foregroundMaxX - foregroundMinX != lev.width() ||
-        foregroundMaxY - foregroundMinY != lev.height())
+    // cells without a foreground mesh (fillers) shrink the extent; it may never exceed the LEV
+    if (foreground.empty() ||
+        foregroundMaxX - foregroundMinX > lev.width() ||
+        foregroundMaxY - foregroundMinY > lev.height())
         throw std::runtime_error("foreground layer mesh extent does not match LEV heightfield");
 
     auto put16At = [](std::vector<uint8_t>& bytes, size_t offset, uint16_t value) {

@@ -3763,8 +3763,13 @@ std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, size_t dirBase) {
         e.frameSpan = getU32(&d[o + 4]);
         for (int k = 0; k < 6; ++k) e.aabb[k] = getF32(&d[o + 8 + k * 4]);
         e.flags = getU32(&d[o + 32]);
-        // terminator: a zeroed frame pointer ends the live array.
-        if (e.frameOffset == 0 && e.frameSpan == 0) break;
+        // terminator: an all-zero record ends the array. A record with a zero
+        // frame pointer but live AABB/flags is a 16x16 cell WITHOUT a foreground
+        // mesh (many fillers have them); it stays in the list with
+        // frameOffset == 0 so AABB edits cover it and counts match the map.
+        bool allZero = true;
+        for (size_t k = 0; k < stride && allZero; ++k) allZero = d[o + k] == 0;
+        if (allZero) break;
         out.push_back(e);
         if (out.size() > 4096) break; // never runs away
     }
@@ -3856,6 +3861,7 @@ RetargetResult retargetChunk(const std::vector<uint8_t>& donorRelocated) {
         r.notes.push_back("quadtree directory empty at 0x7fc (base wrong or chunk malformed)");
     int okCount = 0;
     for (const QuadEntry& e : dir) {
+        if (e.frameOffset == 0 && e.frameSpan == 0) continue;   // a cell without a foreground mesh
         long fl = frameLenAt(e.frameOffset);
         bool wired = (fl >= 0) && (uint32_t(fl) == e.frameSpan);
         bool aabbOk = true;
@@ -4034,6 +4040,7 @@ EmitResult emitChunk(const Chunk& chunk, const EmitOptions& opt) {
 
     std::vector<QuadEntry> dir = parseQuadDir(chunk);
     for (const QuadEntry& e : dir) {
+        if (e.frameOffset == 0 && e.frameSpan == 0) continue;   // a cell without a foreground mesh
         const FrameMove* m = lookupMove(e.frameOffset);
         long newStart = lookupNewStart(e.frameOffset);
         if (!m || newStart < 0) {
