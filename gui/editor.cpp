@@ -233,6 +233,13 @@ void App::scaleSelected(float factor) {
     commitFrame(f);
 }
 
+void App::reseatThings() {
+    if (!documentLoaded() || !doc_.hasTerrain()) return;
+    const size_t n = doc_.reseatThingsSinceSave();
+    if (!n) { pushLog("editor: no object stood on ground that changed", 0); return; }
+    pushLog("editor: " + std::to_string(n) + " object(s) re-seated on the sculpted ground", 0);
+}
+
 void App::snapSelectedToGround() {
     editor::Frame f;
     if (!frameOfSelected(f)) return;
@@ -1037,6 +1044,13 @@ void App::drawEditFooter(float pad, float inner) {
         return;
     }
     const bool dirty = doc_.dirty();
+    if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
+        // objects standing on sculpted ground follow it (their offset kept); one undo step
+        ImGui::SetCursorPosX(pad);
+        if (theme::ghostButton("Re-seat objects on the new ground", ImVec2(inner, S(28)))) reseatThings();
+        auto_.registerWidget("btn_reseat_things");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Every placed object that stood on the ground before this sculpt session\n(within 1 unit) moves with it, keeping its offset. Buried or floating objects stay.");
+    }
     if (doc_.hasTerrain() && (doc_.terrainDirty() || terrainDeployFuture_.valid())) {
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {

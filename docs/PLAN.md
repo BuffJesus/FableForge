@@ -168,8 +168,9 @@ in-game harness run (`tools/ingame`).
 1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid; region
    owner + sees editing in the panel and CLI; seam stitching 2026-09-17:
    `src/stitch.cpp`, opt-in, auto feather; retail seams are exact except at
-   three-map corners). Left over: things/foliage keep their Z when the ground
-   under them is stitched.
+   three-map corners). Placed things follow stitched/sculpted ground
+   (`reseatThings`, also the editor's *Re-seat objects* button); the chunk's own
+   foliage keeps its Z -- open.
 2. ~~Distant-LOD bake~~ DONE 2026-09-17: blank levels get a 64x64 DXT1 tile per
    background node baked from the level's own albedo (`src/lodbake`, forgecore
    `BackgroundTextureProvider`), and a theme-paint deploy re-bakes them in place

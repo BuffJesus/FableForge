@@ -107,9 +107,22 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
     notes.push_back("seam " + mapA + " | " + mapB + ": " + std::to_string(len) + " shared vertices, largest step " + std::to_string(report.maxStep));
     if (report.maxStep < 1e-4f) { notes.push_back("  already tight, nothing to do"); return true; }
     if (!options.deploy) return true;
+    const TerrainState beforeA = docA.terrain(), beforeB = docB.terrain();
     if (!docA.setVertexHeights(editsA) || !docB.setVertexHeights(editsB)) { error = "could not apply the seam heights"; return false; }
     if (!docA.deployTerrain(gameRoot, notes, error)) { error = mapA + ": " + error; return false; }
     if (!docB.deployTerrain(gameRoot, notes, error)) { error = mapB + ": " + error; return false; }
+    // placed things that stood on the old ground follow it (.tng loose + WAD);
+    // the chunk's own foliage keeps its Z (open)
+    auto reseat = [&](Document& doc, const TerrainState& before) {
+        const size_t n = doc.reseatThings(before);
+        if (!n) return true;
+        if (!doc.saveLoose(gameRoot, error) || !doc.deployWad(gameRoot, error)) { error = doc.mapName() + ": " + error; return false; }
+        doc.markSaved();
+        report.thingsReseated += n;
+        notes.push_back("  " + doc.mapName() + ": " + std::to_string(n) + " placed thing(s) re-seated on the new ground");
+        return true;
+    };
+    if (!reseat(docA, beforeA) || !reseat(docB, beforeB)) return false;
     report.stitched = true;
     notes.push_back("  stitched (feather " + std::to_string(feather) + " cells)");
     return true;

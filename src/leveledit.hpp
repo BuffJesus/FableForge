@@ -111,6 +111,13 @@ public:
 
     // ---- commands (each one undo step) ----
     void setFrame(size_t index, const Frame& frame);
+    // After the ground changed (a stitch, a scripted sculpt): every thing that
+    // stood on the old ground (|z - old height| <= tolerance; retail things sit
+    // within 0.4 of it, buried ones further) follows it, keeping its offset.
+    // One undo step; returns how many moved.
+    size_t reseatThings(const TerrainState& before, float tolerance = 1.0f);
+    // The same against the terrain as last saved/deployed (the sculpt session's baseline).
+    size_t reseatThingsSinceSave(float tolerance = 1.0f) { return savedTerrain_ ? reseatThings(*savedTerrain_, tolerance) : 0; }
     void setProperty(size_t index, const std::string& key, const std::string& value);
     // Copy of a thing with a fresh UID and ScriptName NULL, inserted right
     // after the original. Returns the new index.
@@ -161,6 +168,8 @@ public:
     // One undo step that sets vertex heights directly (the seam stitcher; no
     // brush). Out-of-range vertices are ignored. False when no terrain is loaded.
     struct VertexHeight { int x = 0, y = 0; float h = 0; };
+    // Bilinear height of a terrain state at a map-local point (nullopt outside the grid).
+    static std::optional<float> sampleHeight(const TerrainState& t, int cellsX, int cellsY, float x, float y);
     bool setVertexHeights(const std::vector<VertexHeight>& edits);
     uint64_t terrainRevision() const { return terrainRev_; }
     bool terrainDirty() const;

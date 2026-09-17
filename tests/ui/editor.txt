@@ -91,6 +91,27 @@ undo
 undo
 frames 2
 assert_state terrain_dirty 0
+# objects follow sculpted ground: a barrel placed on the ground at the centre,
+# a hill raised under it, re-seat puts it back on the surface (its offset kept)
+camera 64 112 20 0.8 0.9 60
+place OBJECT_BARREL_BREAKABLE
+frames 1
+assert_state selected_ground_delta 0.00
+terrain_mode 0
+brush 8 6
+terrain_stroke 64 112 1
+frames 2
+assert_state terrain_dirty 1
+reseat_things
+frames 1
+assert_log object(s) re-seated on the sculpted ground
+assert_state selected_ground_delta 0.00
+undo
+undo
+undo
+frames 2
+assert_state terrain_dirty 0
+assert_state doc_dirty 0
 # unsaved-changes prompt when switching maps with edits pending
 set unsaved_prompt 1
 select_def OBJECT_BARREL_BREAKABLE

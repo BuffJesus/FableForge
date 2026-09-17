@@ -172,6 +172,7 @@ public:
     void rotateSelected(float degrees);                // yaw about the up axis
     void scaleSelected(float factor);
     void snapSelectedToGround();
+    void reseatThings();             // objects on ground that changed since the last save follow it
     void duplicateSelected();
     void deleteSelected();
     void editUndo();

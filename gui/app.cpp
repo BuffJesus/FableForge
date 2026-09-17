@@ -686,6 +686,10 @@ std::vector<std::string> App::stateDump() const {
             v.push_back(std::string("selected_pos=") + p);
             std::snprintf(p, sizeof p, "%.3f", f.scale);
             v.push_back(std::string("selected_scale=") + p);
+            if (const auto g = doc_.terrainHeight(f.pos[0], f.pos[1])) {   // z above the (live) ground
+                std::snprintf(p, sizeof p, "%.2f", f.pos[2] - *g);
+                v.push_back(std::string("selected_ground_delta=") + p);
+            }
         }
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
@@ -1602,6 +1606,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "rotate_thing") { app.rotateSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "scale_thing") { app.scaleSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "ground_thing") { app.snapSelectedToGround(); note("ok   " + line); ++pc_; }
+    else if (cmd == "reseat_things") { app.reseatThings(); note("ok   " + line); ++pc_; }
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }

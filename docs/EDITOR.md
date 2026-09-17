@@ -204,10 +204,11 @@ stays under ~45 degrees) or a fixed cell count. CLI: `world-move ... --stitch`,
 adjacent maps share their edge vertices exactly (Greatwood_2 x=96 == Greatwood_1
 x=0 to the float) *except at corners where a third map meets* (steps of 2-4 units
 there, hidden by the map's own geometry), so a moved map's fresh seam is the only
-thing worth stitching; `--dry-run` reports every seam's largest step. Known
-limits: the ground moves but trees, grass and placed things keep their Z
-(TeleporterGreatwood | OrchardFarm, a 19.6-unit step, lifted OrchardFarm's edge
-into its own tree canopy), and a map whose region does not *see* the neighbour
+thing worth stitching; `--dry-run` reports every seam's largest step. Placed things that stood on
+the old ground (within 1 unit) follow it, keeping their offset
+(`Document::reseatThings`; the `.tng` goes loose + into the WAD); the chunk's
+own trees and grass keep their Z (TeleporterGreatwood | OrchardFarm, a 19.6-unit
+step, lifted OrchardFarm's edge into its own tree canopy -- open). A map whose region does not *see* the neighbour
 still ends at a void beyond the seam -- tick the neighbour toggles too. The
 engine's ground query answers 0 on the seam column itself when the neighbour is
 not loaded (its cell belongs to the other map).
@@ -398,7 +399,7 @@ See `docs/PLAN.md` (2026-09-16) for the ordered plan and the open
 investigations (texture append resolution, region cap, villagers).
 
 1. ~~Overworld: region editing, seam stitching, the extent question~~ done
-   (2026-09-17). Open: re-seat things/foliage Z after a stitch.
+   (2026-09-17). Open: re-seat the chunk's foliage Z after a stitch (things do).
 2. A baked distant-LOD texture instead of the solid colour (the green band at
    the horizon of a blank level).
 3. Cloned levels: run the donor chunk through `relocateChunk` (the white-out was

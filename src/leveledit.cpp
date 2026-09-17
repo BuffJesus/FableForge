@@ -386,16 +386,42 @@ bool Document::terrainDirty() const {
            terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength;
 }
 
-std::optional<float> Document::terrainHeight(float x, float y) const {
-    const TerrainState* t = stroke_ && working_ ? working_.get() : terrain_.get();
-    if (!t || !level_) return std::nullopt;
-    const int cx = level_->cellsX(), cy = level_->cellsY();
+std::optional<float> Document::sampleHeight(const TerrainState& t, int cx, int cy, float x, float y) {
     if (!(x >= 0 && y >= 0) || x > float(cx - 1) || y > float(cy - 1)) return std::nullopt;
     const int x0 = std::min(int(x), cx - 1), y0 = std::min(int(y), cy - 1);
     const int x1 = std::min(x0 + 1, cx - 1), y1 = std::min(y0 + 1, cy - 1);
     const float fx = x - float(x0), fy = y - float(y0);
-    auto h = [&](int xx, int yy) { return t->heights[size_t(yy) * cx + xx]; };
+    auto h = [&](int xx, int yy) { return t.heights[size_t(yy) * cx + xx]; };
     return (h(x0, y0) * (1 - fx) + h(x1, y0) * fx) * (1 - fy) + (h(x0, y1) * (1 - fx) + h(x1, y1) * fx) * fy;
+}
+
+std::optional<float> Document::terrainHeight(float x, float y) const {
+    const TerrainState* t = stroke_ && working_ ? working_.get() : terrain_.get();
+    if (!t || !level_) return std::nullopt;
+    return sampleHeight(*t, level_->cellsX(), level_->cellsY(), x, y);
+}
+
+size_t Document::reseatThings(const TerrainState& before, float tolerance) {
+    if (!hasTerrain() || stroke_) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    if (before.heights.size() != terrain_->heights.size()) return 0;
+    struct Move { size_t index; std::string ctc; float z; };
+    std::vector<Move> moves;
+    for (size_t i = 0; i < file_.things().size(); ++i) {
+        Frame f;
+        if (!frameOf(i, f)) continue;
+        const auto was = sampleHeight(before, cx, cy, f.pos[0], f.pos[1]);
+        const auto now = sampleHeight(*terrain_, cx, cy, f.pos[0], f.pos[1]);
+        if (!was || !now || std::fabs(*was - *now) < 1e-4f) continue;
+        if (std::fabs(f.pos[2] - *was) > tolerance) continue;   // was floating / sunk on purpose
+        const auto* phys = physicsOf(file_.things()[i]);
+        moves.push_back({i, phys->name, f.pos[2] + (*now - *was)});
+    }
+    if (moves.empty()) return 0;
+    pushUndo();
+    for (const auto& m : moves) file_.setCtcProperty(m.index, m.ctc, "PositionZ", formatFloat(m.z));
+    ++revision_;
+    return moves.size();
 }
 
 namespace {

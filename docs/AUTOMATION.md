@@ -41,6 +41,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `move_thing <dx> <dy> <dz>` / `rotate_thing <deg>` / `scale_thing <factor>` / `ground_thing` | edit the selection (one undo step each) |
 | `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits (the objects layer reloads; `wait_foliage` waits for it) |
 | `place <DEFINITION>` | place a new thing at the camera focus, on the ground |
+| `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |
 | `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |
