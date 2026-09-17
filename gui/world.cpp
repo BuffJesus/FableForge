@@ -163,6 +163,14 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
         }
     }
 
+    // the engine's placement grid (0,0)-(8192,8192): nothing can live outside it
+    {
+        const ImVec2 e0 = toScreen(0, 0), e1 = toScreen(float(editor::kWorldExtent), float(editor::kWorldExtent));
+        dl->AddRect(e0, e1, theme::col(theme::Border), 0, 0, S(1.5f));
+        ImGui::PushFont(fontSmall_);
+        dl->AddText(ImVec2(e1.x - S(120), e1.y + S(4)), theme::col(theme::Muted), "engine world grid 8192");
+        ImGui::PopFont();
+    }
     // hit test (topmost = last drawn = smallest on top: sort by area descending)
     std::vector<const editor::WorldMapBox*> order;
     for (const auto& b : world_.maps) order.push_back(&b);

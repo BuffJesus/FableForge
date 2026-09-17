@@ -91,11 +91,14 @@ def main() -> int:
     r = subprocess.run([cli, "world-move", a.map, "1000", "1000", "--install", scratch], capture_output=True, text=True)
     if r.returncode == 0 or "32-aligned" not in r.stderr:
         print("misaligned move was not refused:", r.stdout, r.stderr); ok = False
+    r = subprocess.run([cli, "world-move", a.map, "1024", "9024", "--install", scratch], capture_output=True, text=True)
+    if r.returncode == 0 or "world grid" not in r.stderr:
+        print("out-of-grid move was not refused:", r.stdout, r.stderr); ok = False
     if open(wld, "rb").read() != orig["FinalAlbion.wld"]:
         print("a refused move touched the WLD"); ok = False
 
     # a real move to a free spot (far below the retail world)
-    nx, ny = 1024, 9024
+    nx, ny = 2048, 8064
     t0 = time.time()
     r = subprocess.run([cli, "world-move", a.map, str(nx), str(ny), "--install", scratch], capture_output=True, text=True)
     print(r.stdout.strip()); print(f"move took {time.time() - t0:.1f}s")
@@ -138,8 +141,8 @@ def main() -> int:
     # two maps in one go, one of them placed where the other used to be
     other = "TeleporterGreatwood" if a.map != "TeleporterGreatwood" else "OrchardFarm"
     op = wld_pos(wld, other)
-    r = subprocess.run([cli, "world-move", a.map, "1024", "9024", other, "1024", "9280", "--install", scratch], capture_output=True, text=True)
-    if r.returncode != 0 or wld_pos(wld, other) != (1024, 9280):
+    r = subprocess.run([cli, "world-move", a.map, "2048", "8064", other, "2176", "8064", "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or wld_pos(wld, other) != (2176, 8064):
         print("batch move failed:", r.stderr, r.stdout); ok = False
     r = subprocess.run([cli, "world-move", a.map, str(before[0]), str(before[1]), other, str(op[0]), str(op[1]), "--install", scratch], capture_output=True, text=True)
     if r.returncode != 0 or open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:

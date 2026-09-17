@@ -120,18 +120,19 @@ in-game harness run (`tools/ingame`).
   no foreground mesh (zero frame pointer, but not the terminator) -> the baker
   under-counts foreground frames on the fillers. The relocation walks the directory
   by `(w/16)*(h/16)` cells.
-* A move far outside the retail world (y=9024) crashed the region transition in
-  `CTCInventoryMap::UpdateRegionsCorrespondances` 0x5fc0c0 (map screen / minimap
-  correspondences); inside the retail extent it is fine. Find the bound before
-  letting the canvas place maps anywhere.
+* A move far outside the retail world (y=9024) crashed the region transition:
+  the engine's placement grid is the fixed box (0,0)-(8192,8192) (`CWorld::Init`
+  0x4a6e30 -> `CWorldMap::CWorldMap` with a 32-unit cell grid, `SetMapPlacement`
+  0x4fc9c0 unchecked). `checkMove` enforces it; the canvas draws the edge. Retail
+  uses (32,640)-(5216,8160), so ~2.5k x 8k units are free for new maps.
 * Harness: post-transition tutorial boxes pause the script thread; the harness now
   clicks their Next button when the probe log stalls.
 
 ## Order of work
 
-1. ~~Overworld editor~~ DONE. Left over: seam stitching between newly adjacent
-   maps (`forge lev stitch` semantics), region ownership editing, the map-screen
-   extent bound (see above).
+1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid). Left over:
+   seam stitching between newly adjacent maps (`forge lev stitch` semantics),
+   region ownership editing.
 2. **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.

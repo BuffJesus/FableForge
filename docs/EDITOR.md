@@ -216,9 +216,11 @@ stops at the first cell without a foreground mesh, so the baker under-counts
 foreground frames on the fillers ("expected 36 CLandscapeLayerMesh foreground
 frames, found 9") -- the relocation walks the directory by cell count instead;
 save games cache the region table, so start a new game to walk a new layout;
-`world-move` far outside the retail bounds (y=9024) crashed the region transition
-in `CTCInventoryMap::UpdateRegionsCorrespondances` -- keep moves inside the map
-screen's extent for now.
+the engine's placement grid is a hard (0,0)-(8192,8192): `CWorld::Init` 0x4a6e30
+constructs `CWorldMap` over that box and `SetMapPlacement` 0x4fc9c0 writes map slots
+into a 32-unit cell grid with no bounds check (a map at y=9024 crashed the next
+region transition), so moves must keep the box inside 8192 -- the canvas draws the
+grid edge and `checkMove` refuses anything past it.
 
 ## Implementation map
 

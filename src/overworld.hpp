@@ -46,6 +46,11 @@ bool loadWorldLayout(const std::filesystem::path& gameRoot, WorldLayout& out, st
 
 struct MapMove { std::string name; int x = 0, y = 0; };
 
+// The engine's world placement grid: CWorld::Init builds CWorldMap over the
+// box (0,0)-(8192,8192) in 32-unit cells; a map placed past it indexes outside
+// the grid (retail's maps end at 5216 x 8160).
+constexpr int kWorldExtent = 8192;
+
 // The rules a move must pass (also what the canvas shows while dragging):
 // 32-aligned, inside the u16 patch grid, no overlap with any box that is not
 // itself part of `moves`.

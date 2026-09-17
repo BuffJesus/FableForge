@@ -153,7 +153,11 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
     const WorldMapBox* box = layout.find(move.name);
     if (!box) { why = move.name + " is not in the world"; return false; }
     if (move.x % 32 || move.y % 32) { why = "origin must be 32-aligned"; return false; }
-    if (move.x < 0 || move.y < 0 || move.x + box->w > 65535 || move.y + box->h > 65535) { why = "outside the world grid (0..65535)"; return false; }
+    // the engine's placement grid is (0,0)-(8192,8192): CWorld::Init 0x4a6e30
+    // constructs CWorldMap with that box and SetMapPlacement 0x4fc9c0 writes
+    // the slot into a 32-unit cell grid with no bounds check (a map at y=9024
+    // crashed the region transition)
+    if (move.x < 0 || move.y < 0 || move.x + box->w > kWorldExtent || move.y + box->h > kWorldExtent) { why = "outside the engine's world grid (0..8192)"; return false; }
     std::set<int> movedSlots;
     for (const auto& mv : moves) if (const auto* b = layout.find(mv.name)) movedSlots.insert(b->slot);
     movedSlots.insert(box->slot);
