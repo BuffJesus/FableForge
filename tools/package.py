@@ -8,7 +8,7 @@ import argparse, os, shutil, subprocess, sys, zipfile
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", default="0.8.0")
+    ap.add_argument("--version", default="0.8.1")
     ap.add_argument("--no-check", action="store_true")
     a = ap.parse_args()
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:

@@ -104,6 +104,12 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   (Bowerstone Bridge's `WATER_BWLAKE_8` slot points at what is now `WATER_BWLAKE_1`);
   the palette NAME wins whenever it disagrees with the index, for textures and water alike.
 * **No lights, particles, creatures (by default), scripts.**
+* **Editor gaps** — a lone new level shows the grey void beyond its edges (retail
+  surrounds every level with filler/sea maps); the *Enemy spawner* card writes the
+  retail generator block but the engine has not been seen spawning from a new one yet
+  (retail generators are activated by something outside the TNG, see `docs/PLAN.md`);
+  the minimap/texture append path needs Python next to a FableTLC checkout
+  (`tools/texture_build.py`) like every earlier release.
 
 ## GUI
 
