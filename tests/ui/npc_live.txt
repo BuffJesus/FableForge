@@ -1,0 +1,20 @@
+# Live-install probe (not in check_all): a villager NPC placed in Greatwood_1 as the retail AICreature block, saved loose and written into FinalAlbion.wad.
+wait_maps
+wait_ready
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+camera 48 96 40 0 -60 30
+frames 2
+place CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED AtlasNPC
+wait_foliage
+frames 2
+assert_state selected_def CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED
+save_level
+frames 2
+deploy_level
+frames 2
+assert_state doc_dirty 0
+quit

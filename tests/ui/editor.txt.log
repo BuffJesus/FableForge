@@ -51,6 +51,15 @@ shot build/ui/e4_placed.png
 ok   delete_thing
 ok   wait_foliage
 ok   frames 2
+ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken
+ok   wait_foliage
+ok   frames 2
+ok   assert_state doc_changes 1
+ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+ok   undo
+ok   wait_foliage
+ok   frames 2
+ok   assert_state doc_changes 0
 ok   assert_state doc_changes 0
 ok   pick 0.5 0.5 -> thing 31
 ok   frames 1
@@ -151,7 +160,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=387 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=367 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -190,7 +199,7 @@ ok   set unsaved_prompt 0
      world_pending_sees=0
      world_ok=0
      world_stitch=0
-     paint_theme=0
+     paint_theme=42
      palette_named=29
      doc_loaded=1
      doc_things=313

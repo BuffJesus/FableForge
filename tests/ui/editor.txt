@@ -48,6 +48,16 @@ screenshot build/ui/e4_placed.png
 delete_thing
 wait_foliage
 frames 2
+# a creature (NPC) as the retail AICreature block, with a script name
+place CREATURE_NEW_CHICKEN_01 AtlasChicken
+wait_foliage
+frames 2
+assert_state doc_changes 1
+assert_state selected_def CREATURE_NEW_CHICKEN_01
+undo
+wait_foliage
+frames 2
+assert_state doc_changes 0
 assert_state doc_changes 0
 pick 0.5 0.5
 frames 1

@@ -1,0 +1,20 @@
+ok   wait_maps
+ok   wait_ready
+ok   select Greatwood_1
+ok   wait_loaded
+ok   edit 1
+ok   frames 2
+ok   assert_state doc_loaded 1
+ok   camera 48 96 40 0 -60 30
+ok   frames 2
+ok   place CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED AtlasNPC
+ok   wait_foliage
+ok   frames 2
+ok   assert_state selected_def CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED
+ok   save_level
+ok   frames 2
+ok   deploy_level
+ok   frames 2
+ok   assert_state doc_dirty 0
+ok   quit
+RESULT PASS

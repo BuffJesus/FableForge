@@ -129,6 +129,15 @@ public:
     // the given CREATURE_GENERATION_FAMILY names. Position is map-local.
     size_t placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
                                   float radius, int activeLimit, const std::string& scriptName = "");
+    // A creature (NPC, animal, guard...) as the retail AICreature thing: a
+    // CTCPhysicsNavigator frame, targetable/talk blocks, VillageMember 0 for
+    // villager defs, and the world-space InitialPos the engine reads (map
+    // origin from FinalAlbion.wld). Position/forward are map-local.
+    size_t placeCreature(const float pos[3], const float forward[2], const std::string& definition,
+                         const std::string& scriptName = "");
+    // WLD MapX/MapY of this map (0,0 when the map is not placed / no WLD).
+    int worldX() const { return worldX_; }
+    int worldY() const { return worldY_; }
     void remove(size_t index);
 
     bool canUndo() const { return !undo_.empty(); }
@@ -205,6 +214,7 @@ private:
     Snapshot snapshot() const;
     void writeTerrainToLevel();
     std::string mapName_;
+    int worldX_ = 0, worldY_ = 0;
     forge::tng::File file_;
     std::string original_;
     std::vector<Snapshot> undo_, redo_;

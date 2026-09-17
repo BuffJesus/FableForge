@@ -318,7 +318,7 @@ void App::frameSelected() {
     camera_.lookAt(c[0], c[1], c[2], camera_.yaw, std::max(camera_.pitch, 0.35f), std::max(r * 4.0f, 8.0f));
 }
 
-bool App::placeDefinition(const std::string& def) {
+bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
@@ -336,7 +336,10 @@ bool App::placeDefinition(const std::string& def) {
     const float fl = std::sqrt(fx * fx + fy * fy);
     if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
     try {
-        const size_t n = doc_.place(p);
+        const bool creature = def.rfind("CREATURE_", 0) == 0;
+        const float pos[3] = {p.position.x, p.position.y, p.position.z};
+        const float fwd[2] = {p.forward.x, p.forward.y};
+        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName) : doc_.place(p);
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
@@ -1064,10 +1067,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##add", inner);
     theme::label("Add an object");
-    if (defList_.empty() && ctx_.ready()) defList_ = ctx_.definitions({"OBJECT", "BUILDING"});
+    if (defList_.empty() && ctx_.ready()) defList_ = ctx_.definitions({"OBJECT", "BUILDING", "CREATURE"});
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-    ImGui::InputTextWithHint("##defsearch", "Search definitions (OBJECT_..., BUILDING_...)", defSearch_, sizeof defSearch_);
+    ImGui::InputTextWithHint("##defsearch", "Search definitions (OBJECT_..., BUILDING_..., CREATURE_...)", defSearch_, sizeof defSearch_);
     ImGui::PopStyleVar();
     auto_.registerWidget("input_defsearch");
     static std::string placeDef;

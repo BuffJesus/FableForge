@@ -1619,7 +1619,10 @@ bool Automation::tick(App& app) {
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
-    else if (cmd == "place") { if (!app.placeDefinition(rest)) fail("place failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "place") {   // place <DEFINITION> [scriptname]
+        std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
+        if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
+    }
     else if (cmd == "place_spawner") {   // place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]
         std::istringstream rs(rest); float radius = 12; int limit = 3; std::string fams, sn; rs >> radius >> limit >> fams >> sn;
         std::vector<std::string> families; std::string cur;

@@ -157,6 +157,14 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
     }
     if (!openText(mapName, std::move(text), error)) return false;
     if (!levPath.empty()) loadLevel(levPath, error);
+    // the map's world origin (creatures carry world-space InitialPos)
+    worldX_ = worldY_ = 0;
+    try {
+        const auto world = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
+        const std::string want = lower(mapName) + ".lev";
+        for (const auto& m : world.maps())
+            if (lower(fs::path(m.levelName).filename().string()) == want) { worldX_ = m.mapX; worldY_ = m.mapY; break; }
+    } catch (const std::exception&) {}
     return true;
 }
 
@@ -778,6 +786,64 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
         b += "EndThing;" + eol;
         // into the NULL section (insertThingBlock places it there); appending after the
         // last thing would land in a quest-loaded section that the engine never loads
+        const size_t n = file_.insertThingBlock("NULL", b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
+size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName) {
+    if (definition.empty()) throw std::invalid_argument("a creature needs a definition");
+    pushUndo();
+    try {
+        // the retail block (StartOakValeWest chickens / villagers): navigator
+        // physics, targetable, talk, editor, the AI flags, world-space InitialPos
+        const std::string eol = "\r\n";
+        float fx = forward[0], fy = forward[1];
+        const float fl = std::sqrt(fx * fx + fy * fy);
+        if (fl < 1e-6f) { fx = 0.0f; fy = 1.0f; } else { fx /= fl; fy /= fl; }
+        const bool villager = definition.find("VILLAGER") != std::string::npos;
+        std::string b;
+        b += "NewThing AICreature;" + eol;
+        b += "Player 0;" + eol;
+        b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
+        b += "DefinitionType \"" + definition + "\";" + eol;
+        b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
+        b += "ScriptData \"NULL\";" + eol;
+        b += "ThingGamePersistent FALSE;" + eol;
+        b += "ThingLevelPersistent FALSE;" + eol;
+        b += "StartCTCPhysicsNavigator;" + eol;
+        b += "PositionX " + formatFloat(pos[0]) + ";" + eol;
+        b += "PositionY " + formatFloat(pos[1]) + ";" + eol;
+        b += "PositionZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "RHSetForwardX " + formatFloat(fx) + ";" + eol;
+        b += "RHSetForwardY " + formatFloat(fy) + ";" + eol;
+        b += "RHSetForwardZ 0.0;" + eol;
+        b += "RHSetUpX 0.0;" + eol + "RHSetUpY 0.0;" + eol + "RHSetUpZ 0.999994;" + eol;
+        b += "EndCTCPhysicsNavigator;" + eol;
+        b += "StartCTCTargeted;" + eol + "Targetable TRUE;" + eol + "EndCTCTargeted;" + eol;
+        b += "StartCTCTalk;" + eol + "EndCTCTalk;" + eol;
+        b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
+        if (villager) b += "StartCTCVillageMember;" + eol + "VillageUID 0;" + eol + "EndCTCVillageMember;" + eol;
+        b += "Health 1.0;" + eol;
+        b += "OverridingBrainName NULL;" + eol;
+        b += "HasInformation FALSE;" + eol;
+        b += "WanderWithInformation FALSE;" + eol;
+        b += "WaveWithInformation FALSE;" + eol;
+        b += "ContinueAIWithInformation FALSE;" + eol;
+        b += "EnableCreatureAutoPlacing FALSE;" + eol;
+        b += "AllowedToFollowHero FALSE;" + eol;
+        b += "RegionFollowingOverriddenFromScript FALSE;" + eol;
+        b += "RespondingToFollowAndWait TRUE;" + eol;
+        b += "CanBeCourted FALSE;" + eol;
+        b += "CanBeMarried FALSE;" + eol;
+        b += "InitialPosX " + formatFloat(pos[0] + float(worldX_)) + ";" + eol;
+        b += "InitialPosY " + formatFloat(pos[1] + float(worldY_)) + ";" + eol;
+        b += "InitialPosZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "EndThing;" + eol;
         const size_t n = file_.insertThingBlock("NULL", b);
         ++revision_;
         return n;

@@ -23,6 +23,7 @@ in-game harness run (`tools/ingame`).
 | Seam stitching between newly adjacent maps (World toggle, `world-stitch`, `world-move --stitch`) | shipped (2026-09-17, in-game verified both sides) |
 | Paint any ENGINE_THEME of the game (palette add from game.bin) | shipped (2026-09-17, in-game verified) |
 | Custom ground texture from a PNG (textures.big + ENGINE_THEME append) | shipped (2026-09-17, in-game verified) |
+| Creatures placed as retail AICreature things (NPCs, animals) | shipped (2026-09-17, in-game verified) |
 
 ## Rocks turned today
 
@@ -187,7 +188,9 @@ in-game harness run (`tools/ingame`).
 2 (old). **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
-3. **Villages & creature generators** as thing presets (section 3). Spawner
+3. **Villages & creature generators** as thing presets (section 3). Creatures
+   themselves place fine (2026-09-17: `place CREATURE_...` = the retail
+   AICreature block, villager verified in-game). Spawner
    card shipped 2026-09-17 (MARKER_CREATURE_GENERATOR with the retail
    self-triggering CTCCreatureGenerator block, family picker from the
    CREATURE_GENERATION_FAMILY defs; inserted into the NULL section -- the last

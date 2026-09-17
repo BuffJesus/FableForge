@@ -185,7 +185,7 @@ public:
     void editUndo();
     void editRedo();
     void frameSelected();
-    bool placeDefinition(const std::string& def);      // at the camera focus point, on the ground
+    bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
     bool saveDocument();                                // loose .tng under saveRoot()
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
     void revertDocument();

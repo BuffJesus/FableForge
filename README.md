@@ -140,9 +140,10 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   and scale in the panel. **End** drops it onto the terrain, **F** frames it.
 * **Ctrl+D** duplicates, **Del** removes, **Ctrl+Z / Ctrl+Y** undo and redo.
 * *Objects in this map* lists every placed thing (filter by definition or script name;
-  double-click to fly to it). *Add an object* searches every `OBJECT_` / `BUILDING_`
-  definition in `game.bin` and places it where the camera looks, on the ground,
-  facing you.
+  double-click to fly to it). *Add an object* searches every `OBJECT_` / `BUILDING_` /
+  `CREATURE_` definition in `game.bin` and places it where the camera looks, on the
+  ground, facing you (creatures as the game's own AICreature things: NPCs, animals,
+  guards).
 * *Changes* summarises what differs from the original by UID. **Save .tng** writes
   the loose `data/Levels/FinalAlbion/<map>.tng`; **Write into FinalAlbion.wad** puts
   the edited file into the archive the game actually loads. Both keep a one-time
