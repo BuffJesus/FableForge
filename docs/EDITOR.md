@@ -217,8 +217,11 @@ path from the command line, `AlbionAtlas world` lists the layout:
    `CLocalDetailPrimitive*` writers).
 3. Maps that touched the moved one before or after get their shared edges re-baked
    (best effort: fillers the baker cannot rebuild keep their retail chunk).
+4. The map's `.tng` (loose and WAD): thing positions are map-local, but AI
+   creatures carry `InitialPosX/Y` in world units (a scan of every retail TNG
+   against its map box found no other world-space key), so those are shifted.
 
-Placed objects (`.tng`) are map-local and stay as they are. **Verified**: the audit
+Placed objects (`.tng`) otherwise stay as they are. **Verified**: the audit
 walk (`AlbionAtlas chunk-audit --all`: every coordinate inside its map's box) is
 clean on all 398 retail chunks; `chunk-relocate <map> <dx> <dy>` checks every
 coordinate site moved by exactly the shift on every map; TeleporterGreatwood moved

@@ -18,6 +18,8 @@
 #include "forge/stbinfo.hpp"
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
+#include "forge/tng.hpp"
+#include "forge/thingplacer.hpp"
 #include "stbrelocate.hpp"
 
 namespace albion::editor {
@@ -433,6 +435,47 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
             }
             bwd.write(bwdPath);
             for (const auto& m : mirrors) if (fs::exists(m)) bwd.write(m);
+        }
+        // 3b. TNG: thing positions are map-local, but AI creatures carry their
+        //     InitialPosX/Y in WORLD units (791/802 retail values sit in the map's
+        //     world box; the only such keys) -- shift them for every moved map,
+        //     in the loose file when there is one and in the WAD entry
+        if (!moveOf.empty() && fs::exists(wadPath)) {
+            std::map<std::string, std::vector<uint8_t>> replacements;
+            const auto wad = forge::wad::Archive::open(wadPath);
+            for (const auto& [slot, mv] : moveOf) {
+                const WorldMapBox* was = nullptr;
+                for (const auto& b : before.maps) if (b.slot == slot) was = &b;
+                const int dx = mv.x - was->x, dy = mv.y - was->y;
+                if (!dx && !dy) continue;
+                const fs::path loose = levels / "FinalAlbion" / (was->name + ".tng");
+                std::string entryName;
+                const std::string want = lower(was->name + ".tng");
+                for (const auto& e : wad.entries())
+                    if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
+                std::string text;
+                if (fs::exists(loose)) { const auto b = readFile(loose); text.assign(b.begin(), b.end()); }
+                else if (!entryName.empty()) { const auto b = wad.read(*std::find_if(wad.entries().begin(), wad.entries().end(), [&](const forge::wad::Entry& e) { return e.name == entryName; })); text.assign(b.begin(), b.end()); }
+                else continue;
+                auto tng = forge::tng::File::parseText(text, was->name + ".tng");
+                int shifted = 0;
+                for (size_t i = 0; i < tng.things().size(); ++i) {
+                    const auto& t = tng.things()[i];
+                    const auto ix = t.find("InitialPosX"), iy = t.find("InitialPosY");
+                    if (ix) { tng.setThingProperty(i, "InitialPosX", forge::thingplacer::formatFloat(float(std::atof(ix->c_str()) + dx))); ++shifted; }
+                    if (iy) tng.setThingProperty(i, "InitialPosY", forge::thingplacer::formatFloat(float(std::atof(iy->c_str()) + dy)));
+                }
+                if (!shifted) continue;
+                const std::string out = tng.serialize();
+                if (fs::exists(loose)) writeFile(loose, out.data(), out.size());
+                if (!entryName.empty()) replacements[entryName] = std::vector<uint8_t>(out.begin(), out.end());
+                notes.push_back(was->name + ".tng: " + std::to_string(shifted) + " creature InitialPos shifted");
+            }
+            if (!replacements.empty()) {
+                const fs::path temp = wadPath.string() + ".atlas-tmp";
+                forge::wad::repack(wadPath, replacements, temp);
+                fs::rename(temp, wadPath);
+            }
         }
         // 4. STB
         if (!batch.empty()) {
