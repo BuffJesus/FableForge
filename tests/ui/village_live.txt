@@ -1,0 +1,26 @@
+# Live-install probe (not in check_all): a VILLAGE_GENERIC village placed in Greatwood_1 with a villager member, saved loose and written into FinalAlbion.wad.
+wait_maps
+wait_ready
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+camera 48 96 40 0 -60 30
+frames 2
+place_village VILLAGE_GENERIC AtlasVillage
+wait_foliage
+frames 2
+assert_state selected_def VILLAGE_GENERIC
+place CREATURE_OAKVALE_VILLAGER_FEMALE_UNEMPLOYED AtlasNPC
+wait_foliage
+frames 2
+village_member AtlasVillage
+frames 1
+assert_state selected_village AtlasVillage
+save_level
+frames 2
+deploy_level
+frames 2
+assert_state doc_dirty 0
+quit

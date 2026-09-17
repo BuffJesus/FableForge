@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -847,6 +848,108 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
         const size_t n = file_.insertThingBlock("NULL", b);
         ++revision_;
         return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
+size_t Document::placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName) {
+    if (definition.empty()) throw std::invalid_argument("a village needs a definition");
+    pushUndo();
+    try {
+        // the retail block (StartOakValeWest V_OakVale)
+        const std::string eol = "\r\n";
+        std::string b;
+        b += "NewThing Village;" + eol;
+        b += "Player 4;" + eol;
+        b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
+        b += "DefinitionType \"" + definition + "\";" + eol;
+        b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
+        b += "ScriptData \"NULL\";" + eol;
+        b += "ThingGamePersistent TRUE;" + eol;
+        b += "ThingLevelPersistent TRUE;" + eol;
+        b += "StartCTCPhysicsStandard;" + eol;
+        b += "PositionX " + formatFloat(pos[0]) + ";" + eol;
+        b += "PositionY " + formatFloat(pos[1]) + ";" + eol;
+        b += "PositionZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "RHSetForwardX 0.0;" + eol + "RHSetForwardY 0.999994;" + eol + "RHSetForwardZ 0.0;" + eol;
+        b += "RHSetUpX 0.0;" + eol + "RHSetUpY 0.0;" + eol + "RHSetUpZ 0.999994;" + eol;
+        b += "EndCTCPhysicsStandard;" + eol;
+        b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
+        b += "StartCTCVillage;" + eol;
+        b += "HasBeenInitiallyPopulated FALSE;" + eol;
+        b += "FramePlayerLastSeenByGuard 0;" + eol;
+        b += "Limbo FALSE;" + eol;
+        b += "IsEnemyBecauseOfCrime FALSE;" + eol;
+        b += "EndCTCVillage;" + eol;
+        b += "StartCTCEnemy;" + eol;
+        b += "FriendsWithEverythingFlag FALSE;" + eol;
+        b += "EnableFollowersEnemyProxy TRUE;" + eol;
+        b += "FactionName \"\";" + eol;
+        b += "EndCTCEnemy;" + eol;
+        b += "StartCTCCreatureOpinionOfHero;" + eol;
+        b += "InteractedFlag FALSE;" + eol;
+        b += "GreetedFlag FALSE;" + eol;
+        b += "LastOpinionReactionFrame 0;" + eol;
+        b += "NumberOfTimesHit 0.0;" + eol;
+        b += "ToleranceToBeingHitOverride -1.0;" + eol;
+        b += "FrameToDecayNumberOfTimesHit 2147483647;" + eol;
+        b += "ForcedAttitude 18;" + eol;
+        b += "HeroOpinionEnemy FALSE;" + eol;
+        b += "EndCTCCreatureOpinionOfHero;" + eol;
+        b += "Health 0.0;" + eol;
+        b += "EndThing;" + eol;
+        const size_t n = file_.insertThingBlock("NULL", b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
+std::vector<ThingSummary> Document::villages() const {
+    std::vector<ThingSummary> out;
+    for (size_t i = 0; i < file_.things().size(); ++i)
+        if (file_.things()[i].findCtc("CTCVillage")) out.push_back(summary(i));
+    return out;
+}
+
+uint64_t Document::villageOf(size_t index) const {
+    if (index >= file_.things().size()) return 0;
+    const auto* m = file_.things()[index].findCtc("CTCVillageMember");
+    if (!m) return 0;
+    for (const auto& pr : m->properties)
+        if (pr.key == "VillageUID") return std::strtoull(pr.value.c_str(), nullptr, 10);
+    return 0;
+}
+
+void Document::setVillageMember(size_t index, uint64_t villageUid) {
+    if (index >= file_.things().size()) throw std::out_of_range("setVillageMember: bad thing index");
+    pushUndo();
+    try {
+        if (file_.things()[index].findCtc("CTCVillageMember")) {
+            file_.setCtcProperty(index, "CTCVillageMember", "VillageUID", std::to_string(villageUid));
+        } else {
+            // insert the block after CTCEditor (retail order), else before the
+            // first top-level line after the CTC blocks, else before EndThing
+            std::string text = file_.thingBlockText(index);
+            const std::string block = "StartCTCVillageMember;\r\nVillageUID " + std::to_string(villageUid) + ";\r\nEndCTCVillageMember;\r\n";
+            size_t at = text.find("EndCTCEditor;");
+            if (at != std::string::npos) {
+                at = text.find('\n', at);
+                at = at == std::string::npos ? text.size() : at + 1;
+            } else {
+                at = text.rfind("EndThing;");
+                if (at == std::string::npos) throw std::runtime_error("thing block without EndThing");
+            }
+            text.insert(at, block);
+            const std::string section = file_.sectionOf(index);
+            file_.removeThing(index);
+            file_.insertThingBlockBefore(index, text);
+        }
+        ++revision_;
     } catch (...) {
         restore(undo_.back()); undo_.pop_back();
         throw;

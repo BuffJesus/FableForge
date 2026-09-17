@@ -279,6 +279,14 @@ private:
     void drawNewLevelCard(float pad, float inner, float cardInner);
     // enemy spawner card: CREATURE_GENERATION_FAMILY picker + radius/limit, placed at the view centre
     void drawSpawnerCard(float pad, float inner, float cardInner);
+    // village card: VILLAGE_* picker; membership lives in the Selection card
+    void drawVillageCard(float pad, float inner, float cardInner);
+    std::vector<std::pair<std::string, std::string>> villageList_;
+    char villageSearch_[64] = {};
+public:
+    bool placeVillage(const std::string& def, const std::string& scriptName = "");
+    bool setSelectedVillage(uint64_t villageUid);   // 0 = leave
+private:
     std::vector<std::string> familyList_;
     std::vector<std::string> spawnerFamilies_;   // chosen families
     char familySearch_[64] = {};

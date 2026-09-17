@@ -24,6 +24,7 @@ in-game harness run (`tools/ingame`).
 | Paint any ENGINE_THEME of the game (palette add from game.bin) | shipped (2026-09-17, in-game verified) |
 | Custom ground texture from a PNG (textures.big + ENGINE_THEME append) | shipped (2026-09-17, in-game verified) |
 | Creatures placed as retail AICreature things (NPCs, animals) | shipped (2026-09-17, in-game verified) |
+| Villages: VILLAGE_* thing + per-thing membership | shipped (2026-09-17; loads in-game, behaviour unverified) |
 
 ## Rocks turned today
 
@@ -189,8 +190,9 @@ in-game harness run (`tools/ingame`).
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
 3. **Villages & creature generators** as thing presets (section 3). Creatures
-   themselves place fine (2026-09-17: `place CREATURE_...` = the retail
-   AICreature block, villager verified in-game). Spawner
+   place fine (2026-09-17: `place CREATURE_...` = the retail AICreature block,
+   villager verified in-game) and villages too (Village card + membership;
+   loads with a member, behaviour unverified). Spawner
    card shipped 2026-09-17 (MARKER_CREATURE_GENERATOR with the retail
    self-triggering CTCCreatureGenerator block, family picker from the
    CREATURE_GENERATION_FAMILY defs; inserted into the NULL section -- the last

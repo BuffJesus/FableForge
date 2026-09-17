@@ -54,6 +54,26 @@ wait_foliage
 frames 2
 assert_state doc_changes 1
 assert_state selected_def CREATURE_NEW_CHICKEN_01
+# a village the chicken joins (CTCVillageMember added), then leaves
+place_village VILLAGE_OAKVALE_INTRO AtlasVillage
+wait_foliage
+frames 2
+assert_state villages 2
+assert_state selected_def VILLAGE_OAKVALE_INTRO
+select_def CREATURE_NEW_CHICKEN_01
+frames 1
+assert_state selected_village 0
+assert_widget combo_village
+village_member AtlasVillage
+frames 1
+assert_state selected_village AtlasVillage
+assert_state selected_def CREATURE_NEW_CHICKEN_01
+village_member 0
+frames 1
+assert_state selected_village 0
+undo
+undo
+undo
 undo
 wait_foliage
 frames 2

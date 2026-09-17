@@ -135,6 +135,18 @@ public:
     // origin from FinalAlbion.wld). Position/forward are map-local.
     size_t placeCreature(const float pos[3], const float forward[2], const std::string& definition,
                          const std::string& scriptName = "");
+    // A village: the retail `Village` thing (CTCVillage + enemy/opinion blocks,
+    // ThingGamePersistent) for a VILLAGE_* def. Buildings, markers and
+    // creatures join it through their CTCVillageMember.VillageUID.
+    size_t placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName = "");
+    // Every Village thing in the map (index, uid, definition, script name).
+    std::vector<ThingSummary> villages() const;
+    // The village a thing belongs to (its CTCVillageMember.VillageUID; 0 = none / no block).
+    uint64_t villageOf(size_t index) const;
+    // Make a thing a member of the village with that uid (0 = leave, the block
+    // stays with VillageUID 0 like retail). Adds the CTCVillageMember block
+    // after CTCEditor when the thing has none. One undo step.
+    void setVillageMember(size_t index, uint64_t villageUid);
     // WLD MapX/MapY of this map (0,0 when the map is not placed / no WLD).
     int worldX() const { return worldX_; }
     int worldY() const { return worldY_; }

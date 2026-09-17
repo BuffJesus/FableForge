@@ -41,6 +41,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `move_thing <dx> <dy> <dz>` / `rotate_thing <deg>` / `scale_thing <factor>` / `ground_thing` | edit the selection (one undo step each) |
 | `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits (the objects layer reloads; `wait_foliage` waits for it) |
 | `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground (`CREATURE_*` as the retail AICreature block) |
+| `place_village <VILLAGE_DEF> [scriptname]` / `village_member <uid\|scriptname\|0>` | place a Village thing at the camera focus; the selected thing joins/leaves a village (state `villages`, `selected_village`) |
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`) |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |

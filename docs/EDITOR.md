@@ -336,8 +336,20 @@ section like everything else. **In-game verified**: a
 fresh game) stands at the placed spot facing the camera (`--things AtlasNPC`
 finds it within 0.1). Saves cache a region's entities, so a new game (or a
 first visit) is needed to see a new creature. Scripts: `place <CREATURE_...>
-[scriptname]`; live probe `tests/ui/npc_live.txt`. Villages (a `VILLAGE_*` thing
-with members and owned houses) are the next step.
+[scriptname]`; live probe `tests/ui/npc_live.txt`.
+
+**Villages**: the *Village* card places a `VILLAGE_*` thing (the retail
+`Village` block: CTCVillage + enemy/opinion blocks, ThingGamePersistent;
+`Document::placeVillage`), and every building, marker or creature gets a
+*Village* box in its Selection card that sets its `CTCVillageMember.VillageUID`
+(`setVillageMember` adds the block after CTCEditor when missing; retail
+Oakvale: buildings and markers carry the village uid, house contents carry
+`CTCOwnedEntity.OwnerUID` = the house). In-game: VILLAGE_GENERIC + a member
+villager in Greatwood_1 load fine (fresh game, villager found); what the
+village does with its members (guards, crime, homes) is not verified.
+Scripts: `place_village <VILLAGE_DEF> [scriptname]`, `village_member
+<uid|scriptname|0>`, state `villages` / `selected_village`; live probe
+`tests/ui/village_live.txt`.
 
 ## Enemy spawners (experimental)
 

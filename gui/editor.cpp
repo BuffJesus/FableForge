@@ -495,6 +495,76 @@ bool App::placeSpawner(const std::vector<std::string>& families, float radius, i
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
 
+bool App::placeVillage(const std::string& def, const std::string& scriptName) {
+    if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
+    if (def.rfind("VILLAGE_", 0) != 0) { pushLog("editor: " + def + " is not a VILLAGE_ definition", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    float pos[3] = {focus[0], -focus[2], focus[1]};
+    if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
+    try {
+        const size_t n = doc_.placeVillage(pos, def, scriptName);
+        selectedUid_ = doc_.uidOf(n);
+        selectedThing_ = int(n);
+        renderer_.selectedThing = selectedThing_;
+        pushLog("placed village " + def + " (uid " + std::to_string(selectedUid_) + "); join buildings and creatures to it from their Selection card", 0);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
+}
+
+bool App::setSelectedVillage(uint64_t villageUid) {
+    if (!documentLoaded() || selectedThing_ < 0) return false;
+    try {
+        doc_.setVillageMember(size_t(selectedThing_), villageUid);
+        // the block edit re-inserts the thing: keep the selection by uid
+        if (const auto i = doc_.indexOfUid(selectedUid_)) { selectedThing_ = int(*i); renderer_.selectedThing = selectedThing_; }
+        pushLog(villageUid ? "joined village " + std::to_string(villageUid) : std::string("left the village"), 0);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
+}
+
+void App::drawVillageCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##village", inner);
+    theme::label("Village");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A VILLAGE_* thing (the retail CTCVillage block: guards, crime, homes). Place it, then pick it in the Village box of each building, marker and creature that belongs to it.");
+    ImGui::PopFont();
+    if (villageList_.empty() && ctx_.ready()) villageList_ = ctx_.definitions({"VILLAGE"});
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::InputTextWithHint("##villagesearch", "Search village definitions (OAKVALE, BOWERSTONE...)", villageSearch_, sizeof villageSearch_);
+    ImGui::PopStyleVar();
+    auto_.registerWidget("input_villagesearch");
+    if (villageSearch_[0]) {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+        ImGui::BeginChild("##villagelist", ImVec2(cardInner, S(90)), ImGuiChildFlags_None);
+        ImGui::PopStyleColor();
+        ImGui::PushFont(fontSmall_);
+        int shown = 0;
+        for (const auto& [name, type] : villageList_) {
+            if (!contains(name, villageSearch_)) continue;
+            if (ImGui::Selectable(name.c_str(), false)) placeVillage(name);
+            if (++shown >= 100) break;
+        }
+        if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+        ImGui::PopFont();
+        ImGui::EndChild();
+    }
+    const auto vills = doc_.villages();
+    if (!vills.empty()) {
+        ImGui::PushFont(fontSmall_);
+        for (const auto& v : vills) {
+            size_t members = 0;
+            for (size_t i = 0; i < doc_.thingCount(); ++i) members += doc_.villageOf(i) == v.uid;
+            ImGui::TextColored(theme::vec(theme::Muted), "%s  %s   %zu member(s)", v.definition.c_str(), v.scriptName.c_str(), members);
+        }
+        ImGui::PopFont();
+    }
+    theme::endCard();
+}
+
 void App::drawSpawnerCard(float pad, float inner, float cardInner) {
     using theme::S;
     if (!documentLoaded()) return;
@@ -1020,6 +1090,27 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Delete  (Del)", ImVec2(half, S(28)))) deleteSelected();
         auto_.registerWidget("btn_delete");
+        // village membership: buildings, markers and creatures belong to a Village thing by uid
+        if (s.type != "Village") {
+            const auto vills = doc_.villages();
+            if (!vills.empty()) {
+                const uint64_t mine = doc_.villageOf(size_t(selectedThing_));
+                std::string cur = "none";
+                for (const auto& v : vills) if (v.uid == mine) cur = v.scriptName.empty() ? v.definition : v.scriptName;
+                ImGui::Dummy(ImVec2(0, S(4)));
+                theme::label("Village");
+                ImGui::SetNextItemWidth(cardInner);
+                if (ImGui::BeginCombo("##village", cur.c_str())) {
+                    if (ImGui::Selectable("none", mine == 0)) setSelectedVillage(0);
+                    for (const auto& v : vills) {
+                        const std::string lbl = (v.scriptName.empty() ? v.definition : v.scriptName) + "  (uid " + std::to_string(v.uid) + ")";
+                        if (ImGui::Selectable(lbl.c_str(), v.uid == mine)) setSelectedVillage(v.uid);
+                    }
+                    ImGui::EndCombo();
+                }
+                auto_.registerWidget("combo_village");
+            }
+        }
     }
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
@@ -1097,6 +1188,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
+    drawVillageCard(pad, inner, cardInner);
+    ImGui::Dummy(ImVec2(0, S(8)));
     drawSpawnerCard(pad, inner, cardInner);
     ImGui::Dummy(ImVec2(0, S(8)));
     drawNewLevelCard(pad, inner, cardInner);

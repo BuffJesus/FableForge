@@ -56,6 +56,25 @@ ok   wait_foliage
 ok   frames 2
 ok   assert_state doc_changes 1
 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+ok   place_village VILLAGE_OAKVALE_INTRO AtlasVillage
+ok   wait_foliage
+ok   frames 2
+ok   assert_state villages 2
+ok   assert_state selected_def VILLAGE_OAKVALE_INTRO
+ok   select_def CREATURE_NEW_CHICKEN_01 -> 55
+ok   frames 1
+ok   assert_state selected_village 0
+ok   assert_widget combo_village
+ok   village_member AtlasVillage
+ok   frames 1
+ok   assert_state selected_village AtlasVillage
+ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+ok   village_member 0
+ok   frames 1
+ok   assert_state selected_village 0
+ok   undo
+ok   undo
+ok   undo
 ok   undo
 ok   wait_foliage
 ok   frames 2
@@ -160,7 +179,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=367 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=395 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -200,6 +219,7 @@ ok   set unsaved_prompt 0
      world_ok=0
      world_stitch=0
      paint_theme=42
+     villages=2
      palette_named=29
      doc_loaded=1
      doc_things=313

@@ -672,6 +672,16 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
     v.push_back("world_stitch=" + std::string(worldStitch_ ? "1" : "0"));
     v.push_back("paint_theme=" + std::to_string(paintTheme_));
+    if (documentLoaded()) {
+        v.push_back("villages=" + std::to_string(doc_.villages().size()));
+        if (selectedThing_ >= 0) {
+            const uint64_t vu = doc_.villageOf(size_t(selectedThing_));
+            std::string vn = vu ? std::to_string(vu) : "0";
+            for (const auto& vv : doc_.villages()) if (vv.uid == vu && !vv.scriptName.empty()) vn = vv.scriptName;
+            v.push_back("selected_village=" + vn);
+        }
+        if (selectedThing_ >= 0) v.push_back("selected_uid=" + std::to_string(selectedUid_));
+    }
     if (documentLoaded() && doc_.level()) { size_t named = 0; for (const auto& g : doc_.level()->groundThemes()) named += !g.name.empty(); v.push_back("palette_named=" + std::to_string(named)); }
     if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
@@ -1622,6 +1632,15 @@ bool Automation::tick(App& app) {
     else if (cmd == "place") {   // place <DEFINITION> [scriptname]
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "place_village") {   // place_village <VILLAGE_DEF> [scriptname]
+        std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
+        if (!app.placeVillage(def, sn)) fail("place_village failed: " + rest); else note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "village_member") {   // village_member <uid|scriptname|0>: the selected thing joins/leaves that village
+        uint64_t uid = std::strtoull(rest.c_str(), nullptr, 10);
+        if (!uid && rest != "0") for (const auto& v : app.doc_.villages()) if (v.scriptName == rest || v.definition == rest) uid = v.uid;
+        if ((!uid && rest != "0") || !app.setSelectedVillage(uid)) fail("village_member failed: " + rest); else note("ok   " + line); ++pc_;
     }
     else if (cmd == "place_spawner") {   // place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]
         std::istringstream rs(rest); float radius = 12; int limit = 3; std::string fams, sn; rs >> radius >> limit >> fams >> sn;
