@@ -13,7 +13,7 @@ in-game harness run (`tools/ingame`).
 | Terrain sculpt + walkable paint + ground-theme paint, STB re-bake in place | shipped |
 | Navigation quadtree patched per touched cell (door nodes, layers kept) | shipped |
 | New level: blank, any retail size, from-scratch chunk | shipped |
-| New level: copy of a map (donor chunk re-baked) | installs, **draws white** (engine map-open issue) |
+| New level: copy of a map (donor chunk translated + re-baked) | shipped (0.7.0, AtlasTGCopy renders in-game) |
 | Own region under the 141 cap (filler slot take-over) + baked minimap | shipped |
 | Unattended in-game harness (teleport, real region transition, follow, crash catcher) | shipped |
 | Overworld: World tab + `world-move`, terrain chunk fully translated to the new origin | shipped (2026-09-17) |
@@ -150,7 +150,8 @@ in-game harness run (`tools/ingame`).
 * The **cloned-chunk white-out** (plan item 7) is explained: the old re-bake moved
   only the vertex grids/quad-dir, leaving edge strips, LOD tree, water and foliage
   at the donor origin. Feed the donor chunk through `relocateChunk` before
-  `bakeHeightfield` and *Copy of this map* should render (not yet wired).
+  `bakeHeightfield` and *Copy of this map* renders (wired in 0.7.0; AtlasTGCopy
+  in-game PASS).
 * forgecore bug to upstream: `stbbake::parseQuadDir` stops at the first cell with
   no foreground mesh (zero frame pointer, but not the terminator) -> the baker
   under-counts foreground frames on the fillers. The relocation walks the directory
@@ -221,8 +222,8 @@ in-game harness run (`tools/ingame`).
    per-vertex blend) -- the real "paint any texture on the ground".
 6. **Region cap lift** via ForgeFSE (section 2, gated on the decompile
    verdict).
-7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk); wire
-   `relocateChunk` into the donor-copy path.
+7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk) and fixed:
+   `relocateChunk` runs in the donor-copy path (0.7.0).
 
 ## Known gotchas to keep
 

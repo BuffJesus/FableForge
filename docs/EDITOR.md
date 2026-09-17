@@ -414,9 +414,9 @@ investigations (texture append resolution, region cap, villagers).
 
 1. ~~Overworld: region editing, seam stitching, the extent question~~ done
    (2026-09-17), things and foliage follow the stitched ground.
-2. A baked distant-LOD texture instead of the solid colour (the green band at
-   the horizon of a blank level).
-3. Cloned levels: run the donor chunk through `relocateChunk` (the white-out was
-   the untranslated chunk, see above) so *Copy of this map* renders.
-4. Live link to the running game through ForgeFSE (spawn/move/reload without a
-   restart).
+2. ~~Distant-LOD texture~~ done (`src/lodbake`); the grey horizon band on a lone
+   level is the void beyond the map.
+3. ~~Cloned levels~~ render since 0.7.0 (donor chunk through `relocateChunk`).
+4. Splat texture paint (STB foreground texture triple + per-vertex blend), the
+   creature-generator activation (needs an adult save), the region cap, and the
+   live link to the running game through ForgeFSE -- see `docs/PLAN.md`.
