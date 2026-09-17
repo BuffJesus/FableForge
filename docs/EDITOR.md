@@ -71,6 +71,14 @@ the crashes. The engine formats are written by FableForge's `forgecore`
   query (`CWorldMap::GetGroundSizeZAt`) returns the edited heights at 121/121
   sample points and the hero teleported onto the hill stands at the new height.
   Saves cache region state, so enter the region fresh to see an edit.
+* **Foliage rides the sculpt** (2026-09-17): every terrain deploy also moves the
+  chunk's trees, grass and z-sprites by the ground change under each of them
+  (`stbrelocate::reseatFoliageZ` against the terrain as last deployed; bounds
+  grow by the largest change) and writes the chunk size-aware (a re-laid
+  foliage section can grow it). In-game: a +6 hill under Greatwood_1's trees,
+  heights 121/121 and trunks rooted on the new slope. Placed objects are
+  re-seated on request (*Re-seat objects on the new ground*), not silently.
+  `tests/ui/terrain_deploy.txt` (scratch) / `terrain_deploy_live.txt` (real install).
 * **Theme paint deploy**: when ground themes were painted the bake runs with `rebuildTopology`
   (`ReadThemesAndCreateLayers`: every foreground layer mesh is regenerated
   from the LEV themes so a new material region gets its own passes) and

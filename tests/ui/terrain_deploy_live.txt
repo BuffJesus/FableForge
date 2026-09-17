@@ -1,0 +1,21 @@
+# Live-install probe (not in check_all): a hill sculpted under Greatwood_1's trees, deployed into the real game.
+wait_maps
+wait_ready
+# live install (default save root)
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+terrain_mode 0
+brush 10 6
+terrain_stroke 48 96 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 3
+assert_state terrain_dirty 0
+assert_log foliage re-seated on the new ground
+assert_log re-baked terrain chunk
+quit

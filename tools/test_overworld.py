@@ -215,6 +215,19 @@ def main() -> int:
             print("GUI world script PASS")
         if semantic() != semantic_before:
             print("GUI moves/region edits did not restore the world layout"); ok = False
+        # a sculpt deployed through the editor: the chunk's foliage rides the new ground and the chunk still parses
+        r = subprocess.run([gui, "--auto", "tests/ui/terrain_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
+        log = os.path.join(ROOT, "tests", "ui", "terrain_deploy.txt.log")
+        if r.returncode != 0:
+            print("GUI terrain deploy script failed:")
+            if os.path.exists(log):
+                print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+            ok = False
+        else:
+            print("GUI terrain deploy script PASS")
+        r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
+        if "0 with findings" not in r.stdout:
+            print("Greatwood_1 chunk does not audit after the sculpt deploy:", r.stdout[-400:]); ok = False
 
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)

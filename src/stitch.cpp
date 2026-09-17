@@ -5,13 +5,9 @@
 #include <fstream>
 #include <stdexcept>
 
-#include <cstdlib>
-#include <cstring>
 
-#include "forge/stb.hpp"
 #include "forge/wad.hpp"
 #include "leveledit.hpp"
-#include "stbrelocate.hpp"
 
 namespace fs = std::filesystem;
 
@@ -38,56 +34,6 @@ fs::path levPathFor(const fs::path& gameRoot, const std::string& stem) {
             return out;
         }
     throw std::runtime_error(stem + ".lev is neither loose nor in FinalAlbion.wad");
-}
-
-// The map's terrain chunk with every foliage point moved by the ground change
-// between `before` and `after` (map-local grids); written back size-aware.
-bool reseatFoliage(const fs::path& gameRoot, const WorldMapBox& box, const TerrainState& before, const TerrainState& after,
-                   StitchReport& report, std::vector<std::string>& notes, std::string& error) {
-    if (!box.inStb) return true;
-    const int cx = box.w + 1, cy = box.h + 1;
-    if (before.heights.size() != size_t(cx) * cy || after.heights.size() != before.heights.size()) { error = box.name + ": terrain grid mismatch"; return false; }
-    float slack = 0;
-    for (size_t i = 0; i < before.heights.size(); ++i) slack = std::max(slack, std::fabs(after.heights[i] - before.heights[i]));
-    if (slack < 1e-4f) return true;
-    try {
-        const fs::path stbPath = gameRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
-        const auto archive = forge::stb::Archive::open(stbPath);
-        const forge::stb::StaticMap* map = nullptr;
-        const std::string want = lower(box.name + ".lev");
-        for (const auto& m : archive.staticMaps())
-            if (lower(fs::path(m.levelName).filename().string()) == want) { map = &m; break; }
-        if (!map) { error = box.name + " has no static map in FinalAlbion_RT.stb"; return false; }
-        auto record = archive.readStaticMapRecord(*map);
-        uint32_t bankIndex = 0; std::memcpy(&bankIndex, record.data() + 4, 4);
-        const forge::stb::Entry* entry = nullptr;
-        for (const auto& e : archive.entries()) if (e.id == bankIndex) { entry = &e; break; }
-        if (!entry) { error = box.name + ": static-map bank entry not found"; return false; }
-        auto chunk = archive.read(*entry);
-        const size_t was = chunk.size();
-        const int ox = box.x, oy = box.y;
-        auto dz = [&](float wx, float wy) -> float {
-            const auto b = Document::sampleHeight(before, cx, cy, wx - float(ox), wy - float(oy));
-            const auto a2 = Document::sampleHeight(after, cx, cy, wx - float(ox), wy - float(oy));
-            return b && a2 ? *a2 - *b : 0.0f;
-        };
-        RelocateReport rr;
-        if (!reseatFoliageZ(chunk, record, dz, slack, rr, error)) { error = box.name + ": " + error; return false; }
-        {
-            // the written tree must parse back (a layout slip here would only show in-game)
-            RelocateReport post; std::string perr;
-            if (!auditChunk(chunk, record, box.x, box.y, box.w, box.h, post, perr)) { error = box.name + ": foliage re-seat produced a chunk that does not parse (" + perr + ")"; return false; }
-        }
-        std::vector<forge::stb::StaticMapAppend> batch;
-        batch.push_back({map->levelName, entry->name, chunk, record});
-        const fs::path tmp = stbPath.string() + ".atlas-tmp";
-        if (chunk.size() == was) forge::stb::replaceStaticMaps(stbPath, tmp, batch);
-        else forge::stb::replaceStaticMapsRelayout(stbPath, tmp, batch);
-        fs::rename(tmp, stbPath);
-        report.foliageGroups += rr.groupFrames;
-        notes.push_back("  " + box.name + ": foliage re-seated (" + std::to_string(rr.groupFrames) + " cache groups, bounds grown by " + std::to_string(slack) + ")" + (chunk.size() == was ? "" : ", chunk re-laid"));
-        return true;
-    } catch (const std::exception& e) { error = box.name + ": " + e.what(); return false; }
 }
 
 } // namespace
@@ -166,8 +112,7 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
     if (!docA.setVertexHeights(editsA) || !docB.setVertexHeights(editsB)) { error = "could not apply the seam heights"; return false; }
     if (!docA.deployTerrain(gameRoot, notes, error)) { error = mapA + ": " + error; return false; }
     if (!docB.deployTerrain(gameRoot, notes, error)) { error = mapB + ": " + error; return false; }
-    // placed things that stood on the old ground follow it (.tng loose + WAD);
-    // the chunk's own foliage keeps its Z (open)
+    // placed things that stood on the old ground follow it (.tng loose + WAD)
     auto reseat = [&](Document& doc, const TerrainState& before) {
         const size_t n = doc.reseatThings(before);
         if (!n) return true;
@@ -178,9 +123,7 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
         return true;
     };
     if (!reseat(docA, beforeA) || !reseat(docB, beforeB)) return false;
-    // ... and the chunk's own trees and grass (the local-detail quadtree)
-    if (!reseatFoliage(gameRoot, *a, beforeA, docA.terrain(), report, notes, error)) return false;
-    if (!reseatFoliage(gameRoot, *b, beforeB, docB.terrain(), report, notes, error)) return false;
+    // (the chunks' own trees and grass rode the ground change inside deployTerrain)
     report.stitched = true;
     notes.push_back("  stitched (feather " + std::to_string(feather) + " cells)");
     return true;

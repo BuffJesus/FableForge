@@ -16,6 +16,7 @@
 #include "forge/stbinfo.hpp"
 #include "forge/bin.hpp"
 #include "lodbake.hpp"
+#include "stbrelocate.hpp"
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
 
@@ -479,6 +480,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const bool themesChanged = themesDirty();
     if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
+    const std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
     try {
         // 1. loose .lev (also the bytes for the WAD)
         if (!saveTerrainLoose(gameRoot, error, &notes)) return false;
@@ -605,14 +607,49 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         forge::stbbake::setRetailCameraHeightBounds(info, minH, maxH);
         const auto encoded = forge::stbinfo::writeInfoBlock(info);
         if (!backupOnce(stb, error)) return false;
-        std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
-        if (!io) { error = "cannot open " + stb.string() + " for writing"; return false; }
-        io.seekp(std::streamoff(entry->offset));
-        io.write(reinterpret_cast<const char*>(baked.chunk.data()), std::streamsize(baked.chunk.size()));
-        io.seekp(std::streamoff(map->absoluteOffset));
-        io.write(reinterpret_cast<const char*>(encoded.data()), std::streamsize(encoded.size()));
-        if (!io) { error = "write to " + stb.string() + " failed"; return false; }
-        notes.push_back("re-baked terrain chunk " + std::to_string(baked.chunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb");
+        std::vector<uint8_t> outChunk = baked.chunk, outRecord = record;
+        std::copy(encoded.begin(), encoded.end(), outRecord.begin());
+        // the chunk's trees and grass ride the ground change (bounds grow by the
+        // largest change); a re-laid foliage section can grow the chunk
+        bool foliageRode = false;
+        if (before && before->heights.size() == terrain_->heights.size() && outRecord.size() > 0x79 && outRecord[0x79]) {
+            float slack = 0;
+            for (size_t i = 0; i < before->heights.size(); ++i) slack = std::max(slack, std::fabs(terrain_->heights[i] - before->heights[i]));
+            if (slack > 1e-4f) {
+                const int cx = level_->cellsX(), cy = level_->cellsY();
+                const float ox = float(wm->mapX), oy = float(wm->mapY);
+                const TerrainState& after = *terrain_;
+                const TerrainState& was = *before;
+                auto dz = [&](float wx, float wy) -> float {
+                    const auto b = sampleHeight(was, cx, cy, wx - ox, wy - oy);
+                    const auto a2 = sampleHeight(after, cx, cy, wx - ox, wy - oy);
+                    return b && a2 ? *a2 - *b : 0.0f;
+                };
+                RelocateReport rr;
+                if (!reseatFoliageZ(outChunk, outRecord, dz, slack, rr, error)) { error = "foliage re-seat: " + error; return false; }
+                RelocateReport check; std::string cerr;
+                if (!auditChunk(outChunk, outRecord, wm->mapX, wm->mapY, level_->width(), level_->height(), check, cerr)) { error = "foliage re-seat produced a chunk that does not parse (" + cerr + ")"; return false; }
+                foliageRode = true;
+                notes.push_back("foliage re-seated on the new ground (" + std::to_string(rr.groupFrames) + " cache groups, bounds grown by " + std::to_string(slack) + ")");
+            }
+        }
+        if (outChunk.size() == chunk.size()) {
+            std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
+            if (!io) { error = "cannot open " + stb.string() + " for writing"; return false; }
+            io.seekp(std::streamoff(entry->offset));
+            io.write(reinterpret_cast<const char*>(outChunk.data()), std::streamsize(outChunk.size()));
+            io.seekp(std::streamoff(map->absoluteOffset));
+            io.write(reinterpret_cast<const char*>(outRecord.data()), std::streamsize(outRecord.size()));
+            if (!io) { error = "write to " + stb.string() + " failed"; return false; }
+        } else {
+            std::vector<forge::stb::StaticMapAppend> batch;
+            batch.push_back({map->levelName, entry->name, outChunk, outRecord});
+            const fs::path tmp = stb.string() + ".atlas-tmp";
+            forge::stb::replaceStaticMapsRelayout(stb, tmp, batch);
+            fs::rename(tmp, stb);
+        }
+        notes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb" + (outChunk.size() == chunk.size() ? "" : " (chunk re-laid)"));
+        (void)foliageRode;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
