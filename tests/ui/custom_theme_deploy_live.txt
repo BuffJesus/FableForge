@@ -1,0 +1,24 @@
+# Live-install probe (not in check_all): a checker PNG becomes GROUND_ATLAS_CHECK, painted onto Greatwood_1, deployed into the real game.
+wait_maps
+wait_ready
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+terrain_mode 6
+custom_theme build/atlas_check.png GROUND_ATLAS_CHECK GROUND_GRASS
+frames 2
+assert_log in palette slot
+wait_ready
+frames 2
+brush 8 10
+terrain_stroke 56 80 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 3
+assert_state terrain_dirty 0
+assert_log ground themes painted: layer meshes rebuilt
+quit

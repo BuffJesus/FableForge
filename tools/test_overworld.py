@@ -67,6 +67,11 @@ def main() -> int:
         src = os.path.join(a.root, "data", "CompiledDefs", f)
         if os.path.exists(src):
             shutil.copyfile(src, os.path.join(scratch, "data", "CompiledDefs", f))
+    # textures.big too (a custom theme appends to it; ~0.5 GB, a few seconds)
+    big = os.path.join(a.root, "data", "graphics", "pc", "textures.big")
+    if os.path.exists(big):
+        os.makedirs(os.path.join(scratch, "data", "graphics", "pc"))
+        shutil.copyfile(big, os.path.join(scratch, "data", "graphics", "pc", "textures.big"))
     print(f"scratch install copied in {time.time() - t0:.1f}s")
     cli = os.path.join(ROOT, "build", "AlbionAtlas.exe")
     sl = os.path.join(scratch, "data", "Levels")
@@ -244,6 +249,35 @@ def main() -> int:
         r = subprocess.run([cli, "info", os.path.join(sl, "FinalAlbion", "Greatwood_1.lev")], capture_output=True, text=True)
         if "BEACH_SAND" not in r.stdout:
             print("the added theme is not in the deployed LEV palette"); ok = False
+        # a custom texture theme (PNG -> textures.big + game.bin), painted and deployed
+        if os.path.exists(os.path.join(scratch, "data", "graphics", "pc", "textures.big")):
+            from PIL import Image, ImageDraw
+            im = Image.new("RGB", (256, 256), (30, 200, 220)); d = ImageDraw.Draw(im)
+            for y in range(0, 256, 32):
+                for x in range(0, 256, 32):
+                    if ((x // 32) + (y // 32)) % 2 == 0: d.rectangle([x, y, x + 31, y + 31], fill=(240, 80, 200))
+            im.save(os.path.join(ROOT, "build", "atlas_check.png"))
+            r = subprocess.run([gui, "--auto", "tests/ui/custom_theme_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
+            log = os.path.join(ROOT, "tests", "ui", "custom_theme_deploy.txt.log")
+            if r.returncode != 0:
+                print("GUI custom theme script failed:")
+                if os.path.exists(log):
+                    print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+                ok = False
+            else:
+                print("GUI custom theme script PASS")
+            r = subprocess.run([cli, "chunk-textures", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
+            r2 = subprocess.run([cli, "info", os.path.join(sl, "FinalAlbion", "Greatwood_1.lev")], capture_output=True, text=True)
+            import re
+            m = re.search(r"GROUND_ATLAS_CHECK\s+def\s+(\d+)", r2.stdout)
+            if not m:
+                print("GROUND_ATLAS_CHECK is not in the deployed LEV palette"); ok = False
+            # the new texture id is 6294 on a retail textures.big (6293 entries + 1)
+            if "(6294, 6294, 0)" not in r.stdout:
+                print("the deployed chunk has no layer with the custom texture:", r.stdout[-600:]); ok = False
+            r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
+            if "0 with findings" not in r.stdout:
+                print("Greatwood_1 chunk does not audit after the custom theme deploy"); ok = False
 
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)

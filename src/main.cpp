@@ -10,6 +10,7 @@
 // is auto-detected.
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -20,6 +21,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -66,6 +68,8 @@ int usage() {
         "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
         "      (relocate maps: WLD/BWD placement + STB chunks translated to the new origins, touching neighbours re-baked)\n"
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
+        "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
+        "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
         "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
         "      (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)\n"
         "\n"
@@ -316,6 +320,24 @@ int main(int argc, char** argv) {
         if (!albion::editor::createLevelFromDonor(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
+    if (cmd == "theme-add") {   // theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]: a ground theme from your own texture
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"); return 2; }
+        std::string installArg; albion::editor::CustomThemeRequest req;
+        req.png = args[1]; req.name = args[2];
+        for (size_t i = 3; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--donor" && i + 1 < args.size()) req.donor = args[++i];
+            else if (args[i] == "--cliff" && i + 1 < args.size()) req.cliffPng = args[++i];
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::CustomThemeResult out; std::string err;
+        if (!albion::editor::createCustomTheme(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
+        std::printf("theme %s ready: def index %u, texture %u -- paint it from the editor (Paint ground -> search the name)\n", req.name.c_str(), out.defIndex, out.baseTexture);
         return 0;
     }
     if (cmd == "world-stitch") {   // world-stitch <map> [<map2>] [--feather n] [--dry-run] [--install root]
@@ -598,6 +620,49 @@ int main(int argc, char** argv) {
             }
             std::printf("%d map(s), %d with findings\n", maps, bad);
             return bad ? 1 : 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
+    }
+    if (cmd == "chunk-textures") {   // diagnostic: chunk-textures <map> [--install <root>]: distinct foreground texture triples (GBANK_MAIN_PC ids) and their layer counts
+        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas chunk-textures <map> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 2; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        try {
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            for (const auto& m : archive.staticMaps()) {
+                if (lower(fs::path(m.levelName).stem().string()) != lower(args[1])) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                const auto info = forge::stbinfo::readInfoBlock(record.data());
+                const forge::stb::Entry* entry = nullptr;
+                for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+                if (!entry) { std::fprintf(stderr, "no bank entry\n"); return 1; }
+                const auto chunk = archive.read(*entry);
+                const auto parsed = forge::stbbake::parseChunk(chunk);
+                // the foreground directory by cell count (a zero frame pointer is an empty cell, not the end)
+                const size_t cells = size_t(info.mapWidth / 16) * size_t(info.mapHeight / 16);
+                uint32_t fgPos = 0; std::memcpy(&fgPos, record.data() + 0x64, 4);
+                std::map<std::array<uint32_t, 3>, size_t> triples;
+                std::set<uint32_t> frames;
+                size_t layers = 0;
+                for (size_t i = 0; i < cells; ++i) {
+                    const size_t o = size_t(fgPos ? fgPos : 0x800) + i * 0x24;
+                    if (o + 4 > chunk.size()) break;
+                    uint32_t frameOffset = 0; std::memcpy(&frameOffset, chunk.data() + o, 4);
+                    if (!frameOffset || !frames.insert(frameOffset).second) continue;
+                    size_t fi = SIZE_MAX;
+                    for (size_t k = 0; k < parsed.frameIndices.size(); ++k) if (parsed.segments[parsed.frameIndices[k]].start == frameOffset) { fi = k; break; }
+                    if (fi == SIZE_MAX) continue;
+                    const auto body = forge::stbbake::decodeFrame(parsed, fi);
+                    const auto frame = forge::stbbake::parseForegroundFrame(body);
+                    for (const auto& l : frame.layers) { ++triples[{l.textures[0], l.textures[1], l.textures[2]}]; ++layers; }
+                }
+                std::printf("%s: %zu foreground frames, %zu layers, %zu distinct texture triples (base, background, bump)\n", args[1].c_str(), frames.size(), layers, triples.size());
+                for (const auto& [t, n] : triples) std::printf("  (%u, %u, %u)  %zu layer(s)\n", t[0], t[1], t[2], n);
+                return 0;
+            }
+            std::fprintf(stderr, "no static map named %s\n", args[1].c_str());
+            return 1;
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-zcheck") {   // diagnostic: chunk-zcheck <map> <dz> [--install <root>]: foliage Z ride by a constant, audit, ride back, compare digests

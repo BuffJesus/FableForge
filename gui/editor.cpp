@@ -233,6 +233,27 @@ void App::scaleSelected(float factor) {
     commitFrame(f);
 }
 
+bool App::createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng) {
+    if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("editor: no terrain loaded", 1); return false; }
+    if (ctxFuture_.valid()) { pushLog("editor: textures are still loading, try again in a moment", 1); return false; }
+    editor::CustomThemeRequest req;
+    req.png = png; req.name = name; req.donor = donor.empty() ? "GROUND_GRASS" : donor;
+    if (!cliffPng.empty()) req.cliffPng = cliffPng;
+    editor::CustomThemeResult out; std::string err;
+    pushLog("custom theme " + name + ": importing " + png + " into textures.big and appending the ENGINE_THEME...", 0);
+    if (!editor::createCustomTheme(saveRoot(), req, out, err)) { pushLog("editor: custom theme failed: " + err, 2); return false; }
+    for (const auto& n : out.notes) pushLog("custom theme: " + n, 0);
+    const int slot = doc_.addGroundTheme(name, out.defIndex);
+    if (slot < 0) { pushLog("editor: the palette has no free slot for " + name, 1); return false; }
+    paintTheme_ = slot;
+    pushLog("ground theme " + name + " in palette slot " + std::to_string(slot) + " (def " + std::to_string(out.defIndex) + ", texture " + std::to_string(out.baseTexture) + "); reloading textures", 3);
+    // the theme library and texture cache must see the new entries before the
+    // preview bake and the deploy (deploy is refused while they reload); they
+    // live wherever the save root points (a scratch tree in tests)
+    startContextLoad(saveRoot());
+    return true;
+}
+
 bool App::addPaintTheme(const std::string& name) {
     if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("editor: no terrain loaded", 1); return false; }
     const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
@@ -685,6 +706,7 @@ void App::startNewLevel() {
 
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
+    if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
     editor::Document* doc = &doc_;
     const std::string root = saveRoot();
@@ -883,6 +905,31 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PushFont(fontSmall_);
             theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material. A theme added from the game takes a free palette slot and is written with the next terrain save.");
             ImGui::PopFont();
+            // your own texture as a ground theme
+            if (theme::ghostButton(customThemeOpen_ ? "Hide custom texture" : "Custom texture from a PNG...", ImVec2(cardInner, S(26)))) customThemeOpen_ = !customThemeOpen_;
+            auto_.registerWidget("btn_custom_theme_toggle");
+            if (customThemeOpen_) {
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::InputTextWithHint("##custompng", "Path to a square power-of-two PNG (512x512 like retail)", customPng_, sizeof customPng_);
+                auto_.registerWidget("input_custom_png");
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::InputTextWithHint("##customname", "Theme name, e.g. GROUND_MY_MOSS", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);
+                auto_.registerWidget("input_custom_name");
+                ImGui::PopStyleVar();
+                ImGui::PushFont(fontSmall_);
+                std::string donor = "GROUND_GRASS";
+                if (lev && paintTheme_ >= 0 && size_t(paintTheme_) < lev->groundThemes().size() && !lev->groundThemes()[size_t(paintTheme_)].name.empty()) donor = lev->groundThemes()[size_t(paintTheme_)].name;
+                theme::hint(("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + donor + ", the selected theme, with your texture) to game.bin; nothing retail is replaced. One-time backups.").c_str());
+                ImGui::PopFont();
+                const bool can = customPng_[0] && customName_[0] && !ctxFuture_.valid();
+                if (theme::ghostButton(ctxFuture_.valid() ? "Textures reloading..." : "Create theme and select it", ImVec2(cardInner, S(28))) && can) {
+                    std::string nm = customName_;
+                    for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+                    createCustomTheme(customPng_, nm, donor);
+                }
+                auto_.registerWidget("btn_custom_theme_create");
+            }
         }
         char val[48];
         std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);

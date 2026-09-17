@@ -107,6 +107,26 @@ bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string
 bool registerMinimapGraphic(const std::filesystem::path& gameRoot, const std::string& name, uint32_t id,
                             std::vector<std::string>& notes, std::string& error);
 
+// A ground theme from your own texture: the PNG goes into textures.big
+// (GBANK_MAIN_PC, appended, DXT1; the terrain layers reference it by that
+// global id) and a new ENGINE_THEME def is appended to game.bin as a copy of
+// `donor` with its base/background (and cliff) textures pointed at the new
+// entry (bump maps cleared). Existing def indices are untouched (append only).
+// One-time .atlas-orig backups of textures.big, names.bin and game.bin.
+struct CustomThemeRequest {
+    std::filesystem::path png;        // the ground texture (power-of-two square, e.g. 512x512)
+    std::filesystem::path cliffPng;   // optional: a different texture for steep faces (default: the same)
+    std::string name;                 // ENGINE_THEME name, e.g. GROUND_MY_MOSS (A-Z 0-9 _)
+    std::string donor = "GROUND_GRASS";   // the ENGINE_THEME whose other fields are copied
+};
+struct CustomThemeResult {
+    uint32_t defIndex = 0;            // the new ENGINE_THEME's global def index (for the LEV palette)
+    uint32_t baseTexture = 0, cliffTexture = 0;   // GBANK_MAIN_PC ids
+    std::vector<std::string> notes;
+};
+bool createCustomTheme(const std::filesystem::path& gameRoot, const CustomThemeRequest& req,
+                       CustomThemeResult& out, std::string& error);
+
 // One-time .atlas-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
 // then the staged atomic install. The new level's LEV/TNG are the donor's
 // current bytes (a loose donor .lev/.tng wins over the WAD copy, like the game).

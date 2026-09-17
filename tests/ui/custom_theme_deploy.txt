@@ -1,0 +1,28 @@
+# Custom-texture theme on the scratch install (tools/test_overworld.py prepares
+# build/ui_overworld_install incl. textures.big): a checker PNG becomes
+# GROUND_ATLAS_CHECK (textures.big + game.bin appended), joins Greatwood_1's
+# palette, is painted and deployed; the chunk must reference the new texture.
+wait_maps
+wait_ready
+set saveroot build/ui_overworld_install
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+terrain_mode 6
+custom_theme build/atlas_check.png GROUND_ATLAS_CHECK GROUND_GRASS
+frames 2
+assert_log in palette slot
+wait_ready
+frames 2
+brush 8 10
+terrain_stroke 56 80 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 3
+assert_state terrain_dirty 0
+assert_log ground themes painted: layer meshes rebuilt
+quit

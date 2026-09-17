@@ -91,6 +91,22 @@ the crashes. The engine formats are written by FableForge's `forgecore`
   the reddish path (screenshots on/off). Scripts: `add_theme <ENGINE_THEME>`,
   state `paint_theme` / `palette_named`; `tests/ui/theme_deploy.txt` (scratch,
   in test_overworld) and `theme_deploy_live.txt`.
+* **Your own texture as a ground theme** (2026-09-17, in-game verified): *Custom
+  texture from a PNG...* in the paint card (or `AlbionAtlas theme-add <png>
+  <NAME> [--donor <theme>] [--cliff <png>]`): the PNG is appended to
+  textures.big (`GBANK_MAIN_PC`, DXT1, symbol `<NAME>_BASE`; the layer meshes
+  reference textures by that global id and retail chunks resolve ids directly)
+  and a new `ENGINE_THEME` def is appended to game.bin as a copy of the donor
+  (the selected theme) with Base/Background(/Cliff) textures repointed and the
+  bump maps cleared (`worldedit::createCustomTheme`; append only, no retail
+  index moves; one-time backups of textures.big, names.bin, game.bin). The
+  theme then joins the LEV palette and the texture/def context reloads from the
+  save root (deploy is refused while it does). A 256x256 magenta/cyan checker
+  painted onto Greatwood_1 draws exactly as such in-game, blended at the brush
+  edge. Diagnostic `chunk-textures <map>` lists a chunk's texture triples.
+  Scripts: `custom_theme <png> <NAME> [donor] [cliffPng]`;
+  `tests/ui/custom_theme_deploy.txt` (scratch with textures.big, in
+  test_overworld) and `custom_theme_deploy_live.txt`.
 * **Theme paint deploy**: when ground themes were painted the bake runs with `rebuildTopology`
   (`ReadThemesAndCreateLayers`: every foreground layer mesh is regenerated
   from the LEV themes so a new material region gets its own passes) and

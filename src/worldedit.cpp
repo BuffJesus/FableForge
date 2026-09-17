@@ -304,6 +304,65 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
+bool createCustomTheme(const fs::path& gameRoot, const CustomThemeRequest& req, CustomThemeResult& out, std::string& error) {
+    out = CustomThemeResult{};
+    if (req.name.empty() || req.name.size() >= 100) { error = "theme name missing or too long"; return false; }
+    for (char c : req.name)
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) { error = "theme name must be A-Z, 0-9 and _ (got '" + req.name + "')"; return false; }
+    if (!fs::exists(req.png)) { error = "no such PNG: " + req.png.string(); return false; }
+    if (!req.cliffPng.empty() && !fs::exists(req.cliffPng)) { error = "no such PNG: " + req.cliffPng.string(); return false; }
+    try {
+        const fs::path defsDir = gameRoot / "data" / "CompiledDefs";
+        const fs::path namesBin = defsDir / "names.bin", gameBin = defsDir / "game.bin";
+        const fs::path big = gameRoot / "data" / "graphics" / "pc" / "textures.big";
+        if (!fs::exists(big)) { error = "no " + big.string(); return false; }
+        auto file = forge::bin::File::open(namesBin, gameBin);
+        if (file.find(req.name)) { error = "game.bin already has a def named " + req.name; return false; }
+        const auto* donor = file.find(req.donor);
+        if (!donor) { error = "no ENGINE_THEME named " + req.donor + " to copy from"; return false; }
+        if (donor->definition != "ENGINE_THEME") { error = req.donor + " is a " + donor->definition + ", not an ENGINE_THEME"; return false; }
+        // 1. the texture(s): appended GBANK_MAIN_PC entries (the layer mesh
+        //    references the global id; retail chunks resolve ids directly)
+        auto addTexture = [&](const fs::path& png, const std::string& symbol, uint32_t& id) {
+            {
+                const auto tex = forge::big::File::open(big);
+                const auto* bank = tex.findBank("GBANK_MAIN_PC");
+                if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
+                for (const auto& e : bank->entries) if (e.name == symbol) { error = "textures.big already has an entry named " + symbol; return false; }
+            }
+            if (!backupOnce(big, error)) return false;
+            forge::terraintex::ImportRequest ir;
+            ir.png = png; ir.srcBig = big; ir.outBig = big.string() + ".atlas-tmp";
+            ir.entryName = symbol; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt1"; ir.add = true;
+            const auto r = forge::terraintex::importPng(ir);
+            if (!r.ok) { error = "texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
+            fs::rename(ir.outBig, big);
+            id = uint32_t(r.entryId);
+            out.notes.push_back("textures.big: appended " + symbol + " (id " + std::to_string(id) + ", DXT1) from " + png.string());
+            return true;
+        };
+        if (!addTexture(req.png, req.name + "_BASE", out.baseTexture)) return false;
+        out.cliffTexture = out.baseTexture;
+        if (!req.cliffPng.empty() && !addTexture(req.cliffPng, req.name + "_CLIFF", out.cliffTexture)) return false;
+        // 2. the ENGINE_THEME def: the donor's bytes with the texture fields repointed
+        const size_t index = file.addEntry("ENGINE_THEME", req.name, donor->data);
+        const auto schema = forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded");
+        auto set = [&](const char* field, uint32_t value) {
+            try { forge::defedit::setField(file, schema, req.name, field, std::to_string(value)); }
+            catch (const std::exception& e) { error = std::string("game.bin: could not set ") + field + ": " + e.what(); return false; }
+            return true;
+        };
+        if (!set("BaseTexture", out.baseTexture) || !set("BackgroundTexture", out.baseTexture) ||
+            !set("CliffBaseTexture", out.cliffTexture) || !set("CliffBackgroundTexture", out.cliffTexture) ||
+            !set("BaseBumpMap", 0) || !set("CliffBumpMap", 0)) return false;
+        if (!backupOnce(namesBin, error) || !backupOnce(gameBin, error)) return false;
+        file.save(namesBin, gameBin);
+        out.defIndex = uint32_t(index);
+        out.notes.push_back("game.bin: appended ENGINE_THEME " + req.name + " (def index " + std::to_string(index) + ", a copy of " + req.donor + " with textures " + std::to_string(out.baseTexture) + "/" + std::to_string(out.cliffTexture) + ")");
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
 bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
                             std::vector<std::string>& notes, std::string& error) {
     try {

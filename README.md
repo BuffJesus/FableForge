@@ -153,9 +153,13 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   it in `FinalAlbion.wad` and re-bakes the map's terrain chunk inside
   `FinalAlbion_RT.stb` from the edited heights, with the neighbouring maps supplying
   the shared-edge samples, so the visible mesh, collision and camera bounds all follow.
-  Same-size, patched in place, one-time `.atlas-orig` backups. Nav meshes are left as
-  they are (blocked paint changes the LEV flag the engine's nav bake reads, not the
-  shipped nav tree).
+  One-time `.atlas-orig` backups. The chunk's trees and grass ride the sculpted
+  ground; *Re-seat objects on the new ground* moves placed things with it.
+* **Paint ground**: brush any ground theme of the map's palette, add any
+  `ENGINE_THEME` the game has to the palette, or turn your own PNG into a theme
+  (*Custom texture from a PNG...*: appended to `textures.big` + a new `ENGINE_THEME`
+  in `game.bin`, nothing retail replaced). Saving rebuilds the map's layer meshes so
+  the game draws the new material.
 
 * **World** (third tab): the whole of Albion as boxes on a grid, coloured by region.
   Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours

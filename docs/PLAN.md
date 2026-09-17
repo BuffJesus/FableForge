@@ -22,6 +22,7 @@ in-game harness run (`tools/ingame`).
 | Distant-LOD textures baked from the level albedo (blank levels, theme-paint deploys) | shipped (2026-09-17) |
 | Seam stitching between newly adjacent maps (World toggle, `world-stitch`, `world-move --stitch`) | shipped (2026-09-17, in-game verified both sides) |
 | Paint any ENGINE_THEME of the game (palette add from game.bin) | shipped (2026-09-17, in-game verified) |
+| Custom ground texture from a PNG (textures.big + ENGINE_THEME append) | shipped (2026-09-17, in-game verified) |
 
 ## Rocks turned today
 
@@ -219,12 +220,12 @@ in-game harness run (`tools/ingame`).
    `SetCreatureGeneratorsEnabledDuringScript(<childhood quests>, true)`. Needs an
    adult save (none on this machine: every profile is the same childhood autosave).
 4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
-5. **Splat texture paint**: any retail ENGINE_THEME can now be painted on any
-   map (palette add from the game, 2026-09-17, in-game verified) -- that covers
-   "any texture the game has". Left: CUSTOM textures (PNG -> textures.big
-   UNASSIGNED_* slot or append + a new ENGINE_THEME def in game.bin), which is
-   the minimap-append recipe plus a def append; FableForge's
-   TERRAIN_TEXTURE_PAINT_PLAN.md has the offline-proven pipeline.
+5. ~~Splat texture paint~~ DONE 2026-09-17: any retail ENGINE_THEME can be
+   painted on any map (palette add from the game) and any PNG becomes a ground
+   theme (`theme-add` / the paint card: textures.big append + ENGINE_THEME def
+   append, donor copy), both in-game verified. The per-vertex blend is what
+   the theme brush already paints (the bake turns LEV slots into layer
+   passes), so a separate "splat" tool is not needed.
 6. **Region cap lift** via ForgeFSE (section 2, gated on the decompile
    verdict).
 7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk) and fixed:

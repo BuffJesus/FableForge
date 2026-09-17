@@ -175,6 +175,11 @@ public:
     void reseatThings();             // objects on ground that changed since the last save follow it
     bool addPaintTheme(const std::string& name);   // ENGINE_THEME -> a free LEV palette slot, selected for painting
     char themeSearch_[64] = {};
+    // a ground theme from the user's own PNG (textures.big + game.bin append), then into the palette
+    bool createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng = "");
+    char customPng_[512] = {};
+    char customName_[64] = {};
+    bool customThemeOpen_ = false;
     void duplicateSelected();
     void deleteSelected();
     void editUndo();
@@ -190,7 +195,7 @@ public:
 
 private:
     void scanInstall(const std::string& root);
-    void startContextLoad();
+    void startContextLoad(const std::string& root = "");   // textures.big + defs from `root` (default: the install)
     void startPreviewLoad();
     void startFoliageLoad();
     void pollWorkers();
