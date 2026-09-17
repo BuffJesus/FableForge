@@ -5,7 +5,7 @@ from here. Evidence lines cite the retail/debug binaries (`Fable.exe`
 addresses; `FableWin.exe` = the leaked debug editor with PDB names) or an
 in-game harness run (`tools/ingame`).
 
-## State (v0.7.0, all in-game verified)
+## State (v0.8.0, all in-game verified)
 
 | Capability | Status |
 |---|---|
@@ -17,6 +17,9 @@ in-game harness run (`tools/ingame`).
 | Own region under the 141 cap (filler slot take-over) + baked minimap | shipped |
 | Unattended in-game harness (teleport, real region transition, follow, crash catcher) | shipped |
 | Overworld: World tab + `world-move`, terrain chunk fully translated to the new origin | shipped (2026-09-17) |
+| Region editing (owner, per-neighbour sees) in the World tab / CLI | shipped (2026-09-17) |
+| Minimap textures appended + registered (PLAYER_GUI.MiniMapGraphics); no retail slot taken | shipped (2026-09-17) |
+| Distant-LOD textures baked from the level albedo (blank levels, theme-paint deploys) | shipped (2026-09-17) |
 
 ## Rocks turned today
 
