@@ -45,8 +45,8 @@ def main() -> int:
     print(r.stdout.strip())
     if r.returncode != 0 or "installed: map slot" not in r.stdout:
         print("CLI new-level failed:", r.stderr); ok = False
-    if "chunk re-baked" not in r.stdout:
-        print("expected a re-baked chunk"); ok = False
+    if "chunk translated" not in r.stdout:
+        print("expected a translated chunk"); ok = False
     r = subprocess.run([cli, "list", "--install", scratch], capture_output=True, text=True)
     if "AtlasCliCopy" not in r.stdout:
         print("new level missing from `list`"); ok = False

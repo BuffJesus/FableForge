@@ -145,6 +145,21 @@ def main() -> int:
     if r.returncode != 0 or open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:
         print("batch move back did not restore the WLD/BWD"); ok = False
 
+    # the GUI's World tab on the same scratch tree (queued moves, refusal, apply, undo)
+    gui = os.path.join(ROOT, "build", "AlbionAtlasGUI.exe")
+    if os.path.exists(gui):
+        r = subprocess.run([gui, "--auto", "tests/ui/world.txt"], capture_output=True, text=True, cwd=ROOT)
+        log = os.path.join(ROOT, "tests", "ui", "world.txt.log")
+        if r.returncode != 0:
+            print("GUI world script failed:")
+            if os.path.exists(log):
+                print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+            ok = False
+        else:
+            print("GUI world script PASS")
+        if open(wld, "rb").read() != orig["FinalAlbion.wld"] or open(bwd, "rb").read() != orig["FinalAlbion.bwd"]:
+            print("GUI moves did not restore the WLD/BWD"); ok = False
+
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)
     print("overworld test", "OK" if ok else "FAILED")

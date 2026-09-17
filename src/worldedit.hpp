@@ -1,7 +1,7 @@
 #pragma once
 // World-level editing: new levels cloned from a donor map, installed straight
 // into the game's four world containers (BWD + WLD + WAD + STB) with the
-// terrain chunk re-baked for the new origin. The install part is forgecore's
+// terrain chunk translated to the new origin (src/stbrelocate). The install part is forgecore's
 // worldinstall (the library form of `forge world install-level`); Atlas adds
 // the re-bake, the .atlas-orig backups and the donor lookup.
 

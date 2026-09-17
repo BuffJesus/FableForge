@@ -151,6 +151,13 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   they are (blocked paint changes the LEV flag the engine's nav bake reads, not the
   shipped nav tree).
 
+* **World** (third tab): the whole of Albion as boxes on a grid, coloured by region.
+  Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours
+  highlighted), queue as many moves as you like, then **Move N maps in the game**:
+  the WLD/BWD placement and the map's terrain chunk (ground, LOD, water, trees and
+  grass) are rewritten for the new origin. Same thing from the shell:
+  `AlbionAtlas world` / `AlbionAtlas world-move <map> <x> <y>`.
+
 Everything is written the way the game wrote it: untouched things stay byte-identical,
 moved things get their position/basis lines rewritten in retail float spelling, new
 things use retail field order and the per-file UID namespace.

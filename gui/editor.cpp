@@ -463,7 +463,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank"}, cardInner);
     auto_.registerWidget("seg_new_level_mode");
     ImGui::PushFont(fontSmall_);
-    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain re-baked for the new origin) into the world as a new level owned by an existing region. Cloned terrain currently draws WHITE in-game (an engine map-open issue); use Blank for a playable level. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
+    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain chunk translated to the new origin: ground, LOD, water, trees and grass) into the world as a new level owned by an existing region. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
     else theme::hint(("A flat level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
     ImGui::PopFont();
     if (newLevelMode_ == 1) {

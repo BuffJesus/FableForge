@@ -1,0 +1,70 @@
+ok   wait_maps
+ok   set saveroot build/ui_overworld_install
+ok   world_tab 1
+ok   frames 3
+ok   assert_state world_mode 1
+ok   assert_state world_loaded 1
+ok   assert_state world_maps 399
+ok   assert_widget viewport
+ok   screenshot build/ui/w1_world.png
+shot build/ui/w1_world.png
+ok   world_select TeleporterGreatwood
+ok   frames 2
+ok   assert_state world_selected TeleporterGreatwood
+ok   assert_state world_selected_pos 3072,2880
+ok   assert_widget world_x
+ok   assert_widget btn_world_move
+ok   world_move_refused TeleporterGreatwood 3104 2880
+ok   world_move_refused TeleporterGreatwead 1000 1000
+ok   assert_state world_pending 0
+ok   world_move TeleporterGreatwood 1024 9024
+ok   frames 2
+ok   assert_state world_pending 1
+ok   assert_state world_selected_pos 1024,9024
+ok   screenshot build/ui/w2_pending.png
+shot build/ui/w2_pending.png
+ok   assert_widget btn_world_putback
+..   click btn_world_putback
+ok   frames 2
+ok   assert_state world_pending 0
+ok   assert_state world_selected_pos 3072,2880
+ok   mouse_move viewport
+ok   frames 1
+ok   world_move TeleporterGreatwood 1024 9024
+ok   frames 1
+ok   assert_state world_pending 1
+ok   world_revert
+ok   frames 1
+ok   assert_state world_pending 0
+ok   world_move TeleporterGreatwood 1024 9024
+ok   world_move OrchardFarm 1024 9280
+ok   frames 2
+ok   assert_state world_pending 2
+ok   assert_widget btn_world_apply
+..   click btn_world_apply
+ok   frames 2
+ok   assert_widget btn_world_apply_confirm
+..   world_apply
+ok   wait_world
+ok   frames 3
+ok   assert_state world_ok 1
+ok   assert_state world_pending 0
+ok   world_select TeleporterGreatwood
+ok   frames 2
+ok   assert_state world_selected_pos 1024,9024
+ok   screenshot build/ui/w3_applied.png
+shot build/ui/w3_applied.png
+ok   world_move TeleporterGreatwood 3072 2880
+ok   world_move OrchardFarm 3200 3168
+..   world_apply
+ok   wait_world
+ok   frames 3
+ok   assert_state world_ok 1
+ok   world_select OrchardFarm
+ok   frames 1
+ok   assert_state world_selected_pos 3200,3168
+ok   world_tab 0
+ok   frames 2
+ok   assert_state world_mode 0
+ok   quit
+RESULT PASS

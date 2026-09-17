@@ -25,6 +25,7 @@
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
+#include "overworld.hpp"
 
 namespace albion::gui {
 
@@ -274,6 +275,48 @@ private:
     void setNewLevel(const std::string& name, int x, int y, const std::string& region) { std::snprintf(newLevelName_, sizeof newLevelName_, "%s", name.c_str()); newLevelX_ = x; newLevelY_ = y; newLevelRegion_ = region; }
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
+
+    // ---- overworld (gui/world.cpp): every map's box on a 2D grid, drag to move,
+    // pending moves applied to the install in one go (WLD/BWD/STB)
+public:
+    void setWorldMode(bool on);
+    bool worldMode() const { return worldMode_; }
+    bool worldLoaded() const { return worldLoaded_; }
+    void worldSelect(const std::string& map);
+    const std::string& worldSelected() const { return worldSelected_; }
+    // queue a move (validated: 32-aligned, no overlap); returns false with the reason in the log
+    bool worldMove(const std::string& map, int x, int y);
+    void worldRevert();
+    void worldApply();
+    bool worldBusy() const { return worldFuture_.valid(); }
+    size_t worldPendingCount() const { return worldPending_.size(); }
+    bool worldLastOk() const { return worldLastOk_; }
+private:
+    void loadWorld();
+    void drawWorldCanvas(const ImVec2& origin, const ImVec2& size);
+    void drawWorldPanel(float pad, float inner, float cardInner);
+    void drawWorldFooter(float pad, float inner);
+    bool worldPlacement(const std::string& map, int& x, int& y) const;   // pending move or the layout's box
+    bool worldMode_ = false;
+    bool worldLoaded_ = false;
+    std::string worldLoadedFrom_;
+    editor::WorldLayout world_;
+    std::vector<editor::MapMove> worldPending_;
+    std::string worldSelected_;
+    std::string worldHover_;
+    float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)
+    bool worldDragging_ = false;
+    int worldDragX_ = 0, worldDragY_ = 0;    // the dragged box's candidate origin (snapped)
+    bool worldDragValid_ = false;
+    std::string worldDragWhy_;
+    ImVec2 worldDragStart_;
+    bool worldPanning_ = false;
+    int worldEditX_ = 0, worldEditY_ = 0;    // the panel's X/Y fields
+    std::string worldEditFor_;
+    bool confirmWorldApply_ = false;
+    bool worldLastOk_ = false;
+    struct WorldJob { bool ok = false; std::string error; std::vector<std::string> notes; };
+    std::future<WorldJob> worldFuture_;
     void terrainInput(const ImVec2& origin, const ImVec2& size);
     void drawBrushCursor(const ImVec2& origin, const ImVec2& size);
     void syncTerrain();

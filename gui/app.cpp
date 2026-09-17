@@ -656,6 +656,13 @@ std::vector<std::string> App::stateDump() const {
     std::snprintf(cam, sizeof cam, "%.2f,%.2f,%.2f", camera_.posX, camera_.posY, camera_.posZ);
     v.push_back(std::string("camera=") + cam);
     v.push_back("edit_mode=" + std::string(editMode_ ? "1" : "0"));
+    v.push_back("world_mode=" + std::string(worldMode_ ? "1" : "0"));
+    v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));
+    v.push_back("world_maps=" + std::to_string(world_.maps.size()));
+    v.push_back("world_selected=" + worldSelected_);
+    v.push_back("world_pending=" + std::to_string(worldPending_.size()));
+    v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
+    if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
     v.push_back("doc_dirty=" + std::string(documentLoaded() && doc_.dirty() ? "1" : "0"));
@@ -698,6 +705,16 @@ void App::frame(float dt) {
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
         if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
+    }
+    if (worldFuture_.valid() && worldFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        const WorldJob r = worldFuture_.get();
+        for (const auto& n : r.notes) pushLog("world: " + n, 0);
+        worldLastOk_ = r.ok;
+        if (r.ok) pushLog("world: maps moved (start a new game to walk the new layout)", 3);
+        else pushLog("world: move failed: " + r.error, 2);
+        worldLoaded_ = false;
+        loadWorld();
+        if (r.ok && (saveRoot_.empty() || saveRoot_ == installPath_)) { const std::string root = installPath_; scanInstall(root); }
     }
     if (newLevelFuture_.valid() && newLevelFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const NewLevelJob r = newLevelFuture_.get();
@@ -984,6 +1001,16 @@ void App::drawViewport(float width) {
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    if (worldMode_) {
+        ImGui::SetCursorScreenPos(origin);
+        ImGui::InvisibleButton("##worldcanvas", ImVec2(std::max(size.x, 8.0f), std::max(size.y, 8.0f)), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+        viewportOrigin_ = origin; viewportSize_ = size;
+        viewportHovered_ = ImGui::IsItemHovered();
+        drawWorldCanvas(origin, size);
+        auto_.registerWidget("viewport");
+        ImGui::EndChild();
+        return;
+    }
     ID3D11ShaderResourceView* srv = renderer_.render(uint32_t(std::max(size.x, 8.0f)), uint32_t(std::max(size.y, 8.0f)), camera_, mode_, time_);
     if (srv) {
         ImGui::SetCursorScreenPos(origin);
@@ -1119,7 +1146,7 @@ void App::drawActions(float width) {
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    const float footerHeight = worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
     // The settings stack takes what it needs (measured last frame); the activity log
     // takes the rest, never less than a few lines. On a short window the settings
     // scroll instead of pushing the export button off screen.
@@ -1136,14 +1163,22 @@ void App::drawActions(float width) {
 
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
-        int tab = editMode_ ? 1 : 0;
-        if (theme::segmented("##paneltab", tab, {"Export", "Edit"}, inner)) setEditMode(tab == 1);
+        int tab = worldMode_ ? 2 : editMode_ ? 1 : 0;
+        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World"}, inner)) {
+            if (tab == 2) setWorldMode(true);
+            else { setWorldMode(false); setEditMode(tab == 1); }
+        }
         auto_.registerWidget("seg_panel");
     }
     ImGui::Dummy(ImVec2(0, S(8)));
 
     const float cardInner = inner - S(24);
-    if (editMode_) {
+    if (worldMode_) {
+        drawWorldPanel(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(6)));
+        settingsContentH_ = ImGui::GetCursorPosY();
+        ImGui::EndChild();  // ##settings
+    } else if (editMode_) {
         drawEditPanel(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(6)));
         settingsContentH_ = ImGui::GetCursorPosY();
@@ -1258,7 +1293,9 @@ void App::drawActions(float width) {
     // ---- footer
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + pad, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - pad, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
     ImGui::Dummy(ImVec2(0, S(8)));
-    if (editMode_) {
+    if (worldMode_) {
+        drawWorldFooter(pad, inner);
+    } else if (editMode_) {
         drawEditFooter(pad, inner);
     } else {
     ImGui::SetCursorPosX(pad);
@@ -1525,6 +1562,21 @@ bool Automation::tick(App& app) {
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "edit") { app.setEditMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "world_tab") { app.setWorldMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "world_select") { app.worldSelect(rest); if (app.worldSelected().empty()) fail("world_select: no map " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "world_move") {   // world_move <map> <x> <y>: queue a move (refused moves fail the script)
+        std::istringstream rs(rest); std::string m; int x = 0, y = 0; rs >> m >> x >> y;
+        if (!app.worldMove(m, x, y)) fail("world_move refused: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "world_move_refused") {   // expects the move to be refused
+        std::istringstream rs(rest); std::string m; int x = 0, y = 0; rs >> m >> x >> y;
+        if (app.worldMove(m, x, y)) fail("world_move_refused: the move was accepted: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "world_revert") { app.worldRevert(); note("ok   " + line); ++pc_; }
+    else if (cmd == "world_apply") { app.worldApply(); note("..   " + line); ++pc_; }
+    else if (cmd == "wait_world") waitOn(!app.worldBusy(), "world move");
     else if (cmd == "gizmo") { app.setGizmoOp(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "pick") { float u = 0, v = 0; std::istringstream(rest) >> u >> v; const int t = app.pickAt(u, v); note("ok   " + line + " -> thing " + std::to_string(t)); ++pc_; }
     else if (cmd == "set_thing_prop") { std::istringstream rs(rest); std::string key, val; rs >> key; std::getline(rs, val); while (!val.empty() && val.front() == ' ') val.erase(val.begin()); if (app.selectedThing() >= 0) { app.document().setProperty(size_t(app.selectedThing()), key, val); note("ok   " + line); } else fail("set_thing_prop: nothing selected"); ++pc_; }

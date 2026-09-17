@@ -166,6 +166,60 @@ told to walk to the hero standing at Oakvale West (68.5, 196.5):
 The control run is what shows the walkable byte alone is inert and the patched
 tree is what the engine follows.
 
+## The overworld (World tab)
+
+The right panel's **World** tab shows every map of `FinalAlbion.bwd` as a box on a
+2D grid (x right, y down, the engine's world units), coloured by the WLD region that
+owns it. Wheel zooms about the cursor, right/middle drag pans, **F** refits. Click a
+map to select it; drag it (or type X/Y, or nudge with the arrow keys) to a new
+origin: it snaps to 32, the maps it would touch light up, and an overlap or a
+misaligned spot is refused (red outline, reason on the canvas). Moves queue up
+(orange outlines, *Pending moves* card) and **Move N maps in the game** writes them
+all at once; *Revert all* / *Put back* drop them.
+
+What a move writes -- `AlbionAtlas world-move <map> <x> <y> [...]` is the same
+path from the command line, `AlbionAtlas world` lists the layout:
+
+1. `FinalAlbion.wld` `MapX`/`MapY` (byte-identical otherwise) and the `.bwd` box, in
+   all three copies the engine reads (`data/Levels`, `data/Levels/FinalAlbion`, root).
+2. The map's static-map record in `FinalAlbion_RT.stb`: `WorldX`/`WorldY`, the
+   camera bounds, and the terrain chunk **translated** to the new origin. The debug
+   editor bakes every coordinate absolute, so `src/stbrelocate.cpp` walks the whole
+   chunk and shifts each one: the foreground patch directory AABBs and the layer-mesh
+   vertices and their water mesh (`CWaterPatchMesh`), every background patch (vertex
+   grid, the four tessellation edge strips, the water sub-patch), the background-LOD
+   tree node AABBs (`mapX/mapY` there are map-local), the foliage quadtree (node and
+   group spheres, every cache group's primitive boxes/spheres/matrices/instances/
+   subsection centres) and the record's foliage root sphere. Range-coded vertex blocks
+   are decoded, shifted and re-encoded with the editor's own compressor; LZO frames
+   are re-laid per file block (foreground run, LOD blocks, the foliage section) with
+   every reference rewritten, and a block that no longer fits is appended to the
+   chunk. Grammars come from the FableWin `Save` functions (`CLandscapeBackgroundPatch`
+   0x2ce3220, `CPatchTesselationEdgeStrip` 0x2e03a80, `CEngineWaterBackgroundSubPatch`
+   0x2e055e0, `CWaterPatchMesh` 0x2e68bf0, `CLandscapeBackgroundTreeNode::SaveHeader`
+   0x2deabe0, `CLocalDetailCacheMap::CQuadTreeElement::SaveFileBlock` 0x2e3eb20 and the
+   `CLocalDetailPrimitive*` writers).
+3. Maps that touched the moved one before or after get their shared edges re-baked
+   (best effort: fillers the baker cannot rebuild keep their retail chunk).
+
+Placed objects (`.tng`) are map-local and stay as they are. **Verified**: the audit
+walk (`AlbionAtlas chunk-audit --all`: every coordinate inside its map's box) is
+clean on all 398 retail chunks; `chunk-relocate <map> <dx> <dy>` checks every
+coordinate site moved by exactly the shift on every map; TeleporterGreatwood moved
+to (3680,2880) renders in-game with its birches at the new place and the engine
+reports the expected ground heights (25/25).
+
+Gotchas found on the way: a re-baked-for-a-new-origin chunk that only moves the
+vertex grids draws WHITE in-game (the "cloned chunk white-out" of earlier
+sessions was this, not a name/registration issue); forgecore's `parseQuadDir`
+stops at the first cell without a foreground mesh, so the baker under-counts
+foreground frames on the fillers ("expected 36 CLandscapeLayerMesh foreground
+frames, found 9") -- the relocation walks the directory by cell count instead;
+save games cache the region table, so start a new game to walk a new layout;
+`world-move` far outside the retail bounds (y=9024) crashed the region transition
+in `CTCInventoryMap::UpdateRegionsCorrespondances` -- keep moves inside the map
+screen's extent for now.
+
 ## Implementation map
 
 | Piece | Where |
@@ -178,6 +232,7 @@ tree is what the engine follows.
 | Gizmo, panel, shortcuts, instance sync | `gui/editor.cpp` |
 | Thing index on preview instances | `foliageexport::Instance::thing`, set by `thingsexport` |
 | Scripted tests | `tests/ui/editor.txt`, commands in `docs/AUTOMATION.md` |
+| Overworld layout + moves | `src/overworld.{hpp,cpp}` (layout, `checkMove`, `applyMoves`), chunk translation `src/stbrelocate.{hpp,cpp}` (`relocateChunk`, `auditChunk`); GUI `gui/world.cpp`; `tools/test_overworld.py` + `tests/ui/world.txt`; diagnostics `chunk-audit`, `chunk-relocate`, `chunk-dump`, `chunk-extract` |
 
 Instance matrices are kept as `local * thingWorld`: a move recomputes the
 world matrices of every instance of that thing (including spawned children)
@@ -280,13 +335,12 @@ confirms the mapping: `(pos - regionMin) / regionExtent`.
 See `docs/PLAN.md` (2026-09-16) for the ordered plan and the open
 investigations (texture append resolution, region cap, villagers).
 
-1. Overworld editor (World tab: map boxes by region, drag/snap, save =
-   WLD/BWD/STB origin + chunk re-bake), then neighbour seam stitching.
+1. Overworld: region editing (which region owns/sees a map), seam stitching
+   between newly adjacent maps, and the map-screen extent question (moves far
+   outside the retail world crash the region transition).
 2. A baked distant-LOD texture instead of the solid colour (the green band at
    the horizon of a blank level).
-2. The cloned-chunk white-out (engine map-open texture resolution) -- RE
-   `CEngineLandscapeMap::OpenStaticMap` 0x00BDD0E0 against a working
-   from-scratch chunk.
-3. WLD map placement / region editing for existing maps.
+3. Cloned levels: run the donor chunk through `relocateChunk` (the white-out was
+   the untranslated chunk, see above) so *Copy of this map* renders.
 4. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

@@ -45,7 +45,7 @@ ok   assert_file build/ui/StartOakValeWest.glb
      hovered_window=##root/##actions_92064320
      mouse=1254,692
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=522 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=534 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -75,6 +75,12 @@ ok   assert_file build/ui/StartOakValeWest.glb
      filter=
      camera=146.05,56.70,-80.10
      edit_mode=0
+     world_mode=0
+     world_loaded=0
+     world_maps=0
+     world_selected=
+     world_pending=0
+     world_ok=0
      doc_loaded=1
      doc_things=874
      doc_dirty=0

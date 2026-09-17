@@ -33,6 +33,7 @@ def main():
     ok &= run("ui editor", [gui, "--auto", "tests/ui/editor.txt"])
     ok &= run("ui no-install", [gui, "--auto", "tests/ui/noinstall.txt", "--install", "D:/definitely/not/fable"])
     ok &= run("new level from donor (scratch install)", [sys.executable, "tools/test_newlevel.py"], capture_output=True)
+    ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1
 

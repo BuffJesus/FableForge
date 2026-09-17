@@ -24,6 +24,7 @@
 #include "forge/wld.hpp"
 #include "forge/worldinstall.hpp"
 #include "terrainexport.hpp"
+#include "stbrelocate.hpp"
 
 namespace albion::editor {
 namespace {
@@ -126,18 +127,21 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
             const forge::stb::Entry* entry = nullptr;
             for (const auto& e : archive.entries()) if (e.id == bankIndex) { entry = &e; break; }
             if (!entry) { error = "static-map bank entry " + std::to_string(bankIndex) + " not found"; return false; }
-            const auto chunk = archive.read(*entry);
-            const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "newlevel";
-            fs::create_directories(tmp);
-            const fs::path levTmp = tmp / (req.donor + ".lev");
-            std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(ir.levBytes.data()), std::streamsize(ir.levBytes.size()));
-            const auto lev = forge::lev::File::open(levTmp);
-            forge::stbbake::HeightfieldBakeOptions opt;
-            opt.requireCanonicalSize = false;
-            const auto baked = forge::stbbake::bakeHeightfield(chunk, lev, req.worldX, req.worldY, opt);
-            for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) out.notes.push_back("bake: " + n);
-            ir.chunkBytes = baked.chunk;
-            out.notes.push_back("terrain chunk re-baked for origin (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "): " + std::to_string(baked.chunk.size()) + " bytes");
+            // every coordinate in the chunk is absolute (vertices, edge strips,
+            // water, LOD tree, foliage): translate the whole thing to the new
+            // origin, the same path a world move takes. The donor's edited loose
+            // heights, if any, are already in this chunk only when the donor was
+            // deployed; a plain copy carries the donor's shipped terrain.
+            auto chunk = archive.read(*entry);
+            auto rec = record;
+            const auto info = forge::stbinfo::readInfoBlock(record.data());
+            RelocateReport rr;
+            if (!relocateChunk(chunk, rec, req.worldX - info.worldX, req.worldY - info.worldY, rr, error)) { error = "terrain chunk: " + error; return false; }
+            for (const auto& n : rr.notes) out.notes.push_back("chunk: " + n);
+            ir.chunkBytes = std::move(chunk);
+            ir.commonRecord = std::move(rec);
+            out.notes.push_back("terrain chunk translated from (" + std::to_string(info.worldX) + "," + std::to_string(info.worldY) + ") to (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "): " +
+                                std::to_string(rr.foregroundFrames) + " foreground, " + std::to_string(rr.patchFrames) + " patches, " + std::to_string(rr.groupFrames) + " foliage groups, " + std::to_string(ir.chunkBytes.size()) + " bytes");
         }
 
         for (const char* f : {"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"})

@@ -57,7 +57,7 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=158 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=161 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -87,6 +87,12 @@ ok   filter
      filter=
      camera=101.25,179.35,35.71
      edit_mode=0
+     world_mode=0
+     world_loaded=0
+     world_maps=0
+     world_selected=
+     world_pending=0
+     world_ok=0
      doc_loaded=1
      doc_things=0
      doc_dirty=0

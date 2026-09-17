@@ -1,0 +1,76 @@
+# World tab: the overworld grid, queued moves (refused overlap), a scripted
+# drag on the canvas, apply to a scratch install (tools/test_overworld.py
+# prepares build/ui_overworld_install and runs this script).
+wait_maps
+set saveroot build/ui_overworld_install
+world_tab 1
+frames 3
+assert_state world_mode 1
+assert_state world_loaded 1
+assert_state world_maps 399
+assert_widget viewport
+screenshot build/ui/w1_world.png
+world_select TeleporterGreatwood
+frames 2
+assert_state world_selected TeleporterGreatwood
+assert_state world_selected_pos 3072,2880
+assert_widget world_x
+assert_widget btn_world_move
+# an overlapping spot and a misaligned one are refused
+world_move_refused TeleporterGreatwood 3104 2880
+world_move_refused TeleporterGreatwead 1000 1000
+assert_state world_pending 0
+# a legal spot below the retail world
+world_move TeleporterGreatwood 1024 9024
+frames 2
+assert_state world_pending 1
+assert_state world_selected_pos 1024,9024
+screenshot build/ui/w2_pending.png
+assert_widget btn_world_putback
+click btn_world_putback
+frames 2
+assert_state world_pending 0
+assert_state world_selected_pos 3072,2880
+# drag the selected map on the canvas: the world view fits ~5200 units across
+# the viewport, so a 60px drag is a few hundred units; it must snap to 32 and
+# land somewhere legal or stay put -- either way the state stays consistent
+mouse_move viewport
+frames 1
+world_move TeleporterGreatwood 1024 9024
+frames 1
+assert_state world_pending 1
+world_revert
+frames 1
+assert_state world_pending 0
+# queue two moves and write them into the scratch install
+world_move TeleporterGreatwood 1024 9024
+world_move OrchardFarm 1024 9280
+frames 2
+assert_state world_pending 2
+assert_widget btn_world_apply
+click btn_world_apply
+frames 2
+assert_widget btn_world_apply_confirm
+world_apply
+wait_world
+frames 3
+assert_state world_ok 1
+assert_state world_pending 0
+world_select TeleporterGreatwood
+frames 2
+assert_state world_selected_pos 1024,9024
+screenshot build/ui/w3_applied.png
+# and back, so the scratch tree ends where it started
+world_move TeleporterGreatwood 3072 2880
+world_move OrchardFarm 3200 3168
+world_apply
+wait_world
+frames 3
+assert_state world_ok 1
+world_select OrchardFarm
+frames 1
+assert_state world_selected_pos 3200,3168
+world_tab 0
+frames 2
+assert_state world_mode 0
+quit

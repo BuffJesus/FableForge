@@ -5,7 +5,7 @@ from here. Evidence lines cite the retail/debug binaries (`Fable.exe`
 addresses; `FableWin.exe` = the leaked debug editor with PDB names) or an
 in-game harness run (`tools/ingame`).
 
-## State (v0.6.0, all in-game verified)
+## State (v0.7.0, all in-game verified)
 
 | Capability | Status |
 |---|---|
@@ -16,6 +16,7 @@ in-game harness run (`tools/ingame`).
 | New level: copy of a map (donor chunk re-baked) | installs, **draws white** (engine map-open issue) |
 | Own region under the 141 cap (filler slot take-over) + baked minimap | shipped |
 | Unattended in-game harness (teleport, real region transition, follow, crash catcher) | shipped |
+| Overworld: World tab + `world-move`, terrain chunk fully translated to the new origin | shipped (2026-09-17) |
 
 ## Rocks turned today
 
@@ -102,16 +103,35 @@ in-game harness run (`tools/ingame`).
 * Rule kept from the FableTLC repo: hooks at function entries only, data
   first, native second.
 
+## 2026-09-17: the overworld move, and what it taught
+
+* **Every coordinate in a static-map chunk is absolute.** Moving a map means
+  translating: the foreground directory AABBs + layer vertices + water mesh, every
+  background patch (vertex grid, 4 edge strips, water sub-patch), the LOD tree
+  AABBs, the whole foliage quadtree (node/group spheres, primitive boxes/spheres/
+  matrices/instances, subsection centres) and the record's foliage root. Done in
+  `src/stbrelocate.cpp`; audit clean on 398/398 retail chunks, translation verified
+  site-by-site on every map, TeleporterGreatwood moved in-game (trees included).
+* The **cloned-chunk white-out** (plan item 7) is explained: the old re-bake moved
+  only the vertex grids/quad-dir, leaving edge strips, LOD tree, water and foliage
+  at the donor origin. Feed the donor chunk through `relocateChunk` before
+  `bakeHeightfield` and *Copy of this map* should render (not yet wired).
+* forgecore bug to upstream: `stbbake::parseQuadDir` stops at the first cell with
+  no foreground mesh (zero frame pointer, but not the terminator) -> the baker
+  under-counts foreground frames on the fillers. The relocation walks the directory
+  by `(w/16)*(h/16)` cells.
+* A move far outside the retail world (y=9024) crashed the region transition in
+  `CTCInventoryMap::UpdateRegionsCorrespondances` 0x5fc0c0 (map screen / minimap
+  correspondences); inside the retail extent it is fine. Find the bound before
+  letting the canvas place maps anywhere.
+* Harness: post-transition tutorial boxes pause the script thread; the harness now
+  clicks their Next button when the probe log stalls.
+
 ## Order of work
 
-1. **Overworld editor** (the "lay terrains next to each other" ask): a
-   World tab drawing every map box coloured by region on a 2D grid, drag a
-   map (snap 32, overlap refusal, neighbours highlighted), save = WLD
-   `MapX/MapY` + BWD box + STB info-block origin + chunk re-bake for the
-   new origin (all pieces exist: `wld::relocateMap`, `bwd` boxes,
-   `stbbake::bakeHeightfield` retarget). Then seam stitching between
-   neighbours (`forge lev stitch` semantics) so adjacent terrains meet.
-   Debug-editor model: `CEditWorldMap`; FableForge plan: world P2.
+1. ~~Overworld editor~~ DONE. Left over: seam stitching between newly adjacent
+   maps (`forge lev stitch` semantics), region ownership editing, the map-screen
+   extent bound (see above).
 2. **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
@@ -124,8 +144,8 @@ in-game harness run (`tools/ingame`).
    per-vertex blend) -- the real "paint any texture on the ground".
 6. **Region cap lift** via ForgeFSE (section 2, gated on the decompile
    verdict).
-7. Cloned-chunk white-out RE (`CEngineLandscapeMap::OpenStaticMap`
-   0x00BDD0E0) -- lowest priority now that blank levels work.
+7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk); wire
+   `relocateChunk` into the donor-copy path.
 
 ## Known gotchas to keep
 
