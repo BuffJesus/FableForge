@@ -178,3 +178,5 @@ clean-room implementation verified against minilzo in the test suite).
 
 Format knowledge: the FableTLC decompilation project, FableForge, EgoCore (AeoN),
 FableMod / ChocolateBox. Thanks to the Fable modding Discord.
+
+Editor status and the plan: `docs/EDITOR.md`, `docs/PLAN.md`.

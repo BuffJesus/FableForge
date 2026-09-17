@@ -44,6 +44,23 @@ in-game harness run (`tools/ingame`).
   `CurrentRegionMinimapGraphicName` (0xe36aa0) xrefs in `Fable.exe`.
 * Until then Atlas keeps replacing unreferenced retail `MINIMAP_*` slots
   (retail ships several; each new level takes one).
+* **Note for the next session -- how to find retail's real resolver:**
+  1. In `Fable.exe`, xref the strings `CurrentRegionMinimapGraphicName`
+     (0xe36aa0) and `MINIMAP_` (0xe58ae4) and decompile their users
+     (headless: `tools/ghidra_scripts/FindCallersDecomp.java` needs the
+     retail program analysed first -- run auto-analysis on `Fable.exe` in
+     the project once, references are missing today).
+  2. Decompile retail `CBankFile::FindIndexBySymbol` (retail address via
+     `ghidra_out/functions.tsv`; debug 0x2f97650) and see what feeds it when
+     the CRC map is empty: a per-bank name index, `names.bin`, or the
+     `RetailHeaders` enum parsed through `CDefinitionManager`.
+  3. Set a live breakpoint (pybag, `tools/ingame/trace_bp_stack.py`) on
+     `CBankFile::FindIndexBySymbol` during the region transition of an
+     own-region level and read the argument/return: it tells whether the
+     lookup runs at all for `MiniMapGraphic` and against which bank.
+  4. The rename experiment (above) with a small `big_write` rename edit.
+  Land whatever function turns out to be the resolver in FableTLC's
+  byte-pure lane (it is small accessor code, the auto-RE crawl handles it).
 
 ### 2. Regions past 141
 * Live probe (2026-08): the region vector is capped at 141 real entries;

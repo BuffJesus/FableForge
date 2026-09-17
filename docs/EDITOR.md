@@ -277,7 +277,12 @@ confirms the mapping: `(pos - regionMin) / regionExtent`.
 
 ## Next
 
-1. A baked distant-LOD texture instead of the solid colour (the green band at
+See `docs/PLAN.md` (2026-09-16) for the ordered plan and the open
+investigations (texture append resolution, region cap, villagers).
+
+1. Overworld editor (World tab: map boxes by region, drag/snap, save =
+   WLD/BWD/STB origin + chunk re-bake), then neighbour seam stitching.
+2. A baked distant-LOD texture instead of the solid colour (the green band at
    the horizon of a blank level).
 2. The cloned-chunk white-out (engine map-open texture resolution) -- RE
    `CEngineLandscapeMap::OpenStaticMap` 0x00BDD0E0 against a working
