@@ -140,6 +140,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     using theme::S;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), theme::col(theme::Bg0));
+    if (!worldLoaded_ && installValid_ && !worldFuture_.valid()) loadWorld();   // invalidated by a new level / an applied job
     if (!worldLoaded_) {
         ImGui::SetCursorScreenPos(ImVec2(origin.x + S(24), origin.y + S(24)));
         ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? "The world could not be read (see the log)." : "Point Albion Atlas at a Fable install to see its world.");
