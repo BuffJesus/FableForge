@@ -184,12 +184,19 @@ struct InlineTexture;
 // SavePatchesToTemporyStream, its first band owns the payload and equal later
 // bands remap to it with null file tuples. Tree and owning payload file-block
 // positions are absolute chunk offsets and page aligned.
+// Per-node background texture: called with the node's map-local cell rect
+// (x, y, w, h) and, when an existing texture is being replaced in place, the
+// size it must keep (texW, texH; 0 = the provider's choice -- retail leaves are
+// mostly 64x64 DXT1, single mip). Returning an empty texture (width 0) keeps
+// the fallback / existing texture.
+using BackgroundTextureProvider = std::function<InlineTexture(int x, int y, int w, int h, int texW, int texH)>;
 BackgroundTreeLayout layoutBackgroundTree(
     BackgroundTreeNode root,
     const terrain::Heightfield& heightfield,
     int worldX, int worldY,
     const InlineTexture& texture,
-    size_t startOffset, size_t alignment = 2048);
+    size_t startOffset, size_t alignment = 2048,
+    const BackgroundTextureProvider& provider = {});
 
 // Exact 0x2C CLocalDetailCacheMap quadtree header written by FableWin.  Empty
 // maps still carry this spatial/file-block header even when their object palette
@@ -434,7 +441,9 @@ TerrainChunk64Result buildTerrainChunk64(
     // Supplying both arguments selects the recovered retail LEV theme path.
     // Leaving them empty preserves the explicit single/slope/highland profiles.
     const std::vector<terrain::TerrainThemeMaterial>& themeMaterials = {},
-    const std::function<terrain::ThemeBlend(int,int)>& themeAt = {});
+    const std::function<terrain::ThemeBlend(int,int)>& themeAt = {},
+    // Per-node distant-LOD textures (baked albedo) instead of the one backgroundTexture.
+    const BackgroundTextureProvider& backgroundProvider = {});
 
 // One LZO-framed block decoded out of a bank chunk: its uncompressed payload plus
 // where the frame sat, so a round-trip can re-emit byte-identically.

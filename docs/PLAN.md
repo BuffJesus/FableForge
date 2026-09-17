@@ -164,7 +164,17 @@ in-game harness run (`tools/ingame`).
 1. ~~Overworld editor~~ DONE (extent bound pinned to the 8192 grid; region
    owner + sees editing in the panel and CLI). Left over: seam stitching between
    newly adjacent maps (`forge lev stitch` semantics).
-2. **Distant-LOD bake** for blank/new levels (the green horizon band): bake
+2. ~~Distant-LOD bake~~ DONE 2026-09-17: blank levels get a 64x64 DXT1 tile per
+   background node baked from the level's own albedo (`src/lodbake`, forgecore
+   `BackgroundTextureProvider`), and a theme-paint deploy re-bakes them in place
+   (`HeightfieldBakeOptions.backgroundTextures`, same size as the tile it
+   replaces). Texture row 0 = lowest map Y (pinned with `AlbionAtlas lod-check`
+   against retail: Greatwood_1 0.65 vs 0.49 flipped, HookCoast 0.58 vs 0.38).
+   Retail tiles are lit renders with STB-foreground textures, so they differ from
+   a LEV-theme bake by design. NOTE: the grey band at a lone level's horizon is
+   NOT the background texture (it stayed grey with green tiles): it is the void
+   beyond the map -- retail hides it with filler/sea maps around every level.
+2 (old). **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
 3. **Villages & creature generators** as thing presets (section 3), verified

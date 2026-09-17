@@ -14,6 +14,7 @@
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
 #include "forge/stbinfo.hpp"
+#include "lodbake.hpp"
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
 
@@ -481,6 +482,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         if (!wm) { error = mapName_ + " is not placed in FinalAlbion.wld"; return false; }
         forge::stbbake::HeightfieldBakeOptions opt;
         opt.requireCanonicalSize = false;
+        std::shared_ptr<LodAlbedo> lodAlbedo;
         if (themesChanged) {
             // regenerate every foreground layer mesh from the LEV themes (the
             // editor's ReadThemesAndCreateLayers): new material regions get
@@ -489,7 +491,11 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
             opt.rebuildDirectionMask = true;
             opt.themes = forge::terraintex::paletteMaterials(*level_, *library);
             opt.themes.resize(256);
-            notes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette");
+            // the distant-LOD textures follow the painted themes (same size as the
+            // ones they replace; retail chunks keep theirs where sizes differ)
+            lodAlbedo = std::make_shared<LodAlbedo>(bakeLodAlbedo(gameRoot, *level_));
+            opt.backgroundTextures = lodTextureProvider(*lodAlbedo);
+            notes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette, distant-LOD textures re-baked");
         }
         // Neighbouring maps (every map a region owning this one contains or
         // sees, whose placement touches ours) supply the shared-edge samples,

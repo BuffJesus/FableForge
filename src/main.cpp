@@ -40,6 +40,8 @@
 #include "worldedit.hpp"
 #include "overworld.hpp"
 #include "stbrelocate.hpp"
+#include "lodbake.hpp"
+#include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
 
 namespace fs = std::filesystem;
@@ -431,6 +433,77 @@ int main(int argc, char** argv) {
         if (!albion::editor::registerMinimapGraphic(install.root, args[1], uint32_t(std::strtoul(args[2].c_str(), nullptr, 0)), notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());
         return 0;
+    }
+    if (cmd == "lod-check") {   // diagnostic: lod-check <map> [--install <root>]: compare our baked distant-LOD tiles with the retail inline textures
+        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas lod-check <map> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 2; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        try {
+            fs::path temp;
+            const fs::path levPath = resolveLevel(args[1], install, temp);
+            const auto lev = forge::lev::File::open(levPath);
+            const auto albedo = albion::editor::bakeLodAlbedo(install.root, lev);
+            std::printf("albedo %ux%u (%s)\n", albedo.image.width, albedo.image.height, albedo.textured ? "textured" : "flat");
+            const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            const std::string want = lower(args[1]) + ".lev";
+            for (const auto& m : archive.staticMaps()) {
+                if (lower(fs::path(m.levelName).filename().string()) != want) continue;
+                const auto record = archive.readStaticMapRecord(m);
+                uint32_t bankIndex = 0; std::memcpy(&bankIndex, record.data() + 4, 4);
+                uint32_t rootPos = 0; std::memcpy(&rootPos, record.data() + 0x68, 4);
+                const forge::stb::Entry* entry = nullptr;
+                for (const auto& e : archive.entries()) if (e.id == bankIndex) { entry = &e; break; }
+                const auto chunk = archive.read(*entry);
+                const auto parsed = forge::stbbake::parseChunk(chunk);
+                std::map<size_t, size_t> frameIndexByStart;
+                for (size_t i = 0; i < parsed.frameIndices.size(); ++i) frameIndexByStart[parsed.segments[parsed.frameIndices[i]].start] = i;
+                const auto root = forge::stbbake::parseBackgroundTree(chunk, rootPos);
+                double corrSame = 0, corrFlip = 0; int nodes = 0; bool dumped = false;
+                std::function<void(const forge::stbbake::BackgroundTreeNode&)> walk = [&](const forge::stbbake::BackgroundTreeNode& n) {
+                    for (const auto& l : n.header.lod) {
+                        if (l.fileBlockPos == 0) continue;
+                        auto it = frameIndexByStart.find(size_t(l.fileBlockPos) + size_t(l.offsetIntoFileBlock));
+                        if (it == frameIndexByStart.end()) continue;
+                        const auto body = forge::stbbake::decodeFrame(parsed, it->second);
+                        const auto pb = forge::stbbake::parsePatchBody(body);
+                        if (!pb.valid || pb.texture.size() < 19) break;
+                        const auto tex = forge::stbbake::parseInlineTexture(pb.texture);
+                        if (tex.width != 64 || tex.height != 64 || tex.mipData.size() < 2048) {
+                            std::printf("node %d,%d %dx%d: texture %ux%u levels %d fmt %u/%u usage %u pool %u bytes %zu (skipped)\n", n.header.mapX, n.header.mapY, n.header.width, n.header.height, tex.width, tex.height, tex.levels, tex.pixelFormat0, tex.pixelFormat1, tex.usage, tex.surfacePool, tex.mipData.size());
+                            break;
+                        }
+                        if (nodes == 0) std::printf("retail inline texture: %ux%u levels %d fmt %u/%u usage %u pool %u mip bytes %zu\n", tex.width, tex.height, tex.levels, tex.pixelFormat0, tex.pixelFormat1, tex.usage, tex.surfacePool, tex.mipData.size());
+                        const auto retail = albion::dxt1::decode(tex.mipData.data(), 64, 64);
+                        const auto same = albion::editor::lodTile(albedo, n.header.mapX, n.header.mapY, n.header.width, n.header.height, false);
+                        const auto flip = albion::editor::lodTile(albedo, n.header.mapX, n.header.mapY, n.header.width, n.header.height, true);
+                        auto corr = [&](const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {
+                            double ma = 0, mb = 0; const size_t n4 = a.size() / 4;
+                            for (size_t i = 0; i < n4; ++i) { ma += a[i * 4] + a[i * 4 + 1] + a[i * 4 + 2]; mb += b[i * 4] + b[i * 4 + 1] + b[i * 4 + 2]; }
+                            ma /= double(n4 * 3); mb /= double(n4 * 3);
+                            double num = 0, da = 0, db = 0;
+                            for (size_t i = 0; i < n4 * 4; ++i) { if (i % 4 == 3) continue; const double x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
+                            return da > 0 && db > 0 ? num / std::sqrt(da * db) : 0.0;
+                        };
+                        corrSame += corr(retail, same.rgba); corrFlip += corr(retail, flip.rgba); ++nodes;
+                        if (!dumped) {
+                            dumped = true;
+                            fs::create_directories("build/lodcheck");
+                            albion::terrainexport::Image ri; ri.width = ri.height = 64; ri.rgba = retail;
+                            auto w = [&](const albion::terrainexport::Image& im, const char* nm) { const auto png = albion::terrainexport::encodePng(im); std::ofstream(fs::path("build/lodcheck") / nm, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size())); };
+                            w(ri, "retail.png"); w(same, "ours_same.png"); w(flip, "ours_flip.png");
+                        }
+                        break;
+                    }
+                    for (const auto& c : n.children) walk(c);
+                };
+                walk(root);
+                std::printf("%d node textures compared: mean correlation same-rows %.3f, flipped-rows %.3f -> %s (build/lodcheck/*.png)\n", nodes, nodes ? corrSame / nodes : 0, nodes ? corrFlip / nodes : 0, corrFlip > corrSame ? "FLIP" : "SAME");
+                return 0;
+            }
+            std::fprintf(stderr, "%s has no static map\n", args[1].c_str()); return 1;
+        } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-extract") {   // diagnostic: chunk-extract <map> <out.bin> [--install <root>]: the map's terrain chunk from FinalAlbion_RT.stb (+ <out.bin>.record)
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-extract <map> <out.bin> [--install <root>]\n"); return 2; }

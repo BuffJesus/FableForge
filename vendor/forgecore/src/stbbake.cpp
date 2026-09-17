@@ -613,7 +613,8 @@ BackgroundTreeNode buildNativeAdaptiveBackgroundTreeShape(
 BackgroundTreeLayout layoutBackgroundTree(
     BackgroundTreeNode root, const terrain::Heightfield& hf,
     int worldX, int worldY, const InlineTexture& texture,
-    size_t startOffset, size_t alignment) {
+    size_t startOffset, size_t alignment,
+    const BackgroundTextureProvider& provider) {
     if (alignment == 0 || (alignment & (alignment - 1)) != 0)
         throw std::invalid_argument("background tree alignment must be a power of two");
     if (root.header.width != hf.width() || root.header.height != hf.height())
@@ -667,10 +668,14 @@ BackgroundTreeLayout layoutBackgroundTree(
             for (auto& child : node.children) self(self, child);
             return;
         }
+        InlineTexture nodeTexture;
+        if (provider)
+            nodeTexture = provider(node.header.mapX, node.header.mapY,
+                                   node.header.width, node.header.height, 0, 0);
         const auto body = buildBackgroundPatchRect(
             hf, node.header.mapX, node.header.mapY,
             node.header.width, node.header.height,
-            worldX, worldY, texture);
+            worldX, worldY, nodeTexture.width ? nodeTexture : texture);
         const auto frame = forge::lzo::compressFramed(assemblePatchBody(body));
         for (size_t i = 0; i < node.header.lod.size(); ++i) {
             auto& lod = node.header.lod[i];
@@ -2250,7 +2255,8 @@ TerrainChunk64Result buildTerrainChunk64(
     const std::filesystem::path& meshBank,
     bool foliageSubsections,
     const std::vector<terrain::TerrainThemeMaterial>& themeMaterials,
-    const std::function<terrain::ThemeBlend(int,int)>& themeAt) {
+    const std::function<terrain::ThemeBlend(int,int)>& themeAt,
+    const BackgroundTextureProvider& backgroundProvider) {
     if (alignment != 2048)
         throw std::invalid_argument(
             "terrain chunk currently requires FinalAlbion_RT.stb bank alignment 2048");
@@ -2301,7 +2307,7 @@ TerrainChunk64Result buildTerrainChunk64(
     const auto treeShape = buildBackgroundTreeShape(hf, worldX, worldY);
     auto background = layoutBackgroundTree(
         treeShape, hf, worldX, worldY, backgroundTexture,
-        backgroundStart, alignment);
+        backgroundStart, alignment, backgroundProvider);
     out.backgroundRootOffset = background.rootHeaderOffset;
     out.chunk.insert(out.chunk.end(), background.bytes.begin(), background.bytes.end());
 

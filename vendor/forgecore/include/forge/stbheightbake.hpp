@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "forge/lev.hpp"
+#include "forge/stbbake.hpp"
 #include "forge/terrain.hpp"
 
 namespace forge::stbbake {
@@ -32,6 +33,10 @@ struct HeightfieldBakeOptions {
     // Set false to skip the 32/64-cell gate the CLI enforces (retail maps are
     // up to 224 cells); the caller then owns the in-game validation.
     bool requireCanonicalSize = true;
+    // Replace every re-baked background patch's inline texture with the
+    // provider's (same dimensions/format as the one it replaces, so the patch
+    // keeps its slot): the distant-LOD bake for edited levels.
+    BackgroundTextureProvider backgroundTextures;
 };
 
 struct HeightfieldBakeResult {

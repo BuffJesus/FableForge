@@ -29,6 +29,7 @@
 #include "forge/defschema.hpp"
 #include "../vendor/embedded_schema.hpp"
 #include "stbrelocate.hpp"
+#include "lodbake.hpp"
 
 namespace albion::editor {
 namespace {
@@ -436,6 +437,11 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         background.mipData[0] = background.mipData[2] = uint8_t(req.backgroundRgb565);
         background.mipData[1] = background.mipData[3] = uint8_t(req.backgroundRgb565 >> 8);
         forge::terrain::TerrainMaterialTuple material = themeMaterials[size_t(slot)].base;
+        // distant-LOD textures: the level's own top-down albedo per background
+        // node (64x64 DXT1 like retail) instead of the solid colour, so a later
+        // theme paint can re-bake them in place
+        const auto lodAlbedo = bakeLodAlbedo(gameRoot, lev);
+        const auto lodProvider = lodTextureProvider(lodAlbedo);
         const auto built = forge::stbbake::buildTerrainChunk64(
             heightfield, req.worldX, req.worldY, 0, material, {}, background, 2048, {}, {}, false, {}, true,
             themeMaterials,
@@ -443,7 +449,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
                 forge::terrain::ThemeBlend blend;
                 for (int k = 0; k < 3; ++k) { blend.indices[size_t(k)] = lev.themeIndexAt(x, y, k); blend.strengths[size_t(k)] = lev.themeStrengthAt(x, y, k); }
                 return blend;
-            });
+            }, lodProvider);
         const auto record = forge::stbbake::buildTerrainCommonRecord(built.info, built.chunk);
         out.notes.push_back("terrain chunk authored from scratch: " + std::to_string(built.chunk.size()) + " bytes, theme " + lev.groundThemes()[size_t(slot)].name);
 

@@ -477,8 +477,20 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         catch (const std::exception&) { continue; }
         const auto h = forge::stbbake::parsePatchHeader(body);
         if (!h.valid || h.isWaterOnly) continue;
-        const auto pb = forge::stbbake::parsePatchBody(body);
+        auto pb = forge::stbbake::parsePatchBody(body);
         if (!pb.valid || pb.waterOnly) continue;
+        if (options.backgroundTextures && pb.texture.size() >= 19) {
+            // the distant-LOD texture: same size and format as the donor's so
+            // the body keeps its span; a differently sized answer is ignored
+            const auto old = forge::stbbake::parseInlineTexture(pb.texture);
+            auto fresh = options.backgroundTextures(int(h.coord0), int(h.coord1), int(h.pw), int(h.ph), int(old.width), int(old.height));
+            if (fresh.width == old.width && fresh.height == old.height && fresh.mipData.size() == old.mipData.size()) {
+                fresh.levels = old.levels; fresh.pixelFormat0 = old.pixelFormat0; fresh.pixelFormat1 = old.pixelFormat1;
+                fresh.usage = old.usage; fresh.surfacePool = old.surfacePool;
+                const auto bytes = forge::stbbake::serializeInlineTexture(fresh);
+                if (bytes.size() == pb.texture.size()) pb.texture = bytes;
+            }
+        }
         auto verts = forge::stbbake::decodePatchVertices(pb);
         uint16_t oldMinX = 0xffff, oldMinY = 0xffff;
         for (const auto& v : verts) {

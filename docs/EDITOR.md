@@ -253,6 +253,7 @@ grid edge and `checkMove` refuses anything past it.
 | Gizmo, panel, shortcuts, instance sync | `gui/editor.cpp` |
 | Thing index on preview instances | `foliageexport::Instance::thing`, set by `thingsexport` |
 | Scripted tests | `tests/ui/editor.txt`, commands in `docs/AUTOMATION.md` |
+| Distant-LOD textures | `src/lodbake.{hpp,cpp}` + `src/dxt1.hpp` (albedo at 16 texels/cell box-filtered to 64x64 DXT1 per background node; blank levels and theme-paint deploys); `AlbionAtlas lod-check <map>` compares against retail tiles |
 | Overworld layout + moves | `src/overworld.{hpp,cpp}` (layout, `checkMove`, `applyMoves`), chunk translation `src/stbrelocate.{hpp,cpp}` (`relocateChunk`, `auditChunk`); GUI `gui/world.cpp`; `tools/test_overworld.py` + `tests/ui/world.txt`; diagnostics `chunk-audit`, `chunk-relocate`, `chunk-dump`, `chunk-extract` |
 
 Instance matrices are kept as `local * thingWorld`: a move recomputes the
