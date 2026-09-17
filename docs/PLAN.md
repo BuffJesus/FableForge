@@ -5,7 +5,7 @@ from here. Evidence lines cite the retail/debug binaries (`Fable.exe`
 addresses; `FableWin.exe` = the leaked debug editor with PDB names) or an
 in-game harness run (`tools/ingame`).
 
-## State (v0.10.0, all in-game verified)
+## State (v0.11.0, all in-game verified)
 
 | Capability | Status |
 |---|---|
@@ -237,6 +237,11 @@ in-game harness run (`tools/ingame`).
    `relocateChunk` runs in the donor-copy path (0.7.0).
 
 ## Known gotchas to keep
+
+* **Restoring the live install after a probe: `.atlas-orig` files ARE the
+  user's originals.** Put them back (`mv X.atlas-orig X`), never delete the pair.
+  A loose `OrchardFarm.tng` / `TeleporterGreatwood.tng` (identical to the WAD
+  entries) was lost that way on 2026-09-17 and re-extracted from the WAD.
 
 * **A chunk's local-detail section is only "the last thing" in retail.** After a
   relocation appended foreground frames or LOD blocks behind it, the section's
