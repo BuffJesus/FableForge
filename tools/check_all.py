@@ -27,10 +27,12 @@ def main():
     gui = os.path.join("build", "AlbionAtlasGUI.exe")
     ok &= run("ui paths", [gui, "--auto", "tests/ui/paths.txt"])
     ok &= run("ui controls", [gui, "--auto", "tests/ui/controls.txt"])
+    ok &= run("ui wheel", [gui, "--auto", "tests/ui/wheel.txt"])
     ok &= run("ui foliage", [gui, "--auto", "tests/ui/foliage.txt"])
     ok &= run("ui region export", [gui, "--auto", "tests/ui/region.txt"])
     ok &= run("ui editor", [gui, "--auto", "tests/ui/editor.txt"])
     ok &= run("ui no-install", [gui, "--auto", "tests/ui/noinstall.txt", "--install", "D:/definitely/not/fable"])
+    ok &= run("new level from donor (scratch install)", [sys.executable, "tools/test_newlevel.py"], capture_output=True)
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1
 

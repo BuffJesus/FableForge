@@ -24,6 +24,7 @@
 #include "renderer.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
+#include "worldedit.hpp"
 
 namespace albion::gui {
 
@@ -228,6 +229,7 @@ private:
     uint64_t syncedRevision_ = 0;
     bool thingsReloadPending_ = false;
     std::string saveRoot_;
+    float settingsScroll_ = 0;       // ##settings ScrollY (state dump, wheel tests)
     char defSearch_[64] = {};
     std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
     char thingSearch_[64] = {};
@@ -245,6 +247,19 @@ private:
     uint64_t syncedTerrainRev_ = 0;
     struct TerrainDeployResult { bool ok = false; std::string error; std::vector<std::string> notes; };
     std::future<TerrainDeployResult> terrainDeployFuture_;
+    // new level from the selected map (donor): inputs, the donor lookup and the install job
+    char newLevelName_[64] = "";
+    int newLevelX_ = 0, newLevelY_ = 0;
+    std::string newLevelRegion_;
+    std::string newLevelDonor_;            // donor the fields were filled for
+    editor::DonorInfo newLevelInfo_;
+    bool newLevelInfoOk_ = false;
+    struct NewLevelJob { bool ok = false; std::string error; std::string name; editor::NewLevelResult result; };
+    std::future<NewLevelJob> newLevelFuture_;
+    void drawNewLevelCard(float pad, float inner, float cardInner);
+    void startNewLevel();
+    void setNewLevel(const std::string& name, int x, int y, const std::string& region) { std::snprintf(newLevelName_, sizeof newLevelName_, "%s", name.c_str()); newLevelX_ = x; newLevelY_ = y; newLevelRegion_ = region; }
+    bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
     void terrainInput(const ImVec2& origin, const ImVec2& size);
     void drawBrushCursor(const ImVec2& origin, const ImVec2& size);

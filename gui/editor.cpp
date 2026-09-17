@@ -432,6 +432,74 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (renderer_.project(c, cu, cv)) dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
 }
 
+// ---- new level from the selected map
+
+void App::drawNewLevelCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    const std::string donor = doc_.mapName();
+    if (newLevelDonor_ != donor) {
+        // refill the fields for this donor: a free origin and the owning region
+        newLevelDonor_ = donor;
+        std::string err;
+        newLevelInfoOk_ = editor::donorInfo(saveRoot(), donor, newLevelInfo_, err);
+        if (newLevelInfoOk_) {
+            newLevelX_ = newLevelInfo_.suggestedX; newLevelY_ = newLevelInfo_.suggestedY;
+            newLevelRegion_ = newLevelInfo_.owningRegion;
+            if (newLevelName_[0] == 0) std::snprintf(newLevelName_, sizeof newLevelName_, "%s_Copy", donor.c_str());
+        } else {
+            pushLog("new level: " + err, 1);
+        }
+    }
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##newlevel", inner);
+    theme::label("New level from this map");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("Clones the map (current .lev/.tng, terrain re-baked for the new origin) into the world as a new level owned by an existing region. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
+    ImGui::PopFont();
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##newlevelname", "Level name (letters, digits, _)", newLevelName_, sizeof newLevelName_);
+    auto_.registerWidget("input_new_level_name");
+    const float half = (cardInner - S(6)) * 0.5f;
+    ImGui::SetNextItemWidth(half);
+    ImGui::InputInt("##newlevelx", &newLevelX_, 32, 128);
+    ImGui::SameLine(0, S(6));
+    ImGui::SetNextItemWidth(half);
+    ImGui::InputInt("##newlevely", &newLevelY_, 32, 128);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("World origin (32-unit grid). The suggestion is the first free spot right of the existing maps.");
+    ImGui::SetNextItemWidth(cardInner);
+    if (ImGui::BeginCombo("##newlevelregion", newLevelRegion_.empty() ? "(owning region)" : newLevelRegion_.c_str())) {
+        for (const auto& r : newLevelInfo_.regions)
+            if (ImGui::Selectable(r.c_str(), r == newLevelRegion_)) newLevelRegion_ = r;
+        ImGui::EndCombo();
+    }
+    auto_.registerWidget("combo_new_level_region");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map (the game only reaches maps owned by one of the first 141 regions, so a copy joins an existing region).");
+    const bool gridOk = newLevelX_ % 32 == 0 && newLevelY_ % 32 == 0;
+    const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && !newLevelRegion_.empty() && !newLevelFuture_.valid();
+    if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
+    if (theme::primaryButton(newLevelFuture_.valid() ? "Installing..." : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
+    auto_.registerWidget("btn_new_level");
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+}
+
+void App::startNewLevel() {
+    if (!documentLoaded() || newLevelFuture_.valid()) return;
+    editor::NewLevelRequest req;
+    req.donor = doc_.mapName();
+    req.name = newLevelName_;
+    req.hostRegion = newLevelRegion_;
+    req.worldX = newLevelX_; req.worldY = newLevelY_;
+    const std::string root = saveRoot();
+    pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
+    newLevelFuture_ = std::async(std::launch::async, [req, root]() {
+        NewLevelJob j; j.name = req.name;
+        j.ok = editor::createLevelFromDonor(root, req, j.result, j.error);
+        return j;
+    });
+}
+
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
     if (doc_.strokeActive()) doc_.endStroke();
@@ -764,6 +832,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, dropped onto the terrain, facing the camera.");
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+
+    drawNewLevelCard(pad, inner, cardInner);
 
     // ---- changes / save
     ImGui::SetCursorPosX(pad);

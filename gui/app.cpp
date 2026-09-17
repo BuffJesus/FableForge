@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include "ImGuizmo.h"
+#include "imgui_internal.h"
 
 #include <algorithm>
 #include <cctype>
@@ -616,6 +617,10 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("install_valid=" + std::string(installValid_ ? "1" : "0"));
     v.push_back("maps=" + std::to_string(maps_.size()));
     v.push_back("selected=" + selectedName_);
+    v.push_back("settings_scroll=" + std::to_string(int(settingsScroll_)));
+    v.push_back(std::string("settings_scrolled=") + (settingsScroll_ > 0.5f ? "1" : "0"));
+    { ImGuiContext& g = *ImGui::GetCurrentContext(); v.push_back(std::string("hovered_window=") + (g.HoveredWindow ? g.HoveredWindow->Name : "-")); v.push_back("mouse=" + std::to_string(int(g.IO.MousePos.x)) + "," + std::to_string(int(g.IO.MousePos.y))); if (g.HoveredWindow) v.push_back("hovered_scrollmax=" + std::to_string(int(g.HoveredWindow->ScrollMax.y)));
+      v.push_back(std::string("wheeling_window=") + (g.WheelingWindow ? g.WheelingWindow->Name : "-") + " scrolled_frame=" + std::to_string(g.WheelingWindowScrolledFrame) + " frame=" + std::to_string(g.FrameCount) + " hovered_flags=" + std::to_string(g.HoveredWindow ? g.HoveredWindow->Flags : 0) + " parent=" + (g.HoveredWindow && g.HoveredWindow->ParentWindow ? g.HoveredWindow->ParentWindow->Name : "-") + " parent_scrollmax=" + std::to_string(g.HoveredWindow && g.HoveredWindow->ParentWindow ? int(g.HoveredWindow->ParentWindow->ScrollMax.y) : -1)); }
     v.push_back("preview_loaded=" + std::string(previewLoaded() ? "1" : "0"));
     v.push_back("preview_textured=" + std::string(previewTextured_ ? "1" : "0"));
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
@@ -689,6 +694,25 @@ void App::frame(float dt) {
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
         if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
+    }
+    if (newLevelFuture_.valid() && newLevelFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        const NewLevelJob r = newLevelFuture_.get();
+        for (const auto& n : r.result.notes) pushLog("new level: " + n, 0);
+        if (r.ok) {
+            pushLog("new level " + r.name + " installed (map slot " + std::to_string(r.result.mapSlot) + ", origin " + std::to_string(r.result.worldX) + "," + std::to_string(r.result.worldY) + ")", 3);
+            newLevelDonor_.clear();
+            if (saveRoot_.empty() || saveRoot_ == installPath_) {
+                // the WAD has a new entry: rescan, then open the copy (the texture context is unchanged)
+                const std::string root = installPath_;
+                scanInstall(root);
+                discardEdits_ = true;
+                selectMap(r.name);
+            } else {
+                pushLog("new level written under the save root " + saveRoot_ + " (not the explorer's install)", 1);
+            }
+        } else {
+            pushLog("new level failed: " + r.error, 2);
+        }
     }
     {
         ImGuiIO& io = ImGui::GetIO();
@@ -1104,6 +1128,7 @@ void App::drawActions(float width) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
     ImGui::BeginChild("##settings", ImVec2(width, settingsH), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
+    settingsScroll_ = ImGui::GetScrollY();
 
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
@@ -1407,11 +1432,16 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "mouse_move") {   // mouse_move <x> <y>  (window pixels) | mouse_move viewport
         ImGuiIO& io = ImGui::GetIO();
-        if (rest == "viewport" && widgets_.count("viewport")) {
-            const ImVec4 r = widgets_["viewport"];
+        if (widgets_.count(rest)) {   // a registered widget (or "viewport"): its centre
+            const ImVec4 r = widgets_[rest];
             setVirtualMouse((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
-        } else { float x = 0, y = 0; std::istringstream(rest) >> x >> y; setVirtualMouse(x, y); }
+        } else if (rest.empty() || !std::isdigit(static_cast<unsigned char>(rest[0]))) { fail("mouse_move: widget not on screen: " + rest); ++pc_; return true; }
+        else { float x = 0, y = 0; std::istringstream(rest) >> x >> y; setVirtualMouse(x, y); }
         io.AddMousePosEvent(vmX_, vmY_);
+        note("ok   " + line); ++pc_; waitFrames_ = 1;
+    }
+    else if (cmd == "wheel") {   // wheel <dy>: mouse wheel at the scripted mouse position
+        ImGui::GetIO().AddMouseWheelEvent(0.0f, float(std::atof(rest.c_str())));
         note("ok   " + line); ++pc_; waitFrames_ = 1;
     }
     else if (cmd == "mouse_down" || cmd == "mouse_up") {
@@ -1510,6 +1540,10 @@ bool Automation::tick(App& app) {
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
     else if (cmd == "terrain_mode") { app.setTerrainMode(std::atoi(rest.c_str())); app.setGizmoOp(4); note("ok   " + line); ++pc_; }
     else if (cmd == "paint_theme") { app.setPaintTheme(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "new_level") {   // new_level <name> <x> <y> [region]: fill the card and start the install
+        std::istringstream rs(rest); std::string name, region; int x = 0, y = 0; rs >> name >> x >> y >> region;
+        app.setNewLevel(name, x, y, region); app.startNewLevel(); note("..   " + line); ++pc_; }
+    else if (cmd == "wait_new_level") { if (!app.newLevelBusy()) { note("ok   " + line); ++pc_; } }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
     else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }

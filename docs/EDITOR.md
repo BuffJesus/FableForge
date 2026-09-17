@@ -166,6 +166,7 @@ tree is what the engine follows.
 | Piece | Where |
 |---|---|
 | Document, commands, undo, diff, save/deploy | `src/leveledit.{hpp,cpp}` (headless; `tests/test_export.cpp::testLevelDocument`, `testTerrainEditing`) |
+| New level from donor | `src/worldedit.{hpp,cpp}` over `vendor/forgecore` `worldinstall.{hpp,cpp}`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
 | Navigation patch | `vendor/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
 | Terrain bake | `vendor/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `AlbionAtlas bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
 | Per-instance rendering, picking, outline | `gui/renderer.{hpp,cpp}` (`uploadThings`, `pick`, `screenRay`) |
@@ -178,8 +179,37 @@ world matrices of every instance of that thing (including spawned children)
 without touching the GPU meshes. Structural edits (add/remove/undo of those)
 reload the things layer from the in-memory `.tng` text.
 
+## New level from a donor map
+
+The Edit panel's **New level from this map** card clones the selected map into
+the world as a new level: a free 32-aligned origin is suggested (first slot
+right of the existing maps), the owning region defaults to the donor's, the
+name must be a bare stem. `AlbionAtlas new-level <donor> <name> [--at x,y]
+[--region R] [--dedicated] [--no-rebake]` is the command-line form.
+
+What it does (`src/worldedit.cpp` over forgecore's `worldinstall::installLevel`,
+the library form of `forge world install-level`, upstreamed to FableForge):
+
+1. the donor's current `.lev`/`.tng` bytes (loose edits included) become the
+   new level's WAD entries (`wad::appendClonedEntries` + `repack`);
+2. the donor's terrain chunk is **re-baked for the new origin**
+   (`stbbake::bakeHeightfield` with `worldX/Y` = the origin, no neighbours) and
+   appended to `FinalAlbion_RT.stb` with an origin-patched common record;
+3. the map is registered in `FinalAlbion.bwd` and `.wld` and added to the host
+   region's `contains`/`sees` lists.
+
+Ownership matters: the engine's region vector is capped at the vanilla 141
+entries (live probe, 2026-08), so a dedicated region past that is never
+reachable. The card therefore always attaches to an existing region; the CLI's
+`--dedicated` keeps the old behaviour and warns. Refusals (duplicate name,
+off-grid origin, overlapping box) happen before any file is touched; the four
+containers get one-time `.atlas-orig` backups and are replaced with staged
+temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
+CLI and the card against a scratch copy of the install.
+
 ## Next
 
-1. World: WLD map/region editing, new-level-from-donor (`forge::worldworkspace`).
-2. Live link to the running game through ForgeFSE (spawn/move/reload without a
+1. In-game check of a cloned level (teleport into it with the harness).
+2. WLD map placement / region editing for existing maps.
+3. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

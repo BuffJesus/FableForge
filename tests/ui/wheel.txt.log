@@ -1,0 +1,30 @@
+ok   wait_maps
+ok   wait_ready
+ok   select StartOakValeWest
+ok   wait_loaded
+ok   frames 3
+ok   assert_state settings_scrolled 0
+ok   mouse_move toggle_textures
+ok   frames 2
+ok   wheel -2
+ok   frames 3
+ok   assert_state settings_scrolled 1
+ok   wheel 2
+ok   frames 3
+ok   assert_state settings_scrolled 0
+ok   mouse_move slider_gain
+ok   frames 2
+ok   wheel -2
+ok   frames 3
+ok   assert_state settings_scrolled 1
+ok   wheel 2
+ok   frames 3
+ok   edit 1
+ok   frames 3
+ok   mouse_move input_thingsearch
+ok   frames 2
+ok   wheel -2
+ok   frames 3
+ok   assert_state settings_scrolled 1
+ok   quit
+RESULT PASS

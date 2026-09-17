@@ -193,7 +193,11 @@ void beginCard(const char* id, float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(10.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(12), S(8)));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(S(8), S(5)));
-    ImGui::BeginChild(id, ImVec2(width, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding);
+    // A card never scrolls itself: with fractional DPI sizes an auto-resized child can
+    // end up with a sub-pixel ScrollMax, which makes ImGui route the mouse wheel to the
+    // card (scrolling it by nothing) instead of the panel around it.
+    ImGui::BeginChild(id, ImVec2(width, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 }
 
 void endCard() {

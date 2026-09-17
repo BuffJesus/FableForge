@@ -35,6 +35,7 @@
 #include "stbterrain.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
+#include "worldedit.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -49,6 +50,7 @@ int usage() {
         "  AlbionAtlas list   [--install <fable-root>]\n"
         "  AlbionAtlas info   <map|file.lev> [--install <fable-root>]\n"
         "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
+        "  AlbionAtlas new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -211,6 +213,35 @@ int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
+    if (cmd == "new-level") {   // new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas new-level <donor> <name> [--at x,y] [--region <hostRegion>] [--dedicated] [--no-rebake] [--install <root>]\n"); return 2; }
+        albion::editor::NewLevelRequest req;
+        req.donor = args[1]; req.name = args[2];
+        std::string installArg, at; bool dedicated = false;
+        for (size_t i = 3; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--at" && i + 1 < args.size()) at = args[++i];
+            else if (args[i] == "--region" && i + 1 < args.size()) req.hostRegion = args[++i];
+            else if (args[i] == "--dedicated") dedicated = true;
+            else if (args[i] == "--no-rebake") req.rebakeChunk = false;
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::DonorInfo info; std::string err;
+        if (!albion::editor::donorInfo(install.root, req.donor, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        req.worldX = info.suggestedX; req.worldY = info.suggestedY;
+        if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }
+        if (req.hostRegion.empty() && !dedicated) req.hostRegion = info.owningRegion;
+        std::printf("donor %s: %dx%d at (%d,%d), region %s\n", req.donor.c_str(), info.width, info.height, info.worldX, info.worldY, info.owningRegion.c_str());
+        std::printf("new level %s at (%d,%d)%s%s\n", req.name.c_str(), req.worldX, req.worldY,
+                    req.hostRegion.empty() ? " in a dedicated region" : (" owned by " + req.hostRegion).c_str(), req.rebakeChunk ? ", chunk re-baked" : ", donor chunk");
+        albion::editor::NewLevelResult out;
+        if (!albion::editor::createLevelFromDonor(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
+        std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
     if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas heights <map.lev> <x,y> ...\n"); return 2; }
         try {

@@ -1,0 +1,31 @@
+# Mouse wheel over any panel widget scrolls the settings panel (cards must not
+# swallow the wheel; regression for sub-pixel ScrollMax on auto-resized cards).
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+frames 3
+assert_state settings_scrolled 0
+mouse_move toggle_textures
+frames 2
+wheel -2
+frames 3
+assert_state settings_scrolled 1
+wheel 2
+frames 3
+assert_state settings_scrolled 0
+mouse_move slider_gain
+frames 2
+wheel -2
+frames 3
+assert_state settings_scrolled 1
+wheel 2
+frames 3
+edit 1
+frames 3
+mouse_move input_thingsearch
+frames 2
+wheel -2
+frames 3
+assert_state settings_scrolled 1
+quit

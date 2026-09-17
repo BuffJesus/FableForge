@@ -28,7 +28,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `open <path.lev>` | open a loose .lev (same path as drag-and-drop) |
 | `orbit <dyaw> <dpitch>` / `zoom <steps>` / `look <dyaw> <dpitch>` / `fly <fwd> <strafe> <rise> <secs>` | camera through its API |
 | `camera <x> <y> <z> <yaw> <pitch> <dist>` | look at a Fable map-local point |
-| `mouse_move <x> <y>` \| `mouse_move viewport`, `mouse_delta <dx> <dy>`, `mouse_down\|mouse_up left\|right\|middle`, `key_down\|key_up W\|A\|S\|D\|Q\|E\|F\|Shift\|Alt\|Ctrl\|Escape` | raw input through ImGui (tests the real control path) |
+| `mouse_move <x> <y>` \| `mouse_move <widget>` (its centre) \| `mouse_move viewport`, `wheel <dy>`, `mouse_delta <dx> <dy>`, `mouse_down\|mouse_up left\|right\|middle`, `key_down\|key_up W\|A\|S\|D\|Q\|E\|F\|Shift\|Alt\|Ctrl\|Escape` | raw input through ImGui (tests the real control path) |
 | `snapshot_camera` / `assert_camera_moved [min]` | camera position delta check |
 | `wait_foliage`, `set preview_foliage 0\|1`, `set foliage 0\|1` | foliage preview / export |
 | `mode textured\|wireframe\|walkable\|height` | view mode |
@@ -45,6 +45,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `frame_selected` | frame the camera on the selection |
 | `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |
 | `brush <radius> <strength>` / `terrain_stroke <x> <y> <seconds>` | brush size; one stroke at a map-local point |
+| `new_level <name> <x> <y> [region]` / `wait_new_level` | fill the "New level from this map" card and install the copy (BWD/WLD/WAD/STB under the install), wait for it |
 | `deploy_terrain` / `wait_terrain` | write .lev + WAD + STB chunk under saveroot (worker thread) |
 | `set unsaved_prompt 0\|1` | scripted runs skip the unsaved-changes prompt unless opted in |
 | `dump_log` | copy the activity log into the script log |
