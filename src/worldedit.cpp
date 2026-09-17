@@ -24,6 +24,10 @@
 #include "forge/wld.hpp"
 #include "forge/worldinstall.hpp"
 #include "terrainexport.hpp"
+#include "forge/bin.hpp"
+#include "forge/defedit.hpp"
+#include "forge/defschema.hpp"
+#include "../vendor/embedded_schema.hpp"
 #include "stbrelocate.hpp"
 
 namespace albion::editor {
@@ -270,37 +274,80 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
             const auto bytes = albion::terrainexport::encodePng(img);
             std::ofstream(png, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         }
-        // The engine indexes GBANK_MAIN_PC by a fixed-size table: an entry appended
-        // past the retail ids crashed the game at start-up, so the minimap goes
-        // into an existing MINIMAP_* slot that no region references (retail ships
-        // a few), keeping its name and id. `entryName` is the slot chosen.
+        // Retail resolves a region's MiniMapGraphic through PLAYER_GUI.MiniMapGraphics
+        // (name -> GBANK_MAIN_PC id), so a new texture is appended under its own
+        // name and registered there; nothing retail is touched. Mip 0 is stored
+        // raw: the python importer's compressed streams do not always decode in
+        // the engine (an appended minimap never drew until stored raw).
         const fs::path big = gameRoot / "data" / "graphics" / "pc" / "textures.big";
-        std::set<std::string> referenced;
-        {
-            const auto bwd = forge::bwd::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.bwd");
-            for (const auto& r : bwd.regions()) if (!r.minimapGraphic.empty()) referenced.insert(r.minimapGraphic);
-        }
-        std::vector<std::string> candidates;
+        std::string upper = levelName;
+        for (char& c : upper) c = char(std::toupper(static_cast<unsigned char>(c)));
+        if (entryName.empty()) entryName = "MINIMAP_" + upper;
+        bool exists = false;
         {
             const auto tex = forge::big::File::open(big);
             const auto* bank = tex.findBank("GBANK_MAIN_PC");
             if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
-            for (const auto& e : bank->entries) {
-                if (e.name.rfind("MINIMAP_", 0) != 0 || e.name.find("ICON") != std::string::npos || e.name.find("BORDER") != std::string::npos) continue;
-                if (!referenced.count(e.name)) candidates.push_back(e.name);
-            }
+            for (const auto& e : bank->entries) exists = exists || e.name == entryName;
         }
-        if (candidates.empty()) { error = "no unreferenced MINIMAP_* texture slot is left in textures.big for the minimap"; return false; }
-        if (!entryName.empty() && std::find(candidates.begin(), candidates.end(), entryName) == candidates.end()) entryName.clear();
-        if (entryName.empty()) entryName = candidates.front();
         if (!backupOnce(big, error)) return false;
         forge::terraintex::ImportRequest ir;
         ir.png = png; ir.srcBig = big; ir.outBig = big.string() + ".atlas-tmp";
-        ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = false;
+        ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = !exists; ir.rawMip0 = true;
         const auto r = forge::terraintex::importPng(ir);
         if (!r.ok) { error = "minimap texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
         fs::rename(ir.outBig, big);
-        notes.push_back("minimap: replaced the unreferenced retail slot " + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3) in textures.big with " + png.string());
+        notes.push_back(std::string("minimap: ") + (exists ? "replaced " : "appended ") + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3, raw mip 0) in textures.big from " + png.string());
+        if (!registerMinimapGraphic(gameRoot, entryName, uint32_t(r.entryId), notes, error)) return false;
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
+                            std::vector<std::string>& notes, std::string& error) {
+    try {
+        const fs::path defs = gameRoot / "data" / "CompiledDefs";
+        const fs::path namesBin = defs / "names.bin", gameBin = defs / "game.bin";
+        auto file = forge::bin::File::open(namesBin, gameBin);
+        const auto schema = forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded");
+        int edited = 0;
+        for (const char* entryName : {"PLAYER_GUI_PC", "PLAYER_GUI_DEFAULT"}) {
+            if (!file.find(entryName)) continue;
+            // Map_JVCCharString__: [u32 count] then count x [NUL-terminated name][u32 id]
+            std::vector<uint8_t> raw = forge::defedit::getFieldBytes(file, schema, entryName, "MiniMapGraphics");
+            if (raw.size() < 4) { error = std::string(entryName) + ".MiniMapGraphics is too short"; return false; }
+            uint32_t count = 0; std::memcpy(&count, raw.data(), 4);
+            std::vector<std::pair<std::string, uint32_t>> entries;
+            size_t p = 4;
+            for (uint32_t i = 0; i < count; ++i) {
+                const size_t z = std::find(raw.begin() + std::ptrdiff_t(p), raw.end(), uint8_t(0)) - raw.begin();
+                if (z + 5 > raw.size()) { error = std::string(entryName) + ".MiniMapGraphics is malformed"; return false; }
+                std::string key(raw.begin() + std::ptrdiff_t(p), raw.begin() + std::ptrdiff_t(z));
+                uint32_t value = 0; std::memcpy(&value, raw.data() + z + 1, 4);
+                entries.emplace_back(std::move(key), value);
+                p = z + 5;
+            }
+            if (p != raw.size()) { error = std::string(entryName) + ".MiniMapGraphics has trailing bytes"; return false; }
+            bool replaced = false;
+            for (auto& e : entries) if (e.first == name) { e.second = id; replaced = true; }
+            if (!replaced) entries.emplace_back(name, id);
+            // the engine's std::map<CCharString, long> serialises in key order; keep it sorted
+            std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            std::vector<uint8_t> out;
+            const uint32_t n = uint32_t(entries.size());
+            out.insert(out.end(), reinterpret_cast<const uint8_t*>(&n), reinterpret_cast<const uint8_t*>(&n) + 4);
+            for (const auto& e : entries) {
+                out.insert(out.end(), e.first.begin(), e.first.end());
+                out.push_back(0);
+                out.insert(out.end(), reinterpret_cast<const uint8_t*>(&e.second), reinterpret_cast<const uint8_t*>(&e.second) + 4);
+            }
+            forge::defedit::setFieldBytes(file, schema, entryName, "MiniMapGraphics", std::move(out));
+            notes.push_back(std::string(entryName) + ".MiniMapGraphics: " + (replaced ? "updated " : "added ") + name + " -> " + std::to_string(id) + " (" + std::to_string(entries.size()) + " entries)");
+            ++edited;
+        }
+        if (!edited) { error = "game.bin has no PLAYER_GUI_PC / PLAYER_GUI_DEFAULT entry"; return false; }
+        if (!backupOnce(namesBin, error) || !backupOnce(gameBin, error)) return false;
+        file.save(namesBin, gameBin);
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

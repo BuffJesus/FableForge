@@ -170,6 +170,11 @@ struct ImportRequest {
     bool add = false;                      // false = replace an existing slot
     std::string format = "dxt1";           // dxt1 | dxt3 | argb8888
     std::string dims;                      // "WxH" for --dims (add only)
+    // Store mip 0 uncompressed. texture_build.py's own LZO compressor emits
+    // streams the retail asm decoder (lzo1x_decompress_ASM_FAST) misreads on
+    // some images: an appended 256x256 DXT3 minimap compressed by it never
+    // drew in-game, the same image stored raw did (2026-09-17).
+    bool rawMip0 = false;
     std::filesystem::path python;          // default: "python"
     std::filesystem::path toolsDir;        // dir holding texture_build.py
 };

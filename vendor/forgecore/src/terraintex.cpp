@@ -546,6 +546,7 @@ ImportResult importPng(const ImportRequest& request) {
     cmd << request.entryName << " " << quoted(request.png)
         << " --format " << request.format;
     if (request.add && !request.dims.empty()) cmd << " --dims " << request.dims;
+    if (request.rawMip0) cmd << " --raw-mip0";
     result.command = cmd.str();
 
     result.exitCode = runCommand(result.command, result.output);

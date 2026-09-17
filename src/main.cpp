@@ -421,6 +421,17 @@ int main(int argc, char** argv) {
             return 0;
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
+    if (cmd == "minimap-register") {   // minimap-register <MINIMAP_NAME> <texture id> [--install <root>]: PLAYER_GUI MiniMapGraphics entry
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas minimap-register <name> <id> [--install <root>]\n"); return 2; }
+        std::string installArg;
+        for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        std::vector<std::string> notes; std::string err;
+        if (!albion::editor::registerMinimapGraphic(install.root, args[1], uint32_t(std::strtoul(args[2].c_str(), nullptr, 0)), notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+        return 0;
+    }
     if (cmd == "chunk-extract") {   // diagnostic: chunk-extract <map> <out.bin> [--install <root>]: the map's terrain chunk from FinalAlbion_RT.stb (+ <out.bin>.record)
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-extract <map> <out.bin> [--install <root>]\n"); return 2; }
         std::string installArg;

@@ -87,13 +87,25 @@ bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelReq
                       const forge::terraintex::ThemeLibrary& library, NewLevelResult& out, std::string& error);
 
 // Bake the level's minimap (top-down albedo + hillshade, north up, the retail
-// circular vignette) from its LEV bytes and put it into textures.big as a
-// 256x256 DXT3 entry MINIMAP_<NAME> (the retail minimap format). Uses the
+// circular vignette) from its LEV bytes, append it to textures.big as a
+// 256x256 DXT3 entry MINIMAP_<NAME> (raw mip 0) and register the name in the
+// PLAYER_GUI defs (registerMinimapGraphic) so the engine resolves it. Uses the
 // FableTLC texture writer through forgecore's import driver. One-time
-// .atlas-orig backup of textures.big.
+// .atlas-orig backups of textures.big and game.bin/names.bin. `entryName` may
+// name the entry (default MINIMAP_<NAME>); an existing entry of that name is
+// replaced.
 bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string& levelName,
                         const std::vector<uint8_t>& levBytes, const forge::terraintex::ThemeLibrary* library,
                         std::string& entryName, std::vector<std::string>& notes, std::string& error);
+
+// Retail resolves a region's MiniMapGraphic name through the PLAYER_GUI def's
+// MiniMapGraphics map (name -> GBANK_MAIN_PC id; CTCInventoryBase::
+// GetMiniMapGraphic, FableWin 0x236e25f), NOT through the bank's TOC symbols:
+// a renamed or appended texture is invisible until it is registered there.
+// Adds/updates `name` -> `id` in PLAYER_GUI_PC (and PLAYER_GUI_DEFAULT when it
+// carries the map) of data/CompiledDefs/game.bin, one-time .atlas-orig backups.
+bool registerMinimapGraphic(const std::filesystem::path& gameRoot, const std::string& name, uint32_t id,
+                            std::vector<std::string>& notes, std::string& error);
 
 // One-time .atlas-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
 // then the staged atomic install. The new level's LEV/TNG are the donor's

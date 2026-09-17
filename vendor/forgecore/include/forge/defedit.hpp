@@ -64,4 +64,17 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
                         size_t entryIndex, std::string_view fieldName,
                         std::string_view valueString);
 
+// The raw value bytes of one field (everything between its tag and the next
+// tag), for the types encodeValue does not parse -- maps, vectors, nested
+// structs. Same entry/field location rules as setField.
+std::vector<uint8_t> getFieldBytes(const bin::File& file, const defschema::Schema& schema,
+                                   std::string_view entryName, std::string_view fieldName);
+
+// Replace one field's raw value bytes (any type; the caller owns the encoding,
+// e.g. a Map_JVCCharString__ is [u32 count] then count x [presized string][u32]).
+// Every other field of the entry round-trips byte-identically.
+SetFieldResult setFieldBytes(bin::File& file, const defschema::Schema& schema,
+                             std::string_view entryName, std::string_view fieldName,
+                             std::vector<uint8_t> valueBytes);
+
 } // namespace forge::defedit

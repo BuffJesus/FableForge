@@ -319,6 +319,15 @@ CLI and the card against a scratch copy of the install.
 
 ### Own region + minimap
 
+**2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
+name `MINIMAP_<LEVEL>` (raw mip 0) and registered in the `PLAYER_GUI_PC` /
+`PLAYER_GUI_DEFAULT` defs' `MiniMapGraphics` map in `game.bin` -- that map is what
+retail resolves a region's `MiniMapGraphic` through (`CTCInventoryBase::
+GetMiniMapGraphic`). No retail slot is taken any more; `AlbionAtlas minimap-register
+<name> <id>` does the registration alone. One-time `.atlas-orig` backups of
+`textures.big`, `game.bin` and `names.bin`. (The paragraphs below describe the
+earlier slot-replacement approach and why it was needed.)
+
 The in-game minimap is per *region*, and the engine keeps only the first 141
 regions (live probe, 2026-08), so a level that wants its own name on the map
 screen and its own minimap takes over a retail **filler** region slot ("Own

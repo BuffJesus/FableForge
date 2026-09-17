@@ -242,7 +242,58 @@ SetFieldResult setFieldImpl(bin::File& file, const defschema::Schema& schema,
     return r;
 }
 
+// Decode the named entry and hand back the decoded field (throws like setFieldImpl).
+defdecode::DecodedField* locateField(const bin::File& file, const defschema::Schema& schema,
+                                     std::string_view entryName, std::string_view fieldName,
+                                     defdecode::Decoded& decoded, size_t& index) {
+    if (entryName.empty())
+        throw std::runtime_error("defedit: empty entry name never matches");
+    const bin::Entry* entry = file.find(entryName);
+    if (entry == nullptr)
+        throw std::runtime_error("defedit: no entry named '" + std::string(entryName) + "'");
+    index = size_t(entry - file.entries().data());
+    const auto* def = defdecode::resolveType(schema, entry->definition, entry->data);
+    if (def == nullptr)
+        throw std::runtime_error("defedit: no schema decodes def type '" + entry->definition + "'");
+    decoded = defdecode::decode(entry->data, *def);
+    if (!decoded.clean())
+        throw std::runtime_error("defedit: entry " + std::string(entryName) + " did not decode cleanly");
+    for (auto& f : decoded.fields)
+        if (f.name == fieldName) return &f;
+    throw std::runtime_error("defedit: field '" + std::string(fieldName) + "' not found in " + entry->definition);
+}
+
 } // namespace
+
+std::vector<uint8_t> getFieldBytes(const bin::File& file, const defschema::Schema& schema,
+                                   std::string_view entryName, std::string_view fieldName) {
+    defdecode::Decoded decoded;
+    size_t index = 0;
+    return locateField(file, schema, entryName, fieldName, decoded, index)->value;
+}
+
+SetFieldResult setFieldBytes(bin::File& file, const defschema::Schema& schema,
+                             std::string_view entryName, std::string_view fieldName,
+                             std::vector<uint8_t> valueBytes) {
+    defdecode::Decoded decoded;
+    size_t index = 0;
+    defdecode::DecodedField* target = locateField(file, schema, entryName, fieldName, decoded, index);
+    const bin::Entry& entry = file.entries()[index];
+    SetFieldResult r;
+    r.entryIndex = index;
+    r.definition = entry.definition;
+    r.entryName = entry.name;
+    r.field = std::string(fieldName);
+    r.type = target->type;
+    r.oldValue = defdecode::formatValue(*target);
+    r.oldPayloadSize = entry.data.size();
+    target->value = std::move(valueBytes);
+    r.newValue = defdecode::formatValue(*target);
+    std::vector<uint8_t> rebuilt = defdecode::encode(decoded);
+    r.newPayloadSize = rebuilt.size();
+    file.setEntryData(index, std::move(rebuilt));
+    return r;
+}
 
 SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
                         std::string_view entryName, std::string_view fieldName,

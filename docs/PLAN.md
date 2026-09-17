@@ -20,7 +20,27 @@ in-game harness run (`tools/ingame`).
 
 ## Rocks turned today
 
-### 1. Appending a texture entry
+### 1. Appending a texture entry -- SOLVED 2026-09-17
+* Retail resolves a region's `MiniMapGraphic` string through the **PLAYER_GUI def's
+  `MiniMapGraphics` map** (`Map_JVCCharString__`: `[u32 count]` then `[name NUL][u32
+  GBANK_MAIN_PC id]`, 95 retail entries in `PLAYER_GUI_PC` and `PLAYER_GUI_DEFAULT`,
+  game.bin) -- `CTCInventoryBase::GetMiniMapGraphic` (FableWin 0x236e25f) does
+  `player_gui_def.MiniMapGraphics.find(region.GetMiniMapGraphic())`. Not the bank
+  TOC symbols (a renamed symbol is not found), not a compiled-in table.
+* A new name registered there resolves (proved with a retail id, then with an
+  appended id): `AlbionAtlas minimap-register <name> <id>` /
+  `editor::registerMinimapGraphic` (forgecore `defedit::setFieldBytes`, upstreamed).
+* The appended texture itself must be written with **raw mip 0**: texture_build.py's
+  own LZO compressor emits streams the engine's asm decoder misreads on some images
+  (the compressed minimap never drew; the same image `--raw-mip0` drew) --
+  `ImportRequest.rawMip0`, upstreamed. FableForge's earlier appended entries
+  (MINIMAP_FORGETEST64) load fine once registered.
+* Atlas now appends `MINIMAP_<LEVEL>` + registers it for every own-region level
+  (in-game: blank level AtlasMM's disc shows its bake); no retail slot is taken.
+  The same recipe should unblock card art and ground splats: append + register in
+  whatever def map the consumer looks the name up in.
+
+### 1 (history). Appending a texture entry
 * An appended `GBANK_MAIN_PC` entry (id 6294, `texture_build.py add`) **does
   not crash the game by itself**: launched and continued clean under the
   crash catcher; the earlier crash coincided with the first appended entry
@@ -149,9 +169,7 @@ in-game harness run (`tools/ingame`).
    instead of the solid colour.
 3. **Villages & creature generators** as thing presets (section 3), verified
    with the harness on a new game.
-4. **Texture append RE** (section 1's experiment) -- unblocks unlimited
-   custom textures for minimaps, ground splats and card art without stealing
-   retail slots.
+4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
 5. **Splat texture paint** (STB foreground layers: texture triple +
    per-vertex blend) -- the real "paint any texture on the ground".
 6. **Region cap lift** via ForgeFSE (section 2, gated on the decompile
