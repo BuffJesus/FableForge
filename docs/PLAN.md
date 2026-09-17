@@ -43,6 +43,17 @@ in-game harness run (`tools/ingame`).
   path has a different defect (stats header / id table); not found -> retail
   ignores TOC symbols, find the table via the string
   `CurrentRegionMinimapGraphicName` (0xe36aa0) xrefs in `Fable.exe`.
+* **Rename experiment done (2026-09-17): NOT FOUND.** `MINIMAP_PRISONCOURTYARD1`'s
+  TOC symbol renamed in place to `MINIMAP_PRISONCOURTYARDX` (same length, same
+  id/payload) and Greatwood's `MiniMapGraphic` pointed at it: the minimap disc
+  fell back to the stock image, on the '0atlas' save AND on a new game (the
+  baseline shows `MINIMAP_GREATWOOD`). So retail does not resolve the string
+  against the TOC names at runtime, and it is not a compiled-in table either
+  (Fable.exe holds only 3 `MINIMAP_*` strings, 76 of the 6290 bank names) nor a
+  name hash in the TOC `crc` field (crc0/crc32 of the name never match). Next
+  lead: a live breakpoint (pybag) on `CBankFile::CreateSymbolMap` 0x9cc530 /
+  `SplitSymbol` 0x9cbaa0 / `FindIndexByFilename` 0x9ccdf0 during the region
+  transition, argument = the graphic name, to see which map answers it.
 * Until then Atlas keeps replacing unreferenced retail `MINIMAP_*` slots
   (retail ships several; each new level takes one).
 * **Note for the next session -- how to find retail's real resolver:**
