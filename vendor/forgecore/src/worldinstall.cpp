@@ -101,8 +101,9 @@ Result installLevel(const Request& req) {
         for (const auto& m : stb.staticMaps())
             if (lowered(m.levelName) == lowered(newLev))
                 throw std::runtime_error("worldinstall: '" + req.newLevelName + "' already has a static map");
-        commonRecord = stb.readStaticMapRecord(*sm);
-        if (commonRecord.size() < stbinfo::kInfoBlockSize) throw std::runtime_error("worldinstall: donor common record too small");
+        commonRecord = req.commonRecord.empty() ? stb.readStaticMapRecord(*sm) : req.commonRecord;
+        if (commonRecord.size() < stbinfo::kInfoBlockSize) throw std::runtime_error("worldinstall: common record too small");
+        if (!req.commonRecord.empty() && req.chunkBytes.empty()) throw std::runtime_error("worldinstall: a custom common record needs its chunk");
         const auto ib = stbinfo::readInfoBlock(commonRecord.data());
         donorW = ib.mapWidth; donorH = ib.mapHeight;
         const stb::Entry* chunkEntry = stb.findEntry(donorLev);
@@ -250,7 +251,7 @@ Result installLevel(const Request& req) {
         throw std::runtime_error(std::string("worldinstall: commit failed after staging (restore from the ") + req.backupSuffix + " files): " + e.what());
     }
     result.notes.push_back("WAD: cloned " + req.donorLevelName + ".lev/.tng as " + req.newLevelName + (req.levBytes.empty() && req.tngBytes.empty() ? " (donor bytes)" : " (custom bytes)"));
-    result.notes.push_back(std::string("STB: chunk appended ") + (result.chunkRetargeted ? "(re-baked for the new origin)" : "(DONOR geometry: re-bake it for the new origin before playing)"));
+    result.notes.push_back(std::string("STB: chunk appended ") + (!req.commonRecord.empty() ? "(authored from scratch)" : result.chunkRetargeted ? "(re-baked for the new origin)" : "(DONOR geometry: re-bake it for the new origin before playing)"));
     return result;
 }
 

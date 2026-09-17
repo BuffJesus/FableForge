@@ -438,6 +438,7 @@ struct TextureCache {
 
 struct Context::Impl {
     bool ready = false;
+    bool defsReady = false;
     fs::path gameRoot;
     forge::terraintex::ThemeLibrary library;
     forge::big::File big;
@@ -481,7 +482,7 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
 }
 
 const forge::terraintex::ThemeLibrary* Context::themeLibrary() const {
-    return ready() ? &impl_->library : nullptr;
+    return (ready() || impl_->defsReady) ? &impl_->library : nullptr;
 }
 
 Context::Context() : impl_(std::make_shared<Impl>()) {}
@@ -493,6 +494,23 @@ const Image* Context::texture(uint32_t id, std::string& warning) const {
     return impl_->cache.get(id, [&](const std::string& m) { warning = m; });
 }
 
+bool Context::loadDefs(const fs::path& gameRoot, std::string& error) {
+    auto impl = std::make_shared<Impl>();
+    try {
+        const fs::path defsDir = gameRoot / "data" / "CompiledDefs";
+        impl->defs = std::make_unique<forge::bin::File>(forge::bin::File::open(defsDir / "names.bin", defsDir / "game.bin"));
+        impl->schema = std::make_unique<forge::defschema::Schema>(forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded"));
+        impl->library = forge::terraintex::ThemeLibrary::load(*impl->defs, *impl->schema);
+    } catch (const std::exception& e) {
+        error = std::string("cannot load ENGINE_THEME defs: ") + e.what();
+        return false;
+    }
+    impl->gameRoot = gameRoot;
+    impl->defsReady = true;
+    impl_ = std::move(impl);
+    return true;
+}
+
 bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::string& error) {
     auto impl = std::make_shared<Impl>();
     try {
@@ -500,6 +518,7 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
         impl->defs = std::make_unique<forge::bin::File>(forge::bin::File::open(defsDir / "names.bin", defsDir / "game.bin"));
         impl->schema = std::make_unique<forge::defschema::Schema>(forge::defschema::Schema::loadText(kEmbeddedDefSchema, "embedded"));
         impl->library = forge::terraintex::ThemeLibrary::load(*impl->defs, *impl->schema);
+        impl->defsReady = true;
     } catch (const std::exception& e) {
         error = std::string("cannot load ENGINE_THEME defs: ") + e.what();
         return false;

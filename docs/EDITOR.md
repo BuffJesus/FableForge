@@ -166,7 +166,7 @@ tree is what the engine follows.
 | Piece | Where |
 |---|---|
 | Document, commands, undo, diff, save/deploy | `src/leveledit.{hpp,cpp}` (headless; `tests/test_export.cpp::testLevelDocument`, `testTerrainEditing`) |
-| New level from donor | `src/worldedit.{hpp,cpp}` over `vendor/forgecore` `worldinstall.{hpp,cpp}`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
+| New levels (blank / copy) | `src/worldedit.{hpp,cpp}` over `vendor/forgecore` `worldinstall.{hpp,cpp}` + `stbbake::buildTerrainChunk64`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
 | Navigation patch | `vendor/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
 | Terrain bake | `vendor/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `AlbionAtlas bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
 | Per-instance rendering, picking, outline | `gui/renderer.{hpp,cpp}` (`uploadThings`, `pick`, `screenRay`) |
@@ -179,22 +179,43 @@ world matrices of every instance of that thing (including spawned children)
 without touching the GPU meshes. Structural edits (add/remove/undo of those)
 reload the things layer from the in-memory `.tng` text.
 
-## New level from a donor map
+## New levels
 
-The Edit panel's **New level from this map** card clones the selected map into
-the world as a new level: a free 32-aligned origin is suggested (first slot
-right of the existing maps), the owning region defaults to the donor's, the
-name must be a bare stem. `AlbionAtlas new-level <donor> <name> [--at x,y]
-[--region R] [--dedicated] [--no-rebake]` is the command-line form.
+The Edit panel's **New level** card adds a level to the world; a free
+32-aligned origin is suggested (first slot right of the existing maps), the
+owning region defaults to the selected map's, the name must be a bare stem.
+Two modes:
 
-What it does (`src/worldedit.cpp` over forgecore's `worldinstall::installLevel`,
+* **Blank 64x64** (`AlbionAtlas blank-level <name> [--theme <slot|name>]
+  [--height h] [--template <64x64 map>] ...`): a level authored from scratch.
+  The LEV skeleton (header, palette) comes from a retail 64x64 template
+  (the selected map when it is 64x64, else TeleporterGreatwood) with the
+  palette rebased to this install's game.bin by name; every cell gets the
+  chosen ground theme, the flat height and walkable=1; the navigation tree is
+  generated fresh; the `.tng` is empty; and the terrain chunk is built by
+  forgecore's `buildTerrainChunk64` (the from-scratch builder ForgeTest64
+  proved in-game) from the LEV heights + palette materials with a solid
+  distant-LOD colour. **In-game verified** (2026-09-16): the hero teleported
+  from Oakvale into `AtlasBlank` stands on a textured (GROUND_FOREST_LEAVES)
+  plane at the authored height, 25/25 ground samples match. Sculpt, paint,
+  place and deploy work on it like on any map.
+* **Copy of this map** (`AlbionAtlas new-level <donor> <name> ...`): clones
+  the selected map's current `.lev`/`.tng` and re-bakes its terrain chunk for
+  the new origin. It installs and loads (hero at the right heights, 25/25),
+  but the cloned chunk **draws white in-game** -- the same engine map-open
+  issue FableForge hit with donor clones (bank/texture resolution by map, not
+  fixed by the chunk bytes); a control teleport into the retail donor from the
+  Oakvale save even exited the game. Kept as experimental; use Blank for a
+  playable level.
+
+What both do (`src/worldedit.cpp` over forgecore's `worldinstall::installLevel`,
 the library form of `forge world install-level`, upstreamed to FableForge):
 
-1. the donor's current `.lev`/`.tng` bytes (loose edits included) become the
-   new level's WAD entries (`wad::appendClonedEntries` + `repack`);
-2. the donor's terrain chunk is **re-baked for the new origin**
-   (`stbbake::bakeHeightfield` with `worldX/Y` = the origin, no neighbours) and
-   appended to `FinalAlbion_RT.stb` with an origin-patched common record;
+1. the level's `.lev`/`.tng` bytes become new WAD entries
+   (`wad::appendClonedEntries` off the donor/template + `repack`);
+2. the terrain chunk is appended to `FinalAlbion_RT.stb` with an
+   origin-patched common record (the donor's record re-targeted, or the
+   from-scratch `buildTerrainCommonRecord`);
 3. the map is registered in `FinalAlbion.bwd` and `.wld` and added to the host
    region's `contains`/`sees` lists.
 
@@ -209,7 +230,11 @@ CLI and the card against a scratch copy of the install.
 
 ## Next
 
-1. In-game check of a cloned level (teleport into it with the harness).
-2. WLD map placement / region editing for existing maps.
-3. Live link to the running game through ForgeFSE (spawn/move/reload without a
+1. Blank levels beyond 64x64 (the from-scratch builder is 32/64 only today)
+   and a baked distant-LOD texture instead of the solid colour.
+2. The cloned-chunk white-out (engine map-open texture resolution) -- RE
+   `CEngineLandscapeMap::OpenStaticMap` 0x00BDD0E0 against a working
+   from-scratch chunk.
+3. WLD map placement / region editing for existing maps.
+4. Live link to the running game through ForgeFSE (spawn/move/reload without a
    restart).

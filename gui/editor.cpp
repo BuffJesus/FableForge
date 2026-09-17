@@ -447,16 +447,40 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
             newLevelX_ = newLevelInfo_.suggestedX; newLevelY_ = newLevelInfo_.suggestedY;
             newLevelRegion_ = newLevelInfo_.owningRegion;
             if (newLevelName_[0] == 0) std::snprintf(newLevelName_, sizeof newLevelName_, "%s_Copy", donor.c_str());
+            // blank levels reuse a 64x64 palette: this map's when it is 64x64, else the stock template
+            blankTemplate_ = (newLevelInfo_.width == 64 && newLevelInfo_.height == 64) ? donor : std::string("TeleporterGreatwood");
+            std::string perr;
+            if (!editor::templatePalette(saveRoot(), blankTemplate_, blankPalette_, perr)) { blankPalette_.clear(); pushLog("new level: " + perr, 1); }
+            if (blankTheme_ < 0 || blankTheme_ >= int(blankPalette_.size()) || blankPalette_[size_t(blankTheme_)].empty())
+                for (size_t i = 0; i < blankPalette_.size(); ++i) if (blankPalette_[i].rfind("GROUND_", 0) == 0) { blankTheme_ = int(i); break; }
         } else {
             pushLog("new level: " + err, 1);
         }
     }
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##newlevel", inner);
-    theme::label("New level from this map");
+    theme::label("New level");
+    theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank 64x64"}, cardInner);
+    auto_.registerWidget("seg_new_level_mode");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Clones the map (current .lev/.tng, terrain re-baked for the new origin) into the world as a new level owned by an existing region. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
+    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain re-baked for the new origin) into the world as a new level owned by an existing region. Cloned terrain currently draws WHITE in-game (an engine map-open issue); use Blank for a playable level. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
+    else theme::hint(("A flat 64x64 level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
     ImGui::PopFont();
+    if (newLevelMode_ == 1) {
+        ImGui::SetNextItemWidth(cardInner);
+        const char* cur = (blankTheme_ >= 0 && blankTheme_ < int(blankPalette_.size())) ? blankPalette_[size_t(blankTheme_)].c_str() : "(ground theme)";
+        if (ImGui::BeginCombo("##blanktheme", cur)) {
+            for (size_t i = 0; i < blankPalette_.size(); ++i) {
+                if (blankPalette_[i].empty()) continue;
+                char lbl[160]; std::snprintf(lbl, sizeof lbl, "%zu  %s", i, blankPalette_[i].c_str());
+                if (ImGui::Selectable(lbl, int(i) == blankTheme_)) blankTheme_ = int(i);
+            }
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_blank_theme");
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::InputFloat("##blankheight", &blankHeight_, 1.0f, 10.0f, "ground height %.1f");
+    }
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##newlevelname", "Level name (letters, digits, _)", newLevelName_, sizeof newLevelName_);
     auto_.registerWidget("input_new_level_name");
@@ -476,7 +500,9 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     auto_.registerWidget("combo_new_level_region");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map (the game only reaches maps owned by one of the first 141 regions, so a copy joins an existing region).");
     const bool gridOk = newLevelX_ % 32 == 0 && newLevelY_ % 32 == 0;
-    const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && !newLevelRegion_.empty() && !newLevelFuture_.valid();
+    const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && !newLevelRegion_.empty() && !newLevelFuture_.valid() &&
+                     (newLevelMode_ == 0 || (blankTheme_ >= 0 && ctx_.themeLibrary()));
+    if (newLevelMode_ == 1 && !ctx_.themeLibrary()) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Waiting for the ENGINE_THEME library (textures loading)."); ImGui::PopFont(); }
     if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
     if (theme::primaryButton(newLevelFuture_.valid() ? "Installing..." : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
     auto_.registerWidget("btn_new_level");
@@ -486,12 +512,30 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
 
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
+    const std::string root = saveRoot();
+    if (newLevelMode_ == 1) {
+        editor::BlankLevelRequest req;
+        req.name = newLevelName_;
+        req.hostRegion = newLevelRegion_;
+        req.worldX = newLevelX_; req.worldY = newLevelY_;
+        req.templateLevel = blankTemplate_;
+        req.themeSlot = blankTheme_;
+        req.groundHeight = blankHeight_;
+        const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+        if (!lib) return;
+        pushLog("new level: authoring blank " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
+        newLevelFuture_ = std::async(std::launch::async, [req, root, lib]() {
+            NewLevelJob j; j.name = req.name;
+            j.ok = editor::createBlankLevel(root, req, *lib, j.result, j.error);
+            return j;
+        });
+        return;
+    }
     editor::NewLevelRequest req;
     req.donor = doc_.mapName();
     req.name = newLevelName_;
     req.hostRegion = newLevelRegion_;
     req.worldX = newLevelX_; req.worldY = newLevelY_;
-    const std::string root = saveRoot();
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
     newLevelFuture_ = std::async(std::launch::async, [req, root]() {
         NewLevelJob j; j.name = req.name;

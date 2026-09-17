@@ -64,6 +64,15 @@ def main() -> int:
         if not os.path.exists(os.path.join(scratch, "data", "Levels", c + ".atlas-orig")):
             print("missing backup for", c); ok = False
 
+    # blank level from scratch (no donor geometry): CLI, by theme name
+    r = subprocess.run([cli, "blank-level", "AtlasCliBlank", "--install", scratch, "--theme", "GROUND_FOREST_LEAVES", "--height", "12"], capture_output=True, text=True)
+    print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr)
+    if r.returncode != 0 or "authored from scratch" not in r.stdout or "navigation:" not in r.stdout:
+        print("CLI blank-level failed:", r.stderr); ok = False
+    r = subprocess.run([cli, "layers", "AtlasCliBlank", "--install", scratch], capture_output=True, text=True)
+    if "16 patches" not in r.stdout or "0 differ" not in r.stdout:
+        print("blank level layers do not match its LEV:", r.stdout[:400]); ok = False
+
     # GUI: the card installs a second copy (suggested origin) and opens it
     script = os.path.join(ROOT, "build", "ui_newlevel.txt")
     with open(script, "w") as f:
@@ -107,6 +116,22 @@ def main() -> int:
             print("GUI new-level run failed"); print(log[-2500:]); ok = False
         if "installed (map slot" not in log:
             print("GUI: no install confirmation in the log"); ok = False
+        # GUI blank level (theme slot 3 = GROUND_FOREST_LEAVES in TeleporterGreatwood's palette), two slots further right
+        with open(script, "w") as f:
+            f.write("\n".join([
+                "wait_maps", "wait_ready", f"select {a.donor}", "wait_loaded",
+                "edit 1", "frames 2",
+                "new_level_blank 3 15",
+                f"new_level AtlasGuiBlank {x + 256} {y} Greatwood",
+                "wait_new_level", "frames 3", "wait_loaded",
+                "assert_state selected AtlasGuiBlank",
+                "screenshot build/ui/n3_blank_level_opened.png",
+                "dump_log", "quit",
+            ]) + "\n")
+        r = subprocess.run([gui, "--auto", script, "--install", scratch], capture_output=True, text=True)
+        log = open(script + ".log", encoding="utf-8", errors="replace").read() if os.path.exists(script + ".log") else ""
+        if r.returncode != 0 or "RESULT PASS" not in log or "authored from scratch" not in log:
+            print("GUI blank-level run failed"); print(log[-2500:]); ok = False
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)
     print("newlevel test", "PASS" if ok else "FAIL")

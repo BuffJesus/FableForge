@@ -45,6 +45,7 @@ HOOK_TAG = "-- ATLAS-PROBE-HOOK"
 PROBE_LUA = r'''-- Albion Atlas in-game terrain probe (installed by tools/ingame/ingame_terrain_test.py,
 -- removed after the run). Logs the engine's ground height at a grid of world points.
 ATLAS_TARGET_MAP = "%(map)s"
+ATLAS_START_MAP = "%(start_map)s"   -- where the hero begins; the teleport (if any) takes him to the target map
 ATLAS_POINTS = { %(points)s }
 ATLAS_TELEPORT = %(teleport)s   -- {x, y} world point to stand the hero on for the screenshot, or nil
 ATLAS_THINGS = { %(things)s }   -- ScriptNames whose world position is reported
@@ -62,15 +63,44 @@ function AtlasProbe(questObject)
         local ok, h = pcall(function() return Q:GetHero() end)
         if ok and h ~= nil then
             local mok, mname = pcall(function() return h:GetCurrentMapName() end)
-            if mok and mname == ATLAS_TARGET_MAP then hero = h; break end
+            if mok and mname == ATLAS_START_MAP then hero = h; break end
             if i %% 10 == 0 then Q:Log("ATLAS_PROBE|waiting|map=" .. tostring(mname)) end
         end
     end
-    if hero == nil then Q:Log("ATLAS_PROBE|error|hero never reached " .. ATLAS_TARGET_MAP); return end
+    if hero == nil then Q:Log("ATLAS_PROBE|error|hero never reached " .. ATLAS_START_MAP); return end
     Q:Pause(2.0)
     if not Q:NewScriptFrame() then return end
     local pok, p = pcall(function() return hero:GetPos() end)
     if pok and p then Q:Log(string.format("ATLAS_PROBE|hero|%%.3f|%%.3f|%%.3f", p.x or 0, p.y or 0, p.z or 0)) end
+    local tz = 0
+    if ATLAS_TELEPORT then
+        -- wait until the opening scenes are over (the harness keeps pressing Esc) so the screenshot shows the spot
+        for i = 1, 90 do
+            local cok, ctrl = pcall(function() return Q:IsHeroControlledByPlayer() end)
+            if i == 1 or i %% 10 == 0 then Q:Log("ATLAS_PROBE|waitcontrol|" .. tostring(cok) .. "|" .. tostring(ctrl)) end
+            if cok and ctrl then break end
+            Q:Pause(1.0)
+            if not Q:NewScriptFrame() then Q:Log("ATLAS_PROBE|error|thread ended while waiting for control"); return end
+        end
+        Q:Log("ATLAS_PROBE|control")
+        pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
+        local tok, terr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}, 0.0) end)
+        Q:Log("ATLAS_PROBE|teleport|" .. tostring(tok) .. "|" .. tostring(terr))
+        -- a teleport into another map streams that map in: wait for the hero to report it
+        for i = 1, 60 do
+            Q:Pause(1.0)
+            if not Q:NewScriptFrame() then return end
+            local mok, mname = pcall(function() return hero:GetCurrentMapName() end)
+            if mok and mname == ATLAS_TARGET_MAP then Q:Log("ATLAS_PROBE|arrived|" .. tostring(mname) .. "|" .. i); break end
+            if i %% 10 == 0 then Q:Log("ATLAS_PROBE|waitmap|" .. tostring(mname)) end
+            if i == 60 then Q:Log("ATLAS_PROBE|error|hero never arrived in " .. ATLAS_TARGET_MAP .. " (in " .. tostring(mname) .. ")"); return end
+        end
+        Q:Pause(3.0)
+        if not Q:NewScriptFrame() then return end
+        pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
+        local p2ok, p2 = pcall(function() return hero:GetPos() end)
+        if p2ok and p2 then Q:Log(string.format("ATLAS_PROBE|hero2|%%.3f|%%.3f|%%.3f", p2.x or 0, p2.y or 0, p2.z or 0)) end
+    end
     for _, pt in ipairs(ATLAS_POINTS) do
         local ok, z = pcall(function() return Q:GetGroundHeightAt(pt[1], pt[2]) end)
         if ok then Q:Log(string.format("ATLAS_PROBE|z|%%.3f|%%.3f|%%.4f", pt[1], pt[2], z))
@@ -87,23 +117,6 @@ function AtlasProbe(questObject)
         end
     end
     if ATLAS_TELEPORT then
-        -- wait until the opening scenes are over (the harness keeps pressing Esc) so the screenshot shows the spot
-        for i = 1, 90 do
-            local cok, ctrl = pcall(function() return Q:IsHeroControlledByPlayer() end)
-            if i == 1 or i %% 10 == 0 then Q:Log("ATLAS_PROBE|waitcontrol|" .. tostring(cok) .. "|" .. tostring(ctrl)) end
-            if cok and ctrl then break end
-            Q:Pause(1.0)
-            if not Q:NewScriptFrame() then Q:Log("ATLAS_PROBE|error|thread ended while waiting for control"); return end
-        end
-        Q:Log("ATLAS_PROBE|control")
-        local tz = 0
-        pcall(function() tz = Q:GetGroundHeightAt(ATLAS_TELEPORT[1], ATLAS_TELEPORT[2]) end)
-        local tok, terr = pcall(function() Q:EntityTeleportToPosition(hero, {x = ATLAS_TELEPORT[1], y = ATLAS_TELEPORT[2], z = tz + 0.5}, 0.0) end)
-        Q:Log("ATLAS_PROBE|teleport|" .. tostring(tok) .. "|" .. tostring(terr))
-        Q:Pause(3.0)
-        if not Q:NewScriptFrame() then return end
-        local p2ok, p2 = pcall(function() return hero:GetPos() end)
-        if p2ok and p2 then Q:Log(string.format("ATLAS_PROBE|hero2|%%.3f|%%.3f|%%.3f", p2.x or 0, p2.y or 0, p2.z or 0)) end
         if ATLAS_FOLLOW then
             -- navigation probe: a creature spawned at ATLAS_FOLLOW follows the hero; where it
             -- ends up tells whether the nav tree lets it reach the hero's cell
@@ -217,6 +230,7 @@ def main() -> int:
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
     ap.add_argument("--things", default="", help="comma-separated ScriptNames: the probe reports their in-game positions, compared with the loose .tng")
+    ap.add_argument("--start-map", default="", help="map the hero starts in (default: --map); with --teleport the probe jumps to the target map and waits for it to stream in")
     ap.add_argument("--follow", default="", help="map-local x,y: spawn a creature there after the teleport and make it follow the hero (navigation probe; needs --teleport)")
     ap.add_argument("--follow-def", default="CREATURE_BOWERSTONE_POSH_VILLAGER_FEMALE_UNEMPLOYED")
     ap.add_argument("--follow-seconds", type=int, default=25)
@@ -270,7 +284,7 @@ def main() -> int:
     log_backup = log.read_bytes() if log.exists() else b""
     thing_names = [t for t in a.things.split(",") if t]
     follow_pt = tuple(float(v) for v in a.follow.split(",")) if a.follow else None
-    probe.write_text(PROBE_LUA % {"map": a.map, "points": ", ".join("{%g, %g}" % p for p in world_pts),
+    probe.write_text(PROBE_LUA % {"map": a.map, "start_map": a.start_map or a.map, "points": ", ".join("{%g, %g}" % p for p in world_pts),
                                   "teleport": ("{%g, %g}" % (mx + cx, my + cy)) if a.teleport else "nil",
                                   "things": ", ".join('"%s"' % t for t in thing_names),
                                   "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",

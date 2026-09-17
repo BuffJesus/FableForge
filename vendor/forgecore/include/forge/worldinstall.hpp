@@ -38,6 +38,8 @@ struct Request {
     std::vector<uint8_t> levBytes;      // empty = the donor's WAD entry
     std::vector<uint8_t> tngBytes;      // empty = the donor's WAD entry
     std::vector<uint8_t> chunkBytes;    // empty = the donor's chunk (see the geometry note)
+    std::vector<uint8_t> commonRecord;  // empty = the donor's static-map record; a from-scratch chunk
+                                        // (stbbake::buildTerrainChunk64 + buildTerrainCommonRecord) passes its own
     std::string backupSuffix = ".bak";  // one-time copies of the four containers; "" = none
 };
 

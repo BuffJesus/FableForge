@@ -193,7 +193,9 @@ public:
     // Names of every game.bin definition whose type is one of `types` (e.g.
     // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
     std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;
-    // The install's ENGINE_THEME library (palette slot -> textures); nullptr until ready().
+    // Defs only (names.bin + game.bin, no textures.big): enough for themeLibrary().
+    bool loadDefs(const std::filesystem::path& gameRoot, std::string& error);
+    // The install's ENGINE_THEME library (palette slot -> textures); nullptr until ready() or loadDefs().
     const forge::terraintex::ThemeLibrary* themeLibrary() const;
     struct Impl;
     Impl& impl() const { return *impl_; }

@@ -51,6 +51,7 @@ int usage() {
         "  AlbionAtlas info   <map|file.lev> [--install <fable-root>]\n"
         "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
         "  AlbionAtlas new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
+        "  AlbionAtlas blank-level <name> [--at x,y] [--region <host>] [--template <64x64 map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"
@@ -213,6 +214,45 @@ int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
+    if (cmd == "blank-level") {   // blank-level <name> [--at x,y] [--region <host>] [--template <64x64 map>] [--theme <slot|name>] [--height h] [--install <root>]
+        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas blank-level <name> [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
+        albion::editor::BlankLevelRequest req;
+        req.name = args[1];
+        std::string installArg, at, theme;
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--at" && i + 1 < args.size()) at = args[++i];
+            else if (args[i] == "--region" && i + 1 < args.size()) req.hostRegion = args[++i];
+            else if (args[i] == "--template" && i + 1 < args.size()) req.templateLevel = args[++i];
+            else if (args[i] == "--theme" && i + 1 < args.size()) theme = args[++i];
+            else if (args[i] == "--height" && i + 1 < args.size()) req.groundHeight = float(std::atof(args[++i].c_str()));
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::DonorInfo info; std::string err;
+        if (!albion::editor::donorInfo(install.root, req.templateLevel, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        req.worldX = info.suggestedX; req.worldY = info.suggestedY;
+        if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }
+        if (req.hostRegion.empty()) req.hostRegion = info.owningRegion;
+        if (!theme.empty()) {
+            if (std::isdigit(static_cast<unsigned char>(theme[0]))) req.themeSlot = std::atoi(theme.c_str());
+            else {
+                fs::path temp;
+                const auto tl = forge::lev::File::open(resolveLevel(req.templateLevel, install, temp));
+                for (size_t i = 0; i < tl.groundThemes().size(); ++i) if (tl.groundThemes()[i].name == theme) req.themeSlot = int(i);
+                if (req.themeSlot < 0) { std::fprintf(stderr, "theme %s is not in %s's palette\n", theme.c_str(), req.templateLevel.c_str()); return 2; }
+            }
+        }
+        albion::terrainexport::Context ctx;
+        if (!ctx.loadDefs(install.root, err) || !ctx.themeLibrary()) { std::fprintf(stderr, "cannot load the ENGINE_THEME library: %s\n", err.c_str()); return 1; }
+        std::printf("blank level %s at (%d,%d) owned by %s, template %s, height %g\n", req.name.c_str(), req.worldX, req.worldY, req.hostRegion.c_str(), req.templateLevel.c_str(), req.groundHeight);
+        albion::editor::NewLevelResult out;
+        if (!albion::editor::createBlankLevel(install.root, req, *ctx.themeLibrary(), out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
+        std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
     if (cmd == "new-level") {   // new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas new-level <donor> <name> [--at x,y] [--region <hostRegion>] [--dedicated] [--no-rebake] [--install <root>]\n"); return 2; }
         albion::editor::NewLevelRequest req;
