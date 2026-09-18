@@ -16,13 +16,15 @@ Scoped, not started (each needs either the in-game harness or a chunk of untangl
 - 0.16 #1 foliage brush (local-detail decode + re-encode splice; see the item).
 - 0.17 static mesh import / creature clone (L, need EgoCore-checked composers + a probe).
 - 0.17 Blender addon bundle (the addon imports FableTLC `tools/` Python; vendor it first).
-- 0.15b leftovers: first-run tour, mesh thumbnails, PiP minimap, brush falloff ring.
+- 0.15b leftovers: mesh thumbnails, PiP minimap, brush falloff ring (the tour is done).
 
 Next in order:
 1. The user: public GitHub repo -> push -> CI; triage FableForge (37 M / 63 ??; junk =
    `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`, `build-debug/`, `build-wiring/`);
    un-vendor forgecore.
-2. `python tools/package.py --version 0.16.0` -> tag; release notes = today's commit log.
+2. Version is 0.16.0 in CMake/package.py (binaries say so). `python tools/package.py` (runs
+   check_all, ~20 min) -> `dist/AlbionAtlas-0.16.0-win64.zip` -> `git tag v0.16.0` (the user,
+   with the public push); release notes = `git log 0a96bd4..` (today).
 3. In-game probes the user drives: map-screen travel to an own-region level through its
    entrance (fresh game); a retextured barrel; a placed preset; a placed emitter.
 4. Then, with the harness: foliage brush; without it: main.cpp split (1.0-rc #3), STB
