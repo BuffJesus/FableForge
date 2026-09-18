@@ -166,15 +166,17 @@ Python), then safety, then depth.
 The bones are right (dark theme, purple accent, 3-pane, `theme::S` DPI scaling, Unreal
 camera + QWER). What a stranger hits is *density and feedback*:
 
-1. **Right panel structure**: today the Edit panel is one long scroll of cards (Tool, Terrain
-   brush, Selection, Objects, Add object, Village, Spawner, Live link, New level, Custom
-   texture...). Make it collapsible sections with remembered state and a sub-tab strip
-   *Objects | Terrain | Paint | Actors | World tools*, so a card is never more than one
-   scroll away (`gui/editor.cpp::drawEditPanel`, `theme::beginCard` gains a header toggle).
-2. **Feedback**: toast for job results (deploy done / failed, level installed, theme created)
-   in the viewport corner instead of only the log; progress bars with a stage label for the
-   long jobs (bake 4–15 s, new level 80 s, world move 15 s) driven by the existing `notes`
-   callbacks; a status line with the save root + install health.
+1. ~~**Right panel structure**~~ DONE 2026-09-18: sub-tabs *Objects | Terrain | Actors | Level*
+   under the Tool card (`editTab_`, remembered in settings.json; Terrain <-> terrain tool
+   follow each other; actions open the tab that owns their card). Paint lives inside Terrain
+   (the brush card), so no separate Paint tab. Was: one long scroll of cards.
+2. ~~**Feedback**~~ DONE 2026-09-18: toasts (every warn/error/success log line, 6 s, viewport
+   top-right); the long jobs report their stage through `editor::ProgressFn`
+   (`NewLevelRequest::progress`, `BlankLevelRequest::progress`, `applyWorldEdits(...,
+   progress)`, `Document::deployTerrain(..., progress)`) and the busy button reads
+   `Installing: baking the minimap  (12 s)`; the header status turns amber `writes -> <root>`
+   when the save root is redirected. Not done: a real progress *bar* (the stages have no
+   fixed weights; the label + elapsed time is the honest version).
 3. **Viewport overlays**: grid at the LEV cell size, compass/north, map-local coordinates under
    the cursor, brush radius ring in world units (exists) + falloff, selection bounds; a
    "picture-in-picture" minimap of the whole map with the camera frustum.
