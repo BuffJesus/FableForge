@@ -42,6 +42,7 @@
 #include "worldedit.hpp"
 #include "overworld.hpp"
 #include "gtg.hpp"
+#include "texturebrowse.hpp"
 #include "leveledit.hpp"
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
@@ -73,6 +74,8 @@ int usage() {
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
+        "  AlbionAtlas textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
+        "  AlbionAtlas texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
         "  AlbionAtlas entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
         "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
         "  AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
@@ -326,6 +329,48 @@ int main(int argc, char** argv) {
         if (!albion::editor::createLevelFromDonor(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
+    if (cmd == "textures" || cmd == "texture-export" || cmd == "texture-replace" || cmd == "texture-add") {
+        // textures [filter] [--bank <bank>] [--install root]        list textures.big entries
+        // texture-export <name> <out.png> [--install root]           first mip as PNG
+        // texture-replace <name> <image> [--install root]            same slot, same format (backup once; refused while the game runs)
+        // texture-add <name> <image> [--bank GBANK_MAIN_PC] [--format dxt1|dxt3|argb8888] [--install root]
+        std::string installArg, bankArg, formatArg;
+        std::vector<std::string> pos;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--bank" && i + 1 < args.size()) bankArg = args[++i];
+            else if (args[i] == "--format" && i + 1 < args.size()) formatArg = args[++i];
+            else pos.push_back(args[i]);
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const fs::path big = install.root / "data" / "graphics" / "pc" / "textures.big";
+        std::string err;
+        if (cmd == "textures") {
+            const auto rows = albion::texbrowse::listTextures(big, err);
+            if (rows.empty()) { std::fprintf(stderr, "error: %s\n", err.empty() ? "no textures" : err.c_str()); return 1; }
+            const std::string filter = pos.empty() ? "" : pos[0];
+            size_t shown = 0;
+            for (const auto& r : rows) {
+                if (!bankArg.empty() && r.bank != bankArg) continue;
+                if (!filter.empty() && r.name.find(filter) == std::string::npos && r.label.find(filter) == std::string::npos) continue;
+                std::printf("%6u  %-44s %5dx%-5d %-9s %2d mips  %8u bytes  %s%s%s\n", r.id, r.label.c_str(), r.width, r.height, r.format.c_str(), r.mips, r.bytes, r.bank.c_str(), r.label == r.name ? "" : "   ", r.label == r.name ? "" : r.name.c_str());
+                ++shown;
+            }
+            std::printf("%zu of %zu textures\n", shown, rows.size());
+            return 0;
+        }
+        if (pos.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas %s <name> <file> [--install <root>]\n", cmd.c_str()); return 2; }
+        std::vector<std::string> notes;
+        bool ok = false;
+        if (cmd == "texture-export") ok = albion::texbrowse::exportPng(big, pos[0], pos[1], err);
+        else if (cmd == "texture-replace") ok = albion::texbrowse::replaceTexture(install.root, pos[0], pos[1], notes, err);
+        else { uint32_t id = 0; ok = albion::texbrowse::addTexture(install.root, bankArg, pos[0], pos[1], formatArg, id, notes, err); if (ok) std::printf("new texture id %u\n", id); }
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+        if (!ok) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (cmd == "texture-export") std::printf("wrote %s\n", pos[1].c_str());
         return 0;
     }
     if (cmd == "entrance") {   // entrance <map> [x y [z]] [--install <root>]: show, or set, the map's region entrance in FinalAlbion.gtg

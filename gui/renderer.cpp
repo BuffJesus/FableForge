@@ -322,6 +322,7 @@ void Camera::fly(float forward, float strafe, float rise, float dt) {
 Renderer::~Renderer() {
     for (auto& [id, srv] : swatches_) release(srv);
     swatches_.clear();
+    release(preview_);
     releaseTarget();
     releaseMesh();
     for (int i = 0; i < kLayers; ++i) clearLayer(i);
@@ -647,6 +648,12 @@ void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearL
 void Renderer::clearLayer(int layer) {
     for (auto& b : layers_[layer]) { release(b.vb); release(b.srv); }
     layers_[layer].clear();
+}
+
+ID3D11ShaderResourceView* Renderer::previewTexture(const terrainexport::Image& img) {
+    release(preview_);
+    preview_ = makeTexture(img);
+    return preview_;
 }
 
 ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Image& img) {

@@ -31,6 +31,7 @@
 #include "worldedit.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
+#include "texturebrowse.hpp"
 #include "overworld.hpp"
 
 namespace albion::gui {
@@ -412,6 +413,32 @@ private:
     // pending moves applied to the install in one go (WLD/BWD/STB)
 public:
     void setWorldMode(bool on);
+    // ---- Textures tab (gui/textures.cpp, 0.17): browse / preview / export / replace / add
+    void setTexturesMode(bool on);
+    bool texturesMode() const { return texturesMode_; }
+    void refreshTextures();
+    bool selectTexture(const std::string& nameOrLabel);
+    const texbrowse::TextureRow* selectedTexture() const;
+    bool exportSelectedTexture(const std::string& outPath);
+    bool replaceSelectedTexture(const std::string& image);
+    bool addTexture(const std::string& name, const std::string& image, const std::string& bank, const std::string& format);
+    std::vector<uint32_t> selectedThingTextures() const;
+    void drawTexturesPanel(float pad, float inner, float cardInner);
+private:
+    bool texturesMode_ = false;
+    bool texturesLoaded_ = false;
+    std::vector<texbrowse::TextureRow> texRows_;
+    std::vector<std::string> texBanks_;
+    std::string texBank_, texSelected_, texPreviewFor_, lastTexturePng_;
+    ID3D11ShaderResourceView* texPreview_ = nullptr;
+    char texSearch_[64] = {};
+    char texImagePath_[512] = {};
+    char texAddName_[64] = {};
+    char texAddPath_[512] = {};
+    int texAddFormat_ = 0;
+    bool texReplaceOpen_ = false;
+    std::vector<std::vector<uint32_t>> meshTextures_;   // per renderer mesh: its parts' diffuse texture ids
+public:
     bool worldMode() const { return worldMode_; }
     bool worldLoaded() const { return worldLoaded_; }
     void worldSelect(const std::string& map);

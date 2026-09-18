@@ -31,6 +31,7 @@ int snap32(float v) { return int(std::floor(v / 32.0f + 0.5f)) * 32; }
 
 void App::setWorldMode(bool on) {
     if (on && editMode_) setEditMode(false);
+    if (on) texturesMode_ = false;
     worldMode_ = on;
     if (on) loadWorld();
 }

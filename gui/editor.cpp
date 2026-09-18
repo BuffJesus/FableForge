@@ -69,6 +69,12 @@ void App::setEditMode(bool on) {
 void App::bindInstances(const foliageexport::Scene& things) {
     instLocal_.clear();
     instUids_.clear();
+    meshTextures_.clear();
+    for (const auto& m : things.meshes) {
+        std::vector<uint32_t> ids;
+        for (const auto& p : m.parts) if (p.diffuseTexture) ids.push_back(p.diffuseTexture);
+        meshTextures_.push_back(std::move(ids));
+    }
     if (!documentLoaded()) return;
     for (size_t i = 0; i < doc_.thingCount(); ++i) instUids_.push_back(doc_.uidOf(i));
     instLocal_.reserve(things.instances.size());

@@ -983,6 +983,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back(std::string("camera=") + cam);
     v.push_back("edit_mode=" + std::string(editMode_ ? "1" : "0"));
     v.push_back("world_mode=" + std::string(worldMode_ ? "1" : "0"));
+    v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
+    v.push_back("textures_count=" + std::to_string(texRows_.size()));
+    { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }
     v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));
     v.push_back("world_maps=" + std::to_string(world_.maps.size()));
     v.push_back("world_selected=" + worldSelected_);
@@ -1525,7 +1528,7 @@ void App::drawActions(float width) {
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    const float footerHeight = texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
     // The settings stack takes what it needs (measured last frame); the activity log
     // takes the rest, never less than a few lines. On a short window the settings
     // scroll instead of pushing the export button off screen.
@@ -1542,17 +1545,23 @@ void App::drawActions(float width) {
 
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
-        int tab = worldMode_ ? 2 : editMode_ ? 1 : 0;
-        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World"}, inner)) {
-            if (tab == 2) setWorldMode(true);
-            else { setWorldMode(false); setEditMode(tab == 1); }
+        int tab = texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
+        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Textures"}, inner)) {
+            if (tab == 3) setTexturesMode(true);
+            else if (tab == 2) { setTexturesMode(false); setWorldMode(true); }
+            else { setTexturesMode(false); setWorldMode(false); if (editMode_ != (tab == 1)) setEditMode(tab == 1); }
         }
         auto_.registerWidget("seg_panel");
     }
     ImGui::Dummy(ImVec2(0, S(8)));
 
     const float cardInner = inner - S(24);
-    if (worldMode_) {
+    if (texturesMode_) {
+        drawTexturesPanel(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(6)));
+        settingsContentH_ = ImGui::GetCursorPosY();
+        ImGui::EndChild();  // ##settings
+    } else if (worldMode_) {
         drawWorldPanel(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(6)));
         settingsContentH_ = ImGui::GetCursorPosY();
@@ -1687,7 +1696,12 @@ void App::drawActions(float width) {
     // ---- footer
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + pad, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - pad, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
     ImGui::Dummy(ImVec2(0, S(8)));
-    if (worldMode_) {
+    if (texturesMode_) {
+        ImGui::SetCursorPosX(pad);
+        ImGui::PushFont(fontSmall_);
+        theme::hint("Textures live in data/graphics/pc/textures.big. Replacing one changes every object that uses it; the original archive is backed up once as textures.big.atlas-orig (Setup > Restore puts it back).");
+        ImGui::PopFont();
+    } else if (worldMode_) {
         drawWorldFooter(pad, inner);
     } else if (editMode_) {
         drawEditFooter(pad, inner);
@@ -1957,6 +1971,14 @@ bool Automation::tick(App& app) {
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "edit") { app.setEditMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "textures_tab") { app.setTexturesMode(rest == "1"); note("ok   " + line); ++pc_; }
+    else if (cmd == "texture_select") { if (!app.selectTexture(rest)) fail("texture_select: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "texture_export") { if (!app.exportSelectedTexture(rest)) fail("texture_export failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "texture_replace") { if (!app.replaceSelectedTexture(rest)) fail("texture_replace failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "texture_add") {   // texture_add <NAME> <image> [dxt1|dxt3|argb8888]
+        std::istringstream rs(rest); std::string n, img, fmt; rs >> n >> img >> fmt;
+        if (!app.addTexture(n, img, "GBANK_MAIN_PC", fmt)) fail("texture_add failed: " + rest); else note("ok   " + line); ++pc_;
+    }
     else if (cmd == "world_tab") { app.setWorldMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
     else if (cmd == "world_select") { app.worldSelect(rest); if (app.worldSelected().empty()) fail("world_select: no map " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_move") {   // world_move <map> <x> <y>: queue a move (refused moves fail the script)

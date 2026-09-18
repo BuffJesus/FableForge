@@ -510,6 +510,17 @@ containers get one-time `.atlas-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
+## Textures tab
+
+The fourth panel tab browses `data/graphics/pc/textures.big` (every bank, search by
+name or id), previews an entry, exports it as PNG, replaces it from any image (the slot
+keeps its allocated size and pixel format, mips are rebuilt, the entry is validated
+against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
+selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
+barrel is: select it, click its texture, *Replace from image*. One-time
+`textures.big.atlas-orig` backup; refused while the game runs. CLI: `AlbionAtlas
+textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
+
 ### Region entrance (FinalAlbion.gtg)
 
 `FinalAlbion.gtg` holds the global things per WLD map slot: the

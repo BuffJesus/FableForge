@@ -167,8 +167,11 @@ public:
     // Small UI swatch of a decoded texture, cached by textures.big id (the theme picker);
     // owned by the renderer, freed with it. Downsampled to 64x64 so 200 themes cost ~3 MB.
     ID3D11ShaderResourceView* swatch(uint32_t id, const terrainexport::Image& img);
+    // The Textures tab's preview: one full-size texture at a time (the previous is freed).
+    ID3D11ShaderResourceView* previewTexture(const terrainexport::Image& img);
 private:
     std::map<uint32_t, ID3D11ShaderResourceView*> swatches_;
+    ID3D11ShaderResourceView* preview_ = nullptr;
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;
     ID3D11RenderTargetView* rtv_ = nullptr;

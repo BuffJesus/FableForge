@@ -1,0 +1,36 @@
+# Textures tab against a scratch tree (tools/test_textures.py copies textures.big +
+# CompiledDefs into build/ui_textures_install): browse, the selected object's texture,
+# export a PNG, replace the slot from that PNG, add a new entry; both writes validated.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+set saveroot build/ui_textures_install
+edit 1
+frames 2
+select_def OBJECT_BARREL_BREAKABLE
+frames 2
+textures_tab 1
+frames 3
+assert_state textures_mode 1
+assert_state edit_mode 1
+assert_widget list_textures
+texture_select 786
+frames 2
+assert_state texture_selected BARREL_BRACED_1_24
+assert_widget img_texture
+texture_export build/ui/barrel_braced.png
+frames 2
+assert_log wrote build/ui/barrel_braced.png
+texture_replace build/ui/barrel_braced.png
+frames 2
+# (mip count is the writer's: it rebuilds the chain down to the smallest level)
+assert_log (id 786, 512x256 DXT1
+assert_log in textures.big from barrel_braced.png
+texture_add ATLAS_UI_TEX build/ui/barrel_braced.png dxt3
+frames 2
+assert_log appended ATLAS_UI_TEX (id 6294, 512x256 DXT3
+assert_state texture_selected ATLAS_UI_TEX
+screenshot build/ui/t1_textures.png
+quit
