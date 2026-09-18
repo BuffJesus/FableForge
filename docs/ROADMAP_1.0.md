@@ -1,31 +1,24 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-18 evening)
+## Resume here (2026-09-18 night)
 
-Where we are: **0.14 "runs anywhere" 2/4, 0.15 "can't hurt you" 4/4, 0.15b "feels like a
-tool" 8/8 first passes**, all on `main`. `tools/check_all.py` re-run at the end of the day
-(ALL PASS, 15/15, after the last UI commit).
+Where we are: **0.14 2/4, 0.15 4/4, 0.15b 8/8 first passes, 0.16 3/4** on `main`;
+`tools/check_all.py` ALL PASS (15/15) after the last commit.
 
-Done today (each item has a `tests/ui` assertion and a reviewed screenshot):
-- 0.15 #2-#4: engine-rule notices under the action, palette + World-tab undo/redo, "Write
-  into FinalAlbion.wad" primary / "Save draft".
-- 0.15b: Edit panel sub-tabs (Objects | Terrain | Actors | Level, remembered); toasts; job
-  stage labels through `editor::ProgressFn`; amber `writes -> <root>` status; one
-  `App::confirmRow` for every game write; `?`/F1 cheat-sheet; Text size slider; striped
-  walkable view; Grid chip + cursor `x y h` + compass; PNG drop = custom texture; albedo
-  swatches in the theme pickers.
-- FableForge: tree links again (stale `findTextureBuilder`), overlay test floored at 933;
-  **still uncommitted there** (the user's triage).
-
-Still open inside 0.15b (small, listed per item above): first-run tour, brush falloff ring
-+ selection bounds + PiP minimap, mesh thumbnails in *Add an object*, a real progress bar.
+0.16 done today: multi-select + copy/paste (rigid group move, batches = one undo step,
+fragments), presets (`src/presets`, Actors-tab card, 4 retail-derived in `presets/`,
+`tools/build_presets.py`), region entrances (`src/gtg`: byte-exact `FinalAlbion.gtg`
+round trip, default entrance on own-region install, Level-tab card, `AlbionAtlas entrance`).
+0.16 #1 foliage brush is scoped in its item (needs the in-game harness; do it with the user).
 
 Next in order:
 1. 0.14 #3/#4: the user creates the public GitHub repo, push, CI green; triage FableForge's
    37 modified / 63 untracked files (junk = `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`,
    `build-debug/`, `build-wiring/`), then un-vendor forgecore.
-2. Tag 0.15 (zip in `dist/`, check_all green, release notes = today's commits).
-3. 0.16 depth: foliage brush, presets, .gtg entrances, multi-select.
+2. Tag 0.15/0.16 (zip in `dist/` now ships `presets/`; check_all green; release notes = today).
+3. In-game checks the user drives: the map screen reaching an own-region level through its
+   new entrance (fresh game), a pasted preset in-game.
+4. 0.16 #1 foliage brush with the harness, then 0.17 content.
 
 Install state: retail (`AlbionAtlas backups` -> 9 backed-up files, 0 differ). Saves:
 `0atlas` and `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is
@@ -206,6 +199,15 @@ that the theme pass already used.
    repeated-mesh instances and type-0 meshes using the grammar in `src/stbrelocate.cpp`
    (`groupBody`) and forgecore's `encodeGroupContents` (`stbbake.cpp:1149`); bounds/spheres
    via the same helpers `zBox/zSphere` use. Preview via `foliageexport`.
+   *Scoped 2026-09-18, not started:* forgecore already authors a whole local-detail section
+   from placements (`buildType0LocalDetailSection`, type-1 grass proven in-game on
+   ForgeTest64; type-0 trees are the open "type-0 strategy"), but only for authored 64x64
+   chunks. A brush on a retail map needs (a) decode the chunk's existing local-detail
+   groups into placements (`stbrelocate.cpp` walks them; a full decode is the gap),
+   (b) add the painted ones, (c) re-encode the section for the map's real size and splice
+   it into the chunk on deploy (`Document::deployTerrain` re-bakes heights/layers but keeps
+   the section verbatim). Each step is byte-checkable offline (re-encode retail = retail),
+   but the result needs the in-game harness before it ships -- do it with the user present.
 2. ~~**Presets**~~ DONE 2026-09-18: `src/presets` (a preset is a valid loose .tng with a
    two-line header; shipped in `presets/` next to the exe, yours in `%APPDATA%\AlbionAtlas\presets`),
    Actors-tab card (click to place at the view centre as a selected group; *Save N selected
