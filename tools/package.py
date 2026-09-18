@@ -25,6 +25,8 @@ def main():
     shutil.copy(os.path.join("vendor", "VENDORED.md"), os.path.join(stage, "THIRD_PARTY.md"))
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
     shutil.copy(os.path.join("docs", "EDITOR.md"), stage)
+    shutil.copy(os.path.join("docs", "FIRST_LEVEL.md"), stage)
+    shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
     shutil.copytree("presets", os.path.join(stage, "presets"))
     zpath = os.path.join("dist", name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:

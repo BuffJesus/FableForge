@@ -26,6 +26,9 @@ AlbionAtlas export my_edited.lev --no-textures
 AlbionAtlas effects BRAZIERFIREFINAL         # what a particle effect is made of
 ```
 
+
+New here? Read **[docs/FIRST_LEVEL.md](docs/FIRST_LEVEL.md)** -- your first level in ten minutes, with screenshots.
+
 ## What you get
 
 | Layer | Source | In the file |

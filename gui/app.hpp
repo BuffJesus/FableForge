@@ -426,6 +426,7 @@ public:
     void setTexturesMode(bool on);
     bool texturesMode() const { return texturesMode_; }
     void refreshTextures();
+    std::filesystem::path texturesBigPath() const;
     bool selectTexture(const std::string& nameOrLabel);
     const texbrowse::TextureRow* selectedTexture() const;
     bool exportSelectedTexture(const std::string& outPath);

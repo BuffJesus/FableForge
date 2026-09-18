@@ -18,9 +18,18 @@ void App::setTexturesMode(bool on) {
     if (on && !texturesLoaded_) refreshTextures();
 }
 
+// browse the save root's textures.big when it has one (scratch trees), else the install's;
+// writes always go to the save root
+std::filesystem::path App::texturesBigPath() const {
+    const std::filesystem::path own = std::filesystem::path(saveRoot()) / "data" / "graphics" / "pc" / "textures.big";
+    std::error_code ec;
+    if (std::filesystem::exists(own, ec)) return own;
+    return std::filesystem::path(installPath_) / "data" / "graphics" / "pc" / "textures.big";
+}
+
 void App::refreshTextures() {
     std::string err;
-    texRows_ = texbrowse::listTextures(std::filesystem::path(saveRoot()) / "data" / "graphics" / "pc" / "textures.big", err);
+    texRows_ = texbrowse::listTextures(texturesBigPath(), err);
     if (texRows_.empty() && !err.empty()) pushLog("textures: " + err, 1);
     texBanks_.clear();
     for (const auto& r : texRows_) if (std::find(texBanks_.begin(), texBanks_.end(), r.bank) == texBanks_.end()) texBanks_.push_back(r.bank);
@@ -47,7 +56,7 @@ bool App::exportSelectedTexture(const std::string& outPath) {
     if (!r) { pushLog("textures: nothing selected", 1); return false; }
     std::filesystem::path png = outPath.empty() ? std::filesystem::path(outDirBuf_) / (r->label + ".png") : std::filesystem::path(outPath);
     std::string err;
-    if (!texbrowse::exportPng(std::filesystem::path(saveRoot()) / "data" / "graphics" / "pc" / "textures.big", r->name, png, err)) { pushLog("textures: " + err, 2); return false; }
+    if (!texbrowse::exportPng(texturesBigPath(), r->name, png, err)) { pushLog("textures: " + err, 2); return false; }
     pushLog("wrote " + png.string() + " (" + std::to_string(r->width) + "x" + std::to_string(r->height) + ")", 3);
     lastTexturePng_ = png.string();
     return true;
@@ -186,7 +195,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         if (texPreviewFor_ != sel->name) {
             texPreviewFor_ = sel->name;
             terrainexport::Image img; std::string err;
-            texPreview_ = texbrowse::decodeTexture(std::filesystem::path(saveRoot()) / "data" / "graphics" / "pc" / "textures.big", sel->name, img, err) ? renderer_.previewTexture(img) : nullptr;
+            texPreview_ = texbrowse::decodeTexture(texturesBigPath(), sel->name, img, err) ? renderer_.previewTexture(img) : nullptr;
             if (!texPreview_ && !err.empty()) pushLog("textures: " + err, 1);
         }
         if (texPreview_) {
