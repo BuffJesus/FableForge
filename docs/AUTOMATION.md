@@ -55,6 +55,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image lands in the custom-texture input (Terrain tab, paint mode) |
 | `click chip_grid` | the LEV cell grid overlay (state `grid`); state `cursor_ground` = `x,y,h` under the mouse when it is over the ground, `-` otherwise |
 | `set uiscale <0.8..1.5>` | the *Interface > Text size* factor (state `ui_scale`; fonts rebuild) |
+| `tour <0..2\|-1>` | the first-run tour callout (state `tour_step`; widgets `btn_tour_next`, `btn_tour_skip`); starts by itself after the first Setup panel |
 | `help 0\|1` | the keyboard/mouse cheat-sheet overlay (also `?` / F1 / the header `?`; state `help_open`, widgets `btn_help`, `btn_help_close`) |
 | `edit_tab <0..3>` | the Edit panel's sub-tab: 0 Objects, 1 Terrain, 2 Actors, 3 Level (state `edit_tab`; widget `seg_edit_tab`). Terrain and the terrain tool follow each other; placing a spawner/village opens Actors, a viewport pick from Terrain/Level opens Objects |
 | `dismiss_rule <creature\|spawner\|region>` | what the engine-rule notice's *Got it* does (state `rule_notice` = the key shown, `-` for none; widget `btn_rule_<key>`) |

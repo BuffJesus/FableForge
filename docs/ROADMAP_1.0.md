@@ -187,8 +187,8 @@ camera + QWER). What a stranger hits is *density and feedback*:
    <file>`); `.lev` already opened as a loose map. GLB onto the viewport = import model (0.17).
 6. **Discoverability**: ~~a `?` shortcut cheat-sheet overlay~~ DONE 2026-09-18 (`?` / F1 /
    header button; camera, objects, terrain, World, everywhere), empty-state hints exist
-   ("Pick a map on the left", "Nothing selected", "This map has no .lev"). Still open: a
-   first-run tour of the three tabs.
+   ("Pick a map on the left", "Nothing selected", "This map has no .lev"), ~~first-run
+   tour~~ DONE 2026-09-18 (three callouts after the first Setup: maps, tabs, viewport).
 7. ~~**Consistency pass**~~ DONE 2026-09-18: one `App::confirmRow` (amber question, *Yes, ...* /
    *Cancel*) for the WAD write, terrain write, world apply and the backup restore; every
    button that touches the game reads "... into the game" / "Write into FinalAlbion.wad"

@@ -256,6 +256,15 @@ public:
     void rescanBackups() { backupsScannedAt_ = -1; }
 private:
     bool firstRun_ = false;
+    // First-run tour (0.15b #6): three callouts after the Setup panel closes the first
+    // time -- the map list, the panel tabs, the viewport -- each with Next / Skip.
+    int tourStep_ = -1;              // -1 off, 0..2 the callout shown
+    bool tourPending_ = false;       // the first run: start the tour when Setup closes
+    void drawTour();
+public:
+    void setTourStep(int s) { tourStep_ = s; }
+    int tourStep() const { return tourStep_; }
+private:
 
     void drawTitleBar();
     void drawExplorer(float width);

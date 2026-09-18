@@ -12,6 +12,16 @@ assert_state doc_loaded 1
 assert_widget seg_gizmo
 assert_widget seg_edit_tab
 assert_widget btn_help
+# the first-run tour: three callouts, Next walks them, Done ends it
+tour 0
+frames 2
+assert_widget btn_tour_next
+click btn_tour_next
+frames 4
+assert_state tour_step 1
+tour -1
+frames 1
+assert_state tour_step -1
 # a dropped PNG lands in the custom-texture input on the Terrain tab (paint mode)
 drop build/atlas_check.png
 frames 2

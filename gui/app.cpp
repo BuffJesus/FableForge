@@ -176,6 +176,47 @@ App::InstallHealth App::installHealth() const {
     return h;
 }
 
+void App::drawTour() {
+    if (tourStep_ < 0 || tourStep_ > 2) return;
+    using theme::S;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    struct Step { const char* title; const char* text; float ax, ay; ImVec2 pos; };   // anchor: 0..1 of the window
+    const float leftW = S(270), rightW = S(330);
+    const Step steps[3] = {
+        {"1 / 3  The maps", "Every map of the game is here, grouped by region. Click one to see it; Ctrl+F searches. Drop a .lev on the window to open a loose file.", 0, 0, ImVec2(vp->Pos.x + leftW + S(14), vp->Pos.y + S(120))},
+        {"2 / 3  The tabs", "Export writes GLB / OBJ for Blender. Edit places objects and shapes the ground. World moves whole maps. Textures browses and replaces the game's textures. Everything you write into the game is backed up once.", 0, 0, ImVec2(vp->Pos.x + vp->Size.x - rightW - S(360), vp->Pos.y + S(110))},
+        {"3 / 3  The viewport", "Right-drag + WASD to fly, left-drag to turn, wheel to zoom, F to frame. In Edit, click an object to select it and drag the gizmo. Press ? any time for the cheat-sheet.", 0, 0, ImVec2(vp->Pos.x + leftW + S(120), vp->Pos.y + vp->Size.y * 0.45f)},
+    };
+    const Step& st = steps[tourStep_];
+    ImGui::SetNextWindowPos(st.pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(S(340), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(16), S(14)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(10));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Accent));
+    ImGui::Begin("##tour", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::BringWindowToFocusFront(ImGui::GetCurrentWindow());
+    ImGui::PushFont(fontBold_);
+    ImGui::TextColored(theme::vec(theme::Accent), "%s", st.title);
+    ImGui::PopFont();
+    ImGui::PushFont(fontSmall_);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + S(308));
+    ImGui::TextColored(theme::vec(theme::Text), "%s", st.text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, S(6)));
+    const float half = (S(308) - S(6)) * 0.5f;
+    if (theme::primaryButton(tourStep_ == 2 ? "Done" : "Next", ImVec2(half, S(28)))) tourStep_ = tourStep_ == 2 ? -1 : tourStep_ + 1;
+    auto_.registerWidget("btn_tour_next");
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("Skip the tour", ImVec2(half, S(28)))) tourStep_ = -1;
+    auto_.registerWidget("btn_tour_skip");
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(3);
+}
+
 void App::drawHelpOverlay() {
     if (!helpOpen_) return;
     using theme::S;
@@ -321,7 +362,7 @@ void App::drawSetupPanel() {
         }
         auto_.registerWidget("btn_setup_browse");
         ImGui::SameLine(0, S(6));
-        if (theme::primaryButton(installValid_ ? "Continue" : "Continue without an install", ImVec2(w, S(32)))) { setupOpen_ = false; ImGui::CloseCurrentPopup(); }
+        if (theme::primaryButton(installValid_ ? "Continue" : "Continue without an install", ImVec2(w, S(32)))) { setupOpen_ = false; ImGui::CloseCurrentPopup(); if (tourPending_) { tourPending_ = false; tourStep_ = 0; } }
         auto_.registerWidget("btn_setup_continue");
         ImGui::EndPopup();
     }
@@ -949,6 +990,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
+    v.push_back("tour_step=" + std::to_string(tourStep_));
     { char b[16]; std::snprintf(b, sizeof b, "%.2f", settings_.uiScale); v.push_back(std::string("ui_scale=") + b); }
     v.push_back("grid=" + std::string(renderer_.showGrid ? "1" : "0"));
     v.push_back("selection_count=" + std::to_string(selectionCount()));
@@ -1133,9 +1175,10 @@ void App::frame(float dt) {
     ImGui::SameLine(0, 0);
     drawActions(right);
     drawUnsavedPrompt();
-    if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; }
+    if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawSetupPanel();
     drawHelpOverlay();
+    drawTour();
 
     ImGui::End();
 }
@@ -2041,6 +2084,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "tour") { app.setTourStep(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // tour <0..2 | -1>
     else if (cmd == "help") { app.setHelpOpen(rest == "1"); note("ok   " + line); ++pc_; }
     else if (cmd == "theme_search") { app.setThemeSearch(rest); note("ok   " + line); ++pc_; }   // the "Add a ground theme from the game" box
     else if (cmd == "edit_tab") { app.setEditTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 Objects 1 Terrain 2 Actors 3 Level
