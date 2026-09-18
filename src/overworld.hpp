@@ -13,11 +13,14 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace albion::editor {
+
+using ProgressFn = std::function<void(const std::string&)>;   // stage label callback (see worldedit.hpp)
 
 struct WorldMapBox {
     int slot = 0;              // BWD/WLD map slot (1-based)
@@ -83,7 +86,7 @@ struct SeesEdit { std::string region, map; bool sees = true; };
 // FinalAlbion_RT.stb; touching neighbours re-bake best-effort.
 bool applyWorldEdits(const std::filesystem::path& gameRoot, const std::vector<MapMove>& moves,
                      const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& sees,
-                     std::vector<std::string>& notes, std::string& error);
+                     std::vector<std::string>& notes, std::string& error, ProgressFn progress = {});
 // Region properties the engine reads from the BWD record (mirrored into the
 // WLD text so the two stay in step): the REGION_* def (atmosphere, name text,
 // creature generation -- an empty one loads but names the region "" and draws

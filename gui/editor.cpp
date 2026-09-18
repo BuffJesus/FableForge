@@ -189,6 +189,7 @@ int App::pickAt(float u, float v) {
     if (inst < 0) { selectThing(-1); return -1; }
     const int thing = renderer_.instance(size_t(inst)).thing;
     selectThing(thing);
+    if (editTab_ == 1 || editTab_ == 3) setEditTab(0);
     return thing;
 }
 
@@ -344,6 +345,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
         pushLog("placed " + def, 0);
+        if (editTab_ != 2) setEditTab(0);
         if (creature) raiseRule("creature");
         return true;
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
@@ -494,6 +496,7 @@ bool App::placeSpawner(const std::vector<std::string>& families, float radius, i
         std::string list;
         for (const auto& f : families) list += (list.empty() ? "" : ", ") + f;
         pushLog("placed an enemy spawner (" + list + ", radius " + std::to_string(int(radius)) + ", limit " + std::to_string(limit) + ")", 0);
+        setEditTab(2);
         raiseRule("spawner");
         return true;
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
@@ -511,6 +514,7 @@ bool App::placeVillage(const std::string& def, const std::string& scriptName) {
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
         pushLog("placed village " + def + " (uid " + std::to_string(selectedUid_) + "); join buildings and creatures to it from their Selection card", 0);
+        setEditTab(2);
         return true;
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
@@ -831,7 +835,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
                      (newLevelMode_ == 0 || (blankTheme_ >= 0 && ctx_.themeLibrary()));
     if (newLevelMode_ == 1 && !ctx_.themeLibrary()) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Waiting for the ENGINE_THEME library (textures loading)."); ImGui::PopFont(); }
     if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
-    if (theme::primaryButton(newLevelFuture_.valid() ? "Installing..." : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
+    if (theme::primaryButton(newLevelFuture_.valid() ? jobLabel("Installing").c_str() : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
     auto_.registerWidget("btn_new_level");
     drawRuleNotice("region", cardInner);
     theme::endCard();
@@ -871,6 +875,7 @@ void App::startNewLevel() {
         const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
         if (!lib) return;
         pushLog("new level: authoring blank " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
+        beginJob(); req.progress = jobProgress();
         newLevelFuture_ = std::async(std::launch::async, [req, root, lib]() {
             NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
             j.ok = editor::createBlankLevel(root, req, *lib, j.result, j.error);
@@ -885,6 +890,7 @@ void App::startNewLevel() {
     req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.dedicated = newLevelDedicated_; req.ownRegion.displayName = newLevelDisplay_;
     req.worldX = newLevelX_; req.worldY = newLevelY_;
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
+    beginJob(); req.progress = jobProgress();
     newLevelFuture_ = std::async(std::launch::async, [req, root]() {
         NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
         j.ok = editor::createLevelFromDonor(root, req, j.result, j.error);
@@ -902,9 +908,11 @@ void App::startTerrainDeploy() {
     const std::string root = saveRoot();
     const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
     pushLog("terrain: writing .lev, FinalAlbion.wad and re-baking the FinalAlbion_RT.stb chunk...", 0);
-    terrainDeployFuture_ = std::async(std::launch::async, [doc, root, lib]() {
+    beginJob();
+    const editor::ProgressFn progress = jobProgress();
+    terrainDeployFuture_ = std::async(std::launch::async, [doc, root, lib, progress]() {
         TerrainDeployResult r;
-        r.ok = doc->deployTerrain(root, r.notes, r.error, lib);
+        r.ok = doc->deployTerrain(root, r.notes, r.error, lib, progress);
         return r;
     });
 }
@@ -1037,8 +1045,26 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
+    // ---- sub-tabs: the tool and the Terrain tab follow each other
+    if (gizmoOp_ != lastGizmoOp_) {
+        if (gizmoOp_ == 4) editTab_ = 1;
+        else if (lastGizmoOp_ == 4 && editTab_ == 1) editTab_ = 0;
+        lastGizmoOp_ = gizmoOp_;
+    }
+    ImGui::SetCursorPosX(pad);
+    {
+        int tab = editTab_;
+        if (theme::segmented("##edittab", tab, {"Objects", "Terrain", "Actors", "Level"}, inner)) setEditTab(tab);
+        auto_.registerWidget("seg_edit_tab");
+    }
+    ImGui::Dummy(ImVec2(0, S(8)));
+
     // ---- terrain brush
-    if (gizmoOp_ == 4 && doc_.hasTerrain()) {
+    if (editTab_ == 1 && !doc_.hasTerrain()) {
+        ImGui::SetCursorPosX(pad);
+        theme::hint("This map has no .lev, so there is no terrain to sculpt or paint.");
+    }
+    if (editTab_ == 1 && doc_.hasTerrain()) {
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##terrain", inner);
         theme::label("Terrain brush");
@@ -1139,7 +1165,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::Dummy(ImVec2(0, S(8)));
     }
 
-    // ---- selection
+    // ---- selection (Objects and Actors: both tabs place things)
+    if (editTab_ == 0 || editTab_ == 2) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##sel", inner);
     editor::Frame f;
@@ -1231,8 +1258,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+    }
 
     // ---- objects in this map
+    if (editTab_ == 0) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##objs", inner);
     theme::label("Objects in this map");
@@ -1305,14 +1334,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     drawRuleNotice("creature", cardInner);
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+    }
 
-    drawVillageCard(pad, inner, cardInner);
-    ImGui::Dummy(ImVec2(0, S(8)));
-    drawSpawnerCard(pad, inner, cardInner);
-    ImGui::Dummy(ImVec2(0, S(8)));
-    drawLiveLinkCard(pad, inner, cardInner);
-    ImGui::Dummy(ImVec2(0, S(8)));
-    drawNewLevelCard(pad, inner, cardInner);
+    if (editTab_ == 2) {
+        drawVillageCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
+        drawSpawnerCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
+        drawLiveLinkCard(pad, inner, cardInner);
+    }
+    if (editTab_ == 3) drawNewLevelCard(pad, inner, cardInner);
 
     // ---- changes / save
     ImGui::SetCursorPosX(pad);
@@ -1360,7 +1391,7 @@ void App::drawEditFooter(float pad, float inner) {
     if (doc_.hasTerrain() && (doc_.terrainDirty() || terrainDeployFuture_.valid())) {
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
-            theme::primaryButton("Baking terrain...", ImVec2(inner, S(36)), false);
+            theme::primaryButton(jobLabel("Saving terrain").c_str(), ImVec2(inner, S(36)), false);
         } else if (!confirmTerrainDeploy_) {
             if (theme::primaryButton("Save terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");

@@ -10,8 +10,19 @@ frames 2
 assert_state edit_mode 1
 assert_state doc_loaded 1
 assert_widget seg_gizmo
+assert_widget seg_edit_tab
 assert_widget btn_save
 assert_widget btn_deploy
+# sub-tabs follow the tool and the actions: the terrain tool opens Terrain, leaving it
+# restores the move tool, a spawner opens Actors, a plain object opens Objects
+assert_state edit_tab 0
+edit_tab 1
+frames 1
+assert_state gizmo 4
+assert_widget seg_terrain_mode
+edit_tab 0
+frames 1
+assert_state gizmo 1
 select_def OBJECT_BARREL_BREAKABLE
 frames 2
 frame_selected
@@ -74,6 +85,7 @@ place_spawner 15 4 WASPS_01 AtlasSpawnerRule
 wait_foliage
 frames 2
 assert_state rule_notice spawner
+assert_state edit_tab 2
 assert_widget btn_rule_spawner
 screenshot build/ui/e4b_rule_notice.png
 undo

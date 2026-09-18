@@ -300,7 +300,8 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
 
 bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves,
                      const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& seesEdits,
-                     std::vector<std::string>& notes, std::string& error) {
+                     std::vector<std::string>& notes, std::string& error, ProgressFn progress) {
+    const auto stage = [&](const std::string& s) { if (progress) progress(s); };
     try {
         if (moves.empty() && owners.empty() && seesEdits.empty()) { error = "nothing to do"; return false; }
         WorldLayout before;
@@ -337,6 +338,7 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
         for (const auto& m : mirrors) if (fs::exists(m) && !backupOnce(m, error)) return false;
 
         // 1. STB first (the slow part; nothing is written until it succeeds)
+        if (!moves.empty()) stage("translating and re-baking terrain chunks");
         std::vector<forge::stb::StaticMapAppend> batch;
         bool sameSize = true;
         if (fs::exists(stbPath)) {
@@ -429,6 +431,7 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
             }
         }
 
+        stage("writing FinalAlbion.wld / .bwd" + std::string(moves.empty() ? "" : " / _RT.stb"));
         // 2. WLD: placement, owners, visibility (line-precise edits)
         // 3. BWD: the on-disk records with the boxes patched for the moves and
         //    the contains/sees lists taken from the edited WLD (forgecore's

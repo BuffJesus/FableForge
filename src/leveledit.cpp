@@ -525,13 +525,16 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
 }
 
 bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
-                             const forge::terraintex::ThemeLibrary* library) {
+                             const forge::terraintex::ThemeLibrary* library,
+                             const std::function<void(const std::string&)>& progress) {
+    const auto stage = [&](const char* s) { if (progress) progress(s); };
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const bool themesChanged = themesDirty();
     if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
     const std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
     try {
         // 1. loose .lev (also the bytes for the WAD)
+        stage("writing the .lev (navigation patch)");
         if (!saveTerrainLoose(gameRoot, error, &notes)) return false;
         const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
         const std::string levBytes = readFile(loose);
@@ -557,6 +560,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         }
 
         // 3. the terrain chunk in FinalAlbion_RT.stb, re-baked from the edited heights
+        stage(themesChanged ? "re-baking the terrain chunk (heights + painted themes)" : "re-baking the terrain chunk");
         const fs::path stb = gameRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
         if (!fs::exists(stb)) { error = "no " + stb.string(); return false; }
         const auto archive = forge::stb::Archive::open(stb);

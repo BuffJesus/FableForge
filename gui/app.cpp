@@ -301,6 +301,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.creatures = j.value("creatures", settings_.creatures);
         settings_.texSize = std::clamp(j.value("texSize", settings_.texSize), 0, 2);
         settings_.world = j.value("world", settings_.world);
+        editTab_ = std::clamp(j.value("editTab", editTab_), 0, 3);
     } catch (...) {}
 }
 
@@ -313,6 +314,7 @@ void App::saveSettings() const {
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
+            {"editTab", editTab_},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -713,7 +715,13 @@ void App::pollWorkers() {
         else { ++batchDone_; ++batchFailed_; }
     }
     std::lock_guard<std::mutex> lock(logMutex_);
-    for (auto& l : logPending_) log_.push_back(std::move(l));
+    for (auto& l : logPending_) {
+        if (l.first >= 1) {
+            toasts_.push_back({l.first, l.second, time_});
+            if (toasts_.size() > 4) toasts_.erase(toasts_.begin());
+        }
+        log_.push_back(std::move(l));
+    }
     logPending_.clear();
     if (log_.size() > 400) log_.erase(log_.begin(), log_.begin() + long(log_.size() - 400));
 }
@@ -721,6 +729,40 @@ void App::pollWorkers() {
 bool App::logContains(const std::string& needle) const {
     for (const auto& l : log_) if (l.second.find(needle) != std::string::npos) return true;
     return false;
+}
+
+std::string App::jobLabel(const char* verb) const {
+    std::string stage;
+    { std::lock_guard<std::mutex> l(jobMutex_); stage = jobStage_; }
+    char buf[192];
+    std::snprintf(buf, sizeof buf, "%s: %s  (%d s)", verb, stage.c_str(), int(time_ - jobStart_));
+    return buf;
+}
+
+void App::drawToasts(const ImVec2& origin, const ImVec2& size) {
+    using theme::S;
+    constexpr float kLife = 6.0f, kFade = 1.0f;
+    toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return time_ - t.at > kLife; }), toasts_.end());
+    if (toasts_.empty()) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float w = std::min(S(360), size.x - S(32));
+    float y = origin.y + S(14);
+    ImGui::PushFont(fontSmall_);
+    for (const Toast& t : toasts_) {
+        const float age = time_ - t.at;
+        const float alpha = age < kLife - kFade ? 1.0f : std::max(0.0f, (kLife - age) / kFade);
+        const ImVec2 ts = ImGui::CalcTextSize(t.text.c_str(), nullptr, false, w - S(34));
+        const float h = ts.y + S(16);
+        const ImVec2 p0(origin.x + size.x - S(16) - w, y), p1(p0.x + w, y + h);
+        const auto withAlpha = [alpha](ImU32 c) { return (c & 0x00FFFFFF) | (ImU32(alpha * float(c >> 24)) << 24); };
+        const theme::Color stripe = t.level == 3 ? theme::Success : t.level == 2 ? theme::Error : theme::Warn;
+        dl->AddRectFilled(p0, p1, withAlpha(theme::col(theme::Bg1) | 0xF0000000), S(8.0f));
+        dl->AddRect(p0, p1, withAlpha(theme::col(theme::Border)), S(8.0f));
+        dl->AddRectFilled(p0, ImVec2(p0.x + S(4), p1.y), withAlpha(theme::col(stripe)), S(8.0f), ImDrawFlags_RoundCornersLeft);
+        dl->AddText(nullptr, 0.0f, ImVec2(p0.x + S(16), p0.y + S(8)), withAlpha(theme::col(theme::Text)), t.text.c_str(), nullptr, w - S(34));
+        y = p1.y + S(6);
+    }
+    ImGui::PopFont();
 }
 
 void App::pushLog(const std::string& line, int level) {
@@ -750,6 +792,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
+    v.push_back("edit_tab=" + std::to_string(editTab_));
+    v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
     v.push_back("format=" + std::string(settings_.format == 0 ? "glb" : "obj"));
@@ -955,7 +999,10 @@ void App::drawTitleBar() {
 
     // install status (right side), shortened from the left when there is no room
     ImGui::PushFont(fontSmall_);
-    std::string status = installValid_ ? installPath_ : "no install selected";
+    // a redirected save root (scripted runs, scratch trees) is the one thing a writer
+    // must not miss: every write goes there, not into the install shown
+    const bool redirected = !saveRoot_.empty() && saveRoot_ != installPath_;
+    std::string status = !installValid_ ? "no install selected" : redirected ? "writes -> " + saveRoot_ : installPath_;
     const float statusMax = std::max(S(120.0f), p.x + w - btnW - S(70) - (titleEnd + (w > S(760) ? subtitleW + S(24) : S(12))));
     if (ImGui::CalcTextSize(status.c_str()).x > statusMax) {
         while (status.size() > 4 && ImGui::CalcTextSize(("..." + status).c_str()).x > statusMax) status.erase(0, 1);
@@ -966,11 +1013,12 @@ void App::drawTitleBar() {
     const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn))
                                     : theme::col(theme::Error);
     dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - S(12), ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
-    ImGui::TextColored(theme::vec(theme::Muted), "%s", status.c_str());
+    ImGui::TextColored(theme::vec(redirected ? theme::Warn : theme::Muted), "%s", status.c_str());
     if (ImGui::IsItemHovered()) {
         const InstallHealth h = installHealth();
-        ImGui::SetTooltip("%s  (%s)\ntextures.big %s   ForgeFSE %s   saves %s\nclick for the setup check", installValid_ ? installPath_.c_str() : "no install", installSource_.c_str(),
-                          h.texturesBig ? "yes" : "no", h.fse ? "yes" : "no", h.saves ? "yes" : "no");
+        ImGui::SetTooltip("%s  (%s)\ntextures.big %s   ForgeFSE %s   saves %s%s%s\nclick for the setup check", installValid_ ? installPath_.c_str() : "no install", installSource_.c_str(),
+                          h.texturesBig ? "yes" : "no", h.fse ? "yes" : "no", h.saves ? "yes" : "no",
+                          redirected ? "\nwrites go to " : "", redirected ? saveRoot_.c_str() : "");
     }
     if (ImGui::IsItemClicked()) setupOpen_ = true;
     ImGui::PopFont();
@@ -1163,6 +1211,7 @@ void App::drawViewport(float width) {
         viewportHovered_ = ImGui::IsItemHovered();
         drawWorldCanvas(origin, size);
         auto_.registerWidget("viewport");
+        drawToasts(origin, size);
         ImGui::EndChild();
         return;
     }
@@ -1178,6 +1227,7 @@ void App::drawViewport(float width) {
         drawBrushCursor(origin, size);
     }
     auto_.registerWidget("viewport");
+    drawToasts(origin, size);
 
     using theme::S;
     // Empty state / loading overlay.
@@ -1759,6 +1809,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "edit_tab") { app.setEditTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 Objects 1 Terrain 2 Actors 3 Level
     else if (cmd == "dismiss_rule") { app.dismissRule(rest); note("ok   " + line); ++pc_; }   // what the notice's "Got it" does (the notice may sit below the panel fold)
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
     else if (cmd == "place") {   // place <DEFINITION> [scriptname]

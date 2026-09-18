@@ -28,6 +28,20 @@ Refused while Fable.exe runs. CLI `AlbionAtlas backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
+## The Edit panel
+
+Under the *Tool* card the panel is split into four sub-tabs so a card is never
+more than one scroll away: **Objects** (selection, the map's object list, add an
+object), **Terrain** (the brush: sculpt, walkable, paint, custom textures),
+**Actors** (selection, village, enemy spawner, live link) and **Level** (new
+level). The Terrain tab and the terrain tool (`T`) follow each other; placing a
+spawner or village opens Actors, picking a thing from Terrain/Level opens
+Objects; the tab is remembered in `settings.json`. *Changes* and the footer
+(*Write into FinalAlbion.wad* / *Save draft*) stay on every tab. Warnings,
+errors and job results also pop up as toasts in the viewport corner, and the
+long jobs (new level, terrain save, world moves) show their current stage and
+elapsed time on the busy button.
+
 ## What works now (things)
 
 * **Selection**: click in the viewport (CPU ray against every instance's real

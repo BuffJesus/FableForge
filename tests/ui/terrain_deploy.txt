@@ -15,6 +15,8 @@ terrain_stroke 48 96 1
 frames 2
 assert_state terrain_dirty 1
 deploy_terrain
+frames 12
+screenshot build/ui/td_progress.png
 wait_terrain
 frames 3
 assert_state terrain_dirty 0

@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -213,7 +214,8 @@ public:
     // `library` (the install's ENGINE_THEME defs) is needed when themes were
     // painted: the layer meshes are regenerated from the LEV themes then.
     bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
-                       const forge::terraintex::ThemeLibrary* library = nullptr);
+                       const forge::terraintex::ThemeLibrary* library = nullptr,
+                       const std::function<void(const std::string&)>& progress = {});
     // Writes the loose .lev. Cells whose walkable byte changed since the
     // navigation was last consistent get the retail CNavQuadTree patched in
     // place (only those cells; door nodes, stacked layers and the rest of the

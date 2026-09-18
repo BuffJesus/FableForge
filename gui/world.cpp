@@ -168,9 +168,11 @@ void App::worldApply() {
     const int feather = worldStitchFeather_;
     worldUndo_.clear(); worldRedo_.clear();
     pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
-    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees, stitch, feather]() {
+    beginJob();
+    const editor::ProgressFn progress = jobProgress();
+    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees, stitch, feather, progress]() {
         WorldJob r;
-        r.ok = editor::applyWorldEdits(root, moves, owners, sees, r.notes, r.error);
+        r.ok = editor::applyWorldEdits(root, moves, owners, sees, r.notes, r.error, progress);
         if (r.ok && stitch) {
             // every moved map's seams at its new placement: shared-edge heights
             // averaged into both LEVs, both chunks re-baked
@@ -534,7 +536,7 @@ void App::drawWorldFooter(float pad, float inner) {
     using theme::S;
     ImGui::SetCursorPosX(pad);
     if (worldFuture_.valid()) {
-        theme::primaryButton("Moving maps...", ImVec2(inner, S(42)), false);
+        theme::primaryButton(jobLabel(worldPending_.empty() ? "Writing" : "Moving").c_str(), ImVec2(inner, S(42)), false);
         return;
     }
     const bool any = worldPendingCount() > 0;

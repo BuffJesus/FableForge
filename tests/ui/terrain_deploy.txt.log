@@ -12,6 +12,9 @@ ok   terrain_stroke 48 96 1
 ok   frames 2
 ok   assert_state terrain_dirty 1
 ..   deploy_terrain
+ok   frames 12
+ok   screenshot build/ui/td_progress.png
+shot build/ui/td_progress.png
 ok   wait_terrain
 ok   frames 3
 ok   assert_state terrain_dirty 0

@@ -4,6 +4,7 @@
 // (install scan, texture context, preview bake, export) runs on worker threads
 // and lands on the main thread through futures polled every frame.
 
+#include <algorithm>
 #include <cmath>
 #include <atomic>
 #include <chrono>
@@ -247,6 +248,16 @@ private:
     int selectedThing_ = -1;
     uint64_t selectedUid_ = 0;
     int gizmoOp_ = 1;            // 0 select, 1 move, 2 rotate, 3 scale
+    // Edit panel sub-tabs (0.15b #1): 0 Objects (selection / list / add), 1 Terrain (brush +
+    // paint), 2 Actors (village / spawner / live link), 3 Level (new level). The Terrain tab
+    // and the terrain tool follow each other; actions raise the tab that owns their card so
+    // a result (and its engine-rule notice) is on screen. Remembered in settings.json.
+    int editTab_ = 0;
+    int lastGizmoOp_ = -1;
+public:
+    void setEditTab(int tab) { editTab_ = std::clamp(tab, 0, 3); if (editTab_ == 1 && doc_.hasTerrain()) gizmoOp_ = 4; else if (editTab_ != 1 && gizmoOp_ == 4) gizmoOp_ = 1; lastGizmoOp_ = gizmoOp_; }
+    int editTab() const { return editTab_; }
+private:
     bool gizmoSnap_ = false;
     bool gizmoWasUsing_ = false;
     editor::Frame gizmoFrame_;   // frame while dragging
@@ -422,6 +433,20 @@ private:
     void drawUnsavedPrompt();
     bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
+    // Toasts (0.15b #2): every warning / error / success log line also surfaces in the
+    // viewport's top-right corner for a few seconds, so a job's result is seen without
+    // reading the Activity log. Info lines (level 0) stay in the log only.
+    struct Toast { int level; std::string text; float at; };
+    // The long jobs (new level, terrain deploy, world apply) report their stage from
+    // their thread; the busy button shows it with the elapsed time.
+    mutable std::mutex jobMutex_;
+    std::string jobStage_;
+    float jobStart_ = 0;
+    void beginJob() { std::lock_guard<std::mutex> l(jobMutex_); jobStage_ = "starting"; jobStart_ = time_; }
+    editor::ProgressFn jobProgress() { return [this](const std::string& s) { std::lock_guard<std::mutex> l(jobMutex_); jobStage_ = s; }; }
+    std::string jobLabel(const char* verb) const;   // "<verb>: <stage>  (12 s)"
+    std::vector<Toast> toasts_;
+    void drawToasts(const ImVec2& origin, const ImVec2& size);
 
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;

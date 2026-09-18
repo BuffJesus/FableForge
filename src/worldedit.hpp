@@ -6,6 +6,7 @@
 // the re-bake, the .atlas-orig backups and the donor lookup.
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -46,7 +47,13 @@ struct ReusableRegion { int slot = 0; std::string name; int maps = 0; };
 // by map count; the first is the suggested victim, the last the merge target.
 std::vector<ReusableRegion> reusableRegions(const std::filesystem::path& gameRoot, std::string& error);
 
+// Called from the job's thread at each stage boundary with a short label
+// ("baking the minimap", "writing FinalAlbion.wad"); the GUI shows it on the
+// busy button. Optional everywhere.
+using ProgressFn = std::function<void(const std::string&)>;   // (also declared in overworld.hpp; identical)
+
 struct NewLevelRequest {
+    ProgressFn progress;
     std::string donor;          // existing level (stem)
     std::string name;           // new level stem: letters, digits, '_'
     std::string hostRegion;     // existing region to own the map; "" = a dedicated region (complete on a new game)
@@ -70,6 +77,7 @@ struct NewLevelResult {
 // ("" = the first retail map of that size); the ground theme is one of that
 // palette's slots.
 struct BlankLevelRequest {
+    ProgressFn progress;
     std::string name;
     std::string hostRegion;
     int worldX = 0, worldY = 0;

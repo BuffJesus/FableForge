@@ -9,8 +9,17 @@ ok   frames 2
 ok   assert_state edit_mode 1
 ok   assert_state doc_loaded 1
 ok   assert_widget seg_gizmo
+ok   assert_widget seg_edit_tab
 ok   assert_widget btn_save
 ok   assert_widget btn_deploy
+ok   assert_state edit_tab 0
+ok   edit_tab 1
+ok   frames 1
+ok   assert_state gizmo 4
+ok   assert_widget seg_terrain_mode
+ok   edit_tab 0
+ok   frames 1
+ok   assert_state gizmo 1
 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
 ok   frames 2
 ok   frame_selected
@@ -73,6 +82,7 @@ ok   place_spawner 15 4 WASPS_01 AtlasSpawnerRule
 ok   wait_foliage
 ok   frames 2
 ok   assert_state rule_notice spawner
+ok   assert_state edit_tab 2
 ok   assert_widget btn_rule_spawner
 ok   screenshot build/ui/e4b_rule_notice.png
 shot build/ui/e4b_rule_notice.png
@@ -219,12 +229,14 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=462 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=467 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
      mode=Textured
      rule_notice=spawner
+     edit_tab=1
+     toasts=1
      export_ok=0
      export_path=
      format=glb
@@ -256,6 +268,8 @@ ok   set unsaved_prompt 0
      world_selected=
      world_pending=0
      world_pending_owners=0
+     world_can_undo=0
+     world_can_redo=0
      world_pending_sees=0
      world_ok=0
      world_stitch=0

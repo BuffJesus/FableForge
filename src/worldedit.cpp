@@ -109,6 +109,8 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();   // Atlas keeps its own .atlas-orig copies
+        const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
+        stage("reading the donor level");
 
         // the donor's current bytes (loose edits included) become the new level's
         const auto wad = forge::wad::Archive::open(wadPath);
@@ -116,11 +118,13 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.tngBytes = levelBytes(gameRoot, wad, req.donor, ".tng");
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
+            stage("baking the minimap into textures.big");
             if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, out.notes, error)) return false;
             ir.minimapGraphic = entry;
         }
 
         if (req.rebakeChunk) {
+            stage("translating the terrain chunk");
             // re-bake the donor's terrain chunk for the new origin: same LEV, no
             // neighbours (the copy stands alone), every shared-edge sample clamps locally
             const auto archive = forge::stb::Archive::open(stbPath);
@@ -156,10 +160,12 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
             if (!backupOnce(levels / f, error)) return false;
         for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
+        stage("installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
+        stage("registering the region");
         if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
@@ -465,6 +471,8 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
                 if (s.width == req.width && s.height == req.height) { templateLevel = s.templateLevel; break; }
             if (templateLevel.empty()) { error = "no retail map is " + std::to_string(req.width) + "x" + std::to_string(req.height) + " (a template LEV of that size is needed)"; return false; }
         }
+        const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
+        stage("authoring the level from the " + templateLevel + " skeleton");
         const auto wad = forge::wad::Archive::open(levels / "FinalAlbion.wad");
         const auto templateBytes = levelBytes(gameRoot, wad, templateLevel, ".lev");
         const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "newlevel";
@@ -501,6 +509,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
             if (rebased) out.notes.push_back("palette: " + std::to_string(rebased) + " theme slot(s) rebased to this install's game.bin");
         }
         lev.save(levTmp);
+        stage("building the navigation tree");
         // navigation: a fresh single-layer tree over the (all walkable) cells
         {
             const auto saved = forge::lev::File::open(levTmp);
@@ -510,6 +519,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         }
         lev = forge::lev::File::open(levTmp);
 
+        stage("baking the terrain chunk");
         // terrain chunk from scratch: LEV heights + palette materials, a solid distant-LOD colour
         const auto heightfield = forge::terrain::Heightfield::fromLev(lev);
         auto themeMaterials = forge::terraintex::paletteMaterials(lev, library);
@@ -558,6 +568,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
             if (!backupOnce(levels / f, error)) return false;
         for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
+        stage("installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
