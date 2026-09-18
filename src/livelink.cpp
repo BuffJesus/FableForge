@@ -56,6 +56,13 @@ function AtlasLink(questObject)
                             Q:GoToMapSlotRetailTransition(t.slot, t.x, t.y, z + 0.5)
                             return "transition to slot " .. tostring(t.slot)
                         end
+                    elseif t.cmd == "reload" then
+                        -- a retail region transition into the hero's own map re-streams
+                        -- the region: edited .lev/.wad/.stb data comes in
+                        local z = 0
+                        pcall(function() z = Q:GetGroundHeightAt(t.x, t.y) end)
+                        Q:GoToMapSlotRetailTransition(t.slot, t.x, t.y, z + 0.5)
+                        return "reloading slot " .. tostring(t.slot)
                     elseif t.cmd == "spawn" then
                         local z = 0
                         pcall(function() z = Q:GetGroundHeightAt(t.x, t.y) end)
@@ -177,6 +184,12 @@ uint64_t sendSpawn(const fs::path& root, const std::string& definition, float x,
 }
 
 uint64_t sendPing(const fs::path& root, std::string& error) { return send(root, "cmd = \"ping\"", error); }
+
+uint64_t sendReload(const fs::path& root, int mapSlot, float x, float y, std::string& error) {
+    char buf[160];
+    std::snprintf(buf, sizeof buf, "cmd = \"reload\", slot = %d, x = %.3f, y = %.3f", mapSlot, x, y);
+    return send(root, buf, error);
+}
 
 Status poll(const fs::path& root) {
     static std::string lastBeat;

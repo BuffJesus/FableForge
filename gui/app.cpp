@@ -1640,6 +1640,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "link_remove") { if (!app.linkRemove()) fail("link_remove failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_go") { if (!app.linkGoHere()) fail("link_go failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_spawn") { if (!app.linkSpawnSelected()) fail("link_spawn failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_reload") { if (!app.linkReload()) fail("link_reload failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_ping") { if (!app.linkPing()) fail("link_ping failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_poll") { app.linkPoll(true); note("ok   " + line); ++pc_; }
     else if (cmd == "place_village") {   // place_village <VILLAGE_DEF> [scriptname]

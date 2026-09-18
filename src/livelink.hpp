@@ -24,6 +24,9 @@ bool remove(const std::filesystem::path& gameRoot, std::string& error, const std
 uint64_t sendTeleport(const std::filesystem::path& gameRoot, int mapSlot, const std::string& mapName, float x, float y, std::string& error);
 uint64_t sendSpawn(const std::filesystem::path& gameRoot, const std::string& definition, float x, float y, const std::string& scriptName, std::string& error);
 uint64_t sendPing(const std::filesystem::path& gameRoot, std::string& error);
+// Re-stream the region the hero is in (a retail transition into `mapSlot` at
+// x, y): the way to see a deployed edit without restarting the game.
+uint64_t sendReload(const std::filesystem::path& gameRoot, int mapSlot, float x, float y, std::string& error);
 
 struct Status {
     bool logSeen = false;        // the FSE log exists

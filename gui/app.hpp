@@ -295,6 +295,7 @@ public:
     bool linkGoHere();                     // teleport the hero to the camera focus (transition when in another map)
     bool linkSpawnSelected();              // spawn the selected creature at its position
     bool linkPing();
+    bool linkReload();                     // re-stream the hero's region (he must be in this map)
     void linkPoll(bool force = false);
     const livelink::Status& linkStatus() const { return link_; }
 private:

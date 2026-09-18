@@ -1,0 +1,7 @@
+# Live-install probe part A (before the game starts): install the link.
+wait_maps
+wait_ready
+link_install
+frames 1
+assert_state link_installed 1
+quit

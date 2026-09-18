@@ -1,0 +1,25 @@
+# Live-install probe part B (while the adult hero stands in GreatwoodTeleport at local (107,56)):
+# raise a hill under him, deploy it, reload the region through the link; the heartbeat must show him higher.
+wait_maps
+wait_ready
+select GreatwoodTeleport
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+link_poll
+assert_state link_hero_map GreatwoodTeleport
+terrain_mode 0
+brush 10 6
+terrain_stroke 107 56 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 2
+assert_state terrain_dirty 0
+link_reload
+frames 1
+link_remove
+frames 1
+quit

@@ -616,6 +616,19 @@ bool App::linkSpawnSelected() {
     return true;
 }
 
+bool App::linkReload() {
+    if (!documentLoaded()) { pushLog("live link: no level document", 1); return false; }
+    linkPoll(true);
+    if (link_.heartbeatAge < 0 || link_.heartbeatAge > 5.0) { pushLog("live link: the game is not live", 1); return false; }
+    if (link_.heroMap != doc_.mapName()) { pushLog("live link: the hero is in " + link_.heroMap + ", not " + doc_.mapName() + " -- use Go here first", 1); return false; }
+    if (!doc_.worldSlot()) { pushLog("live link: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
+    std::string err;
+    linkLastSent_ = livelink::sendReload(installPath_, doc_.worldSlot(), link_.heroX, link_.heroY, err);
+    if (!linkLastSent_) { pushLog("live link: " + err, 2); return false; }
+    pushLog("live link: reloading " + doc_.mapName() + " around the hero", 0);
+    return true;
+}
+
 bool App::linkPing() {
     std::string err;
     linkLastSent_ = livelink::sendPing(installPath_, err);
@@ -648,6 +661,9 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Spawn selected creature", ImVec2(half, S(28)))) linkSpawnSelected();
         auto_.registerWidget("btn_link_spawn");
+        if (theme::ghostButton("Reload the region in game", ImVec2(cardInner, S(28)))) linkReload();
+        auto_.registerWidget("btn_link_reload");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("After a save/deploy: a retail transition into the hero's own map re-streams the region,\nso the edited terrain, objects and textures appear without restarting the game.");
         ImGui::Checkbox("Camera follows the hero", &linkFollow_);
         auto_.registerWidget("chk_link_follow");
         if (theme::ghostButton("Remove the hook", ImVec2(cardInner, S(24)))) linkRemove();
