@@ -1,5 +1,35 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+## Resume here (2026-09-17 night)
+
+Where we are: **0.14 "runs anywhere" is 2/4 done, 0.15 "can't hurt you" is 1/4 done**,
+all on `main` (last commit `c44ea35`, everything builds, `check_all` green as of the
+0.13.1 package; the backups/setup commits were smoke-tested, not full-suited).
+
+Done today after the plan was approved:
+- Native texture importer (forgecore `texturewrite`, FableForge `b7ea3c8`; Atlas synced) --
+  no Python anywhere in the app; checker theme verified in-game through it.
+- Setup panel (first run / status click): install health + engine rules; GOG/Steam
+  candidates on C..H (FableForge `env.cpp`).
+- `.github/workflows/ci.yml` (MSYS2 MinGW build + offline checks) -- needs the public
+  remote to run.
+- Backup manager: `AlbionAtlas backups` / `restore`, Setup-panel list + restore,
+  `.atlas-created` marker for new loose TNGs.
+
+Next in order:
+1. `python tools/check_all.py` (the last two commits were only smoke-tested).
+2. 0.14 #3/#4: create the public GitHub repo (user), push, see CI go green; then the
+   forgecore un-vendoring -- **needs the user to triage FableForge's ~100 uncommitted
+   files first** (`git -C D:\Code\FableForge status`).
+3. 0.15 #2 engine-rule prompts at the point of action (new region -> "start a new game",
+   creature/spawner -> "fresh game / adult hero"), #3 undo for palette + region edits,
+   #4 rename "Save .tng (loose file)" -> "Save draft" with the WAD write as primary.
+4. Then 0.15b UI/UX (panel sub-tabs, toasts, overlays) and 0.16 depth.
+
+Install state: retail (`AlbionAtlas backups` -> 9 backed-up files, 0 differ). Saves:
+`0atlas` and `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is
+the adult save (`--save-from Cornelio`). FSE has no Atlas hook installed.
+
 ## Context
 
 Albion Atlas (`D:\Code\AlbionAtlas`, v0.13.1, no public remote, no CI) started as a map

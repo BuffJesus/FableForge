@@ -5,7 +5,7 @@ from here. Evidence lines cite the retail/debug binaries (`Fable.exe`
 addresses; `FableWin.exe` = the leaked debug editor with PDB names) or an
 in-game harness run (`tools/ingame`).
 
-## State (v0.13.0, all in-game verified)
+## State (v0.13.1 + 0.14 work in progress -- see docs/ROADMAP_1.0.md "Resume here")
 
 | Capability | Status |
 |---|---|
