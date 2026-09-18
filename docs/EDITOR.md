@@ -500,8 +500,11 @@ region + minimap" toggle / `--own-region [<filler>] [--merge-into <filler>]
    **replaces an unreferenced retail `MINIMAP_*` slot** (retail ships a few
    that no region uses, e.g. `MINIMAP_PRISONCOURTYARD2`): an entry *appended*
    past the retail ids crashed the game at start-up (the engine indexes
-   `GBANK_MAIN_PC` by a fixed-size table). The encoder is FableTLC's
-   `texture_build.py` through forgecore's import driver.
+   `GBANK_MAIN_PC` by a fixed-size table; superseded 2026-09-17: appended
+   entries work once the mip-0 chunk header uses the escape form). Since
+   2026-09-17 the encoder is forgecore's own `texturewrite` (DXT1/DXT3/ARGB,
+   mips, chunked LZO, Info, bank splice) -- no Python or FableTLC checkout is
+   needed any more; stb_image reads the PNG.
 
 **In-game verified** (2026-09-16): `AtlasOwn` (own region over slot 73,
 `MINIMAP_PRISONCOURTYARD2` replaced) reached with `--transition`; the minimap

@@ -13,6 +13,7 @@
 #include "forge/big.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/lzo.hpp"
+#include "forge/texturewrite.hpp"
 
 namespace fs = std::filesystem;
 
@@ -59,35 +60,7 @@ int32_t fieldInt32(const defdecode::Decoded& decoded, std::string_view name,
     return 0;
 }
 
-// Run a command, capturing combined stdout/stderr. Kept deliberately simple:
-// the only external process forge launches here is the python texture writer.
-int runCommand(const std::string& command, std::string& output) {
-    fs::path logPath;
-    {
-        std::error_code ec;
-        const fs::path base = fs::temp_directory_path(ec);
-        logPath = (ec ? fs::path(".") : base) /
-                  ("forge_texture_import_" + std::to_string(std::rand()) + ".log");
-    }
-    std::string full = command + " > \"" + logPath.string() + "\" 2>&1";
-#ifdef _WIN32
-    // cmd.exe strips the outer pair of quotes from the whole command line.
-    full = "\"" + full + "\"";
-#endif
-    const int rc = std::system(full.c_str());
-    std::ifstream log(logPath, std::ios::binary);
-    if (log) {
-        std::ostringstream ss;
-        ss << log.rdbuf();
-        output = ss.str();
-    }
-    log.close();
-    std::error_code ec;
-    fs::remove(logPath, ec);
-    return rc;
-}
 
-std::string quoted(const fs::path& p) { return "\"" + p.string() + "\""; }
 
 } // namespace
 
@@ -490,24 +463,6 @@ std::vector<terrain::TerrainThemeMaterial> paletteMaterials(
     return materials;
 }
 
-// ------------------------------------------------------------ import driver
-fs::path findTextureBuilder(const fs::path& toolsDir) {
-    std::vector<fs::path> candidates;
-    if (!toolsDir.empty()) {
-        candidates.push_back(toolsDir / "texture_build.py");
-        candidates.push_back(toolsDir);
-    }
-    if (const char* env = std::getenv("FABLETLC_TOOLS"))
-        candidates.push_back(fs::path(env) / "texture_build.py");
-    if (const char* env = std::getenv("FABLETLC_ROOT"))
-        candidates.push_back(fs::path(env) / "tools" / "texture_build.py");
-    candidates.push_back(fs::path("D:/Documents/FableTLC/tools/texture_build.py"));
-    for (const auto& c : candidates) {
-        std::error_code ec;
-        if (fs::is_regular_file(c, ec)) return c;
-    }
-    return {};
-}
 
 TextureValidation validateBigEntry(const fs::path& bigPath,
                                    std::string_view entryName,
@@ -529,35 +484,81 @@ TextureValidation validateBigEntry(const fs::path& bigPath,
 }
 
 ImportResult importPng(const ImportRequest& request) {
+    // Native path (2026-09-17): no Python. The Fable entry is built by
+    // texturewrite (DXT1/DXT3/ARGB, mips, chunked-LZO mip 0, 34-byte Info) and
+    // spliced into a copy of the bank through big::File::serialize().
     ImportResult result;
-    const fs::path builder = findTextureBuilder(request.toolsDir);
-    if (builder.empty()) {
-        result.validation.errors.push_back(
-            "texture_build.py not found (pass --tools <dir> or set FABLETLC_TOOLS)");
-        return result;
-    }
-    const fs::path python = request.python.empty() ? fs::path("python") : request.python;
-
-    std::ostringstream cmd;
-    cmd << quoted(python) << " " << quoted(builder) << " "
-        << (request.add ? "add " : "replace ") << quoted(request.srcBig) << " "
-        << quoted(request.outBig) << " ";
-    if (request.add) cmd << request.subBank << " ";
-    cmd << request.entryName << " " << quoted(request.png)
-        << " --format " << request.format;
-    if (request.add && !request.dims.empty()) cmd << " --dims " << request.dims;
-    if (request.rawMip0) cmd << " --raw-mip0";
-    result.command = cmd.str();
-
-    result.exitCode = runCommand(result.command, result.output);
+    auto fail = [&](const std::string& why) { result.validation.errors.push_back(why); return result; };
+    std::string err;
+    texturewrite::Image img = texturewrite::loadImage(request.png.string(), err);
+    if (img.rgba.empty()) return fail(err);
+    const int realW = img.width, realH = img.height;
     std::error_code ec;
-    if (result.exitCode != 0 || !fs::is_regular_file(request.outBig, ec)) {
-        result.validation.errors.push_back("texture_build.py failed (exit " +
-                                           std::to_string(result.exitCode) + ")");
-        return result;
+    if (!fs::is_regular_file(request.srcBig, ec)) return fail("no such bank " + request.srcBig.string());
+    big::File file = big::File::open(request.srcBig);
+    big::Bank* bank = nullptr;
+    big::Entry* target = nullptr;
+    for (auto& b : file.banks()) {
+        for (auto& e : b.entries)
+            if (e.name == request.entryName) { bank = &b; target = &e; break; }
+        if (target) break;
     }
-    result.validation = validateBigEntry(request.outBig, request.entryName,
-                                         &result.bankName, &result.entryId);
+    uint32_t format = texturewrite::formatByName(request.format);
+    int allocW = 0, allocH = 0;
+    if (request.add) {
+        if (target) return fail("entry " + request.entryName + " already exists in " + bank->name + " (replace it instead)");
+        bank = file.findBank(request.subBank);
+        if (!bank) return fail("bank " + request.subBank + " not found in " + request.srcBig.string());
+        if (bank->entries.empty()) return fail("bank " + request.subBank + " is empty; nothing to model the new record on");
+        if (!format) return fail("unknown texture format '" + request.format + "' (dxt1 | dxt3 | argb8888)");
+        if (!request.dims.empty()) {
+            if (std::sscanf(request.dims.c_str(), "%dx%d", &allocW, &allocH) != 2 || allocW <= 0 || allocH <= 0) return fail("bad --dims " + request.dims);
+        } else {
+            for (allocW = 1; allocW < realW; allocW <<= 1) {}
+            for (allocH = 1; allocH < realH; allocH <<= 1) {}
+        }
+    } else {
+        if (!target) return fail("entry " + request.entryName + " not found in " + request.srcBig.string());
+        TextureInfo info;
+        if (!parseTextureInfo(target->subHeader.data(), target->subHeader.size(), info, err)) return fail(request.entryName + ": " + err);
+        allocW = info.allocWidth; allocH = info.allocHeight;   // the slot keeps its allocated size
+        if (!format) format = info.pixelFormat & 0xFF;
+        if (format != texturewrite::kFormatDXT1 && format != texturewrite::kFormatDXT3 && format != texturewrite::kFormatARGB)
+            return fail(request.entryName + " uses pixel format " + std::to_string(format) + ", which this writer cannot encode");
+    }
+    img = texturewrite::resample(img, allocW, allocH);
+    const texturewrite::Entry built = texturewrite::buildEntry(img, format, realW, realH, !request.rawMip0);
+    if (request.add) {
+        big::Entry e;
+        const big::Entry& model = bank->entries.back();
+        e.magic = model.magic; e.type = model.type; e.devFileType = model.devFileType;
+        uint32_t maxId = 0;
+        for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
+        e.id = maxId + 1;
+        e.name = request.entryName;
+        e.subHeader = built.info;
+        e.data = built.payload;
+        e.length = uint32_t(built.payload.size());
+        bank->entries.push_back(std::move(e));
+        target = &bank->entries.back();
+    } else {
+        target->subHeader = built.info;
+        target->data = built.payload;
+        target->length = uint32_t(built.payload.size());
+    }
+    result.entryId = target->id;
+    result.bankName = bank->name;
+    const auto bytes = file.serialize();
+    {
+        std::ofstream out(request.outBig, std::ios::binary | std::ios::trunc);
+        if (!out) return fail("cannot write " + request.outBig.string());
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        if (!out) return fail("write to " + request.outBig.string() + " failed");
+    }
+    result.command = std::string("native texturewrite: ") + (request.add ? "add " : "replace ") + request.entryName + " " +
+                     std::to_string(allocW) + "x" + std::to_string(allocH) + " fmt " + std::to_string(format) + " mips " + std::to_string(built.mips);
+    result.exitCode = 0;
+    result.validation = validateBigEntry(request.outBig, request.entryName, &result.bankName, &result.entryId);
     result.ok = result.validation.ok;
     return result;
 }

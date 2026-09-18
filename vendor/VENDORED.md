@@ -4,8 +4,9 @@
 Full copy of the FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/
 STB bake/nav/world workspace/defs/quests), synced from `D:\Code\FableForge`
 with `python tools/sync_forgecore.py` (`--check` reports drift). Last synced
-at commit `c17f6e1` (working tree, uncommitted forgecore changes)
-Skipped: `audio.*` (miniaudio). Fixes made here are upstreamed to FableForge
+at commit `7494b03` (working tree, uncommitted forgecore changes)
+Skipped: `audio.*` (miniaudio). `vendor/third_party/stb/stb_image.h` (public
+domain) is forgecore's PNG reader for the native texture importer. Fixes made here are upstreamed to FableForge
 first, then re-synced, so the copy stays byte-identical except for:
 * `src/lzo.cpp` — the only local override: `forge::lzo` backed by the
   clean-room MIT LZO1X codec in `src/lzo1x.*` (decoder + optimal-parse

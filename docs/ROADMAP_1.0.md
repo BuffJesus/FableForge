@@ -88,7 +88,9 @@ the in-game probes it touches re-run (documented in the release notes). Order ch
 Python), then safety, then depth.
 
 ### 0.14 — "Runs anywhere" (portability)
-1. **Native texture importer** replacing the Python shell-out. Pieces already in tree:
+1. ~~**Native texture importer** replacing the Python shell-out.~~ DONE 2026-09-17
+   (forgecore `texturewrite`, upstream `b7ea3c8`; validated against the Python
+   reference and in-game). Remaining text kept for the record. Pieces already in tree:
    `src/dxt1.hpp` (DXT1 encode), `src/lzo1x.cpp` (LZO1X encoder incl. the engine-safe
    M2/M3/M4 rule), `forge::big` (reader with `Entry::data` writer field). To write:
    - DXT3 encoder (minimaps use DXT3; ~80 lines next to dxt1),

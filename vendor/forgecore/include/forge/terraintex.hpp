@@ -175,8 +175,9 @@ struct ImportRequest {
     // (the engine needs the 0xFFFF+u32 escape for >= 64 KiB raw chunks, fixed
     // in lionhead_lz_compress.py), not the LZO stream itself.
     bool rawMip0 = false;
-    std::filesystem::path python;          // default: "python"
-    std::filesystem::path toolsDir;        // dir holding texture_build.py
+    // kept for source compatibility; the import is native since 2026-09-17
+    std::filesystem::path python;
+    std::filesystem::path toolsDir;
 };
 
 struct ImportResult {
