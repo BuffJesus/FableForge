@@ -242,6 +242,62 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
     return true;
 }
 
+bool setRegionProperties(const fs::path& gameRoot, const std::string& region, const RegionProps& props,
+                         std::vector<std::string>& notes, std::string& error) {
+    try {
+        const fs::path levels = gameRoot / "data" / "Levels";
+        const fs::path wldPath = levels / "FinalAlbion.wld", bwdPath = levels / "FinalAlbion.bwd";
+        const fs::path mirrors[] = {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"};
+        auto wld = forge::wld::File::parse(wldPath);
+        const forge::wld::Region* r = wld.findRegion(region);
+        if (!r) { error = "unknown region " + region; return false; }
+        auto bwd = forge::bwd::File::parse(bwdPath);
+        if (r->index < 1 || size_t(r->index) > bwd.regions().size()) { error = region + ": BWD has no region slot " + std::to_string(r->index); return false; }
+        for (const fs::path& f : {wldPath, bwdPath}) if (!backupOnce(f, error)) return false;
+        for (const fs::path& m : mirrors) if (fs::exists(m) && !backupOnce(m, error)) return false;
+        // WLD: replace/insert the lines inside this region's block (retail order:
+        // RegionName, NewDisplayName, RegionDef, [AppearOnWorldMap;], [MiniMapGraphic X;], MiniMapScale ...)
+        const auto raw = readFile(wldPath); std::string text(raw.begin(), raw.end());
+        const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+        std::vector<std::string> lines;
+        for (size_t q = 0, e; q < text.size(); q = e + 1) { e = text.find('\n', q); if (e == std::string::npos) e = text.size() - 1; lines.push_back(text.substr(q, e - q + 1)); }
+        auto trimmed = [](const std::string& l) { size_t a = l.find_first_not_of(" \t\r\n"), b = l.find_last_not_of(" \t\r\n"); return a == std::string::npos ? std::string() : l.substr(a, b - a + 1); };
+        int active = -1; size_t blockStart = SIZE_MAX, blockEnd = SIZE_MAX;
+        for (size_t i = 0; i < lines.size(); ++i) {
+            const std::string tl = trimmed(lines[i]);
+            if (tl.rfind("NewRegion", 0) == 0) { active = std::atoi(tl.c_str() + 9); if (active == r->index) blockStart = i; continue; }
+            if (active == r->index && tl == "EndRegion;") { blockEnd = i; break; }
+        }
+        if (blockStart == SIZE_MAX || blockEnd == SIZE_MAX) { error = region + ": WLD block not found"; return false; }
+        auto setLine = [&](const std::string& key, const std::string& value, const char* afterKey) {
+            // value empty = remove the line (flags); otherwise replace or insert after `afterKey`
+            for (size_t i = blockStart + 1; i < blockEnd; ++i)
+                if (trimmed(lines[i]).rfind(key, 0) == 0 && (trimmed(lines[i]).size() == key.size() || trimmed(lines[i])[key.size()] == ' ' || trimmed(lines[i])[key.size()] == ';')) {
+                    if (value.empty()) { lines.erase(lines.begin() + std::ptrdiff_t(i)); --blockEnd; }
+                    else lines[i] = value + eol;
+                    return;
+                }
+            if (value.empty()) return;
+            size_t at = blockEnd;
+            for (size_t i = blockStart + 1; i < blockEnd; ++i) if (trimmed(lines[i]).rfind(afterKey, 0) == 0) at = i + 1;
+            lines.insert(lines.begin() + std::ptrdiff_t(at), value + eol);
+            ++blockEnd;
+        };
+        auto& br = bwd.regions()[size_t(r->index - 1)];
+        if (!props.displayName.empty()) { setLine("NewDisplayName", "NewDisplayName \"" + props.displayName + "\";", "RegionName"); br.displayName = props.displayName; notes.push_back(region + ": display name " + props.displayName); }
+        if (!props.regionDef.empty()) { setLine("RegionDef", "RegionDef \"" + props.regionDef + "\";", "NewDisplayName"); br.regionDef = props.regionDef; notes.push_back(region + ": RegionDef " + props.regionDef); }
+        if (props.onWorldMap >= 0) { setLine("AppearOnWorldMap", props.onWorldMap ? "AppearOnWorldMap;" : "", "RegionDef"); br.onWorldMap = uint8_t(props.onWorldMap); notes.push_back(region + (props.onWorldMap ? ": appears on the world map" : ": hidden from the world map")); }
+        if (!props.minimapGraphic.empty()) { setLine("MiniMapGraphic", "MiniMapGraphic " + props.minimapGraphic + ";", props.onWorldMap > 0 || r->appearOnWorldMap ? "AppearOnWorldMap" : "RegionDef"); br.minimapGraphic = props.minimapGraphic; notes.push_back(region + ": minimap " + props.minimapGraphic); }
+        std::string out;
+        for (const auto& l : lines) out += l;
+        writeFile(wldPath, out.data(), out.size());
+        bwd.write(bwdPath);
+        for (const auto& m : mirrors) if (fs::exists(m)) bwd.write(m);
+        notes.push_back("FinalAlbion.wld + FinalAlbion.bwd (3 copies) updated");
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
 bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves,
                      const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& seesEdits,
                      std::vector<std::string>& notes, std::string& error) {

@@ -84,6 +84,20 @@ struct SeesEdit { std::string region, map; bool sees = true; };
 bool applyWorldEdits(const std::filesystem::path& gameRoot, const std::vector<MapMove>& moves,
                      const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& sees,
                      std::vector<std::string>& notes, std::string& error);
+// Region properties the engine reads from the BWD record (mirrored into the
+// WLD text so the two stay in step): the REGION_* def (atmosphere, name text,
+// creature generation -- an empty one loads but names the region "" and draws
+// the ground unlit white), the MINIMAP_* graphic and the world-map flag.
+// Empty strings leave a field alone.
+struct RegionProps {
+    std::string regionDef;        // e.g. REGION_GREATWOOD_TELEPORT
+    std::string minimapGraphic;   // e.g. MINIMAP_GREATWOOD
+    std::string displayName;      // TXT_... key or plain text
+    int onWorldMap = -1;          // 0/1, -1 = keep
+};
+bool setRegionProperties(const std::filesystem::path& gameRoot, const std::string& region, const RegionProps& props,
+                         std::vector<std::string>& notes, std::string& error);
+
 inline bool applyMoves(const std::filesystem::path& gameRoot, const std::vector<MapMove>& moves,
                        std::vector<std::string>& notes, std::string& error) {
     return applyWorldEdits(gameRoot, moves, {}, {}, notes, error);

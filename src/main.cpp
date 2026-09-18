@@ -70,6 +70,7 @@ int usage() {
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
+        "  AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
         "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
         "      (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)\n"
         "\n"
@@ -320,6 +321,24 @@ int main(int argc, char** argv) {
         if (!albion::editor::createLevelFromDonor(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
+    if (cmd == "region-props") {   // region-props <region> [--def REGION_X] [--minimap MINIMAP_X] [--display NAME] [--worldmap 0|1] [--install root]
+        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_GRAPHIC>] [--display <name>] [--worldmap 0|1] [--install <root>]\n"); return 2; }
+        std::string installArg; albion::editor::RegionProps props;
+        for (size_t i = 2; i + 1 < args.size(); i += 2) {
+            if (args[i] == "--install") installArg = args[i + 1];
+            else if (args[i] == "--def") props.regionDef = args[i + 1];
+            else if (args[i] == "--minimap") props.minimapGraphic = args[i + 1];
+            else if (args[i] == "--display") props.displayName = args[i + 1];
+            else if (args[i] == "--worldmap") props.onWorldMap = std::atoi(args[i + 1].c_str());
+            else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        std::vector<std::string> notes; std::string err;
+        if (!albion::editor::setRegionProperties(install.root, args[1], props, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        for (const auto& n : notes) std::printf("  %s\n", n.c_str());
         return 0;
     }
     if (cmd == "theme-add") {   // theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]: a ground theme from your own texture
