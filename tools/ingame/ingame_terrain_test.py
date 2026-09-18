@@ -321,6 +321,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
+    ap.add_argument("--save-from", default="", help="continue from another profile's AutoSave (e.g. Cornelio = an adult hero in GreatwoodTeleport): copied into --save-dir for the run, put back afterwards")
+    ap.add_argument("--save-dir", default="1234234", help="the profile folder the game actually loads for '0atlas' (its Profile.bin names profile 1234234, so Continue Game reads 1234234/AutoSave, not 0atlas/)")
     ap.add_argument("--activate-quests", default="", help="comma-separated quest names the probe activates (ActivateMultipleQuestsWithoutLoadingResources) before the walk, e.g. CreatureGenerators")
     ap.add_argument("--enable-gen", default="", help="region name: the probe calls SetCreatureGeneratorsEnabled(region, true) before the walk")
     ap.add_argument("--walk", default="", help="map-local x,y the hero walks to after the teleport (before the --creatures listing)")
@@ -406,6 +408,17 @@ def main() -> int:
         log.write_text("", encoding="utf-8")
 
     result = {"map": a.map, "placement": [mx, my], "points": len(pts), "ok": False, "mismatches": [], "notes": []}
+    save_swapped = []   # (path, original bytes or None)
+    if a.save_from and not a.new_game:
+        src_dir, dst_dir = saves_root / a.save_from, saves_root / a.save_dir
+        if not (src_dir / "AutoSave").exists():
+            print(f"no AutoSave in profile {src_dir}", file=sys.stderr)
+            return 2
+        for name in ("AutoSave", "AutoSave.qs", "AutoSave.qs.hs"):
+            dst = dst_dir / name
+            save_swapped.append((dst, dst.read_bytes() if dst.exists() else None))
+            shutil.copyfile(src_dir / "AutoSave", dst)
+        result["notes"].append(f"continued from {a.save_from}'s AutoSave (via {a.save_dir})")
     try:
         subprocess.Popen([str(root / "FSE_Launcher.exe")], cwd=str(root))
         if "window" not in ps("-Action", "wait", "-Seconds", "90", timeout=120):
@@ -561,6 +574,12 @@ def main() -> int:
         if not a.keep_game:
             kill_game()
         master.write_bytes(master_backup)
+        for dst, original in save_swapped:
+            try:
+                if original is None: dst.unlink()
+                else: dst.write_bytes(original)
+            except OSError:
+                pass
         try:
             probe.unlink()
         except OSError:

@@ -1,0 +1,17 @@
+# Live-install probe (not in check_all): an Atlas enemy spawner next to the adult save's hero position in GreatwoodTeleport.
+wait_maps
+wait_ready
+select GreatwoodTeleport
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+camera 110 62 60 0 -60 30
+frames 2
+place_spawner 25 4 WASPS_01,WASPS_02 AtlasSpawner
+frames 2
+assert_state doc_changes 1
+save_level
+deploy_level
+frames 2
+quit

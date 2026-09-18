@@ -376,16 +376,25 @@ Implementation `src/livelink.{hpp,cpp}`. Not yet: moving/deleting existing
 things live (the engine keeps its own copies; a reload of the region is the
 honest path), terrain reload.
 
-## Enemy spawners (experimental)
+## Enemy spawners
 
 The Edit panel's **Enemy spawner** card places a `MARKER_CREATURE_GENERATOR` thing
 carrying the retail self-triggering `CTCCreatureGenerator` block (families from the
 game's `CREATURE_GENERATION_FAMILY` defs, trigger radius, creature limit) at the view
-centre, on the ground, in the TNG's NULL section. The data matches retail generators
-byte for byte in shape, but generation itself has not been observed in the automated
-childhood-profile tests yet (retail generators spawn on region load through
-`CTCCreatureGeneratorCreator`, gated by the hero's level band); see `docs/PLAN.md`.
-Scripted: `place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]`.
+centre, on the ground, in the TNG's NULL section. **In-game verified 2026-09-17
+with an adult save**: an Atlas spawner (WASPS_01/02, radius 25, limit 4) next to
+the hero in GreatwoodTeleport produced four hornets (`CREATURE_HORNET_01` /
+`_LEV_02`) within about a minute, the hero fighting them in the screenshot. The
+earlier silence was the test profile: childhood keeps a quest active that
+disables creature generation (`CWorld::IsCreatureGenerationEnabled`), so a
+spawner can only be tested from a save past the Guild. The harness takes
+`--save-from Cornelio` (an adult hero in GreatwoodTeleport) and puts the save
+back afterwards; note the game loads the folder its `Profile.bin` names
+(`1234234` for the `0atlas` profile), hence `--save-dir`. A save that had
+already visited the region still showed the new thing (`--things` found it),
+so the "saves cache region entities" rule is not absolute for markers.
+Scripted: `place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]`;
+live probe `tests/ui/spawner_adult_live.txt`.
 
 ## New levels
 

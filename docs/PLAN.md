@@ -25,6 +25,7 @@ in-game harness run (`tools/ingame`).
 | Custom ground texture from a PNG (textures.big + ENGINE_THEME append) | shipped (2026-09-17, in-game verified) |
 | Creatures placed as retail AICreature things (NPCs, animals) | shipped (2026-09-17, in-game verified) |
 | Villages: VILLAGE_* thing + per-thing membership | shipped (2026-09-17; loads in-game, behaviour unverified) |
+| Enemy spawner (MARKER_CREATURE_GENERATOR) | shipped; in-game verified with an adult save (2026-09-17, 4 hornets) |
 | Live link to the running game (ForgeFSE Lua thread: go here, spawn, follow) | shipped (2026-09-17, in-game verified) |
 
 ## Rocks turned today
@@ -190,41 +191,11 @@ in-game harness run (`tools/ingame`).
 2 (old). **Distant-LOD bake** for blank/new levels (the green horizon band): bake
    the composed background patches' inline textures from the level's albedo
    instead of the solid colour.
-3. **Villages & creature generators** as thing presets (section 3). Creatures
-   place fine (2026-09-17: `place CREATURE_...` = the retail AICreature block,
-   villager verified in-game) and villages too (Village card + membership;
-   loads with a member, behaviour unverified). Spawner
-   card shipped 2026-09-17 (MARKER_CREATURE_GENERATOR with the retail
-   self-triggering CTCCreatureGenerator block, family picker from the
-   CREATURE_GENERATION_FAMILY defs; inserted into the NULL section -- the last
-   section of a retail TNG is a quest-loaded one the engine never loads by
-   default, found the hard way). **Not yet observed spawning** in the childhood
-   test profile: retail generators on the same map spawn on region load through
-   `CTCCreatureGeneratorCreator::FrameUpdate` 0x7c99f0 (gated by
-   `CWorld::IsCreatureGenerationEnabled` 0x49ea40 and a hero-level family band:
-   the family def's level at +0x48, highest <= heroLevel+1, else the lowest),
-   while an Atlas-placed one next to them stayed silent with WASPS/HOBBE
-   families -- and so did a VERBATIM copy of the map's own working hobbe
-   generator (new UID, new position, script name): whatever activates retail
-   generators is external to the TNG block (a quest / population-sim registry
-   keyed by UID, `CQuestManager::SetCreatureGeneratorState` 0x4b3810 /
-   `CGameScriptInterface::SetCreatureGeneratorsEnabled` 0x892cf0 are the
-   script-side entry points; `CWorld::IsCreatureGenerationEnabled` 0x49ea40
-   consults a name/UID lookup on the thing). Next: find who calls
-   SetCreatureGeneratorState for GreatwoodTeleport's generators (retail quest
-   scripts / Aeon's Lua ports) -- an Atlas spawner will need the same
-   registration, probably via a ForgeFSE companion quest. Villages untouched.
-   UPDATE (debug build `CWorld::IsCreatureGenerationEnabled` 0x1b46fa0, named):
-   a thing may generate when (world flag && no quest in CQuestManager's
-   "disabled during script" list is active && region flag && no active quest in
-   the region), OR when the quest named like the thing's TNG *section* is
-   active, OR when its def has flag +0x4a bit 0. Childhood keeps a disabling
-   quest active, so the test profile can never spawn from a NULL-section
-   generator; the Greatwood spawns come from the `V_RandomPopulationSim`
-   section (Gameflow activates it after the intro). Probes tried without
-   success: activating `CreatureGenerators`, `SetCreatureGeneratorsEnabled(region)`,
-   `SetCreatureGeneratorsEnabledDuringScript(<childhood quests>, true)`. Needs an
-   adult save (none on this machine: every profile is the same childhood autosave).
+3. ~~Villages & creature generators~~ DONE 2026-09-17: creatures (`place
+   CREATURE_...`), villages (Village card + membership), and the enemy spawner
+   VERIFIED with an adult save (harness `--save-from Cornelio`): four hornets
+   from an Atlas WASPS spawner in GreatwoodTeleport. The childhood profile was
+   the only blocker (a disabling quest stays active until the Guild).
 4. ~~Texture append RE~~ SOLVED (PLAYER_GUI.MiniMapGraphics + raw mip 0).
 5. ~~Splat texture paint~~ DONE 2026-09-17: any retail ENGINE_THEME can be
    painted on any map (palette add from the game) and any PNG becomes a ground
