@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -259,6 +260,16 @@ private:
     std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
     char thingSearch_[64] = {};
     bool confirmDeploy_ = false;
+    // engine-rule notice at the point of action (0.15 #2): raised by the action that the
+    // rule applies to, drawn directly under that action's button, dismissed per rule for
+    // the session ("Got it"). Keys: creature | spawner | region.
+    std::string ruleKey_;
+    std::set<std::string> rulesDismissed_;
+    void raiseRule(const std::string& key);
+public:
+    void dismissRule(const std::string& key) { rulesDismissed_.insert(key); if (ruleKey_ == key) ruleKey_.clear(); }
+private:
+    void drawRuleNotice(const char* key, float width);
     // terrain tool (gizmoOp_ == 4)
     int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme
     int paintTheme_ = 0;             // LEV palette slot for mode 6
@@ -290,7 +301,7 @@ private:
     std::vector<std::string> blankPalette_;
     int blankTheme_ = -1;
     float blankHeight_ = 20.0f;
-    struct NewLevelJob { bool ok = false; std::string error; std::string name; editor::NewLevelResult result; };
+    struct NewLevelJob { bool ok = false; std::string error; std::string name; bool ownRegion = false; editor::NewLevelResult result; };
     std::future<NewLevelJob> newLevelFuture_;
     void drawNewLevelCard(float pad, float inner, float cardInner);
     // enemy spawner card: CREATURE_GENERATION_FAMILY picker + radius/limit, placed at the view centre
@@ -348,6 +359,12 @@ public:
     // queue a move (validated: 32-aligned, no overlap); returns false with the reason in the log
     bool worldMove(const std::string& map, int x, int y);
     void worldRevert();
+    // undo/redo over the pending region edits (moves, owners, visibility): one step per
+    // move / owner change / visibility toggle / revert; cleared when the edits are written
+    bool worldUndo();
+    bool worldRedo();
+    bool worldCanUndo() const { return !worldUndo_.empty(); }
+    bool worldCanRedo() const { return !worldRedo_.empty(); }
     void worldApply();
     bool worldBusy() const { return worldFuture_.valid(); }
     size_t worldPendingCount() const { return worldPending_.size() + worldOwnerEdits_.size() + worldSeesEdits_.size(); }
@@ -371,6 +388,11 @@ private:
     std::vector<editor::MapMove> worldPending_;
     std::vector<editor::OwnerEdit> worldOwnerEdits_;
     std::vector<editor::SeesEdit> worldSeesEdits_;
+    struct WorldSnap { std::vector<editor::MapMove> moves; std::vector<editor::OwnerEdit> owners; std::vector<editor::SeesEdit> sees; };
+    std::vector<WorldSnap> worldUndo_, worldRedo_;
+    WorldSnap worldSnapshot() const { return WorldSnap{worldPending_, worldOwnerEdits_, worldSeesEdits_}; }
+    void worldRestore(const WorldSnap& s);
+    void worldPushUndo();
     std::string worldSelected_;
     std::string worldHover_;
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)

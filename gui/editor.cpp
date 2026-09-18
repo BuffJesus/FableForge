@@ -344,6 +344,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
         pushLog("placed " + def, 0);
+        if (creature) raiseRule("creature");
         return true;
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
@@ -493,6 +494,7 @@ bool App::placeSpawner(const std::vector<std::string>& families, float radius, i
         std::string list;
         for (const auto& f : families) list += (list.empty() ? "" : ", ") + f;
         pushLog("placed an enemy spawner (" + list + ", radius " + std::to_string(int(radius)) + ", limit " + std::to_string(limit) + ")", 0);
+        raiseRule("spawner");
         return true;
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
@@ -724,6 +726,7 @@ void App::drawSpawnerCard(float pad, float inner, float cardInner) {
     ImGui::SliderInt("##spawnlimit", &spawnerLimit_, -1, 12, "");
     if (theme::ghostButton("Place spawner at view centre", ImVec2(cardInner, S(30))) && !spawnerFamilies_.empty()) placeSpawner(spawnerFamilies_, spawnerRadius_, spawnerLimit_);
     auto_.registerWidget("btn_place_spawner");
+    drawRuleNotice("spawner", cardInner);
     theme::endCard();
 }
 
@@ -830,6 +833,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
     if (theme::primaryButton(newLevelFuture_.valid() ? "Installing..." : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
     auto_.registerWidget("btn_new_level");
+    drawRuleNotice("region", cardInner);
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 }
@@ -868,7 +872,7 @@ void App::startNewLevel() {
         if (!lib) return;
         pushLog("new level: authoring blank " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
         newLevelFuture_ = std::async(std::launch::async, [req, root, lib]() {
-            NewLevelJob j; j.name = req.name;
+            NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
             j.ok = editor::createBlankLevel(root, req, *lib, j.result, j.error);
             return j;
         });
@@ -882,7 +886,7 @@ void App::startNewLevel() {
     req.worldX = newLevelX_; req.worldY = newLevelY_;
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
     newLevelFuture_ = std::async(std::launch::async, [req, root]() {
-        NewLevelJob j; j.name = req.name;
+        NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
         j.ok = editor::createLevelFromDonor(root, req, j.result, j.error);
         return j;
     });
@@ -990,7 +994,7 @@ void App::drawUnsavedPrompt() {
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(390) - 2 * S(6)) / 3.0f;
-        if (theme::primaryButton("Save .tng", ImVec2(w, S(32)), doc_.dirty())) { saveDocument(); if (!hasUnsavedEdits()) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); } }
+        if (theme::primaryButton("Save draft", ImVec2(w, S(32)), doc_.dirty())) { saveDocument(); if (!hasUnsavedEdits()) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); } }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Discard", ImVec2(w, S(32)))) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
@@ -1298,6 +1302,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     if (theme::ghostButton(placeLabel.c_str(), ImVec2(cardInner, S(30))) && !placeDef.empty()) placeDefinition(placeDef);
     auto_.registerWidget("btn_place");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, dropped onto the terrain, facing the camera.");
+    drawRuleNotice("creature", cardInner);
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
@@ -1371,27 +1376,69 @@ void App::drawEditFooter(float pad, float inner) {
             if (theme::ghostButton("Cancel", ImVec2(half2, S(30)))) confirmTerrainDeploy_ = false;
         }
     }
-    ImGui::SetCursorPosX(pad);
-    if (theme::primaryButton(dirty ? "Save .tng (loose file)" : "Saved", ImVec2(inner, S(42)), dirty)) saveDocument();
-    auto_.registerWidget("btn_save");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes data/Levels/FinalAlbion/%s.tng. A one-time backup of any existing file is kept as .atlas-orig.", doc_.mapName().c_str());
+    // The WAD write is the primary action: the engine only ever reads the archive. The
+    // loose .tng is the editor's working copy, so it is a "draft" (0.15 #4).
     ImGui::SetCursorPosX(pad);
     const float half = (inner - S(6)) * 0.5f;
     if (!confirmDeploy_) {
-        if (theme::ghostButton("Write into FinalAlbion.wad", ImVec2(dirty ? half : inner, S(32)))) confirmDeploy_ = true;
+        if (theme::primaryButton("Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.atlas-orig.");
-        if (dirty) {
-            ImGui::SameLine(0, S(6));
-            if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
-            auto_.registerWidget("btn_revert");
-        }
     } else {
-        if (theme::primaryButton("Yes, write into the WAD", ImVec2(half, S(32)))) { confirmDeploy_ = false; deployDocument(); }
+        if (theme::primaryButton("Yes, write into the WAD", ImVec2(half, S(42)))) { confirmDeploy_ = false; deployDocument(); }
         auto_.registerWidget("btn_deploy_confirm");
         ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Cancel", ImVec2(half, S(32)))) confirmDeploy_ = false;
+        if (theme::ghostButton("Cancel", ImVec2(half, S(42)))) confirmDeploy_ = false;
     }
+    ImGui::SetCursorPosX(pad);
+    if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();
+    auto_.registerWidget("btn_save");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; Atlas reopens it).\nA one-time backup of any existing file is kept as .atlas-orig.", doc_.mapName().c_str());
+    if (dirty) {
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
+        auto_.registerWidget("btn_revert");
+    }
+}
+
+// ---- engine-rule notices -------------------------------------------------------------
+// The rules the engine imposes are listed once in the Setup panel; these repeat the one
+// that applies right where the user just acted, so it is read at the moment it matters.
+namespace {
+const char* ruleText(const std::string& key) {
+    if (key == "creature") return "Engine rule: existing saves will not show this creature. It appears in a new game, or on the first visit to this map in a save that has never loaded it.";
+    if (key == "spawner")  return "Engine rule: enemy spawners only run once the hero is past childhood, and existing saves will not show this one. Test from a fresh game with an adult hero.";
+    if (key == "region")   return "Engine rule: saves cache the region table, so this region is only named and drawn in a game started after it was added (or a save made after adding it).";
+    return "";
+}
+} // namespace
+
+void App::raiseRule(const std::string& key) {
+    if (rulesDismissed_.count(key)) return;
+    ruleKey_ = key;
+}
+
+void App::drawRuleNotice(const char* key, float width) {
+    using theme::S;
+    if (ruleKey_ != key) return;
+    const char* text = ruleText(key);
+    if (!*text) { ruleKey_.clear(); return; }
+    ImGui::Dummy(ImVec2(0, S(4)));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::AccentSoft));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(6));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(10), S(8)));
+    ImGui::BeginChild((std::string("##rule_") + key).c_str(), ImVec2(width, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PushFont(fontSmall_);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width - S(20));
+    ImGui::TextColored(theme::vec(theme::Text), "%s", text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, S(2)));
+    if (theme::ghostButton("Got it", ImVec2(S(90), S(24)))) dismissRule(key);
+    auto_.registerWidget((std::string("btn_rule_") + key).c_str());
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
 }
 
 } // namespace albion::gui

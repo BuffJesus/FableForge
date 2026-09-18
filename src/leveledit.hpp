@@ -59,6 +59,7 @@ struct TerrainState {
     std::vector<uint8_t> walkable;
     std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
     std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
+    std::vector<forge::lev::GroundTheme> palette;       // the LEV's 256 ground-theme slots
 };
 
 struct TerrainBrush {
@@ -201,8 +202,8 @@ public:
     // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
     // map). Painting is limited to it, so any ENGINE_THEME of the game can be
     // added to a free slot: returns the slot (the existing one when the name is
-    // already there), -1 when the palette is full or no terrain is loaded. Not
-    // an undo step (an unused slot is harmless) and written with the next
+    // already there), -1 when the palette is full or no terrain is loaded. One
+    // undo step (the palette rides in TerrainState); written with the next
     // terrain save.
     int addGroundTheme(const std::string& name, uint32_t defIndex);
     int paletteSlotOf(const std::string& name) const;

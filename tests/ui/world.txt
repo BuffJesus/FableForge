@@ -42,6 +42,23 @@ assert_state world_pending 1
 world_revert
 frames 1
 assert_state world_pending 0
+# region edits are undoable: undo the revert (the move comes back), undo the move, redo it
+assert_state world_can_undo 1
+world_undo
+frames 1
+assert_state world_pending 1
+assert_state world_selected_pos 2048,8064
+world_undo
+frames 1
+assert_state world_pending 0
+assert_state world_selected_pos 3072,2880
+world_redo
+frames 1
+assert_state world_pending 1
+assert_widget btn_world_undo
+world_revert
+frames 1
+assert_state world_pending 0
 # queue two moves (side by side: a shared edge at x=2112) and write them into
 # the scratch install with seam stitching on
 world_move TeleporterGreatwood 2048 8032

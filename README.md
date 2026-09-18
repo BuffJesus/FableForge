@@ -144,10 +144,14 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   `CREATURE_` definition in `game.bin` and places it where the camera looks, on the
   ground, facing you (creatures as the game's own AICreature things: NPCs, animals,
   guards).
-* *Changes* summarises what differs from the original by UID. **Save .tng** writes
-  the loose `data/Levels/FinalAlbion/<map>.tng`; **Write into FinalAlbion.wad** puts
-  the edited file into the archive the game actually loads. Both keep a one-time
-  `.atlas-orig` backup of what was there.
+* *Changes* summarises what differs from the original by UID. **Write into
+  FinalAlbion.wad** puts the edited file into the archive the game actually loads
+  (the primary action); **Save draft** keeps a loose
+  `data/Levels/FinalAlbion/<map>.tng` working copy that only Atlas reads. Both keep
+  a one-time `.atlas-orig` backup of what was there.
+* When you place a creature or spawner, or create a level with its own region, a
+  note under that button repeats the engine rule that applies (new game / adult
+  hero / region table cached in saves). *Got it* hides it for the session.
 * **Terrain (T)**: raise / lower / flatten / smooth brushes and walkable / blocked
   painting straight on the ground (hold LMB, Shift inverts, `[` `]` resize; each
   stroke is one undo step). **Save terrain into the game** writes the `.lev`, replaces

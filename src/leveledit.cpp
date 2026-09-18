@@ -179,6 +179,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
         t->walkable.resize(size_t(cx) * cy);
         t->themeIndex.resize(size_t(cx) * cy);
         t->themeStrength.resize(size_t(cx) * cy);
+        t->palette = level_->groundThemes();
         for (int y = 0; y < cy; ++y)
             for (int x = 0; x < cx; ++x) {
                 const size_t i = size_t(y) * cx + x;
@@ -281,6 +282,10 @@ void Document::restore(const Snapshot& s) {
 
 void Document::writeTerrainToLevel() {
     if (!level_ || !terrain_) return;
+    const auto& pal = level_->groundThemes();
+    for (size_t i = 0; i < terrain_->palette.size() && i < pal.size(); ++i)
+        if (pal[i].name != terrain_->palette[i].name || pal[i].value != terrain_->palette[i].value)
+            level_->setGroundTheme(i, terrain_->palette[i].name, terrain_->palette[i].value);
     const int cx = level_->cellsX(), cy = level_->cellsY();
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
@@ -392,8 +397,12 @@ bool Document::themesDirty() const {
 bool Document::terrainDirty() const {
     if (!terrain_ || !savedTerrain_) return false;
     if (terrain_ == savedTerrain_) return false;
-    return terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable ||
-           terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength;
+    if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable ||
+        terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
+    if (terrain_->palette.size() != savedTerrain_->palette.size()) return true;
+    for (size_t i = 0; i < terrain_->palette.size(); ++i)
+        if (terrain_->palette[i].name != savedTerrain_->palette[i].name || terrain_->palette[i].value != savedTerrain_->palette[i].value) return true;
+    return false;
 }
 
 std::optional<float> Document::sampleHeight(const TerrainState& t, int cx, int cy, float x, float y) {
@@ -427,6 +436,14 @@ int Document::addGroundTheme(const std::string& name, uint32_t defIndex) {
     // put in slot 0 does not draw in-game -- tried)
     for (size_t i = 2; i < pal.size(); ++i) {
         if (!pal[i].name.empty()) continue;
+        if (terrain_ && !stroke_) {
+            pushUndo();
+            auto next = std::make_unique<TerrainState>(*terrain_);
+            if (next->palette.size() != pal.size()) next->palette = pal;
+            next->palette[i] = forge::lev::GroundTheme{name, defIndex};
+            terrain_ = std::shared_ptr<const TerrainState>(next.release());
+            ++terrainRev_;
+        }
         level_->setGroundTheme(i, name, defIndex);
         ++revision_;
         return int(i);

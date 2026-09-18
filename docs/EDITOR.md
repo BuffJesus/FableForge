@@ -43,13 +43,15 @@ files* (confirm). Scripts: `restore_all`, state `backups_differ`.
   (`Object` for `OBJECT_*`, `Building` for `BUILDING_*`). Placement lands on
   the LEV terrain height (bilinear, like the retail placer).
 * **Undo/redo**: snapshot based (128 steps); indices are re-derived from UIDs.
-* **Save / deploy**: `Save .tng` writes the loose file; `Write into
-  FinalAlbion.wad` replaces the archive entry through `forge::wad::repack`
+* **Save / deploy**: `Write into FinalAlbion.wad` is the primary action -- it
+  replaces the archive entry through `forge::wad::repack`
   (same-size payloads are patched in place, larger ones appended; every byte
   the reader does not interpret is preserved). One-time `.atlas-orig` backups.
   The game loads levels from the WAD, so deploy is what makes edits visible
   in-game; saved games cache region entities, so start a new game or enter the
-  region fresh to see them.
+  region fresh to see them. `Save draft` keeps the loose
+  `data/Levels/FinalAlbion/<map>.tng` as the editor's working copy (the engine
+  never reads it; Atlas lists it under *Loose files*).
 
 ## What works now (terrain)
 

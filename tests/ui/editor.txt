@@ -11,6 +11,7 @@ assert_state edit_mode 1
 assert_state doc_loaded 1
 assert_widget seg_gizmo
 assert_widget btn_save
+assert_widget btn_deploy
 select_def OBJECT_BARREL_BREAKABLE
 frames 2
 frame_selected
@@ -54,6 +55,30 @@ wait_foliage
 frames 2
 assert_state doc_changes 1
 assert_state selected_def CREATURE_NEW_CHICKEN_01
+# the engine rule for creatures is shown under the Place button, until dismissed
+assert_state rule_notice creature
+assert_widget btn_rule_creature
+dismiss_rule creature
+frames 2
+assert_state rule_notice -
+# dismissed for the session: placing another creature stays quiet
+place CREATURE_NEW_CHICKEN_01 AtlasChicken2
+wait_foliage
+frames 2
+assert_state rule_notice -
+undo
+wait_foliage
+frames 2
+# a spawner raises its own rule
+place_spawner 15 4 WASPS_01 AtlasSpawnerRule
+wait_foliage
+frames 2
+assert_state rule_notice spawner
+assert_widget btn_rule_spawner
+screenshot build/ui/e4b_rule_notice.png
+undo
+wait_foliage
+frames 2
 # a village the chicken joins (CTCVillageMember added), then leaves
 place_village VILLAGE_OAKVALE_INTRO AtlasVillage
 wait_foliage
@@ -126,13 +151,27 @@ terrain_mode 6
 frames 1
 assert_widget combo_paint_theme
 assert_widget input_themesearch
+assert_state palette_named 41
 add_theme PATH_COBBLES_IRREGULAR_ET
 frames 1
 assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
+assert_state palette_named 42
 brush 6 10
 terrain_stroke 64 112 1
 frames 2
 assert_state terrain_dirty 1
+undo
+frames 2
+# the stroke is undone; the palette add is its own undo step (written with the LEV)
+assert_state terrain_dirty 1
+assert_state palette_named 42
+undo
+frames 2
+assert_state terrain_dirty 0
+assert_state palette_named 41
+redo
+frames 2
+assert_state palette_named 42
 undo
 frames 2
 assert_state terrain_dirty 0

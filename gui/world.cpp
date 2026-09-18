@@ -77,6 +77,8 @@ bool App::worldMove(const std::string& map, int x, int y) {
     std::string why;
     if (!editor::checkMove(current, others, mv, why)) { pushLog("world: " + box->name + " -> (" + std::to_string(x) + "," + std::to_string(y) + ") refused: " + why, 1); return false; }
     auto it = std::find_if(worldPending_.begin(), worldPending_.end(), [&](const editor::MapMove& m) { return m.name == box->name; });
+    if (it == worldPending_.end() ? (x == box->x && y == box->y) : (it->x == x && it->y == y)) return true;   // nothing changes
+    worldPushUndo();
     if (x == box->x && y == box->y) { if (it != worldPending_.end()) worldPending_.erase(it); }
     else if (it != worldPending_.end()) { it->x = x; it->y = y; }
     else worldPending_.push_back(mv);
@@ -100,6 +102,8 @@ bool App::worldSetOwner(const std::string& map, const std::string& region) {
     const auto* b = world_.find(map);
     if (!b) { pushLog("world: no map " + map, 2); return false; }
     if (!world_.region(region)) { pushLog("world: no region " + region, 2); return false; }
+    if (worldOwnerOf(b->name) == region) return true;
+    worldPushUndo();
     worldOwnerEdits_.erase(std::remove_if(worldOwnerEdits_.begin(), worldOwnerEdits_.end(), [&](const editor::OwnerEdit& e) { return e.map == b->name; }), worldOwnerEdits_.end());
     if (region != b->region) worldOwnerEdits_.push_back({b->name, region});
     return true;
@@ -109,16 +113,49 @@ bool App::worldSetSees(const std::string& region, const std::string& map, bool s
     const auto* b = world_.find(map);
     const auto* r = world_.region(region);
     if (!b || !r) { pushLog("world: no such map/region " + region + " / " + map, 2); return false; }
+    if (worldSees(r->name, b->name) == sees) return true;
+    worldPushUndo();
     worldSeesEdits_.erase(std::remove_if(worldSeesEdits_.begin(), worldSeesEdits_.end(), [&](const editor::SeesEdit& e) { return e.region == r->name && e.map == b->name; }), worldSeesEdits_.end());
     if (sees != r->sees_(b->name)) worldSeesEdits_.push_back({r->name, b->name, sees});
     return true;
 }
 
 void App::worldRevert() {
+    if (worldPendingCount() == 0) return;
+    worldPushUndo();
     worldPending_.clear();
     worldOwnerEdits_.clear();
     worldSeesEdits_.clear();
     if (!worldSelected_.empty()) worldSelect(worldSelected_);
+}
+
+void App::worldPushUndo() {
+    worldUndo_.push_back(worldSnapshot());
+    if (worldUndo_.size() > 128) worldUndo_.erase(worldUndo_.begin());
+    worldRedo_.clear();
+}
+
+void App::worldRestore(const WorldSnap& s) {
+    worldPending_ = s.moves;
+    worldOwnerEdits_ = s.owners;
+    worldSeesEdits_ = s.sees;
+    if (!worldSelected_.empty()) worldSelect(worldSelected_);
+}
+
+bool App::worldUndo() {
+    if (worldUndo_.empty() || worldFuture_.valid()) return false;
+    worldRedo_.push_back(worldSnapshot());
+    worldRestore(worldUndo_.back());
+    worldUndo_.pop_back();
+    return true;
+}
+
+bool App::worldRedo() {
+    if (worldRedo_.empty() || worldFuture_.valid()) return false;
+    worldUndo_.push_back(worldSnapshot());
+    worldRestore(worldRedo_.back());
+    worldRedo_.pop_back();
+    return true;
 }
 
 void App::worldApply() {
@@ -129,6 +166,7 @@ void App::worldApply() {
     const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
     const bool stitch = worldStitch_ && !moves.empty();
     const int feather = worldStitchFeather_;
+    worldUndo_.clear(); worldRedo_.clear();
     pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
     worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees, stitch, feather]() {
         WorldJob r;
@@ -174,6 +212,8 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     ImGuiIO& io = ImGui::GetIO();
     const bool hovered = viewportHovered_;
     if (hovered && !io.WantTextInput && (ImGui::IsKeyPressed(ImGuiKey_F) || ImGui::IsKeyPressed(ImGuiKey_Home))) { worldZoom_ = 0; return; }
+    if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) worldUndo();
+    if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) worldRedo();
     // arrow keys nudge the selected map by one grid step
     if (hovered && !io.WantTextInput && !worldSelected_.empty()) {
         int nx, ny;
@@ -504,9 +544,16 @@ void App::drawWorldFooter(float pad, float inner) {
         else std::snprintf(label, sizeof label, "Move %zu map%s in the game%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
         if (theme::primaryButton(label, ImVec2(inner, S(42)), any)) confirmWorldApply_ = true;
         auto_.registerWidget("btn_world_apply");
-        if (any) {
+        if (any || worldCanUndo() || worldCanRedo()) {
+            const float third = (inner - 2 * S(6)) / 3.0f;
             ImGui::SetCursorPosX(pad);
-            if (theme::ghostButton("Revert all", ImVec2(inner, S(30)))) worldRevert();
+            if (theme::ghostButton(worldCanUndo() ? "Undo  (Ctrl+Z)" : "Undo", ImVec2(third, S(30))) && worldCanUndo()) worldUndo();
+            auto_.registerWidget("btn_world_undo");
+            ImGui::SameLine(0, S(6));
+            if (theme::ghostButton(worldCanRedo() ? "Redo  (Ctrl+Y)" : "Redo", ImVec2(third, S(30))) && worldCanRedo()) worldRedo();
+            auto_.registerWidget("btn_world_redo");
+            ImGui::SameLine(0, S(6));
+            if (theme::ghostButton("Revert all", ImVec2(third, S(30))) && any) worldRevert();
             auto_.registerWidget("btn_world_revert");
         }
     } else {

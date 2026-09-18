@@ -10,6 +10,7 @@ ok   assert_state edit_mode 1
 ok   assert_state doc_loaded 1
 ok   assert_widget seg_gizmo
 ok   assert_widget btn_save
+ok   assert_widget btn_deploy
 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
 ok   frames 2
 ok   frame_selected
@@ -56,6 +57,28 @@ ok   wait_foliage
 ok   frames 2
 ok   assert_state doc_changes 1
 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+ok   assert_state rule_notice creature
+ok   assert_widget btn_rule_creature
+ok   dismiss_rule creature
+ok   frames 2
+ok   assert_state rule_notice -
+ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken2
+ok   wait_foliage
+ok   frames 2
+ok   assert_state rule_notice -
+ok   undo
+ok   wait_foliage
+ok   frames 2
+ok   place_spawner 15 4 WASPS_01 AtlasSpawnerRule
+ok   wait_foliage
+ok   frames 2
+ok   assert_state rule_notice spawner
+ok   assert_widget btn_rule_spawner
+ok   screenshot build/ui/e4b_rule_notice.png
+shot build/ui/e4b_rule_notice.png
+ok   undo
+ok   wait_foliage
+ok   frames 2
 ok   place_village VILLAGE_OAKVALE_INTRO AtlasVillage
 ok   wait_foliage
 ok   frames 2
@@ -128,13 +151,26 @@ ok   terrain_mode 6
 ok   frames 1
 ok   assert_widget combo_paint_theme
 ok   assert_widget input_themesearch
+ok   assert_state palette_named 41
 ok   add_theme PATH_COBBLES_IRREGULAR_ET
 ok   frames 1
 ok   assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
+ok   assert_state palette_named 42
 ok   brush 6 10
 ok   terrain_stroke 64 112 1
 ok   frames 2
 ok   assert_state terrain_dirty 1
+ok   undo
+ok   frames 2
+ok   assert_state terrain_dirty 1
+ok   assert_state palette_named 42
+ok   undo
+ok   frames 2
+ok   assert_state terrain_dirty 0
+ok   assert_state palette_named 41
+ok   redo
+ok   frames 2
+ok   assert_state palette_named 42
 ok   undo
 ok   frames 2
 ok   assert_state terrain_dirty 0
@@ -172,6 +208,10 @@ ok   assert_state selected Greatwood_1
 ok   set unsaved_prompt 0
      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
      install_valid=1
+     install_textures=1
+     install_fse=1
+     setup_open=0
+     backups_differ=0
      maps=399
      selected=Greatwood_1
      settings_scroll=0
@@ -179,11 +219,12 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=397 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=462 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
      mode=Textured
+     rule_notice=spawner
      export_ok=0
      export_path=
      format=glb
@@ -219,6 +260,9 @@ ok   set unsaved_prompt 0
      world_ok=0
      world_stitch=0
      paint_theme=42
+     link_installed=0
+     link_ready=0
+     link_hero_map=
      villages=2
      palette_named=29
      doc_loaded=1

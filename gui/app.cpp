@@ -749,6 +749,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("preview_textured=" + std::string(previewTextured_ ? "1" : "0"));
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
+    v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
     v.push_back("format=" + std::string(settings_.format == 0 ? "glb" : "obj"));
@@ -782,6 +783,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_selected=" + worldSelected_);
     v.push_back("world_pending=" + std::to_string(worldPending_.size()));
     v.push_back("world_pending_owners=" + std::to_string(worldOwnerEdits_.size()));
+    v.push_back("world_can_undo=" + std::string(worldCanUndo() ? "1" : "0"));
+    v.push_back("world_can_redo=" + std::string(worldCanRedo() ? "1" : "0"));
     v.push_back("world_pending_sees=" + std::to_string(worldSeesEdits_.size()));
     if (!worldSelected_.empty()) v.push_back("world_selected_owner=" + worldOwnerOf(worldSelected_));
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
@@ -864,6 +867,7 @@ void App::frame(float dt) {
         for (const auto& n : r.result.notes) pushLog("new level: " + n, 0);
         if (r.ok) {
             pushLog("new level " + r.name + " installed (map slot " + std::to_string(r.result.mapSlot) + ", origin " + std::to_string(r.result.worldX) + "," + std::to_string(r.result.worldY) + ")", 3);
+            if (r.ownRegion) raiseRule("region");
             newLevelDonor_.clear();
             worldLoaded_ = false;   // the World tab re-reads the layout with the new map
             if (saveRoot_.empty() || saveRoot_ == installPath_) {
@@ -1728,6 +1732,8 @@ bool Automation::tick(App& app) {
     else if (cmd == "world_owner") { std::istringstream rs(rest); std::string m, r; rs >> m >> r; if (!app.worldSetOwner(m, r)) fail("world_owner refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_sees") { std::istringstream rs(rest); std::string r, m; int v = 1; rs >> r >> m >> v; if (!app.worldSetSees(r, m, v != 0)) fail("world_sees refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_revert") { app.worldRevert(); note("ok   " + line); ++pc_; }
+    else if (cmd == "world_undo") { if (!app.worldUndo()) fail("world_undo: nothing to undo"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "world_redo") { if (!app.worldRedo()) fail("world_redo: nothing to redo"); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_stitch") {   // world_stitch <0|1> [feather]: stitch seams after the next apply
         std::istringstream rs(rest); int on = 1, feather = -1; rs >> on >> feather;
         app.setWorldStitch(on != 0, feather); note("ok   " + line); ++pc_;
@@ -1753,6 +1759,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "dismiss_rule") { app.dismissRule(rest); note("ok   " + line); ++pc_; }   // what the notice's "Got it" does (the notice may sit below the panel fold)
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }
     else if (cmd == "place") {   // place <DEFINITION> [scriptname]
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
