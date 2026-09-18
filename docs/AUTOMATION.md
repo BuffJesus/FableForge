@@ -40,6 +40,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `select_thing <index>` / `select_def <DEFINITION>` | select by .tng index / first thing with that DefinitionType |
 | `move_thing <dx> <dy> <dz>` / `rotate_thing <deg>` / `scale_thing <factor>` / `ground_thing` | edit the selection (one undo step each) |
 | `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits on the whole selection (the objects layer reloads; `wait_foliage` waits for it) |
+| `set_entrance` | the map's region entrance (FinalAlbion.gtg, this map's WLD slot) at the view centre, facing the camera (state `entrance` = `x,y,h` or `-`; widget `btn_set_entrance`) |
 | `preset_place <name>` / `preset_save <name>` | place a preset (shipped `presets/` or the user folder) at the view centre as a selected group; save the selection as a user preset (state `presets` = how many are listed) |
 | `select_toggle <index>` / `select_added` / `copy` / `paste` | Ctrl+click a thing into/out of the selection; select the first thing the Changes list reports as added; copy the selection as a fragment; paste it at the view centre (state `selection_count`) |
 | `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground (`CREATURE_*` as the retail AICreature block) |

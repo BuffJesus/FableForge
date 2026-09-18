@@ -510,6 +510,16 @@ containers get one-time `.atlas-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
+### Region entrance (FinalAlbion.gtg)
+
+`FinalAlbion.gtg` holds the global things per WLD map slot: the
+`REGION_ENTRANCE_POINT` the map screen and quest teleports drop the hero on,
+and a `HOLY_SITE_PLAYER_START` named `<Map>HSP`. A level installed with its own
+region gets both at its centre; the Level tab's *Region entrance* card (and
+`AlbionAtlas entrance <map> [x y [z]]`) shows and moves them. Retail entrances
+are never edited; Atlas's own (recognised by the `<Map>HSP` name) are replaced
+in place. The file is CRLF and is re-serialised byte-exact around the edit.
+
 ### Own region + minimap
 
 **Update 2026-09-17 -- there is no 141-region cap.** The BWD loader

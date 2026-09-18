@@ -41,6 +41,8 @@
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
 #include "overworld.hpp"
+#include "gtg.hpp"
+#include "leveledit.hpp"
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
 #include "backups.hpp"
@@ -71,7 +73,7 @@ int usage() {
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
-        "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
+        "  AlbionAtlas entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
         "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
         "  AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
         "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
@@ -324,6 +326,39 @@ int main(int argc, char** argv) {
         if (!albion::editor::createLevelFromDonor(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
+        return 0;
+    }
+    if (cmd == "entrance") {   // entrance <map> [x y [z]] [--install <root>]: show, or set, the map's region entrance in FinalAlbion.gtg
+        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas entrance <map> [x y [z]] [--install <root>]\n"); return 2; }
+        std::string installArg; std::vector<float> xyz;
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else xyz.push_back(float(std::atof(args[i].c_str())));
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        albion::editor::WorldLayout layout; std::string err;
+        if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        const auto* box = layout.find(args[1]);
+        if (!box) { std::fprintf(stderr, "no map %s in FinalAlbion.wld\n", args[1].c_str()); return 1; }
+        if (xyz.size() >= 2) {
+            float pos[3] = {xyz[0], xyz[1], xyz.size() > 2 ? xyz[2] : 0.0f};
+            if (xyz.size() < 3) {
+                // on the ground when a loose .lev is at hand (the WAD copy needs the editor's extraction)
+                albion::editor::Document doc;
+                std::string derr;
+                const fs::path loose = install.root / "data" / "Levels" / "FinalAlbion" / (box->name + ".lev");
+                if (fs::exists(loose) && doc.loadLevel(loose, derr)) if (const auto h = doc.groundHeight(pos[0], pos[1])) pos[2] = *h;
+            }
+            const float fwd[2] = {0.0f, 1.0f};
+            std::vector<std::string> notes;
+            if (!albion::editor::setRegionEntrance(install.root, box->slot, box->name, pos, fwd, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+            for (const auto& n : notes) std::printf("  %s\n", n.c_str());
+            return 0;
+        }
+        const auto e = albion::editor::entranceOf(install.root, box->slot, err);
+        if (!e) { std::printf("%s (slot %d): no region entrance in FinalAlbion.gtg\n", box->name.c_str(), box->slot); return 0; }
+        std::printf("%s (slot %d): entrance at %.3f %.3f %.3f facing %.3f %.3f%s%s\n", box->name.c_str(), box->slot, e->pos[0], e->pos[1], e->pos[2], e->forward[0], e->forward[1], e->startScript.empty() ? "" : ", start ", e->startScript.c_str());
         return 0;
     }
     if (cmd == "backups" || cmd == "restore") {   // backups [--install root]: list; restore [--forget] [--install root]: put every backed-up file back (refused while the game runs)

@@ -30,6 +30,7 @@
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
 #include "presets.hpp"
+#include "gtg.hpp"
 #include "overworld.hpp"
 
 namespace albion::gui {
@@ -179,6 +180,11 @@ public:
     bool placePreset(const std::string& name);         // at the view centre, on the ground; selects it
     bool savePresetFromSelection(const std::string& name, const std::string& description);
     const std::vector<editor::PresetInfo>& presets() const { return presets_; }
+    // Region entrance (0.16 #3): where the map screen / teleports drop the hero in this
+    // map's WLD slot (FinalAlbion.gtg). Set at the view centre, facing the camera.
+    bool setEntranceHere();
+    std::optional<editor::RegionEntrance> currentEntrance() const;
+    void drawEntranceCard(float pad, float inner, float cardInner);
     bool hasClipboard() const { return !clipboard_.empty(); }
     // Screen position (window pixels) of the selected thing's pivot, for scripted gizmo drags.
     bool selectedPivotScreen(float& x, float& y) const;

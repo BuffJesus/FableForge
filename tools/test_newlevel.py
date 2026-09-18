@@ -10,7 +10,7 @@ import argparse, os, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_INSTALL = r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters"
-CONTAINERS = ["FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"]
+CONTAINERS = ["FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb", "FinalAlbion.gtg"]
 
 
 def main() -> int:
@@ -60,7 +60,7 @@ def main() -> int:
     leftovers = [f for f in os.listdir(os.path.join(scratch, "data", "Levels")) if "forge-tmp" in f]
     if leftovers:
         print("temp files left behind:", leftovers); ok = False
-    for c in CONTAINERS:
+    for c in CONTAINERS[:4]:   # the .gtg is only written for an own-region level (below)
         if not os.path.exists(os.path.join(scratch, "data", "Levels", c + ".atlas-orig")):
             print("missing backup for", c); ok = False
 
@@ -76,6 +76,19 @@ def main() -> int:
     r = subprocess.run([cli, "blank-level", "AtlasCliOwn", "--install", scratch, "--template", a.donor, "--own-region", "--no-minimap", "--display", "Atlas Own"], capture_output=True, text=True)
     if r.returncode != 0 or "taken over from" not in r.stdout:
         print("CLI own-region blank-level failed:", r.stderr, r.stdout[-400:]); ok = False
+    # an own-region level gets a region entrance in FinalAlbion.gtg (map centre); the CLI reads it back and can move it
+    if "region entrance + AtlasCliOwnHSP added" not in r.stdout:
+        print("own-region level: no region entrance note", r.stdout[-600:]); ok = False
+    r = subprocess.run([cli, "entrance", "AtlasCliOwn", "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or "entrance at" not in r.stdout or "AtlasCliOwnHSP" not in r.stdout:
+        print("CLI entrance read failed:", r.stderr, r.stdout); ok = False
+    r = subprocess.run([cli, "entrance", "AtlasCliOwn", "10", "12", "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or "moved the region entrance" not in r.stdout:
+        print("CLI entrance move failed:", r.stderr, r.stdout); ok = False
+    with open(os.path.join(scratch, "data", "Levels", "FinalAlbion.gtg"), "rb") as f:
+        gtg = f.read()
+    if gtg.count(b"AtlasCliOwnHSP") != 1 or b"\r\n" not in gtg or gtg.count(b"\n") != gtg.count(b"\r\n"):
+        print("gtg: duplicate HSP or broken line endings"); ok = False
     # a retail-sized one (128x224, the template is picked automatically) and a non-power-of-two one
     for name, size, patches in (("AtlasCliBig", "128x224", "112 patches"), ("AtlasCliOdd", "96x96", "36 patches")):
         r = subprocess.run([cli, "blank-level", name, "--install", scratch, "--size", size, "--height", "20"], capture_output=True, text=True)

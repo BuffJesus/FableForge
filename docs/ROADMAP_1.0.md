@@ -213,9 +213,13 @@ that the theme pass already used.
    camp fire, Oakvale fence + gate, cottage furniture, graveyard corner; Objects only --
    creatures/villagers need the placer's world-space InitialPos, so a camp's spawner is added
    from the spawner card).
-3. **Region entrances / map travel**: parse and edit `FinalAlbion.gtg` (TNG text) so a new
-   region gets a REGION_ENTRANCE_POINT and appears reachable from the world map. *(untested:
-   what the map screen needs beyond the entrance thing — verify with the harness.)*
+3. **Region entrances / map travel**: `src/gtg` DONE 2026-09-18 -- `FinalAlbion.gtg` is one
+   TNG-shaped section per WLD map slot (`NEWMAP n` ... `ENDMAP`, CRLF, 151 of 399 slots
+   present in retail; parsed and re-serialised byte-exact). An own-region level now gets a
+   REGION_ENTRANCE_POINT + `<Level>HSP` start at its centre on install; the Level tab's
+   *Region entrance* card and `AlbionAtlas entrance <map> [x y [z]]` show / set / move it.
+   *(still untested in-game: whether the map screen needs anything beyond the entrance thing
+   + the region's minimap -- verify with the harness on a fresh game.)*
 4. ~~**Multi-select + copy/paste**~~ DONE 2026-09-18: Ctrl+click (viewport / objects list)
    toggles; the gizmo and nudges move the set as a rigid group about the primary; Del /
    Ctrl+D / Ctrl+C / Ctrl+V act on the set, each one undo step (`Document::beginBatch`,

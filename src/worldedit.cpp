@@ -1,4 +1,5 @@
 #include "worldedit.hpp"
+#include "gtg.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -97,6 +98,24 @@ bool donorInfo(const fs::path& gameRoot, const std::string& donor, DonorInfo& ou
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
+// The region entrance a new own-region level gets by default: the map centre, on the
+// ground, facing north. The map screen / quest teleports drop the hero there.
+bool defaultEntrance(const fs::path& gameRoot, int slot, const std::string& levelName, const std::vector<uint8_t>& levBytes,
+                     std::vector<std::string>& notes, std::string& error) {
+    if (!fs::exists(gameRoot / "data" / "Levels" / "FinalAlbion.gtg")) { notes.push_back("no FinalAlbion.gtg in this tree: region entrance skipped (set it later from the Level tab)"); return true; }
+    try {
+        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "entrance";
+        fs::create_directories(tmp);
+        const fs::path levTmp = tmp / (levelName + ".lev");
+        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
+        const auto lev = forge::lev::File::open(levTmp);
+        const int cx = lev.cellsX() / 2, cy = lev.cellsY() / 2;
+        const float pos[3] = {float(cx), float(cy), lev.heightAt(cx, cy)};
+        const float fwd[2] = {0.0f, 1.0f};
+        return setRegionEntrance(gameRoot, slot, levelName, pos, fwd, notes, error);
+    } catch (const std::exception& e) { error = std::string("region entrance: ") + e.what(); return false; }
+}
+
 bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, NewLevelResult& out, std::string& error) {
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
@@ -167,6 +186,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
         stage("registering the region");
         if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
+        if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
@@ -574,6 +594,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
         if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
+        if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

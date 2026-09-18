@@ -1488,7 +1488,11 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::Dummy(ImVec2(0, S(8)));
         drawLiveLinkCard(pad, inner, cardInner);
     }
-    if (editTab_ == 3) drawNewLevelCard(pad, inner, cardInner);
+    if (editTab_ == 3) {
+        drawNewLevelCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
+        drawEntranceCard(pad, inner, cardInner);
+    }
 
     // ---- changes / save
     ImGui::SetCursorPosX(pad);
@@ -1571,6 +1575,48 @@ void App::drawEditFooter(float pad, float inner) {
         if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");
     }
+}
+
+// ---- region entrance --------------------------------------------------------------------
+std::optional<editor::RegionEntrance> App::currentEntrance() const {
+    if (!documentLoaded() || !doc_.worldSlot()) return std::nullopt;
+    std::string err;
+    return editor::entranceOf(saveRoot(), doc_.worldSlot(), err);
+}
+
+bool App::setEntranceHere() {
+    if (!documentLoaded()) { pushLog("entrance: no level document", 1); return false; }
+    if (!doc_.worldSlot()) { pushLog("entrance: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
+    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("entrance: the game is running (live link heartbeat); quit to the main menu first", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    float pos[3] = {focus[0], -focus[2], focus[1]};
+    if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
+    float d[3]; camera_.dir(d);
+    const float fwd[2] = {-d[0], d[2]};   // face the camera, like a placed object
+    std::vector<std::string> notes; std::string err;
+    if (!editor::setRegionEntrance(saveRoot(), doc_.worldSlot(), doc_.mapName(), pos, fwd, notes, err)) { pushLog("entrance: " + err, 2); return false; }
+    for (const auto& n : notes) pushLog(n, 3);
+    raiseRule("region");
+    return true;
+}
+
+void App::drawEntranceCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##entrance", inner);
+    theme::label("Region entrance");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("Where the map screen and quest teleports put the hero when he travels to this map (FinalAlbion.gtg, a REGION_ENTRANCE_POINT + a <Map>HSP start). A level installed with its own region gets one at its centre; move it here to choose the spot.");
+    const auto e = currentEntrance();
+    if (!doc_.worldSlot()) ImGui::TextColored(theme::vec(theme::Warn), "This map is not placed in FinalAlbion.wld.");
+    else if (e) ImGui::TextColored(theme::vec(theme::Muted), "Slot %d: entrance at %.1f, %.1f (h %.1f)%s%s", doc_.worldSlot(), e->pos[0], e->pos[1], e->pos[2], e->startScript.empty() ? "" : "   start ", e->startScript.c_str());
+    else ImGui::TextColored(theme::vec(theme::Warn), "Slot %d has no region entrance yet: the map screen cannot travel here.", doc_.worldSlot());
+    ImGui::PopFont();
+    if (theme::ghostButton(e ? "Move the entrance to the view centre" : "Set the entrance at the view centre", ImVec2(cardInner, S(28))) && doc_.worldSlot()) setEntranceHere();
+    auto_.registerWidget("btn_set_entrance");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes FinalAlbion.gtg (one-time .atlas-orig backup). Retail entrances are left in place; a second one is added for this map.");
+    theme::endCard();
 }
 
 // ---- presets --------------------------------------------------------------------------

@@ -22,6 +22,7 @@
 #include "thingsexport.hpp"
 #include "leveledit.hpp"
 #include "presets.hpp"
+#include "gtg.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -642,6 +643,84 @@ void testNavPatch(const fs::path& dir) {
     CHECK(after.sections[0].nodes.size() + 0 >= recordsBefore - 1);   // one leaf lost, one gained (+ any split internals)
 }
 
+// FinalAlbion.gtg: byte-exact round trip of a retail-shaped file, an entrance added to a
+// missing slot (inserted in slot order), moved in place on the second call, retail
+// sections untouched; the real retail file round-trips too when an install is at hand.
+void testGtg(const fs::path& dir) {
+    auto near = [](float a, float b) { return std::fabs(a - b) < 1e-3f; };
+    const std::string retail =
+        "NEWMAP 1\nVersion 2;\n\nXXXSectionStart NULL;\n\nNewThing Thing;\nPlayer 4;\nUID 18446741874686296173;\nDefinitionType \"REGION_ENTRANCE_POINT\";\nScriptName NULL;\nScriptData \"NULL\";\n"
+        "ThingGamePersistent FALSE;\nThingLevelPersistent FALSE;\nStartCTCPhysicsStandard;\nPositionX 44.759766;\nPositionY 80.547852;\nPositionZ 33.785801;\nRHSetForwardX 0.773852;\nRHSetForwardY -0.633358;\nRHSetForwardZ 0.0;\n"
+        "RHSetUpX 0.000219;\nRHSetUpY 0.000267;\nRHSetUpZ 0.999994;\nEndCTCPhysicsStandard;\nStartCTCDRegionEntrance;\nActive TRUE;\nEndCTCDRegionEntrance;\nEndThing;\n\nXXXSectionEnd;\n\n\nENDMAP\n"
+        "NEWMAP 3\nVersion 2;\n\nENDMAP\nNEWMAP 62\nVersion 2;\n\nENDMAP\n";
+    const auto f = albion::editor::GtgFile::parse(retail);
+    CHECK(f.sections.size() == 3 && f.sections[0].slot == 1 && f.sections[2].slot == 62 && f.serialize() == retail);
+    CHECK(f.maxUid() == 18446741874686296173ull);
+    const fs::path root = dir / "gtg_root";
+    std::error_code ec; fs::remove_all(root, ec); fs::create_directories(root / "data" / "Levels", ec);
+    { std::ofstream(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary) << retail; }
+    std::vector<std::string> notes; std::string err;
+    const float pos[3] = {32.0f, 48.0f, 12.5f}, fwd[2] = {0.0f, 1.0f};
+    CHECK(albion::editor::setRegionEntrance(root, 7, "MyLevel", pos, fwd, notes, err));
+    CHECK(fs::exists(root / "data" / "Levels" / "FinalAlbion.gtg.atlas-orig"));
+    auto e = albion::editor::entranceOf(root, 7, err);
+    CHECK(e && near(e->pos[0], 32.0f) && near(e->pos[2], 12.5f) && e->startScript == "MyLevelHSP");
+    {
+        std::ifstream in(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary);
+        std::stringstream ss; ss << in.rdbuf();
+        const std::string t = ss.str();
+        const auto g = albion::editor::GtgFile::parse(t);
+        CHECK(g.sections.size() == 4 && g.sections[1].slot == 3 && g.sections[2].slot == 7 && g.sections[3].slot == 62);   // slot order kept
+        CHECK(g.sections[0].body == f.sections[0].body);                       // retail bytes untouched
+        CHECK(t.find("UID 18446741874686296174;") != std::string::npos && t.find("UID 18446741874686296175;") != std::string::npos);   // fresh uids
+        CHECK(g.sections[2].body.rfind("Version 2;\n\nXXXSectionStart NULL;\n\nNewThing Thing;", 0) == 0);
+    }
+    // moved: same slot, same script -> replaced in place, no duplicate
+    const float pos2[3] = {10.0f, 11.0f, 1.0f};
+    CHECK(albion::editor::setRegionEntrance(root, 7, "MyLevel", pos2, fwd, notes, err));
+    e = albion::editor::entranceOf(root, 7, err);
+    CHECK(e && near(e->pos[0], 10.0f));
+    {
+        std::ifstream in(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary);
+        std::stringstream ss; ss << in.rdbuf();
+        const std::string t = ss.str();
+        size_t n = 0, p = 0; while ((p = t.find("REGION_ENTRANCE_POINT", p)) != std::string::npos) { ++n; p += 5; }
+        CHECK(n == 2);   // retail's + ours
+        n = 0; p = 0; while ((p = t.find("MyLevelHSP", p)) != std::string::npos) { ++n; p += 5; }
+        CHECK(n == 1);
+    }
+    // the real retail file, when an install is around
+    for (const char* cand : {"C:/programs/steam/steamapps/common/Fable The Lost Chapters/data/Levels/FinalAlbion.gtg"}) {
+        std::ifstream in(cand, std::ios::binary);
+        if (!in) continue;
+        std::stringstream ss; ss << in.rdbuf();
+        const std::string t = ss.str();
+        const auto g = albion::editor::GtgFile::parse(t);
+        CHECK(g.sections.size() > 100 && g.eol == "\r\n" && g.serialize() == t);
+        CHECK(g.find(1) && g.find(1)->body.find("REGION_ENTRANCE_POINT") != std::string::npos);
+    }
+    // the same on a CRLF file (retail's line ending): the new blocks use CRLF too
+    {
+        std::string crlf;
+        for (const char c : retail) { if (c == '\n') crlf += "\r\n"; else crlf += c; }
+        const auto g = albion::editor::GtgFile::parse(crlf);
+        CHECK(g.sections.size() == 3 && g.eol == "\r\n" && g.serialize() == crlf);
+        fs::create_directories(root / "data" / "Levels", ec);
+        { std::ofstream(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary) << crlf; }
+        fs::remove(root / "data" / "Levels" / "FinalAlbion.gtg.atlas-orig", ec);
+        CHECK(albion::editor::setRegionEntrance(root, 2, "Crlf", pos, fwd, notes, err));
+        std::ifstream in(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary);
+        std::stringstream ss; ss << in.rdbuf();
+        const std::string t = ss.str();
+        CHECK(t.find('\n') != std::string::npos && t.find("\n") == t.find("\r\n") + 1);   // still CRLF throughout
+        size_t lone = 0; for (size_t k = 0; k < t.size(); ++k) if (t[k] == '\n' && (k == 0 || t[k - 1] != '\r')) ++lone;
+        CHECK(lone == 0);
+        const auto h = albion::editor::entranceOf(root, 2, err);
+        CHECK(h && h->startScript == "CrlfHSP");
+    }
+    fs::remove_all(root, ec);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
     fs::create_directories(dir);
@@ -658,6 +737,7 @@ int main() {
     testLevelDocument();
     testTerrainEditing(lev, dir);
     testNavPatch(dir);
+    testGtg(dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "albionatlas_tests: all passed\n";
     return 0;

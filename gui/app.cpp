@@ -953,6 +953,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("grid=" + std::string(renderer_.showGrid ? "1" : "0"));
     v.push_back("selection_count=" + std::to_string(selectionCount()));
     v.push_back("presets=" + std::to_string(presets().size()));
+    { const auto e = currentEntrance(); char b[64]; if (e) std::snprintf(b, sizeof b, "%.1f,%.1f,%.1f", e->pos[0], e->pos[1], e->pos[2]); v.push_back(std::string("entrance=") + (e ? b : "-")); }
     if (cursorHit_) { char b[64]; std::snprintf(b, sizeof b, "%.1f,%.1f,%.1f", cursorFable_[0], cursorFable_[1], cursorFable_[2]); v.push_back(std::string("cursor_ground=") + b); } else v.push_back("cursor_ground=-");
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
@@ -1996,6 +1997,7 @@ bool Automation::tick(App& app) {
         if (hit < 0) fail("select_added: nothing added"); else { app.selectThing(hit); note("ok   " + line); }
         ++pc_;
     }
+    else if (cmd == "set_entrance") { if (!app.setEntranceHere()) fail("set_entrance failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "preset_place") { if (!app.placePreset(rest)) fail("preset_place failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "preset_save") { if (!app.savePresetFromSelection(rest, "")) fail("preset_save failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "select_toggle") { app.toggleSelect(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // Ctrl+click on a thing index
