@@ -154,7 +154,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   hero / region table cached in saves). *Got it* hides it for the session.
 * **Terrain (T)**: raise / lower / flatten / smooth brushes and walkable / blocked
   painting straight on the ground (hold LMB, Shift inverts, `[` `]` resize; each
-  stroke is one undo step). **Save terrain into the game** writes the `.lev`, replaces
+  stroke is one undo step). **Write terrain into the game** writes the `.lev`, replaces
   it in `FinalAlbion.wad` and re-bakes the map's terrain chunk inside
   `FinalAlbion_RT.stb` from the edited heights, with the neighbouring maps supplying
   the shared-edge samples, so the visible mesh, collision and camera bounds all follow.
@@ -171,7 +171,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   creature there, let the camera follow him. No native code, removable.
 * **World** (third tab): the whole of Albion as boxes on a grid, coloured by region.
   Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours
-  highlighted), queue as many moves as you like, then **Move N maps in the game**:
+  highlighted), queue as many moves as you like, then **Move N maps into the game**:
   the WLD/BWD placement and the map's terrain chunk (ground, LOD, water, trees and
   grass) are rewritten for the new origin. The same panel sets which region owns a
   map and which regions draw it across each edge, and can stitch the shared

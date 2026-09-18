@@ -40,7 +40,9 @@ Objects; the tab is remembered in `settings.json`. *Changes* and the footer
 (*Write into FinalAlbion.wad* / *Save draft*) stay on every tab. Warnings,
 errors and job results also pop up as toasts in the viewport corner, and the
 long jobs (new level, terrain save, world moves) show their current stage and
-elapsed time on the busy button.
+elapsed time on the busy button. `?` (or F1, or the header button) opens the
+keyboard/mouse cheat-sheet; every action that rewrites a game file asks once
+with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 
 ## What works now (things)
 
@@ -81,7 +83,7 @@ elapsed time on the busy button.
   in place with recomputed normals every frame of a stroke; the brush ring is
   projected onto the ground. One undo step per stroke, on the same stack as
   the object edits.
-* **Deploy** (`Save terrain into the game`), in this order:
+* **Deploy** (`Write terrain into the game`), in this order:
   1. loose `data/Levels/FinalAlbion/<map>.lev` (`lev::File::save`, only the
      cell bytes change);
   2. the `.lev` entry in `FinalAlbion.wad` (`wad::repack`, same size so it is
@@ -249,7 +251,7 @@ owns it. Wheel zooms about the cursor, right/middle drag pans, **F** refits. Cli
 map to select it; drag it (or type X/Y, or nudge with the arrow keys) to a new
 origin: it snaps to 32, the maps it would touch light up, and an overlap or a
 misaligned spot is refused (red outline, reason on the canvas). Moves queue up
-(orange outlines, *Pending moves* card) and **Move N maps in the game** writes them
+(orange outlines, *Pending moves* card) and **Move N maps into the game** writes them
 all at once; *Revert all* / *Put back* drop them.
 
 **Regions** live in the same panel: *Owned by region* changes the region that

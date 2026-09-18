@@ -11,6 +11,14 @@ assert_state edit_mode 1
 assert_state doc_loaded 1
 assert_widget seg_gizmo
 assert_widget seg_edit_tab
+assert_widget btn_help
+help 1
+frames 2
+assert_state help_open 1
+assert_widget btn_help_close
+click btn_help_close
+frames 4
+assert_state help_open 0
 assert_widget btn_save
 assert_widget btn_deploy
 # sub-tabs follow the tool and the actions: the terrain tool opens Terrain, leaving it

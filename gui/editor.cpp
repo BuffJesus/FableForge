@@ -1393,18 +1393,14 @@ void App::drawEditFooter(float pad, float inner) {
         if (terrainDeployFuture_.valid()) {
             theme::primaryButton(jobLabel("Saving terrain").c_str(), ImVec2(inner, S(36)), false);
         } else if (!confirmTerrainDeploy_) {
-            if (theme::primaryButton("Save terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
+            if (theme::primaryButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .atlas-orig backups of all three files.");
         } else {
-            ImGui::PushFont(fontSmall_);
-            ImGui::TextColored(theme::vec(theme::Warn), "Rewrite %s's terrain in the .lev, .wad and .stb?", doc_.mapName().c_str());
-            ImGui::PopFont();
-            const float half2 = (inner - S(6)) * 0.5f;
-            if (theme::primaryButton("Yes, bake it", ImVec2(half2, S(30)))) { confirmTerrainDeploy_ = false; startTerrainDeploy(); }
-            auto_.registerWidget("btn_terrain_deploy_confirm");
-            ImGui::SameLine(0, S(6));
-            if (theme::ghostButton("Cancel", ImVec2(half2, S(30)))) confirmTerrainDeploy_ = false;
+            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev, FinalAlbion.wad and FinalAlbion_RT.stb? (one-time .atlas-orig backups)";
+            const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(36), "btn_terrain_deploy_confirm");
+            if (r != 0) confirmTerrainDeploy_ = false;
+            if (r > 0) startTerrainDeploy();
         }
     }
     // The WAD write is the primary action: the engine only ever reads the archive. The
@@ -1416,10 +1412,10 @@ void App::drawEditFooter(float pad, float inner) {
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.atlas-orig.");
     } else {
-        if (theme::primaryButton("Yes, write into the WAD", ImVec2(half, S(42)))) { confirmDeploy_ = false; deployDocument(); }
-        auto_.registerWidget("btn_deploy_confirm");
-        ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Cancel", ImVec2(half, S(42)))) confirmDeploy_ = false;
+        const std::string q = "Replace " + doc_.mapName() + ".tng inside FinalAlbion.wad? The game reads it on the next visit (one-time .atlas-orig backup).";
+        const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(42), "btn_deploy_confirm");
+        if (r != 0) confirmDeploy_ = false;
+        if (r > 0) deployDocument();
     }
     ImGui::SetCursorPosX(pad);
     if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();

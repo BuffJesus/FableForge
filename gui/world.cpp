@@ -542,8 +542,8 @@ void App::drawWorldFooter(float pad, float inner) {
     const bool any = worldPendingCount() > 0;
     if (!confirmWorldApply_) {
         char label[96];
-        if (worldPending_.empty()) std::snprintf(label, sizeof label, any ? "Write %zu region change%s to the game" : "No pending changes", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
-        else std::snprintf(label, sizeof label, "Move %zu map%s in the game%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
+        if (worldPending_.empty()) std::snprintf(label, sizeof label, any ? "Write %zu region change%s into the game" : "No pending changes", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
+        else std::snprintf(label, sizeof label, "Move %zu map%s into the game%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
         if (theme::primaryButton(label, ImVec2(inner, S(42)), any)) confirmWorldApply_ = true;
         auto_.registerWidget("btn_world_apply");
         if (any || worldCanUndo() || worldCanRedo()) {
@@ -559,14 +559,11 @@ void App::drawWorldFooter(float pad, float inner) {
             auto_.registerWidget("btn_world_revert");
         }
     } else {
-        ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Warn), "%s", worldPending_.empty() ? "Rewrite FinalAlbion.wld/.bwd?" : "Rewrite the world files and the terrain chunks?");
-        ImGui::PopFont();
-        const float half = (inner - S(6)) * 0.5f;
-        if (theme::primaryButton(worldPending_.empty() ? "Yes, write them" : "Yes, move them", ImVec2(half, S(32)))) { confirmWorldApply_ = false; worldApply(); }
-        auto_.registerWidget("btn_world_apply_confirm");
-        ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Cancel", ImVec2(half, S(32)))) confirmWorldApply_ = false;
+        const int r = confirmRow(worldPending_.empty() ? "Rewrite FinalAlbion.wld / .bwd with these region changes? (one-time .atlas-orig backups)"
+                                                       : "Rewrite FinalAlbion.wld / .bwd and translate the moved maps' terrain chunks in FinalAlbion_RT.stb? (one-time .atlas-orig backups)",
+                                 worldPending_.empty() ? "Yes, write them" : "Yes, move them", inner, S(42), "btn_world_apply_confirm");
+        if (r != 0) confirmWorldApply_ = false;
+        if (r > 0) worldApply();
     }
 }
 

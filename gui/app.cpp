@@ -176,6 +176,76 @@ App::InstallHealth App::installHealth() const {
     return h;
 }
 
+void App::drawHelpOverlay() {
+    if (!helpOpen_) return;
+    using theme::S;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    // dim everything (a full-screen window under the card), then the card; a click
+    // outside or Escape closes it
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0.55f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("##helpdim", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::BringWindowToFocusFront(ImGui::GetCurrentWindow());
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(S(720), vp->Size.x - S(40)), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(22), S(18)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
+    ImGui::Begin("##help", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::BringWindowToFocusFront(ImGui::GetCurrentWindow());
+    ImGui::PushFont(fontBold_);
+    ImGui::TextUnformatted("Keyboard and mouse");
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::PushFont(fontSmall_);
+    ImGui::TextColored(theme::vec(theme::Faint), "   ?  or  F1 toggles this   |   Esc closes");
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, S(8)));
+    struct Row { const char* keys; const char* what; };
+    struct Group { const char* title; std::vector<Row> rows; };
+    const Group groups[] = {
+        {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
+        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + D", "duplicate"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}}},
+        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "invert: lower, or paint walkable"}, {"[  ]", "brush radius"}}},
+        {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
+        {"Everywhere", {{"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Drop a .lev / .tng", "open a loose file"}}},
+    };
+    const float colW = S(190);
+    ImGui::Columns(2, "##helpcols", false);
+    ImGui::SetColumnWidth(0, std::min(S(720), vp->Size.x - S(40)) * 0.5f);
+    int i = 0;
+    for (const Group& g : groups) {
+        if (i == 3) ImGui::NextColumn();
+        ImGui::PushFont(fontBold_);
+        ImGui::TextColored(theme::vec(theme::Accent), "%s", g.title);
+        ImGui::PopFont();
+        ImGui::PushFont(fontSmall_);
+        for (const Row& r : g.rows) {
+            ImGui::TextColored(theme::vec(theme::Text), "%s", r.keys);
+            ImGui::SameLine(colW);
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", r.what);
+        }
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, S(8)));
+        ++i;
+    }
+    ImGui::Columns(1);
+    ImGui::Dummy(ImVec2(0, S(4)));
+    if (theme::ghostButton("Close", ImVec2(S(120), S(28)))) helpOpen_ = false;
+    auto_.registerWidget("btn_help_close");
+    const bool clickedOutside = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem | ImGuiHoveredFlags_ChildWindows);
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
+    if (clickedOutside) helpOpen_ = false;
+}
+
 void App::drawSetupPanel() {
     if (!setupOpen_) return;
     using theme::S;
@@ -236,14 +306,10 @@ void App::drawSetupPanel() {
                     if (theme::ghostButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
                     auto_.registerWidget("btn_restore_all");
                 } else {
-                    ImGui::PushFont(fontSmall_);
-                    ImGui::TextColored(theme::vec(theme::Warn), "Put every backed-up file back and delete the files Atlas created? Your edits in the game are lost (loose .lev/.tng drafts stay).");
-                    ImGui::PopFont();
-                    const float hw = (S(530) - S(6)) * 0.5f;
-                    if (theme::primaryButton("Yes, restore", ImVec2(hw, S(28)))) { confirmRestore_ = false; restoreAllBackups(); }
-                    auto_.registerWidget("btn_restore_confirm");
-                    ImGui::SameLine(0, S(6));
-                    if (theme::ghostButton("Cancel", ImVec2(hw, S(28)))) confirmRestore_ = false;
+                    const int r = confirmRow("Put every backed-up file back and delete the files Atlas created? Your edits in the game are lost (loose .lev/.tng drafts stay).",
+                                             "Yes, restore", S(530), S(28), "btn_restore_confirm");
+                    if (r != 0) confirmRestore_ = false;
+                    if (r > 0) restoreAllBackups();
                 }
             }
         }
@@ -731,6 +797,22 @@ bool App::logContains(const std::string& needle) const {
     return false;
 }
 
+int App::confirmRow(const char* question, const char* yes, float width, float height, const char* widget) {
+    using theme::S;
+    ImGui::PushFont(fontSmall_);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    ImGui::TextColored(theme::vec(theme::Warn), "%s", question);
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    const float half = (width - S(6)) * 0.5f;
+    int r = 0;
+    if (theme::primaryButton(yes, ImVec2(half, height))) r = 1;
+    auto_.registerWidget(widget);
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("Cancel", ImVec2(half, height))) r = -1;
+    return r;
+}
+
 std::string App::jobLabel(const char* verb) const {
     std::string stage;
     { std::lock_guard<std::mutex> l(jobMutex_); stage = jobStage_; }
@@ -794,6 +876,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
+    v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
     v.push_back("format=" + std::string(settings_.format == 0 ? "glb" : "obj"));
@@ -932,6 +1015,9 @@ void App::frame(float dt) {
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E) && !exportFuture_.valid() && !selectedName_.empty()) startExport();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !filter_.empty() && !ImGui::IsAnyItemActive()) setFilter("");
+        // ? (shift+/ on most layouts) or F1: the shortcut cheat-sheet; Escape closes it
+        if (!io.WantTextInput && (ImGui::IsKeyPressed(ImGuiKey_F1) || (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Slash)))) helpOpen_ = !helpOpen_;
+        if (helpOpen_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) helpOpen_ = false;
     }
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -967,6 +1053,7 @@ void App::frame(float dt) {
     drawUnsavedPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; }
     drawSetupPanel();
+    drawHelpOverlay();
 
     ImGui::End();
 }
@@ -1003,13 +1090,13 @@ void App::drawTitleBar() {
     // must not miss: every write goes there, not into the install shown
     const bool redirected = !saveRoot_.empty() && saveRoot_ != installPath_;
     std::string status = !installValid_ ? "no install selected" : redirected ? "writes -> " + saveRoot_ : installPath_;
-    const float statusMax = std::max(S(120.0f), p.x + w - btnW - S(70) - (titleEnd + (w > S(760) ? subtitleW + S(24) : S(12))));
+    const float statusMax = std::max(S(120.0f), p.x + w - btnW - S(108) - (titleEnd + (w > S(760) ? subtitleW + S(24) : S(12))));
     if (ImGui::CalcTextSize(status.c_str()).x > statusMax) {
         while (status.size() > 4 && ImGui::CalcTextSize(("..." + status).c_str()).x > statusMax) status.erase(0, 1);
         status = "..." + status;
     }
     const float statusW = ImGui::CalcTextSize(status.c_str()).x;
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - statusW - btnW - S(40), p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
+    ImGui::SetCursorScreenPos(ImVec2(p.x + w - statusW - btnW - S(78), p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
     const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn))
                                     : theme::col(theme::Error);
     dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - S(12), ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
@@ -1022,6 +1109,10 @@ void App::drawTitleBar() {
     }
     if (ImGui::IsItemClicked()) setupOpen_ = true;
     ImGui::PopFont();
+    ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18) - S(38), p.y + (h - S(30)) * 0.5f));
+    if (theme::ghostButton("?", ImVec2(S(30), S(30)))) helpOpen_ = !helpOpen_;
+    auto_.registerWidget("btn_help");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keyboard and mouse cheat-sheet  (? or F1)");
     ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18), p.y + (h - S(30)) * 0.5f));
     if (theme::ghostButton("Change...", ImVec2(btnW, S(30)))) {
         const std::string picked = pickFolder(hwnd_, installPath_);
@@ -1809,6 +1900,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "delete_thing") { app.deleteSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
+    else if (cmd == "help") { app.setHelpOpen(rest == "1"); note("ok   " + line); ++pc_; }
     else if (cmd == "edit_tab") { app.setEditTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 Objects 1 Terrain 2 Actors 3 Level
     else if (cmd == "dismiss_rule") { app.dismissRule(rest); note("ok   " + line); ++pc_; }   // what the notice's "Got it" does (the notice may sit below the panel fold)
     else if (cmd == "redo") { app.editRedo(); note("ok   " + line); ++pc_; }

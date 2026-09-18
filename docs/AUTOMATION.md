@@ -46,6 +46,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`); one undo step |
 | *(toasts)* | every warning / error / success log line also shows for 6 s in the viewport's top-right corner (state `toasts` = how many are up); the long jobs' busy button reads `<verb>: <stage>  (N s)` from the job thread |
+| `help 0\|1` | the keyboard/mouse cheat-sheet overlay (also `?` / F1 / the header `?`; state `help_open`, widgets `btn_help`, `btn_help_close`) |
 | `edit_tab <0..3>` | the Edit panel's sub-tab: 0 Objects, 1 Terrain, 2 Actors, 3 Level (state `edit_tab`; widget `seg_edit_tab`). Terrain and the terrain tool follow each other; placing a spawner/village opens Actors, a viewport pick from Terrain/Level opens Objects |
 | `dismiss_rule <creature\|spawner\|region>` | what the engine-rule notice's *Got it* does (state `rule_notice` = the key shown, `-` for none; widget `btn_rule_<key>`) |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |

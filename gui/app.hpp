@@ -204,6 +204,10 @@ private:
     void startFoliageLoad();
     void pollWorkers();
     void pushLog(const std::string& line, int level = 0);
+    // The one confirm pattern (0.15b #7): an amber question, then [Yes, <verb>] [Cancel]
+    // side by side at `width`. Returns 1 for yes, -1 for cancel, 0 while undecided.
+    // `widget` names the yes button for the automation ("btn_x_confirm").
+    int confirmRow(const char* question, const char* yes, float width, float height, const char* widget);
     std::string resolveLevPath(const MapEntry& e, std::string& err);
     void startExportOf(const MapEntry& entry);
     const MapEntry* findEntry(const std::string& key) const;
@@ -214,6 +218,8 @@ private:
     InstallHealth installHealth() const;
     void drawSetupPanel();
     bool setupOpen_ = false;         // the Setup modal (first run, or the status click)
+    bool helpOpen_ = false;          // the shortcut cheat-sheet (? / F1, or the header button)
+    void drawHelpOverlay();
     bool confirmRestore_ = false;
     std::vector<backups::Entry> backupList_;
     double backupsScannedAt_ = -1;
@@ -255,6 +261,7 @@ private:
     int editTab_ = 0;
     int lastGizmoOp_ = -1;
 public:
+    void setHelpOpen(bool on) { helpOpen_ = on; }
     void setEditTab(int tab) { editTab_ = std::clamp(tab, 0, 3); if (editTab_ == 1 && doc_.hasTerrain()) gizmoOp_ = 4; else if (editTab_ != 1 && gizmoOp_ == 4) gizmoOp_ = 1; lastGizmoOp_ = gizmoOp_; }
     int editTab() const { return editTab_; }
 private:
