@@ -61,7 +61,7 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=161 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=156 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -74,6 +74,7 @@ ok   filter
      grid=0
      selection_count=0
      presets=0
+     entrance=-
      cursor_ground=-
      export_ok=1
      export_path=build/ui\Arena_Filler_02.glb

@@ -11,7 +11,7 @@ ok   mouse_down right
 ok   key_down W
 ok   frames 30
 ok   key_up W
-ok   assert_camera_moved 0.5  (moved 2.703413)
+ok   assert_camera_moved 0.5  (moved 2.741014)
 ok   snapshot_camera
 ok   mouse_delta 80 0
 ok   frames 2
@@ -72,6 +72,7 @@ shot build/ui/c3_orbited.png
      grid=0
      selection_count=0
      presets=0
+     entrance=32.1,52.3,100.0
      cursor_ground=-
      export_ok=0
      export_path=

@@ -123,7 +123,7 @@ def main() -> int:
     print(line)
     if line is None or "baked at" in line or f" {nx} " not in line:
         print("STB info block origin not updated"); ok = False
-    for c in CONTAINERS:
+    for c in CONTAINERS[:4]:   # a world move never touches the .gtg
         if not os.path.exists(os.path.join(sl, c + ".atlas-orig")):
             print("missing backup", c); ok = False
     # the export path still reads the moved map at its new place

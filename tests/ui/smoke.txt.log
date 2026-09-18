@@ -60,7 +60,7 @@ shot build/ui/08_exported.png
      hovered_window=##root/##actions_92064320
      mouse=1254,692
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=321 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=311 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -71,6 +71,9 @@ shot build/ui/08_exported.png
      help_open=0
      ui_scale=1.00
      grid=0
+     selection_count=0
+     presets=0
+     entrance=37.1,38.9,40.1
      cursor_ground=-
      export_ok=1
      export_path=build/ui\Greatwood_1.glb
