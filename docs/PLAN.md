@@ -224,6 +224,10 @@ in-game harness run (`tools/ingame`).
    RegionDef / minimap / display name / world-map flag in WLD + BWD.
 7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk) and fixed:
    `relocateChunk` runs in the donor-copy path (0.7.0).
+8. ~~Live link~~ DONE 2026-09-17 (`src/livelink`: file command + log answer
+   through a PartyMode Main hook; go-here / spawn / follow). Region reload
+   after a deploy is NOT possible: the game crashes as soon as the WAD/STB are
+   rewritten under it (tested); deploys are refused while a hero is live.
 
 ## Known gotchas to keep
 
