@@ -74,6 +74,7 @@ ok   filter
      grid=0
      selection_count=0
      presets=0
+     effects=0
      entrance=-
      cursor_ground=-
      export_ok=1
@@ -102,6 +103,9 @@ ok   filter
      camera=101.25,179.35,35.71
      edit_mode=0
      world_mode=0
+     textures_mode=0
+     textures_count=0
+     texture_selected=-
      world_loaded=0
      world_maps=0
      world_selected=
