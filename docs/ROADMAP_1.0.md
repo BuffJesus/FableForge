@@ -1,30 +1,36 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-17 night)
+## Resume here (2026-09-18 morning)
 
-Where we are: **0.14 "runs anywhere" is 2/4 done, 0.15 "can't hurt you" is 1/4 done**,
-all on `main` (last commit `c44ea35`, everything builds, `check_all` green as of the
-0.13.1 package; the backups/setup commits were smoke-tested, not full-suited).
+Where we are: **0.14 "runs anywhere" is 2/4 done, 0.15 "can't hurt you" is 4/4 done**,
+all on `main`. `python tools/check_all.py` was ALL PASS (15/15, ~19 min) on the backups/
+setup commits; every suite the 0.15 work touches (unit, editor, world/overworld, paths,
+controls, wheel, foliage, region, no-install, ui smoke) re-run green after it.
 
-Done today after the plan was approved:
-- Native texture importer (forgecore `texturewrite`, FableForge `b7ea3c8`; Atlas synced) --
-  no Python anywhere in the app; checker theme verified in-game through it.
-- Setup panel (first run / status click): install health + engine rules; GOG/Steam
-  candidates on C..H (FableForge `env.cpp`).
-- `.github/workflows/ci.yml` (MSYS2 MinGW build + offline checks) -- needs the public
-  remote to run.
-- Backup manager: `AlbionAtlas backups` / `restore`, Setup-panel list + restore,
-  `.atlas-created` marker for new loose TNGs.
+Done today:
+- 0.15 #2 engine-rule notices at the point of action: placing a creature / a spawner and
+  installing a level with its own region slot show the rule under that button
+  (`App::raiseRule` / `drawRuleNotice`, "Got it" hides it for the session; state
+  `rule_notice`, auto `dismiss_rule <key>`).
+- 0.15 #3 undo: the LEV palette rides in `TerrainState` (a palette add is one undo step
+  and makes the terrain dirty, since it is written with the LEV); the World tab has an
+  undo/redo stack over its pending moves / owner / visibility edits (Ctrl+Z/Y over the
+  canvas, buttons next to *Revert all*, auto `world_undo` / `world_redo`, cleared on apply).
+- 0.15 #4 "Write into FinalAlbion.wad" is the primary button; the loose .tng is "Save draft".
+- FableForge: the tree did not link after `b7ea3c8` (stale `findTextureBuilder`
+  declaration + CLI caller) -- fixed there, Atlas re-synced; `test_fse_native_overlay`
+  now floors the manifest count (947) instead of pinning 933. 15/16 FableForge test
+  binaries pass, `dirmask` skips without its retail fixture. **Still uncommitted there.**
 
 Next in order:
-1. `python tools/check_all.py` (the last two commits were only smoke-tested).
-2. 0.14 #3/#4: create the public GitHub repo (user), push, see CI go green; then the
-   forgecore un-vendoring -- **needs the user to triage FableForge's ~100 uncommitted
-   files first** (`git -C D:\Code\FableForge status`).
-3. 0.15 #2 engine-rule prompts at the point of action (new region -> "start a new game",
-   creature/spawner -> "fresh game / adult hero"), #3 undo for palette + region edits,
-   #4 rename "Save .tng (loose file)" -> "Save draft" with the WAD write as primary.
-4. Then 0.15b UI/UX (panel sub-tabs, toasts, overlays) and 0.16 depth.
+1. 0.14 #3/#4: create the public GitHub repo (user), push, see CI go green; then the
+   forgecore un-vendoring -- **needs the user to triage FableForge's uncommitted work**
+   (`git -C D:\Code\FableForge status`: 37 modified + 63 untracked; the untracked set is
+   11 new forgecore modules with tests, the GUI canvas + vendored imgui-node-editor, ~15
+   docs; junk = `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`, `build-debug/`,
+   `build-wiring/`).
+2. 0.15b UI/UX (panel sub-tabs, toasts, overlays), then 0.16 depth.
+3. Tag 0.15 once #1's repo exists (release = zip in `dist/` + check_all green).
 
 Install state: retail (`AlbionAtlas backups` -> 9 backed-up files, 0 differ). Saves:
 `0atlas` and `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is
@@ -145,12 +151,14 @@ Python), then safety, then depth.
    per-file restore, refusing while the game runs. Reuse `backupOnce` sites (`src/worldedit.cpp:44`,
    `src/leveledit.cpp:452`) by routing them through one registry (`src/backups.{hpp,cpp}`)
    that records what was backed up and when.
-2. **Engine-rule prompts at the point of action** (not the log): new region -> "start a new
+2. ~~**Engine-rule prompts at the point of action**~~ DONE 2026-09-18 (`raiseRule`/`drawRuleNotice`
+   under the Place / spawner / new-level buttons, "Got it" per session). Was: (not the log): new region -> "start a new
    game"; placing a creature/spawner -> "existing saves won't show it; spawners need an
    adult hero"; deploy while game runs -> already refused.
-3. **Undo coverage**: palette add (`Document::addGroundTheme`) and region edits are outside
+3. ~~**Undo coverage**~~ DONE 2026-09-18 (palette in `TerrainState`; World tab undo/redo stack).
+   Was: palette add (`Document::addGroundTheme`) and region edits are outside
    the undo stack today; put them in (snapshot the LEV palette; World tab already has Revert).
-4. **Loose-file honesty**: rename "Save .tng (loose file)" to "Save draft" and make *Write
+4. ~~**Loose-file honesty**~~ DONE 2026-09-18. Was: rename "Save .tng (loose file)" to "Save draft" and make *Write
    into FinalAlbion.wad* the primary action, since the engine never reads the loose copy.
 
 ### 0.15b — "Feels like a tool" (UI/UX polish; runs alongside 0.15 and 1.0-rc)
