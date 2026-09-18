@@ -42,4 +42,14 @@ assert_state export_ok 1
 assert_file build/ui/Greatwood_1.glb
 screenshot build/ui/08_exported.png
 dump_state
+# the setup / install-health panel (first run opens it; the status text opens it later)
+setup 1
+frames 2
+assert_state setup_open 1
+assert_widget btn_setup_continue
+assert_state install_textures 1
+screenshot build/ui/s_setup.png
+click btn_setup_continue
+frames 2
+assert_state setup_open 0
 quit

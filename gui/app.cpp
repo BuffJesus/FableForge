@@ -142,7 +142,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
 
     settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionAtlas").string();
     std::string savedInstall;
-    if (!auto_.active()) loadSettings(savedInstall);   // scripted runs stay deterministic
+    if (!auto_.active()) { firstRun_ = !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
     std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
 
     std::string root = installOverride;
@@ -159,6 +159,74 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
     if (!root.empty()) scanInstall(root);
     else pushLog("No Fable install found. Point me at your 'Fable The Lost Chapters' folder.", 1);
     return true;
+}
+
+App::InstallHealth App::installHealth() const {
+    InstallHealth h;
+    if (installPath_.empty()) return h;
+    const fs::path r = installPath_;
+    std::error_code ec;
+    h.gameBin = fs::exists(r / "data" / "CompiledDefs" / "game.bin", ec);
+    h.wad = fs::exists(r / "data" / "Levels" / "FinalAlbion.wad", ec);
+    h.stb = fs::exists(r / "data" / "Levels" / "FinalAlbion_RT.stb", ec);
+    h.texturesBig = fs::exists(r / "data" / "graphics" / "pc" / "textures.big", ec);
+    h.fse = fs::exists(r / "FSE" / "FableScriptExtender.dll", ec) && fs::exists(r / "FSE" / "PartyMode" / "PartyMode.lua", ec);
+    const char* home = std::getenv("USERPROFILE");
+    h.saves = home && fs::exists(fs::path(home) / "Documents" / "My Games" / "Fable" / "Saves", ec);
+    return h;
+}
+
+void App::drawSetupPanel() {
+    if (!setupOpen_) return;
+    using theme::S;
+    ImGui::OpenPopup("Setup");
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(S(560), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), S(16)));
+    if (ImGui::BeginPopupModal("Setup", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
+        const InstallHealth h = installHealth();
+        ImGui::PushFont(fontBold_);
+        ImGui::TextUnformatted(installValid_ ? "Your Fable install" : "Point Albion Atlas at Fable: The Lost Chapters");
+        ImGui::PopFont();
+        ImGui::PushFont(fontSmall_);
+        ImGui::PushTextWrapPos(S(530));
+        ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? installPath_.c_str() : "The Steam or GOG folder that holds Fable.exe (Steam: steamapps\\common\\Fable The Lost Chapters). Nothing in it is changed until you write something; every file touched gets a one-time .atlas-orig backup.");
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0, S(8)));
+        auto row = [&](bool ok, const char* what, const char* enables, const char* without) {
+            ImGui::TextColored(theme::vec(ok ? theme::Success : theme::Warn), ok ? "  ok   " : "  --   ");
+            ImGui::SameLine(0, 0);
+            ImGui::TextColored(theme::vec(theme::Text), "%s", what);
+            ImGui::SameLine(0, S(8));
+            ImGui::PushTextWrapPos(S(530));
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", ok ? enables : without);
+            ImGui::PopTextWrapPos();
+        };
+        row(h.gameBin && h.wad && h.stb, "game data", "levels, objects, terrain and the world editor", "no data/Levels + CompiledDefs here: this is not a Fable install");
+        row(h.texturesBig, "textures.big", "textured preview, ground-theme paint, custom textures, minimaps", "no textured preview, no theme paint or custom textures (a trimmed install?)");
+        row(h.fse, "ForgeFSE", "the live link to the running game (go here, spawn, follow)", "no live link: install ForgeFSE (FSE_Launcher.exe) to talk to the running game; everything else works");
+        row(h.saves, "saves folder", "the in-game test harness can continue your profiles", "no My Games/Fable/Saves yet: start the game once");
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, S(10)));
+        ImGui::PushFont(fontSmall_);
+        ImGui::PushTextWrapPos(S(530));
+        ImGui::TextColored(theme::vec(theme::Faint), "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, S(10)));
+        const float w = (S(530) - S(6)) * 0.5f;
+        if (theme::ghostButton("Choose the install folder...", ImVec2(w, S(32)))) {
+            const std::string picked = pickFolder(hwnd_, installPath_);
+            if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
+        }
+        auto_.registerWidget("btn_setup_browse");
+        ImGui::SameLine(0, S(6));
+        if (theme::primaryButton(installValid_ ? "Continue" : "Continue without an install", ImVec2(w, S(32)))) { setupOpen_ = false; ImGui::CloseCurrentPopup(); }
+        auto_.registerWidget("btn_setup_continue");
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
 }
 
 std::string App::settingsPath() const {
@@ -624,6 +692,7 @@ std::vector<std::string> App::stateDump() const {
     std::vector<std::string> v;
     v.push_back("install=" + installPath_);
     v.push_back("install_valid=" + std::string(installValid_ ? "1" : "0"));
+    { const InstallHealth h = installHealth(); v.push_back("install_textures=" + std::string(h.texturesBig ? "1" : "0")); v.push_back("install_fse=" + std::string(h.fse ? "1" : "0")); v.push_back("setup_open=" + std::string(setupOpen_ ? "1" : "0")); }
     v.push_back("maps=" + std::to_string(maps_.size()));
     v.push_back("selected=" + selectedName_);
     v.push_back("settings_scroll=" + std::to_string(int(settingsScroll_)));
@@ -802,6 +871,8 @@ void App::frame(float dt) {
     ImGui::SameLine(0, 0);
     drawActions(right);
     drawUnsavedPrompt();
+    if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; }
+    drawSetupPanel();
 
     ImGui::End();
 }
@@ -846,7 +917,12 @@ void App::drawTitleBar() {
                                     : theme::col(theme::Error);
     dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - S(12), ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
     ImGui::TextColored(theme::vec(theme::Muted), "%s", status.c_str());
-    if (installValid_ && ImGui::IsItemHovered()) ImGui::SetTooltip("%s  (%s)", installPath_.c_str(), installSource_.c_str());
+    if (ImGui::IsItemHovered()) {
+        const InstallHealth h = installHealth();
+        ImGui::SetTooltip("%s  (%s)\ntextures.big %s   ForgeFSE %s   saves %s\nclick for the setup check", installValid_ ? installPath_.c_str() : "no install", installSource_.c_str(),
+                          h.texturesBig ? "yes" : "no", h.fse ? "yes" : "no", h.saves ? "yes" : "no");
+    }
+    if (ImGui::IsItemClicked()) setupOpen_ = true;
     ImGui::PopFont();
     ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18), p.y + (h - S(30)) * 0.5f));
     if (theme::ghostButton("Change...", ImVec2(btnW, S(30)))) {
@@ -1636,6 +1712,7 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
     }
+    else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
     else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_remove") { if (!app.linkRemove()) fail("link_remove failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_go") { if (!app.linkGoHere()) fail("link_go failed"); else note("ok   " + line); ++pc_; }

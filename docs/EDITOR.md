@@ -5,6 +5,18 @@ used the leaked Lionhead debug build for, on retail data, with undo, and without
 the crashes. The engine formats are written by FableForge's `forgecore`
 (vendored; `tools/sync_forgecore.py` keeps it byte-identical with the upstream).
 
+## Setup (first run)
+
+A *Setup* panel opens on the first run (and from the install status in the
+header) with the install-health check: game data, `textures.big`, ForgeFSE
+and the saves folder, each with what it enables or what is lost without it,
+plus the engine rules that bite (new regions need a new game, saves cache
+entities, spawners need an adult hero, never write while the game runs).
+Install detection tries the Steam registry/library folders, then Steam and
+GOG default folders on drives C..H. Scripts: `setup 0|1`, state `setup_open`,
+`install_textures`, `install_fse`. CI (`.github/workflows/ci.yml`) builds with
+MSYS2 MinGW and runs the offline checks (unit, LZO, the no-install GUI script).
+
 ## What works now (things)
 
 * **Selection**: click in the viewport (CPU ray against every instance's real

@@ -104,10 +104,8 @@ Python), then safety, then depth.
    Verification: byte-compare our payload against `texture_build.py` output for the same PNG
    (PSNR=inf on the DXT blocks is not required; the Info header, chunk framing and TOC must be
    identical), then the existing `custom_theme_deploy.txt` + `atlas_check.png` in-game probe.
-2. **Install detection & first-run**: detect Steam/GOG paths, ForgeFSE presence (needed only
-   for the live link and the harness), textures.big presence; a first-run panel that says
-   what works without each.
-3. **CI + public repo**: GitHub Actions building with the same MinGW/CMake profile and
+2. ~~**Install detection & first-run**~~ DONE 2026-09-17 (Setup panel, GOG/Steam candidates on C..H).
+3. **CI + public repo** (workflow committed 2026-09-17; the public remote is the user's call): GitHub Actions building with the same MinGW/CMake profile and
    running `check_all.py --no-install` subset (unit, LZO cross-check, UI scripts that don't
    need an install — `noinstall.txt` exists). Retail-dependent tests stay local.
 

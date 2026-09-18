@@ -243,14 +243,24 @@ Environment Environment::detect(const fs::path& overrideInstall) {
             e.detectSource = steamSrc;
         } else {
             // 3) candidate paths.
+            // Steam and GOG defaults on every drive letter
             const char* cands[] = {
-                "C:\\Programs\\Steam\\steamapps\\common\\Fable The Lost Chapters",
-                "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Fable The Lost Chapters",
-                "C:\\Program Files\\Steam\\steamapps\\common\\Fable The Lost Chapters",
+                "Programs\\Steam\\steamapps\\common\\Fable The Lost Chapters",
+                "Program Files (x86)\\Steam\\steamapps\\common\\Fable The Lost Chapters",
+                "Program Files\\Steam\\steamapps\\common\\Fable The Lost Chapters",
+                "SteamLibrary\\steamapps\\common\\Fable The Lost Chapters",
+                "Steam\\steamapps\\common\\Fable The Lost Chapters",
+                "GOG Games\\Fable - The Lost Chapters",
+                "Program Files (x86)\\GOG Galaxy\\Games\\Fable - The Lost Chapters",
+                "GOG Galaxy\\Games\\Fable - The Lost Chapters",
+                "Games\\Fable - The Lost Chapters",
+                "Games\\Fable The Lost Chapters",
             };
-            for (const char* c : cands) {
-                if (looksLikeFable(c)) { e.installDir = c; e.detectSource = "candidate"; break; }
-            }
+            for (char drive = 'C'; drive <= 'H' && e.installDir.empty(); ++drive)
+                for (const char* c : cands) {
+                    const std::string full = std::string(1, drive) + ":\\" + c;
+                    if (looksLikeFable(full)) { e.installDir = full; e.detectSource = "candidate"; break; }
+                }
         }
     }
 

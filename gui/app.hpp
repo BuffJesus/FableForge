@@ -206,6 +206,12 @@ private:
     const MapEntry* findEntry(const std::string& key) const;
     void loadSettings(std::string& savedInstall);
     std::string settingsPath() const;
+    // what the chosen folder offers: each false switches a feature off with a reason
+    struct InstallHealth { bool gameBin = false, wad = false, stb = false, texturesBig = false, fse = false, saves = false; };
+    InstallHealth installHealth() const;
+    void drawSetupPanel();
+    bool setupOpen_ = false;         // the Setup modal (first run, or the status click)
+    bool firstRun_ = false;
 
     void drawTitleBar();
     void drawExplorer(float width);
