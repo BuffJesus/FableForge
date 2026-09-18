@@ -185,13 +185,14 @@ camera + QWER). What a stranger hits is *density and feedback*:
    preview mesh to a small RT once, cache by def); texture tab thumbnails.
 5. **Drag & drop**: PNG onto the paint card = custom texture; GLB onto the viewport = import
    model (0.17); `.lev/.tng` already works.
-6. **Discoverability**: a `?` shortcut cheat-sheet overlay (QWER, T, F, End, Ctrl+D, Del,
-   [ ], Shift-invert), tooltips on every card header (most exist), first-run tour of the three
-   tabs, empty-state hints ("Select a map on the left").
-7. **Consistency pass**: one confirm-dialog pattern (the World footer and the Edit footer
-   differ), one wording for install/write/deploy ("Write into the game"), consistent
-   button hierarchy (primary = the one that touches the game), error text that says what to
-   do next.
+6. **Discoverability**: ~~a `?` shortcut cheat-sheet overlay~~ DONE 2026-09-18 (`?` / F1 /
+   header button; camera, objects, terrain, World, everywhere), empty-state hints exist
+   ("Pick a map on the left", "Nothing selected", "This map has no .lev"). Still open: a
+   first-run tour of the three tabs.
+7. ~~**Consistency pass**~~ DONE 2026-09-18: one `App::confirmRow` (amber question, *Yes, ...* /
+   *Cancel*) for the WAD write, terrain write, world apply and the backup restore; every
+   button that touches the game reads "... into the game" / "Write into FinalAlbion.wad"
+   and is the primary of its card; each confirm names the files and the backup.
 8. **Accessibility/perf of the UI**: font scale slider in Options, colour-blind-safe walkable
    overlay (red/white -> pattern), keep 60 fps with the objects list virtualised (`ImGuiListClipper`
    for 500+ things).
