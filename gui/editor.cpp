@@ -358,6 +358,8 @@ bool App::saveDocument() {
 
 bool App::deployDocument() {
     if (!documentLoaded()) return false;
+    linkPoll(true);
+    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("deploy: the game is running (live link heartbeat) -- rewriting FinalAlbion.wad underneath it crashes it; quit to the main menu first", 1); return false; }
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
     pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.atlas-orig)", 3);
@@ -661,9 +663,6 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Spawn selected creature", ImVec2(half, S(28)))) linkSpawnSelected();
         auto_.registerWidget("btn_link_spawn");
-        if (theme::ghostButton("Reload the region in game", ImVec2(cardInner, S(28)))) linkReload();
-        auto_.registerWidget("btn_link_reload");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("After a save/deploy: a retail transition into the hero's own map re-streams the region,\nso the edited terrain, objects and textures appear without restarting the game.");
         ImGui::Checkbox("Camera follows the hero", &linkFollow_);
         auto_.registerWidget("chk_link_follow");
         if (theme::ghostButton("Remove the hook", ImVec2(cardInner, S(24)))) linkRemove();
@@ -891,6 +890,8 @@ void App::startNewLevel() {
 
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
+    linkPoll(true);
+    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("terrain: the game is running (live link heartbeat) -- rewriting FinalAlbion.wad / FinalAlbion_RT.stb underneath it crashes it; quit to the main menu first", 1); return; }
     if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
     editor::Document* doc = &doc_;

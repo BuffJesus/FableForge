@@ -372,9 +372,16 @@ at (3312.1, 3392.0, 42.5). Scripts: `link_install`, `link_go`, `link_spawn`,
 `link_ping`, `link_poll`, `link_remove`; state `link_installed`, `link_ready`,
 `link_hero_map`; live probes `tests/ui/link_live_send.txt` / `link_live_check.txt`
 (the harness moves the run's FSE log to `build/ingame/FableScriptExtender.run.log`).
-Implementation `src/livelink.{hpp,cpp}`. Not yet: moving/deleting existing
-things live (the engine keeps its own copies; a reload of the region is the
-honest path), terrain reload.
+Implementation `src/livelink.{hpp,cpp}`. **Tried and dropped (2026-09-17): a
+"reload the region" command.** Deploying a hill into GreatwoodTeleport while
+the hero stood in it killed the game before the reload command was even read
+(the heartbeat stopped the moment FinalAlbion.wad / FinalAlbion_RT.stb were
+rewritten; the engine holds them open and streams from them). So a running
+game cannot take a deploy: the editor now refuses terrain and WAD deploys
+while the link reports a live hero ("quit to the main menu first"). The
+`reload` command stays in the Lua thread (`link_reload` in scripts) for
+experiments from the main menu. Moving/deleting existing things live is out
+for the same reason.
 
 ## Enemy spawners
 
