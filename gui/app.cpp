@@ -368,6 +368,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.texSize = std::clamp(j.value("texSize", settings_.texSize), 0, 2);
         settings_.world = j.value("world", settings_.world);
         editTab_ = std::clamp(j.value("editTab", editTab_), 0, 3);
+        settings_.uiScale = std::clamp(j.value("uiScale", settings_.uiScale), 0.8f, 1.5f);
     } catch (...) {}
 }
 
@@ -380,7 +381,7 @@ void App::saveSettings() const {
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
-            {"editTab", editTab_},
+            {"editTab", editTab_}, {"uiScale", settings_.uiScale},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -877,6 +878,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
+    { char b[16]; std::snprintf(b, sizeof b, "%.2f", settings_.uiScale); v.push_back(std::string("ui_scale=") + b); }
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
     v.push_back("format=" + std::string(settings_.format == 0 ? "glb" : "obj"));
@@ -1026,7 +1028,7 @@ void App::frame(float dt) {
         // anything shorter than ~1000 px at 0.85. Snapped to 0.05 so a resize does not
         // rebuild fonts every frame.
         const float sizeFactor = std::clamp(vp->Size.y / 1200.0f, 0.85f, 1.25f);
-        wantScale_ = std::round(dpiScale_ * sizeFactor * 20.0f) / 20.0f;
+        wantScale_ = std::round(dpiScale_ * sizeFactor * settings_.uiScale * 20.0f) / 20.0f;
     }
     ImGui::SetNextWindowPos(vp->Pos);
     ImGui::SetNextWindowSize(vp->Size);
@@ -1581,6 +1583,21 @@ void App::drawActions(float width) {
     }
     theme::endCard();
 
+    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##interface", inner);
+    theme::label("Interface");
+    {
+        char val[32];
+        std::snprintf(val, sizeof val, "%d %%", int(std::round(settings_.uiScale * 100.0f)));
+        theme::labelValue("Text size", val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        if (ImGui::SliderFloat("##uiscale", &settings_.uiScale, 0.8f, 1.5f, "")) settings_.uiScale = std::round(settings_.uiScale * 20.0f) / 20.0f;
+        auto_.registerWidget("slider_uiscale");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On top of the display DPI and the window size. Fonts rebuild when you let go.");
+    }
+    theme::endCard();
+
     ImGui::Dummy(ImVec2(0, S(6)));
     settingsContentH_ = ImGui::GetCursorPosY();
     ImGui::EndChild();  // ##settings
@@ -1843,6 +1860,7 @@ bool Automation::tick(App& app) {
         else if (key == "things") s.things = val == "1";
         else if (key == "water") s.water = val == "1";
         else if (key == "creatures") s.creatures = val == "1";
+        else if (key == "uiscale") s.uiScale = std::clamp(float(std::atof(val.c_str())), 0.8f, 1.5f);
         else if (key == "texsize") s.texSize = std::atoi(val.c_str());
         else if (key == "world") s.world = val == "1";
         else if (key == "preview_things") app.setPreviewThings(val == "1");

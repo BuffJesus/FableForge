@@ -193,9 +193,10 @@ camera + QWER). What a stranger hits is *density and feedback*:
    *Cancel*) for the WAD write, terrain write, world apply and the backup restore; every
    button that touches the game reads "... into the game" / "Write into FinalAlbion.wad"
    and is the primary of its card; each confirm names the files and the backup.
-8. **Accessibility/perf of the UI**: font scale slider in Options, colour-blind-safe walkable
-   overlay (red/white -> pattern), keep 60 fps with the objects list virtualised (`ImGuiListClipper`
-   for 500+ things).
+8. ~~**Accessibility/perf of the UI**~~ DONE 2026-09-18: *Interface > Text size* slider
+   (80..150 %, on top of DPI + window size, `settings.uiScale`), blocked cells in the
+   walkable view are orange AND diagonally striped (reads without the hue), the objects
+   list was already `ImGuiListClipper`-virtualised.
 
 Verification: each item gets a `tests/ui/*.txt` script asserting widgets + a screenshot the
 user reviews (the existing `screenshot` command), plus the DPI sweep 1024x700..2560x1440

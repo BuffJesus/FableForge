@@ -50,6 +50,10 @@ ok   assert_file build/ui/Arena_Filler_02.glb
 ok   filter
      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
      install_valid=1
+     install_textures=1
+     install_fse=1
+     setup_open=0
+     backups_differ=0
      maps=400
      selected=file:Arena_Filler_01
      settings_scroll=0
@@ -57,11 +61,16 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=161 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=157 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
      mode=Textured
+     rule_notice=-
+     edit_tab=0
+     toasts=4
+     help_open=0
+     ui_scale=1.00
      export_ok=1
      export_path=build/ui\Arena_Filler_02.glb
      format=glb
@@ -93,10 +102,15 @@ ok   filter
      world_selected=
      world_pending=0
      world_pending_owners=0
+     world_can_undo=0
+     world_can_redo=0
      world_pending_sees=0
      world_ok=0
      world_stitch=0
      paint_theme=0
+     link_installed=0
+     link_ready=0
+     link_hero_map=
      villages=0
      palette_named=6
      doc_loaded=1

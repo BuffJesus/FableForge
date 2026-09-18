@@ -1,0 +1,24 @@
+ok   wait_maps
+ok   wait_ready
+ok   select GreatwoodTeleport
+ok   wait_loaded
+ok   edit 1
+ok   frames 2
+ok   assert_state doc_loaded 1
+ok   link_poll
+ok   assert_state link_hero_map GreatwoodTeleport
+ok   terrain_mode 0
+ok   brush 10 6
+ok   terrain_stroke 107 56 1
+ok   frames 2
+ok   assert_state terrain_dirty 1
+..   deploy_terrain
+ok   wait_terrain
+ok   frames 2
+ok   assert_state terrain_dirty 0
+ok   link_reload
+ok   frames 1
+ok   link_remove
+ok   frames 1
+ok   quit
+RESULT PASS

@@ -38,6 +38,10 @@ ok   assert_state export_ok 1
 ok   assert_file build/ui/StartOakValeWest.glb
      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
      install_valid=1
+     install_textures=1
+     install_fse=1
+     setup_open=0
+     backups_differ=0
      maps=399
      selected=StartOakValeWest
      settings_scroll=0
@@ -45,11 +49,16 @@ ok   assert_file build/ui/StartOakValeWest.glb
      hovered_window=##root/##actions_92064320
      mouse=1254,692
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=532 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=531 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
      mode=Textured
+     rule_notice=-
+     edit_tab=0
+     toasts=2
+     help_open=0
+     ui_scale=1.00
      export_ok=1
      export_path=build/ui\StartOakValeWest.glb
      format=glb
@@ -81,10 +90,15 @@ ok   assert_file build/ui/StartOakValeWest.glb
      world_selected=
      world_pending=0
      world_pending_owners=0
+     world_can_undo=0
+     world_can_redo=0
      world_pending_sees=0
      world_ok=0
      world_stitch=0
      paint_theme=0
+     link_installed=0
+     link_ready=0
+     link_hero_map=
      villages=1
      palette_named=41
      doc_loaded=1

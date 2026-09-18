@@ -49,6 +49,10 @@ ok   screenshot build/ui/08_exported.png
 shot build/ui/08_exported.png
      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
      install_valid=1
+     install_textures=1
+     install_fse=1
+     setup_open=0
+     backups_differ=0
      maps=399
      selected=Greatwood_1
      settings_scroll=0
@@ -56,11 +60,16 @@ shot build/ui/08_exported.png
      hovered_window=##root/##actions_92064320
      mouse=1254,692
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=319 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=322 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
      mode=Textured
+     rule_notice=-
+     edit_tab=0
+     toasts=2
+     help_open=0
+     ui_scale=1.00
      export_ok=1
      export_path=build/ui\Greatwood_1.glb
      format=glb
@@ -92,10 +101,15 @@ shot build/ui/08_exported.png
      world_selected=
      world_pending=0
      world_pending_owners=0
+     world_can_undo=0
+     world_can_redo=0
      world_pending_sees=0
      world_ok=0
      world_stitch=0
      paint_theme=0
+     link_installed=0
+     link_ready=0
+     link_hero_map=
      villages=2
      palette_named=29
      doc_loaded=1
@@ -106,5 +120,15 @@ shot build/ui/08_exported.png
      gizmo=1
      terrain_dirty=0
      terrain_center_height=42.442
+ok   setup 1
+ok   frames 2
+ok   assert_state setup_open 1
+ok   assert_widget btn_setup_continue
+ok   assert_state install_textures 1
+ok   screenshot build/ui/s_setup.png
+shot build/ui/s_setup.png
+..   click btn_setup_continue
+ok   frames 2
+ok   assert_state setup_open 0
 ok   quit
 RESULT PASS

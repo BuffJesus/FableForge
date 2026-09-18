@@ -1,0 +1,7 @@
+ok   wait_maps
+ok   wait_ready
+ok   link_install
+ok   frames 1
+ok   assert_state link_installed 1
+ok   quit
+RESULT PASS

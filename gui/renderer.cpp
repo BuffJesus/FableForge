@@ -88,8 +88,12 @@ float4 PS(VSOut i) : SV_Target {
         float fade = saturate(1.0 - d / (eye.w * 3.0));
         return float4(lerp(float3(0.30, 0.20, 0.55), float3(0.72, 0.55, 1.0), fade), 1.0);
     } else if (mode == 2) {
-        float3 ok = float3(0.30, 0.80, 0.55), no = float3(0.85, 0.28, 0.35);
+        // walkable = teal, blocked = orange-red AND diagonally striped, so the two read
+        // apart without the hue (red/green colour blindness)
+        float3 ok = float3(0.30, 0.80, 0.55), no = float3(0.90, 0.40, 0.20);
         base = lerp(no, ok, saturate(i.walk)) * 0.9;
+        float stripe = step(0.5, frac((i.wpos.x + i.wpos.z) * 0.25));
+        base = lerp(base, base * 0.6, stripe * (1.0 - saturate(i.walk)));
         // subtle 1-unit grid so cells read
         float2 g = abs(frac(float2(i.wpos.x, i.wpos.z)) - 0.5);
         float gridLine = smoothstep(0.47, 0.5, max(g.x, g.y));

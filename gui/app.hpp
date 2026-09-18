@@ -58,6 +58,7 @@ struct ExportSettings {
     int texSize = 0;         // object/plant texture cap: 0 full, 1 half (256), 2 quarter (128)
     bool world = false;      // place at WLD MapX/MapY so maps line up
     int up = 0;              // 0 = Y, 1 = Z
+    float uiScale = 1.0f;    // user font/UI scale on top of DPI + window size (0.8 .. 1.5)
     std::string outDir;
 };
 
