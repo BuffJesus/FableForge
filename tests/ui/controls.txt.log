@@ -11,7 +11,7 @@ ok   mouse_down right
 ok   key_down W
 ok   frames 30
 ok   key_up W
-ok   assert_camera_moved 0.5  (moved 2.716687)
+ok   assert_camera_moved 0.5  (moved 2.730458)
 ok   snapshot_camera
 ok   mouse_delta 80 0
 ok   frames 2
@@ -59,7 +59,7 @@ shot build/ui/c3_orbited.png
      hovered_window=##root/##actions_92064320/##settings_CD5EA619
      mouse=1198,533
      hovered_scrollmax=216
-     wheeling_window=- scrolled_frame=-1 frame=134 hovered_flags=16777479 parent=##root/##actions_92064320 parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=140 hovered_flags=16777479 parent=##root/##actions_92064320 parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1

@@ -1,36 +1,31 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-18 morning)
+## Resume here (2026-09-18 evening)
 
-Where we are: **0.14 "runs anywhere" is 2/4 done, 0.15 "can't hurt you" is 4/4 done**,
-all on `main`. `python tools/check_all.py` was ALL PASS (15/15, ~19 min) on the backups/
-setup commits; every suite the 0.15 work touches (unit, editor, world/overworld, paths,
-controls, wheel, foliage, region, no-install, ui smoke) re-run green after it.
+Where we are: **0.14 "runs anywhere" 2/4, 0.15 "can't hurt you" 4/4, 0.15b "feels like a
+tool" 8/8 first passes**, all on `main`. `tools/check_all.py` re-run at the end of the day
+(ALL PASS, 15/15, after the last UI commit).
 
-Done today:
-- 0.15 #2 engine-rule notices at the point of action: placing a creature / a spawner and
-  installing a level with its own region slot show the rule under that button
-  (`App::raiseRule` / `drawRuleNotice`, "Got it" hides it for the session; state
-  `rule_notice`, auto `dismiss_rule <key>`).
-- 0.15 #3 undo: the LEV palette rides in `TerrainState` (a palette add is one undo step
-  and makes the terrain dirty, since it is written with the LEV); the World tab has an
-  undo/redo stack over its pending moves / owner / visibility edits (Ctrl+Z/Y over the
-  canvas, buttons next to *Revert all*, auto `world_undo` / `world_redo`, cleared on apply).
-- 0.15 #4 "Write into FinalAlbion.wad" is the primary button; the loose .tng is "Save draft".
-- FableForge: the tree did not link after `b7ea3c8` (stale `findTextureBuilder`
-  declaration + CLI caller) -- fixed there, Atlas re-synced; `test_fse_native_overlay`
-  now floors the manifest count (947) instead of pinning 933. 15/16 FableForge test
-  binaries pass, `dirmask` skips without its retail fixture. **Still uncommitted there.**
+Done today (each item has a `tests/ui` assertion and a reviewed screenshot):
+- 0.15 #2-#4: engine-rule notices under the action, palette + World-tab undo/redo, "Write
+  into FinalAlbion.wad" primary / "Save draft".
+- 0.15b: Edit panel sub-tabs (Objects | Terrain | Actors | Level, remembered); toasts; job
+  stage labels through `editor::ProgressFn`; amber `writes -> <root>` status; one
+  `App::confirmRow` for every game write; `?`/F1 cheat-sheet; Text size slider; striped
+  walkable view; Grid chip + cursor `x y h` + compass; PNG drop = custom texture; albedo
+  swatches in the theme pickers.
+- FableForge: tree links again (stale `findTextureBuilder`), overlay test floored at 933;
+  **still uncommitted there** (the user's triage).
+
+Still open inside 0.15b (small, listed per item above): first-run tour, brush falloff ring
++ selection bounds + PiP minimap, mesh thumbnails in *Add an object*, a real progress bar.
 
 Next in order:
-1. 0.14 #3/#4: create the public GitHub repo (user), push, see CI go green; then the
-   forgecore un-vendoring -- **needs the user to triage FableForge's uncommitted work**
-   (`git -C D:\Code\FableForge status`: 37 modified + 63 untracked; the untracked set is
-   11 new forgecore modules with tests, the GUI canvas + vendored imgui-node-editor, ~15
-   docs; junk = `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`, `build-debug/`,
-   `build-wiring/`).
-2. 0.15b UI/UX (panel sub-tabs, toasts, overlays), then 0.16 depth.
-3. Tag 0.15 once #1's repo exists (release = zip in `dist/` + check_all green).
+1. 0.14 #3/#4: the user creates the public GitHub repo, push, CI green; triage FableForge's
+   37 modified / 63 untracked files (junk = `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`,
+   `build-debug/`, `build-wiring/`), then un-vendor forgecore.
+2. Tag 0.15 (zip in `dist/`, check_all green, release notes = today's commits).
+3. 0.16 depth: foliage brush, presets, .gtg entrances, multi-select.
 
 Install state: retail (`AlbionAtlas backups` -> 9 backed-up files, 0 differ). Saves:
 `0atlas` and `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is
