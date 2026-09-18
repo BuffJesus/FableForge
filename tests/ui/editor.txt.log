@@ -237,7 +237,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=491 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=483 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -247,6 +247,8 @@ ok   set unsaved_prompt 0
      toasts=1
      help_open=0
      ui_scale=1.00
+     grid=0
+     cursor_ground=-
      export_ok=0
      export_path=
      format=glb

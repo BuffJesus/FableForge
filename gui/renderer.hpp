@@ -64,6 +64,7 @@ public:
     bool& showFoliage = showLayer[0];
     bool& showThings = showLayer[1];
     bool showWater = true;
+    bool showGrid = false;   // LEV cell grid over the ground (every mode; Walkable always has it)
     // Back-compat names used by the app.
     bool uploadFoliage(const foliageexport::Scene& scene, terrainexport::UpAxis up) { return uploadLayer(0, scene, up); }
     void clearFoliage() { clearLayer(0); }

@@ -441,6 +441,11 @@ private:
     void drawUnsavedPrompt();
     bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
+    // Viewport overlays (0.15b #3): the ground under the cursor (map-local Fable
+    // coordinates + height) and a compass; drawn every frame the viewport is hovered.
+    bool cursorHit_ = false;
+    float cursorFable_[3] = {0, 0, 0};   // x, y (Fable), height
+    void drawViewportOverlays(const ImVec2& origin, const ImVec2& size);
     // Toasts (0.15b #2): every warning / error / success log line also surfaces in the
     // viewport's top-right corner for a few seconds, so a job's result is seen without
     // reading the Activity log. Info lines (level 0) stay in the log only.

@@ -798,6 +798,57 @@ bool App::logContains(const std::string& needle) const {
     return false;
 }
 
+void App::drawViewportOverlays(const ImVec2& origin, const ImVec2& size) {
+    using theme::S;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    cursorHit_ = false;
+    if (!renderer_.hasMesh() || !previewLoaded() || size.x <= 0 || size.y <= 0) return;
+    ImGuiIO& io = ImGui::GetIO();
+    // ground under the cursor: map-local Fable x/y (y north) and the height there
+    if (viewportHovered_) {
+        const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
+        float o[3], d[3], hit[3];
+        renderer_.screenRay(u, v, o, d);
+        if (renderer_.rayTerrain(o, d, hit)) { cursorHit_ = true; cursorFable_[0] = hit[0]; cursorFable_[1] = -hit[2]; cursorFable_[2] = hit[1]; }
+    }
+    ImGui::PushFont(fontSmall_);
+    const float rowH = ImGui::GetFrameHeight() + S(2);
+    const float yChips = origin.y + size.y - rowH - S(10);   // the view-mode chip row
+    if (cursorHit_) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "x %.1f   y %.1f   h %.1f", cursorFable_[0], cursorFable_[1], cursorFable_[2]);
+        const ImVec2 ts = ImGui::CalcTextSize(buf);
+        const ImVec2 p0(origin.x + S(14), yChips - ts.y - S(22));
+        dl->AddRectFilled(p0, ImVec2(p0.x + ts.x + S(16), p0.y + ts.y + S(10)), theme::col(theme::Bg1) | 0xD0000000, S(6));
+        dl->AddText(ImVec2(p0.x + S(8), p0.y + S(5)), theme::col(theme::Muted), buf);
+    }
+    // compass: where Fable north (+y, rendered as -z) points on screen, from two projected
+    // points around the camera focus; the needle keeps its length whatever the pitch
+    {
+        float f[3]; camera_.focus(f);
+        const float a[3] = {f[0], f[1], f[2]}, b[3] = {f[0], f[1], f[2] - 1.0f};
+        float au, av, bu, bv;
+        if (renderer_.project(a, au, av) && renderer_.project(b, bu, bv)) {
+            float dx = (bu - au) * size.x, dy = (bv - av) * size.y;
+            const float len = std::sqrt(dx * dx + dy * dy);
+            if (len > 1e-3f) {
+                dx /= len; dy /= len;
+                const float r = S(16);
+                const ImVec2 c(origin.x + size.x - S(14) - r, yChips - r - S(26));
+                dl->AddCircleFilled(c, r + S(4), theme::col(theme::Bg1) | 0xD0000000, 32);
+                dl->AddCircle(c, r + S(4), theme::col(theme::Border), 32, 1.0f);
+                const ImVec2 tip(c.x + dx * r, c.y + dy * r), tail(c.x - dx * r * 0.6f, c.y - dy * r * 0.6f);
+                const ImVec2 side(-dy * S(4), dx * S(4));
+                dl->AddTriangleFilled(tip, ImVec2(c.x + side.x, c.y + side.y), ImVec2(c.x - side.x, c.y - side.y), theme::col(theme::Accent));
+                dl->AddTriangleFilled(tail, ImVec2(c.x - side.x, c.y - side.y), ImVec2(c.x + side.x, c.y + side.y), theme::col(theme::Muted));
+                const ImVec2 ns = ImGui::CalcTextSize("N");
+                dl->AddText(ImVec2(c.x + dx * (r + S(11)) - ns.x * 0.5f, c.y + dy * (r + S(11)) - ns.y * 0.5f), theme::col(theme::Text), "N");
+            }
+        }
+    }
+    ImGui::PopFont();
+}
+
 int App::confirmRow(const char* question, const char* yes, float width, float height, const char* widget) {
     using theme::S;
     ImGui::PushFont(fontSmall_);
@@ -879,6 +930,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
     { char b[16]; std::snprintf(b, sizeof b, "%.2f", settings_.uiScale); v.push_back(std::string("ui_scale=") + b); }
+    v.push_back("grid=" + std::string(renderer_.showGrid ? "1" : "0"));
+    if (cursorHit_) { char b[64]; std::snprintf(b, sizeof b, "%.1f,%.1f,%.1f", cursorFable_[0], cursorFable_[1], cursorFable_[2]); v.push_back(std::string("cursor_ground=") + b); } else v.push_back("cursor_ground=-");
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
     v.push_back("format=" + std::string(settings_.format == 0 ? "glb" : "obj"));
@@ -1318,6 +1371,7 @@ void App::drawViewport(float width) {
         terrainInput(origin, size);
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
+        drawViewportOverlays(origin, size);
     }
     auto_.registerWidget("viewport");
     drawToasts(origin, size);
@@ -1386,7 +1440,7 @@ void App::drawViewport(float width) {
         auto chipW = [&](const char* t) { return ImGui::CalcTextSize(t).x + S(24); };
         float modesW = 0; for (int i = 0; i < 4; ++i) modesW += chipW(kModeNames[i]) + gap;
         modesW += chipW("Frame  (F)") + S(8);
-        const char* layerNames[3] = {"Foliage", "Objects", "Water"};
+        const char* layerNames[4] = {"Foliage", "Objects", "Water", "Grid"};
         float layersW = 0; for (const char* n : layerNames) layersW += chipW(n) + gap;
         const bool twoRows = modesW + layersW + ImGui::CalcTextSize("Show:").x + S(40) > size.x;
         const float yModes = origin.y + size.y - rowH - S(10);
@@ -1420,6 +1474,10 @@ void App::drawViewport(float width) {
         ImGui::SameLine(0, gap);
         if (theme::chip("Water", renderer_.showWater)) renderer_.showWater = !renderer_.showWater;
         auto_.registerWidget("chip_water");
+        ImGui::SameLine(0, gap);
+        if (theme::chip("Grid", renderer_.showGrid)) renderer_.showGrid = !renderer_.showGrid;
+        auto_.registerWidget("chip_grid");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The LEV cell grid (1 unit), heavier every 8 cells (one terrain patch).");
         const char* hint = "RMB look + WASD fly   LMB dolly/turn   MMB pan   Alt+LMB orbit   Wheel zoom   F frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
         const float hintRight = lx - ImGui::CalcTextSize("Show:").x - S(8) - S(28);   // clear of the "Show:" caption

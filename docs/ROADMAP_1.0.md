@@ -177,9 +177,11 @@ camera + QWER). What a stranger hits is *density and feedback*:
    `Installing: baking the minimap  (12 s)`; the header status turns amber `writes -> <root>`
    when the save root is redirected. Not done: a real progress *bar* (the stages have no
    fixed weights; the label + elapsed time is the honest version).
-3. **Viewport overlays**: grid at the LEV cell size, compass/north, map-local coordinates under
-   the cursor, brush radius ring in world units (exists) + falloff, selection bounds; a
-   "picture-in-picture" minimap of the whole map with the camera frustum.
+3. **Viewport overlays**: DONE 2026-09-18 -- *Grid* chip (LEV cell lines, heavier every 8 =
+   one terrain patch, screen-space width, per-cell lines fade out when a cell is under ~6 px),
+   map-local `x y h` under the cursor (bottom-left pill; state `cursor_ground`), compass
+   (Fable north) bottom-right; brush radius ring existed. Still open: falloff ring, selection
+   bounds, the picture-in-picture minimap with the camera frustum.
 4. **Pickers with pictures**: theme picker shows a 32px albedo swatch per palette slot (the
    texture cache already has the texels); *Add an object* shows a mesh thumbnail (render the
    preview mesh to a small RT once, cache by def); texture tab thumbnails.

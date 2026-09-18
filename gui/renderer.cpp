@@ -16,7 +16,7 @@ template <typename T> void release(T*& p) { if (p) { p->Release(); p = nullptr; 
 const char* kShader = R"HLSL(
 cbuffer Frame : register(b0) {
     row_major float4x4 viewProj;
-    float4 lightDir;      // xyz normalized, towards the light
+    float4 lightDir;      // xyz normalized, towards the light; w = cell grid on
     float4 params;        // x = mode, y = minH, z = maxH, w = time
     float4 eye;
     float4 flags;         // x = pass (0 terrain, 1 instances, 2 water), y = alpha test (cutout materials)
@@ -100,6 +100,22 @@ float4 PS(VSOut i) : SV_Target {
         base = lerp(base, base * 0.6, gridLine * 0.5);
     } else {
         base = heightRamp(t);
+    }
+    if (lightDir.w > 0.5 && mode != 2) {
+        // the LEV cell grid: one line per cell, a stronger one every 8 (the STB patch
+        // size). Screen-space widths (fwidth) keep the lines ~1.5 px at any zoom; the
+        // per-cell lines fade out when a cell is under ~6 px so they never moire.
+        float2 pos = float2(i.wpos.x, i.wpos.z);
+        float2 fw = max(fwidth(pos), 1e-4);
+        float2 d1 = abs(frac(pos) - 0.5);
+        float2 w1 = min(fw * 1.5, 0.2), w8 = min(fw / 8.0 * 1.5, 0.2);
+        float2 l1 = smoothstep(0.5 - w1, 0.5, d1);
+        float cell = max(l1.x, l1.y) * saturate((0.16 - max(fw.x, fw.y)) / 0.1);
+        float2 d8 = abs(frac(pos / 8.0) - 0.5);
+        float2 l8 = smoothstep(0.5 - w8, 0.5, d8);
+        float patch = max(l8.x, l8.y) * saturate((0.16 - max(fw.x, fw.y) / 8.0) / 0.1);
+        float3 ink = float3(0.08, 0.06, 0.12);
+        base = lerp(base, ink, max(cell * 0.35, patch * 0.75));
     }
     // gentle distance haze towards the viewport background
     float dist = distance(eye.xyz, i.wpos);
@@ -824,7 +840,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     // Sun: from the upper-left-front, slowly not moving (stable screenshots).
     float l[3] = {-0.45f, 0.8f, 0.35f};
     const float ll = std::sqrt(l[0] * l[0] + l[1] * l[1] + l[2] * l[2]);
-    cb.lightDir[0] = l[0] / ll; cb.lightDir[1] = l[1] / ll; cb.lightDir[2] = l[2] / ll; cb.lightDir[3] = 0;
+    cb.lightDir[0] = l[0] / ll; cb.lightDir[1] = l[1] / ll; cb.lightDir[2] = l[2] / ll; cb.lightDir[3] = showGrid ? 1.0f : 0.0f;
     cb.params[0] = float(int(mode)); cb.params[1] = minH_; cb.params[2] = maxH_; cb.params[3] = time;
     cb.eye[0] = eye[0]; cb.eye[1] = eye[1]; cb.eye[2] = eye[2]; cb.eye[3] = camera.distance;
     D3D11_MAPPED_SUBRESOURCE map;
