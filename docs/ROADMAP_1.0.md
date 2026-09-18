@@ -110,7 +110,7 @@ Python), then safety, then depth.
    need an install — `noinstall.txt` exists). Retail-dependent tests stay local.
 
 ### 0.15 — "Can't hurt you" (safety + UX honesty)
-1. **Backup manager**: one place listing every `.atlas-orig` (Levels, CompiledDefs,
+1. ~~**Backup manager**~~ DONE 2026-09-17 (`src/backups`, CLI `backups`/`restore`, Setup panel). Was: one place listing every `.atlas-orig` (Levels, CompiledDefs,
    textures.big, FSE/PartyMode.lua, loose LEV/TNG), with *Restore everything to retail* and
    per-file restore, refusing while the game runs. Reuse `backupOnce` sites (`src/worldedit.cpp:44`,
    `src/leveledit.cpp:452`) by routing them through one registry (`src/backups.{hpp,cpp}`)

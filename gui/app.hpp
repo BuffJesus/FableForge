@@ -22,6 +22,7 @@
 #include "foliageexport.hpp"
 #include "leveledit.hpp"
 #include "livelink.hpp"
+#include "backups.hpp"
 #include "renderer.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
@@ -211,6 +212,13 @@ private:
     InstallHealth installHealth() const;
     void drawSetupPanel();
     bool setupOpen_ = false;         // the Setup modal (first run, or the status click)
+    bool confirmRestore_ = false;
+    std::vector<backups::Entry> backupList_;
+    double backupsScannedAt_ = -1;
+public:
+    bool restoreAllBackups();        // put every backed-up file back (refused while the game runs)
+    void rescanBackups() { backupsScannedAt_ = -1; }
+private:
     bool firstRun_ = false;
 
     void drawTitleBar();

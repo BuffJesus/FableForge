@@ -214,6 +214,39 @@ void App::drawSetupPanel() {
         ImGui::TextColored(theme::vec(theme::Faint), "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
+        // backups: everything Atlas has touched, and the way back
+        if (installValid_) {
+            if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) { backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime(); }
+            size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
+            ImGui::Dummy(ImVec2(0, S(10)));
+            ImGui::PushFont(fontBold_);
+            ImGui::Text("Backups: %zu file(s) touched, %zu differ from retail", backupList_.size(), changed);
+            ImGui::PopFont();
+            if (!backupList_.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                ImGui::BeginChild("##backuplist", ImVec2(S(530), S(std::min(120.0f, 18.0f * float(backupList_.size()) + 8.0f))), ImGuiChildFlags_None);
+                ImGui::PopStyleColor();
+                ImGui::PushFont(fontSmall_);
+                for (const auto& e : backupList_) {
+                    ImGui::TextColored(theme::vec(e.differs ? theme::Warn : theme::Faint), "%s  %s", e.differs ? (e.created ? "new " : "edit") : "same", fs::relative(e.file, installPath_).string().c_str());
+                }
+                ImGui::PopFont();
+                ImGui::EndChild();
+                if (!confirmRestore_) {
+                    if (theme::ghostButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
+                    auto_.registerWidget("btn_restore_all");
+                } else {
+                    ImGui::PushFont(fontSmall_);
+                    ImGui::TextColored(theme::vec(theme::Warn), "Put every backed-up file back and delete the files Atlas created? Your edits in the game are lost (loose .lev/.tng drafts stay).");
+                    ImGui::PopFont();
+                    const float hw = (S(530) - S(6)) * 0.5f;
+                    if (theme::primaryButton("Yes, restore", ImVec2(hw, S(28)))) { confirmRestore_ = false; restoreAllBackups(); }
+                    auto_.registerWidget("btn_restore_confirm");
+                    ImGui::SameLine(0, S(6));
+                    if (theme::ghostButton("Cancel", ImVec2(hw, S(28)))) confirmRestore_ = false;
+                }
+            }
+        }
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(530) - S(6)) * 0.5f;
         if (theme::ghostButton("Choose the install folder...", ImVec2(w, S(32)))) {
@@ -227,6 +260,18 @@ void App::drawSetupPanel() {
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar();
+}
+
+bool App::restoreAllBackups() {
+    if (!installValid_) return false;
+    std::vector<std::string> notes; std::string err;
+    const size_t n = backups::restoreAll(installPath_, true, notes, err);
+    for (const auto& x : notes) pushLog("restore: " + x, 0);
+    if (!err.empty()) pushLog("restore: " + err, 2);
+    if (n) pushLog("restore: " + std::to_string(n) + " file(s) back to retail; reloading the map list", 3);
+    rescanBackups();
+    if (n) { scanInstall(installPath_); }
+    return err.empty();
 }
 
 std::string App::settingsPath() const {
@@ -693,6 +738,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("install=" + installPath_);
     v.push_back("install_valid=" + std::string(installValid_ ? "1" : "0"));
     { const InstallHealth h = installHealth(); v.push_back("install_textures=" + std::string(h.texturesBig ? "1" : "0")); v.push_back("install_fse=" + std::string(h.fse ? "1" : "0")); v.push_back("setup_open=" + std::string(setupOpen_ ? "1" : "0")); }
+    if (installValid_) { size_t d = 0; for (const auto& e : backupList_) d += e.differs; v.push_back("backups_differ=" + std::to_string(d)); }
     v.push_back("maps=" + std::to_string(maps_.size()));
     v.push_back("selected=" + selectedName_);
     v.push_back("settings_scroll=" + std::to_string(int(settingsScroll_)));
@@ -1712,6 +1758,7 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
     }
+    else if (cmd == "restore_all") { if (!app.restoreAllBackups()) fail("restore failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
     else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_remove") { if (!app.linkRemove()) fail("link_remove failed"); else note("ok   " + line); ++pc_; }

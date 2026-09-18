@@ -1039,7 +1039,8 @@ bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
     try {
         fs::create_directories(path.parent_path());
         const std::string text = file_.serialize();
-        if (fs::exists(path) && !fs::exists(path.string() + ".atlas-orig")) fs::copy_file(path, path.string() + ".atlas-orig");
+        if (fs::exists(path)) { if (!fs::exists(path.string() + ".atlas-orig") && !fs::exists(path.string() + ".atlas-created")) fs::copy_file(path, path.string() + ".atlas-orig"); }
+        else std::ofstream(path.string() + ".atlas-created") << "created by Albion Atlas\n";   // the backup manager deletes it on restore
         std::ofstream f(path, std::ios::binary | std::ios::trunc);
         if (!f) { error = "cannot write " + path.string(); return false; }
         f.write(text.data(), std::streamsize(text.size()));

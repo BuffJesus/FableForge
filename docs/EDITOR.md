@@ -17,6 +17,17 @@ GOG default folders on drives C..H. Scripts: `setup 0|1`, state `setup_open`,
 `install_textures`, `install_fse`. CI (`.github/workflows/ci.yml`) builds with
 MSYS2 MinGW and runs the offline checks (unit, LZO, the no-install GUI script).
 
+## Backups and restore
+
+Every writer keeps `<file>.atlas-orig` (the untouched original, once) or marks a
+file it created with `<file>.atlas-created`. `src/backups.{hpp,cpp}` scans the
+install for both (root BWD, data/Levels, the loose FinalAlbion folder,
+CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over
+the live file (the backup stays as the baseline), created files are deleted.
+Refused while Fable.exe runs. CLI `AlbionAtlas backups` (list, which differ) and
+`restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
+files* (confirm). Scripts: `restore_all`, state `backups_differ`.
+
 ## What works now (things)
 
 * **Selection**: click in the viewport (CPU ray against every instance's real

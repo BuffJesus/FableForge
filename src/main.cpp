@@ -43,6 +43,7 @@
 #include "overworld.hpp"
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
+#include "backups.hpp"
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
@@ -70,6 +71,8 @@ int usage() {
         "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
+        "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
+        "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
         "  AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
         "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
         "      (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)\n"
@@ -322,6 +325,58 @@ int main(int argc, char** argv) {
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
         std::printf("installed: map slot %d, box (%d,%d)-(%d,%d)\n", out.mapSlot, out.worldX, out.worldY, out.worldX + out.width, out.worldY + out.height);
         return 0;
+    }
+    if (cmd == "backups" || cmd == "restore") {   // backups [--install root]: list; restore [--forget] [--install root]: put every backed-up file back (refused while the game runs)
+        std::string installArg; bool forget = false;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--forget") forget = true;
+            else { std::fprintf(stderr, "usage: AlbionAtlas backups | restore [--forget] [--install <root>]\n"); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const auto entries = albion::backups::scan(install.root);
+        if (cmd == "backups") {
+            size_t changed = 0;
+            for (const auto& e : entries) {
+                std::printf("  %s  %-70s %s\n", e.differs ? (e.created ? "NEW " : "EDIT") : "same", e.file.string().c_str(), e.when.c_str());
+                changed += e.differs;
+            }
+            std::printf("%zu backed-up file(s), %zu differ from their backup%s\n", entries.size(), changed, albion::backups::gameRunning() ? " (Fable.exe is running)" : "");
+            return 0;
+        }
+        std::vector<std::string> notes; std::string err;
+        const size_t n = albion::backups::restoreAll(install.root, !forget, notes, err);
+        for (const auto& x : notes) std::printf("  %s\n", x.c_str());
+        if (!err.empty() && n == 0) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        std::printf("%zu file(s) restored%s\n", n, forget ? ", backups removed" : "");
+        return err.empty() ? 0 : 1;
+    }
+    if (cmd == "backups" || cmd == "restore") {   // backups [--install root]: list; restore [--forget] [--install root]: put every backed-up file back (refused while the game runs)
+        std::string installArg; bool forget = false;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--forget") forget = true;
+            else { std::fprintf(stderr, "usage: AlbionAtlas backups | restore [--forget] [--install <root>]\n"); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        const auto entries = albion::backups::scan(install.root);
+        if (cmd == "backups") {
+            size_t changed = 0;
+            for (const auto& e : entries) {
+                std::printf("  %s  %-70s %s\n", e.differs ? (e.created ? "NEW " : "EDIT") : "same", e.file.string().c_str(), e.when.c_str());
+                changed += e.differs;
+            }
+            std::printf("%zu backed-up file(s), %zu differ from their backup%s\n", entries.size(), changed, albion::backups::gameRunning() ? " (Fable.exe is running)" : "");
+            return 0;
+        }
+        std::vector<std::string> notes; std::string err;
+        const size_t n = albion::backups::restoreAll(install.root, !forget, notes, err);
+        for (const auto& x : notes) std::printf("  %s\n", x.c_str());
+        if (!err.empty() && n == 0) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        std::printf("%zu file(s) restored%s\n", n, forget ? ", backups removed" : "");
+        return err.empty() ? 0 : 1;
     }
     if (cmd == "region-props") {   // region-props <region> [--def REGION_X] [--minimap MINIMAP_X] [--display NAME] [--worldmap 0|1] [--install root]
         if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_GRAPHIC>] [--display <name>] [--worldmap 0|1] [--install <root>]\n"); return 2; }
