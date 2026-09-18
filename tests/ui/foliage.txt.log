@@ -45,7 +45,7 @@ ok   assert_file build/ui/StartOakValeWest.glb
      hovered_window=##root/##actions_92064320
      mouse=1254,692
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=541 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=532 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -85,6 +85,7 @@ ok   assert_file build/ui/StartOakValeWest.glb
      world_ok=0
      world_stitch=0
      paint_theme=0
+     villages=1
      palette_named=41
      doc_loaded=1
      doc_things=874

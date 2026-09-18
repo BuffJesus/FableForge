@@ -159,12 +159,12 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
     if (!openText(mapName, std::move(text), error)) return false;
     if (!levPath.empty()) loadLevel(levPath, error);
     // the map's world origin (creatures carry world-space InitialPos)
-    worldX_ = worldY_ = 0;
+    worldX_ = worldY_ = worldSlot_ = 0;
     try {
         const auto world = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
         const std::string want = lower(mapName) + ".lev";
         for (const auto& m : world.maps())
-            if (lower(fs::path(m.levelName).filename().string()) == want) { worldX_ = m.mapX; worldY_ = m.mapY; break; }
+            if (lower(fs::path(m.levelName).filename().string()) == want) { worldX_ = m.mapX; worldY_ = m.mapY; worldSlot_ = m.index; break; }
     } catch (const std::exception&) {}
     return true;
 }

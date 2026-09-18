@@ -672,6 +672,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_ok=" + std::string(worldLastOk_ ? "1" : "0"));
     v.push_back("world_stitch=" + std::string(worldStitch_ ? "1" : "0"));
     v.push_back("paint_theme=" + std::to_string(paintTheme_));
+    v.push_back("link_installed=" + std::string(installValid_ && livelink::isInstalled(installPath_) ? "1" : "0"));
+    v.push_back("link_ready=" + std::string(link_.ready ? "1" : "0"));
+    v.push_back("link_hero_map=" + link_.heroMap);
     if (documentLoaded()) {
         v.push_back("villages=" + std::to_string(doc_.villages().size()));
         if (selectedThing_ >= 0) {
@@ -1633,6 +1636,12 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
     }
+    else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_remove") { if (!app.linkRemove()) fail("link_remove failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_go") { if (!app.linkGoHere()) fail("link_go failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_spawn") { if (!app.linkSpawnSelected()) fail("link_spawn failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_ping") { if (!app.linkPing()) fail("link_ping failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "link_poll") { app.linkPoll(true); note("ok   " + line); ++pc_; }
     else if (cmd == "place_village") {   // place_village <VILLAGE_DEF> [scriptname]
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeVillage(def, sn)) fail("place_village failed: " + rest); else note("ok   " + line); ++pc_;

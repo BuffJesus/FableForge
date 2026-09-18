@@ -1,0 +1,12 @@
+# Live-install probe, part 2: after the game ran (the harness keeps the run's FSE log in build/ingame/FableScriptExtender.run.log,
+# where ATLAS_LINK|ready / ack / hero lines prove the round trip), remove the hook again.
+wait_maps
+wait_ready
+link_poll
+frames 1
+dump_state
+assert_state link_installed 1
+link_remove
+frames 1
+assert_state link_installed 0
+quit

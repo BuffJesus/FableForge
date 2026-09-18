@@ -565,6 +565,97 @@ void App::drawVillageCard(float pad, float inner, float cardInner) {
     theme::endCard();
 }
 
+// ------------------------------------------------------------ live link
+
+void App::linkPoll(bool force) {
+    const double now = ImGui::GetTime();
+    if (!force && linkPolledAt_ >= 0 && now - linkPolledAt_ < 1.0) return;
+    linkPolledAt_ = now;
+    link_ = livelink::poll(installPath_);
+    if (linkFollow_ && documentLoaded() && link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0 && link_.heroMap == doc_.mapName()) {
+        const float lx = link_.heroX - float(doc_.worldX()), ly = link_.heroY - float(doc_.worldY());
+        camera_.lookAt(lx, link_.heroZ, -ly, camera_.yaw, camera_.pitch, camera_.distance);
+    }
+}
+
+bool App::linkInstall() {
+    std::string err;
+    if (!livelink::install(installPath_, err)) { pushLog("live link: " + err, 2); return false; }
+    pushLog("live link installed (FSE/AtlasLink + a Main hook in PartyMode.lua); start the game through ForgeFSE", 3);
+    return true;
+}
+
+bool App::linkRemove() {
+    std::string err;
+    if (!livelink::remove(installPath_, err)) { pushLog("live link: " + err, 2); return false; }
+    pushLog("live link removed from PartyMode.lua", 0);
+    return true;
+}
+
+bool App::linkGoHere() {
+    if (!documentLoaded()) { pushLog("live link: no level document", 1); return false; }
+    if (!doc_.worldSlot()) { pushLog("live link: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    const float wx = focus[0] + float(doc_.worldX()), wy = -focus[2] + float(doc_.worldY());
+    std::string err;
+    linkLastSent_ = livelink::sendTeleport(installPath_, doc_.worldSlot(), doc_.mapName(), wx, wy, err);
+    if (!linkLastSent_) { pushLog("live link: " + err, 2); return false; }
+    pushLog("live link: hero -> " + doc_.mapName() + " (" + std::to_string(int(focus[0])) + ", " + std::to_string(int(-focus[2])) + ")", 0);
+    return true;
+}
+
+bool App::linkSpawnSelected() {
+    editor::Frame f;
+    if (!frameOfSelected(f)) { pushLog("live link: select a creature first", 1); return false; }
+    const auto s = doc_.summary(size_t(selectedThing_));
+    if (s.definition.rfind("CREATURE_", 0) != 0) { pushLog("live link: " + s.definition + " is not a creature (spawning places creatures only)", 1); return false; }
+    std::string err;
+    linkLastSent_ = livelink::sendSpawn(installPath_, s.definition, f.pos[0] + float(doc_.worldX()), f.pos[1] + float(doc_.worldY()), s.scriptName, err);
+    if (!linkLastSent_) { pushLog("live link: " + err, 2); return false; }
+    pushLog("live link: spawn " + s.definition + " at the selected spot", 0);
+    return true;
+}
+
+bool App::linkPing() {
+    std::string err;
+    linkLastSent_ = livelink::sendPing(installPath_, err);
+    if (!linkLastSent_) { pushLog("live link: " + err, 2); return false; }
+    return true;
+}
+
+void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!installValid_) return;
+    linkPoll();
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##livelink", inner);
+    theme::label("Live link (ForgeFSE)");
+    const bool installed = livelink::isInstalled(installPath_);
+    ImGui::PushFont(fontSmall_);
+    theme::hint("Talks to the running game through a small Lua thread in ForgeFSE's PartyMode quest: jump the hero to the spot you are looking at (a real region transition when he is elsewhere), spawn the selected creature where it stands, follow him with the camera.");
+    if (!installed) ImGui::TextColored(theme::vec(theme::Muted), "Not installed.");
+    else if (link_.heartbeatAge < 0 || link_.heartbeatAge > 5.0) ImGui::TextColored(theme::vec(theme::Muted), "%s", link_.ready ? "Installed; the game is not running (or no hero yet)." : "Installed; waiting for the game (start it through FSE_Launcher).");
+    else ImGui::TextColored(theme::vec(theme::Text), "Live: hero in %s at (%.0f, %.0f, %.1f)", link_.heroMap.c_str(), link_.heroX, link_.heroY, link_.heroZ);
+    if (link_.lastAckId && link_.lastAckId == linkLastSent_) ImGui::TextColored(theme::vec(link_.lastAckOk ? theme::Muted : theme::Warn), "last command: %s", link_.lastAckMessage.c_str());
+    ImGui::PopFont();
+    const float half = (cardInner - S(6)) * 0.5f;
+    if (!installed) {
+        if (theme::ghostButton("Install into ForgeFSE", ImVec2(cardInner, S(28)))) linkInstall();
+        auto_.registerWidget("btn_link_install");
+    } else {
+        if (theme::ghostButton("Go here in game", ImVec2(half, S(28)))) linkGoHere();
+        auto_.registerWidget("btn_link_go");
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Spawn selected creature", ImVec2(half, S(28)))) linkSpawnSelected();
+        auto_.registerWidget("btn_link_spawn");
+        ImGui::Checkbox("Camera follows the hero", &linkFollow_);
+        auto_.registerWidget("chk_link_follow");
+        if (theme::ghostButton("Remove the hook", ImVec2(cardInner, S(24)))) linkRemove();
+        auto_.registerWidget("btn_link_remove");
+    }
+    theme::endCard();
+}
+
 void App::drawSpawnerCard(float pad, float inner, float cardInner) {
     using theme::S;
     if (!documentLoaded()) return;
@@ -1191,6 +1282,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     drawVillageCard(pad, inner, cardInner);
     ImGui::Dummy(ImVec2(0, S(8)));
     drawSpawnerCard(pad, inner, cardInner);
+    ImGui::Dummy(ImVec2(0, S(8)));
+    drawLiveLinkCard(pad, inner, cardInner);
     ImGui::Dummy(ImVec2(0, S(8)));
     drawNewLevelCard(pad, inner, cardInner);
 

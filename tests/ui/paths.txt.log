@@ -57,7 +57,7 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=162 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=161 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -97,6 +97,7 @@ ok   filter
      world_ok=0
      world_stitch=0
      paint_theme=0
+     villages=0
      palette_named=6
      doc_loaded=1
      doc_things=0

@@ -351,6 +351,31 @@ Scripts: `place_village <VILLAGE_DEF> [scriptname]`, `village_member
 <uid|scriptname|0>`, state `villages` / `selected_village`; live probe
 `tests/ui/village_live.txt`.
 
+## Live link to the running game (ForgeFSE)
+
+The *Live link* card (2026-09-17, in-game verified) talks to the running game
+with no native code: *Install into ForgeFSE* writes `FSE/AtlasLink/atlas_link.lua`
+and appends a tagged `Main()` hook to `FSE/PartyMode/PartyMode.lua` (one-time
+`.atlas-orig`; *Remove the hook* takes it out again, byte-exact). The hook
+starts an `AtlasLink` quest thread that polls `FSE/AtlasLink/cmd.lua` with
+`loadfile()` every 0.5 s -- the FSE Lua state has no `io` library, so the command
+is a Lua chunk returning a table -- runs it through the quest API and answers in
+the FSE log (`ATLAS_LINK|ready`, `ATLAS_LINK|ack|id|ok|msg`, a
+`ATLAS_LINK|hero|beat|map|x|y|z` heartbeat every second) that Atlas tails.
+Commands: **Go here in game** (the camera focus -> `EntityTeleportToPosition`
+when the hero is already in this map, `GoToMapSlotRetailTransition(slot, x, y)`
+otherwise), **Spawn selected creature** (`CreateCreature` at the selected
+creature's spot), *Camera follows the hero* (the viewport tracks the heartbeat
+while he is in this map). Verified: from Oakvale, "go here" into Greatwood_1
+(48,96) acked `transition to slot 5` and the heartbeat then reported the hero
+at (3312.1, 3392.0, 42.5). Scripts: `link_install`, `link_go`, `link_spawn`,
+`link_ping`, `link_poll`, `link_remove`; state `link_installed`, `link_ready`,
+`link_hero_map`; live probes `tests/ui/link_live_send.txt` / `link_live_check.txt`
+(the harness moves the run's FSE log to `build/ingame/FableScriptExtender.run.log`).
+Implementation `src/livelink.{hpp,cpp}`. Not yet: moving/deleting existing
+things live (the engine keeps its own copies; a reload of the region is the
+honest path), terrain reload.
+
 ## Enemy spawners (experimental)
 
 The Edit panel's **Enemy spawner** card places a `MARKER_CREATURE_GENERATOR` thing

@@ -150,6 +150,7 @@ public:
     // WLD MapX/MapY of this map (0,0 when the map is not placed / no WLD).
     int worldX() const { return worldX_; }
     int worldY() const { return worldY_; }
+    int worldSlot() const { return worldSlot_; }   // WLD map slot (GoToMapSlotRetailTransition), 0 = unknown
     void remove(size_t index);
 
     bool canUndo() const { return !undo_.empty(); }
@@ -226,7 +227,7 @@ private:
     Snapshot snapshot() const;
     void writeTerrainToLevel();
     std::string mapName_;
-    int worldX_ = 0, worldY_ = 0;
+    int worldX_ = 0, worldY_ = 0, worldSlot_ = 0;
     forge::tng::File file_;
     std::string original_;
     std::vector<Snapshot> undo_, redo_;

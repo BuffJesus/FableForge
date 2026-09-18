@@ -21,6 +21,7 @@
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "leveledit.hpp"
+#include "livelink.hpp"
 #include "renderer.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
@@ -281,6 +282,21 @@ private:
     void drawSpawnerCard(float pad, float inner, float cardInner);
     // village card: VILLAGE_* picker; membership lives in the Selection card
     void drawVillageCard(float pad, float inner, float cardInner);
+    // live link card: ForgeFSE hook install/remove, hero heartbeat, go-here / spawn-here
+    void drawLiveLinkCard(float pad, float inner, float cardInner);
+    livelink::Status link_;
+    double linkPolledAt_ = -1;
+    bool linkFollow_ = false;              // camera follows the hero while he is in this map
+    uint64_t linkLastSent_ = 0;
+public:
+    bool linkInstall();
+    bool linkRemove();
+    bool linkGoHere();                     // teleport the hero to the camera focus (transition when in another map)
+    bool linkSpawnSelected();              // spawn the selected creature at its position
+    bool linkPing();
+    void linkPoll(bool force = false);
+    const livelink::Status& linkStatus() const { return link_; }
+private:
     std::vector<std::pair<std::string, std::string>> villageList_;
     char villageSearch_[64] = {};
 public:

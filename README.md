@@ -162,6 +162,9 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   in `game.bin`, nothing retail replaced). Saving rebuilds the map's layer meshes so
   the game draws the new material.
 
+* **Live link**: with ForgeFSE installed, one click hooks a tiny Lua thread into the
+  running game -- jump the hero to the spot you are looking at, spawn the selected
+  creature there, let the camera follow him. No native code, removable.
 * **World** (third tab): the whole of Albion as boxes on a grid, coloured by region.
   Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours
   highlighted), queue as many moves as you like, then **Move N maps in the game**:

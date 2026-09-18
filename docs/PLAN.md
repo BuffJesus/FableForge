@@ -25,6 +25,7 @@ in-game harness run (`tools/ingame`).
 | Custom ground texture from a PNG (textures.big + ENGINE_THEME append) | shipped (2026-09-17, in-game verified) |
 | Creatures placed as retail AICreature things (NPCs, animals) | shipped (2026-09-17, in-game verified) |
 | Villages: VILLAGE_* thing + per-thing membership | shipped (2026-09-17; loads in-game, behaviour unverified) |
+| Live link to the running game (ForgeFSE Lua thread: go here, spawn, follow) | shipped (2026-09-17, in-game verified) |
 
 ## Rocks turned today
 
@@ -233,6 +234,9 @@ in-game harness run (`tools/ingame`).
    passes), so a separate "splat" tool is not needed.
 6. **Region cap lift** via ForgeFSE (section 2, gated on the decompile
    verdict).
+8. ~~Live link~~ DONE 2026-09-17 (`src/livelink`, file-command + log-answer
+   through a PartyMode Main hook; go-here / spawn / follow). Next there: reload
+   the current region after a deploy, move things live.
 7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk) and fixed:
    `relocateChunk` runs in the donor-copy path (0.7.0).
 
