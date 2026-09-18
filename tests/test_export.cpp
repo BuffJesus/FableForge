@@ -21,6 +21,7 @@
 #include "terrainexport.hpp"
 #include "thingsexport.hpp"
 #include "leveledit.hpp"
+#include "presets.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -485,6 +486,34 @@ void testLevelDocument() {
         CHECK(doc.summary(pasted[1]).definition == "OBJECT_CRATE_02");
         CHECK(doc.undo() && doc.thingCount() == count + 1);   // the paste was one step
         CHECK(doc.undo() && doc.text() == before);            // then the crate
+    }
+    // presets: save the selection as a file, list it, load it, paste it (round trip)
+    {
+        const fs::path dir = fs::temp_directory_path() / "atlas_preset_test";
+        std::error_code ec; fs::remove_all(dir, ec); fs::create_directories(dir, ec);
+        const auto frag = doc.extract({0, 1});
+        std::string err;
+        CHECK(albion::editor::savePreset(dir / (albion::editor::presetSlug("My camp!") + ".preset.tng"), "My camp!", "two things", frag, err));
+        const auto list = albion::editor::listPresets({dir / "nope", dir});
+        CHECK(list.size() == 1 && list[0].name == "My camp!" && list[0].description == "two things" && list[0].things == 2 && list[0].user);
+        albion::editor::Document::Fragment back;
+        CHECK(albion::editor::loadPreset(list[0].file, back, err));
+        CHECK(back.items.size() == 2 && near(back.centre[0], frag.centre[0]) && near(back.centre[1], frag.centre[1]));
+        const size_t count = doc.thingCount();
+        const float at[3] = {50.0f, 60.0f, 1.0f};
+        const auto pasted = doc.paste(back, at, false);
+        CHECK(pasted.size() == 2 && doc.thingCount() == count + 2);
+        bool framed = false;
+        for (size_t k = 0; k < pasted.size(); ++k) {
+            albion::editor::Frame q;
+            if (!frag.items[k].hasFrame) continue;
+            CHECK(doc.frameOf(pasted[k], q));
+            CHECK(near(q.pos[0] - 50.0f, frag.items[k].frame.pos[0] - frag.centre[0]));
+            framed = true;
+        }
+        CHECK(framed);
+        doc.undo();
+        fs::remove_all(dir, ec);
     }
     // undo depth survives many edits
     for (int i = 0; i < 200; ++i) { f.pos[0] = float(i); doc.setFrame(1, f); }

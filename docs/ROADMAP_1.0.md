@@ -206,9 +206,13 @@ that the theme pass already used.
    repeated-mesh instances and type-0 meshes using the grammar in `src/stbrelocate.cpp`
    (`groupBody`) and forgecore's `encodeGroupContents` (`stbbake.cpp:1149`); bounds/spheres
    via the same helpers `zBox/zSphere` use. Preview via `foliageexport`.
-2. **Presets**: save a selection as a TNG fragment with relative positions; place with one
-   click (village + houses + villagers + guards; bandit camp = spawner + props). Ships with
-   3–4 retail-derived presets.
+2. ~~**Presets**~~ DONE 2026-09-18: `src/presets` (a preset is a valid loose .tng with a
+   two-line header; shipped in `presets/` next to the exe, yours in `%APPDATA%\AlbionAtlas\presets`),
+   Actors-tab card (click to place at the view centre as a selected group; *Save N selected
+   objects as a preset*), 4 retail-derived presets built by `tools/build_presets.py` (bandit
+   camp fire, Oakvale fence + gate, cottage furniture, graveyard corner; Objects only --
+   creatures/villagers need the placer's world-space InitialPos, so a camp's spawner is added
+   from the spawner card).
 3. **Region entrances / map travel**: parse and edit `FinalAlbion.gtg` (TNG text) so a new
    region gets a REGION_ENTRANCE_POINT and appears reachable from the world map. *(untested:
    what the map screen needs beyond the entrance thing — verify with the harness.)*

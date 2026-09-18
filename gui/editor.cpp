@@ -1480,6 +1480,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
 
     if (editTab_ == 2) {
+        drawPresetsCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawVillageCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawSpawnerCard(pad, inner, cardInner);
@@ -1569,6 +1571,92 @@ void App::drawEditFooter(float pad, float inner) {
         if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");
     }
+}
+
+// ---- presets --------------------------------------------------------------------------
+std::vector<std::filesystem::path> App::presetFolders() const {
+    std::vector<std::filesystem::path> v;
+    wchar_t exe[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exe, MAX_PATH)) v.push_back(std::filesystem::path(exe).parent_path() / "presets");
+    v.push_back(std::filesystem::path(settingsPath()).parent_path() / "presets");
+    return v;
+}
+
+void App::refreshPresets() {
+    presets_ = editor::listPresets(presetFolders());
+    presetsLoaded_ = true;
+}
+
+bool App::placePreset(const std::string& name) {
+    if (!documentLoaded()) { pushLog("preset: no level document", 1); return false; }
+    if (!presetsLoaded_) refreshPresets();
+    const editor::PresetInfo* hit = nullptr;
+    for (const auto& p : presets_) if (p.name == name || p.file.filename().string() == name) { hit = &p; break; }
+    if (!hit) { pushLog("preset: no preset named " + name, 1); return false; }
+    editor::Document::Fragment frag;
+    std::string err;
+    if (!editor::loadPreset(hit->file, frag, err)) { pushLog("preset: " + err, 2); return false; }
+    float focus[3]; camera_.focus(focus);
+    const float at[3] = {focus[0], -focus[2], focus[1]};
+    try {
+        const auto placed = doc_.paste(frag, at, true);
+        if (placed.empty()) return false;
+        extraUids_.clear();
+        selectedThing_ = int(placed.front()); selectedUid_ = doc_.uidOf(placed.front()); renderer_.selectedThing = selectedThing_;
+        for (size_t i = 1; i < placed.size(); ++i) extraUids_.push_back(doc_.uidOf(placed[i]));
+        syncExtraSelection();
+        pushLog("placed preset " + hit->name + " (" + std::to_string(placed.size()) + " objects) at the view centre; they stay selected, drag the gizmo to move them together", 0);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("preset: ") + e.what(), 2); return false; }
+}
+
+bool App::savePresetFromSelection(const std::string& name, const std::string& description) {
+    const auto sel = selectionIndices();
+    if (sel.empty()) { pushLog("preset: select the objects to save first", 1); return false; }
+    if (name.empty()) { pushLog("preset: give it a name", 1); return false; }
+    std::vector<size_t> idx(sel.begin(), sel.end());
+    const auto frag = doc_.extract(idx);
+    const auto folders = presetFolders();
+    const std::filesystem::path file = folders.back() / (editor::presetSlug(name) + ".preset.tng");
+    std::string err;
+    if (!editor::savePreset(file, name, description, frag, err)) { pushLog("preset: " + err, 2); return false; }
+    refreshPresets();
+    pushLog("saved preset " + name + " (" + std::to_string(sel.size()) + " objects) to " + file.string(), 3);
+    return true;
+}
+
+void App::drawPresetsCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!presetsLoaded_) refreshPresets();
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##presets", inner);
+    theme::label("Presets");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A saved group of objects placed with one click at the view centre (positions kept relative, fresh UIDs, dropped on the ground). Shipped ones come from retail maps; yours go to %APPDATA%\\AlbionAtlas\\presets.");
+    ImGui::PopFont();
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+    ImGui::BeginChild("##presetlist", ImVec2(cardInner, S(std::min(150.0f, 26.0f * float(std::max<size_t>(presets_.size(), 1)) + 8.0f))), ImGuiChildFlags_None);
+    ImGui::PopStyleColor();
+    ImGui::PushFont(fontSmall_);
+    if (presets_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "No presets found (presets/ next to the exe, or your own folder).");
+    for (const auto& p : presets_) {
+        char lbl[200]; std::snprintf(lbl, sizeof lbl, "%s   (%zu)%s##%s", p.name.c_str(), p.things, p.user ? "  *" : "", p.file.string().c_str());
+        if (ImGui::Selectable(lbl, false, 0, ImVec2(0, S(22)))) placePreset(p.name);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClick to place at the view centre.%s", p.description.c_str(), p.user ? "\n* your own preset" : "");
+    }
+    ImGui::PopFont();
+    ImGui::EndChild();
+    auto_.registerWidget("list_presets");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::InputTextWithHint("##presetname", "Name for the selection as a preset", presetName_, sizeof presetName_);
+    ImGui::PopStyleVar();
+    auto_.registerWidget("input_preset_name");
+    const size_t n = selectionCount();
+    char btn[96]; std::snprintf(btn, sizeof btn, n ? "Save %zu selected object%s as a preset" : "Save selection as a preset", n, n == 1 ? "" : "s");
+    if (theme::ghostButton(btn, ImVec2(cardInner, S(28))) && n && presetName_[0]) { if (savePresetFromSelection(presetName_, "")) presetName_[0] = 0; }
+    auto_.registerWidget("btn_preset_save");
+    theme::endCard();
 }
 
 // ---- theme swatches -----------------------------------------------------------------

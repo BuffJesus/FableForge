@@ -29,6 +29,7 @@
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
+#include "presets.hpp"
 #include "overworld.hpp"
 
 namespace albion::gui {
@@ -172,6 +173,12 @@ public:
     size_t selectionCount() const { return selectionIndices().size(); }
     void copySelection();
     void pasteClipboard();
+    // Presets (0.16 #2): shipped next to the exe (presets/) + the user's (%APPDATA%/AlbionAtlas/presets)
+    std::vector<std::filesystem::path> presetFolders() const;
+    void refreshPresets();
+    bool placePreset(const std::string& name);         // at the view centre, on the ground; selects it
+    bool savePresetFromSelection(const std::string& name, const std::string& description);
+    const std::vector<editor::PresetInfo>& presets() const { return presets_; }
     bool hasClipboard() const { return !clipboard_.empty(); }
     // Screen position (window pixels) of the selected thing's pivot, for scripted gizmo drags.
     bool selectedPivotScreen(float& x, float& y) const;
@@ -272,6 +279,10 @@ private:
     editor::Frame gizmoStart_;                        // the primary's frame when the drag began
     std::vector<std::pair<int, editor::Frame>> groupStart_;   // the extras' frames when the drag began
     editor::Document::Fragment clipboard_;
+    std::vector<editor::PresetInfo> presets_;
+    bool presetsLoaded_ = false;
+    char presetName_[64] = {};
+    void drawPresetsCard(float pad, float inner, float cardInner);
     void syncExtraSelection();                        // renderer.alsoSelected from extraUids_
     editor::Frame groupFrame(const editor::Frame& start) const;
     // Edit panel sub-tabs (0.15b #1): 0 Objects (selection / list / add), 1 Terrain (brush +

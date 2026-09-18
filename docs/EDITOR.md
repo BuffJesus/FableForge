@@ -62,6 +62,11 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
   Copy/paste carries a *fragment* (blocks + positions relative to the centroid),
   pasted at the view centre on the ground with fresh UIDs.
+* **Presets** (Actors tab): a saved group of objects (`presets/*.preset.tng`, a valid
+  loose .tng with a two-line header) placed at the view centre with one click as a
+  selected group; *Save N selected objects as a preset* writes to
+  `%APPDATA%\AlbionAtlas\presets`. Four retail-derived ones ship; rebuild them with
+  `tools/build_presets.py`.
 * **Undo/redo**: snapshot based (128 steps); indices are re-derived from UIDs.
 * **Save / deploy**: `Write into FinalAlbion.wad` is the primary action -- it
   replaces the archive entry through `forge::wad::repack`

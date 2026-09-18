@@ -139,6 +139,19 @@ screenshot build/ui/e4b_rule_notice.png
 undo
 wait_foliage
 frames 2
+# presets: the shipped ones list; one places as a selected group; the selection saves as a user preset
+edit_tab 2
+frames 1
+assert_widget list_presets
+preset_place Cottage furniture
+wait_foliage
+frames 2
+assert_state selection_count 16
+screenshot build/ui/e5_preset.png
+undo
+wait_foliage
+frames 2
+assert_state selection_count 0
 # a village the chicken joins (CTCVillageMember added), then leaves
 place_village VILLAGE_OAKVALE_INTRO AtlasVillage
 wait_foliage
