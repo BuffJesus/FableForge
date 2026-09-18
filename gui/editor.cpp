@@ -788,14 +788,19 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
         ImGui::EndCombo();
     }
     auto_.registerWidget("combo_new_level_region");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map (the game only reaches maps owned by one of the first 141 regions, so a copy joins an existing region).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map when it does not get its own (existing saves see it at once).");
     theme::toggle("Own region + minimap", &newLevelOwnRegion_);
     auto_.registerWidget("toggle_new_level_own_region");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game keeps only 141 regions, so a new region takes over a retail filler slot\n(a region owning only decorative maps; they move to another filler). The level gets its own\nname on the map screen and a minimap baked from its terrain (replaces an unreferenced\nMINIMAP_* texture in textures.big; one-time .atlas-orig backup).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The level gets its own region: its own name on the map screen and a minimap baked from its\nterrain (appended to textures.big and registered; one-time .atlas-orig backups).");
     if (newLevelOwnRegion_) {
+        int mode = newLevelDedicated_ ? 0 : 1;
+        if (theme::segmented("##ownmode", mode, {"New region slot", "Take over a filler"}, cardInner)) newLevelDedicated_ = mode == 0;
+        auto_.registerWidget("seg_new_level_own_mode");
         ImGui::PushFont(fontSmall_);
-        if (reusableRegions_.size() >= 2)
-            theme::hint(("Takes over " + reusableRegions_.front().name + " (slot " + std::to_string(reusableRegions_.front().slot) + ", " + std::to_string(reusableRegions_.front().maps) + " map(s) -> " + reusableRegions_.back().name + ").").c_str());
+        if (newLevelDedicated_)
+            theme::hint("A brand-new region slot (no engine cap). Saves cache the region table, so start a new game -- or make your save after adding it -- to see it named and drawn.");
+        else if (reusableRegions_.size() >= 2)
+            theme::hint(("Takes over " + reusableRegions_.front().name + " (slot " + std::to_string(reusableRegions_.front().slot) + ", " + std::to_string(reusableRegions_.front().maps) + " map(s) -> " + reusableRegions_.back().name + "); existing saves see it.").c_str());
         else
             ImGui::TextColored(theme::vec(theme::Warn), "No filler region slot is free to take over.");
         ImGui::PopFont();
@@ -840,7 +845,7 @@ void App::startNewLevel() {
         req.hostRegion = newLevelRegion_;
         req.worldX = newLevelX_; req.worldY = newLevelY_;
         req.templateLevel = blankTemplate_;
-        req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.displayName = newLevelDisplay_;
+        req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.dedicated = newLevelDedicated_; req.ownRegion.displayName = newLevelDisplay_;
         if (blankSize_ >= 0 && blankSize_ < int(blankSizes_.size())) { req.width = blankSizes_[size_t(blankSize_)].width; req.height = blankSizes_[size_t(blankSize_)].height; }
         req.themeSlot = blankTheme_;
         req.groundHeight = blankHeight_;
@@ -858,7 +863,7 @@ void App::startNewLevel() {
     req.donor = doc_.mapName();
     req.name = newLevelName_;
     req.hostRegion = newLevelRegion_;
-    req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.displayName = newLevelDisplay_;
+    req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.dedicated = newLevelDedicated_; req.ownRegion.displayName = newLevelDisplay_;
     req.worldX = newLevelX_; req.worldY = newLevelY_;
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
     newLevelFuture_ = std::async(std::launch::async, [req, root]() {

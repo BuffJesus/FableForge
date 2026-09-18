@@ -62,8 +62,8 @@ int usage() {
         "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
         "  AlbionAtlas new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
         "  AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
-        "      new-level / blank-level: [--own-region [<filler region>]] [--merge-into <filler>] [--display <name>] [--no-minimap]\n"
-        "      (own region = take over a retail filler slot under the 141-region cap, with a baked MINIMAP_<NAME> texture)\n"
+        "      new-level / blank-level: [--own-region [new|<filler region>]] [--merge-into <filler>] [--display <name>] [--no-minimap]\n"
+        "      (own region = a NEW region slot (`new`; complete on a game started after it) or a retail filler slot taken over; baked MINIMAP_<NAME>)\n"
         "  AlbionAtlas world  [--install <root>]                      every map's box, region and baked origin\n"
         "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
         "      (relocate maps: WLD/BWD placement + STB chunks translated to the new origins, touching neighbours re-baked)\n"
@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
             else if (args[i] == "--theme" && i + 1 < args.size()) theme = args[++i];
             else if (args[i] == "--height" && i + 1 < args.size()) req.groundHeight = float(std::atof(args[++i].c_str()));
             else if (args[i] == "--size" && i + 1 < args.size()) { if (std::sscanf(args[++i].c_str(), "%dx%d", &req.width, &req.height) != 2) { std::fprintf(stderr, "bad --size %s (WxH)\n", args[i].c_str()); return 2; } }
-            else if (args[i] == "--own-region") { req.ownRegion.wanted = true; if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) req.ownRegion.takeOver = args[++i]; }
+            else if (args[i] == "--own-region") { req.ownRegion.wanted = true; if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) { req.ownRegion.takeOver = args[++i]; if (req.ownRegion.takeOver == "new") { req.ownRegion.dedicated = true; req.ownRegion.takeOver.clear(); } } }
             else if (args[i] == "--merge-into" && i + 1 < args.size()) req.ownRegion.mergeInto = args[++i];
             else if (args[i] == "--display" && i + 1 < args.size()) req.ownRegion.displayName = args[++i];
             else if (args[i] == "--no-minimap") req.ownRegion.minimap = false;
@@ -267,7 +267,7 @@ int main(int argc, char** argv) {
         req.worldX = info.suggestedX; req.worldY = info.suggestedY;
         if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }
         if (req.hostRegion.empty()) req.hostRegion = info.owningRegion;
-        if (req.ownRegion.wanted) {
+        if (req.ownRegion.wanted && !req.ownRegion.dedicated) {
             std::string rerr;
             const auto rr = albion::editor::reusableRegions(install.root, rerr);
             std::printf("reusable filler regions:"); for (const auto& r : rr) std::printf(" %s(slot %d, %d maps)", r.name.c_str(), r.slot, r.maps); std::printf("\n");
@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
             else if (args[i] == "--region" && i + 1 < args.size()) req.hostRegion = args[++i];
             else if (args[i] == "--dedicated") dedicated = true;
             else if (args[i] == "--no-rebake") req.rebakeChunk = false;
-            else if (args[i] == "--own-region") { req.ownRegion.wanted = true; if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) req.ownRegion.takeOver = args[++i]; }
+            else if (args[i] == "--own-region") { req.ownRegion.wanted = true; if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) { req.ownRegion.takeOver = args[++i]; if (req.ownRegion.takeOver == "new") { req.ownRegion.dedicated = true; req.ownRegion.takeOver.clear(); } } }
             else if (args[i] == "--merge-into" && i + 1 < args.size()) req.ownRegion.mergeInto = args[++i];
             else if (args[i] == "--display" && i + 1 < args.size()) req.ownRegion.displayName = args[++i];
             else if (args[i] == "--no-minimap") req.ownRegion.minimap = false;

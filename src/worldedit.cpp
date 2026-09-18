@@ -28,6 +28,7 @@
 #include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
 #include "../vendor/embedded_schema.hpp"
+#include "overworld.hpp"
 #include "stbrelocate.hpp"
 #include "lodbake.hpp"
 
@@ -66,6 +67,8 @@ std::vector<uint8_t> levelBytes(const fs::path& gameRoot, const forge::wad::Arch
 
 bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
                     forge::worldinstall::Request& ir, std::string& error);
+bool finishDedicatedRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& minimap,
+                           std::vector<std::string>& notes, std::string& error);
 } // namespace
 
 bool donorInfo(const fs::path& gameRoot, const std::string& donor, DonorInfo& out, std::string& error) {
@@ -156,7 +159,8 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
-        for (const auto& n : r.notes) out.notes.push_back(n);
+        for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
+        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
@@ -198,10 +202,31 @@ std::vector<ReusableRegion> reusableRegions(const fs::path& gameRoot, std::strin
 
 namespace {
 // Fill the worldinstall request's region fields from the Atlas request.
+// A dedicated region: forgecore's install writes name/display/def but not the
+// minimap graphic; set it (WLD + the three BWD copies) and say what the region
+// needs from the player.
+bool finishDedicatedRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& minimap,
+                           std::vector<std::string>& notes, std::string& error) {
+    if (!own.wanted || !own.dedicated) return true;
+    if (!minimap.empty()) {
+        RegionProps props; props.minimapGraphic = minimap;
+        if (!setRegionProperties(gameRoot, levelName, props, notes, error)) return false;
+    }
+    notes.push_back("region " + levelName + " is a new slot: saves cache the region table, so start a new game (or make a save after this) to see it named and drawn");
+    return true;
+}
+
 bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
                     forge::worldinstall::Request& ir, std::string& error) {
     ir.hostRegion = hostRegion;
     if (!own.wanted) return true;
+    if (own.dedicated) {
+        ir.hostRegion.clear();
+        ir.regionName = levelName;
+        ir.regionDisplayName = own.displayName.empty() ? levelName : own.displayName;
+        ir.regionDef = own.regionDef;
+        return true;
+    }
     std::string rerr;
     const auto regions = reusableRegions(gameRoot, rerr);
     if (regions.size() < 2) { error = "no filler region slots left to take over (" + rerr + ")"; return false; }
@@ -536,7 +561,8 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
-        for (const auto& n : r.notes) out.notes.push_back(n);
+        for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
+        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

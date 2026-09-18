@@ -455,6 +455,18 @@ CLI and the card against a scratch copy of the install.
 
 ### Own region + minimap
 
+**Update 2026-09-17 -- there is no 141-region cap.** The BWD loader
+(`CWorldMap::LoadWorldFromBinaryFile`) loads every region the count says. What
+looked like a cap was the SAVE: saves cache the region table, so a region
+added after the save was made is nameless and draws white when that save is
+continued. On a game started after the region exists, dedicated region 146
+(`blank-level AtlasIsle --own-region new`) renders, is named "AtlasIsle" and
+shows its own baked minimap. The New level card therefore offers *New region
+slot* (default; needs a new game / a save made afterwards) or *Take over a
+filler* (existing saves see it at once). CLI: `--own-region new`. The
+`region-props` command sets a region's RegionDef / minimap / display name /
+world-map flag in the WLD and all three BWD copies.
+
 **2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
 name `MINIMAP_<LEVEL>` and registered in the `PLAYER_GUI_PC` /
 `PLAYER_GUI_DEFAULT` defs' `MiniMapGraphics` map in `game.bin` -- that map is what

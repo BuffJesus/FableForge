@@ -24,12 +24,16 @@ struct DonorInfo {
 // Reads the WLD/BWD/STB for the donor. Errors are returned, not thrown.
 bool donorInfo(const std::filesystem::path& gameRoot, const std::string& donor, DonorInfo& out, std::string& error);
 
-// Own region for a new level: the engine keeps only the first 141 regions, so
-// a new region is made by taking over a retail *filler* slot (a region that
-// only owns decorative, never-entered maps): its maps are re-owned by another
-// filler, the slot is renamed and gets the level's minimap texture.
+// Own region for a new level. Two ways: a NEW region slot (`dedicated`; there
+// is no engine cap -- proven 2026-09-17 with region 146 -- but saves cache the
+// region table, so the region is only complete on a game started after it was
+// added), or taking over a retail *filler* slot (a region that only owns
+// decorative, never-entered maps): its maps are re-owned by another filler and
+// the slot is renamed, which existing saves do see. Both get the level's
+// minimap texture and display name.
 struct OwnRegion {
     bool wanted = false;
+    bool dedicated = false;     // new slot instead of a filler take-over
     std::string takeOver;       // filler region to repurpose (see reusableRegions)
     std::string mergeInto;      // filler region that receives its maps
     std::string displayName;    // shown on the map screen; default = level name
@@ -45,7 +49,7 @@ std::vector<ReusableRegion> reusableRegions(const std::filesystem::path& gameRoo
 struct NewLevelRequest {
     std::string donor;          // existing level (stem)
     std::string name;           // new level stem: letters, digits, '_'
-    std::string hostRegion;     // existing region to own the map; "" = dedicated region (unreachable past slot 141)
+    std::string hostRegion;     // existing region to own the map; "" = a dedicated region (complete on a new game)
     OwnRegion ownRegion;        // wins over hostRegion when wanted
     int worldX = 0, worldY = 0; // 32-aligned origin
     bool rebakeChunk = true;    // re-bake the STB chunk for the new origin (recommended; otherwise donor geometry)
