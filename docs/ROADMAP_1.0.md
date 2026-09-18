@@ -185,8 +185,9 @@ camera + QWER). What a stranger hits is *density and feedback*:
 4. **Pickers with pictures**: theme picker shows a 32px albedo swatch per palette slot (the
    texture cache already has the texels); *Add an object* shows a mesh thumbnail (render the
    preview mesh to a small RT once, cache by def); texture tab thumbnails.
-5. **Drag & drop**: PNG onto the paint card = custom texture; GLB onto the viewport = import
-   model (0.17); `.lev/.tng` already works.
+5. **Drag & drop**: PNG/JPG/TGA onto the window = custom ground texture (DONE 2026-09-18:
+   lands in the Terrain tab's custom-texture input with a `GROUND_<file>` name, auto `drop
+   <file>`); `.lev` already opened as a loose map. GLB onto the viewport = import model (0.17).
 6. **Discoverability**: ~~a `?` shortcut cheat-sheet overlay~~ DONE 2026-09-18 (`?` / F1 /
    header button; camera, objects, terrain, World, everywhere), empty-state hints exist
    ("Pick a map on the left", "Nothing selected", "This map has no .lev"). Still open: a

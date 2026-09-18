@@ -462,6 +462,26 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
     return {};
 }
 
+bool App::openDropped(const std::string& path) {
+    const std::string ext = lower(fs::path(path).extension().string());
+    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
+        if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("drop: open a map with terrain first, then drop the image again to make a ground texture from it", 1); return false; }
+        std::snprintf(customPng_, sizeof customPng_, "%s", fs::absolute(path).string().c_str());
+        if (!customName_[0]) {
+            std::string nm = "GROUND_" + fs::path(path).stem().string();
+            for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+            std::snprintf(customName_, sizeof customName_, "%.*s", int(sizeof customName_ - 1), nm.c_str());
+        }
+        setEditMode(true);
+        setEditTab(1);
+        terrainMode_ = 6;
+        customThemeOpen_ = true;
+        pushLog("drop: " + fs::path(path).filename().string() + " is ready as a custom ground texture; name it and press Create theme", 0);
+        return true;
+    }
+    return openLooseLev(path);
+}
+
 bool App::openLooseLev(const std::string& path) {
     std::error_code ec;
     if (!fs::is_regular_file(path, ec) || lower(fs::path(path).extension().string()) != ".lev") {
@@ -2037,6 +2057,7 @@ bool Automation::tick(App& app) {
         ++pc_;
     }
     else if (cmd == "wait_batch") waitOn(!app.batchActive() && !app.exportBusy(), "batch export");
+    else if (cmd == "drop") { if (!app.openDropped(rest)) fail("drop failed: " + rest); else note("ok   " + line); ++pc_; }   // what a file dropped on the window does
     else if (cmd == "open") { if (!app.openLooseLev(rest)) fail("open failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "screenshot") { pendingShot_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 1; }
     else if (cmd == "assert_file") {

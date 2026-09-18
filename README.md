@@ -7,7 +7,7 @@ write the result back into the game. Two small Windows executables, no dependenc
 
 * **`AlbionAtlasGUI.exe`** — pick your install, browse the 399 maps on the left,
   see the map in 3D in the middle, export or edit on the right. Drag a `.lev`
-  onto the window to open a loose file. Export one map or all of them.
+  onto the window to open a loose file (drop a PNG to make a ground texture from it). Export one map or all of them.
 * **`AlbionAtlas.exe`** — the same exporter as a command line tool.
 
 Runs on anything with Direct3D 10-class graphics (falls back to the software

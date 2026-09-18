@@ -11,6 +11,12 @@ ok   assert_state doc_loaded 1
 ok   assert_widget seg_gizmo
 ok   assert_widget seg_edit_tab
 ok   assert_widget btn_help
+ok   drop build/atlas_check.png
+ok   frames 2
+ok   assert_state edit_tab 1
+ok   assert_widget input_custom_png
+ok   edit_tab 0
+ok   frames 1
 ok   help 1
 ok   frames 2
 ok   assert_state help_open 1
@@ -237,7 +243,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=483 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=490 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1

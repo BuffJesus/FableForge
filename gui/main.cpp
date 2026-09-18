@@ -126,7 +126,7 @@ static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_DROPFILES: {
             HDROP drop = reinterpret_cast<HDROP>(wp);
             wchar_t path[MAX_PATH];
-            if (g_app && DragQueryFileW(drop, 0, path, MAX_PATH)) g_app->openLooseLev(narrow(path));
+            if (g_app && DragQueryFileW(drop, 0, path, MAX_PATH)) g_app->openDropped(narrow(path));
             DragFinish(drop);
             return 0;
         }

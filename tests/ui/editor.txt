@@ -12,6 +12,13 @@ assert_state doc_loaded 1
 assert_widget seg_gizmo
 assert_widget seg_edit_tab
 assert_widget btn_help
+# a dropped PNG lands in the custom-texture input on the Terrain tab (paint mode)
+drop build/atlas_check.png
+frames 2
+assert_state edit_tab 1
+assert_widget input_custom_png
+edit_tab 0
+frames 1
 help 1
 frames 2
 assert_state help_open 1

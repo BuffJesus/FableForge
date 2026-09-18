@@ -139,6 +139,9 @@ public:
     std::vector<std::string> visibleMapNames() const;
     // Load a loose .lev from disk (drag & drop / automation) and select it.
     bool openLooseLev(const std::string& path);
+    // A file dropped on the window: .lev opens as a loose map; a .png / .jpg / .tga becomes
+    // the custom-texture input (Edit > Terrain > paint) with a name guessed from the file.
+    bool openDropped(const std::string& path);
     void saveSettings() const;
     ExportSettings& settings() { return settings_; }
     Camera& camera() { return camera_; }
