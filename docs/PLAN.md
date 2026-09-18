@@ -14,7 +14,7 @@ in-game harness run (`tools/ingame`).
 | Navigation quadtree patched per touched cell (door nodes, layers kept) | shipped |
 | New level: blank, any retail size, from-scratch chunk | shipped |
 | New level: copy of a map (donor chunk translated + re-baked) | shipped (0.7.0, AtlasTGCopy renders in-game) |
-| Own region under the 141 cap (filler slot take-over) + baked minimap | shipped |
+| Own region (filler take-over + baked minimap; dedicated regions past 141 work too with a NEW GAME) | shipped |
 | Unattended in-game harness (teleport, real region transition, follow, crash catcher) | shipped |
 | Overworld: World tab + `world-move`, terrain chunk fully translated to the new origin | shipped (2026-09-17) |
 | Region editing (owner, per-neighbour sees) in the World tab / CLI | shipped (2026-09-17) |
@@ -203,24 +203,25 @@ in-game harness run (`tools/ingame`).
    append, donor copy), both in-game verified. The per-vertex blend is what
    the theme brush already paints (the bake turns LEV slots into layer
    passes), so a separate "splat" tool is not needed.
-6. **Region cap** -- RE'd 2026-09-17 (`CWorldMap::LoadWorldFromBinaryFile`,
-   FableWin 0x1c7f9b0, headless decompile in FableTLC
-   `ghidra_out/bwd_loader_fablewin.c`): the BWD loop is
-   `count = ReadSLONG; regions.resize(count); for i in 1..count-1:
-   regions[i].LoadBinary()` -- **no cap in the loader**. Live test: `new-level
-   TeleporterGreatwood AtlasCap --dedicated` (map slot 400, region 146, all
-   three BWD copies in step) -- the first transition crashed the game on the
-   BWD `installLevel` wrote; after a WLD->BWD recompile (any Atlas region edit)
-   the hero ARRIVES in region 146 and walks on its collision (25/25 heights)
-   but the level draws WHITE: no textures, trees, or minimap, and
-   `GetRegionName` returns "" -- while the same level hosted by Greatwood
-   renders completely. A real `RegionDef`/`MiniMapGraphic`/display name
-   (`region-props`, new) changes nothing. So the "cap" is a per-region render/
-   atmosphere table past slot 141 (region 141 = ForgeTest64 via filler takeover
-   renders), not the loader. Next: find the fixed-size per-region array the
-   static-map open / atmosphere setup indexes (candidates
-   `PrepareAtmosBanksForLoadedRegion`, `PostRegionLoad`, the region graph).
-   Until then: host-region attach or filler takeover (both shipped).
+6. ~~Region cap~~ **THERE IS NO 141-REGION CAP** (2026-09-17). The BWD loader
+   (`CWorldMap::LoadWorldFromBinaryFile`, FableWin 0x1c7f9b0, decompiled
+   headless into FableTLC `ghidra_out/bwd_loader_fablewin.c`) is
+   `count = ReadSLONG; resize(count); for i in 1..count-1: LoadBinary()`.
+   Live: `new-level TeleporterGreatwood AtlasCap --dedicated` = map slot 400,
+   region 146 (all three BWD copies in step). From the existing '0atlas' save
+   the hero arrives but the level draws WHITE and `GetRegionName` is "" --
+   because SAVES CACHE THE REGION TABLE: a region younger than the save is
+   nameless and unrendered. Hosted by region 142 (in the save) it renders and
+   is named; with `--new-game` region 146 renders completely, is named
+   AtlasCap and shows its minimap. The August ForgeTest "cap" probe and the
+   filler-takeover workaround were both artefacts of continuing an old save.
+   Rule: a new dedicated region needs a new game (or a save made after it was
+   added); the own-region UI should say so instead of taking over fillers.
+   One caveat kept: the very first transition on the BWD that
+   `worldinstall::installLevel` wrote crashed the game; after any Atlas region
+   edit (WLD->BWD recompile of contains/sees) it loaded -- the installLevel
+   region record differs somewhere (to diff). `region-props` sets a region's
+   RegionDef / minimap / display name / world-map flag in WLD + BWD.
 7. ~~Cloned-chunk white-out RE~~ explained (untranslated chunk) and fixed:
    `relocateChunk` runs in the donor-copy path (0.7.0).
 
