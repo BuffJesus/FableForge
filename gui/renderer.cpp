@@ -949,14 +949,16 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
                 ctx_->Draw(b.count, 0);
             }
         }
-        if (selectedThing >= 0) {
+        if (selectedThing >= 0 || !alsoSelected.empty()) {
             // outline: the selected thing's instances again as an accent wireframe
-            const float accent[4] = {0.78f, 0.62f, 1.0f, 1.0f};
+            const float accent[4] = {0.78f, 0.62f, 1.0f, 1.0f}, dim[4] = {0.60f, 0.48f, 0.82f, 1.0f};
             ctx_->RSSetState(wire_);
             ctx_->OMSetDepthStencilState(depthOverlay_, 0);
             for (const auto& d : instances_) {
-                if (!d.visible || d.thing != selectedThing) continue;
-                setObject(d.world, accent);
+                if (!d.visible) continue;
+                const bool primary = d.thing == selectedThing;
+                if (!primary && std::find(alsoSelected.begin(), alsoSelected.end(), d.thing) == alsoSelected.end()) continue;
+                setObject(d.world, primary ? accent : dim);
                 for (const auto& b : meshes_[size_t(d.mesh)].parts) {
                     ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
                     ctx_->Draw(b.count, 0);

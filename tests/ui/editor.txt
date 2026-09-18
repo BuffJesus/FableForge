@@ -72,6 +72,39 @@ assert_state doc_changes 1
 frame_selected
 frames 2
 screenshot build/ui/e4_placed.png
+# multi-select: the placed barrel + thing 0 (Ctrl+click); a group move is one undo step,
+# duplicate copies both, copy/paste lands both at the view centre, delete removes all
+select_toggle 0
+frames 1
+assert_state selection_count 2
+move_thing 2 0 0
+frames 2
+assert_state doc_changes 2
+undo
+frames 2
+assert_state doc_changes 1
+assert_state selection_count 2
+duplicate_thing
+wait_foliage
+frames 2
+assert_state selection_count 2
+assert_state doc_changes 3
+copy
+paste
+wait_foliage
+frames 2
+assert_state selection_count 2
+assert_state doc_changes 5
+screenshot build/ui/e4b_multiselect.png
+undo
+undo
+wait_foliage
+frames 2
+assert_state doc_changes 1
+select_added
+frames 1
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+assert_state selection_count 1
 delete_thing
 wait_foliage
 frames 2

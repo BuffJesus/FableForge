@@ -90,6 +90,7 @@ public:
     void setInstanceWorld(size_t i, const float fableWorld[16]);
     void setInstanceVisible(size_t i, bool on) { if (i < instances_.size()) instances_[i].visible = on; }
     int selectedThing = -1;  // instances of this thing are outlined
+    std::vector<int> alsoSelected;   // the rest of a multi-selection (outlined a shade dimmer)
     // Ray (render space) against every visible instance's mesh; returns the
     // instance index or -1, with `t` the hit distance.
     int pick(const float origin[3], const float dir[3], float& t) const;

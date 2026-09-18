@@ -39,7 +39,8 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `pick <u> <v>` | ray-pick at viewport-relative (u, v) in [0,1]; selects the hit thing |
 | `select_thing <index>` / `select_def <DEFINITION>` | select by .tng index / first thing with that DefinitionType |
 | `move_thing <dx> <dy> <dz>` / `rotate_thing <deg>` / `scale_thing <factor>` / `ground_thing` | edit the selection (one undo step each) |
-| `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits (the objects layer reloads; `wait_foliage` waits for it) |
+| `duplicate_thing` / `delete_thing` / `undo` / `redo` | structural edits on the whole selection (the objects layer reloads; `wait_foliage` waits for it) |
+| `select_toggle <index>` / `select_added` / `copy` / `paste` | Ctrl+click a thing into/out of the selection; select the first thing the Changes list reports as added; copy the selection as a fragment; paste it at the view centre (state `selection_count`) |
 | `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground (`CREATURE_*` as the retail AICreature block) |
 | `place_village <VILLAGE_DEF> [scriptname]` / `village_member <uid\|scriptname\|0>` | place a Village thing at the camera focus; the selected thing joins/leaves a village (state `villages`, `selected_village`) |
 | `link_install` / `link_remove` / `link_go` / `link_spawn` / `link_ping` / `link_poll` | the ForgeFSE live link (state `link_installed`, `link_ready`, `link_hero_map`) |

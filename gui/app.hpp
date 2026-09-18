@@ -163,6 +163,16 @@ public:
     int selectedThing() const { return selectedThing_; }
     void selectThing(int index);
     int selectByDefinition(const std::string& def);   // first thing with this DefinitionType
+    // Multi-selection (0.16 #4): the primary (selectedThing_, the gizmo's pivot and the
+    // Selection card) plus extras kept by UID so they survive index shifts. Ctrl+click in
+    // the viewport / the objects list toggles; the gizmo moves the whole set as a rigid
+    // group about the primary; Del / Ctrl+D / Ctrl+C / Ctrl+V act on the set (one undo step).
+    void toggleSelect(int index);
+    std::vector<int> selectionIndices() const;        // primary first, then the extras that still exist
+    size_t selectionCount() const { return selectionIndices().size(); }
+    void copySelection();
+    void pasteClipboard();
+    bool hasClipboard() const { return !clipboard_.empty(); }
     // Screen position (window pixels) of the selected thing's pivot, for scripted gizmo drags.
     bool selectedPivotScreen(float& x, float& y) const;
     void setGizmoOp(int op) { gizmoOp_ = op; }
@@ -258,6 +268,12 @@ private:
     int selectedThing_ = -1;
     uint64_t selectedUid_ = 0;
     int gizmoOp_ = 1;            // 0 select, 1 move, 2 rotate, 3 scale
+    std::vector<uint64_t> extraUids_;                 // the multi-selection beyond the primary
+    editor::Frame gizmoStart_;                        // the primary's frame when the drag began
+    std::vector<std::pair<int, editor::Frame>> groupStart_;   // the extras' frames when the drag began
+    editor::Document::Fragment clipboard_;
+    void syncExtraSelection();                        // renderer.alsoSelected from extraUids_
+    editor::Frame groupFrame(const editor::Frame& start) const;
     // Edit panel sub-tabs (0.15b #1): 0 Objects (selection / list / add), 1 Terrain (brush +
     // paint), 2 Actors (village / spawner / live link), 3 Level (new level). The Terrain tab
     // and the terrain tool follow each other; actions raise the tab that owns their card so

@@ -449,6 +449,43 @@ void testLevelDocument() {
     CHECK(doc.text().find("ScriptName \"Exit\";") != std::string::npos);
     doc.markSaved();
     CHECK(!doc.dirty() && doc.changes().empty());
+    // a batch is one undo step: two moves + a duplicate, one undo restores all
+    {
+        while (doc.redo()) {}
+        const std::string before = doc.text();
+        const size_t count = doc.thingCount();
+        doc.beginBatch();
+        albion::editor::Frame g; CHECK(doc.frameOf(1, g)); g.pos[0] += 5; doc.setFrame(1, g);
+        g.pos[1] += 5; doc.setFrame(1, g);
+        doc.duplicate(1);
+        doc.endBatch();
+        CHECK(doc.thingCount() == count + 1);
+        CHECK(doc.undo() && doc.text() == before && doc.thingCount() == count);
+        CHECK(doc.redo() && doc.thingCount() == count + 1);
+        doc.undo();
+    }
+    // a fragment keeps relative positions; paste lands its centroid on `at`, fresh UIDs,
+    // ScriptName NULL; one undo step
+    {
+        const std::string before = doc.text();
+        const size_t count = doc.thingCount();
+        albion::editor::Frame a; CHECK(doc.frameOf(1, a));
+        const size_t crate = doc.place([] { forge::thingplacer::Placement p; p.definitionType = "OBJECT_CRATE_02"; p.position = {10.0f, 0.0f, 0.0f}; return p; }());
+        albion::editor::Frame c; CHECK(doc.frameOf(crate, c));
+        const auto frag = doc.extract({1, crate});
+        CHECK(frag.items.size() == 2 && frag.items[0].hasFrame && frag.items[1].hasFrame);
+        CHECK(near(frag.centre[0], (a.pos[0] + c.pos[0]) * 0.5f));
+        const float at[3] = {100.0f, 200.0f, 7.0f};
+        const auto pasted = doc.paste(frag, at, false);
+        CHECK(pasted.size() == 2 && doc.thingCount() == count + 3);
+        albion::editor::Frame p0, p1; CHECK(doc.frameOf(pasted[0], p0) && doc.frameOf(pasted[1], p1));
+        CHECK(near(p0.pos[0] - p1.pos[0], a.pos[0] - c.pos[0]));            // relative layout kept
+        CHECK(near((p0.pos[0] + p1.pos[0]) * 0.5f, 100.0f) && near(p0.pos[1] + p1.pos[1], 400.0f));
+        CHECK(doc.uidOf(pasted[0]) != doc.uidOf(1) && doc.uidOf(pasted[1]) != doc.uidOf(crate));
+        CHECK(doc.summary(pasted[1]).definition == "OBJECT_CRATE_02");
+        CHECK(doc.undo() && doc.thingCount() == count + 1);   // the paste was one step
+        CHECK(doc.undo() && doc.text() == before);            // then the crate
+    }
     // undo depth survives many edits
     for (int i = 0; i < 200; ++i) { f.pos[0] = float(i); doc.setFrame(1, f); }
     int undone = 0; while (doc.undo()) ++undone;

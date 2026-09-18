@@ -211,7 +211,7 @@ void App::drawHelpOverlay() {
     struct Group { const char* title; std::vector<Row> rows; };
     const Group groups[] = {
         {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
-        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + D", "duplicate"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}}},
+        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + click", "add to / remove from the selection"}, {"Ctrl + D", "duplicate"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}}},
         {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "invert: lower, or paint walkable"}, {"[  ]", "brush radius"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
         {"Everywhere", {{"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Drop a .lev / .tng", "open a loose file"}}},
@@ -951,6 +951,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
     { char b[16]; std::snprintf(b, sizeof b, "%.2f", settings_.uiScale); v.push_back(std::string("ui_scale=") + b); }
     v.push_back("grid=" + std::string(renderer_.showGrid ? "1" : "0"));
+    v.push_back("selection_count=" + std::to_string(selectionCount()));
     if (cursorHit_) { char b[64]; std::snprintf(b, sizeof b, "%.1f,%.1f,%.1f", cursorFable_[0], cursorFable_[1], cursorFable_[2]); v.push_back(std::string("cursor_ground=") + b); } else v.push_back("cursor_ground=-");
     v.push_back("export_ok=" + std::string(lastExportOk_ ? "1" : "0"));
     v.push_back("export_path=" + lastExportPath_);
@@ -1982,6 +1983,21 @@ bool Automation::tick(App& app) {
     else if (cmd == "set_thing_prop") { std::istringstream rs(rest); std::string key, val; rs >> key; std::getline(rs, val); while (!val.empty() && val.front() == ' ') val.erase(val.begin()); if (app.selectedThing() >= 0) { app.document().setProperty(size_t(app.selectedThing()), key, val); note("ok   " + line); } else fail("set_thing_prop: nothing selected"); ++pc_; }
     else if (cmd == "select_def") { const int t = app.selectByDefinition(rest); if (t < 0) fail("select_def: not found " + rest); else note("ok   " + line + " -> " + std::to_string(t)); ++pc_; }
     else if (cmd == "select_thing") { app.selectThing(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "select_added") {   // select the first thing the Changes list reports as added (uid from "... (uid N)")
+        int hit = -1;
+        for (const auto& c : app.document().changes()) {
+            if (c.rfind("added ", 0) != 0) continue;
+            const auto p = c.rfind("(uid ");
+            if (p == std::string::npos) continue;
+            const uint64_t uid = std::strtoull(c.c_str() + p + 5, nullptr, 10);
+            if (const auto i = app.document().indexOfUid(uid)) { hit = int(*i); break; }
+        }
+        if (hit < 0) fail("select_added: nothing added"); else { app.selectThing(hit); note("ok   " + line); }
+        ++pc_;
+    }
+    else if (cmd == "select_toggle") { app.toggleSelect(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // Ctrl+click on a thing index
+    else if (cmd == "copy") { app.copySelection(); note("ok   " + line); ++pc_; }
+    else if (cmd == "paste") { app.pasteClipboard(); note("ok   " + line); ++pc_; }
     else if (cmd == "move_thing") { float x = 0, y = 0, z = 0; std::istringstream(rest) >> x >> y >> z; app.moveSelected(x, y, z); note("ok   " + line); ++pc_; }
     else if (cmd == "rotate_thing") { app.rotateSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "scale_thing") { app.scaleSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }

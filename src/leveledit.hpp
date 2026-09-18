@@ -155,6 +155,26 @@ public:
     int worldSlot() const { return worldSlot_; }   // WLD map slot (GoToMapSlotRetailTransition), 0 = unknown
     void remove(size_t index);
 
+    // Several commands as ONE undo step (multi-select move / delete / duplicate / paste):
+    // the first pushUndo inside the batch snapshots, the rest are skipped. Nestable.
+    void beginBatch();
+    void endBatch();
+    bool inBatch() const { return batchDepth_ > 0; }
+
+    // A fragment: thing blocks with positions relative to their centroid (copy/paste,
+    // presets). `paste` inserts each block at the end of the things with a fresh UID,
+    // ScriptName NULL and its frame moved so the centroid lands on `at` (map-local; the
+    // z of each thing keeps its offset from the centroid unless `dropToGround`, in which
+    // case each is set on the terrain). Returns the new indices; one undo step.
+    struct Fragment {
+        struct Item { std::string block; Frame frame; bool hasFrame = false; };
+        std::vector<Item> items;
+        float centre[3] = {0, 0, 0};
+        bool empty() const { return items.empty(); }
+    };
+    Fragment extract(const std::vector<size_t>& indices) const;
+    std::vector<size_t> paste(const Fragment& fragment, const float at[3], bool dropToGround);
+
     bool canUndo() const { return !undo_.empty(); }
     bool canRedo() const { return !redo_.empty(); }
     bool undo();
@@ -234,6 +254,8 @@ private:
     forge::tng::File file_;
     std::string original_;
     std::vector<Snapshot> undo_, redo_;
+    int batchDepth_ = 0;
+    bool batchPushed_ = false;
     std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
     std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
     std::unique_ptr<TerrainState> working_;              // during a stroke

@@ -212,8 +212,11 @@ that the theme pass already used.
 3. **Region entrances / map travel**: parse and edit `FinalAlbion.gtg` (TNG text) so a new
    region gets a REGION_ENTRANCE_POINT and appears reachable from the world map. *(untested:
    what the map screen needs beyond the entrance thing — verify with the harness.)*
-4. **Multi-select + copy/paste** in the editor (selection set on `App`, `Document::place`
-   batches as one undo step).
+4. ~~**Multi-select + copy/paste**~~ DONE 2026-09-18: Ctrl+click (viewport / objects list)
+   toggles; the gizmo and nudges move the set as a rigid group about the primary; Del /
+   Ctrl+D / Ctrl+C / Ctrl+V act on the set, each one undo step (`Document::beginBatch`,
+   `extract` / `paste` fragments with positions relative to their centroid, pasted at the
+   view centre on the ground). The fragment is also the preset format for #2.
 
 ### 0.17 — "Content" (meshes, creatures, textures, particles, Blender)
 

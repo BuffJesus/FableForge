@@ -263,9 +263,60 @@ std::optional<float> Document::groundHeight(float x, float y) const {
 Document::Snapshot Document::snapshot() const { return Snapshot{file_.serialize(), terrain_}; }
 
 void Document::pushUndo() {
+    if (batchDepth_ > 0) {
+        if (batchPushed_) return;
+        batchPushed_ = true;
+    }
     undo_.push_back(snapshot());
     if (undo_.size() > kUndoDepth) undo_.erase(undo_.begin());
     redo_.clear();
+}
+
+void Document::beginBatch() {
+    if (batchDepth_++ == 0) batchPushed_ = false;
+}
+
+void Document::endBatch() {
+    if (batchDepth_ > 0 && --batchDepth_ == 0) batchPushed_ = false;
+}
+
+Document::Fragment Document::extract(const std::vector<size_t>& indices) const {
+    Fragment f;
+    int n = 0;
+    for (size_t i : indices) {
+        if (i >= file_.things().size()) continue;
+        Fragment::Item item;
+        item.block = file_.thingBlockText(i);
+        item.hasFrame = frameOf(i, item.frame);
+        if (item.hasFrame) { for (int k = 0; k < 3; ++k) f.centre[k] += item.frame.pos[k]; ++n; }
+        f.items.push_back(std::move(item));
+    }
+    if (n) for (int k = 0; k < 3; ++k) f.centre[k] /= float(n);
+    return f;
+}
+
+std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3], bool dropToGround) {
+    std::vector<size_t> out;
+    if (fragment.empty()) return out;
+    beginBatch();
+    pushUndo();
+    try {
+        for (const auto& item : fragment.items) {
+            const size_t idx = file_.insertThingBlockBefore(file_.things().size(), item.block);
+            file_.setThingProperty(idx, "UID", std::to_string(forge::thingplacer::nextUid(file_)));
+            if (file_.things()[idx].find("ScriptName")) file_.setThingProperty(idx, "ScriptName", "NULL");
+            ++revision_;
+            if (item.hasFrame) {
+                Frame nf = item.frame;
+                for (int k = 0; k < 3; ++k) nf.pos[k] = at[k] + (item.frame.pos[k] - fragment.centre[k]);
+                if (dropToGround) if (const auto h = groundHeight(nf.pos[0], nf.pos[1])) nf.pos[2] = *h + (item.frame.pos[2] - fragment.centre[2]);
+                setFrame(idx, nf);
+            }
+            out.push_back(idx);
+        }
+    } catch (...) { endBatch(); throw; }
+    endBatch();
+    return out;
 }
 
 void Document::restore(const Snapshot& s) {

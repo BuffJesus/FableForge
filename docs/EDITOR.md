@@ -58,6 +58,10 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   file's `0xFFFFFE00` namespace, `thingplacer` blocks in retail field order
   (`Object` for `OBJECT_*`, `Building` for `BUILDING_*`). Placement lands on
   the LEV terrain height (bilinear, like the retail placer).
+* **Multi-select**: Ctrl+click adds/removes (viewport or list); the gizmo, nudges,
+  Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
+  Copy/paste carries a *fragment* (blocks + positions relative to the centroid),
+  pasted at the view centre on the ground with fresh UIDs.
 * **Undo/redo**: snapshot based (128 steps); indices are re-derived from UIDs.
 * **Save / deploy**: `Write into FinalAlbion.wad` is the primary action -- it
   replaces the archive entry through `forge::wad::repack`

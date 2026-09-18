@@ -5,6 +5,7 @@
 #include "app.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -124,6 +125,7 @@ void App::syncInstances() {
         selectedThing_ = idx ? int(*idx) : -1;
         renderer_.selectedThing = selectedThing_;
     }
+    syncExtraSelection();
 }
 
 void App::startThingsReload() {
@@ -152,10 +154,71 @@ void App::startThingsReload() {
 // ------------------------------------------------------------ selection
 
 void App::selectThing(int index) {
+    extraUids_.clear();
+    syncExtraSelection();
     if (!documentLoaded() || index < 0 || size_t(index) >= doc_.thingCount()) { selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1; return; }
     selectedThing_ = index;
     selectedUid_ = doc_.uidOf(size_t(index));
     renderer_.selectedThing = index;
+}
+
+void App::toggleSelect(int index) {
+    if (!documentLoaded() || index < 0 || size_t(index) >= doc_.thingCount()) return;
+    const uint64_t uid = doc_.uidOf(size_t(index));
+    if (index == selectedThing_) {
+        // the primary leaves: the first extra takes over
+        if (extraUids_.empty()) { selectThing(-1); return; }
+        const uint64_t next = extraUids_.front();
+        extraUids_.erase(extraUids_.begin());
+        if (const auto i = doc_.indexOfUid(next)) { selectedThing_ = int(*i); selectedUid_ = next; renderer_.selectedThing = selectedThing_; }
+        syncExtraSelection();
+        return;
+    }
+    if (selectedThing_ < 0) { selectThing(index); return; }
+    const auto it = std::find(extraUids_.begin(), extraUids_.end(), uid);
+    if (it != extraUids_.end()) extraUids_.erase(it); else extraUids_.push_back(uid);
+    syncExtraSelection();
+}
+
+std::vector<int> App::selectionIndices() const {
+    std::vector<int> v;
+    if (!documentLoaded()) return v;
+    if (selectedThing_ >= 0) v.push_back(selectedThing_);
+    for (const uint64_t uid : extraUids_)
+        if (const auto i = doc_.indexOfUid(uid)) if (int(*i) != selectedThing_) v.push_back(int(*i));
+    return v;
+}
+
+void App::syncExtraSelection() {
+    renderer_.alsoSelected.clear();
+    if (!documentLoaded()) return;
+    for (const uint64_t uid : extraUids_)
+        if (const auto i = doc_.indexOfUid(uid)) renderer_.alsoSelected.push_back(int(*i));
+}
+
+void App::copySelection() {
+    const auto sel = selectionIndices();
+    if (sel.empty()) { pushLog("copy: nothing selected", 1); return; }
+    std::vector<size_t> idx(sel.begin(), sel.end());
+    clipboard_ = doc_.extract(idx);
+    pushLog("copied " + std::to_string(sel.size()) + " object" + (sel.size() == 1 ? "" : "s"), 0);
+}
+
+void App::pasteClipboard() {
+    if (!documentLoaded()) return;
+    if (clipboard_.empty()) { pushLog("paste: the clipboard is empty (Ctrl+C a selection first)", 1); return; }
+    float focus[3]; camera_.focus(focus);
+    const float at[3] = {focus[0], -focus[2], focus[1]};
+    try {
+        const auto pasted = doc_.paste(clipboard_, at, true);
+        if (pasted.empty()) return;
+        extraUids_.clear();
+        selectedThing_ = int(pasted.front()); selectedUid_ = doc_.uidOf(pasted.front()); renderer_.selectedThing = selectedThing_;
+        for (size_t i = 1; i < pasted.size(); ++i) extraUids_.push_back(doc_.uidOf(pasted[i]));
+        syncExtraSelection();
+        pushLog("pasted " + std::to_string(pasted.size()) + " object" + (pasted.size() == 1 ? "" : "s") + " at the view centre", 0);
+        if (editTab_ != 2) setEditTab(0);
+    } catch (const std::exception& e) { pushLog(std::string("paste: ") + e.what(), 2); }
 }
 
 int App::selectByDefinition(const std::string& def) {
@@ -186,9 +249,9 @@ int App::pickAt(float u, float v) {
     renderer_.screenRay(u, v, o, d);
     float t;
     const int inst = renderer_.pick(o, d, t);
-    if (inst < 0) { selectThing(-1); return -1; }
+    if (inst < 0) { if (!ImGui::GetIO().KeyCtrl) selectThing(-1); return -1; }
     const int thing = renderer_.instance(size_t(inst)).thing;
-    selectThing(thing);
+    if (ImGui::GetIO().KeyCtrl) toggleSelect(thing); else selectThing(thing);
     if (editTab_ == 1 || editTab_ == 3) setEditTab(0);
     return thing;
 }
@@ -206,8 +269,14 @@ void App::commitFrame(const editor::Frame& f) {
 void App::moveSelected(float dx, float dy, float dz) {
     editor::Frame f;
     if (!frameOfSelected(f)) return;
-    f.pos[0] += dx; f.pos[1] += dy; f.pos[2] += dz;
-    commitFrame(f);
+    doc_.beginBatch();
+    for (const int i : selectionIndices()) {
+        editor::Frame g;
+        if (!doc_.frameOf(size_t(i), g)) continue;
+        g.pos[0] += dx; g.pos[1] += dy; g.pos[2] += dz;
+        try { doc_.setFrame(size_t(i), g); } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
+    }
+    doc_.endBatch();
 }
 
 void App::rotateSelected(float degrees) {
@@ -285,20 +354,42 @@ void App::snapSelectedToGround() {
 
 void App::duplicateSelected() {
     if (!documentLoaded() || selectedThing_ < 0) return;
+    auto sel = selectionIndices();
+    if (sel.empty()) return;
     try {
-        const size_t n = doc_.duplicate(size_t(selectedThing_));
-        selectedUid_ = doc_.uidOf(n);
-        selectedThing_ = int(n);
-        renderer_.selectedThing = selectedThing_;
-        pushLog("duplicated " + doc_.summary(n).definition, 0);
-    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
+        // highest index first so the insert-after-original does not shift the rest;
+        // the copies become the new selection (the primary's copy stays primary)
+        std::vector<int> order = sel;
+        std::sort(order.begin(), order.end(), std::greater<int>());
+        std::vector<uint64_t> copies;
+        uint64_t primaryCopy = 0;
+        doc_.beginBatch();
+        for (const int i : order) {
+            const size_t n = doc_.duplicate(size_t(i));
+            const uint64_t uid = doc_.uidOf(n);
+            if (i == selectedThing_) primaryCopy = uid; else copies.push_back(uid);
+        }
+        doc_.endBatch();
+        extraUids_ = copies;
+        if (const auto p = doc_.indexOfUid(primaryCopy)) { selectedThing_ = int(*p); selectedUid_ = primaryCopy; renderer_.selectedThing = selectedThing_; }
+        syncExtraSelection();
+        pushLog(sel.size() == 1 ? "duplicated " + doc_.summary(size_t(selectedThing_)).definition : "duplicated " + std::to_string(sel.size()) + " objects", 0);
+    } catch (const std::exception& e) { doc_.endBatch(); pushLog(std::string("editor: ") + e.what(), 2); }
 }
 
 void App::deleteSelected() {
     if (!documentLoaded() || selectedThing_ < 0) return;
-    const std::string what = doc_.summary(size_t(selectedThing_)).definition;
-    try { doc_.remove(size_t(selectedThing_)); } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return; }
+    auto sel = selectionIndices();
+    if (sel.empty()) return;
+    const std::string what = sel.size() == 1 ? doc_.summary(size_t(selectedThing_)).definition : std::to_string(sel.size()) + " objects";
+    std::sort(sel.begin(), sel.end(), std::greater<int>());
+    try {
+        doc_.beginBatch();
+        for (const int i : sel) doc_.remove(size_t(i));
+        doc_.endBatch();
+    } catch (const std::exception& e) { doc_.endBatch(); pushLog(std::string("editor: ") + e.what(), 2); return; }
     selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1;
+    extraUids_.clear(); syncExtraSelection();
     pushLog("removed " + what, 0);
 }
 
@@ -939,6 +1030,8 @@ void App::editorShortcuts() {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) editRedo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) duplicateSelected();
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && selectedThing_ >= 0) copySelection();
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) pasteClipboard();
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
     if (ImGui::IsKeyPressed(ImGuiKey_End) && selectedThing_ >= 0) snapSelectedToGround();
 }
@@ -947,7 +1040,16 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
     if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0) { gizmoWasUsing_ = false; return; }
     editor::Frame f;
     if (!frameOfSelected(f)) return;
-    if (!gizmoWasUsing_) gizmoFrame_ = f;
+    if (!gizmoWasUsing_) {
+        gizmoFrame_ = f;
+        gizmoStart_ = f;
+        groupStart_.clear();
+        for (const int i : selectionIndices()) {
+            if (i == selectedThing_) continue;
+            editor::Frame g;
+            if (doc_.frameOf(size_t(i), g)) groupStart_.push_back({i, g});
+        }
+    }
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetDrawlist();
     ImGuizmo::SetRect(origin.x, origin.y, size.x, size.y);
@@ -973,11 +1075,36 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
             if (gizmoOp_ == 3) { nf.pos[0] = gizmoFrame_.pos[0]; nf.pos[1] = gizmoFrame_.pos[1]; nf.pos[2] = gizmoFrame_.pos[2]; }
             gizmoFrame_ = nf;
             applyFrame(selectedThing_, gizmoFrame_);
+            for (const auto& [i, g] : groupStart_) applyFrame(i, groupFrame(g));
         }
     } else if (gizmoWasUsing_) {
-        commitFrame(gizmoFrame_);   // one undo step per drag
+        // one undo step per drag, the whole group
+        doc_.beginBatch();
+        commitFrame(gizmoFrame_);
+        for (const auto& [i, g] : groupStart_) {
+            try { doc_.setFrame(size_t(i), groupFrame(g)); }
+            catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
+        }
+        doc_.endBatch();
     }
     gizmoWasUsing_ = using_;
+}
+
+// An extra's frame under the primary's drag: the rigid transform that took the primary
+// from its start frame to the current one (about its own pivot, unit scale) applied to
+// the extra's start frame; a scale drag multiplies the extra's own scale instead.
+editor::Frame App::groupFrame(const editor::Frame& start) const {
+    editor::Frame out = start;
+    if (gizmoOp_ == 3) { out.scale = std::clamp(start.scale * (gizmoFrame_.scale / std::max(gizmoStart_.scale, 1e-4f)), 0.01f, 100.0f); return out; }
+    editor::Frame a = gizmoStart_, b = gizmoFrame_, s = start;
+    a.scale = b.scale = s.scale = 1.0f;
+    float ma[16], mb[16], ms[16], inv[16], t[16], m[16];
+    editor::frameToMatrix(a, ma); editor::frameToMatrix(b, mb); editor::frameToMatrix(s, ms);
+    if (!editor::invert(ma, inv)) return out;
+    editor::multiply(inv, mb, t);       // start -> now
+    editor::multiply(ms, t, m);         // the extra, moved the same way
+    if (editor::matrixToFrame(m, out)) out.scale = start.scale;
+    return out;
 }
 
 // ------------------------------------------------------------ unsaved-changes prompt
@@ -1184,11 +1311,19 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::PopFont();
     } else {
         const auto s = doc_.summary(size_t(selectedThing_));
+        const size_t nSel = selectionCount();
         ImGui::PushFont(fontBold_);
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
         ImGui::TextUnformatted(s.definition.c_str());
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
+        if (nSel > 1) {
+            ImGui::PushFont(fontSmall_);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextColored(theme::vec(theme::Accent), "+ %zu more selected: the gizmo moves them together; Del, Ctrl+D and Ctrl+C act on all of them.", nSel - 1);
+            ImGui::PopTextWrapPos();
+            ImGui::PopFont();
+        }
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Muted), "%s%s%s   uid %llu", s.type.c_str(), s.scriptName.empty() ? "" : "   ", s.scriptName.c_str(), (unsigned long long)s.uid);
         ImGui::PopFont();
@@ -1298,7 +1433,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             std::string labelText = s.definition;
             if (!s.scriptName.empty()) labelText += "  (" + s.scriptName + ")";
             labelText += "##t" + std::to_string(i);
-            if (ImGui::Selectable(labelText.c_str(), i == selectedThing_)) { selectThing(i); }
+            const bool inSel = i == selectedThing_ || std::find(renderer_.alsoSelected.begin(), renderer_.alsoSelected.end(), i) != renderer_.alsoSelected.end();
+            if (ImGui::Selectable(labelText.c_str(), inSel)) { if (ImGui::GetIO().KeyCtrl) toggleSelect(i); else selectThing(i); }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { selectThing(i); frameSelected(); }
         }
     }
