@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <d3d11.h>
 #include <string>
+#include <map>
 #include <vector>
 
 #include "foliageexport.hpp"
@@ -161,6 +162,12 @@ private:
     Camera lastCamera_;
     float lastAspect_ = 1.0f;
     ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img);
+public:
+    // Small UI swatch of a decoded texture, cached by textures.big id (the theme picker);
+    // owned by the renderer, freed with it. Downsampled to 64x64 so 200 themes cost ~3 MB.
+    ID3D11ShaderResourceView* swatch(uint32_t id, const terrainexport::Image& img);
+private:
+    std::map<uint32_t, ID3D11ShaderResourceView*> swatches_;
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;
     ID3D11RenderTargetView* rtv_ = nullptr;

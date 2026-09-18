@@ -182,9 +182,10 @@ camera + QWER). What a stranger hits is *density and feedback*:
    map-local `x y h` under the cursor (bottom-left pill; state `cursor_ground`), compass
    (Fable north) bottom-right; brush radius ring existed. Still open: falloff ring, selection
    bounds, the picture-in-picture minimap with the camera frustum.
-4. **Pickers with pictures**: theme picker shows a 32px albedo swatch per palette slot (the
-   texture cache already has the texels); *Add an object* shows a mesh thumbnail (render the
-   preview mesh to a small RT once, cache by def); texture tab thumbnails.
+4. **Pickers with pictures**: theme picker swatches DONE 2026-09-18 (the palette combo, the
+   game-theme search list and a "painting with this theme" row show the base albedo, 64x64
+   box-filtered from the texture cache, `Renderer::swatch`). Still open: *Add an object* mesh
+   thumbnails (render the preview mesh to a small RT once, cache by def), texture-tab thumbnails.
 5. **Drag & drop**: PNG/JPG/TGA onto the window = custom ground texture (DONE 2026-09-18:
    lands in the Terrain tab's custom-texture input with a `GROUND_<file>` name, auto `drop
    <file>`); `.lev` already opened as a loose map. GLB onto the viewport = import model (0.17).

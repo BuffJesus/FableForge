@@ -266,6 +266,7 @@ private:
     int lastGizmoOp_ = -1;
 public:
     void setHelpOpen(bool on) { helpOpen_ = on; }
+    void setThemeSearch(const std::string& s) { std::snprintf(themeSearch_, sizeof themeSearch_, "%s", s.c_str()); }
     void setEditTab(int tab) { editTab_ = std::clamp(tab, 0, 3); if (editTab_ == 1 && doc_.hasTerrain()) gizmoOp_ = 4; else if (editTab_ != 1 && gizmoOp_ == 4) gizmoOp_ = 1; lastGizmoOp_ = gizmoOp_; }
     int editTab() const { return editTab_; }
 private:
@@ -288,6 +289,10 @@ private:
     std::string ruleKey_;
     std::set<std::string> rulesDismissed_;
     void raiseRule(const std::string& key);
+    // 24 px albedo swatch for an ENGINE_THEME's base texture in the theme pickers
+    // (null when the texture is not decoded yet); draws it + the label on one row
+    ID3D11ShaderResourceView* themeSwatch(const std::string& themeName);
+    void themeRow(const std::string& themeName, const ImVec2& at, float size, const char* label);   // draw-only, over an item already submitted
 public:
     void dismissRule(const std::string& key) { rulesDismissed_.insert(key); if (ruleKey_ == key) ruleKey_.clear(); }
 private:

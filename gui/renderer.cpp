@@ -320,6 +320,8 @@ void Camera::fly(float forward, float strafe, float rise, float dt) {
 }
 
 Renderer::~Renderer() {
+    for (auto& [id, srv] : swatches_) release(srv);
+    swatches_.clear();
     releaseTarget();
     releaseMesh();
     for (int i = 0; i < kLayers; ++i) clearLayer(i);
@@ -645,6 +647,33 @@ void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearL
 void Renderer::clearLayer(int layer) {
     for (auto& b : layers_[layer]) { release(b.vb); release(b.srv); }
     layers_[layer].clear();
+}
+
+ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Image& img) {
+    auto it = swatches_.find(id);
+    if (it != swatches_.end()) return it->second;
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (img.width >= 64 && img.height >= 64 && !img.rgba.empty()) {
+        // box-filter down to 64x64 (the picker draws it at 22..32 px)
+        terrainexport::Image small;
+        small.width = small.height = 64;
+        small.rgba.resize(64 * 64 * 4);
+        const uint32_t sx = img.width / 64, sy = img.height / 64;
+        for (uint32_t y = 0; y < 64; ++y)
+            for (uint32_t x = 0; x < 64; ++x) {
+                uint32_t acc[4] = {0, 0, 0, 0};
+                for (uint32_t yy = 0; yy < sy; ++yy)
+                    for (uint32_t xx = 0; xx < sx; ++xx) {
+                        const uint8_t* p = &img.rgba[((y * sy + yy) * img.width + (x * sx + xx)) * 4];
+                        for (int c = 0; c < 4; ++c) acc[c] += p[c];
+                    }
+                uint8_t* o = &small.rgba[(y * 64 + x) * 4];
+                for (int c = 0; c < 4; ++c) o[c] = uint8_t(acc[c] / (sx * sy));
+            }
+        srv = makeTexture(small);
+    } else srv = makeTexture(img);
+    swatches_[id] = srv;   // a null entry remembers a texture that could not be made
+    return srv;
 }
 
 ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img) {

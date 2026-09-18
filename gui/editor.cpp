@@ -1080,6 +1080,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             const char* current = "(pick a ground theme)";
             if (lev && paintTheme_ >= 0 && size_t(paintTheme_) < lev->groundThemes().size() && !lev->groundThemes()[size_t(paintTheme_)].name.empty())
                 current = lev->groundThemes()[size_t(paintTheme_)].name.c_str();
+            if (current[0] != '(') { const ImVec2 at = ImGui::GetCursorScreenPos(); ImGui::Dummy(ImVec2(cardInner, S(28))); themeRow(current, at, S(28), nullptr); ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + S(36), at.y + (S(28) - ImGui::GetTextLineHeight()) * 0.5f), theme::col(theme::Muted), "painting with this theme"); }
             ImGui::SetNextItemWidth(cardInner);
             if (ImGui::BeginCombo("##paintTheme", current)) {
                 if (lev)
@@ -1087,7 +1088,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                         const auto& g = lev->groundThemes()[i];
                         if (g.name.empty()) continue;
                         char lbl[160]; std::snprintf(lbl, sizeof lbl, "%zu  %s", i, g.name.c_str());
-                        if (ImGui::Selectable(lbl, int(i) == paintTheme_)) paintTheme_ = int(i);
+                        const float rowH = S(24);
+                        const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+                        if (ImGui::Selectable((std::string("##pal") + std::to_string(i)).c_str(), int(i) == paintTheme_, 0, ImVec2(0, rowH))) paintTheme_ = int(i);
+                        themeRow(g.name, rowPos, rowH, lbl);
                     }
                 ImGui::EndCombo();
             }
@@ -1111,7 +1115,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                         if (!th.decoded || !contains(th.name, themeSearch_)) continue;
                         const int have = doc_.paletteSlotOf(th.name);
                         char lbl[200]; std::snprintf(lbl, sizeof lbl, have >= 0 ? "%s  (slot %d)" : "%s", th.name.c_str(), have);
-                        if (ImGui::Selectable(lbl, have >= 0 && have == paintTheme_)) addPaintTheme(th.name);
+                        const float rowH = S(22);
+                        const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+                        if (ImGui::Selectable((std::string("##lib") + th.name).c_str(), have >= 0 && have == paintTheme_, 0, ImVec2(0, rowH))) addPaintTheme(th.name);
+                        themeRow(th.name, rowPos, rowH, lbl);
                         if (++shown >= 200) break;
                     }
                 if (lib && !shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
@@ -1426,6 +1433,27 @@ void App::drawEditFooter(float pad, float inner) {
         if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");
     }
+}
+
+// ---- theme swatches -----------------------------------------------------------------
+ID3D11ShaderResourceView* App::themeSwatch(const std::string& themeName) {
+    if (!ctx_.ready()) return nullptr;
+    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+    const auto* th = lib ? lib->byName(themeName) : nullptr;
+    if (!th || !th->textures.base[0]) return nullptr;
+    std::string warning;
+    const terrainexport::Image* img = ctx_.texture(th->textures.base[0], warning);
+    if (!img) return nullptr;
+    return renderer_.swatch(th->textures.base[0], *img);
+}
+
+void App::themeRow(const std::string& themeName, const ImVec2& p, float size, const char* label) {
+    using theme::S;
+    ID3D11ShaderResourceView* srv = themeSwatch(themeName);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (srv) dl->AddImageRounded((ImTextureID)(intptr_t)srv, p, ImVec2(p.x + size, p.y + size), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, S(4));
+    else dl->AddRectFilled(p, ImVec2(p.x + size, p.y + size), theme::col(theme::Bg3), S(4));
+    if (label) dl->AddText(ImVec2(p.x + size + S(8), p.y + (size - ImGui::GetTextLineHeight()) * 0.5f), theme::col(theme::Text), label);
 }
 
 // ---- engine-rule notices -------------------------------------------------------------
