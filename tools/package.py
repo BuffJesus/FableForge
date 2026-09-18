@@ -26,6 +26,8 @@ def main():
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
     shutil.copy(os.path.join("docs", "EDITOR.md"), stage)
     shutil.copy(os.path.join("docs", "FIRST_LEVEL.md"), stage)
+    subprocess.run([sys.executable, "tools/gen_cli_reference.py"], check=False)
+    shutil.copy(os.path.join("docs", "CLI.md"), stage)
     shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
     shutil.copytree("presets", os.path.join(stage, "presets"))
     zpath = os.path.join("dist", name + ".zip")
