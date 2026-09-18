@@ -190,10 +190,6 @@ struct ImportResult {
     TextureValidation validation;
 };
 
-// Locate texture_build.py: explicit toolsDir, else FABLETLC_TOOLS env var, else
-// the known FableTLC checkout. Returns an empty path when not found.
-std::filesystem::path findTextureBuilder(const std::filesystem::path& toolsDir);
-
 ImportResult importPng(const ImportRequest& request);
 
 // Validate an entry that already lives in a BIG.

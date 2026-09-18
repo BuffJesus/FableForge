@@ -4,7 +4,7 @@
 Full copy of the FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/
 STB bake/nav/world workspace/defs/quests), synced from `D:\Code\FableForge`
 with `python tools/sync_forgecore.py` (`--check` reports drift). Last synced
-at commit `7494b03` (working tree, uncommitted forgecore changes)
+at commit `8793a44` (working tree, uncommitted forgecore changes)
 Skipped: `audio.*` (miniaudio). `vendor/third_party/stb/stb_image.h` (public
 domain) is forgecore's PNG reader for the native texture importer. Fixes made here are upstreamed to FableForge
 first, then re-synced, so the copy stays byte-identical except for:
