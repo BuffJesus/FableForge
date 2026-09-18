@@ -248,6 +248,14 @@ bool openBank(const fs::path& gameRoot, std::string& err) {
 bool bankOpen() { std::lock_guard<std::mutex> lock(g_mutex); return g_bank != nullptr; }
 size_t entryCount() { std::lock_guard<std::mutex> lock(g_mutex); return g_bank ? g_bank->count : 0; }
 
+std::vector<std::string> entryNames() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    std::vector<std::string> v;
+    if (!g_bank) return v;
+    for (const auto& [name, e] : g_bank->byName) v.push_back(name);
+    return v;   // a std::map: already sorted
+}
+
 const Effect* byName(const std::string& name) {
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_bank) return nullptr;

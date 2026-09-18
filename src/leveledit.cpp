@@ -981,6 +981,43 @@ size_t Document::placeVillage(const float pos[3], const std::string& definition,
     }
 }
 
+size_t Document::placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName) {
+    if (effectName.empty()) throw std::invalid_argument("an emitter needs an effect name");
+    pushUndo();
+    try {
+        // the retail block (StartOakValeWest BUTTERFLY_BLUE)
+        const std::string eol = "\r\n";
+        std::string b;
+        b += "NewThing Thing;" + eol;
+        b += "Player 4;" + eol;
+        b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
+        b += "DefinitionType \"PARTICLE_EMITTER_PLACEABLE\";" + eol;
+        b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
+        b += "ScriptData \"NULL\";" + eol;
+        b += "ThingGamePersistent FALSE;" + eol;
+        b += "ThingLevelPersistent FALSE;" + eol;
+        b += "StartCTCPhysicsStandard;" + eol;
+        b += "PositionX " + formatFloat(pos[0]) + ";" + eol;
+        b += "PositionY " + formatFloat(pos[1]) + ";" + eol;
+        b += "PositionZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "RHSetForwardX 0.0;" + eol + "RHSetForwardY 0.999994;" + eol + "RHSetForwardZ 0.0;" + eol;
+        b += "RHSetUpX 0.0;" + eol + "RHSetUpY 0.0;" + eol + "RHSetUpZ 0.999994;" + eol;
+        b += "EndCTCPhysicsStandard;" + eol;
+        b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
+        b += "StartCTCDParticleEmitter;" + eol;
+        b += "IndependantObject TRUE;" + eol;
+        b += "ParticleTypeName \"" + effectName + "\";" + eol;
+        b += "EndCTCDParticleEmitter;" + eol;
+        b += "EndThing;" + eol;
+        const size_t n = file_.insertThingBlock("NULL", b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
 std::vector<ThingSummary> Document::villages() const {
     std::vector<ThingSummary> out;
     for (size_t i = 0; i < file_.things().size(); ++i)

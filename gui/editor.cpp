@@ -3,6 +3,7 @@
 // layout, explorer, export and automation.
 
 #include "app.hpp"
+#include "effects.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -1492,6 +1493,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::Dummy(ImVec2(0, S(8)));
         drawSpawnerCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
+        drawEffectsCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawLiveLinkCard(pad, inner, cardInner);
     }
     if (editTab_ == 3) {
@@ -1622,6 +1625,66 @@ void App::drawEntranceCard(float pad, float inner, float cardInner) {
     if (theme::ghostButton(e ? "Move the entrance to the view centre" : "Set the entrance at the view centre", ImVec2(cardInner, S(28))) && doc_.worldSlot()) setEntranceHere();
     auto_.registerWidget("btn_set_entrance");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes FinalAlbion.gtg (one-time .atlas-orig backup). Retail entrances are left in place; a second one is added for this map.");
+    theme::endCard();
+}
+
+// ---- particle emitters -----------------------------------------------------------------
+bool App::placeEmitter(const std::string& effectName, const std::string& scriptName) {
+    if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
+    if (effectName.empty()) { pushLog("editor: pick an effect first", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    float pos[3] = {focus[0], -focus[2], focus[1]};
+    if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h + 0.5f;   // half a unit up, where retail puts most flames
+    try {
+        const size_t n = doc_.placeEmitter(pos, effectName, scriptName);
+        selectedUid_ = doc_.uidOf(n);
+        selectedThing_ = int(n);
+        renderer_.selectedThing = selectedThing_;
+        extraUids_.clear(); syncExtraSelection();
+        setEditTab(2);
+        pushLog("placed a particle emitter playing " + effectName + " (the preview shows a tinted proxy when Objects are on; the real effect needs the game)", 0);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
+}
+
+void App::drawEffectsCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!effectsLoaded_) {
+        std::string err;
+        if (effects::bankOpen() || effects::openBank(installPath_, err)) effectNames_ = effects::entryNames();   // read-only: the install, not a scratch save root
+        else pushLog("effects: " + err, 1);
+        effectsLoaded_ = true;
+    }
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##effects", inner);
+    theme::label("Particle effect");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A PARTICLE_EMITTER_PLACEABLE thing playing one of the game's effects (effects.big: fires, smoke, butterflies, sparkles...). Placed half a unit above the ground at the view centre.");
+    ImGui::PopFont();
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::InputTextWithHint("##effectsearch", "Search effects (FIRE, SMOKE, BUTTERFLY...)", effectSearch_, sizeof effectSearch_, ImGuiInputTextFlags_CharsUppercase);
+    ImGui::PopStyleVar();
+    auto_.registerWidget("input_effectsearch");
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+    ImGui::BeginChild("##effectlist", ImVec2(cardInner, S(110)), ImGuiChildFlags_None);
+    ImGui::PopStyleColor();
+    ImGui::PushFont(fontSmall_);
+    std::vector<const std::string*> rows;
+    for (const auto& n : effectNames_) if (!effectSearch_[0] || n.find(effectSearch_) != std::string::npos) rows.push_back(&n);
+    if (effectNames_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "effects.big not loaded");
+    else if (rows.empty()) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+    ImGuiListClipper clipper;
+    clipper.Begin(int(rows.size()));
+    while (clipper.Step())
+        for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k)
+            if (ImGui::Selectable(rows[size_t(k)]->c_str(), *rows[size_t(k)] == effectPick_)) effectPick_ = *rows[size_t(k)];
+    ImGui::PopFont();
+    ImGui::EndChild();
+    auto_.registerWidget("list_effects");
+    const std::string lbl = effectPick_.empty() ? "Place an emitter at view centre" : "Place " + effectPick_ + " at view centre";
+    if (theme::ghostButton(lbl.c_str(), ImVec2(cardInner, S(28))) && !effectPick_.empty()) placeEmitter(effectPick_);
+    auto_.registerWidget("btn_place_emitter");
     theme::endCard();
 }
 

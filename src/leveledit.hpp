@@ -141,6 +141,9 @@ public:
     // ThingGamePersistent) for a VILLAGE_* def. Buildings, markers and
     // creatures join it through their CTCVillageMember.VillageUID.
     size_t placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName = "");
+    // A particle emitter: the retail PARTICLE_EMITTER_PLACEABLE thing (CTCDParticleEmitter,
+    // IndependantObject TRUE) playing the named effects.big entry. Position is map-local.
+    size_t placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName = "");
     // Every Village thing in the map (index, uid, definition, script name).
     std::vector<ThingSummary> villages() const;
     // The village a thing belongs to (its CTCVillageMember.VillageUID; 0 = none / no block).

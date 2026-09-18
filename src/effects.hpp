@@ -52,5 +52,7 @@ bool bankOpen();
 // Case-insensitive lookup by entry name; nullptr when unknown. Parsed lazily and cached.
 const Effect* byName(const std::string& name);
 size_t entryCount();
+// Every effect name in the bank (upper case, sorted); empty until openBank.
+std::vector<std::string> entryNames();
 
 } // namespace albion::effects

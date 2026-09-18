@@ -139,6 +139,16 @@ screenshot build/ui/e4b_rule_notice.png
 undo
 wait_foliage
 frames 2
+# a particle emitter playing an effects.big entry (retail CTCDParticleEmitter block)
+place_emitter BUTTERFLY_BLUE AtlasFx
+wait_foliage
+frames 2
+assert_state selected_def PARTICLE_EMITTER_PLACEABLE
+assert_state edit_tab 2
+assert_widget list_effects
+undo
+wait_foliage
+frames 2
 # presets: the shipped ones list; one places as a selected group; the selection saves as a user preset
 edit_tab 2
 frames 1

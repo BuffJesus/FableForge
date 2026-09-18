@@ -290,6 +290,15 @@ private:
     bool presetsLoaded_ = false;
     char presetName_[64] = {};
     void drawPresetsCard(float pad, float inner, float cardInner);
+    // particle emitter card (Actors tab): pick an effects.big entry, place an emitter
+    std::vector<std::string> effectNames_;
+    bool effectsLoaded_ = false;
+    char effectSearch_[64] = {};
+    std::string effectPick_;
+    void drawEffectsCard(float pad, float inner, float cardInner);
+public:
+    bool placeEmitter(const std::string& effectName, const std::string& scriptName = "");
+private:
     void syncExtraSelection();                        // renderer.alsoSelected from extraUids_
     editor::Frame groupFrame(const editor::Frame& start) const;
     // Edit panel sub-tabs (0.15b #1): 0 Objects (selection / list / add), 1 Terrain (brush +
