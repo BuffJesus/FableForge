@@ -67,7 +67,7 @@ def main():
         # skip the unbreakable-chunk definitions that only make sense in their map
         bestSet = [t for t in bestSet if not t[1].startswith(("OBJECT_COIN_GOLF", "OBJECT_OV_VILLAGER_CHARRED"))]
         with open(os.path.join(a.out, slug + ".preset.tng"), "w", encoding="latin-1", newline="") as f:
-            f.write(f"// Albion Atlas preset: {name}\r\n// {desc}\r\nVersion 2;\r\nXXXSectionStart NULL;\r\n")
+            f.write(f"// FableForge preset: {name}\r\n// {desc}\r\nVersion 2;\r\nXXXSectionStart NULL;\r\n")
             for t in bestSet:
                 f.write(t[4])
             f.write("XXXSectionEnd;\r\n")

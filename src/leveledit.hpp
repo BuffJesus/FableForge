@@ -1,5 +1,5 @@
 #pragma once
-// albion::editor -- the editable level document behind the Albion Atlas
+// albion::editor -- the editable level document behind the FableForge
 // editor: one map's .tng (placed things) with undoable commands, plus the
 // terrain heights it rests on.
 //

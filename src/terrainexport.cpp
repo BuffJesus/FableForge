@@ -1018,7 +1018,7 @@ int appendTerrain(glb::Builder& b, const Scene& scene) {
                    {"height_min", scene.minHeight}, {"height_max", scene.maxHeight},
                    {"fable_units", "1 vertex = 1 world unit; heights = lev raw * 2048"},
                    {"up_axis", scene.up == UpAxis::Y ? "Y" : "Z"},
-                   {"generator", "Albion Atlas"}};
+                   {"generator", "FableForge"}};
     if (!scene.themes.empty()) {
         json th = json::array();
         for (const auto& t : scene.themes)
@@ -1065,7 +1065,7 @@ int appendTerrain(glb::Builder& b, const Scene& scene) {
 std::vector<uint8_t> buildGlb(const Scene& scene) {
     glb::Builder b;
     const int root = appendTerrain(b, scene);
-    return b.finish(scene.sourceName, {root}, "Albion Atlas");
+    return b.finish(scene.sourceName, {root}, "FableForge");
 }
 
 std::vector<fs::path> writeGlb(const Scene& scene, const fs::path& out) {
@@ -1088,7 +1088,7 @@ std::vector<fs::path> writeObj(const Scene& scene, const fs::path& out) {
 
     std::ofstream obj(out);
     if (!obj) throw std::runtime_error("cannot write " + out.string());
-    obj << "# Albion Atlas export of " << scene.sourceName << "\n"
+    obj << "# FableForge export of " << scene.sourceName << "\n"
         << "# map " << scene.mapWidth << "x" << scene.mapHeight << " cells, 1 unit per cell, up="
         << (scene.up == UpAxis::Y ? "Y" : "Z") << "\n"
         << "mtllib " << mtlPath.filename().string() << "\n"

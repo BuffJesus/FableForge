@@ -104,7 +104,7 @@ bool defaultEntrance(const fs::path& gameRoot, int slot, const std::string& leve
                      std::vector<std::string>& notes, std::string& error) {
     if (!fs::exists(gameRoot / "data" / "Levels" / "FinalAlbion.gtg")) { notes.push_back("no FinalAlbion.gtg in this tree: region entrance skipped (set it later from the Level tab)"); return true; }
     try {
-        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "entrance";
+        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "entrance";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (levelName + ".lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
@@ -127,7 +127,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.newLevelName = req.name;
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
-        ir.backupSuffix.clear();   // Atlas keeps its own .atlas-orig copies
+        ir.backupSuffix.clear();   // FableForge keeps its own .atlas-orig copies
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("reading the donor level");
 
@@ -227,7 +227,7 @@ std::vector<ReusableRegion> reusableRegions(const fs::path& gameRoot, std::strin
 }
 
 namespace {
-// Fill the worldinstall request's region fields from the Atlas request.
+// Fill the worldinstall request's region fields from the FableForge request.
 // A dedicated region: forgecore's install writes name/display/def but not the
 // minimap graphic; set it (WLD + the three BWD copies) and say what the region
 // needs from the player.
@@ -273,7 +273,7 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
                         std::vector<std::string>& notes, std::string& error) {
     try {
         (void)library;
-        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "minimap";
+        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "minimap";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (levelName + ".lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
@@ -467,7 +467,7 @@ bool templatePalette(const fs::path& gameRoot, const std::string& level, std::ve
     try {
         const auto wad = forge::wad::Archive::open(gameRoot / "data" / "Levels" / "FinalAlbion.wad");
         const auto bytes = levelBytes(gameRoot, wad, level, ".lev");
-        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "newlevel";
+        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (level + ".palette.lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
@@ -495,7 +495,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         stage("authoring the level from the " + templateLevel + " skeleton");
         const auto wad = forge::wad::Archive::open(levels / "FinalAlbion.wad");
         const auto templateBytes = levelBytes(gameRoot, wad, templateLevel, ".lev");
-        const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "newlevel";
+        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (req.name + ".lev");
         std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(templateBytes.data()), std::streamsize(templateBytes.size()));

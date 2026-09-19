@@ -1,5 +1,5 @@
 #pragma once
-// AlbionAtlas GUI application state + ImGui drawing. Three-slot layout:
+// FableForge GUI application state + ImGui drawing. Three-slot layout:
 // explorer (left) | 3D preview (middle) | actions (right). All heavy work
 // (install scan, texture context, preview bake, export) runs on worker threads
 // and lands on the main thread through futures polled every frame.
@@ -175,7 +175,7 @@ public:
     size_t selectionCount() const { return selectionIndices().size(); }
     void copySelection();
     void pasteClipboard();
-    // Presets (0.16 #2): shipped next to the exe (presets/) + the user's (%APPDATA%/AlbionAtlas/presets)
+    // Presets (0.16 #2): shipped next to the exe (presets/) + the user's (%APPDATA%/FableForge/presets)
     std::vector<std::filesystem::path> presetFolders() const;
     void refreshPresets();
     bool placePreset(const std::string& name);         // at the view centre, on the ground; selects it

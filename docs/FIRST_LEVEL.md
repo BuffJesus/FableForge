@@ -1,18 +1,18 @@
 # Your first level in ten minutes
 
-Albion Atlas edits the real game files and the game loads what you write. This
+FableForge edits the real game files and the game loads what you write. This
 walkthrough goes from a fresh install to a level of your own that the map screen
 can travel to. Every screenshot here was taken by the app's own test harness on
 the retail Steam install, so what you see is what the tool does today.
 
-Before you start: **close Fable**. Atlas refuses to write while the game runs
+Before you start: **close Fable**. FableForge refuses to write while the game runs
 (it would crash it), and every game file it touches is backed up once as
 `<file>.atlas-orig` -- *Setup > Restore the retail files* puts everything back.
 
 ## 1. Point it at the game
 
-Unzip anywhere, run `AlbionAtlasGUI.exe`. The first run opens the Setup panel:
-Atlas looks for Fable on every drive (Steam and GOG defaults) and shows what it
+Unzip anywhere, run `FableForge.exe`. The first run opens the Setup panel:
+FableForge looks for Fable on every drive (Steam and GOG defaults) and shows what it
 found -- the WAD with the 399 maps, `textures.big`, `game.bin`, your saves, and
 whether ForgeFSE is installed (only needed for the live link). Pick *Change...* if
 it guessed wrong. The panel also lists the engine rules that no tool can bend
@@ -55,7 +55,7 @@ The **Actors** tab holds the bigger pieces: a *Village* (join buildings and
 creatures to it), an *Enemy spawner* (bandits, hobbes, wasps... when the hero
 comes near -- adult hero only), a *Particle effect* (fires, smoke, butterflies),
 and *Presets*: whole groups of objects placed with one click. Four ship with
-Atlas (a bandit camp fire, an Oakvale fence and gate, cottage furniture, a
+FableForge (a bandit camp fire, an Oakvale fence and gate, cottage furniture, a
 graveyard corner); *Save N selected objects as a preset* makes your own.
 
 ![A preset](walkthrough/w05_preset.jpg)
@@ -81,7 +81,7 @@ Two buttons at the bottom of the Edit tab:
 
 * **Write into FinalAlbion.wad** -- objects. The game reads levels from the WAD
   and nothing else, so this is what makes your edit real. *Save draft* only keeps
-  a loose `.tng` working copy for Atlas.
+  a loose `.tng` working copy for FableForge.
 * **Write terrain into the game** -- heights, walkability and painted themes:
   the `.lev`, the WAD entry and the map's terrain chunk in `FinalAlbion_RT.stb`
   are rewritten (a few seconds; the button shows the stage).
@@ -123,7 +123,7 @@ one for your own defs and themes.
 | A new region to show in an existing save | It cannot; saves cache the region table. New game. |
 | A spawner to fire in the childhood prologue | It cannot; the engine gates generators on an adult hero. |
 | Foliage painted onto a retail map | Not yet (the local-detail writer only covers levels authored from scratch). |
-| Custom meshes / creatures / animations | Not yet in Atlas; the FableTLC toolchain does it from Python. |
+| Custom meshes / creatures / animations | Not yet in FableForge; the FableTLC toolchain does it from Python. |
 | Editing while the game runs | Refused on purpose; the live link (ForgeFSE) can teleport the hero and spawn creatures, nothing more. |
 
 Everything else -- the exact file formats, the engine rules and their evidence,

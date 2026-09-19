@@ -1,5 +1,5 @@
 #!/bin/bash
-# Put back the .atlas-orig backups Albion Atlas made (FinalAlbion.wad/.stb/.bwd/.wld,
+# Put back the .atlas-orig backups FableForge made (FinalAlbion.wad/.stb/.bwd/.wld,
 # loose .lev/.tng) and remove the loose files it wrote. Usage: restore_install.sh [game-root]
 G="${1:-/c/Programs/Steam/steamapps/common/Fable The Lost Chapters}"
 L="$G/data/Levels"

@@ -4,7 +4,7 @@
 // host quest script, PartyMode by default) polls FSE/AtlasLink/cmd.lua with
 // loadfile() -- the FSE Lua state has no io library, so the command file is a
 // Lua chunk returning a table -- executes it through the quest API and answers
-// through the FSE log (ATLAS_LINK|... lines) that Atlas tails. A heartbeat line
+// through the FSE log (ATLAS_LINK|... lines) that FableForge tails. A heartbeat line
 // carries the hero's map and position every second.
 #include <cstdint>
 #include <filesystem>

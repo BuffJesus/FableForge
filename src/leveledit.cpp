@@ -541,7 +541,7 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
         if (!backupOnce(path, error)) return false;
         // a loose file that did not exist before gets a marker so tooling can
         // tell it apart from the user's own loose levels
-        if (!fs::exists(path)) std::ofstream(path.string() + ".atlas-created") << "created by Albion Atlas\n";
+        if (!fs::exists(path)) std::ofstream(path.string() + ".atlas-created") << "created by FableForge\n";
         level_->save(path);
         savedTerrain_ = terrain_;
 
@@ -667,7 +667,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
                 for (const auto& n : region.seesMaps) candidates.insert(lower(n));
             }
             candidates.erase(mine);
-            const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "neighbours";
+            const fs::path tmp = fs::temp_directory_path() / "FableForge" / "neighbours";
             fs::create_directories(tmp);
             std::unique_ptr<forge::wad::Archive> wadArchive;
             for (const auto& name : candidates) {
@@ -1149,7 +1149,7 @@ bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
         fs::create_directories(path.parent_path());
         const std::string text = file_.serialize();
         if (fs::exists(path)) { if (!fs::exists(path.string() + ".atlas-orig") && !fs::exists(path.string() + ".atlas-created")) fs::copy_file(path, path.string() + ".atlas-orig"); }
-        else std::ofstream(path.string() + ".atlas-created") << "created by Albion Atlas\n";   // the backup manager deletes it on restore
+        else std::ofstream(path.string() + ".atlas-created") << "created by FableForge\n";   // the backup manager deletes it on restore
         std::ofstream f(path, std::ios::binary | std::ios::trunc);
         if (!f) { error = "cannot write " + path.string(); return false; }
         f.write(text.data(), std::streamsize(text.size()));

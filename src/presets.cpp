@@ -24,7 +24,7 @@ std::string readAll(const fs::path& p, std::string& error) {
     return ss.str();
 }
 
-// "// Albion Atlas preset: <name>" then "// <description>" (both optional)
+// "// FableForge preset: <name>" then "// <description>" (both optional)
 void readHeader(const std::string& text, std::string& name, std::string& description) {
     std::istringstream in(text);
     std::string line;
@@ -34,8 +34,9 @@ void readHeader(const std::string& text, std::string& name, std::string& descrip
         if (line.rfind("//", 0) != 0) break;
         std::string body = line.substr(2);
         while (!body.empty() && body.front() == ' ') body.erase(body.begin());
-        const std::string tag = "Albion Atlas preset:";
-        if (n == 0 && body.rfind(tag, 0) == 0) { name = body.substr(tag.size()); while (!name.empty() && name.front() == ' ') name.erase(name.begin()); }
+        const std::string tag = "FableForge preset:", oldTag = "Albion Atlas preset:";   // presets saved before the rename
+        const std::string* hit = body.rfind(tag, 0) == 0 ? &tag : body.rfind(oldTag, 0) == 0 ? &oldTag : nullptr;
+        if (n == 0 && hit) { name = body.substr(hit->size()); while (!name.empty() && name.front() == ' ') name.erase(name.begin()); }
         else if (n == 0) name = body;
         else description = body;
         ++n;
@@ -100,7 +101,7 @@ bool savePreset(const fs::path& file, const std::string& name, const std::string
     fs::create_directories(file.parent_path(), ec);
     std::ofstream out(file, std::ios::binary | std::ios::trunc);
     if (!out) { error = "cannot write " + file.string(); return false; }
-    out << "// Albion Atlas preset: " << name << "\r\n";
+    out << "// FableForge preset: " << name << "\r\n";
     out << "// " << (description.empty() ? std::to_string(fragment.items.size()) + " things" : description) << "\r\n";
     out << "Version 2;\r\nXXXSectionStart NULL;\r\n";
     for (const auto& item : fragment.items) {

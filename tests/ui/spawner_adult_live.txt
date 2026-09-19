@@ -1,4 +1,4 @@
-# Live-install probe (not in check_all): an Atlas enemy spawner next to the adult save's hero position in GreatwoodTeleport.
+# Live-install probe (not in check_all): an FableForge enemy spawner next to the adult save's hero position in GreatwoodTeleport.
 wait_maps
 wait_ready
 select GreatwoodTeleport

@@ -722,7 +722,7 @@ void testGtg(const fs::path& dir) {
 }
 
 int main() {
-    const fs::path dir = fs::temp_directory_path() / "AlbionAtlasTests";
+    const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
     const fs::path lev = writeSyntheticLev(dir / "synthetic.lev", 4, 3,
                                            [](int x, int y) { return 10.0f * x + 3.0f * y; });
@@ -739,6 +739,6 @@ int main() {
     testNavPatch(dir);
     testGtg(dir);
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
-    std::cout << "albionatlas_tests: all passed\n";
+    std::cout << "fableforge_tests: all passed\n";
     return 0;
 }

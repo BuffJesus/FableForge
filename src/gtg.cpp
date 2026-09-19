@@ -162,7 +162,7 @@ bool setRegionEntrance(const fs::path& gameRoot, int slot, const std::string& le
     const std::string script = levelName + "HSP";
     uint64_t uid = f.maxUid();
     std::string things;
-    // an entrance Atlas wrote before (its HSP carries our script name): replace both blocks
+    // an entrance FableForge wrote before (its HSP carries our script name): replace both blocks
     const size_t mine = s.body.find("ScriptName " + script + ";");
     if (mine != std::string::npos) {
         const auto [h0, h1] = blockAround(s.body, mine);

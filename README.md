@@ -1,29 +1,32 @@
-# Albion Atlas
+# FableForge
+
+*Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
+library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
 
 View, export and edit **Fable: The Lost Chapters** maps — terrain, ground textures,
 grass, trees, water and placed objects — straight from your Steam install. Export to
 `.glb` (glTF binary) or `.obj`, or move, add and remove the objects of a level and
 write the result back into the game. Two small Windows executables, no dependencies:
 
-* **`AlbionAtlasGUI.exe`** — pick your install, browse the 399 maps on the left,
+* **`FableForge.exe`** — pick your install, browse the 399 maps on the left,
   see the map in 3D in the middle, export or edit on the right. Drag a `.lev`
   onto the window to open a loose file (drop a PNG to make a ground texture from it). Export one map or all of them.
-* **`AlbionAtlas.exe`** — the same exporter as a command line tool.
+* **`forge.exe`** — the same exporter as a command line tool.
 
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
-![The Arena in Albion Atlas](docs/screenshot_arena.png)
-![Oakvale in Albion Atlas](docs/screenshot_oakvale.png)
-![Greatwood in Albion Atlas](docs/screenshot_greatwood.png)
+![The Arena in FableForge](docs/screenshot_arena.png)
+![Oakvale in FableForge](docs/screenshot_oakvale.png)
+![Greatwood in FableForge](docs/screenshot_greatwood.png)
 
 ```
-AlbionAtlas list                             # every map in FinalAlbion.wad
-AlbionAtlas info   Greatwood_1               # size, height range, ground themes
-AlbionAtlas export Greatwood_1               # -> Greatwood_1.glb, textured
-AlbionAtlas export Oakvale_1 --out oak.obj   # OBJ + MTL + PNG instead
-AlbionAtlas export my_edited.lev --no-textures
-AlbionAtlas effects BRAZIERFIREFINAL         # what a particle effect is made of
+forge list                             # every map in FinalAlbion.wad
+forge info   Greatwood_1               # size, height range, ground themes
+forge export Greatwood_1               # -> Greatwood_1.glb, textured
+forge export Oakvale_1 --out oak.obj   # OBJ + MTL + PNG instead
+forge export my_edited.lev --no-textures
+forge effects BRAZIERFIREFINAL         # what a particle effect is made of
 ```
 
 
@@ -82,11 +85,11 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   distant trees the engine draws as impostors; exported as full meshes, far-LOD
   twins of a near tree dropped). Counts per mesh are in the log.
 * **Terrain brightness** — Fable's ground textures are authored dark; the engine's
-  own baked background patches are equally dark (checked with `AlbionAtlas ground <map>`),
+  own baked background patches are equally dark (checked with `forge ground <map>`),
   so the in-game look comes from lighting. The export keeps raw texels; `--gain` /
   the brightness slider brighten if you want a lit look baked in.
 * **Caves have no lid** — terrain is the cave floor; walls and ceilings are placed
-  meshes. Every cell of every map is drawn by the engine (`AlbionAtlas coverage <map>`).
+  meshes. Every cell of every map is drawn by the engine (`forge coverage <map>`).
 * **Placed-object orientation** — meshes compose exactly as the engine's
   `CalcObjectMatrix` does: `pos + lx*(-right) + ly*(-forward) + lz*up` (`right = forward x up`),
   cross-checked against the Arena (oval pit, N/S corridors, gates, audience ring and
@@ -95,7 +98,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
   `CREATEOBJECT` / `CREATEBUILDING` dummies (see the table), which are now followed.
 * **Particles are off by default** (`--particles` opts in) — a flame is a small tinted
   sprite quad, a fountain a stack of them, a sun beam its mesh; nothing moves. The real
-  emitter parameters are in the effect name (`AlbionAtlas effects <NAME>`).
+  emitter parameters are in the effect name (`forge effects <NAME>`).
 * **Water** — a `Water` sheet (child of the terrain node; `water` + `ice` materials, OBJ
   `o Water`) built the way the engine's water patches are: ground + the LEV theme blend
   times each `ENGINE_THEME`'s `WaterHeight` (a depth), averaged over the 5x5 neighbourhood
@@ -117,7 +120,7 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 ## GUI
 
 ```
-AlbionAtlasGUI.exe [--install <fable-root>]
+FableForge.exe [--install <fable-root>]
 ```
 
 Left: searchable map list grouped by the game's regions from `FinalAlbion.wld` (Ctrl+F);
@@ -128,13 +131,13 @@ Unreal-editor controls — hold **RMB** to look around and fly with **WASD**
 dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames
 the map. Textured / Wireframe / Walkable / Height views, Foliage toggle. Right:
 export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
-are remembered in `%APPDATA%\AlbionAtlas`.
+are remembered in `%APPDATA%\FableForge`.
 The UI is DPI-aware and scales with the window (0.85x on small windows up to 1.25x on
 a 1440p one); it stays usable down to 1024 x 700.
 
 ## Editing a level
 
-Switch the right panel to **Edit**. This is the part of Albion Atlas that replaces the
+Switch the right panel to **Edit**. This is the part of FableForge that replaces the
 leaked Lionhead debug editor for the everyday job of laying out a level, without the
 crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
 
@@ -150,7 +153,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
 * *Changes* summarises what differs from the original by UID. **Write into
   FinalAlbion.wad** puts the edited file into the archive the game actually loads
   (the primary action); **Save draft** keeps a loose
-  `data/Levels/FinalAlbion/<map>.tng` working copy that only Atlas reads. Both keep
+  `data/Levels/FinalAlbion/<map>.tng` working copy that only FableForge reads. Both keep
   a one-time `.atlas-orig` backup of what was there.
 * When you place a creature or spawner, or create a level with its own region, a
   note under that button repeats the engine rule that applies (new game / adult
@@ -179,7 +182,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   grass) are rewritten for the new origin. The same panel sets which region owns a
   map and which regions draw it across each edge, and can stitch the shared
   edge heights of newly adjacent maps. Same thing from the shell:
-  `AlbionAtlas world` / `world-move <map> <x> <y> [--stitch]` / `world-owner` /
+  `forge world` / `world-move <map> <x> <y> [--stitch]` / `world-owner` /
   `world-sees` / `world-stitch`.
 
 Everything is written the way the game wrote it: untouched things stay byte-identical,
@@ -191,7 +194,7 @@ things use retail field order and the per-file UID namespace.
 ```
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-build\albionatlas_tests.exe            # unit tests (synthetic .lev, no install needed)
+build\fableforge_tests.exe            # unit tests (synthetic .lev, no install needed)
 python tools\retail_smoke.py --count 12  # exports real maps and validates every GLB
 python tools\ui_smoke.py                 # drives the GUI, validates output + screenshots
 python tools\check_all.py                # everything above

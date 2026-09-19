@@ -140,7 +140,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
         pushLog(std::string("renderer: ") + renderer_.error(), 2);
     }
 
-    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "AlbionAtlas").string();
+    settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "FableForge").string();
     std::string savedInstall;
     if (!auto_.active()) { firstRun_ = !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
     std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
@@ -298,7 +298,7 @@ void App::drawSetupPanel() {
     if (ImGui::BeginPopupModal("Setup", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
         const InstallHealth h = installHealth();
         ImGui::PushFont(fontBold_);
-        ImGui::TextUnformatted(installValid_ ? "Your Fable install" : "Point Albion Atlas at Fable: The Lost Chapters");
+        ImGui::TextUnformatted(installValid_ ? "Your Fable install" : "Point FableForge at Fable: The Lost Chapters");
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
         ImGui::PushTextWrapPos(S(530));
@@ -325,7 +325,7 @@ void App::drawSetupPanel() {
         ImGui::TextColored(theme::vec(theme::Faint), "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
-        // backups: everything Atlas has touched, and the way back
+        // backups: everything FableForge has touched, and the way back
         if (installValid_) {
             if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) { backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime(); }
             size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
@@ -347,7 +347,7 @@ void App::drawSetupPanel() {
                     if (theme::ghostButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
                     auto_.registerWidget("btn_restore_all");
                 } else {
-                    const int r = confirmRow("Put every backed-up file back and delete the files Atlas created? Your edits in the game are lost (loose .lev/.tng drafts stay).",
+                    const int r = confirmRow("Put every backed-up file back and delete the files FableForge created? Your edits in the game are lost (loose .lev/.tng drafts stay).",
                                              "Yes, restore", S(530), S(28), "btn_restore_confirm");
                     if (r != 0) confirmRestore_ = false;
                     if (r > 0) restoreAllBackups();
@@ -383,7 +383,11 @@ bool App::restoreAllBackups() {
 
 std::string App::settingsPath() const {
     const char* appdata = std::getenv("APPDATA");
-    const fs::path dir = fs::path(appdata ? appdata : ".") / "AlbionAtlas";
+    const fs::path dir = fs::path(appdata ? appdata : ".") / "FableForge";
+    // the app was Albion Atlas until 0.16: carry the old settings and presets over once
+    const fs::path old = fs::path(appdata ? appdata : ".") / "AlbionAtlas";
+    std::error_code ec;
+    if (!fs::exists(dir, ec) && fs::is_directory(old, ec)) fs::copy(old, dir, fs::copy_options::recursive, ec);
     return (dir / "settings.json").string();
 }
 
@@ -490,7 +494,7 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
         for (const auto& en : wad.entries()) {
             if (lower(fs::path(en.name).filename().string()) != want) continue;
             const auto bytes = wad.read(en);
-            const fs::path dir = fs::temp_directory_path() / "AlbionAtlas";
+            const fs::path dir = fs::temp_directory_path() / "FableForge";
             fs::create_directories(dir);
             const fs::path out = dir / (e.name + ".lev");
             std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
@@ -1196,16 +1200,16 @@ void App::drawTitleBar() {
 
     ImGui::SetCursorScreenPos(ImVec2(p.x + S(36), p.y + S(11)));
     ImGui::PushFont(fontTitle_);
-    ImGui::TextUnformatted("Albion Atlas");
+    ImGui::TextUnformatted("FableForge");
     const float titleEnd = ImGui::GetItemRectMax().x;
     ImGui::PopFont();
     const float btnW = S(92.0f);
-    const float subtitleW = ImGui::CalcTextSize("v" ALBION_VERSION "   Fable: The Lost Chapters map exporter").x;
+    const float subtitleW = ImGui::CalcTextSize("v" ALBION_VERSION "   Fable: The Lost Chapters level editor").x;
     if (w > S(760)) {
         ImGui::SameLine(0, S(12));
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(8));
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Faint), "v" ALBION_VERSION "   Fable: The Lost Chapters map exporter");
+        ImGui::TextColored(theme::vec(theme::Faint), "v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
         ImGui::PopFont();
     }
 

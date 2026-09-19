@@ -12,7 +12,7 @@ What it does (everything is undone afterwards):
   3. waits for the probe's 'done' line in FSE/FableScriptExtender.log, screenshots
      the game, kills it, restores the master script and the log;
   4. compares every probed height with the bilinear LEV height at that point
-     (loose data/Levels/FinalAlbion/<map>.lev, i.e. what Atlas deployed) and
+     (loose data/Levels/FinalAlbion/<map>.lev, i.e. what FableForge deployed) and
      writes a report.
 
 Prerequisites (one-time): a profile folder 'My Games/Fable/Saves/0atlas' whose
@@ -42,7 +42,7 @@ GAMEWIN = HERE / "gamewin.ps1"
 DEFAULT_ROOT = r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters"
 HOOK_TAG = "-- ATLAS-PROBE-HOOK"
 
-PROBE_LUA = r'''-- Albion Atlas in-game terrain probe (installed by tools/ingame/ingame_terrain_test.py,
+PROBE_LUA = r'''-- FableForge in-game terrain probe (installed by tools/ingame/ingame_terrain_test.py,
 -- removed after the run). Logs the engine's ground height at a grid of world points.
 ATLAS_TARGET_MAP = "%(map)s"
 ATLAS_START_MAP = "%(start_map)s"   -- where the hero begins; the teleport (if any) takes him to the target map
@@ -296,7 +296,7 @@ def tng_positions(root: Path, map_name: str, names: list[str]) -> dict[str, tupl
 
 
 def lev_heights(lev: str, pts: list[tuple[float, float]]) -> dict[tuple[float, float], float | None]:
-    exe = ROOT / "build" / "AlbionAtlas.exe"
+    exe = ROOT / "build" / "forge.exe"
     out = subprocess.run([str(exe), "heights", lev, *[f"{x},{y}" for x, y in pts]], capture_output=True, text=True)
     res: dict[tuple[float, float], float | None] = {}
     for line in out.stdout.splitlines():
@@ -356,7 +356,7 @@ def main() -> int:
     elif not (saves_root / "0atlas").is_dir():
         print(f"missing profile folder {saves_root / '0atlas'}: copy an Oakvale autosave profile there first", file=sys.stderr)
         return 2
-    # the oracle: the loose .lev Atlas deploys, else the WAD copy (resolved by the CLI)
+    # the oracle: the loose .lev FableForge deploys, else the WAD copy (resolved by the CLI)
     lev = root / "data" / "Levels" / "FinalAlbion" / f"{a.map}.lev"
     lev_arg = str(lev) if lev.exists() else a.map
     if game_running():
@@ -394,7 +394,7 @@ def main() -> int:
                                   "follow": ("{%g, %g}" % (mx + follow_pt[0], my + follow_pt[1])) if follow_pt else "nil",
                                   "follow_def": a.follow_def, "follow_seconds": a.follow_seconds}, encoding="utf-8")
     # The probe thread is started BEFORE the host's own Main (which may loop forever).
-    hook = (f"\n{HOOK_TAG} (installed by Albion Atlas tools/ingame; removed after the run)\n"
+    hook = (f"\n{HOOK_TAG} (installed by FableForge tools/ingame; removed after the run)\n"
             f"local _atlasMain = Main\n"
             f"function Main(quest)\n"
             f"    pcall(function()\n"

@@ -1,6 +1,6 @@
 #pragma once
 // albion::stbterrain -- which terrain cells the engine actually renders
-// (DIAGNOSTIC; `AlbionAtlas coverage <map>`).
+// (DIAGNOSTIC; `forge coverage <map>`).
 //
 // The engine draws terrain from the baked STB "foreground" frames: per 16x16
 // patch, per theme layer, a vertex list + either a triangle strip or the shared

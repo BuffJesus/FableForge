@@ -1,8 +1,8 @@
-// AlbionAtlas -- export Fable: The Lost Chapters terrain to .glb / .obj.
+// FableForge -- export Fable: The Lost Chapters terrain to .glb / .obj.
 //
-//   AlbionAtlas list   [--install <root>]
-//   AlbionAtlas info   <map|file.lev> [--install <root>]
-//   AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]
+//   forge list   [--install <root>]
+//   forge info   <map|file.lev> [--install <root>]
+//   forge export <map|file.lev> [--out <file.glb|file.obj>] [options]
 //
 // <map> is a level name (e.g. Greatwood_1) read from the install's
 // data/Levels/FinalAlbion.wad (a loose data/Levels/FinalAlbion/<map>.lev wins if
@@ -58,28 +58,28 @@ namespace {
 
 int usage() {
     std::puts(
-        "Albion Atlas " ALBION_VERSION " -- Fable: The Lost Chapters maps -> .glb / .obj\n"
+        "FableForge " ALBION_VERSION " -- Fable: The Lost Chapters level editor (maps -> .glb / .obj, levels, terrain, textures)\n"
         "\n"
         "usage:\n"
-        "  AlbionAtlas list   [--install <fable-root>]\n"
-        "  AlbionAtlas info   <map|file.lev> [--install <fable-root>]\n"
-        "  AlbionAtlas export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
-        "  AlbionAtlas new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
-        "  AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
+        "  forge list   [--install <fable-root>]\n"
+        "  forge info   <map|file.lev> [--install <fable-root>]\n"
+        "  forge export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
+        "  forge new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
+        "  forge blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
         "      new-level / blank-level: [--own-region [new|<filler region>]] [--merge-into <filler>] [--display <name>] [--no-minimap]\n"
         "      (own region = a NEW region slot (`new`; complete on a game started after it) or a retail filler slot taken over; baked MINIMAP_<NAME>)\n"
-        "  AlbionAtlas world  [--install <root>]                      every map's box, region and baked origin\n"
-        "  AlbionAtlas world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
+        "  forge world  [--install <root>]                      every map's box, region and baked origin\n"
+        "  forge world-move <map> <x> <y> [<map> <x> <y> ...] [--install <root>]\n"
         "      (relocate maps: WLD/BWD placement + STB chunks translated to the new origins, touching neighbours re-baked)\n"
-        "  AlbionAtlas world-owner <map> <region>   |   AlbionAtlas world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
-        "  AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
+        "  forge world-owner <map> <region>   |   forge world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
+        "  forge theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
-        "  AlbionAtlas textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
-        "  AlbionAtlas texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
-        "  AlbionAtlas entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
-        "  AlbionAtlas backups   |   AlbionAtlas restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
-        "  AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
-        "  AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
+        "  forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
+        "  forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
+        "  forge entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
+        "  forge backups   |   forge restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
+        "  forge region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
+        "  forge world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"
         "      (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)\n"
         "\n"
         "export options:\n"
@@ -151,13 +151,13 @@ fs::path resolveLevel(const std::string& arg, const Install& install, fs::path& 
         const std::string leaf = lower(fs::path(e.name).filename().string());
         if (leaf != want) continue;
         const auto bytes = wad.read(e);
-        const fs::path dir = fs::temp_directory_path() / "Albion Atlas";
+        const fs::path dir = fs::temp_directory_path() / "FableForge";
         fs::create_directories(dir);
         tempOut = dir / (name + ".lev");
         std::ofstream(tempOut, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         return tempOut;
     }
-    throw std::runtime_error("no map named '" + name + "' in " + wadPath.string() + " (try: AlbionAtlas list)");
+    throw std::runtime_error("no map named '" + name + "' in " + wadPath.string() + " (try: forge list)");
 }
 
 int cmdList(const Install& install) {
@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
     if (args.empty() || args[0] == "-h" || args[0] == "--help") return usage();
     const std::string cmd = args[0];
     if (cmd == "blank-level") {   // blank-level <name> [--at x,y] [--region <host>] [--template <64x64 map>] [--theme <slot|name>] [--height h] [--install <root>]
-        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas blank-level <name> [--size WxH] [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
+        if (args.size() < 2) { std::fprintf(stderr, "usage: forge blank-level <name> [--size WxH] [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
         albion::editor::BlankLevelRequest req;
         req.name = args[1];
         std::string installArg, at, theme;
@@ -299,7 +299,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "new-level") {   // new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas new-level <donor> <name> [--at x,y] [--region <hostRegion>] [--dedicated] [--no-rebake] [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge new-level <donor> <name> [--at x,y] [--region <hostRegion>] [--dedicated] [--no-rebake] [--install <root>]\n"); return 2; }
         albion::editor::NewLevelRequest req;
         req.donor = args[1]; req.name = args[2];
         std::string installArg, at; bool dedicated = false;
@@ -362,7 +362,7 @@ int main(int argc, char** argv) {
             std::printf("%zu of %zu textures\n", shown, rows.size());
             return 0;
         }
-        if (pos.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas %s <name> <file> [--install <root>]\n", cmd.c_str()); return 2; }
+        if (pos.size() < 2) { std::fprintf(stderr, "usage: FableForge %s <name> <file> [--install <root>]\n", cmd.c_str()); return 2; }
         std::vector<std::string> notes;
         bool ok = false;
         if (cmd == "texture-export") ok = albion::texbrowse::exportPng(big, pos[0], pos[1], err);
@@ -374,7 +374,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "entrance") {   // entrance <map> [x y [z]] [--install <root>]: show, or set, the map's region entrance in FinalAlbion.gtg
-        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas entrance <map> [x y [z]] [--install <root>]\n"); return 2; }
+        if (args.size() < 2) { std::fprintf(stderr, "usage: forge entrance <map> [x y [z]] [--install <root>]\n"); return 2; }
         std::string installArg; std::vector<float> xyz;
         for (size_t i = 2; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
@@ -411,7 +411,7 @@ int main(int argc, char** argv) {
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
             else if (args[i] == "--forget") forget = true;
-            else { std::fprintf(stderr, "usage: AlbionAtlas backups | restore [--forget] [--install <root>]\n"); return 2; }
+            else { std::fprintf(stderr, "usage: forge backups | restore [--forget] [--install <root>]\n"); return 2; }
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
@@ -437,7 +437,7 @@ int main(int argc, char** argv) {
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
             else if (args[i] == "--forget") forget = true;
-            else { std::fprintf(stderr, "usage: AlbionAtlas backups | restore [--forget] [--install <root>]\n"); return 2; }
+            else { std::fprintf(stderr, "usage: forge backups | restore [--forget] [--install <root>]\n"); return 2; }
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
@@ -459,7 +459,7 @@ int main(int argc, char** argv) {
         return err.empty() ? 0 : 1;
     }
     if (cmd == "region-props") {   // region-props <region> [--def REGION_X] [--minimap MINIMAP_X] [--display NAME] [--worldmap 0|1] [--install root]
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_GRAPHIC>] [--display <name>] [--worldmap 0|1] [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_GRAPHIC>] [--display <name>] [--worldmap 0|1] [--install <root>]\n"); return 2; }
         std::string installArg; albion::editor::RegionProps props;
         for (size_t i = 2; i + 1 < args.size(); i += 2) {
             if (args[i] == "--install") installArg = args[i + 1];
@@ -477,7 +477,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "theme-add") {   // theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]: a ground theme from your own texture
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"); return 2; }
         std::string installArg; albion::editor::CustomThemeRequest req;
         req.png = args[1]; req.name = args[2];
         for (size_t i = 3; i < args.size(); ++i) {
@@ -502,7 +502,7 @@ int main(int argc, char** argv) {
             else if (args[i] == "--dry-run") so.deploy = false;
             else maps.push_back(args[i]);
         }
-        if (maps.empty() || maps.size() > 2) { std::fprintf(stderr, "usage: AlbionAtlas world-stitch <map> [<map2>] [--feather <cells>] [--dry-run] [--install <root>]\n"); return 2; }
+        if (maps.empty() || maps.size() > 2) { std::fprintf(stderr, "usage: forge world-stitch <map> [<map2>] [--feather <cells>] [--dry-run] [--install <root>]\n"); return 2; }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         albion::editor::WorldLayout layout; std::string err; std::vector<std::string> notes; std::vector<albion::editor::StitchReport> reports;
@@ -531,7 +531,7 @@ int main(int argc, char** argv) {
             else if (cmd == "world-move" && i + 2 < args.size()) { moves.push_back({args[i], std::atoi(args[i + 1].c_str()), std::atoi(args[i + 2].c_str())}); i += 2; }
             else if (cmd == "world-owner" && i + 1 < args.size()) { owners.push_back({args[i], args[i + 1]}); i += 1; }
             else if (cmd == "world-sees" && i + 2 < args.size()) { sees.push_back({args[i], args[i + 1], args[i + 2] != "0"}); i += 2; }
-            else { std::fprintf(stderr, "usage: AlbionAtlas world [--regions] | world-move <map> <x> <y> [...] | world-owner <map> <region> | world-sees <region> <map> <0|1>  [--install <root>]\n"); return 2; }
+            else { std::fprintf(stderr, "usage: forge world [--regions] | world-move <map> <x> <y> [...] | world-owner <map> <region> | world-sees <region> <map> <0|1>  [--install <root>]\n"); return 2; }
         }
         if (cmd == "world-owner" || cmd == "world-sees") {
             const Install install = findInstall(installArg);
@@ -565,7 +565,7 @@ int main(int argc, char** argv) {
             }
             return 0;
         }
-        if (moves.empty()) { std::fprintf(stderr, "usage: AlbionAtlas world-move <map> <x> <y> [...] [--install <root>]\n"); return 2; }
+        if (moves.empty()) { std::fprintf(stderr, "usage: forge world-move <map> <x> <y> [...] [--install <root>]\n"); return 2; }
         for (const auto& mv : moves) {
             std::string why;
             if (!albion::editor::checkMove(layout, moves, mv, why)) { std::fprintf(stderr, "error: %s: %s\n", mv.name.c_str(), why.c_str()); return 1; }
@@ -590,7 +590,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas heights <map.lev> <x,y> ...\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge heights <map.lev> <x,y> ...\n"); return 2; }
         try {
             fs::path temp;
             const fs::path levPath = fs::exists(args[1]) ? fs::path(args[1]) : resolveLevel(args[1], findInstall(""), temp);
@@ -609,7 +609,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "recompress-chunk") {   // diagnostic: re-encode every frame's LZO with our encoder, bodies untouched
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas recompress-chunk <in.bin> <out.bin>\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge recompress-chunk <in.bin> <out.bin>\n"); return 2; }
         try {
             std::ifstream cf(args[1], std::ios::binary);
             std::vector<uint8_t> raw((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
@@ -637,7 +637,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "minimap-register") {   // minimap-register <MINIMAP_NAME> <texture id> [--install <root>]: PLAYER_GUI MiniMapGraphics entry
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas minimap-register <name> <id> [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge minimap-register <name> <id> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -648,7 +648,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (cmd == "lod-check") {   // diagnostic: lod-check <map> [--install <root>]: compare our baked distant-LOD tiles with the retail inline textures
-        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas lod-check <map> [--install <root>]\n"); return 2; }
+        if (args.size() < 2) { std::fprintf(stderr, "usage: forge lod-check <map> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 2; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -719,7 +719,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-extract") {   // diagnostic: chunk-extract <map> <out.bin> [--install <root>]: the map's terrain chunk from FinalAlbion_RT.stb (+ <out.bin>.record)
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-extract <map> <out.bin> [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge chunk-extract <map> <out.bin> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -749,7 +749,7 @@ int main(int argc, char** argv) {
             else target = args[i];
         }
         const Install install = findInstall(installArg);
-        if (!install.valid || target.empty()) { std::fprintf(stderr, "usage: AlbionAtlas chunk-audit <map>|--all [--install <root>]\n"); return 2; }
+        if (!install.valid || target.empty()) { std::fprintf(stderr, "usage: forge chunk-audit <map>|--all [--install <root>]\n"); return 2; }
         try {
             const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
             int maps = 0, bad = 0;
@@ -777,7 +777,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-textures") {   // diagnostic: chunk-textures <map> [--install <root>]: distinct foreground texture triples (GBANK_MAIN_PC ids) and their layer counts
-        if (args.size() < 2) { std::fprintf(stderr, "usage: AlbionAtlas chunk-textures <map> [--install <root>]\n"); return 2; }
+        if (args.size() < 2) { std::fprintf(stderr, "usage: forge chunk-textures <map> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 2; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -820,7 +820,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-zcheck") {   // diagnostic: chunk-zcheck <map> <dz> [--install <root>]: foliage Z ride by a constant, audit, ride back, compare digests
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-zcheck <map> <dz> [--install <root>]\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge chunk-zcheck <map> <dz> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -895,7 +895,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-relocate") {   // diagnostic: chunk-relocate <map> <dx> <dy> [--install <root>]: translate + audit at the new box, then translate back and compare
-        if (args.size() < 4) { std::fprintf(stderr, "usage: AlbionAtlas chunk-relocate <map> <dx> <dy> [--install <root>]\n"); return 2; }
+        if (args.size() < 4) { std::fprintf(stderr, "usage: forge chunk-relocate <map> <dx> <dy> [--install <root>]\n"); return 2; }
         std::string installArg;
         for (size_t i = 4; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
@@ -953,7 +953,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "chunk-dump") {   // diagnostic: chunk-dump <chunk.bin> <outdir>: every segment as a file (frames decoded), plus segments.txt
-        if (args.size() < 3) { std::fprintf(stderr, "usage: AlbionAtlas chunk-dump <chunk.bin> <outdir>\n"); return 2; }
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge chunk-dump <chunk.bin> <outdir>\n"); return 2; }
         try {
             std::ifstream cf(args[1], std::ios::binary);
             std::vector<uint8_t> raw((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
@@ -1009,7 +1009,7 @@ int main(int argc, char** argv) {
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
     if (cmd == "bake-terrain") {   // diagnostic: stbbake::bakeHeightfield <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>
-        if (args.size() < 6) { std::fprintf(stderr, "usage: AlbionAtlas bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>\n"); return 2; }
+        if (args.size() < 6) { std::fprintf(stderr, "usage: forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>\n"); return 2; }
         try {
             std::ifstream cf(args[1], std::ios::binary);
             std::vector<uint8_t> chunk((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());

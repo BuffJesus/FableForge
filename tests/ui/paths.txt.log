@@ -28,7 +28,7 @@ ok   assert_file build/ui/Arena_Filler_01.mtl
 ok   frames 2
 ok   assert_state textures 1
 ok   set format glb
-ok   open C:\Users\Cornelio\AppData\Local\Temp/AlbionAtlas/Arena_Filler_01.lev
+ok   open C:\Users\Cornelio\AppData\Local\Temp/FableForge/Arena_Filler_01.lev
 ok   wait_loaded
 ok   assert_state selected file:Arena_Filler_01
 ok   assert_widget group_Loose files
@@ -61,7 +61,7 @@ ok   filter
      hovered_window=##root/##actions_92064320
      mouse=1254,729
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=156 hovered_flags=16777487 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=164 hovered_flags=16777487 parent=##root parent_scrollmax=0
      preview_loaded=1
      preview_textured=1
      context_ready=1
@@ -70,6 +70,7 @@ ok   filter
      edit_tab=0
      toasts=4
      help_open=0
+     tour_step=-1
      ui_scale=1.00
      grid=0
      selection_count=0

@@ -1,18 +1,20 @@
 # Vendored code
 
-## `forgecore/` — FableForge `libs/forgecore` (MIT)
-Full copy of the FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/
-STB bake/nav/world workspace/defs/quests), synced from `D:\Code\FableForge`
-with `python tools/sync_forgecore.py` (`--check` reports drift). Last synced
-at commit `8793a44` (working tree, uncommitted forgecore changes)
-Skipped: `audio.*` (miniaudio). `vendor/third_party/stb/stb_image.h` (public
-domain) is forgecore's PNG reader for the native texture importer. Fixes made here are upstreamed to FableForge
-first, then re-synced, so the copy stays byte-identical except for:
-* `src/lzo.cpp` — the only local override: `forge::lzo` backed by the
-  clean-room MIT LZO1X codec in `src/lzo1x.*` (decoder + optimal-parse
-  encoder) instead of GPL minilzo / liblzo2. `compress` packs to 99.4% of
-  retail lzo1x_999 output on the STB frames (2217/2223 fit their slot), so
-  `compress999` maps to it as well.
+## `../libs/forgecore/` — forgecore (MIT), canonical here since 0.16
+The FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/STB bake/nav/
+world workspace/defs/quests). It started as a vendored copy of the old FableForge
+repo's `libs/forgecore` (last synced at its commit `8793a44` + working tree); with
+the rename this tree became the canonical FableForge, so the library moved to
+`libs/forgecore` and is edited in place (no sync script any more). The old repo is
+kept as `D:\Code\FableForge-legacy` for its GUI canvas / quest tooling, to be
+merged piece by piece. Local differences from the legacy copy:
+* `src/lzo.cpp` — `forge::lzo` backed by the clean-room MIT LZO1X codec in
+  `src/lzo1x.*` (decoder + optimal-parse encoder) instead of GPL minilzo /
+  liblzo2. `compress` packs to 99.4% of retail lzo1x_999 output on the STB
+  frames (2217/2223 fit their slot), so `compress999` maps to it as well.
+* `audio.*` (miniaudio) was never carried over.
+`vendor/third_party/stb/stb_image.h` (public domain) is forgecore's PNG reader for
+the native texture importer.
 
 ## `embedded_schema.hpp`
 Slice of FableForge `docs/re_reference/def_schema.json`: `CEngineThemeDef`

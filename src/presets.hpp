@@ -1,8 +1,8 @@
 // Presets: a saved selection (a Document::Fragment) as a small TNG-shaped text file that
 // places with one click. Two folders: the ones shipped next to the exe (`presets/`) and
-// the user's own (%APPDATA%/AlbionAtlas/presets). Format:
+// the user's own (%APPDATA%/FableForge/presets). Format:
 //
-//   // Albion Atlas preset: <name>
+//   // FableForge preset: <name>
 //   // <description>
 //   Version 2;
 //   XXXSectionStart NULL;

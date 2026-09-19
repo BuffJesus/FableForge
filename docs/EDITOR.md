@@ -1,6 +1,6 @@
-# The Albion Atlas editor
+# The FableForge editor
 
-Albion Atlas started as an exporter; the editor makes it the tool the community
+FableForge started as an exporter; the editor makes it the tool the community
 used the leaked Lionhead debug build for, on retail data, with undo, and without
 the crashes. The engine formats are written by FableForge's `forgecore`
 (vendored; `tools/sync_forgecore.py` keeps it byte-identical with the upstream).
@@ -24,7 +24,7 @@ file it created with `<file>.atlas-created`. `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
 CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over
 the live file (the backup stays as the baseline), created files are deleted.
-Refused while Fable.exe runs. CLI `AlbionAtlas backups` (list, which differ) and
+Refused while Fable.exe runs. CLI `forge backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
@@ -65,7 +65,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 * **Presets** (Actors tab): a saved group of objects (`presets/*.preset.tng`, a valid
   loose .tng with a two-line header) placed at the view centre with one click as a
   selected group; *Save N selected objects as a preset* writes to
-  `%APPDATA%\AlbionAtlas\presets`. Four retail-derived ones ship; rebuild them with
+  `%APPDATA%\FableForge\presets`. Four retail-derived ones ship; rebuild them with
   `tools/build_presets.py`.
 * **Undo/redo**: snapshot based (128 steps); indices are re-derived from UIDs.
 * **Save / deploy**: `Write into FinalAlbion.wad` is the primary action -- it
@@ -76,7 +76,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   in-game; saved games cache region entities, so start a new game or enter the
   region fresh to see them. `Save draft` keeps the loose
   `data/Levels/FinalAlbion/<map>.tng` as the editor's working copy (the engine
-  never reads it; Atlas lists it under *Loose files*).
+  never reads it; FableForge lists it under *Loose files*).
 
 ## What works now (terrain)
 
@@ -142,7 +142,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   state `paint_theme` / `palette_named`; `tests/ui/theme_deploy.txt` (scratch,
   in test_overworld) and `theme_deploy_live.txt`.
 * **Your own texture as a ground theme** (2026-09-17, in-game verified): *Custom
-  texture from a PNG...* in the paint card (or `AlbionAtlas theme-add <png>
+  texture from a PNG...* in the paint card (or `forge theme-add <png>
   <NAME> [--donor <theme>] [--cliff <png>]`): the PNG is appended to
   textures.big (`GBANK_MAIN_PC`, DXT1, symbol `<NAME>_BASE`; the layer meshes
   reference textures by that global id and retail chunks resolve ids directly)
@@ -200,7 +200,7 @@ mouse via relative motion, keyboard):
   game at the position the loose .tng says. Verified 2026-09-16: a barrel
   placed and written into FinalAlbion.wad is found at exactly its position.
 * `restore_install.sh` -- puts the `.atlas-orig` backups back and removes only
-  the loose files Atlas created (`.atlas-created` marker).
+  the loose files FableForge created (`.atlas-created` marker).
 * `patch_stb_chunk.sh` -- write a same-size chunk into `FinalAlbion_RT.stb`
   (bisecting a bad bake: splice donor/baked regions and test each in-game).
 * `crash_catcher.py`, `trace_lzo_calls.py`, `trace_bp_stack.py`,
@@ -220,7 +220,7 @@ mouse via relative motion, keyboard):
 
 The LEV walkable byte does nothing at runtime; the engine moves creatures on
 the **CNavQuadTree** stored in the LEV's navigation sections (proven below).
-`forge::navmesh::parseNavigation` / `emitNavigation` (`vendor/forgecore`
+`forge::navmesh::parseNavigation` / `emitNavigation` (`libs/forgecore`
 `navpatch.cpp`, upstreamed to FableForge) read and write those sections
 node-for-node -- every layer, the 3-byte blocked-root markers, switchable
 (door) leaves with their thing UIDs, the half-cell leaves carved around
@@ -277,7 +277,7 @@ slot lists, which are resolved from the edited WLD (forgecore's
 maps). CLI: `world-owner <map> <region>`, `world-sees <region> <map> <0|1>`,
 `world --regions`. Note: the BWD keys maps by LEV stem; ten retail maps carry a
 different script name (`BowerstoneSlumsWarehouses.lev` is scripted
-"BowerstoneSlums") and Atlas keys on the stem everywhere.
+"BowerstoneSlums") and FableForge keys on the stem everywhere.
 
 **Seam stitching** (2026-09-17, in-game verified) -- *Stitch edges with
 neighbours* in the pending-changes card (off by default) averages the shared
@@ -305,8 +305,8 @@ still ends at a void beyond the seam -- tick the neighbour toggles too. The
 engine's ground query answers 0 on the seam column itself when the neighbour is
 not loaded (its cell belongs to the other map).
 
-What a move writes -- `AlbionAtlas world-move <map> <x> <y> [...]` is the same
-path from the command line, `AlbionAtlas world` lists the layout:
+What a move writes -- `forge world-move <map> <x> <y> [...]` is the same
+path from the command line, `forge world` lists the layout:
 
 1. `FinalAlbion.wld` `MapX`/`MapY` (byte-identical otherwise) and the `.bwd` box, in
    all three copies the engine reads (`data/Levels`, `data/Levels/FinalAlbion`, root).
@@ -334,7 +334,7 @@ path from the command line, `AlbionAtlas world` lists the layout:
    against its map box found no other world-space key), so those are shifted.
 
 Placed objects (`.tng`) otherwise stay as they are. **Verified**: the audit
-walk (`AlbionAtlas chunk-audit --all`: every coordinate inside its map's box) is
+walk (`forge chunk-audit --all`: every coordinate inside its map's box) is
 clean on all 398 retail chunks; `chunk-relocate <map> <dx> <dy>` checks every
 coordinate site moved by exactly the shift on every map; TeleporterGreatwood moved
 to (3680,2880) renders in-game with its birches at the new place and the engine
@@ -358,14 +358,14 @@ grid edge and `checkMove` refuses anything past it.
 | Piece | Where |
 |---|---|
 | Document, commands, undo, diff, save/deploy | `src/leveledit.{hpp,cpp}` (headless; `tests/test_export.cpp::testLevelDocument`, `testTerrainEditing`) |
-| New levels (blank / copy) | `src/worldedit.{hpp,cpp}` over `vendor/forgecore` `worldinstall.{hpp,cpp}` + `stbbake::buildTerrainChunk64`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
-| Navigation patch | `vendor/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
-| Terrain bake | `vendor/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `AlbionAtlas bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
+| New levels (blank / copy) | `src/worldedit.{hpp,cpp}` over `libs/forgecore` `worldinstall.{hpp,cpp}` + `stbbake::buildTerrainChunk64`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
+| Navigation patch | `libs/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
+| Terrain bake | `libs/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `forge bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
 | Per-instance rendering, picking, outline | `gui/renderer.{hpp,cpp}` (`uploadThings`, `pick`, `screenRay`) |
 | Gizmo, panel, shortcuts, instance sync | `gui/editor.cpp` |
 | Thing index on preview instances | `foliageexport::Instance::thing`, set by `thingsexport` |
 | Scripted tests | `tests/ui/editor.txt`, commands in `docs/AUTOMATION.md` |
-| Distant-LOD textures | `src/lodbake.{hpp,cpp}` + `src/dxt1.hpp` (albedo at 16 texels/cell box-filtered to 64x64 DXT1 per background node; blank levels and theme-paint deploys); `AlbionAtlas lod-check <map>` compares against retail tiles |
+| Distant-LOD textures | `src/lodbake.{hpp,cpp}` + `src/dxt1.hpp` (albedo at 16 texels/cell box-filtered to 64x64 DXT1 per background node; blank levels and theme-paint deploys); `forge lod-check <map>` compares against retail tiles |
 | Overworld layout + moves | `src/overworld.{hpp,cpp}` (layout, `checkMove`, `applyMoves`), chunk translation `src/stbrelocate.{hpp,cpp}` (`relocateChunk`, `auditChunk`); GUI `gui/world.cpp`; `tools/test_overworld.py` + `tests/ui/world.txt`; diagnostics `chunk-audit`, `chunk-relocate`, `chunk-dump`, `chunk-extract` |
 | Seam stitching | `src/stitch.{hpp,cpp}` (`sharedEdge`, `stitchEdges`, `stitchNeighbours`) over `Document::setVertexHeights` + `deployTerrain` + `reseatThings` + `stbrelocate::reseatFoliageZ`; GUI toggle in `gui/world.cpp` (`world_stitch <0|1> [feather]`, `assert_log`); `world-stitch`, `world-move --stitch`; diagnostic `chunk-zcheck <map> <dz> [--seam] [--slack v] [--bake <lev>] [--write]` |
 
@@ -411,7 +411,7 @@ starts an `AtlasLink` quest thread that polls `FSE/AtlasLink/cmd.lua` with
 `loadfile()` every 0.5 s -- the FSE Lua state has no `io` library, so the command
 is a Lua chunk returning a table -- runs it through the quest API and answers in
 the FSE log (`ATLAS_LINK|ready`, `ATLAS_LINK|ack|id|ok|msg`, a
-`ATLAS_LINK|hero|beat|map|x|y|z` heartbeat every second) that Atlas tails.
+`ATLAS_LINK|hero|beat|map|x|y|z` heartbeat every second) that FableForge tails.
 Commands: **Go here in game** (the camera focus -> `EntityTeleportToPosition`
 when the hero is already in this map, `GoToMapSlotRetailTransition(slot, x, y)`
 otherwise), **Spawn selected creature** (`CreateCreature` at the selected
@@ -439,7 +439,7 @@ The Edit panel's **Enemy spawner** card places a `MARKER_CREATURE_GENERATOR` thi
 carrying the retail self-triggering `CTCCreatureGenerator` block (families from the
 game's `CREATURE_GENERATION_FAMILY` defs, trigger radius, creature limit) at the view
 centre, on the ground, in the TNG's NULL section. **In-game verified 2026-09-17
-with an adult save**: an Atlas spawner (WASPS_01/02, radius 25, limit 4) next to
+with an adult save**: an FableForge spawner (WASPS_01/02, radius 25, limit 4) next to
 the hero in GreatwoodTeleport produced four hornets (`CREATURE_HORNET_01` /
 `_LEV_02`) within about a minute, the hero fighting them in the screenshot. The
 earlier silence was the test profile: childhood keeps a quest active that
@@ -460,7 +460,7 @@ The Edit panel's **New level** card adds a level to the world; a free
 owning region defaults to the selected map's, the name must be a bare stem.
 Two modes:
 
-* **Blank** (`AlbionAtlas blank-level <name> [--size WxH] [--theme
+* **Blank** (`forge blank-level <name> [--size WxH] [--theme
   <slot|name>] [--height h] [--template <map>] ...`): a level authored from
   scratch in any size a retail map has (32x32 .. 160x256; the size combo
   lists them). The LEV skeleton (header, palette) comes from a retail map of
@@ -481,7 +481,7 @@ Two modes:
   the hero's *starting* region loads with the game and must not be there
   while the region is being played (AtlasBig in StartOakVale exited the game
   at load; hosted by Greatwood it is fine).
-* **Copy of this map** (`AlbionAtlas new-level <donor> <name> ...`): clones
+* **Copy of this map** (`forge new-level <donor> <name> ...`): clones
   the selected map's current `.lev`/`.tng` and re-bakes its terrain chunk for
   the new origin. It installs and loads (hero at the right heights, 25/25),
   but the cloned chunk **draws white in-game** -- the same engine map-open
@@ -518,7 +518,7 @@ keeps its allocated size and pixel format, mips are rebuilt, the entry is valida
 against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
 barrel is: select it, click its texture, *Replace from image*. One-time
-`textures.big.atlas-orig` backup; refused while the game runs. CLI: `AlbionAtlas
+`textures.big.atlas-orig` backup; refused while the game runs. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 
 ### Region entrance (FinalAlbion.gtg)
@@ -527,8 +527,8 @@ textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 `REGION_ENTRANCE_POINT` the map screen and quest teleports drop the hero on,
 and a `HOLY_SITE_PLAYER_START` named `<Map>HSP`. A level installed with its own
 region gets both at its centre; the Level tab's *Region entrance* card (and
-`AlbionAtlas entrance <map> [x y [z]]`) shows and moves them. Retail entrances
-are never edited; Atlas's own (recognised by the `<Map>HSP` name) are replaced
+`forge entrance <map> [x y [z]]`) shows and moves them. Retail entrances
+are never edited; FableForge's own (recognised by the `<Map>HSP` name) are replaced
 in place. The file is CRLF and is re-serialised byte-exact around the edit.
 
 ### Own region + minimap
@@ -549,7 +549,7 @@ world-map flag in the WLD and all three BWD copies.
 name `MINIMAP_<LEVEL>` and registered in the `PLAYER_GUI_PC` /
 `PLAYER_GUI_DEFAULT` defs' `MiniMapGraphics` map in `game.bin` -- that map is what
 retail resolves a region's `MiniMapGraphic` through (`CTCInventoryBase::
-GetMiniMapGraphic`). No retail slot is taken any more; `AlbionAtlas minimap-register
+GetMiniMapGraphic`). No retail slot is taken any more; `forge minimap-register
 <name> <id>` does the registration alone. One-time `.atlas-orig` backups of
 `textures.big`, `game.bin` and `names.bin`. (The paragraphs below describe the
 earlier slot-replacement approach and why it was needed.)

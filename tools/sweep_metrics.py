@@ -7,12 +7,12 @@ is recorded. Objects whose origin is far above or below the ground are listed pe
 map; a map with many is worth a look. Also collects the exporter's own skip
 counts and warnings. Output: out/sweep/metrics.json + a markdown summary.
 
-    python tools/sweep_metrics.py [--maps a,b,c] [--exe build/AlbionAtlas.exe]
+    python tools/sweep_metrics.py [--maps a,b,c] [--exe build/forge.exe]
 """
 import json, os, re, struct, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXE = os.path.join(ROOT, 'build', 'AlbionAtlas.exe')
+EXE = os.path.join(ROOT, 'build', 'forge.exe')
 OUT = os.path.join(ROOT, 'out', 'sweep')
 
 

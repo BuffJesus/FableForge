@@ -5,7 +5,7 @@ real widgets get real synthetic clicks, state is asserted through the same
 accessors the UI uses, and the backbuffer is saved as PNG for pixel checks.
 
 ```
-AlbionAtlasGUI.exe --auto tests/ui/smoke.txt [--install <root>] [--size 1440x900]
+FableForge.exe --auto tests/ui/smoke.txt [--install <root>] [--size 1440x900]
 ```
 
 Exit code is 0 when every assertion passed. A log lands next to the script

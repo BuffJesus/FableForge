@@ -2,7 +2,7 @@
 // World-level editing: new levels cloned from a donor map, installed straight
 // into the game's four world containers (BWD + WLD + WAD + STB) with the
 // terrain chunk translated to the new origin (src/stbrelocate). The install part is forgecore's
-// worldinstall (the library form of `forge world install-level`); Atlas adds
+// worldinstall (the library form of `forge world install-level`); FableForge adds
 // the re-bake, the .atlas-orig backups and the donor lookup.
 
 #include <filesystem>

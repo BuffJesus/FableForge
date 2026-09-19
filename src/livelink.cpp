@@ -11,7 +11,7 @@ namespace albion::livelink {
 
 namespace {
 
-const char* kScript = R"LUA(-- Albion Atlas live link (installed from the editor; remove it there or delete the ATLAS-LIVE-LINK hook).
+const char* kScript = R"LUA(-- FableForge live link (installed from the editor; remove it there or delete the ATLAS-LIVE-LINK hook).
 -- Polls FSE/AtlasLink/cmd.lua (a Lua chunk returning {id=, cmd=, ...}) and answers in the FSE log.
 ATLAS_LINK_CMD = [[%CMD%]]
 
@@ -97,7 +97,7 @@ fs::path logPath(const fs::path& root) { return root / "FSE" / "FableScriptExten
 std::string hookText(const fs::path& script) {
     std::string posix = script.string();
     for (char& c : posix) if (c == '\\') c = '/';
-    return std::string("\n") + kHookTag + " (installed by Albion Atlas; the editor's Live link card removes it)\n"
+    return std::string("\n") + kHookTag + " (installed by FableForge; the editor's Live link card removes it)\n"
            "local _atlasLinkMain = Main\n"
            "function Main(quest)\n"
            "    pcall(function()\n"

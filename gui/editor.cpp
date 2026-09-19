@@ -1,4 +1,4 @@
-// Albion Atlas editor: selection, gizmo, edit panel and document plumbing.
+// FableForge editor: selection, gizmo, edit panel and document plumbing.
 // The App methods that make the viewer an editor live here; app.cpp keeps the
 // layout, explorer, export and automation.
 
@@ -1747,7 +1747,7 @@ void App::drawPresetsCard(float pad, float inner, float cardInner) {
     theme::beginCard("##presets", inner);
     theme::label("Presets");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A saved group of objects placed with one click at the view centre (positions kept relative, fresh UIDs, dropped on the ground). Shipped ones come from retail maps; yours go to %APPDATA%\\AlbionAtlas\\presets.");
+    theme::hint("A saved group of objects placed with one click at the view centre (positions kept relative, fresh UIDs, dropped on the ground). Shipped ones come from retail maps; yours go to %APPDATA%\\FableForge\\presets.");
     ImGui::PopFont();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##presetlist", ImVec2(cardInner, S(std::min(150.0f, 26.0f * float(std::max<size_t>(presets_.size(), 1)) + 8.0f))), ImGuiChildFlags_None);

@@ -65,7 +65,7 @@ std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, forge::wad::
         for (const auto& e : wad.entries())
             if (lower(fs::path(e.name).filename().string()) == want) {
                 const auto bytes = wad.read(e);
-                const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "overworld";
+                const fs::path tmp = fs::temp_directory_path() / "FableForge" / "overworld";
                 fs::create_directories(tmp);
                 levFile = tmp / (stem + ".lev");
                 writeFile(levFile, bytes.data(), bytes.size());

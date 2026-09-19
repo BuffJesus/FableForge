@@ -37,8 +37,8 @@ def main() -> int:
     # textures.big is only needed for the textured preview; the GUI copes without it
     print(f"scratch install copied in {time.time() - t0:.1f}s")
 
-    cli = os.path.join(ROOT, "build", "AlbionAtlas.exe")
-    gui = os.path.join(ROOT, "build", "AlbionAtlasGUI.exe")
+    cli = os.path.join(ROOT, "build", "forge.exe")
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
     ok = True
 
     r = subprocess.run([cli, "new-level", a.donor, "AtlasCliCopy", "--install", scratch], capture_output=True, text=True)
@@ -73,7 +73,7 @@ def main() -> int:
     if "16 patches" not in r.stdout or "0 differ" not in r.stdout:
         print("blank level layers do not match its LEV:", r.stdout[:400]); ok = False
     # own region (takes over a filler slot; no minimap bake on the scratch, it has no textures.big)
-    r = subprocess.run([cli, "blank-level", "AtlasCliOwn", "--install", scratch, "--template", a.donor, "--own-region", "--no-minimap", "--display", "Atlas Own"], capture_output=True, text=True)
+    r = subprocess.run([cli, "blank-level", "AtlasCliOwn", "--install", scratch, "--template", a.donor, "--own-region", "--no-minimap", "--display", "FableForge Own"], capture_output=True, text=True)
     if r.returncode != 0 or "taken over from" not in r.stdout:
         print("CLI own-region blank-level failed:", r.stderr, r.stdout[-400:]); ok = False
     # an own-region level gets a region entrance in FinalAlbion.gtg (map centre); the CLI reads it back and can move it

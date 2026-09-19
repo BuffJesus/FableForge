@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a release zip: dist/AlbionAtlas-<version>-win64.zip with both exes,
+"""Build a release zip: dist/FableForge-<version>-win64.zip with both exes,
 README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
   python tools/package.py [--version 0.1.0] [--no-check]
@@ -13,11 +13,11 @@ def main():
     a = ap.parse_args()
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:
         print("checks failed; not packaging"); return 1
-    name = f"AlbionAtlas-{a.version}-win64"
+    name = f"FableForge-{a.version}-win64"
     stage = os.path.join("dist", name)
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
-    for f in ["AlbionAtlasGUI.exe", "AlbionAtlas.exe"]:
+    for f in ["FableForge.exe", "forge.exe"]:
         shutil.copy(os.path.join("build", f), stage)
         subprocess.run(["strip", os.path.join(stage, f)], check=False)
     shutil.copy("README.md", stage)

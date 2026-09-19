@@ -37,16 +37,16 @@ jobs:
       # Fable install. The retail smoke, scratch-install suites and the in-game
       # harness run locally against a real install.
       - name: Unit tests
-        run: ./build/albionatlas_tests.exe
+        run: ./build/fableforge_tests.exe
 
       - name: LZO1X vs minilzo
-        run: ./build/albionatlas_lzo_tests.exe
+        run: ./build/fableforge_lzo_tests.exe
 
       - name: GUI without an install (D3D11 WARP)
-        run: ./build/AlbionAtlasGUI.exe --auto tests/ui/noinstall.txt --install "D:/definitely/not/fable"
+        run: ./build/FableForge.exe --auto tests/ui/noinstall.txt --install "D:/definitely/not/fable"
 
       - name: CLI usage
-        run: ./build/AlbionAtlas.exe || true
+        run: ./build/forge.exe || true
 
       - name: Package
         if: startsWith(github.ref, 'refs/tags/v')
@@ -55,5 +55,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: AlbionAtlas-win64
+          name: FableForge-win64
           path: dist/*.zip

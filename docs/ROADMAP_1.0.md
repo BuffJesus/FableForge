@@ -1,8 +1,8 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-18, late)
+## Resume here (2026-09-18, after the rename)
 
-Where we are, all on `main`: **0.14 2/4, 0.15 4/4, 0.15b 8/8 first passes, 0.16 3/4,
+Where we are (this repo is FableForge, formerly Albion Atlas; exes `FableForge.exe` / `forge.exe`), all on `main`: **0.14 2/4, 0.15 4/4, 0.15b 8/8 first passes, 0.16 3/4,
 0.17 2/6 (Textures tab, effect picker), 1.0-rc docs 2/3** (FIRST_LEVEL walkthrough with
 harness screenshots, generated CLI reference). `tools/check_all.py` has 16 checks now
 (textures tab included); ALL PASS (16/16) after the CLI-reference commit.
@@ -19,9 +19,10 @@ Scoped, not started (each needs either the in-game harness or a chunk of untangl
 - 0.15b leftovers: mesh thumbnails, PiP minimap, brush falloff ring (the tour is done).
 
 Next in order:
-1. The user: public GitHub repo -> push -> CI; triage FableForge (37 M / 63 ??; junk =
-   `005fcb00`, `017d2463`, `017d6540`, `_wf.patch`, `build-debug/`, `build-wiring/`);
-   un-vendor forgecore.
+1. The user: public GitHub repo (`FableForge`) -> push -> CI. The old repo is
+   `D:\Code\FableForge-legacy` (37 M / 63 ??; junk = `005fcb00`, `017d2463`, `017d6540`,
+   `_wf.patch`, `build-debug/`, `build-wiring/`): merge its GUI canvas / quest tooling here
+   piece by piece when wanted; forgecore is already un-vendored (`libs/forgecore`).
 2. Version is 0.16.0 in CMake/package.py (binaries say so). `python tools/package.py` (runs
    check_all, ~20 min) -> `dist/AlbionAtlas-0.16.0-win64.zip` -> `git tag v0.16.0` (the user,
    with the public push); release notes = `git log 0a96bd4..` (today).
@@ -89,7 +90,7 @@ game**. Concretely:
 
 ---
 
-## 1b. Decision (2026-09-17): Atlas becomes FableForge
+## 1b. Decision (2026-09-17): Atlas becomes FableForge -- LANDED 2026-09-18
 
 The user's call: *Albion Atlas absorbs FableForge* — the Atlas repo is the product and takes
 the FableForge name; the 1.0 is the **level/world/content editor** described here; the
@@ -113,6 +114,13 @@ joins as a 1.x tab, not in 1.0. Consequences, folded into the milestones below:
   entangled with a rename diff.
 - Memory/docs to update when this executes: the *Albion Atlas* and *FableForge Creation-Kit
   toolchain* memory notes, FableForge's `docs/`, and the CLAUDE.md sibling-repo line.
+
+**Landed 2026-09-18:** product, exe and settings rename (`FableForge.exe` GUI, `forge.exe`
+CLI, `%APPDATA%\FableForge` with a one-time copy of the old `AlbionAtlas` folder, presets
+read both header tags, `.atlas-orig` / `.atlas-created` / the live-link hook tag kept for
+existing installs); forgecore un-vendored into `libs/forgecore` (canonical; `tools/sync_forgecore.py`
+retired); the repo folder is `D:\Code\FableForge`, the old repo `D:\Code\FableForge-legacy`
+(its GUI canvas / quest tooling / ~100 uncommitted files are merged from there piece by piece).
 
 ## 2. Process: milestones to 1.0
 

@@ -27,7 +27,7 @@ fs::path levPathFor(const fs::path& gameRoot, const std::string& stem) {
     for (const auto& e : wad.entries())
         if (lower(fs::path(e.name).filename().string()) == want) {
             const auto bytes = wad.read(e);
-            const fs::path tmp = fs::temp_directory_path() / "Albion Atlas" / "stitch";
+            const fs::path tmp = fs::temp_directory_path() / "FableForge" / "stitch";
             fs::create_directories(tmp);
             const fs::path out = tmp / (stem + ".lev");
             std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));

@@ -1,5 +1,5 @@
 #pragma once
-// The backup manager. Every writer in Atlas keeps a one-time copy of a file it
+// The backup manager. Every writer in FableForge keeps a one-time copy of a file it
 // is about to change as `<file>.atlas-orig` (the untouched original) and marks
 // a file it created from nothing with `<file>.atlas-created`. This module finds
 // all of them under an install and puts things back: an original is copied
@@ -15,7 +15,7 @@ namespace albion::backups {
 struct Entry {
     std::filesystem::path file;      // the live file
     std::filesystem::path backup;    // the .atlas-orig copy, or the .atlas-created marker
-    bool created = false;            // true = Atlas created `file`; restore deletes it
+    bool created = false;            // true = FableForge created `file`; restore deletes it
     bool differs = false;            // the live file differs from the backup (or exists, for created)
     uintmax_t size = 0;              // live file size
     std::string when;                // backup / marker mtime, "YYYY-MM-DD HH:MM"

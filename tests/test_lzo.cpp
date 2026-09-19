@@ -232,7 +232,7 @@ int main() {
         const auto env = forge::env::Environment::detect();
         if (env.installValid) root = env.installDir;
     } catch (...) {}
-    if (root.empty()) { std::printf("albionatlas_lzo_tests: no Fable install, corrupt-input checks only (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
+    if (root.empty()) { std::printf("fableforge_lzo_tests: no Fable install, corrupt-input checks only (%d failures)\n", g_fail); return g_fail ? 1 : 0; }
 
     const fs::path stbPath = root / "data" / "Levels" / "FinalAlbion_RT.stb";
     const auto archive = forge::stb::Archive::open(stbPath);
@@ -253,7 +253,7 @@ int main() {
     if (g_vbBad) ++g_fail;
     std::printf("  retail lzo1x_999 frames: %zu bytes; ours: %zu bytes (%.1f%%), %d of %d frames fit their retail slot\n",
                 g_retailComp, g_oursComp, g_retailComp ? 100.0 * double(g_oursComp) / double(g_retailComp) : 0.0, g_fits, g_frameCmp);
-    std::printf("albionatlas_lzo_tests: %d chunk frames + texture chunks compared, %d encoder round trips (%.1f%% of input), %d failures\n",
+    std::printf("fableforge_lzo_tests: %d chunk frames + texture chunks compared, %d encoder round trips (%.1f%% of input), %d failures\n",
                 g_frames, g_roundtrips, g_rtIn ? 100.0 * double(g_rtOut) / double(g_rtIn) : 0.0, g_fail);
     return g_fail ? 1 : 0;
 }

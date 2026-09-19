@@ -60,7 +60,7 @@ def main() -> int:
     t0 = time.time()
     for c in CONTAINERS:
         shutil.copyfile(os.path.join(levels, c), os.path.join(scratch, "data", "Levels", c))
-    # the engine reads the BWD from three places; Atlas keeps them in step
+    # the engine reads the BWD from three places; FableForge keeps them in step
     shutil.copyfile(os.path.join(levels, "FinalAlbion.bwd"), os.path.join(scratch, "FinalAlbion.bwd"))
     shutil.copyfile(os.path.join(levels, "FinalAlbion.bwd"), os.path.join(scratch, "data", "Levels", "FinalAlbion", "FinalAlbion.bwd"))
     for f in ("game.bin", "names.bin"):
@@ -73,7 +73,7 @@ def main() -> int:
         os.makedirs(os.path.join(scratch, "data", "graphics", "pc"))
         shutil.copyfile(big, os.path.join(scratch, "data", "graphics", "pc", "textures.big"))
     print(f"scratch install copied in {time.time() - t0:.1f}s")
-    cli = os.path.join(ROOT, "build", "AlbionAtlas.exe")
+    cli = os.path.join(ROOT, "build", "forge.exe")
     sl = os.path.join(scratch, "data", "Levels")
     wld, bwd = os.path.join(sl, "FinalAlbion.wld"), os.path.join(sl, "FinalAlbion.bwd")
     orig = {c: open(os.path.join(sl, c), "rb").read() for c in ("FinalAlbion.wld", "FinalAlbion.bwd")}
@@ -207,7 +207,7 @@ def main() -> int:
     semantic_before = semantic()
 
     # the GUI's World tab on the same scratch tree (queued moves, refusal, apply, undo)
-    gui = os.path.join(ROOT, "build", "AlbionAtlasGUI.exe")
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):
         r = subprocess.run([gui, "--auto", "tests/ui/world.txt"], capture_output=True, text=True, cwd=ROOT)
         log = os.path.join(ROOT, "tests", "ui", "world.txt.log")

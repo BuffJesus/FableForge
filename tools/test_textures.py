@@ -25,8 +25,8 @@ def main() -> int:
     shutil.copyfile(big, os.path.join(scratch, "data", "graphics", "pc", "textures.big"))
     for f in ("game.bin", "names.bin"):
         shutil.copyfile(os.path.join(a.root, "data", "CompiledDefs", f), os.path.join(scratch, "data", "CompiledDefs", f))
-    cli = os.path.join(ROOT, "build", "AlbionAtlas.exe")
-    gui = os.path.join(ROOT, "build", "AlbionAtlasGUI.exe")
+    cli = os.path.join(ROOT, "build", "forge.exe")
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
     ok = True
     r = subprocess.run([gui, "--auto", "tests/ui/textures.txt"], capture_output=True, text=True, cwd=ROOT)
     log = os.path.join(ROOT, "tests", "ui", "textures.txt.log")
