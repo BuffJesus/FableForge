@@ -69,6 +69,23 @@ void sampleWrap(const Image& img, float u, float v, float out[4]) {
     }
 }
 
+// Run `fn(row)` for every row 0..rows-1 on hardware_concurrency threads (contiguous
+// bands). The albedo bakes below are pure per row: they only read the level / scene /
+// texture images and write their own texels.
+template <typename Fn>
+void parallelRows(uint32_t rows, Fn&& fn) {
+    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    const unsigned threads = std::min<unsigned>(hw, std::max<uint32_t>(1, rows / 8));
+    if (threads <= 1) { for (uint32_t r = 0; r < rows; ++r) fn(r); return; }
+    std::vector<std::thread> pool;
+    for (unsigned t = 0; t < threads; ++t)
+        pool.emplace_back([&, t]() {
+            const uint32_t r0 = uint32_t(uint64_t(rows) * t / threads), r1 = uint32_t(uint64_t(rows) * (t + 1) / threads);
+            for (uint32_t r = r0; r < r1; ++r) fn(r);
+        });
+    for (auto& th : pool) th.join();
+}
+
 Image rgbaImage(uint32_t w, uint32_t h, std::vector<uint8_t> rgba, std::string name) {
     Image img;
     img.width = w; img.height = h; img.rgba = std::move(rgba); img.name = std::move(name);
@@ -774,8 +791,8 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             const float gain = options.gain > 0 ? options.gain : 1.0f;
             // Fallback colour where no pass covers a texel: the engine's background bake.
             const auto bg = stbterrain::backgroundAlbedo(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight);
-            int uncovered = 0;
-            for (uint32_t py = 0; py < H; ++py) {
+            std::atomic<int> uncovered{0};
+            parallelRows(H, [&](uint32_t py) {
                 const float wy = (float(py) + 0.5f) / float(tpc);
                 const int iy = std::min(int(wy), scene.mapHeight - 1);
                 const float fy = wy - float(iy);
@@ -827,8 +844,8 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
                     } else { out[0] = out[1] = out[2] = 128; ++uncovered; }
                     out[3] = 255;
                 }
-            }
-            if (options.log && uncovered) options.log("  " + std::to_string(uncovered) + " texels had no pass and took the background bake");
+            });
+            if (options.log && uncovered) options.log("  " + std::to_string(uncovered.load()) + " texels had no pass and took the background bake");
             scene.hasAlbedo = true;
             scene.engineBake = true;
             scene.enginePasses = passCount;
@@ -848,7 +865,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     const float gain = options.gain > 0 ? options.gain : 1.0f;
 
     struct Acc { int slot; float w; };
-    for (uint32_t py = 0; py < H; ++py) {
+    parallelRows(H, [&](uint32_t py) {
         const float wy = (float(py) + 0.5f) / float(tpc);
         const int iy = std::min(int(wy), scene.mapHeight - 1);
         const float fy = wy - float(iy);
@@ -919,7 +936,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             else out[0] = out[1] = out[2] = 128;
             out[3] = 255;
         }
-    }
+    });
     scene.hasAlbedo = true;
     return scene;
 }
