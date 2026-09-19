@@ -11,7 +11,7 @@ ok   mouse_down right
 ok   key_down W
 ok   frames 30
 ok   key_up W
-ok   assert_camera_moved 0.5  (moved 2.795017)
+ok   assert_camera_moved 0.5  (moved 2.827669)
 ok   snapshot_camera
 ok   mouse_delta 80 0
 ok   frames 2

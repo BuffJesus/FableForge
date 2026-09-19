@@ -306,7 +306,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=594 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=601 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
@@ -321,7 +321,7 @@ ok   set unsaved_prompt 0
      selection_count=0
      presets=4
      effects=1165
-     entrance=37.1,38.9,40.1
+     entrance=-
      cursor_ground=-
      export_ok=0
      export_path=
