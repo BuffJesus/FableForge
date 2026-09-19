@@ -278,8 +278,7 @@ script + one in-game probe (a custom barrel mesh standing in Greatwood, a custom
 3. ~~Split `src/main.cpp` into `src/cli/*.cpp`~~ DONE 2026-09-18 (`common` / `levels` /
    `textures` / `install` / `world` / `chunks` / `export`, each family a
    `std::optional<int> runX(cmd, args)`; the duplicated backups block went; outputs diffed
-   identical against the pre-split binary). Still open: `gui/app.cpp`'s automation dispatcher
-   into `gui/automation.cpp`.
+   identical against the pre-split binary). The automation dispatcher is `gui/automation.cpp` too.
 4. STB compaction: a `chunk-compact` pass re-laying fg run / LOD blocks / LD section
    contiguously (all three reference sets are already collected in `stbrelocate::run`), and
    an STB-level compaction that drops superseded payloads.

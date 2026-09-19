@@ -67,6 +67,7 @@ if(WIN32)
     gui/app.cpp
     gui/editor.cpp
     gui/textures.cpp
+    gui/automation.cpp
     gui/world.cpp
     gui/theme.cpp
     gui/renderer.cpp
