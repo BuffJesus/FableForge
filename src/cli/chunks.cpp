@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <thread>
+#include <atomic>
 #include <array>
 #include <cctype>
 #include <chrono>
@@ -200,25 +202,48 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
         if (!install.valid || target.empty()) { std::fprintf(stderr, "usage: forge chunk-audit <map>|--all [--install <root>]\n"); return 2; }
         try {
             const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+            // one audit per map, run on every core (Archive::read opens its own stream; the
+            // audit is pure); the report lines are printed in archive order afterwards
+            std::vector<const forge::stb::StaticMap*> wanted;
+            for (const auto& m : archive.staticMaps())
+                if (target == "--all" || lower(fs::path(m.levelName).stem().string()) == lower(target)) wanted.push_back(&m);
+            std::vector<std::string> reports(wanted.size());
+            std::vector<int> findings(wanted.size(), 0);   // -1 = no bank entry (not counted), 0 ok, 1 findings
+            std::atomic<size_t> next{0};
+            auto work = [&]() {
+                for (size_t k = next++; k < wanted.size(); k = next++) {
+                    const auto& m = *wanted[k];
+                    const std::string stem = fs::path(m.levelName).stem().string();
+                    std::string out;
+                    try {
+                        const auto record = archive.readStaticMapRecord(m);
+                        const auto info = forge::stbinfo::readInfoBlock(record.data());
+                        const forge::stb::Entry* entry = nullptr;
+                        for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+                        if (!entry) { reports[k] = stem + std::string(36 - std::min<size_t>(36, stem.size()), ' ') + " no bank entry\n"; findings[k] = -1; continue; }
+                        const auto chunk = archive.read(*entry);
+                        albion::editor::RelocateReport rep; std::string err;
+                        const bool ok = albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, rep, err);
+                        findings[k] = (!ok || !rep.issues.empty()) ? 1 : 0;
+                        char line[512];
+                        std::snprintf(line, sizeof line, "%-36s %s fg %d patches %d groups %d tree %d detail %d/%d blocks %d unclassified %d%s%s\n", stem.c_str(), ok ? "ok " : "ERR",
+                                      rep.foregroundFrames, rep.patchFrames, rep.groupFrames, rep.treeNodes, rep.detailNodes, rep.detailGroups, rep.rangeBlocks, rep.unclassifiedFrames,
+                                      ok ? "" : (" : " + err).c_str(), rep.issues.empty() ? "" : (" issues " + std::to_string(rep.issues.size())).c_str());
+                        out += line;
+                        for (size_t i = 0; i < rep.issues.size() && i < (target == "--all" ? 3u : 40u); ++i) out += "    " + rep.issues[i] + "\n";
+                        for (const auto& n : rep.notes) out += "    note: " + n + "\n";
+                    } catch (const std::exception& e) { out += stem + ": error: " + e.what() + "\n"; findings[k] = 1; }
+                    reports[k] = std::move(out);
+                }
+            };
+            const unsigned threads = std::max(1u, std::min<unsigned>(std::thread::hardware_concurrency(), unsigned(wanted.size())));
+            std::vector<std::thread> pool;
+            for (unsigned t = 0; t < threads; ++t) pool.emplace_back(work);
+            for (auto& th : pool) th.join();
             int maps = 0, bad = 0;
-            for (const auto& m : archive.staticMaps()) {
-                const std::string stem = fs::path(m.levelName).stem().string();
-                if (target != "--all" && lower(stem) != lower(target)) continue;
-                const auto record = archive.readStaticMapRecord(m);
-                const auto info = forge::stbinfo::readInfoBlock(record.data());
-                const forge::stb::Entry* entry = nullptr;
-                for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
-                if (!entry) { std::printf("%-36s no bank entry\n", stem.c_str()); continue; }
-                const auto chunk = archive.read(*entry);
-                albion::editor::RelocateReport rep; std::string err;
-                const bool ok = albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, rep, err);
-                ++maps;
-                if (!ok || !rep.issues.empty()) ++bad;
-                std::printf("%-36s %s fg %d patches %d groups %d tree %d detail %d/%d blocks %d unclassified %d%s%s\n", stem.c_str(), ok ? "ok " : "ERR",
-                            rep.foregroundFrames, rep.patchFrames, rep.groupFrames, rep.treeNodes, rep.detailNodes, rep.detailGroups, rep.rangeBlocks, rep.unclassifiedFrames,
-                            ok ? "" : (" : " + err).c_str(), rep.issues.empty() ? "" : (" issues " + std::to_string(rep.issues.size())).c_str());
-                for (size_t i = 0; i < rep.issues.size() && i < (target == "--all" ? 3u : 40u); ++i) std::printf("    %s\n", rep.issues[i].c_str());
-                for (const auto& n : rep.notes) std::printf("    note: %s\n", n.c_str());
+            for (size_t k = 0; k < wanted.size(); ++k) {
+                std::fputs(reports[k].c_str(), stdout);
+                if (findings[k] >= 0) { ++maps; if (findings[k] > 0) ++bad; }
             }
             std::printf("%d map(s), %d with findings\n", maps, bad);
             return bad ? 1 : 0;

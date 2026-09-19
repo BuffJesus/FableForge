@@ -275,7 +275,8 @@ script + one in-game probe (a custom barrel mesh standing in Greatwood, a custom
    LEV-blend paths) run row-parallel since 2026-09-18 (byte-identical output; 128x224 map at
    32 texels/cell 6.9 s -> 3.5 s, at 16: 1.8 -> 1.1 s). Measured: the paint preview bakes
    at 4 texels/cell and was already under a second, so a dirty-patch re-bake is not worth
-   its complexity now. Still open: `chunk-audit --all` parallel over chunks.
+   its complexity now. `chunk-audit --all` audits the 399 maps on every core (report byte-identical,
+   88 s -> 70 s only: the audit is allocation-bound on the CRT heap, so more threads buy little).
 3. ~~Split `src/main.cpp` into `src/cli/*.cpp`~~ DONE 2026-09-18 (`common` / `levels` /
    `textures` / `install` / `world` / `chunks` / `export`, each family a
    `std::optional<int> runX(cmd, args)`; the duplicated backups block went; outputs diffed
