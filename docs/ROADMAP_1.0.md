@@ -5,15 +5,15 @@
 This repo IS FableForge now (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo
 is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge.exe` (CLI,
 `src/cli/*.cpp`), `buildorge-tools.exe` (the legacy CLI, 133 commands, `tools/forge-cli`).
-`libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks; the last full
-run (after the rename, before the CLI split) was ALL PASS -- the split was diffed command by
-command and re-smoked, but run the suite again before tagging.
+`libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
+the CLI split (the evening run; see the last commit for the run after the thumbnails).
 
 State: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 + tour, 0.16 3/4,
 0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 2/3 (walkthrough, CLI reference),
-perf (parallel albedo bake), main.cpp split + automation.cpp. Scoped-not-started: foliage
-brush (harness), mesh/creature import (L), Blender addon bundle (vendor its Python first),
-STB compaction, `chunk-audit --all` parallel, engine-rules FAQ page.
+perf (parallel albedo bake, parallel chunk-audit), main.cpp split + automation.cpp,
+ENGINE_RULES.md, object-palette mesh thumbnails. Scoped-not-started: foliage brush (harness),
+mesh/creature import (L), Blender addon bundle (vendor its Python first), STB compaction,
+texture-tab thumbnails, PiP minimap, brush falloff ring.
 
 Next in order:
 1. The user: public GitHub repo `FableForge` -> push -> CI green; `python tools/package.py`
