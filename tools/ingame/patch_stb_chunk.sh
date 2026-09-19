@@ -4,7 +4,7 @@ C="$1"; M="${2:-StartOakValeWest}"; G="/c/Programs/Steam/steamapps/common/Fable 
 python - "$C" "$M" "$G" <<'PY'
 import sys, subprocess, re, os
 chunk, m, stb = sys.argv[1:4]
-out = subprocess.run(["D:/Code/FableForge/build/forge.exe", "stb", "list", stb], capture_output=True, text=True).stdout
+out = subprocess.run(["D:/Code/FableForge-legacy/build/forge.exe", "stb", "list", stb], capture_output=True, text=True).stdout
 mt = re.search(r"\s+(\d+) bytes\s+@(\d+)\s+Data\\Levels\\FinalAlbion\\%s\.lev" % re.escape(m), out)
 size, off = int(mt.group(1)), int(mt.group(2))
 data = open(chunk, 'rb').read()
