@@ -32,7 +32,8 @@ add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/th
 target_include_directories(fableforge PUBLIC src)
 target_link_libraries(fableforge PUBLIC forgecore_slice)
 
-add_executable(forge src/main.cpp)
+file(GLOB CLI_SOURCES CONFIGURE_DEPENDS src/cli/*.cpp)
+add_executable(forge src/main.cpp ${CLI_SOURCES})
 target_link_libraries(forge PRIVATE fableforge)
 
 enable_testing()

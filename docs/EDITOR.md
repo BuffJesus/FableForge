@@ -360,6 +360,7 @@ grid edge and `checkMove` refuses anything past it.
 | Document, commands, undo, diff, save/deploy | `src/leveledit.{hpp,cpp}` (headless; `tests/test_export.cpp::testLevelDocument`, `testTerrainEditing`) |
 | New levels (blank / copy) | `src/worldedit.{hpp,cpp}` over `libs/forgecore` `worldinstall.{hpp,cpp}` + `stbbake::buildTerrainChunk64`; GUI card in `gui/editor.cpp::drawNewLevelCard`; `tools/test_newlevel.py` |
 | Navigation patch | `libs/forgecore` `navpatch.{hpp,cpp}` (`parseNavigation`, `emitNavigation`, `patchWalkability`); `Document::saveTerrainLoose` applies it for the changed cells; `tests/test_export.cpp::testNavPatch` |
+| CLI | `src/main.cpp` dispatches to `src/cli/*.cpp` (one file per command family; `cli/common.hpp` has `findInstall` / `resolveLevel` / `usage`) |
 | Terrain bake | `libs/forgecore` `stbheightbake.cpp` (lifted from the forge CLI), `rangecodec::encodeNative`; `forge bake-terrain <chunk> <lev> <wx> <wy> <out>` bakes and verifies from the command line |
 | Per-instance rendering, picking, outline | `gui/renderer.{hpp,cpp}` (`uploadThings`, `pick`, `screenRay`) |
 | Gizmo, panel, shortcuts, instance sync | `gui/editor.cpp` |

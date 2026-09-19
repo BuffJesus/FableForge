@@ -275,8 +275,11 @@ script + one in-game probe (a custom barrel mesh standing in Greatwood, a custom
 2. Performance: preview re-bake after each theme stroke is a full-map albedo bake
    (`terrainexport::buildScene`) — re-bake only dirty 16x16 patches; `chunk-audit --all`
    parallel over chunks.
-3. Split `src/main.cpp` (1179 lines of `if (cmd == ...)`) into `src/cli/*.cpp` one file per
-   command family; `gui/app.cpp` automation dispatcher into `gui/automation.cpp`.
+3. ~~Split `src/main.cpp` into `src/cli/*.cpp`~~ DONE 2026-09-18 (`common` / `levels` /
+   `textures` / `install` / `world` / `chunks` / `export`, each family a
+   `std::optional<int> runX(cmd, args)`; the duplicated backups block went; outputs diffed
+   identical against the pre-split binary). Still open: `gui/app.cpp`'s automation dispatcher
+   into `gui/automation.cpp`.
 4. STB compaction: a `chunk-compact` pass re-laying fg run / LOD blocks / LD section
    contiguously (all three reference sets are already collected in `stbrelocate::run`), and
    an STB-level compaction that drops superseded payloads.
