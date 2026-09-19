@@ -320,6 +320,8 @@ void Camera::fly(float forward, float strafe, float rise, float dt) {
 }
 
 Renderer::~Renderer() {
+    for (auto& [key, srv] : thumbs_) release(srv);
+    thumbs_.clear();
     for (auto& [id, srv] : swatches_) release(srv);
     swatches_.clear();
     release(preview_);
@@ -437,9 +439,27 @@ bool Renderer::uploadThings(const foliageexport::Scene& scene, terrainexport::Up
     // meshes: one vertex buffer per part, mesh-local Fable axes (cm)
     std::map<int, ID3D11ShaderResourceView*> imageSrv;
     meshes_.resize(scene.meshes.size());
-    for (size_t mi = 0; mi < scene.meshes.size(); ++mi) {
-        const auto& m = scene.meshes[mi];
-        auto& g = meshes_[mi];
+    for (size_t mi = 0; mi < scene.meshes.size(); ++mi) uploadMesh(scene.meshes[mi], scene.images, imageSrv, meshes_[mi]);
+    for (auto& [id, srv] : imageSrv) release(srv);
+    instances_.reserve(scene.instances.size());
+    for (const auto& inst : scene.instances) {
+        if (inst.mesh < 0 || size_t(inst.mesh) >= meshes_.size()) continue;
+        float col[3][3]; foliageexport::instanceBasis(inst, col);
+        const float world[16] = {col[0][0], col[0][1], col[0][2], 0,
+                                 col[1][0], col[1][1], col[1][2], 0,
+                                 col[2][0], col[2][1], col[2][2], 0,
+                                 inst.x, inst.y, inst.z, 1};
+        InstanceDraw d;
+        d.mesh = inst.mesh; d.thing = inst.thing;
+        instances_.push_back(d);
+        setInstanceWorld(instances_.size() - 1, world);
+    }
+    return !instances_.empty();
+}
+
+void Renderer::uploadMesh(const foliageexport::Mesh& m, const std::vector<terrainexport::Image>& images,
+                          std::map<int, ID3D11ShaderResourceView*>& imageSrv, GpuMesh& g) {
+    {
         g.bmin[0] = g.bmin[1] = g.bmin[2] = 1e30f; g.bmax[0] = g.bmax[1] = g.bmax[2] = -1e30f;
         for (const auto& part : m.parts) {
             std::vector<GpuVertex> verts;
@@ -466,30 +486,114 @@ bool Renderer::uploadThings(const foliageexport::Scene& scene, terrainexport::Up
             if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) continue;
             b.count = uint32_t(verts.size());
             b.alpha = part.hasAlpha;
-            if (part.image >= 0 && size_t(part.image) < scene.images.size()) {
+            if (part.image >= 0 && size_t(part.image) < images.size()) {
                 auto hit = imageSrv.find(part.image);
-                if (hit == imageSrv.end()) hit = imageSrv.emplace(part.image, makeTexture(scene.images[size_t(part.image)])).first;
+                if (hit == imageSrv.end()) hit = imageSrv.emplace(part.image, makeTexture(images[size_t(part.image)])).first;
                 if (hit->second) { b.srv = hit->second; b.srv->AddRef(); }
             }
             g.parts.push_back(b);
         }
         if (g.tris.empty()) { g.bmin[0] = g.bmin[1] = g.bmin[2] = 0; g.bmax[0] = g.bmax[1] = g.bmax[2] = 0; }
     }
+}
+
+void Renderer::releaseMesh(GpuMesh& g) {
+    for (auto& b : g.parts) { release(b.vb); release(b.srv); }
+    g.parts.clear();
+    g.tris.clear();
+}
+
+ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foliageexport::Mesh& mesh,
+                                              const std::vector<terrainexport::Image>& images, uint32_t size) {
+    auto it = thumbs_.find(key);
+    if (it != thumbs_.end()) return it->second;
+    if (!device_ || !vs_) { return nullptr; }
+    std::map<int, ID3D11ShaderResourceView*> imageSrv;
+    GpuMesh g;
+    uploadMesh(mesh, images, imageSrv, g);
     for (auto& [id, srv] : imageSrv) release(srv);
-    instances_.reserve(scene.instances.size());
-    for (const auto& inst : scene.instances) {
-        if (inst.mesh < 0 || size_t(inst.mesh) >= meshes_.size()) continue;
-        float col[3][3]; foliageexport::instanceBasis(inst, col);
-        const float world[16] = {col[0][0], col[0][1], col[0][2], 0,
-                                 col[1][0], col[1][1], col[1][2], 0,
-                                 col[2][0], col[2][1], col[2][2], 0,
-                                 inst.x, inst.y, inst.z, 1};
-        InstanceDraw d;
-        d.mesh = inst.mesh; d.thing = inst.thing;
-        instances_.push_back(d);
-        setInstanceWorld(instances_.size() - 1, world);
+    if (g.parts.empty()) { thumbs_[key] = nullptr; return nullptr; }
+
+    // its own little target
+    ID3D11Texture2D* tex = nullptr; ID3D11Texture2D* depth = nullptr;
+    ID3D11RenderTargetView* rtv = nullptr; ID3D11DepthStencilView* dsv = nullptr; ID3D11ShaderResourceView* srv = nullptr;
+    D3D11_TEXTURE2D_DESC td = {};
+    td.Width = size; td.Height = size; td.MipLevels = 1; td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1; td.Usage = D3D11_USAGE_DEFAULT;
+    td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    D3D11_TEXTURE2D_DESC dd = td;
+    dd.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; dd.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    if (FAILED(device_->CreateTexture2D(&td, nullptr, &tex)) || FAILED(device_->CreateRenderTargetView(tex, nullptr, &rtv)) ||
+        FAILED(device_->CreateShaderResourceView(tex, nullptr, &srv)) || FAILED(device_->CreateTexture2D(&dd, nullptr, &depth)) ||
+        FAILED(device_->CreateDepthStencilView(depth, nullptr, &dsv))) {
+        release(tex); release(rtv); release(srv); release(depth); release(dsv); releaseMesh(g);
+        thumbs_[key] = nullptr; return nullptr;
     }
-    return !instances_.empty();
+
+    // frame the bounds (mesh-local Fable axes -> Y up) from a three-quarter view
+    float c[3] = {(g.bmin[0] + g.bmax[0]) * 0.5f, (g.bmin[1] + g.bmax[1]) * 0.5f, (g.bmin[2] + g.bmax[2]) * 0.5f};
+    float r = 0.5f * std::sqrt((g.bmax[0] - g.bmin[0]) * (g.bmax[0] - g.bmin[0]) + (g.bmax[1] - g.bmin[1]) * (g.bmax[1] - g.bmin[1]) + (g.bmax[2] - g.bmin[2]) * (g.bmax[2] - g.bmin[2]));
+    if (r < 1e-3f) r = 1.0f;
+    float cy[4] = {c[0], c[1], c[2], 1.0f}, at[4];
+    // to Y-up render space: at = c * kFableToYUp
+    for (int k = 0; k < 4; ++k) at[k] = cy[0] * kFableToYUp[0 * 4 + k] + cy[1] * kFableToYUp[1 * 4 + k] + cy[2] * kFableToYUp[2 * 4 + k] + cy[3] * kFableToYUp[3 * 4 + k];
+    Camera cam;
+    cam.lookAt(at[0], at[1], at[2], 0.8f, 0.55f, r * 2.6f);
+    float eye[3]; cam.eye(eye);
+    float view[16], proj[16];
+    lookAtRH(eye, at, view);
+    perspectiveRH(cam.fovY, 1.0f, std::max(r * 0.05f, 0.01f), r * 10.0f, proj);
+    FrameCB cb = {};
+    mul4(view, proj, cb.viewProj);
+    const float l[3] = {-0.45f, 0.8f, 0.35f};
+    const float ll = std::sqrt(l[0] * l[0] + l[1] * l[1] + l[2] * l[2]);
+    cb.lightDir[0] = l[0] / ll; cb.lightDir[1] = l[1] / ll; cb.lightDir[2] = l[2] / ll; cb.lightDir[3] = 0;
+    cb.params[0] = 0; cb.params[1] = 0; cb.params[2] = 1; cb.params[3] = 0;
+    cb.eye[0] = eye[0]; cb.eye[1] = eye[1]; cb.eye[2] = eye[2]; cb.eye[3] = r * 2.6f;
+    cb.flags[0] = 1.0f; cb.flags[1] = 1.0f;   // instance pass, alpha test
+
+    // draw
+    const float clearCol[4] = {0.11f, 0.10f, 0.14f, 1.0f};
+    ctx_->OMSetRenderTargets(1, &rtv, dsv);
+    ctx_->ClearRenderTargetView(rtv, clearCol);
+    ctx_->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
+    D3D11_VIEWPORT vp = {0, 0, float(size), float(size), 0, 1};
+    ctx_->RSSetViewports(1, &vp);
+    D3D11_MAPPED_SUBRESOURCE map;
+    if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
+    const UINT stride = sizeof(GpuVertex), offset = 0;
+    ctx_->IASetInputLayout(layout_);
+    ctx_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ctx_->VSSetShader(vs_, nullptr, 0);
+    ctx_->VSSetConstantBuffers(0, 1, &cbuffer_);
+    ctx_->VSSetConstantBuffers(1, 1, &ocbuffer_);
+    ctx_->PSSetShader(ps_, nullptr, 0);
+    ctx_->PSSetConstantBuffers(0, 1, &cbuffer_);
+    ctx_->PSSetConstantBuffers(1, 1, &ocbuffer_);
+    ctx_->PSSetSamplers(0, 1, &wrapSampler_);
+    ctx_->RSSetState(solid_);
+    ctx_->OMSetDepthStencilState(depth_, 0);
+    const float bf[4] = {0, 0, 0, 0};
+    ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
+    setObject(kFableToYUp, kNoTint);
+    bool currentAlpha = true;
+    for (const auto& b : g.parts) {
+        if (b.alpha != currentAlpha) {
+            currentAlpha = b.alpha;
+            cb.flags[1] = currentAlpha ? 1.0f : 0.0f;
+            if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
+        }
+        ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
+        ctx_->PSSetShaderResources(0, 1, &t);
+        ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
+        ctx_->Draw(b.count, 0);
+    }
+    ID3D11RenderTargetView* none = nullptr;
+    ctx_->OMSetRenderTargets(1, &none, nullptr);
+    release(rtv); release(dsv); release(depth); release(tex);   // the SRV keeps the texture alive
+    releaseMesh(g);
+    thumbs_[key] = srv;
+    return srv;
 }
 
 void Renderer::setInstanceWorld(size_t i, const float fableWorld[16]) {

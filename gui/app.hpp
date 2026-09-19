@@ -318,6 +318,7 @@ private:
     int lastGizmoOp_ = -1;
 public:
     void setHelpOpen(bool on) { helpOpen_ = on; }
+    void setDefSearch(const std::string& s) { std::snprintf(defSearch_, sizeof defSearch_, "%s", s.c_str()); }
     void setThemeSearch(const std::string& s) { std::snprintf(themeSearch_, sizeof themeSearch_, "%s", s.c_str()); }
     void setEditTab(int tab) { editTab_ = std::clamp(tab, 0, 3); if (editTab_ == 1 && doc_.hasTerrain()) gizmoOp_ = 4; else if (editTab_ != 1 && gizmoOp_ == 4) gizmoOp_ = 1; lastGizmoOp_ = gizmoOp_; }
     int editTab() const { return editTab_; }
@@ -345,6 +346,14 @@ private:
     // (null when the texture is not decoded yet); draws it + the label on one row
     ID3D11ShaderResourceView* themeSwatch(const std::string& themeName);
     void themeRow(const std::string& themeName, const ImVec2& at, float size, const char* label);   // draw-only, over an item already submitted
+    // Object palette thumbnails: the definition's mesh rendered once (renderer cache); at
+    // most one new one is decoded per frame so the list never stalls. Null = no mesh.
+    ID3D11ShaderResourceView* defThumbnail(const std::string& def, bool& pending);
+    std::map<std::string, ID3D11ShaderResourceView*> defThumbs_;
+    std::vector<terrainexport::Image> thumbImages_;
+    std::map<uint32_t, int> thumbTextureToImage_;
+    bool thumbBankOpen_ = false;
+    int thumbBudget_ = 0;
 public:
     void dismissRule(const std::string& key) { rulesDismissed_.insert(key); if (ruleKey_ == key) ruleKey_.clear(); }
 private:

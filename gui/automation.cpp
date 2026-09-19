@@ -286,6 +286,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "undo") { app.editUndo(); note("ok   " + line); ++pc_; }
     else if (cmd == "tour") { app.setTourStep(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // tour <0..2 | -1>
     else if (cmd == "help") { app.setHelpOpen(rest == "1"); note("ok   " + line); ++pc_; }
+    else if (cmd == "def_search") { app.setDefSearch(rest); note("ok   " + line); ++pc_; }   // the "Add an object" search box
     else if (cmd == "theme_search") { app.setThemeSearch(rest); note("ok   " + line); ++pc_; }   // the "Add a ground theme from the game" box
     else if (cmd == "edit_tab") { app.setEditTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 Objects 1 Terrain 2 Actors 3 Level
     else if (cmd == "dismiss_rule") { app.dismissRule(rest); note("ok   " + line); ++pc_; }   // what the notice's "Got it" does (the notice may sit below the panel fold)

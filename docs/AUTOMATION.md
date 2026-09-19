@@ -51,6 +51,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`); one undo step |
 | *(toasts)* | every warning / error / success log line also shows for 6 s in the viewport's top-right corner (state `toasts` = how many are up); the long jobs' busy button reads `<verb>: <stage>  (N s)` from the job thread |
+| `def_search <text>` | fills the *Add an object* box (rows show a mesh thumbnail) |
 | `theme_search <text>` | fills the *Add a ground theme from the game* box (the list shows a swatch per theme) |
 | `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image lands in the custom-texture input (Terrain tab, paint mode) |
 | `click chip_grid` | the LEV cell grid overlay (state `grid`); state `cursor_ground` = `x,y,h` under the mouse when it is over the ground, `-` otherwise |

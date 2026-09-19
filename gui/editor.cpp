@@ -1463,14 +1463,27 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     static std::string placeDef;
     if (defSearch_[0]) {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-        ImGui::BeginChild("##deflist", ImVec2(cardInner, S(120)), ImGuiChildFlags_None);
+        ImGui::BeginChild("##deflist", ImVec2(cardInner, S(180)), ImGuiChildFlags_None);
         ImGui::PopStyleColor();
         ImGui::PushFont(fontSmall_);
         int shown = 0;
+        const float rowH = S(34), thumb = S(30);
+        thumbBudget_ = 1;   // one mesh decode per frame across the visible rows
         for (const auto& [name, type] : defList_) {
             if (!contains(name, defSearch_)) continue;
-            if (ImGui::Selectable(name.c_str(), name == placeDef)) placeDef = name;
+            const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+            if (ImGui::Selectable((std::string("##def") + name).c_str(), name == placeDef, 0, ImVec2(0, rowH))) placeDef = name;
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { placeDef = name; placeDefinition(name); }
+            // thumbnail + name drawn over the row; rows off screen are not decoded
+            if (ImGui::IsItemVisible()) {
+                bool pending = false;
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ID3D11ShaderResourceView* srv = defThumbnail(name, pending);
+                const ImVec2 p(rowPos.x + S(2), rowPos.y + (rowH - thumb) * 0.5f);
+                if (srv) dl->AddImageRounded((ImTextureID)(intptr_t)srv, p, ImVec2(p.x + thumb, p.y + thumb), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, S(4));
+                else dl->AddRectFilled(p, ImVec2(p.x + thumb, p.y + thumb), theme::col(pending ? theme::Bg2 : theme::Bg3), S(4));
+                dl->AddText(ImVec2(p.x + thumb + S(8), rowPos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f), theme::col(theme::Text), name.c_str());
+            }
             if (++shown >= 300) { ImGui::TextColored(theme::vec(theme::Faint), "...type more to narrow down"); break; }
         }
         if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
@@ -1772,6 +1785,34 @@ void App::drawPresetsCard(float pad, float inner, float cardInner) {
     if (theme::ghostButton(btn, ImVec2(cardInner, S(28))) && n && presetName_[0]) { if (savePresetFromSelection(presetName_, "")) presetName_[0] = 0; }
     auto_.registerWidget("btn_preset_save");
     theme::endCard();
+}
+
+// ---- object thumbnails ----------------------------------------------------------------
+ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pending) {
+    pending = false;
+    auto it = defThumbs_.find(def);
+    if (it != defThumbs_.end()) return it->second;
+    if (!ctx_.ready()) { pending = true; return nullptr; }
+    if (thumbBudget_ <= 0) { pending = true; return nullptr; }   // one decode per frame
+    --thumbBudget_;
+    uint32_t modelId = 0;
+    const int code = ctx_.graphicModelId(def, modelId);
+    if (code <= 0 || !modelId) { defThumbs_[def] = nullptr; return nullptr; }
+    if (!thumbBankOpen_) {
+        std::string err;
+        std::filesystem::path graphics = std::filesystem::path(installPath_) / "data" / "graphics" / "graphics.big";
+        if (!std::filesystem::exists(graphics)) graphics = std::filesystem::path(installPath_) / "data" / "graphics" / "pc" / "graphics.big";
+        thumbBankOpen_ = foliageexport::openMeshBank(graphics, err);
+        if (!thumbBankOpen_) { pushLog("thumbnails: " + err, 1); defThumbs_[def] = nullptr; return nullptr; }
+    }
+    std::string merr;
+    const auto* geo = foliageexport::cachedMesh(modelId, merr);
+    if (!geo) { defThumbs_[def] = nullptr; return nullptr; }
+    std::vector<std::string> warnings;
+    const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
+    ID3D11ShaderResourceView* srv = renderer_.thumbnail(def, m, thumbImages_, 96);
+    defThumbs_[def] = srv;
+    return srv;
 }
 
 // ---- theme swatches -----------------------------------------------------------------
