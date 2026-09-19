@@ -17,7 +17,7 @@ def main():
     stage = os.path.join("dist", name)
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
-    for f in ["FableForge.exe", "forge.exe"]:
+    for f in ["FableForge.exe", "forge.exe", "forge-tools.exe"]:
         shutil.copy(os.path.join("build", f), stage)
         subprocess.run(["strip", os.path.join(stage, f)], check=False)
     shutil.copy("README.md", stage)
@@ -30,6 +30,7 @@ def main():
     shutil.copy(os.path.join("docs", "CLI.md"), stage)
     shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
     shutil.copytree("presets", os.path.join(stage, "presets"))
+    shutil.copytree(os.path.join("docs", "re_reference"), os.path.join(stage, "docs", "re_reference"))   # forge-tools reads def_schema.json etc.
     zpath = os.path.join("dist", name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(stage):

@@ -115,6 +115,12 @@ joins as a 1.x tab, not in 1.0. Consequences, folded into the milestones below:
 - Memory/docs to update when this executes: the *Albion Atlas* and *FableForge Creation-Kit
   toolchain* memory notes, FableForge's `docs/`, and the CLAUDE.md sibling-repo line.
 
+**Landed 2026-09-18 (2):** the legacy `forge` CLI (10.7k lines, 133 commands: quests, mods, saves,
+defs, scripts, UI, STB tooling) builds here as `forge-tools.exe` from `tools/forge-cli/main.cpp`
+against `libs/forgecore` unchanged, with `docs/re_reference/` (schemas, manifests) copied over;
+its families fold into `forge` as they get a GUI. Not carried: the legacy `apps/forge-gui`
+(node canvas), its tests, the 13 MB `fse_native_overlay.json` (stays in the legacy repo).
+
 **Landed 2026-09-18:** product, exe and settings rename (`FableForge.exe` GUI, `forge.exe`
 CLI, `%APPDATA%\FableForge` with a one-time copy of the old `AlbionAtlas` folder, presets
 read both header tags, `.atlas-orig` / `.atlas-created` / the live-link hook tag kept for

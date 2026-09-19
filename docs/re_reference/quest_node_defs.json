@@ -1,0 +1,2027 @@
+{
+  "description": "FQT curated visual-scripting node definitions (ported from FableQuestTool NodeDefinitions.cs). Regenerate with tools/gen_questnode_defs.py.",
+  "source": "FQT NodeDefinitions.cs",
+  "nodes": [
+    {
+      "type": "onHeroTalks",
+      "label": "When Hero Talks",
+      "category": "trigger",
+      "description": "Triggered when the hero initiates conversation with this entity",
+      "codeTemplate": "if Me:IsTalkedToByHero() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onHeroHits",
+      "label": "When Hero Hits",
+      "category": "trigger",
+      "description": "Triggered when the hero hits this entity with any attack",
+      "codeTemplate": "if Me:MsgIsHitByHero() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onHeroHitsWithFlourish",
+      "label": "When Flourish Hit",
+      "category": "trigger",
+      "description": "Triggered when the hero hits with a flourish attack",
+      "codeTemplate": "if Me:MsgIsHitByHeroWithFlourish() then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onHeroHitsWithWeapon",
+      "label": "When Hit With Weapon",
+      "category": "trigger",
+      "description": "Triggered when hit with a specific weapon type",
+      "codeTemplate": "if Me:MsgIsHitByHeroWithWeapon(\"{weaponName}\") then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "weaponName",
+          "type": "string",
+          "label": "Weapon Name",
+          "defaultValue": "WEAPON_IRON_SWORD"
+        }
+      ]
+    },
+    {
+      "type": "onEntityKilled",
+      "label": "When Killed",
+      "category": "trigger",
+      "description": "Triggered when this entity dies",
+      "codeTemplate": "if Me:IsDead() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onKilledByHero",
+      "label": "When Killed By Hero",
+      "category": "trigger",
+      "description": "Triggered when killed specifically by the hero",
+      "codeTemplate": "if Me:IsKilledByHero() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onProximity",
+      "label": "When Hero Nearby",
+      "category": "trigger",
+      "description": "Triggered when hero comes within specified distance",
+      "codeTemplate": "if Quest:IsDistanceBetweenThingsUnder(hero, Me, {distance}) then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "distance",
+          "type": "float",
+          "label": "Distance",
+          "defaultValue": "5.0"
+        }
+      ]
+    },
+    {
+      "type": "onItemPresented",
+      "label": "When Item Given",
+      "category": "trigger",
+      "description": "Triggered when hero presents the specified item to this entity",
+      "codeTemplate": "local wasPresented = Me:MsgIsPresentedWithItem()\nlocal presentedItemName = g_PresentedItemName\nif wasPresented then\n    Quest:Log(\"Presented item: \" .. tostring(presentedItemName))\n    g_PresentedItemName = nil\nend\nif wasPresented and presentedItemName == \"{item}\" then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "item",
+          "type": "string",
+          "label": "Item",
+          "defaultValue": "OBJECT_APPLE",
+          "optionsSource": "Objects"
+        }
+      ]
+    },
+    {
+      "type": "onHeroUsed",
+      "label": "When Used By Hero",
+      "category": "trigger",
+      "description": "Triggered when hero uses/activates this entity",
+      "codeTemplate": "if Me:MsgIsUsedByHero() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onTriggered",
+      "label": "When Triggered",
+      "category": "trigger",
+      "description": "Triggered when hero enters a trigger region",
+      "codeTemplate": "if Me:MsgIsTriggeredByHero() then\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onKnockedOut",
+      "label": "When Knocked Out",
+      "category": "trigger",
+      "description": "Triggered when this entity is knocked unconscious",
+      "codeTemplate": "if Me:MsgIsKnockedOutByHero() then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onKicked",
+      "label": "When Kicked",
+      "category": "trigger",
+      "description": "Triggered when this entity is kicked",
+      "codeTemplate": "if Me:MsgIsKicked() then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onAwareOfHero",
+      "label": "When Aware of Hero",
+      "category": "trigger",
+      "description": "Triggered when entity becomes aware of hero's presence",
+      "codeTemplate": "if Me:IsAwareOfHero() then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "onRegionLoaded",
+      "label": "When Region Loads",
+      "category": "trigger",
+      "description": "Triggered when specified region loads",
+      "codeTemplate": "if Quest:IsRegionLoaded(\"{region}\") then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "region",
+          "type": "string",
+          "label": "Region",
+          "defaultValue": "Oakvale",
+          "optionsSource": "Regions"
+        }
+      ]
+    },
+    {
+      "type": "onStateChange",
+      "label": "When State Changes",
+      "category": "trigger",
+      "description": "Triggered when a state variable reaches a specific value",
+      "codeTemplate": "if Quest:GetStateBool(\"{stateName}\") == {value} then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "stateName",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "onStateChangeBool",
+      "label": "When State Changes (Bool)",
+      "category": "trigger",
+      "description": "Triggered when a boolean state variable reaches a specific value",
+      "codeTemplate": "if Quest:GetStateBool(\"{stateName}\") == {value} then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "stateName",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "bool",
+          "label": "Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "onStateChangeInt",
+      "label": "When State Changes (Int)",
+      "category": "trigger",
+      "description": "Triggered when an integer state variable reaches a specific value",
+      "codeTemplate": "if Quest:GetStateInt(\"{stateName}\") == {value} then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "stateName",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "killCount"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "label": "Value",
+          "defaultValue": "0"
+        }
+      ]
+    },
+    {
+      "type": "onStateChangeFloat",
+      "label": "When State Changes (Float)",
+      "category": "trigger",
+      "description": "Triggered when a float state variable reaches a specific value",
+      "codeTemplate": "if tonumber(Quest:GetStateString(\"{stateName}\")) == {value} then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "stateName",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "progress"
+        },
+        {
+          "name": "value",
+          "type": "float",
+          "label": "Value",
+          "defaultValue": "0.0"
+        }
+      ]
+    },
+    {
+      "type": "onStateChangeString",
+      "label": "When State Changes (String)",
+      "category": "trigger",
+      "description": "Triggered when a string state variable reaches a specific value",
+      "codeTemplate": "if Quest:GetStateString(\"{stateName}\") == \"{value}\" then\n{CHILDREN}\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "stateName",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStage"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Value",
+          "defaultValue": "started"
+        }
+      ]
+    },
+    {
+      "type": "showDialogue",
+      "label": "Show Dialogue",
+      "category": "action",
+      "description": "Display dialogue text from this entity",
+      "codeTemplate": "Me:SpeakAndWait(\"{text}\")\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Dialogue Text",
+          "defaultValue": "Hello, hero!"
+        }
+      ]
+    },
+    {
+      "type": "speakToHero",
+      "label": "Speak To Hero",
+      "category": "action",
+      "description": "Entity speaks directly to the hero",
+      "codeTemplate": "Me:Speak(hero, \"{text}\")\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Text",
+          "defaultValue": "Greetings!"
+        }
+      ]
+    },
+    {
+      "type": "giveReward",
+      "label": "Give Reward",
+      "category": "action",
+      "description": "Give gold and/or items to hero",
+      "codeTemplate": "if {gold} > 0 then Quest:GiveHeroGold({gold}) end\nlocal itemToGive = \"{item}\"\nif itemToGive ~= \"\" and itemToGive ~= nil then Quest:GiveHeroObject(\"{item}\", {amount}) end\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "gold",
+          "type": "int",
+          "label": "Gold",
+          "defaultValue": "100"
+        },
+        {
+          "name": "item",
+          "type": "string",
+          "label": "Item (optional)",
+          "defaultValue": "",
+          "optionsSource": "Objects"
+        },
+        {
+          "name": "amount",
+          "type": "int",
+          "label": "Item Amount",
+          "defaultValue": "1"
+        }
+      ]
+    },
+    {
+      "type": "giveItem",
+      "label": "Give Item",
+      "category": "action",
+      "description": "Give specific item(s) to hero",
+      "codeTemplate": "Quest:GiveHeroObject(\"{item}\", {amount})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "item",
+          "type": "string",
+          "label": "Item",
+          "defaultValue": "OBJECT_HEALTH_POTION",
+          "optionsSource": "Objects"
+        },
+        {
+          "name": "amount",
+          "type": "int",
+          "label": "Amount",
+          "defaultValue": "1"
+        }
+      ]
+    },
+    {
+      "type": "takeItem",
+      "label": "Take Item",
+      "category": "action",
+      "description": "Remove item from hero's inventory or possession",
+      "codeTemplate": "local ok = pcall(function() Quest:ConfiscateItemsOfTypeFromHero(\"{item}\") end)\nlocal stillHas = false\nif Quest:GetNumberOfItemsOfTypeInInventory(\"{item}\") > 0 then\n    stillHas = true\nelseif Quest:IsObjectInHeroPossession(\"{item}\") then\n    stillHas = true\nelseif Quest:IsPlayerCarryingItemOfType(\"{item}\") then\n    stillHas = true\nend\nif not ok or stillHas then\n    Quest:TakeObjectFromHero(\"{item}\")\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "item",
+          "type": "string",
+          "label": "Item",
+          "defaultValue": "OBJECT_APPLE",
+          "optionsSource": "Objects"
+        }
+      ]
+    },
+    {
+      "type": "setState",
+      "label": "Set State",
+      "category": "action",
+      "description": "Set a quest state variable",
+      "codeTemplate": "Quest:SetStateBool(\"{name}\", {value})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "setStateBool",
+      "label": "Set State (Bool)",
+      "category": "action",
+      "description": "Set a boolean quest state variable",
+      "codeTemplate": "Quest:SetStateBool(\"{name}\", {value})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "bool",
+          "label": "Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "setStateInt",
+      "label": "Set State (Int)",
+      "category": "action",
+      "description": "Set an integer quest state variable",
+      "codeTemplate": "Quest:SetStateInt(\"{name}\", {value})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "killCount"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "label": "Value",
+          "defaultValue": "0"
+        }
+      ]
+    },
+    {
+      "type": "setStateFloat",
+      "label": "Set State (Float)",
+      "category": "action",
+      "description": "Set a float quest state variable",
+      "codeTemplate": "Quest:SetStateString(\"{name}\", tostring({value}))\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "progress"
+        },
+        {
+          "name": "value",
+          "type": "float",
+          "label": "Value",
+          "defaultValue": "0.0"
+        }
+      ]
+    },
+    {
+      "type": "setStateString",
+      "label": "Set State (String)",
+      "category": "action",
+      "description": "Set a string quest state variable",
+      "codeTemplate": "Quest:SetStateString(\"{name}\", \"{value}\")\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "questStage"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Value",
+          "defaultValue": "started"
+        }
+      ]
+    },
+    {
+      "type": "setGlobalState",
+      "label": "Set Global",
+      "category": "action",
+      "description": "Set a global state variable (persists across quests)",
+      "codeTemplate": "Quest:SetGlobalBool(\"{name}\", {value})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "globalFlag"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "showMessage",
+      "label": "Show Message",
+      "category": "action",
+      "description": "Display on-screen message",
+      "codeTemplate": "Quest:ShowMessage(\"{text}\", {duration})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Message",
+          "defaultValue": "Objective Updated"
+        },
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Duration",
+          "defaultValue": "3.0"
+        }
+      ]
+    },
+    {
+      "type": "showTitleMessage",
+      "label": "Show Title Message",
+      "category": "action",
+      "description": "Display large title message",
+      "codeTemplate": "Quest:AddScreenTitleMessage(\"{text}\", {duration}, true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Title",
+          "defaultValue": "New Objective"
+        },
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Duration",
+          "defaultValue": "5.0"
+        }
+      ]
+    },
+    {
+      "type": "guildmasterMessage",
+      "label": "Guildmaster Says",
+      "category": "action",
+      "description": "Show message from guild master",
+      "codeTemplate": "Quest:HeroReceiveMessageFromGuildMaster(\"{key}\", \"Class\", true, true)\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "key",
+          "type": "string",
+          "label": "Message Key",
+          "defaultValue": "QUEST_MESSAGE"
+        }
+      ]
+    },
+    {
+      "type": "yesNoQuestion",
+      "label": "Yes/No Question",
+      "category": "action",
+      "description": "Ask hero a yes/no question (use with Check Answer node to handle response)",
+      "codeTemplate": "answer = Quest:GiveHeroYesNoQuestion(\"{question}\", \"{yes}\", \"{no}\", \"{unsure}\")\nQuest:EndMovieSequence()\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "question",
+          "type": "text",
+          "label": "Question",
+          "defaultValue": "Do you accept?"
+        },
+        {
+          "name": "yes",
+          "type": "text",
+          "label": "Yes Text",
+          "defaultValue": "Yes"
+        },
+        {
+          "name": "no",
+          "type": "text",
+          "label": "No Text",
+          "defaultValue": "No"
+        },
+        {
+          "name": "unsure",
+          "type": "text",
+          "label": "Unsure Text",
+          "defaultValue": "I'm not sure"
+        }
+      ]
+    },
+    {
+      "type": "showStartScreen",
+      "label": "Show Start Screen",
+      "category": "action",
+      "description": "Display the quest start screen for this quest. Uses AddQuestCard so the card is registered in the Guild/Logbook; GiveQuestCardDirectly is activation-coupled and may destroy the card.",
+      "codeTemplate": "local questName = \"{QUEST_NAME}\"\nlocal debugStart = Quest:GetStateBool(\"FQT_DebugStartScreen\")\nlocal alreadyShown = Quest:GetStateBool(\"FQT_StartScreenShown\")\nif alreadyShown == nil then alreadyShown = false end\nif not alreadyShown then\n    if debugStart then Quest:Log(\"FQT: ShowStartScreen node attempting\") end\n    local activeQuest = Quest:GetActiveQuestName()\n    if activeQuest == nil or activeQuest == \"\" or activeQuest ~= questName then\n        Quest:ActivateQuest(questName)\n    end\n    local questCard = \"{questCard}\"\n    if {giveCard} and questCard ~= \"\" then\n        Quest:AddQuestCard(questCard, questName, false, true)\n    end\n    if {showHeroGuide} then\n        Quest:SetHeroGuideShowsQuestCards(true)\n    end\n    Quest:Pause(0.1)\n    Quest:KickOffQuestStartScreen(questName, {isStory}, {isGold})\n    Quest:SetStateBool(\"FQT_StartScreenShown\", true)\n    if debugStart then Quest:Log(\"FQT: ShowStartScreen node done\") end\nelse\n    if debugStart then Quest:Log(\"FQT: ShowStartScreen node skipped (already shown)\") end\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "questCard",
+          "type": "string",
+          "label": "Quest Card",
+          "defaultValue": "OBJECT_QUEST_CARD_GENERIC",
+          "optionsSource": "QuestCards"
+        },
+        {
+          "name": "giveCard",
+          "type": "bool",
+          "label": "Give Quest Card",
+          "defaultValue": "false"
+        },
+        {
+          "name": "showHeroGuide",
+          "type": "bool",
+          "label": "Show Hero Guide",
+          "defaultValue": "true"
+        },
+        {
+          "name": "isStory",
+          "type": "bool",
+          "label": "Story Quest",
+          "defaultValue": "false"
+        },
+        {
+          "name": "isGold",
+          "type": "bool",
+          "label": "Gold Quest",
+          "defaultValue": "false"
+        }
+      ]
+    },
+    {
+      "type": "showMinimapMarker",
+      "label": "Show Minimap Marker",
+      "category": "action",
+      "description": "Show a minimap marker on this entity",
+      "codeTemplate": "Quest:MiniMapAddMarker(Me, \"{markerName}\")\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "markerName",
+          "type": "string",
+          "label": "Marker Name",
+          "defaultValue": "QuestTarget"
+        }
+      ]
+    },
+    {
+      "type": "hideMinimapMarker",
+      "label": "Hide Minimap Marker",
+      "category": "action",
+      "description": "Remove the minimap marker from this entity",
+      "codeTemplate": "Quest:MiniMapRemoveMarker(Me)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "highlightQuestTarget",
+      "label": "Highlight Quest Target",
+      "category": "action",
+      "description": "Highlight this entity as a quest target (green glow)",
+      "codeTemplate": "Quest:SetThingHasInformation(Me, true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "clearQuestTargetHighlight",
+      "label": "Clear Quest Target Highlight",
+      "category": "action",
+      "description": "Remove the quest target highlight from this entity",
+      "codeTemplate": "Quest:ClearThingHasInformation(Me)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "highlightQuestTargetByName",
+      "label": "Highlight Quest Target (By Name)",
+      "category": "action",
+      "description": "Highlight another entity using its script name",
+      "codeTemplate": "local target = Quest:GetThingWithScriptName(\"{targetScriptName}\")\nif target ~= nil then\n    Quest:SetThingHasInformation(target, true)\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "targetScriptName",
+          "type": "string",
+          "label": "Target Script Name",
+          "defaultValue": "QuestTarget"
+        }
+      ]
+    },
+    {
+      "type": "clearQuestTargetHighlightByName",
+      "label": "Clear Quest Target (By Name)",
+      "category": "action",
+      "description": "Clear highlight on another entity using its script name",
+      "codeTemplate": "local target = Quest:GetThingWithScriptName(\"{targetScriptName}\")\nif target ~= nil then\n    Quest:ClearThingHasInformation(target)\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "targetScriptName",
+          "type": "string",
+          "label": "Target Script Name",
+          "defaultValue": "QuestTarget"
+        }
+      ]
+    },
+    {
+      "type": "showMinimapMarkerByName",
+      "label": "Show Minimap Marker (By Name)",
+      "category": "action",
+      "description": "Show a minimap marker for another entity using its script name",
+      "codeTemplate": "local target = Quest:GetThingWithScriptName(\"{targetScriptName}\")\nif target ~= nil then\n    Quest:MiniMapAddMarker(target, \"{markerName}\")\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "targetScriptName",
+          "type": "string",
+          "label": "Target Script Name",
+          "defaultValue": "QuestTarget"
+        },
+        {
+          "name": "markerName",
+          "type": "string",
+          "label": "Marker Name",
+          "defaultValue": "QuestTarget"
+        }
+      ]
+    },
+    {
+      "type": "hideMinimapMarkerByName",
+      "label": "Hide Minimap Marker (By Name)",
+      "category": "action",
+      "description": "Remove a minimap marker for another entity using its script name",
+      "codeTemplate": "local target = Quest:GetThingWithScriptName(\"{targetScriptName}\")\nif target ~= nil then\n    Quest:MiniMapRemoveMarker(target)\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "targetScriptName",
+          "type": "string",
+          "label": "Target Script Name",
+          "defaultValue": "QuestTarget"
+        }
+      ]
+    },
+    {
+      "type": "startMovieSequence",
+      "label": "Start Movie Sequence",
+      "category": "action",
+      "description": "Begin cinematic mode (prevents interruptions during cutscenes/conversations)",
+      "codeTemplate": "Quest:StartMovieSequence()\nQuest:Pause(0.1)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "endMovieSequence",
+      "label": "End Movie Sequence",
+      "category": "action",
+      "description": "End cinematic mode and return control to player",
+      "codeTemplate": "Quest:EndMovieSequence()\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "letterbox",
+      "label": "Start Cinematic",
+      "category": "action",
+      "description": "Start cinematic mode with letterbox bars (use Letterbox Off to remove)",
+      "codeTemplate": "Quest:StartMovieSequence()\nQuest:Pause(0.1)\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "letterboxOff",
+      "label": "Letterbox Off",
+      "category": "action",
+      "description": "End cinematic mode and remove letterbox bars",
+      "codeTemplate": "Quest:EndLetterBox()\nQuest:EndMovieSequence()\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "speakWithOptions",
+      "label": "Speak (Advanced)",
+      "category": "action",
+      "description": "Entity speaks with full audio and display options",
+      "codeTemplate": "Me:Speak(hero, \"{text}\", {use2DSound}, {useVoice}, {displayOnScreen})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Text/Voice Key",
+          "defaultValue": "Hello, hero!"
+        },
+        {
+          "name": "use2DSound",
+          "type": "bool",
+          "label": "Use 2D Sound",
+          "defaultValue": "false"
+        },
+        {
+          "name": "useVoice",
+          "type": "bool",
+          "label": "Use Voice",
+          "defaultValue": "false"
+        },
+        {
+          "name": "displayOnScreen",
+          "type": "bool",
+          "label": "Display On Screen",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "cameraResetToHero",
+      "label": "Reset Camera To Hero",
+      "category": "action",
+      "description": "Return camera to default third-person view behind hero",
+      "codeTemplate": "Quest:CameraResetToViewBehindHero({duration})\nQuest:Pause({duration})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Duration",
+          "defaultValue": "1.0"
+        }
+      ]
+    },
+    {
+      "type": "cameraUseCameraPoint",
+      "label": "Use Camera Point",
+      "category": "action",
+      "description": "Use a predefined camera point from the level",
+      "codeTemplate": "local camPoint = Quest:GetThingWithScriptName(\"{cameraPoint}\")\nif camPoint ~= nil then\n    Quest:CameraUseCameraPoint(camPoint, Me, {duration}, {easeIn}, {easeOut})\n    Quest:Pause({duration})\nelse\n    Quest:Log(\"Warning: Camera point '{cameraPoint}' not found\")\nend\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "cameraPoint",
+          "type": "string",
+          "label": "Camera Point Name",
+          "defaultValue": "CAMERA_POINT_1"
+        },
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Transition Duration",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "easeIn",
+          "type": "int",
+          "label": "Ease In Type",
+          "defaultValue": "0"
+        },
+        {
+          "name": "easeOut",
+          "type": "int",
+          "label": "Ease Out Type",
+          "defaultValue": "0"
+        }
+      ]
+    },
+    {
+      "type": "cameraConversation",
+      "label": "Conversation Camera",
+      "category": "action",
+      "description": "Set up camera for dialogue scene (0=Default, 1=Close, 2=OTS_Speaker, 3=OTS_Listener) - QUEST THREAD ONLY",
+      "codeTemplate": "-- This API only works from Quest threads, NOT entity scripts\n-- Use with a quest thread that monitors DialogueTriggered flag\nlocal stranger = Quest:GetThingWithScriptName(\"ENTITY_SCRIPT_NAME\")\nlocal hero = Quest:GetHero()\nif stranger and hero then\n    Quest:CameraDoConversation(stranger, hero, {cameraOp})\n    Quest:Pause(0.5)\nend\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "cameraOp",
+          "type": "int",
+          "label": "Camera Type",
+          "defaultValue": "3"
+        }
+      ]
+    },
+    {
+      "type": "screenFadeOut",
+      "label": "Screen Fade Out",
+      "category": "action",
+      "description": "Fade screen to black",
+      "codeTemplate": "Quest:FadeScreenOutUntilNextCallToFadeScreenIn({duration})\nQuest:Pause({duration})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Duration",
+          "defaultValue": "0.5"
+        }
+      ]
+    },
+    {
+      "type": "screenFadeIn",
+      "label": "Screen Fade In",
+      "category": "action",
+      "description": "Fade screen back from black",
+      "codeTemplate": "Quest:FadeScreenIn({duration})\nQuest:Pause({duration})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "duration",
+          "type": "float",
+          "label": "Duration",
+          "defaultValue": "0.5"
+        }
+      ]
+    },
+    {
+      "type": "radialBlur",
+      "label": "Radial Blur",
+      "category": "action",
+      "description": "Apply radial blur effect (intensity 0-1, inner/outer radius, fade params)",
+      "codeTemplate": "Quest:RadialBlurFadeTo({intensity}, {innerRadius}, {outerRadius}, {fadeIn}, {hold}, {fadeOut}, {unknown})\nQuest:Pause({fadeIn})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "intensity",
+          "type": "float",
+          "label": "Intensity (0-1)",
+          "defaultValue": "0.5"
+        },
+        {
+          "name": "innerRadius",
+          "type": "float",
+          "label": "Inner Radius",
+          "defaultValue": "0.0"
+        },
+        {
+          "name": "outerRadius",
+          "type": "float",
+          "label": "Outer Radius",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "fadeIn",
+          "type": "float",
+          "label": "Fade In Time",
+          "defaultValue": "0.5"
+        },
+        {
+          "name": "hold",
+          "type": "float",
+          "label": "Hold Time",
+          "defaultValue": "0.0"
+        },
+        {
+          "name": "fadeOut",
+          "type": "float",
+          "label": "Fade Out Time",
+          "defaultValue": "0.0"
+        },
+        {
+          "name": "unknown",
+          "type": "float",
+          "label": "Unknown Param",
+          "defaultValue": "0.0"
+        }
+      ]
+    },
+    {
+      "type": "radialBlurOff",
+      "label": "Radial Blur Off",
+      "category": "action",
+      "description": "Cancel any active radial blur effect",
+      "codeTemplate": "Quest:CancelRadialBlurFade()\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "colorFilter",
+      "label": "Color Filter",
+      "category": "action",
+      "description": "Apply color filter to screen (5 params + color: saturation, brightness, contrast, intensity, fade)",
+      "codeTemplate": "Quest:ScreenFilterFadeTo({saturation}, {brightness}, {contrast}, {intensity}, {fadeTime}, {r={r}, g={g}, b={b}})\nQuest:Pause({fadeTime})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "saturation",
+          "type": "float",
+          "label": "Saturation",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "brightness",
+          "type": "float",
+          "label": "Brightness",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "contrast",
+          "type": "float",
+          "label": "Contrast",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "intensity",
+          "type": "float",
+          "label": "Intensity (0-1)",
+          "defaultValue": "0.5"
+        },
+        {
+          "name": "fadeTime",
+          "type": "float",
+          "label": "Fade Time",
+          "defaultValue": "0.5"
+        },
+        {
+          "name": "r",
+          "type": "float",
+          "label": "Red (0-1)",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "g",
+          "type": "float",
+          "label": "Green (0-1)",
+          "defaultValue": "1.0"
+        },
+        {
+          "name": "b",
+          "type": "float",
+          "label": "Blue (0-1)",
+          "defaultValue": "1.0"
+        }
+      ]
+    },
+    {
+      "type": "colorFilterOff",
+      "label": "Color Filter Off",
+      "category": "action",
+      "description": "Reset color filter to neutral (requires handle from FadeTo - use neutral values instead)",
+      "codeTemplate": "-- Reset to neutral filter (intensity 0)\nQuest:ScreenFilterFadeTo(1.0, 1.0, 1.0, 0.0, {fadeTime}, {r=1.0, g=1.0, b=1.0})\nQuest:Pause({fadeTime})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "fadeTime",
+          "type": "float",
+          "label": "Fade Time",
+          "defaultValue": "0.5"
+        }
+      ]
+    },
+    {
+      "type": "overrideMusic",
+      "label": "Override Music",
+      "category": "action",
+      "description": "Override current music with specified music set",
+      "codeTemplate": "Quest:OverrideMusic({musicSetType}, {isCutscene}, {forcePlay})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "musicSetType",
+          "type": "int",
+          "label": "Music Set Type",
+          "defaultValue": "2"
+        },
+        {
+          "name": "isCutscene",
+          "type": "bool",
+          "label": "Is Cutscene Music",
+          "defaultValue": "true"
+        },
+        {
+          "name": "forcePlay",
+          "type": "bool",
+          "label": "Force Play",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "stopMusicOverride",
+      "label": "Stop Music Override",
+      "category": "action",
+      "description": "Stop overriding music and return to normal",
+      "codeTemplate": "Quest:StopOverrideMusic()\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "enableDangerMusic",
+      "label": "Enable Danger Music",
+      "category": "action",
+      "description": "Enable or disable danger/combat music",
+      "codeTemplate": "Quest:EnableDangerMusic({enabled})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "enabled",
+          "type": "bool",
+          "label": "Enabled",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "playMovie",
+      "label": "Play Movie",
+      "category": "action",
+      "description": "Play an AVI movie file",
+      "codeTemplate": "Quest:PlayAVIMovie(\"{movieName}\")\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "movieName",
+          "type": "string",
+          "label": "Movie Name",
+          "defaultValue": "intro"
+        }
+      ]
+    },
+    {
+      "type": "makeHostile",
+      "label": "Make Hostile",
+      "category": "action",
+      "description": "Make this entity hostile to the hero",
+      "codeTemplate": "Quest:EntitySetThingAsEnemyOfThing(Me, hero)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "makeFriendly",
+      "label": "Make Friendly",
+      "category": "action",
+      "description": "Make this entity friendly to the hero",
+      "codeTemplate": "Me:SetFriendsWithEverythingFlag(true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "killEntity",
+      "label": "Kill Entity",
+      "category": "action",
+      "description": "Kill this entity",
+      "codeTemplate": "Quest:SetThingAsKilled(Me)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "teleportEntity",
+      "label": "Teleport Entity",
+      "category": "action",
+      "description": "Teleport this entity to a marker",
+      "codeTemplate": "local marker = Quest:GetThingWithScriptName(\"{marker}\")\nif marker ~= nil then\n    Quest:EntityTeleportToThing(Me, marker)\nelse\n    Quest:Log(\"Warning: Marker '{marker}' not found for teleport\")\nend\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "marker",
+          "type": "string",
+          "label": "Marker Name",
+          "defaultValue": "MARKER_SPAWN"
+        }
+      ]
+    },
+    {
+      "type": "followHero",
+      "label": "Follow Hero",
+      "category": "action",
+      "description": "Make entity follow the hero",
+      "codeTemplate": "Me:FollowThing(hero, {distance}, true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "distance",
+          "type": "float",
+          "label": "Follow Distance",
+          "defaultValue": "3.0"
+        }
+      ]
+    },
+    {
+      "type": "stopFollowing",
+      "label": "Stop Following",
+      "category": "action",
+      "description": "Stop following a target entity",
+      "codeTemplate": "local followTarget = \"{target}\"\nlocal followThing = nil\nif followTarget == \"Hero\" then\n    followThing = Quest:GetHero()\nelse\n    followThing = Quest:GetThingWithScriptName(followTarget)\nend\nif followThing ~= nil then\n    Me:StopFollowingThing(followThing)\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "target",
+          "type": "string",
+          "label": "Target Script Name",
+          "defaultValue": "Hero"
+        }
+      ]
+    },
+    {
+      "type": "sheatheWeapons",
+      "label": "Sheathe Weapons",
+      "category": "action",
+      "description": "Put weapons away",
+      "codeTemplate": "Quest:EntitySheatheWeapons(Me)\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "unsheatheWeapons",
+      "label": "Unsheathe Weapons",
+      "category": "action",
+      "description": "Draw weapons",
+      "codeTemplate": "Quest:EntityUnsheatheWeapons(Me)\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "moveToMarker",
+      "label": "Move To Marker",
+      "category": "action",
+      "description": "Walk to specified marker",
+      "codeTemplate": "local marker = Quest:GetThingWithScriptName(\"{marker}\")\nif marker ~= nil then\n    Me:MoveToThing(marker)\nelse\n    Quest:Log(\"Warning: Marker '{marker}' not found\")\nend\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "marker",
+          "type": "string",
+          "label": "Marker Name",
+          "defaultValue": "MARKER_1"
+        }
+      ]
+    },
+    {
+      "type": "moveToPosition",
+      "label": "Move To Position",
+      "category": "action",
+      "description": "Move to specific coordinates",
+      "codeTemplate": "Me:MoveToPosition({x={x}, y={y}, z={z}}, 1.0, 1)\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "x",
+          "type": "float",
+          "label": "X",
+          "defaultValue": "0"
+        },
+        {
+          "name": "y",
+          "type": "float",
+          "label": "Y",
+          "defaultValue": "0"
+        },
+        {
+          "name": "z",
+          "type": "float",
+          "label": "Z",
+          "defaultValue": "0"
+        }
+      ]
+    },
+    {
+      "type": "teleportToMarker",
+      "label": "Teleport To Marker",
+      "category": "action",
+      "description": "Instantly teleport to a marker",
+      "codeTemplate": "local marker = Quest:GetThingWithScriptName(\"{marker}\")\nif marker ~= nil then\n    Quest:EntityTeleportToThing(Me, marker)\nelse\n    Quest:Log(\"Warning: Marker '{marker}' not found for teleport\")\nend\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "marker",
+          "type": "string",
+          "label": "Marker Name",
+          "defaultValue": "MARKER_SPAWN"
+        }
+      ]
+    },
+    {
+      "type": "playAnimation",
+      "label": "Play Animation",
+      "category": "action",
+      "description": "Play an animation (non-blocking)",
+      "codeTemplate": "Me:PlayAnimation(\"{anim}\", {stayOnLastFrame}, {allowLooking})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "anim",
+          "type": "string",
+          "label": "Animation",
+          "defaultValue": "idle"
+        },
+        {
+          "name": "stayOnLastFrame",
+          "type": "bool",
+          "label": "Stay On Last Frame",
+          "defaultValue": "false"
+        },
+        {
+          "name": "allowLooking",
+          "type": "bool",
+          "label": "Allow Looking",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "playAnimationBlocking",
+      "label": "Play Animation (Wait)",
+      "category": "action",
+      "description": "Play an animation and wait for completion",
+      "codeTemplate": "Me:GainControlAndPlayAnimation(\"{anim}\", true, {stayOnLastFrame}, {allowLooking})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "anim",
+          "type": "string",
+          "label": "Animation",
+          "defaultValue": "idle"
+        },
+        {
+          "name": "stayOnLastFrame",
+          "type": "bool",
+          "label": "Stay On Last Frame",
+          "defaultValue": "false"
+        },
+        {
+          "name": "allowLooking",
+          "type": "bool",
+          "label": "Allow Looking",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "playLoopingAnim",
+      "label": "Play Looping Anim",
+      "category": "action",
+      "description": "Play animation multiple times",
+      "codeTemplate": "Me:PlayLoopingAnimation(\"{anim}\", {loops}, {useMovement}, {allowLooking})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "anim",
+          "type": "string",
+          "label": "Animation",
+          "defaultValue": "idle"
+        },
+        {
+          "name": "loops",
+          "type": "int",
+          "label": "Loop Count",
+          "defaultValue": "1"
+        },
+        {
+          "name": "useMovement",
+          "type": "bool",
+          "label": "Use Movement",
+          "defaultValue": "false"
+        },
+        {
+          "name": "allowLooking",
+          "type": "bool",
+          "label": "Allow Looking",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "completeQuest",
+      "label": "Complete Quest",
+      "category": "action",
+      "description": "Mark quest as completed and give rewards (Note: Rewards must be configured in quest settings)",
+      "codeTemplate": "Quest:SetStateBool(\"QuestCompleted\", true)\nbreak\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "showScreen",
+          "type": "bool",
+          "label": "Show Completion Screen",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "failQuest",
+      "label": "Fail Quest",
+      "category": "action",
+      "description": "Mark quest as failed",
+      "codeTemplate": "Quest:SetQuestAsFailed(\"{QUEST_NAME}\", true, \"{message}\", true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "message",
+          "type": "text",
+          "label": "Failure Message",
+          "defaultValue": "Quest Failed"
+        }
+      ]
+    },
+    {
+      "type": "wait",
+      "label": "Wait",
+      "category": "action",
+      "description": "Pause execution for specified seconds",
+      "codeTemplate": "Quest:Pause({seconds})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Seconds",
+          "defaultValue": "1.0"
+        }
+      ]
+    },
+    {
+      "type": "giveAbility",
+      "label": "Give Ability",
+      "category": "action",
+      "description": "Grant hero a combat ability",
+      "codeTemplate": "Quest:GiveHeroAbility({abilityId}, true)\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "abilityId",
+          "type": "int",
+          "label": "Ability ID",
+          "defaultValue": "1",
+          "optionsSource": "Abilities"
+        }
+      ]
+    },
+    {
+      "type": "giveExpression",
+      "label": "Give Expression",
+      "category": "action",
+      "description": "Unlock a hero expression",
+      "codeTemplate": "Quest:GiveHeroExpression(\"{expression}\", {level})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "expression",
+          "type": "string",
+          "label": "Expression Name",
+          "defaultValue": "LAUGH"
+        },
+        {
+          "name": "level",
+          "type": "int",
+          "label": "Level",
+          "defaultValue": "1"
+        }
+      ]
+    },
+    {
+      "type": "goToMapSlot",
+      "label": "Teleport To Map Slot (stream region)",
+      "category": "action",
+      "description": "Real cross-region hero move: STREAMS the target map/region into memory and moves the hero there, using a known 1-based map slot. Unlike Teleport Entity/Marker (which only reposition within already-loaded space). Wraps CWorldMap::SetPlayerPos (ForgeFSE binding).",
+      "codeTemplate": "Quest:GoToMapSlot({mapSlot}, {x}, {y}, {z})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "mapSlot",
+          "type": "int",
+          "label": "Map Slot (1-based)",
+          "defaultValue": "399"
+        },
+        {
+          "name": "x",
+          "type": "float",
+          "label": "X",
+          "defaultValue": "2800"
+        },
+        {
+          "name": "y",
+          "type": "float",
+          "label": "Y",
+          "defaultValue": "2576"
+        },
+        {
+          "name": "z",
+          "type": "float",
+          "label": "Z",
+          "defaultValue": "74"
+        }
+      ]
+    },
+    {
+      "type": "goToMap",
+      "label": "Teleport To Map (stream region)",
+      "category": "action",
+      "description": "Real cross-region hero move: STREAMS the target map/region into memory and moves the hero there, resolving the map by its script name. Unlike Teleport Entity/Marker (which only reposition within already-loaded space). Wraps CWorldMap::SetPlayerPos (ForgeFSE binding).",
+      "codeTemplate": "Quest:GoToMap(\"{mapScriptName}\", {x}, {y}, {z})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "mapScriptName",
+          "type": "string",
+          "label": "Map Script Name",
+          "defaultValue": ""
+        },
+        {
+          "name": "x",
+          "type": "float",
+          "label": "X",
+          "defaultValue": "2800"
+        },
+        {
+          "name": "y",
+          "type": "float",
+          "label": "Y",
+          "defaultValue": "2576"
+        },
+        {
+          "name": "z",
+          "type": "float",
+          "label": "Z",
+          "defaultValue": "74"
+        }
+      ]
+    },
+    {
+      "type": "checkState",
+      "label": "Check State",
+      "category": "condition",
+      "description": "Check if state variable equals value",
+      "codeTemplate": "if Quest:GetStateBool(\"{name}\") == {value} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Expected Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "checkStateBool",
+      "label": "Check State (Bool)",
+      "category": "condition",
+      "description": "Check if boolean state variable equals value",
+      "codeTemplate": "if Quest:GetStateBool(\"{name}\") == {value} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStarted"
+        },
+        {
+          "name": "value",
+          "type": "bool",
+          "label": "Expected Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "checkStateInt",
+      "label": "Check State (Int)",
+      "category": "condition",
+      "description": "Check if integer state variable equals value",
+      "codeTemplate": "if Quest:GetStateInt(\"{name}\") == {value} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "killCount"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "label": "Expected Value",
+          "defaultValue": "0"
+        }
+      ]
+    },
+    {
+      "type": "checkStateFloat",
+      "label": "Check State (Float)",
+      "category": "condition",
+      "description": "Check if float state variable equals value",
+      "codeTemplate": "if tonumber(Quest:GetStateString(\"{name}\")) == {value} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "progress"
+        },
+        {
+          "name": "value",
+          "type": "float",
+          "label": "Expected Value",
+          "defaultValue": "0.0"
+        }
+      ]
+    },
+    {
+      "type": "checkStateString",
+      "label": "Check State (String)",
+      "category": "condition",
+      "description": "Check if string state variable equals value",
+      "codeTemplate": "if Quest:GetStateString(\"{name}\") == \"{value}\" then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "State Name",
+          "defaultValue": "questStage"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Expected Value",
+          "defaultValue": "started"
+        }
+      ]
+    },
+    {
+      "type": "checkGlobal",
+      "label": "Check Global",
+      "category": "condition",
+      "description": "Check a global state variable",
+      "codeTemplate": "if Quest:GetGlobalBool(\"{name}\") == {value} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "name",
+          "type": "string",
+          "label": "Variable Name",
+          "defaultValue": "globalFlag"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "label": "Expected Value",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "checkHasItem",
+      "label": "Has Item",
+      "category": "condition",
+      "description": "Check if hero has specific item in inventory or possession",
+      "codeTemplate": "local hasItem = false\nif Quest:IsObjectInHeroPossession(\"{item}\") then\n    hasItem = true\nelseif Quest:GetNumberOfItemsOfTypeInInventory(\"{item}\") > 0 then\n    hasItem = true\nelseif Quest:IsPlayerCarryingItemOfType(\"{item}\") then\n    hasItem = true\nend\nif hasItem then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "item",
+          "type": "string",
+          "label": "Item",
+          "defaultValue": "OBJECT_APPLE",
+          "optionsSource": "Objects"
+        }
+      ]
+    },
+    {
+      "type": "checkIsAlive",
+      "label": "Is Alive",
+      "category": "condition",
+      "description": "Check if entity is alive",
+      "codeTemplate": "if Me:IsAlive() then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": []
+    },
+    {
+      "type": "checkYesNoAnswer",
+      "label": "Check Answer",
+      "category": "condition",
+      "description": "Check yes/no question answer and branch (Yes/No/Unsure) - Use after Yes/No Question node",
+      "codeTemplate": "if answer ~= nil then\n    if answer == 0 then\n{Yes}\n    elseif answer == 1 then\n{No}\n    else\n{Unsure}\n    end\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "branchLabels": [
+        "Yes",
+        "No",
+        "Unsure"
+      ],
+      "properties": []
+    },
+    {
+      "type": "checkRegionLoaded",
+      "label": "Region Loaded",
+      "category": "condition",
+      "description": "Check if region is currently loaded",
+      "codeTemplate": "if Quest:IsRegionLoaded(\"{region}\") then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "region",
+          "type": "string",
+          "label": "Region",
+          "defaultValue": "Oakvale",
+          "optionsSource": "Regions"
+        }
+      ]
+    },
+    {
+      "type": "checkQuestComplete",
+      "label": "Quest Complete",
+      "category": "condition",
+      "description": "Check if another quest is completed",
+      "codeTemplate": "if Quest:IsQuestCompleted(\"{questName}\") then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "questName",
+          "type": "string",
+          "label": "Quest Name",
+          "defaultValue": "QUEST_NAME"
+        }
+      ]
+    },
+    {
+      "type": "checkBoastTaken",
+      "label": "Boast Taken",
+      "category": "condition",
+      "description": "Check if hero has taken a specific boast",
+      "codeTemplate": "if Quest:IsBoastTaken({boastID}, \"{questName}\") then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "boastID",
+          "type": "int",
+          "label": "Boast ID",
+          "defaultValue": "1"
+        },
+        {
+          "name": "questName",
+          "type": "string",
+          "label": "Quest Name",
+          "defaultValue": "QUEST_NAME"
+        }
+      ]
+    },
+    {
+      "type": "checkCameraScripted",
+      "label": "Camera Scripted",
+      "category": "condition",
+      "description": "Check if camera is currently in scripted mode",
+      "codeTemplate": "if Quest:IsCameraInScriptedMode() then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": true,
+      "hasBranching": true,
+      "properties": []
+    },
+    {
+      "type": "checkDistanceToHero",
+      "label": "Distance To Hero",
+      "category": "condition",
+      "description": "Check if distance between entity and hero is under threshold",
+      "codeTemplate": "if Quest:IsDistanceBetweenThingsUnder(Me, hero, {distance}) then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "distance",
+          "type": "float",
+          "label": "Distance",
+          "defaultValue": "5.0"
+        }
+      ]
+    },
+    {
+      "type": "branch",
+      "label": "Branch",
+      "category": "flow",
+      "description": "Executes True or False path based on a boolean value",
+      "codeTemplate": "if {condition} then\n{TRUE}\nelse\n{FALSE}\nend",
+      "advanced": false,
+      "hasBranching": true,
+      "properties": [
+        {
+          "name": "condition",
+          "type": "bool",
+          "label": "Condition",
+          "defaultValue": "true"
+        }
+      ]
+    },
+    {
+      "type": "sequence",
+      "label": "Sequence",
+      "category": "flow",
+      "description": "Execute children in sequential order",
+      "codeTemplate": "{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "parallel",
+      "label": "Parallel",
+      "category": "flow",
+      "description": "Execute children in parallel (falls back to sequential in entity scripts)",
+      "codeTemplate": "-- Parallel execution\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": []
+    },
+    {
+      "type": "loop",
+      "label": "Loop",
+      "category": "flow",
+      "description": "Repeat children N times",
+      "codeTemplate": "for i = 1, {count} do\n{CHILDREN}\nif Me:IsNull() then break end\nif not Quest:NewScriptFrame(Me) then break end\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "count",
+          "type": "int",
+          "label": "Loop Count",
+          "defaultValue": "3"
+        }
+      ]
+    },
+    {
+      "type": "whileLoop",
+      "label": "While Loop",
+      "category": "flow",
+      "description": "Repeat while condition is true",
+      "codeTemplate": "while {condition} do\n{CHILDREN}\nQuest:Pause(0)\nif Me:IsNull() then break end\nif not Quest:NewScriptFrame(Me) then break end\nend",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "condition",
+          "type": "text",
+          "label": "Condition (Lua)",
+          "defaultValue": "Me:IsAlive()"
+        }
+      ]
+    },
+    {
+      "type": "delay",
+      "label": "Delay",
+      "category": "flow",
+      "description": "Wait before continuing",
+      "codeTemplate": "Quest:Pause({seconds})\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Seconds",
+          "defaultValue": "1.0"
+        }
+      ]
+    },
+    {
+      "type": "randomChoice",
+      "label": "Random Choice",
+      "category": "flow",
+      "description": "Execute children with random selection (use multiple children for branching)",
+      "codeTemplate": "-- Random choice (1 to {maxChoice})\nlocal randomChoice = math.random(1, {maxChoice})\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "maxChoice",
+          "type": "int",
+          "label": "Number of Choices",
+          "defaultValue": "3"
+        }
+      ]
+    },
+    {
+      "type": "callFunction",
+      "label": "Call Function",
+      "category": "flow",
+      "description": "Call a custom Lua function",
+      "codeTemplate": "{functionName}()\n{CHILDREN}",
+      "advanced": true,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "functionName",
+          "type": "string",
+          "label": "Function Name",
+          "defaultValue": "CustomFunction"
+        }
+      ]
+    },
+    {
+      "type": "defineEvent",
+      "label": "Define Event",
+      "category": "custom",
+      "description": "Create a custom event that can be called from anywhere in the graph",
+      "codeTemplate": "-- Event: {eventName}\nfunction Event_{eventName}()\n{CHILDREN}\nend",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "eventName",
+          "type": "string",
+          "label": "Event Name",
+          "defaultValue": "MyCustomEvent"
+        }
+      ]
+    },
+    {
+      "type": "callEvent",
+      "label": "Call Event",
+      "category": "custom",
+      "description": "Trigger a custom event defined elsewhere",
+      "codeTemplate": "Event_{eventName}()\n{CHILDREN}",
+      "advanced": false,
+      "hasBranching": false,
+      "properties": [
+        {
+          "name": "eventName",
+          "type": "string",
+          "label": "Event Name",
+          "defaultValue": "MyCustomEvent"
+        }
+      ]
+    }
+  ]
+}

@@ -89,3 +89,9 @@ target_link_libraries(probe_bwd PRIVATE fableforge)
 # the shipped presets live next to the exe (presets/*.preset.tng)
 add_custom_command(TARGET FableForge POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/presets $<TARGET_FILE_DIR:FableForge>/presets)
+
+# The legacy forge CLI (quests, mods, saves, defs, scripts, UI, stb tooling...) from the
+# old FableForge repo, kept alive here as forge-tools until its command families are folded
+# into forge one by one. Same forgecore.
+add_executable(forge-tools tools/forge-cli/main.cpp)
+target_link_libraries(forge-tools PRIVATE forgecore_slice)
