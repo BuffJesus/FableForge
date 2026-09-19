@@ -1,39 +1,32 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-18, after the rename)
+## Resume here (2026-09-18, evening -- after the rename)
 
-Where we are (this repo is FableForge, formerly Albion Atlas; exes `FableForge.exe` / `forge.exe`), all on `main`: **0.14 2/4, 0.15 4/4, 0.15b 8/8 first passes, 0.16 3/4,
-0.17 2/6 (Textures tab, effect picker), 1.0-rc docs 2/3** (FIRST_LEVEL walkthrough with
-harness screenshots, generated CLI reference). `tools/check_all.py` has 16 checks now
-(textures tab included); ALL PASS (16/16) after the CLI-reference commit.
+This repo IS FableForge now (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo
+is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge.exe` (CLI,
+`src/cli/*.cpp`), `buildorge-tools.exe` (the legacy CLI, 133 commands, `tools/forge-cli`).
+`libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks; the last full
+run (after the rename, before the CLI split) was ALL PASS -- the split was diffed command by
+command and re-smoked, but run the suite again before tagging.
 
-Done since the previous resume point: Textures tab (`src/texturebrowse`, `gui/textures.cpp`,
-CLI `textures` / `texture-*`, `tools/test_textures.py`), particle-effect picker
-(`Document::placeEmitter`, `effects::entryNames`), `docs/FIRST_LEVEL.md` + `docs/walkthrough/`,
-`docs/CLI.md` (`tools/gen_cli_reference.py`), both shipped by `package.py`.
-
-Scoped, not started (each needs either the in-game harness or a chunk of untangling):
-- 0.16 #1 foliage brush (local-detail decode + re-encode splice; see the item).
-- 0.17 static mesh import / creature clone (L, need EgoCore-checked composers + a probe).
-- 0.17 Blender addon bundle (the addon imports FableTLC `tools/` Python; vendor it first).
-- 0.15b leftovers: mesh thumbnails, PiP minimap, brush falloff ring (the tour is done).
+State: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 + tour, 0.16 3/4,
+0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 2/3 (walkthrough, CLI reference),
+perf (parallel albedo bake), main.cpp split + automation.cpp. Scoped-not-started: foliage
+brush (harness), mesh/creature import (L), Blender addon bundle (vendor its Python first),
+STB compaction, `chunk-audit --all` parallel, engine-rules FAQ page.
 
 Next in order:
-1. The user: public GitHub repo (`FableForge`) -> push -> CI. The old repo is
-   `D:\Code\FableForge-legacy` (37 M / 63 ??; junk = `005fcb00`, `017d2463`, `017d6540`,
-   `_wf.patch`, `build-debug/`, `build-wiring/`): merge its GUI canvas / quest tooling here
-   piece by piece when wanted; forgecore is already un-vendored (`libs/forgecore`).
-2. Version is 0.16.0 in CMake/package.py (binaries say so). `python tools/package.py` (runs
-   check_all, ~20 min) -> `dist/AlbionAtlas-0.16.0-win64.zip` -> `git tag v0.16.0` (the user,
-   with the public push); release notes = `git log 0a96bd4..` (today).
-3. In-game probes the user drives: map-screen travel to an own-region level through its
+1. The user: public GitHub repo `FableForge` -> push -> CI green; `python tools/package.py`
+   (runs the suite) -> `git tag v0.16.0`.
+2. In-game probes the user drives: map-screen travel to an own-region level through its
    entrance (fresh game); a retextured barrel; a placed preset; a placed emitter.
-4. Then, with the harness: foliage brush; without it: main.cpp split (1.0-rc #3), STB
-   compaction (#4), the first-run tour.
+3. Fold forge-tools families into forge / the GUI as they get UI (quests first: the legacy
+   `apps/forge-gui` node canvas is the reference; `docs/re_reference/quest_node_defs.json`).
+4. With the harness: foliage brush. Without: STB compaction, chunk-audit --all parallel.
 
-Install state: retail (`AlbionAtlas backups` -> 9 backed-up files, 0 differ). Saves:
-`0atlas` and `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is
-the adult save (`--save-from Cornelio`). FSE has no Atlas hook installed.
+Install state: retail (`forge backups` -> 9 backed-up files, 0 differ). Saves: `0atlas` and
+`1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is the adult save
+(`--save-from Cornelio`). FSE has no live-link hook installed.
 
 ## Context
 
