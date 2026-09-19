@@ -126,6 +126,6 @@ one for your own defs and themes.
 | Custom meshes / creatures / animations | Not yet in FableForge; the FableTLC toolchain does it from Python. |
 | Editing while the game runs | Refused on purpose; the live link (ForgeFSE) can teleport the hero and spawn creatures, nothing more. |
 
-Everything else -- the exact file formats, the engine rules and their evidence,
-the automation that took these screenshots -- is in `EDITOR.md` and
-`AUTOMATION.md`.
+Everything else -- the engine rules and their evidence (`ENGINE_RULES.md`), the
+exact file formats (`EDITOR.md`), the automation that took these screenshots
+(`AUTOMATION.md`) -- is next to this file.
