@@ -3,6 +3,7 @@
 #include "forge/big.hpp"
 
 #include "forge/lzo.hpp"
+#include "forge/stbbake.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -300,35 +301,11 @@ bool coordSane(float x, float y, float z, const ScanBounds& b) {
 // gate, decode-safe, then skip past an accepted frame.
 template <class Fn>
 void forEachFrame(const std::vector<uint8_t>& d, int& framesDecoded, Fn&& onFrame) {
-    auto u32 = [&](size_t o) {
-        uint32_t v;
-        std::memcpy(&v, d.data() + o, 4);
-        return v;
-    };
-    const size_t n = d.size();
-    for (size_t off = 0; off + 8 < n; off += 4) {
-        const uint32_t a = u32(off), b = u32(off + 4);
-        const uint32_t pairs[2][2] = {{a, b}, {b, a}};  // {unc, comp}
-        for (int k = 0; k < 2; ++k) {
-            const uint32_t unc = pairs[k][0], comp = pairs[k][1];
-            if (comp < 32 || comp > 400000 || unc < 64 || unc > 4000000) continue;
-            if (comp > unc) continue;
-            if (off + 8 + static_cast<size_t>(comp) > n) continue;
-            std::vector<uint8_t> out;
-            try {
-                out = forge::lzo::decompress(d.data() + off + 8, comp, unc);
-            } catch (const std::exception&) {
-                continue;  // wrong candidate; decompress_safe fails cleanly
-            }
-            ++framesDecoded;
-            onFrame(out);
-            // Resume on the scanner's 4-byte lattice. Compressed lengths are
-            // not necessarily multiples of four; adding the raw length here
-            // permanently shifted the old scan off all later aligned frames.
-            off = ((off + 8 + comp + 3) & ~size_t(3)) - 4; // loop adds 4
-            break;
-        }
-    }
+    // A chunk's LZO frames are packed back-to-back at byte granularity: retail
+    // OakValeWest_v2 holds 895, and 530 of them start off the 4-byte lattice the
+    // old probe stepped on (the town-square oak and three quarters of the grass
+    // lived in those). Walk them with the writer's proven byte-granular walker.
+    for (auto& b : forge::stbbake::walkFramedBlocks(d)) { ++framesDecoded; onFrame(b.data); }
 }
 
 // Recover the palette type# for a transform run via the RepeatedMesh grammar.

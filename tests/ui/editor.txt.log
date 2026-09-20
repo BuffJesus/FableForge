@@ -306,7 +306,7 @@ ok   set unsaved_prompt 0
      hovered_window=##root/##viewport_61898038
      mouse=713,463
      hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=601 hovered_flags=16777503 parent=##root parent_scrollmax=0
+     wheeling_window=- scrolled_frame=-1 frame=970 hovered_flags=16777503 parent=##root parent_scrollmax=0
      preview_loaded=0
      preview_textured=1
      context_ready=1
