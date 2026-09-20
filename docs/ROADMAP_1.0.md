@@ -1,12 +1,57 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-19, night)
+## Resume here (2026-09-20 morning; written at the end of 2026-09-19)
 
-This repo IS FableForge now (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo
-is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge.exe` (CLI,
-`src/cli/*.cpp`), `buildorge-tools.exe` (the legacy CLI, 133 commands, `tools/forge-cli`).
-`libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
-the CLI split (the evening run; see the last commit for the run after the thumbnails).
+This repo IS FableForge (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo is
+`D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `build\forge.exe` (CLI,
+`src/cli/*.cpp`), `build\forge-tools.exe` (the legacy CLI, 133 commands, `tools/forge-cli`).
+`libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, **ALL PASS** at
+`d1f54ac` (18 commits on 2026-09-19, tree clean). Fable.exe must be closed for the suite and
+for any write to the install (every writer now refuses while the game runs from that install).
+
+### State of 1.0
+Every "Must" row in section 1 is done except the two that need a second machine and a public
+remote. Everything on the code side of 1.0-rc is done (docs 3/3, perf, CLI split, bank
+compaction, `RELEASE.md`). Nothing new is in-game verified since 2026-09-17.
+
+### Next, in order (all the user's, per `docs/RELEASE.md`)
+1. Game closed -> `python tools/check_all.py` -> ALL PASS.
+2. In-game probes on a **fresh** game: map-screen travel to an own-region level through its
+   entrance; a retextured barrel; a placed preset; a placed particle emitter; a placed
+   **fishing spot** (Actors card); one session on a **compacted bank** (`forge compact-stb`).
+   Then `forge restore`, `forge backups` -> 0 differ.
+3. Public GitHub repo `FableForge` -> push -> CI green.
+4. `python tools/package.py` -> `dist/FableForge-0.16.0-win64.zip` -> stranger's test on a
+   second machine/VM (`docs/FIRST_LEVEL.md` end to end; the zip already dry-runs from a clean
+   folder on this machine) -> `git tag v0.16.0` -> release + Discord post.
+
+### After 1.0 (planned only, nothing started; do not queue ahead of the tag)
+- **0.18 Water** -- RE complete (`FableTLC docs/engine/WATER_RE.md`): water is depth-theme paint
+  (works today, gameplay water) + a baked STB `CWaterPatchMesh` retail only loads (layout and
+  constants known). Order: water brush -> foreground writer (retail round-trip gate) ->
+  background/shore/sea.
+- **0.19 World in 3D** -- renderer multi-terrain over the existing world-placed bakes.
+- **0.20 Mod packs v1** -- the legacy `mods`/`fmp`/`stage` family (`docs/modding/`), one
+  composer for EgoCore mods and every older mod shape, mod things with provenance in the
+  editor; corpus on disk (`work/nexus_mods/CATALOGUE.md`, GB packs in `D:\Downloads`).
+- Chunk-level compaction (scoped in 1.0-rc #4), foliage brush (needs the harness + user).
+
+### Watch list
+- The synthetic-click suites: scripted runs now drop real mouse input (hardening, not a proven
+  fix). If `ui paths` / `ui foliage` still flake in a full run, that theory is wrong.
+- `ENGINE_RULES` says retail loads TNGs from the WAD only; Connected Regions ships 397 loose
+  TNGs. Verify in-game before 0.20 relies on either.
+
+Install state: retail per `forge backups` (10 backed-up files, 0 differ; the extra one is a loose
+`OakValeWest_v2.tng` of identical content from tonight's guard test). The STB's `.atlas-orig`
+baseline carries a `__ENGINE_SEA_STATIC_MAP_BANK_FILE__ForgeTest64` entry from the FableTLC
+era (the `.forgebak` is true retail); harmless, 3.2 MB reclaimable. Saves: `0atlas` and
+`1234234` carry childhood autosaves, `Cornelio` is the adult save (`--save-from Cornelio`).
+FSE has no live-link hook installed.
+
+---
+
+## History: the night of 2026-09-19 (18 commits)
 
 **2026-09-19 (last):** the release zip was dry-run from a clean folder (all three exes + GUI
 against the Steam install), CI re-checked against the current targets, scripted runs now drop
@@ -36,35 +81,12 @@ ImGui sees them (the only path by which the user's cursor could reach a scripted
 a hardening, not a proven fix: a cursor-wiggle control run did not reproduce the flake on the
 old binary either. Watch the next few full runs.
 
-State: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 + tour, 0.16 3/4,
-0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 2/3 (walkthrough, CLI reference),
-perf (parallel albedo bake, parallel chunk-audit), main.cpp split + automation.cpp,
-ENGINE_RULES.md, object-palette mesh thumbnails. Scoped-not-started: foliage brush (harness),
-mesh/creature import (L), Blender addon bundle (vendor its Python first), STB compaction,
-texture-tab thumbnails, PiP minimap, brush falloff ring.
-
-Next in order (unchanged by the 2026-09-19 evening; water and fishing spots are filed below,
-not queued ahead of 1.0):
-1. The user: `docs/RELEASE.md` -- public GitHub repo `FableForge` -> push -> CI green;
-   `python tools/package.py` (runs the suite) -> `git tag v0.16.0`.
-2. In-game probes the user drives: map-screen travel to an own-region level through its
-   entrance (fresh game); a retextured barrel; a placed preset; a placed emitter; **a placed
-   fishing spot** (Actors card, new 2026-09-19); Oakvale's square oak now in the viewport;
-   **a session on a compacted bank** (`forge compact-stb`, or the Setup panel button).
-3. Fold forge-tools families into forge / the GUI as they get UI (quests first: the legacy
-   `apps/forge-gui` node canvas is the reference; `docs/re_reference/quest_node_defs.json`).
-4. With the harness: foliage brush (its step (a), decoding the chunk's existing groups, is
-   what the 2026-09-19 lattice fix delivered for the exporter). Without: **STB compaction
-   (1.0-rc #4) -- bank level DONE 2026-09-19, chunk level open**, chunk-audit --all parallel.
-5. Post-1.0, planned only (all 2026-09-19): **0.18 Water** (RE done, paint works today),
-   **0.19 World in 3D** (renderer multi-terrain), **0.20 Mod packs v1** (the legacy
-   `mods`/`fmp`/`stage` family + design docs, now in `docs/modding/`).
-
-Install state: retail per `forge backups` (9 backed-up files, 0 differ) -- the STB's
-`.atlas-orig` baseline already carries a `__ENGINE_SEA_STATIC_MAP_BANK_FILE__ForgeTest64`
-entry from the FableTLC era (the `.forgebak` is the true retail); harmless, 3.2 MB reclaimable. Saves: `0atlas` and
-`1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is the adult save
-(`--save-from Cornelio`). FSE has no live-link hook installed.
+State at the end of 2026-09-19: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 +
+tour, 0.16 3/4, 0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 3/3, perf, main.cpp split +
+automation.cpp, ENGINE_RULES.md, object-palette mesh thumbnails, bank compaction, RELEASE.md.
+Scoped-not-started: foliage brush (harness), mesh/creature import (L), Blender addon bundle
+(vendor its Python first), chunk-level compaction, texture-tab thumbnails, PiP minimap, brush
+falloff ring.
 
 ## Context
 
