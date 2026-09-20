@@ -80,6 +80,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `save_level` / `deploy_level` | write the loose .tng / replace the WAD entry under saveroot |
 | `screenshot <png>` | save the next presented frame |
 | `assert_file <path>` | file exists and is non-empty |
+| `assert_file_contains <path> <text...>` | the file exists and contains the text (the rest of the line, e.g. `ScriptName UiNamedBarrel;`) |
 | `assert_state <key> <value>` | see `dump_state` for keys |
 | `assert_widget <widget>` | the widget was drawn this frame |
 | `assert_log <text>` | some app log line contains the text (background job notes, e.g. `1 stitched`) |

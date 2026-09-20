@@ -222,8 +222,12 @@ frames 1
 select_def OBJECT_BARREL_BREAKABLE
 move_thing 0 0 1
 frames 1
+# a named object keeps its ScriptName in the saved .tng (objects dropped it until 2026-09-20; creatures never did)
+place OBJECT_BARREL_BREAKABLE UiNamedBarrel
+frames 1
 save_level
 assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
+assert_file_contains build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng ScriptName UiNamedBarrel;
 assert_state doc_dirty 0
 # terrain brush: raise a hill at the map centre, check the height, undo
 edit 1

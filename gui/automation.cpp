@@ -368,6 +368,17 @@ bool Automation::tick(App& app) {
         if (!fs::exists(rest, ec) || fs::file_size(rest, ec) == 0) fail("missing or empty file: " + rest); else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "assert_file_contains") {   // assert_file_contains <path> <text...>  (the text is the rest of the line)
+        std::istringstream rs(rest); std::string path; rs >> path;
+        std::string text; std::getline(rs, text);
+        if (!text.empty() && text.front() == ' ') text.erase(0, 1);
+        std::ifstream in(path, std::ios::binary);
+        std::string body((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (!in && body.empty()) fail("cannot read " + path);
+        else if (body.find(text) == std::string::npos) fail("file " + path + " does not contain: " + text);
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "assert_state") {
         std::istringstream rs(rest); std::string key, val; rs >> key >> val;
         bool found = false, match = false;

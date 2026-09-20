@@ -135,9 +135,9 @@ game**. Concretely:
 | One-click *restore my install to retail* and visible backup state             | **Done 2026-09-17**: `src/backups` registry, Setup panel *Restore the retail files* (with confirm) + per-file state, CLI `forge backups` / `forge restore`; refuses while the game runs |
 | Refuses to damage a running game                                              | **Done 2026-09-19**: every writer (deploy, terrain, new level, world moves, entrance, textures, restore, compact) goes through one guard -- the live-link heartbeat when the link is installed, and always a `Fable.exe` process scan matched to the *target install* (`backups::gameRunningIn`, so a game running from another copy or a scratch tree is not blocked); proven with the game up (`deploy: Fable.exe is running from this install ...`) |
 | New level end-to-end from the GUI (blank/copy, own region, minimap, textures, objects, NPCs, spawner) | Done, verified in-game |
-| Tells the user the engine's rules where they bite (new region needs a new game; saves cache entities; spawners need an adult hero) | Partly (notes in the log); needs to be in the UI at the point of action |
+| Tells the user the engine's rules where they bite (new region needs a new game; saves cache entities; spawners need an adult hero) | **Done 2026-09-18**: `raiseRule`/`drawRuleNotice` under the Place / spawner / new-level buttons (new region -> new game; saves cache entities; spawners need an adult hero), "Got it" per session; `docs/ENGINE_RULES.md` is the FAQ |
 | Export still works as before (GLB/OBJ)                                        | Done |
-| Documented for a newcomer (install, first level, FAQ of engine rules)         | README is 206 lines of feature paragraphs; no "first level in 10 minutes" |
+| Documented for a newcomer (install, first level, FAQ of engine rules)         | **Done 2026-09-18/20**: `docs/FIRST_LEVEL.md` (first level in ten minutes, harness screenshots), `docs/ENGINE_RULES.md`, README *Get it* + safety block; the zip ships them flat next to README with working links |
 | Public repo, tagged releases, CI that builds + runs the offline suite         | Missing (no remote, no workflow) |
 
 | Could (post-1.0, "power")                                | Notes |

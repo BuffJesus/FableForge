@@ -43,10 +43,21 @@ def main() -> int:
     if "ATLAS_UI_TEX" not in r.stdout or "DXT3" not in r.stdout:
         print("the added texture is not listed:", r.stdout[-300:]); ok = False
     # the replaced slot decodes back to (nearly) the same pixels
-    r = subprocess.run([cli, "texture-export", r"[\DEV\BBBPROJECTS\FABLE1_5RELEASE\FABLE\RESOURCES\ART3\GAMEPLAY\TEXTURE\BARREL_BRACED_1_24.TGA]",
+    # by the name the list prints (the retail symbol is a [\DEV\...\NAME.TGA] path); the id must work too
+    r = subprocess.run([cli, "texture-export", "BARREL_BRACED_1_24",
                         os.path.join(ROOT, "build", "ui", "barrel_braced_2.png"), "--install", scratch], capture_output=True, text=True)
     if r.returncode != 0:
         print("export after replace failed:", r.stderr); ok = False
+    r = subprocess.run([cli, "texture-export", "786", os.path.join(ROOT, "build", "ui", "barrel_braced_3.png"), "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0:
+        print("export by id failed:", r.stderr); ok = False
+    # the CLI replace by listed name (the GUI path above replaced by row); a missing name must say why
+    r = subprocess.run([cli, "texture-replace", "BARREL_BRACED_1_24", os.path.join(ROOT, "build", "ui", "barrel_braced.png"), "--install", scratch], capture_output=True, text=True)
+    if r.returncode != 0 or "replaced BARREL_BRACED_1_24" not in r.stdout:
+        print("CLI replace by listed name failed:", r.stderr, r.stdout[-300:]); ok = False
+    r = subprocess.run([cli, "texture-replace", "NO_SUCH_TEXTURE_XYZ", os.path.join(ROOT, "build", "ui", "barrel_braced.png"), "--install", scratch], capture_output=True, text=True)
+    if r.returncode == 0 or "no texture named" not in r.stderr + r.stdout:
+        print("replace of a missing name must fail with a reason:", r.stderr, r.stdout[-200:]); ok = False
     else:
         from PIL import Image
         import numpy as np
