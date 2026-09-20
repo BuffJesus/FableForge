@@ -568,7 +568,7 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
 // absolute surface. Where the smoothed sheet dips under the ground it is hidden;
 // where it is less than 2 units deep the in-game shader fades it out, which is
 // what makes shores read as shores. The fade is exported as COLOR_0 alpha.
-WaterLevels computeWaterLevels(const forge::lev::File& level, const Scene& scene, const std::map<int, size_t>& slotToLayer) {
+WaterLevels computeWaterLevels(const forge::lev::File& level, const Scene& scene, const std::map<int, size_t>& slotToLayer, const std::vector<float>* groundOverride = nullptr) {
     WaterLevels out;
     const int cx = level.cellsX(), cy = level.cellsY();
     out.width = cx; out.height = cy;
@@ -600,7 +600,10 @@ WaterLevels computeWaterLevels(const forge::lev::File& level, const Scene& scene
     out.ice.assign(depth.size(), 0);
     out.type = ctype;
     if (wet == 0) return out;
-    auto ground = [&](int x, int y) { return level.heightAt(x, y); };
+    auto ground = [&](int x, int y) {
+        if (groundOverride && groundOverride->size() == size_t(cx) * size_t(cy)) return (*groundOverride)[size_t(y) * cx + x];
+        return level.heightAt(x, y);
+    };
     // PeekInterpolatedWaterHeight(x, y, 2).
     std::vector<float>& lvl = out.level;
     std::vector<uint8_t>& cellIce = out.ice;
@@ -695,7 +698,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     return scene;
 }
 
-WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context) {
+WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context, const std::vector<float>* ground) {
     Scene scene = buildMesh(level, options);   // the vertex grid with each vertex's theme slots and weights
     Context local;
     if (!context || !context->ready()) {
@@ -705,7 +708,7 @@ WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& optio
     }
     std::map<int, size_t> slotToLayer;
     resolveThemeLayers(level, context->impl(), options, scene, slotToLayer);
-    return computeWaterLevels(level, scene, slotToLayer);
+    return computeWaterLevels(level, scene, slotToLayer, ground);
 }
 
 // 3. Per-slot layers: the LEV palette resolved against the install's ENGINE_THEMEs.

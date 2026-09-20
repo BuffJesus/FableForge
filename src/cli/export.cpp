@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -81,9 +82,25 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     if (!wp.found) { std::printf("%-32s no STB frames (%s)\n", name.c_str(), wp.note.c_str()); return 1; }
     if (wp.patches.empty()) { std::printf("%-32s %d frames, no water\n", name.c_str(), wp.frames); return 0; }
     te::Options o; o.gameRoot = install.root; o.texturesBig = install.root / "data" / "graphics" / "pc" / "textures.big"; o.mapName = name;
-    const te::WaterLevels wl = te::buildWaterLevels(file, o);
     const int W = file.width(), H = file.height();
-    auto ground = [&](int x, int y) { return file.heightAt(std::clamp(x, 0, W), std::clamp(y, 0, H)); };
+    auto groundLev = [&](int x, int y) { return file.heightAt(std::clamp(x, 0, W), std::clamp(y, 0, H)); };
+    // The baked foreground layers carry their own copy of every vertex height; the water bake
+    // ran on the same in-memory map the layer bake did, so that copy is the better oracle.
+    std::vector<float> stbHeight(size_t(W + 1) * size_t(H + 1), std::numeric_limits<float>::quiet_NaN());
+    {
+        const auto fl = st::loadLayers(install.root, name, W, H);
+        for (const auto& L : fl.layers)
+            for (const auto& v : L.vertices)
+                if (v.x >= 0 && v.y >= 0 && v.x <= W && v.y <= H) stbHeight[size_t(v.y) * size_t(W + 1) + size_t(v.x)] = v.height;
+    }
+    auto ground = [&](int x, int y) {
+        const int cx = std::clamp(x, 0, W), cy = std::clamp(y, 0, H);
+        const float h = stbHeight[size_t(cy) * size_t(W + 1) + size_t(cx)];
+        return std::isnan(h) ? groundLev(cx, cy) : h;
+    };
+    std::vector<float> groundGrid(stbHeight.size());
+    for (int y = 0; y <= H; ++y) for (int x = 0; x <= W; ++x) groundGrid[size_t(y) * size_t(W + 1) + size_t(x)] = ground(x, y);
+    const te::WaterLevels wl = te::buildWaterLevels(file, o, nullptr, &groundGrid);
     // CWaterPatchMesh::Build: a vertex with no interpolated height takes the mean of the
     // non-zero heights within +-2 cells (FindCorrectWaterLevel), else ground - 1 (sunk).
     // The search stays inside the patch's own 17x17 height array (px, py = patch origin).
@@ -97,6 +114,7 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     };
     size_t records = 0, exact = 0, rawOk = 0;
     size_t zBad = 0, dBad = 0, wsBad = 0, wcBad = 0, shoreNonZero = 0, wetMismatch = 0;
+    size_t zDumped = 0, zRound = 0, zFloor = 0, zCeil = 0, dFromZ = 0, dFromH = 0, dFromHTrunc = 0;   // which quantisation the retail bake used
     double zMax = 0, dMax = 0, wsMax = 0, wcMax = 0, zBias = 0; size_t zBiasN = 0;
     float dtsMin = 1e30f, dtsMax = -1e30f;
     std::map<int, int> types;
@@ -134,13 +152,28 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
             ++records;
             const int x = int(r.x) - wp.worldX, y = int(r.y) - wp.worldY;
             const float h = vertexLevel(x, y, p.offsetX, p.offsetY);
-            const float zExp = std::round(std::max(h - (ice ? 0.001f : 0.1f), 0.0f) * 256.0f) / 256.0f;
+            const float zRaw = std::max(h - (ice ? 0.001f : 0.1f), 0.0f);
+            const float zExp = std::round(zRaw * 256.0f) / 256.0f;
+            if (r.z == zExp) ++zRound;
+            if (r.z == std::floor(zRaw * 256.0f) / 256.0f) ++zFloor;
+            if (r.z == std::ceil(zRaw * 256.0f) / 256.0f) ++zCeil;
+            if (verbose && r.z != std::floor(zRaw * 256.0f) / 256.0f && zDumped < 40) {
+                ++zDumped;
+                std::printf("    z!=floor at (%d,%d): retail %.5f (x256 %.2f) ours raw %.5f (x256 %.2f) level %.5f ground %.5f depth %d\n",
+                            x, y, r.z, r.z * 256.0f, zRaw, zRaw * 256.0f, wl.at(x, y), ground(x, y), r.depth);
+            }
             const double dz = std::fabs(double(r.z) - zExp);
             if (dz > 1.0 / 256.0 + 1e-6) ++zBad;
             zMax = std::max(zMax, dz);
             if (wl.at(x, y) > 0.001f) { zBias += double(r.z) - (wl.at(x, y) - 0.1f); ++zBiasN; }
             if ((wl.at(x, y) > 0.001f) != (r.depth > 0)) ++wetMismatch;
             const float depthExp = std::clamp((r.z + 0.1f) - ground(x, y), 0.0f, 2.0f) * 32767.0f / 2.0f;
+            {   // alternatives: from the unquantised level h, rounded or truncated
+                const float dH = std::clamp(h - ground(x, y), 0.0f, 2.0f) * 32767.0f / 2.0f;
+                if (r.depth == int16_t(std::lround(depthExp))) ++dFromZ;
+                if (r.depth == int16_t(std::lround(dH))) ++dFromH;
+                if (r.depth == int16_t(dH)) ++dFromHTrunc;
+            }
             const double dd = std::fabs(double(r.depth) - std::round(depthExp));
             if (dd > 1.0) ++dBad;
             dMax = std::max(dMax, dd);
@@ -169,6 +202,8 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     std::printf("    codec: native re-encode byte-exact %zu/%zu, raw form decodes %zu/%zu\n", exact, wp.patches.size(), rawOk, wp.patches.size());
     std::printf("    z:     %zu/%zu off by > 1/256 (max %.4f); mean retail z - (level - 0.1) over wet vertices = %+.4f\n", zBad, records, zMax, zBiasN ? zBias / double(zBiasN) : 0.0);
     std::printf("    depth: %zu/%zu off by > 1 (max %.1f); wet/dry disagreements %zu\n", dBad, records, dMax, wetMismatch);
+    std::printf("    quantisation: z exact with round %zu / floor %zu / ceil %zu; depth exact from quantised z %zu / from level round %zu / from level trunc %zu (of %zu)\n",
+                zRound, zFloor, zCeil, dFromZ, dFromH, dFromHTrunc, records);
     std::printf("    wave:  sin %zu off (max %.0f), cos %zu off (max %.0f)\n", wsBad, wsMax, wcBad, wcMax);
     std::printf("    shore: %zu/%zu records carry shore data; distToShore %.2f .. %.2f\n", shoreNonZero, records, dtsMin, dtsMax);
     return 0;

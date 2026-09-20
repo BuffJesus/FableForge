@@ -223,7 +223,11 @@ private:
 // built from `options.gameRoot` / `options.texturesBig` for this call.
 // The water level grid alone: resolves the LEV's themes against the install's ENGINE_THEMEs
 // (WaterType / WaterHeight) and runs the engine's 5x5 interpolation. No textures are decoded.
-WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context = nullptr);
+// `ground` (optional, (width)*(height) floats, row-major like the LEV vertices) replaces the
+// LEV heights in the ground + depth sum: the retail bake ran on its in-memory map, whose
+// heights the STB foreground layers carry to the millimetre where the LEV on disk does not.
+WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context = nullptr,
+                             const std::vector<float>* ground = nullptr);
 
 Scene buildScene(const forge::lev::File& level, const Options& options,
                  const Context* context = nullptr);
