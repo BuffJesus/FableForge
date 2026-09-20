@@ -427,11 +427,14 @@ WAD-resident TNG/LEV, `text.big`, `names.bin` link fixups for `.fmp`, `FSE/quest
 unions, textures/STB; conflict reports are per-family, not over a whole order; ForgeFSE loads
 one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
 
-1. `modpack.json` (name, version, group, sources dir/.fmp/.patch/FSE tree) + the
-   `fableforge.stage_overlay.v1` file list with sha256 (already emitted by
-   `FableTLC tools/oakvale_reborn/build_custom_intro.py`). *S*
-2. `forge mods list/add/remove/order` persisting `<root>/forge_mods.json`; `forge mods build`
-   = `modsMerge` over the ordered list. *S*
+1. ~~`modpack.json`~~ folded into 2: each order entry carries name, kind, source, sha256, note. *S*
+2. ~~`forge mods list/add/remove/order` persisting `<root>/forge_mods.json`; `forge mods build`~~
+   DONE 2026-09-20 (branch `modpacks`): `libs/forgecore/modorder` + `forge-tools mods
+   list/add/remove/move/enable/disable/build`, `tools/test_mods.py` in check_all. The corpus
+   needed three merge fixes first: the Fable Explorer `.fmp` dialect (contentType 459), partial
+   game-root trees as TNG sources, and bsdiff against the pristine bytes (this install's game.bin
+   is a record-identical re-save; `<file>.retail-bak` is tried when the result does not parse).
+   Unofficial Patch + Special Melee + F2 Melee build into one game.bin + 8 TNGs. *S*
 3. Deploy = rebuild from the order onto the retail baseline (`.atlas-orig`), staged once;
    uninstall = drop from the order and rebuild; the three backup suffixes unified behind
    `albion::backups`. *M*

@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""The mod load order, offline, on a scratch root: forge-tools mods add / list / move /
+disable / build over three corpus packs of three shapes (a bsdiff .patch that needs the pristine
+game.bin, a Fable Explorer v459 .fmp, a ChocolateBox v510 .fmp + its loose-TNG tree). Skips when
+the corpus (work/nexus_mods/_peek) or the install is missing. Nothing touches the install.
+
+  python tools/test_mods.py [--root <fable install>] [--keep]
+"""
+import argparse, json, os, shutil, subprocess, sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PEEK = os.path.join(ROOT, "work", "nexus_mods", "_peek")
+UFP = os.path.join(PEEK, "UnofficialFablePatch", "Patches", "game.bin.patch")
+SPECIAL = os.path.join(PEEK, "SpecialMelee", "SpecialMeleeAbilities.fmp")
+F2 = os.path.join(PEEK, "F2MeleeWeapons")
+F2FMP = os.path.join(F2, "F2MeleeWeaponPack.fmp")
+TNGS = ["ArenaHallOfHeroes", "BanditCampPathEntrance", "BarrowFields", "BowerstoneSlumsWarehouses", "GibbetWoods", "GrannysHouse", "HookCoast"]
+
+
+def find_root(explicit: str) -> str:
+    if explicit:
+        return explicit
+    for c in [r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters",
+              r"C:\Program Files (x86)\Steam\steamapps\common\Fable The Lost Chapters"]:
+        if os.path.exists(os.path.join(c, "data", "CompiledDefs", "game.bin")):
+            return c
+    return ""
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", default="")
+    ap.add_argument("--keep", action="store_true")
+    a = ap.parse_args()
+    root = find_root(a.root)
+    if not root or not all(os.path.exists(p) for p in (UFP, SPECIAL, F2FMP)):
+        print("mods test skipped (no install or no corpus under work/nexus_mods/_peek)"); return 0
+    os.chdir(ROOT)
+    tool = os.path.join(ROOT, "build", "forge-tools.exe")
+    scratch = os.path.join(ROOT, "build", "ui_mods_root")
+    shutil.rmtree(scratch, ignore_errors=True)
+    defs = os.path.join(scratch, "data", "CompiledDefs"); levels = os.path.join(scratch, "data", "Levels", "FinalAlbion")
+    os.makedirs(defs); os.makedirs(levels)
+    for f in ["game.bin", "names.bin", "script.bin", "frontend.bin", "game.bin.retail-bak", "names.bin.retail-bak"]:
+        src = os.path.join(root, "data", "CompiledDefs", f)
+        if os.path.exists(src): shutil.copyfile(src, os.path.join(defs, f))
+    for t in TNGS:
+        src = os.path.join(root, "data", "Levels", "FinalAlbion", t + ".tng")
+        if os.path.exists(src): shutil.copyfile(src, os.path.join(levels, t + ".tng"))
+    ok = True
+
+    def run(*args, expect=0):
+        r = subprocess.run([tool, *args], capture_output=True, text=True)
+        if (r.returncode == 0) != (expect == 0):
+            nonlocal ok; ok = False
+            print("unexpected rc", r.returncode, "for", " ".join(args)); print(r.stdout[-600:], r.stderr[-600:])
+        return r
+
+    run("mods", "add", scratch, UFP, "--name", "Unofficial Fable Patch", "--note", "2.0")
+    run("mods", "add", scratch, SPECIAL)
+    run("mods", "add", scratch, F2FMP, "--name", "F2 Melee (defs)")
+    run("mods", "add", scratch, F2, "--name", "F2 Melee (levels)")
+    r = run("mods", "add", scratch, SPECIAL, expect=1)   # same contents twice
+    if "already in the order" not in r.stderr: print("duplicate not refused:", r.stderr); ok = False
+    r = run("mods", "list", scratch, "--json")
+    order = json.loads(r.stdout)["mods"]
+    if [m["kind"] for m in order] != ["patch", "fmp", "fmp", "tree"]:
+        print("kinds:", [m["kind"] for m in order]); ok = False
+    if any(len(m["sha256"]) != 64 for m in order): print("hashes missing"); ok = False
+    run("mods", "move", scratch, "F2 Melee (levels)", "0")
+    run("mods", "disable", scratch, "1")
+    order = json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]
+    if order[0]["name"] != "F2 Melee (levels)" or order[1]["enabled"]:
+        print("move/disable wrong:", [(m["name"], m["enabled"]) for m in order]); ok = False
+    run("mods", "enable", scratch, "1")
+    out = os.path.join(ROOT, "build", "ui_mods_out")
+    shutil.rmtree(out, ignore_errors=True)
+    r = run("mods", "build", scratch, out)
+    if "112 changes applied (95 new records)" not in r.stdout:
+        print("build output unexpected:", r.stdout[-800:]); ok = False
+    if "applied to game.bin.retail-bak instead" not in r.stdout and os.path.exists(os.path.join(defs, "game.bin.retail-bak")):
+        # the install's game.bin is a re-save; the patch must have gone to the pristine copy
+        print("expected the pristine fallback for the bsdiff patch:", r.stdout[-400:]); ok = False
+    if not os.path.exists(os.path.join(out, "data", "CompiledDefs", "game.bin")):
+        print("no merged game.bin"); ok = False
+    tngs = [f for f in os.listdir(os.path.join(out, "data", "Levels", "FinalAlbion")) if f.endswith(".tng")] if os.path.isdir(os.path.join(out, "data", "Levels", "FinalAlbion")) else []
+    if len(tngs) < 7: print("merged TNGs:", tngs); ok = False
+    r = run("defs", "list", out, "game.bin", "F2_RUSTY")
+    if "CInventoryItemDef_F2_RUSTY_LONGSWORD" not in r.stdout: print("F2 record missing from the merged defs"); ok = False
+    run("mods", "remove", scratch, "F2 Melee (defs)")
+    if len(json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]) != 3: print("remove failed"); ok = False
+    if not a.keep:
+        shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
+    print("mods test", "OK" if ok else "FAILED")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

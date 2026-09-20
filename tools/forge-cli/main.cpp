@@ -53,6 +53,7 @@
 #include "forge/qst.hpp"
 #include "forge/rangecodec.hpp"
 #include "forge/stage.hpp"
+#include "forge/modorder.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
@@ -249,6 +250,10 @@ int usage() {
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
         "  forge mods merge <base-root> <out-dir> --with <src>... [--fields schema.json] [--stage] [--json]\n"
+        "  forge mods list <game-root> [--json]                       the load order in <game-root>/forge_mods.json\n"
+        "  forge mods add <game-root> <source> [--name N] [--at i] [--note text]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
+        "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
+        "  forge mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -11120,6 +11125,75 @@ int main(int argc, char** argv) {
                 if (args[i] != "--json") modRoots.push_back(args[i]);
             }
             return modsAnalyze(args[2], modRoots, asJson);
+        }
+        if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build")) {
+            namespace mo = forge::modorder;
+            const std::string root = args[2];
+            const bool asJson = args.back() == "--json";
+            try {
+                if (args[1] == "list") {
+                    const auto order = mo::load(root);
+                    if (asJson) {
+                        json mods = json::array();
+                        for (const auto& e : order.mods) mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", mo::kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
+                        std::puts(json{{"file", mo::orderPath(root).generic_string()}, {"mods", mods}}.dump(2).c_str());
+                        return 0;
+                    }
+                    std::printf("%s: %zu mod(s), load order (last wins)\n", mo::orderPath(root).generic_string().c_str(), order.mods.size());
+                    for (size_t i = 0; i < order.mods.size(); ++i) {
+                        const auto& e = order.mods[i];
+                        std::printf("  %2zu %s %-36s %-8s %s  %.12s%s%s\n", i, e.enabled ? "[x]" : "[ ]", e.name.c_str(), mo::kindName(e.kind), e.source.c_str(), e.sha256.c_str(), e.note.empty() ? "" : "  -- ", e.note.c_str());
+                    }
+                    return 0;
+                }
+                if (args[1] == "add") {
+                    if (args.size() < 4) { std::fprintf(stderr, "mods add <game-root> <source> [--name N] [--at i] [--note text]\n"); return 2; }
+                    std::string name, note; int at = -1;
+                    for (size_t i = 4; i < args.size(); ++i) {
+                        if (args[i] == "--name" && i + 1 < args.size()) name = args[++i];
+                        else if (args[i] == "--at" && i + 1 < args.size()) at = std::stoi(args[++i]);
+                        else if (args[i] == "--note" && i + 1 < args.size()) note = args[++i];
+                    }
+                    auto order = mo::load(root);
+                    auto& e = mo::add(order, root, args[3], name, at);
+                    e.note = note;
+                    mo::save(root, order);
+                    std::printf("added \"%s\" (%s, sha256 %.12s) at %d of %zu\n", e.name.c_str(), mo::kindName(e.kind), e.sha256.c_str(), mo::indexOf(order, e.name), order.mods.size());
+                    return 0;
+                }
+                if (args[1] == "remove" || args[1] == "enable" || args[1] == "disable") {
+                    if (args.size() < 4) { std::fprintf(stderr, "mods %s <game-root> <name|index>\n", args[1].c_str()); return 2; }
+                    auto order = mo::load(root);
+                    if (args[1] == "remove") mo::remove(order, args[3]); else mo::setEnabled(order, args[3], args[1] == "enable");
+                    mo::save(root, order);
+                    std::printf("%s \"%s\"; %zu mod(s) in the order\n", args[1] == "remove" ? "removed" : args[1] == "enable" ? "enabled" : "disabled", args[3].c_str(), order.mods.size());
+                    return 0;
+                }
+                if (args[1] == "move") {
+                    if (args.size() < 5) { std::fprintf(stderr, "mods move <game-root> <name|index> <to>\n"); return 2; }
+                    auto order = mo::load(root);
+                    mo::move(order, args[3], std::stoi(args[4]));
+                    mo::save(root, order);
+                    for (size_t i = 0; i < order.mods.size(); ++i) std::printf("  %2zu %s\n", i, order.mods[i].name.c_str());
+                    return 0;
+                }
+                if (args[1] == "build") {
+                    if (args.size() < 4) { std::fprintf(stderr, "mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]\n"); return 2; }
+                    bool doStage = false; std::string fieldSchema;
+                    for (size_t i = 4; i < args.size(); ++i) {
+                        if (args[i] == "--stage") doStage = true;
+                        else if (args[i] == "--fields" && i + 1 < args.size()) fieldSchema = args[++i];
+                    }
+                    const auto order = mo::load(root);
+                    const auto sources = mo::buildSources(order, root);
+                    if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
+                    std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
+                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson);
+                }
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
+                return 1;
+            }
         }
         if (args.size() >= 5 && args[0] == "mods" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";
