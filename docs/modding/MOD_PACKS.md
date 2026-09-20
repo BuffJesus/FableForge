@@ -1,4 +1,4 @@
-> Ported verbatim from FableForge-legacy `docs/MOD_PACKS.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools` (`tools/forge-cli/main.cpp`).
+> Ported verbatim from FableForge-legacy `docs/MOD_PACKS.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, the legacy repo called that exe `forge`).
 
 # Mod packs, load order, and conflict resolution
 
@@ -41,7 +41,7 @@ Grounding this in how Fable mods are really distributed and installed today:
    conflict detection, explicit load order (replacing "install the big one
    first"), field-level merge via `def_schema.json`, and reversible staging.
 3. Whole-file-replacement mods (Method 1) can be *converted* to record deltas by
-   diffing them against vanilla (`forge defs diff`) — turning an incompatible mod
+   diffing them against vanilla (`forge-tools defs diff`) — turning an incompatible mod
    into a mergeable one.
 
 Sources: Fable community forums / GameFAQs (fmp install + compatibility rules),
@@ -78,8 +78,9 @@ already understand from every other modding scene.
 
 ### 3. Record-level diff (the atom)
 For each mod, diff each container it touches against the base → the mod's
-**change set** (records added / removed / modified). `forge diff` is this
-primitive. A mod's footprint is the union of its change sets.
+**change set** (records added / removed / modified). A general `diff` command is this
+primitive (planned for 0.20; today `forge-tools wad diff` and `forge-tools tng conflicts`
+cover WADs and TNGs). A mod's footprint is the union of its change sets.
 
 ### 4. Conflict detection
 Intersect change sets across enabled mods per container. For each shared record:
@@ -89,14 +90,14 @@ Intersect change sets across enabled mods per container. For each shared record:
   surfaced in a conflict view (records, mods involved, winner).
 
 For structured records (game.bin defs) the diff goes to the FIELD level using
-`def_schema.json` (**shipped**, `forge defs merge --fields`): two mods editing
+`def_schema.json` (**shipped**, `forge-tools defs merge --fields`): two mods editing
 different *fields* of the same def are field-merged, with only same-field edits
 conflicting. See "Status" below.
 
 ### 5. Compose / build
 Produce the final containers by applying, per record, the winning mod's version
 over the base — a merged `game.bin`, a repacked WAD, merged registries. Emit via
-`forge stage` so it's reversible (`.forgebak` + manifest) and the base install
+`forge-tools stage` so it's reversible (`.forgebak` + manifest) and the base install
 stays pristine. Uninstalling a mod = drop it from the order and rebuild.
 
 ### 6. Registry-aware merge
@@ -124,17 +125,17 @@ installer of record.
 
 ## Status (2026-07-19)
 The record-level core is **shipped and proven on two real 2GB overhauls**:
-- `forge defs diff` / `forge wad diff` — record-level change sets. **Done.**
-- `forge defs merge <base> <out> <bin> <mod>...` — compose non-conflicting
+- `forge-tools defs diff` / `forge-tools wad diff` — record-level change sets. **Done.**
+- `forge-tools defs merge <base> <out> <bin> <mod>...` — compose non-conflicting
   changes from N mods, resolve same-record conflicts by load order, write a
   drop-in overlay. **Done.** Aeon Edition + Lost Content → 3,136 changes applied,
   2,503 new records, 53 conflicts; merged bin contains both mods' unique content
   and round-trips clean over 17,264 entries.
 
-Also shipped: `forge mods analyze` — read-only cross-mod conflict report over all
+Also shipped: `forge-tools mods analyze` — read-only cross-mod conflict report over all
 def bins (inspect-before-merge).
 
-**Field-level def merge is now shipped** (`forge defs merge ... --fields
+**Field-level def merge is now shipped** (`forge-tools defs merge ... --fields
 <schema.json>`, task #12): the game.bin per-field serialization was cracked
 (each field = `[4-byte CRC(name) seed-0 tag][value]`; FINDINGS.md "game.bin FIELD
 ENCODING FULLY CRACKED"), so `forge::defdecode` splits a def payload into named
@@ -162,11 +163,11 @@ mergeable and TNG mostly mergeable.
 
 **Unified ingest + merge shipped.** Every mod format now normalizes into the one
 field-level pipeline:
-- `.fmp` (#13, **done**): `forge fmp list/apply/extract` — an `.fmp` is a BIG
+- `.fmp` (#13, **done**): `forge-tools fmp list/apply/extract` — an `.fmp` is a BIG
   archive (`forge::big`); `fmp apply` turns it into a drop-in game-root.
-- bsdiff `.patch` (**done**): `forge patch apply` (`forge::bunzip`+`forge::bspatch`)
+- bsdiff `.patch` (**done**): `forge-tools patch apply` (`forge::bunzip`+`forge::bspatch`)
   produces a modified game.bin from a `game.bin.patch`.
-- `forge mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--stage]`
+- `forge-tools mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--stage]`
   (**done**): normalizes each source to a game-root, then in ONE pass runs the
   field-level game.bin merge **and** the loose level-TNG thing-merge (per level:
   1 editor → copy; ≥2 → thing-merge by UID). Proven: HalsSword.fmp + Unofficial
@@ -174,7 +175,7 @@ field-level pipeline:
   cross-format field conflict (load-order resolved), 15,352 entries, round-trips
   clean; Aeon + Lost Content also thing-merged BanditCampBoss.tng (308 → 325
   things, 32 conflicts).
-- `.fmp` **export** (**done**): `forge fmp export <base> <modded> <out.fmp>` writes
+- `.fmp` **export** (**done**): `forge-tools fmp export <base> <modded> <out.fmp>` writes
   a game.bin diff as an .fmp via the `forge::big` writer (both samples re-serialize
   byte-exact; export → apply round-trips to 0 diff).
 
@@ -186,14 +187,14 @@ def schemas — `DEF_SCHEMA_COVERAGE.md`), `.patch` *export* (bsdiff create need
 bzip2 encoder), masterlist, GUI.
 
 ## Build order (each rides existing forgecore readers/writers)
-1. `forge defs diff <root-a> <root-b> [container]` — record-level change set
+1. `forge-tools defs diff <root-a> <root-b> [container]` — record-level change set
    (game.bin/script.bin **done**; WAD **done**; then TNG/text). **Foundational.**
-2. **`.fmp` reader/writer** (`forge fmp list/apply/export`) — consume the existing
+2. **`.fmp` reader/writer** (`forge-tools fmp list/apply/export`) — consume the existing
    community mod library and emit installs the current tools understand. Format
    from fabletlcmod.com; Fable Explorer / ShadowNet are the reference impls.
-3. Mod-pack manifest + load-order file (`forge mods list/add/order`).
+3. Mod-pack manifest + load-order file (`forge-tools mods list/add/order`).
 4. Conflict scan: change-set intersection across the order → conflict report.
-5. Compose: merged containers → `forge stage`. Field-level merge for defs via
+5. Compose: merged containers → `forge-tools stage`. Field-level merge for defs via
    `def_schema.json` (two mods editing different fields of one def both apply).
 6. Registry-aware merge for quests.lua / FinalAlbion.qst.
 7. Convert Method-1 whole-file mods to deltas by diffing vs vanilla.

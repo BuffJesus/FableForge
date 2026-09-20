@@ -1,4 +1,4 @@
-> Ported verbatim from FableForge-legacy `docs/FMP_FORMAT.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools` (`tools/forge-cli/main.cpp`).
+> Ported verbatim from FableForge-legacy `docs/FMP_FORMAT.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, the legacy repo called that exe `forge`).
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
@@ -68,7 +68,7 @@ records by (name, definition) — no hash resolution needed for these sections.
 **SOLVED — the `.fmp` IS a Lionhead BIG archive.** The decompiled ChocolateBox
 source (`FableMod.ContentManagement/ModPackage.cs` = a `BIGFile` wrapper;
 `SilverChest.Formats.Big/BigReader.cs`) gives the exact container, and `forge::big`
-(`forge fmp list`) parses ControllerSupport.fmp + HalsSword.fmp with zero trailing
+(`forge-tools fmp list`) parses ControllerSupport.fmp + HalsSword.fmp with zero trailing
 slack. The "footer" above is the BIG **bank directory**; the header word I called
 `entryCount` is actually `contentType` (510 = FMP_VERSION). Entry-table grammar:
 
@@ -103,14 +103,14 @@ banks (graphics/textures) carry binary subheaders. Full layout in
 
 ## Why this matters
 
-- **Ingest:** `forge fmp list <x.fmp>` → the exact records a mod changes, per
+- **Ingest:** `forge-tools fmp list <x.fmp>` → the exact records a mod changes, per
   container, by hash. That is a ready-made change set — no diff-against-vanilla
   needed for `.fmp` mods (only for whole-file Method-1 mods like Aeon/LC).
-- **Interop:** `forge fmp apply` installs through the same target files; `forge
+- **Interop:** `forge-tools fmp apply` installs through the same target files; `forge-tools
   fmp export` emits a `.fmp` so FableForge output loads in Fable Explorer / the
   tools people already use.
 - **Merge:** `.fmp` sections drop straight into the record-level merge engine —
-  each section is a per-container change set, exactly what `forge defs merge`
+  each section is a per-container change set, exactly what `forge-tools defs merge`
   consumes. `.fmp` mods and Method-1 overlays merge through one pipeline.
 - **The hash link:** the `.fmp` entry hash == the game.bin entry/field hash,
   now **CRACKED** — reflected CRC-32 of the name with seed 0, no final XOR
@@ -120,23 +120,23 @@ banks (graphics/textures) carry binary subheaders. Full layout in
   human-readable and letting FableForge author `.fmp`s from scratch.
 
 ## Build order (task #13) — SHIPPED
-1. ~~Header + footer parse~~ → `forge fmp list [--json]` (banks, per-entry name /
+1. ~~Header + footer parse~~ → `forge-tools fmp list [--json]` (banks, per-entry name /
    def-type / payload size). Shows a mod's footprint by container. **Done.**
 2. ~~Inflate entries~~ → not needed: BIG entry `data` is stored raw (the earlier
    "zlib sections" read was pre-SOLVED misparse; the 0x78-9c hits were graphics
-   payload internals). `forge fmp extract <x.fmp> <outdir> [bank-filter]` dumps
+   payload internals). `forge-tools fmp extract <x.fmp> <outdir> [bank-filter]` dumps
    every entry payload. **Done.**
 3. ~~Hash → name~~ → moot for `.fmp`: BIG entries carry plaintext DevSymbolNames
    and def-type subheaders; no hash resolution required. **Done.**
-4. `forge fmp apply <base-root> <x.fmp> <out-root>` (non-destructive: builds a
+4. `forge-tools fmp apply <base-root> <x.fmp> <out-root>` (non-destructive: builds a
    drop-in root, never mutates the base — strictly safer than an in-place apply
-   with `forge::stage` backups) and `forge fmp export <base> <modded> <out.fmp>`;
-   `.fmp` sources feed `forge mods merge`. **Done.**
+   with `forge::stage` backups) and `forge-tools fmp export <base> <modded> <out.fmp>`;
+   `.fmp` sources feed `forge-tools mods merge`. **Done.**
 
 Validated against `HalsSword.fmp` (88,408 bytes, 17 entries / 6 non-empty banks):
-byte-exact re-serialize (`forge fmp _rewrite`), and every GameBINEntries payload
+byte-exact re-serialize (`forge-tools fmp _rewrite`), and every GameBINEntries payload
 decodes against the 100% def schema with zero leftover bytes after
-`fmp apply` + `forge defs decode`.
+`fmp apply` + `forge-tools defs decode`.
 
 Note: a stale pre-SOLVED prototype (`forge::fmp` — custom footer parser assuming
 u32-length-prefixed section names, 12-byte hash/offset/size entries, zlib record

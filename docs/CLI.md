@@ -31,6 +31,13 @@ usage:
   forge world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]
       (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)
 
+diagnostics (read-only, print what the engine's data says):
+  forge effects [<name>]                            every effects.big emitter parsed with the ported grammar, or one
+  forge layers <map>   |   forge ground <map>   |   forge coverage <map>   (the STB's texture passes / background albedo / foreground frames)
+  forge heights <map.lev> <x,y> ...                 bilinear LEV heights at map-local points (the in-game harness oracle)
+  forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>
+  forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>   (stbbake::bakeHeightfield on one chunk)
+
 export options:
   --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)
   --install <root>    Fable TLC install dir (default: auto-detect Steam)

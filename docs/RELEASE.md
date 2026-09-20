@@ -5,7 +5,7 @@ the two in-game items are the human part.
 
 1. Game closed (`Fable.exe` not running from the install: every writer and the suite's
    scratch tests refuse or flake while it is).
-2. `python tools/check_all.py` -- ALL PASS (16 checks; the synthetic-click suites
+2. `python tools/check_all.py` -- ALL PASS (17 checks; the synthetic-click suites
    `ui paths` / `ui foliage` occasionally miss a click under the full run: rerun that one
    alone before calling it a failure).
 3. In-game probes on the release build, from a **fresh** New Game where the item needs one

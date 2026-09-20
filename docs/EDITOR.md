@@ -132,7 +132,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 * **Verified**: the identity bake reproduces every vertex height of the
   retail chunk; a sculpted hill bakes with max |dh| = 0 against the LEV on
   all 94k vertices; baking the result again works (a second edit after a
-  deploy). Structural checks pass (`forge stb foregroundinfo --verify-roundtrip`,
+  deploy). Structural checks pass (`forge-tools stb foregroundinfo --verify-roundtrip`,
   `backgroundtreeinfo --validate-only`, directory spans == frame lengths).
   **In-game verified** (2026-09-16) with `tools/ingame/ingame_terrain_test.py`:
   a +6 hill deployed into the real install, the running engine's own ground

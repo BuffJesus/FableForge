@@ -1,4 +1,4 @@
-> Ported verbatim from FableForge-legacy `docs/LOAD_ORDER.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools` (`tools/forge-cli/main.cpp`).
+> Ported verbatim from FableForge-legacy `docs/LOAD_ORDER.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, the legacy repo called that exe `forge`).
 
 # Load order & conflict optimization — lessons from LOOT/Wrye Bash
 
@@ -42,7 +42,7 @@ Two consequences:
 2. **FableForge doesn't need a masterlist to find conflicts.** LOOT relies on a
    masterlist because reading every plugin's records for ordering is too
    expensive at scale. FableForge already reads Fable's containers at the record
-   level (`forge defs diff`, `forge wad diff`), so it can **compute** most
+   level (`forge-tools defs diff`, `forge-tools wad diff`), so it can **compute** most
    conflicts directly from each mod's change set. The masterlist shrinks to only
    what data can't reveal (semantic requirements, "this mod's script assumes that
    mod's quest exists", known-bad combos).
@@ -56,7 +56,7 @@ Two consequences:
 | LOOT | Health warnings during sort | Warn on missing requirements, incompatibilities, version mismatch, dirty edits at build time |
 | Wrye Bash | Record-level merge into one patch | Merge non-conflicting record/field edits across all mods → merged game.bin/WAD/script.bin; order only decides same-record conflicts |
 | Mator Smash | General record conflict resolution | Field-level resolution via `def_schema.json` (two mods editing different fields of one def both apply) |
-| MO2/Vortex | Mod isolation + reversible deploy | Isolated packages + `forge stage`/`unstage` (`.forgebak`); base install stays pristine |
+| MO2/Vortex | Mod isolation + reversible deploy | Isolated packages + `forge-tools stage`/`unstage` (`.forgebak`); base install stays pristine |
 
 ## The FableForge model
 
@@ -67,7 +67,7 @@ Two consequences:
    conflicts, masterlist rules, and user pins. Cycles/incompatibilities are
    surfaced, not silently resolved.
 3. **Build = merge, then bake.** Apply, per record/field, the winner over vanilla;
-   emit merged containers via `forge stage`. This is the step Skyrim delegates to
+   emit merged containers via `forge-tools stage`. This is the step Skyrim delegates to
    the engine and Fable cannot.
 4. **Masterlist supplements, never gates.** It carries only the semantic knowledge
    (requirements, known-bad combos, dirty-edit flags) that record diffing can't
@@ -118,7 +118,7 @@ hygiene LOOT can't compute; FableForge computes real record conflicts directly),
 
 **Why the masterlist is SMALLER for FableForge:** LOOT needs a big masterlist
 because it can't read plugin records to find conflicts, so every relationship is
-hand-curated. FableForge *computes* conflicts from `forge defs diff` /
+hand-curated. FableForge *computes* conflicts from `forge-tools defs diff` /
 `tng conflicts`, so the masterlist only carries what data can't reveal: intent
 (groups/order), hard incompatibilities, required deps, and human notes.
 
@@ -129,9 +129,9 @@ condition-interpreter idea (`condition:` gates a rule on e.g. a file existing)
 is worth keeping for "this rule applies only if mod X is present".
 
 ## Build order
-1. `forge defs diff` / `forge wad diff` — change sets. **Done.**
+1. `forge-tools defs diff` / `forge-tools wad diff` — change sets. **Done.**
 2. Change-set intersection → conflict report (record + field level).
 3. Apply-order graph + topological sort (LOOT's core), with user pins.
-4. Merge/bake → `forge stage`.
+4. Merge/bake → `forge-tools stage`.
 5. Masterlist schema + loader (semantic rules); community-updatable.
 6. GUI: conflict/order panel (LOOT's list + xEdit's conflict view, Fable-native).
