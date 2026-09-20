@@ -1,76 +1,76 @@
-   0.13 ok   wait_maps
-   0.15 ok   wait_ready
-   0.16 ok   filter Arena_Filler
-   0.16 ok   frames 2
-   0.18 ok   assert_widget group_Filler_Arena_01
-   0.18 ..   click group_Filler_Arena_01
-   0.21 ok   frames 3
-   0.23 ok   assert_widget row_Arena_Filler_01
-   0.23 ..   click row_Arena_Filler_01
-   0.29 ok   wait_loaded
-   0.30 ok   assert_state selected Arena_Filler_01
-   0.31 ok   assert_state region Filler_Arena_01
-   0.32 ok   screenshot build/ui/p1_tree_click.png
-   0.50 shot build/ui/p1_tree_click.png
-   0.51 ok   filter
-   0.52 ok   set format obj
-   0.52 ok   set outdir build/ui
-   0.53 ..   click toggle_textures
-   0.55 ok   frames 2
-   0.57 ok   assert_state textures 0
-   0.57 ..   click btn_export
-   0.60 ok   frames 2
-   0.62 ok   wait_export
-   0.63 ok   assert_state export_ok 1
+   0.12 ok   wait_maps
+   0.14 ok   wait_ready
+   0.14 ok   filter Arena_Filler
+   0.15 ok   frames 2
+   0.16 ok   assert_widget group_Filler_Arena_01
+   0.17 ..   click group_Filler_Arena_01
+   0.19 ok   frames 3
+   0.21 ok   assert_widget row_Arena_Filler_01
+   0.22 ..   click row_Arena_Filler_01
+   0.28 ok   wait_loaded
+   0.29 ok   assert_state selected Arena_Filler_01
+   0.29 ok   assert_state region Filler_Arena_01
+   0.30 ok   screenshot build/ui/p1_tree_click.png
+   0.48 shot build/ui/p1_tree_click.png
+   0.49 ok   filter
+   0.50 ok   set format obj
+   0.51 ok   set outdir build/ui
+   0.51 ..   click toggle_textures
+   0.54 ok   frames 2
+   0.55 ok   assert_state textures 0
+   0.56 ..   click btn_export
+   0.58 ok   frames 2
+   0.61 ok   wait_export
+   0.62 ok   assert_state export_ok 1
    0.63 ok   assert_file build/ui/Arena_Filler_01.obj
-   0.64 ok   assert_file build/ui/Arena_Filler_01.mtl
-   0.65 ..   click toggle_textures
-   0.67 ok   frames 2
-   0.69 ok   assert_state textures 1
-   0.69 ok   set format glb
-   0.70 ok   open C:\Users\Cornelio\AppData\Local\Temp/FableForge/Arena_Filler_01.lev
-   0.71 ok   wait_loaded
-   0.71 ok   assert_state selected file:Arena_Filler_01
-   0.72 ok   assert_widget group_Loose files
-   0.72 ok   assert_widget row_file:Arena_Filler_01
-   0.73 ok   screenshot build/ui/p2_loose.png
-   0.94 shot build/ui/p2_loose.png
-   0.95 ok   filter Arena_Filler
-   0.96 ok   frames 2
-   0.97 ..   click btn_export_all
-   1.00 ok   frames 2
-   1.01 ok   assert_state batch_active 1
-   1.02 ok   screenshot build/ui/p3_batch.png
-   1.21 shot build/ui/p3_batch.png
+   0.63 ok   assert_file build/ui/Arena_Filler_01.mtl
+   0.64 ..   click toggle_textures
+   0.66 ok   frames 2
+   0.68 ok   assert_state textures 1
+   0.68 ok   set format glb
+   0.69 ok   open C:\Users\Cornelio\AppData\Local\Temp/FableForge/Arena_Filler_01.lev
+   0.70 ok   wait_loaded
+   0.70 ok   assert_state selected file:Arena_Filler_01
+   0.71 ok   assert_widget group_Loose files
+   0.71 ok   assert_widget row_file:Arena_Filler_01
+   0.72 ok   screenshot build/ui/p2_loose.png
+   0.91 shot build/ui/p2_loose.png
+   0.93 ok   filter Arena_Filler
+   0.93 ok   frames 2
+   0.95 ..   click btn_export_all
+   0.97 ok   frames 2
+   0.99 ok   assert_state batch_active 1
+   0.99 ok   screenshot build/ui/p3_batch.png
+   1.19 shot build/ui/p3_batch.png
    1.37 ok   wait_batch
    1.38 ok   assert_state batch_failed 0
-   1.39 ok   assert_state batch_done 3
+   1.38 ok   assert_state batch_done 3
    1.39 ok   assert_file build/ui/Arena_Filler_01.glb
-   1.40 ok   assert_file build/ui/Arena_Filler_02.glb
+   1.39 ok   assert_file build/ui/Arena_Filler_02.glb
    1.40 ok   filter
-   1.41      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-   1.41      install_valid=1
-   1.41      install_textures=1
-   1.41      install_fse=1
-   1.41      setup_open=0
-   1.41      backups_differ=0
-   1.41      maps=400
-   1.41      selected=file:Arena_Filler_01
-   1.41      settings_scroll=0
-   1.41      settings_scrolled=0
-   1.41      hovered_window=##root/##actions_92064320
-   1.41      mouse=1254,729
-   1.41      hovered_scrollmax=0
-   1.41      wheeling_window=- scrolled_frame=-1 frame=127 hovered_flags=16777487 parent=##root parent_scrollmax=0
-   1.41      preview_loaded=1
-   1.41      preview_textured=1
-   1.41      context_ready=1
-   1.41      mode=Textured
-   1.41      rule_notice=-
-   1.41      edit_tab=0
-   1.41      toasts=4
-   1.41      help_open=0
-   1.41      tour_step=-1
+   1.40      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+   1.40      install_valid=1
+   1.40      install_textures=1
+   1.40      install_fse=1
+   1.40      setup_open=0
+   1.40      backups_differ=0
+   1.40      maps=400
+   1.40      selected=file:Arena_Filler_01
+   1.40      settings_scroll=0
+   1.40      settings_scrolled=0
+   1.40      hovered_window=##root/##actions_92064320
+   1.40      mouse=1254,729
+   1.40      hovered_scrollmax=0
+   1.40      wheeling_window=- scrolled_frame=-1 frame=131 hovered_flags=16777487 parent=##root parent_scrollmax=0
+   1.40      preview_loaded=1
+   1.40      preview_textured=1
+   1.40      context_ready=1
+   1.40      mode=Textured
+   1.40      rule_notice=-
+   1.40      edit_tab=0
+   1.40      toasts=4
+   1.40      help_open=0
+   1.40      tour_step=-1
    1.41      ui_scale=1.00
    1.41      grid=0
    1.41      selection_count=0
@@ -131,5 +131,5 @@
    1.41      gizmo=1
    1.41      terrain_dirty=0
    1.41      terrain_center_height=120.421
-   1.42 ok   quit
+   1.41 ok   quit
 RESULT PASS

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "forge/lev.hpp"
+#include "forge/stb.hpp"
 #include "forge/navmesh.hpp"
 #include "forge/navpatch.hpp"
 #include "nlohmann/json.hpp"
@@ -721,6 +722,65 @@ void testGtg(const fs::path& dir) {
     fs::remove_all(root, ec);
 }
 
+// STB compaction: a hand-built bank, one replace (which appends a payload and a
+// cloned table, leaving the old ones dead), then compact -> same entries, same
+// payload bytes, smaller file, and compact(compact(x)) == compact(x).
+static void testStbCompaction(const fs::path& dir) {
+    fs::create_directories(dir);
+    auto put32 = [](std::vector<uint8_t>& b, uint32_t v) { for (int i = 0; i < 4; ++i) b.push_back(uint8_t(v >> (8 * i))); };
+    auto align = [](std::vector<uint8_t>& b, size_t a) { b.resize((b.size() + a - 1) / a * a, 0); };
+    const uint32_t alignment = 64;
+    std::vector<uint8_t> chunkA(150, 0xA1), chunkB(70, 0xB2);
+    std::vector<uint8_t> common;
+    put32(common, 1);
+    const std::string level = "Data/Levels/FinalAlbion/T.lev";
+    common.insert(common.end(), level.begin(), level.end()); common.push_back(0);
+    put32(common, uint32_t(common.size() + 4));   // the record follows its own directory row
+    common.resize(common.size() + 0x80, 0x11);
+
+    std::vector<uint8_t> bank;
+    put32(bank, 0x42424242u); put32(bank, 0); put32(bank, 0); put32(bank, 1);
+    put32(bank, alignment); put32(bank, 4); put32(bank, 3); put32(bank, 0);   // table offset patched below
+    struct P { const char* name; uint32_t id; const std::vector<uint8_t>* data; uint32_t offset = 0; };
+    std::vector<P> payloads{{"Data/Levels/FinalAlbion/T.lev", 1, &chunkA}, {"__STATIC_MAP_COMMON_HEADER__", 2, &common}, {"Data/Levels/FinalAlbion/U.lev", 3, &chunkB}};
+    for (auto& p : payloads) { align(bank, alignment); p.offset = uint32_t(bank.size()); bank.insert(bank.end(), p.data->begin(), p.data->end()); }
+    align(bank, alignment);
+    const uint32_t table = uint32_t(bank.size());
+    put32(bank, 1); put32(bank, 0); put32(bank, 3);   // dev header
+    for (const auto& p : payloads) {
+        const std::string n = p.name;
+        put32(bank, 42); put32(bank, p.id); put32(bank, 0); put32(bank, uint32_t(p.data->size())); put32(bank, p.offset); put32(bank, 0);
+        put32(bank, uint32_t(n.size())); bank.insert(bank.end(), n.begin(), n.end());
+        put32(bank, 0); put32(bank, 1); put32(bank, uint32_t(n.size())); bank.insert(bank.end(), n.begin(), n.end());
+        put32(bank, 0);
+    }
+    for (int i = 0; i < 4; ++i) bank[28 + i] = uint8_t(table >> (8 * i));
+    const fs::path src = dir / "bank.stb", grown = dir / "grown.stb", compact1 = dir / "c1.stb", compact2 = dir / "c2.stb";
+    std::ofstream(src, std::ios::binary).write(reinterpret_cast<const char*>(bank.data()), std::streamsize(bank.size()));
+
+    // a replace appends: the old payload and table become dead bytes
+    std::vector<uint8_t> chunkA2(200, 0xC3);   // bigger than the slot: the replace appends
+    forge::stb::replaceEntryPayload(src, grown, "Data/Levels/FinalAlbion/T.lev", chunkA2);
+    const auto before = forge::stb::compactMeasure(grown);
+    CHECK(before.entries == 3);
+    CHECK(before.bytesBefore > bank.size() && before.deadBytes() > 0);
+    const auto rep = forge::stb::compactBank(grown, compact1);
+    CHECK(rep.bytesAfter == before.bytesAfter && rep.bytesAfter < rep.bytesBefore);
+    const auto a = forge::stb::Archive::open(grown), b = forge::stb::Archive::open(compact1);
+    CHECK(a.entries().size() == 3 && b.entries().size() == 3);
+    for (size_t i = 0; i < 3; ++i) {
+        CHECK(a.entries()[i].id == b.entries()[i].id && a.entries()[i].name == b.entries()[i].name);
+        CHECK(a.read(a.entries()[i]) == b.read(b.entries()[i]));
+    }
+    CHECK(b.read(*b.findEntry("Data/Levels/FinalAlbion/T.lev")) == chunkA2);
+    CHECK(b.staticMaps().size() == 1 && b.staticMaps()[0].levelName == level);
+    CHECK(forge::stb::compactMeasure(compact1).deadBytes() == 0);
+    forge::stb::compactBank(compact1, compact2);
+    std::ifstream f1(compact1, std::ios::binary), f2(compact2, std::ios::binary);
+    const std::vector<uint8_t> b1((std::istreambuf_iterator<char>(f1)), {}), b2((std::istreambuf_iterator<char>(f2)), {});
+    CHECK(b1 == b2);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
@@ -738,6 +798,7 @@ int main() {
     testTerrainEditing(lev, dir);
     testNavPatch(dir);
     testGtg(dir);
+    testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";
     return 0;

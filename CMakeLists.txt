@@ -28,7 +28,8 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}")
-add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp)
+add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp
+    src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp)
 target_include_directories(fableforge PUBLIC src)
 target_link_libraries(fableforge PUBLIC forgecore_slice)
 

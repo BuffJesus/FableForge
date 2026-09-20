@@ -327,7 +327,10 @@ void App::drawSetupPanel() {
         ImGui::PopFont();
         // backups: everything FableForge has touched, and the way back
         if (installValid_) {
-            if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) { backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime(); }
+            if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) {
+                backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime();
+                try { bankReport_ = stbcompact::measure(installPath_); bankReportOk_ = true; } catch (const std::exception&) { bankReportOk_ = false; }
+            }
             size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
             ImGui::Dummy(ImVec2(0, S(10)));
             ImGui::PushFont(fontBold_);
@@ -354,6 +357,17 @@ void App::drawSetupPanel() {
                 }
             }
         }
+        // the static-map bank: every deploy that resizes a chunk appends and leaves dead bytes behind
+        if (installValid_ && bankReportOk_) {
+            ImGui::Dummy(ImVec2(0, S(10)));
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Faint), "Static-map bank: %.0f MB, %.1f MB reclaimable (retail itself ships %.1f MB of it)",
+                               double(bankReport_.bytesBefore) / 1048576.0, double(bankReport_.deadBytes()) / 1048576.0, 3.4);
+            ImGui::PopFont();
+            const bool busy = compactBusy();
+            if (theme::ghostButton(busy ? "Compacting..." : (bankReport_.deadBytes() ? "Compact the bank (payloads verified, game must be closed)" : "Bank is compact"), ImVec2(S(530), S(28))) && !busy && bankReport_.deadBytes()) compactBank();
+            auto_.registerWidget("btn_compact_stb");
+        }
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(530) - S(6)) * 0.5f;
         if (theme::ghostButton("Choose the install folder...", ImVec2(w, S(32)))) {
@@ -367,6 +381,14 @@ void App::drawSetupPanel() {
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar();
+}
+
+bool App::compactBank() {
+    if (!installValid_ || compactFuture_.valid()) return false;
+    const std::string root = installPath_;
+    pushLog("compacting the static-map bank (a ~570 MB rewrite; every payload is verified before the swap)", 0);
+    compactFuture_ = std::async(std::launch::async, [root]() { return stbcompact::compact(root); });
+    return true;
 }
 
 bool App::restoreAllBackups() {
@@ -820,6 +842,17 @@ void App::pollWorkers() {
         }
         if (!foliagePendingName_.empty()) { foliagePendingName_.clear(); if (!foliageLoaded()) startFoliageLoad(); }
         else if (thingsReloadPending_) startThingsReload();
+    }
+    if (compactFuture_.valid() && compactFuture_.wait_for(0ms) == std::future_status::ready) {
+        const stbcompact::Result r = compactFuture_.get();
+        if (!r.ok) pushLog("compact: " + r.error, 2);
+        else if (r.alreadyCompact) pushLog("compact: the bank was already compact", 0);
+        else {
+            char buf[128];
+            std::snprintf(buf, sizeof buf, "compact: %.1f MB -> %.1f MB, %u payloads verified byte-identical", double(r.report.bytesBefore) / 1048576.0, double(r.report.bytesAfter) / 1048576.0, r.report.entries);
+            pushLog(buf, 3);
+        }
+        rescanBackups();
     }
     if (exportFuture_.valid() && exportFuture_.wait_for(0ms) == std::future_status::ready) {
         ExportResult r = exportFuture_.get();

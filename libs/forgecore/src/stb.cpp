@@ -761,4 +761,124 @@ void replaceStaticMapsRelayout(const fs::path& srcPath, const fs::path& outPath,
     if (!output) throw std::runtime_error("stb: failed writing " + outPath.string());
 }
 
+namespace {
+struct CompactPlan {
+    std::vector<uint8_t> src;
+    uint32_t alignment = 0, entryCount = 0, tableOffset = 0;
+    struct Row { size_t begin, end, sizePos, offsetPos; uint32_t size, offset; };
+    std::vector<Row> rows;
+    uint64_t compactSize = 0;
+};
+
+CompactPlan planCompaction(const fs::path& srcPath) {
+    CompactPlan plan;
+    std::ifstream input(srcPath, std::ios::binary);
+    if (!input) throw std::runtime_error("stb: cannot open " + srcPath.string());
+    plan.src.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    const auto& src = plan.src;
+    if (src.size() < 32 || u32At(src, 0, "magic") != 0x42424242u) throw std::runtime_error("stb: bad magic");
+    plan.alignment = u32At(src, 16, "alignment");
+    plan.entryCount = u32At(src, 24, "entry count");
+    plan.tableOffset = u32At(src, 28, "table offset");
+    if (plan.alignment == 0 || size_t(plan.tableOffset) + 12 > src.size()) throw std::runtime_error("stb: bad header");
+    size_t pos = size_t(plan.tableOffset) + 12;
+    for (uint32_t i = 0; i < plan.entryCount; ++i) {
+        const size_t begin = pos;
+        if (u32At(src, pos, "entry magic") != 42) throw std::runtime_error("stb: bad entry magic");
+        const uint32_t nameLen = u32At(src, pos + 24, "name length");
+        pos += 28 + nameLen + 8;
+        const uint32_t devNameLen = u32At(src, pos, "dev name length");
+        pos += 4 + devNameLen;
+        const uint32_t extraSize = u32At(src, pos, "extra size");
+        pos += 4 + extraSize;
+        if (pos > src.size()) throw std::runtime_error("stb: truncated entry metadata");
+        CompactPlan::Row r{begin, pos, begin + 12, begin + 16,
+                           u32At(src, begin + 12, "payload size"), u32At(src, begin + 16, "payload offset")};
+        if (uint64_t(r.offset) + r.size > src.size()) throw std::runtime_error("stb: payload out of range");
+        plan.rows.push_back(r);
+    }
+    if (pos != src.size()) throw std::runtime_error("stb: bytes after the table");
+    uint64_t at = 32;
+    for (const auto& r : plan.rows) at = alignSize(size_t(at), plan.alignment) + r.size;
+    at = alignSize(size_t(at), plan.alignment);            // the table sits on an alignment boundary
+    plan.compactSize = at + (src.size() - plan.tableOffset);
+    return plan;
+}
+} // namespace
+
+CompactReport compactMeasure(const fs::path& srcPath) {
+    // header + table only (the GUI polls this; the bank is ~570 MB)
+    std::ifstream f(srcPath, std::ios::binary);
+    if (!f) throw std::runtime_error("stb: cannot open " + srcPath.string());
+    f.seekg(0, std::ios::end);
+    const uint64_t fileSize = uint64_t(f.tellg());
+    f.seekg(0);
+    std::vector<uint8_t> hdr(32);
+    f.read(reinterpret_cast<char*>(hdr.data()), 32);
+    if (!f || u32At(hdr, 0, "magic") != 0x42424242u) throw std::runtime_error("stb: bad magic");
+    const uint32_t alignment = u32At(hdr, 16, "alignment"), entryCount = u32At(hdr, 24, "entry count"), tableOffset = u32At(hdr, 28, "table offset");
+    if (alignment == 0 || uint64_t(tableOffset) + 12 > fileSize) throw std::runtime_error("stb: bad header");
+    std::vector<uint8_t> table(size_t(fileSize - tableOffset));
+    f.seekg(tableOffset);
+    f.read(reinterpret_cast<char*>(table.data()), std::streamsize(table.size()));
+    if (!f) throw std::runtime_error("stb: truncated table");
+    size_t pos = 12;
+    uint64_t at = 32;
+    for (uint32_t i = 0; i < entryCount; ++i) {
+        if (u32At(table, pos, "entry magic") != 42) throw std::runtime_error("stb: bad entry magic");
+        const uint32_t size = u32At(table, pos + 12, "payload size");
+        const uint32_t nameLen = u32At(table, pos + 24, "name length");
+        pos += 28 + nameLen + 8;
+        const uint32_t devNameLen = u32At(table, pos, "dev name length");
+        pos += 4 + devNameLen;
+        const uint32_t extraSize = u32At(table, pos, "extra size");
+        pos += 4 + extraSize;
+        if (pos > table.size()) throw std::runtime_error("stb: truncated entry metadata");
+        at = alignSize(size_t(at), alignment) + size;
+    }
+    at = alignSize(size_t(at), alignment);
+    CompactReport rep;
+    rep.bytesBefore = fileSize;
+    rep.bytesAfter = at + table.size();
+    rep.entries = entryCount;
+    return rep;
+}
+
+CompactReport compactBank(const fs::path& srcPath, const fs::path& outPath) {
+    const CompactPlan plan = planCompaction(srcPath);
+    const auto& src = plan.src;
+    std::vector<uint8_t> out;
+    out.reserve(size_t(plan.compactSize));
+    out.insert(out.end(), src.begin(), src.begin() + 32);
+    std::vector<uint32_t> offsets;
+    offsets.reserve(plan.rows.size());
+    for (const auto& r : plan.rows) {
+        out.resize(alignSize(out.size(), plan.alignment), 0);
+        offsets.push_back(uint32_t(out.size()));
+        out.insert(out.end(), src.begin() + r.offset, src.begin() + r.offset + r.size);
+    }
+    out.resize(alignSize(out.size(), plan.alignment), 0);
+    if (out.size() > std::numeric_limits<uint32_t>::max()) throw std::runtime_error("stb: table offset exceeds 32-bit range");
+    const uint32_t newTableOffset = uint32_t(out.size());
+    out.insert(out.end(), src.begin() + plan.tableOffset, src.begin() + plan.tableOffset + 12);
+    for (size_t i = 0; i < plan.rows.size(); ++i) {
+        const auto& r = plan.rows[i];
+        const size_t dst = out.size();
+        out.insert(out.end(), src.begin() + r.begin, src.begin() + r.end);
+        patchU32(out, dst + (r.offsetPos - r.begin), offsets[i]);
+    }
+    patchU32(out, 28, newTableOffset);
+    if (out.size() != plan.compactSize) throw std::runtime_error("stb: compaction size mismatch");
+
+    std::ofstream output(outPath, std::ios::binary | std::ios::trunc);
+    if (!output) throw std::runtime_error("stb: cannot write " + outPath.string());
+    output.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size()));
+    if (!output) throw std::runtime_error("stb: failed writing " + outPath.string());
+    CompactReport rep;
+    rep.bytesBefore = src.size();
+    rep.bytesAfter = out.size();
+    rep.entries = plan.entryCount;
+    return rep;
+}
+
 } // namespace forge::stb

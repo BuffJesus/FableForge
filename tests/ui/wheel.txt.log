@@ -1,30 +1,30 @@
-   0.13 ok   wait_maps
-   0.15 ok   wait_ready
-   0.18 ok   select StartOakValeWest
-   0.28 ok   wait_loaded
-   0.28 ok   frames 3
-   0.32 ok   assert_state settings_scrolled 0
-   0.32 ok   mouse_move toggle_textures
-   0.33 ok   frames 2
-   0.35 ok   wheel -2
-   0.36 ok   frames 3
-   0.40 ok   assert_state settings_scrolled 1
-   0.40 ok   wheel 2
-   0.41 ok   frames 3
-   0.45 ok   assert_state settings_scrolled 0
-   0.46 ok   mouse_move slider_gain
-   0.47 ok   frames 2
-   0.48 ok   wheel -2
+   0.12 ok   wait_maps
+   0.14 ok   wait_ready
+   0.17 ok   select StartOakValeWest
+   0.26 ok   wait_loaded
+   0.26 ok   frames 3
+   0.30 ok   assert_state settings_scrolled 0
+   0.31 ok   mouse_move toggle_textures
+   0.32 ok   frames 2
+   0.33 ok   wheel -2
+   0.35 ok   frames 3
+   0.38 ok   assert_state settings_scrolled 1
+   0.39 ok   wheel 2
+   0.40 ok   frames 3
+   0.44 ok   assert_state settings_scrolled 0
+   0.44 ok   mouse_move slider_gain
+   0.45 ok   frames 2
+   0.59 ok   wheel -2
    0.60 ok   frames 3
    0.64 ok   assert_state settings_scrolled 1
-   0.65 ok   wheel 2
+   0.64 ok   wheel 2
    0.66 ok   frames 3
    0.68 ok   edit 1
-   0.71 ok   frames 3
-   0.80 ok   mouse_move input_thingsearch
-   0.84 ok   frames 2
-   0.90 ok   wheel -2
-   0.94 ok   frames 3
+   0.70 ok   frames 3
+   0.79 ok   mouse_move input_thingsearch
+   0.83 ok   frames 2
+   0.89 ok   wheel -2
+   0.93 ok   frames 3
    1.03 ok   assert_state settings_scrolled 1
    1.05 ok   quit
 RESULT PASS

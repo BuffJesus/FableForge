@@ -1,7 +1,7 @@
    0.11 ok   wait_maps
    0.14 ok   wait_ready
    0.16 ok   select Greatwood_2
-   0.22 ok   wait_loaded
+   0.23 ok   wait_loaded
    0.23 ok   assert_state region GreatwoodEntrance
    0.24 ok   assert_widget btn_export_region
    0.24 ok   set outdir build/ui
@@ -12,10 +12,10 @@
    0.29 ok   frames 2
    0.36 ok   assert_state batch_active 1
    0.37 ok   assert_state world 1
-   0.39 ok   wait_batch
-   0.40 ok   assert_state batch_done 2
-   0.41 ok   assert_state batch_failed 0
-   0.41 ok   assert_file build/ui/Greatwood_1.glb
-   0.42 ok   assert_file build/ui/Greatwood_2.glb
-   0.42 ok   quit
+   0.41 ok   wait_batch
+   0.42 ok   assert_state batch_done 2
+   0.43 ok   assert_state batch_failed 0
+   0.43 ok   assert_file build/ui/Greatwood_1.glb
+   0.44 ok   assert_file build/ui/Greatwood_2.glb
+   0.44 ok   quit
 RESULT PASS

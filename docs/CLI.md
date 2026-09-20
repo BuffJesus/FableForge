@@ -26,6 +26,7 @@ usage:
   forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]
   forge entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)
   forge backups   |   forge restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)
+  forge compact-stb [--dry-run]                     (rewrite FinalAlbion_RT.stb without the dead payloads deploys leave behind; every payload verified byte-identical)
   forge region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)
   forge world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]
       (average the shared edge heights with every edge-sharing neighbour, or one pair; world-move --stitch does it after a move)

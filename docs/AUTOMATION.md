@@ -64,6 +64,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `help 0\|1` | the keyboard/mouse cheat-sheet overlay (also `?` / F1 / the header `?`; state `help_open`, widgets `btn_help`, `btn_help_close`) |
 | `edit_tab <0..3>` | the Edit panel's sub-tab: 0 Objects, 1 Terrain, 2 Actors, 3 Level (state `edit_tab`; widget `seg_edit_tab`). Terrain and the terrain tool follow each other; placing a spawner/village opens Actors, a viewport pick from Terrain/Level opens Objects |
 | `dismiss_rule <creature\|spawner\|region>` | what the engine-rule notice's *Got it* does (state `rule_notice` = the key shown, `-` for none; widget `btn_rule_<key>`) |
+| `compact_stb` / `wait_compact` | compact the static-map bank in the background (Setup panel's *Compact the bank*); log line `compact: A MB -> B MB, N payloads verified byte-identical` |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |

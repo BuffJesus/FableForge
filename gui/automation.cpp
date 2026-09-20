@@ -300,6 +300,8 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); std::string def, sn; rs >> def >> sn;
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
     }
+    else if (cmd == "compact_stb") { if (!app.compactBank()) fail("compact_stb failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "wait_compact") waitOn(!app.compactBusy(), "compaction");
     else if (cmd == "restore_all") { if (!app.restoreAllBackups()) fail("restore failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
     else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }

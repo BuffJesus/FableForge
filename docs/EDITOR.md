@@ -28,6 +28,24 @@ Refused while Fable.exe runs. CLI `forge backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
+### Compacting the static-map bank (2026-09-19, 1.0-rc #4)
+
+Every deploy that changes a chunk's size appends the new payload and a cloned table to
+`FinalAlbion_RT.stb` and leaves the old ones behind (retail's own bake did the same: the
+shipped bank carries ~3.4 MB of dead bytes around its common header). The engine reaches
+payloads only through the table and the common header names entries by id, so
+`forge::stb::compactBank` rewrites the bank as `[header][live payloads in table order,
+aligned][one table]` -- ids, names, sizes, payload bytes and the table metadata verbatim,
+only offsets and the table pointer change; compacting a compact bank reproduces it byte
+for byte (unit test). `src/stbcompact` wraps it: one-time `.atlas-orig` backup, write to
+`.compact-tmp`, re-parse and compare every payload, then swap (a running game holds the
+bank open and the swap fails cleanly). CLI `forge compact-stb [--dry-run]`; the Setup panel
+shows *Static-map bank: N MB, M MB reclaimable* with *Compact the bank* (background job,
+~4 s for 574 MB). Scripts: `compact_stb`, `wait_compact`. Measured on the install:
+574.4 -> 571.2 MB, 425 payloads verified, `chunk-audit` clean through the result. *In-game
+run on a compacted bank: not yet done (the user's next probe list).* The chunk-level
+compaction (dead sections inside a chunk after a re-layout) is still open.
+
 ## The Edit panel
 
 Under the *Tool* card the panel is split into four sub-tabs so a card is never

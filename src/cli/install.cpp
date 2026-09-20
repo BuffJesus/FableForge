@@ -36,6 +36,7 @@
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
 #include "backups.hpp"
+#include "stbcompact.hpp"
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
@@ -73,6 +74,28 @@ std::optional<int> runInstall(const std::string& cmd, const Args& args) {
         if (!err.empty() && n == 0) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         std::printf("%zu file(s) restored%s\n", n, forget ? ", backups removed" : "");
         return err.empty() ? 0 : 1;
+    }
+    if (cmd == "compact-stb") {   // compact-stb [--dry-run] [--install root]: rewrite FinalAlbion_RT.stb without the dead payloads/tables every deploy leaves behind
+        std::string installArg; bool dryRun = false;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--dry-run") dryRun = true;
+            else { std::fprintf(stderr, "usage: forge compact-stb [--dry-run] [--install <root>]" "\n"); return 2; }
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)" "\n"); return 2; }
+        try {
+            const auto before = albion::stbcompact::measure(install.root);
+            std::printf("%s: %u entries, %.1f MB, %.1f MB reclaimable" "\n", albion::stbcompact::bankPath(install.root).string().c_str(), before.entries,
+                        double(before.bytesBefore) / 1048576.0, double(before.deadBytes()) / 1048576.0);
+            if (dryRun) return 0;
+        } catch (const std::exception& e) { std::fprintf(stderr, "compact-stb: %s" "\n", e.what()); return 1; }
+        const auto r = albion::stbcompact::compact(install.root);
+        if (!r.ok) { std::fprintf(stderr, "compact-stb: %s" "\n", r.error.c_str()); return 1; }
+        if (r.alreadyCompact) { std::printf("already compact" "\n"); return 0; }
+        std::printf("compacted: %.1f MB -> %.1f MB (%u entries verified byte-identical)" "\n",
+                    double(r.report.bytesBefore) / 1048576.0, double(r.report.bytesAfter) / 1048576.0, r.report.entries);
+        return 0;
     }
     return std::nullopt;
 }

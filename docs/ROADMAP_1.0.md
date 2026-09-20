@@ -30,16 +30,19 @@ not queued ahead of 1.0):
    (runs the suite) -> `git tag v0.16.0`.
 2. In-game probes the user drives: map-screen travel to an own-region level through its
    entrance (fresh game); a retextured barrel; a placed preset; a placed emitter; **a placed
-   fishing spot** (Actors card, new 2026-09-19); Oakvale's square oak now in the viewport.
+   fishing spot** (Actors card, new 2026-09-19); Oakvale's square oak now in the viewport;
+   **a session on a compacted bank** (`forge compact-stb`, or the Setup panel button).
 3. Fold forge-tools families into forge / the GUI as they get UI (quests first: the legacy
    `apps/forge-gui` node canvas is the reference; `docs/re_reference/quest_node_defs.json`).
 4. With the harness: foliage brush (its step (a), decoding the chunk's existing groups, is
    what the 2026-09-19 lattice fix delivered for the exporter). Without: **STB compaction
-   (1.0-rc #4) -- in progress 2026-09-19**, chunk-audit --all parallel.
+   (1.0-rc #4) -- bank level DONE 2026-09-19, chunk level open**, chunk-audit --all parallel.
 5. Post-1.0: **0.18 Water** (below) -- the RE is done, the paint side works today; the
    writer waits until 1.0 ships.
 
-Install state: retail (`forge backups` -> 9 backed-up files, 0 differ). Saves: `0atlas` and
+Install state: retail per `forge backups` (9 backed-up files, 0 differ) -- the STB's
+`.atlas-orig` baseline already carries a `__ENGINE_SEA_STATIC_MAP_BANK_FILE__ForgeTest64`
+entry from the FableTLC era (the `.forgebak` is the true retail); harmless, 3.2 MB reclaimable. Saves: `0atlas` and
 `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is the adult save
 (`--save-from Cornelio`). FSE has no live-link hook installed.
 
@@ -323,9 +326,11 @@ thing with an optional `CTCContainerRewardHero` first catch -- no water dependen
    `textures` / `install` / `world` / `chunks` / `export`, each family a
    `std::optional<int> runX(cmd, args)`; the duplicated backups block went; outputs diffed
    identical against the pre-split binary). The automation dispatcher is `gui/automation.cpp` too.
-4. STB compaction: a `chunk-compact` pass re-laying fg run / LOD blocks / LD section
-   contiguously (all three reference sets are already collected in `stbrelocate::run`), and
-   an STB-level compaction that drops superseded payloads.
+4. STB compaction: ~~an STB-level compaction that drops superseded payloads~~ DONE 2026-09-19
+   (`forge compact-stb`, Setup panel button, `src/stbcompact`, unit test; 574.4 -> 571.2 MB
+   on the install, payloads verified; needs one in-game run on a compacted bank). Still open:
+   a `chunk-compact` pass re-laying fg run / LOD blocks / LD section contiguously (all three
+   reference sets are already collected in `stbrelocate::run`).
 5. A "stranger's test": fresh Windows VM or a second PC, retail Steam install, the zip only —
    follow the walkthrough; every step that needs a workaround becomes a bug.
 

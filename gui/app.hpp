@@ -25,6 +25,7 @@
 #include "leveledit.hpp"
 #include "livelink.hpp"
 #include "backups.hpp"
+#include "stbcompact.hpp"
 #include "renderer.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
@@ -255,6 +256,14 @@ private:
 public:
     bool restoreAllBackups();        // put every backed-up file back (refused while the game runs)
     void rescanBackups() { backupsScannedAt_ = -1; }
+    // the static-map bank's dead space (header + table read, polled with the backups)
+    forge::stb::CompactReport bankReport_;
+    bool bankReportOk_ = false;
+    std::future<stbcompact::Result> compactFuture_;
+public:
+    bool compactBank();              // scripted too: compact_stb
+    bool compactBusy() const { return compactFuture_.valid(); }
+private:
 private:
     bool firstRun_ = false;
     // First-run tour (0.15b #6): three callouts after the Setup panel closes the first

@@ -115,4 +115,23 @@ void replaceStaticMapsRelayout(const std::filesystem::path& srcPath,
                                const std::filesystem::path& outPath,
                                const std::vector<StaticMapAppend>& maps);
 
+// Compaction. Every append/replace above leaves the superseded payload and the
+// old table behind as unreachable bytes (retail's own bake did the same: the
+// shipped bank carries ~3.4 MB of dead space around its common header). The
+// engine only reaches payloads through the table and the common header names
+// entries by id, so a bank rewritten as [header][live payloads in table order,
+// aligned][table] is equivalent. Entry ids, names, sizes, payload bytes and the
+// table's metadata are preserved verbatim; only payload offsets and the table
+// pointer change. Idempotent: compacting a compact bank reproduces it.
+struct CompactReport {
+    uint64_t bytesBefore = 0, bytesAfter = 0;
+    uint32_t entries = 0;
+    uint64_t deadBytes() const { return bytesBefore > bytesAfter ? bytesBefore - bytesAfter : 0; }
+};
+// Measure without writing.
+CompactReport compactMeasure(const std::filesystem::path& srcPath);
+// Write the compact bank to outPath (may equal srcPath: the file is read fully first).
+CompactReport compactBank(const std::filesystem::path& srcPath,
+                          const std::filesystem::path& outPath);
+
 } // namespace forge::stb
