@@ -8,6 +8,11 @@ is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge
 `libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
 the CLI split (the evening run; see the last commit for the run after the thumbnails).
 
+**2026-09-19 (late):** the 1.0 "Must" table closed two rows -- *refuses to damage a running
+game* (one guard for every writer, matched to the target install, proven with the game up) and
+*runs on a clean machine* (static exes verified) -- plus `docs/RELEASE.md`. Open for 1.0 now:
+the public repo/tag (user), the in-game probes (user), the stranger's test (user).
+
 **2026-09-19 (night, later):** fishing spots (Actors card, `place_fishing_spot`), STB bank
 compaction (`forge compact-stb`, Setup button, unit test), and four milestones *planned only*
 -- 0.18 Water (RE'd from the debug build), 0.19 World in 3D, 0.20 Mod packs v1 (legacy
@@ -33,8 +38,8 @@ texture-tab thumbnails, PiP minimap, brush falloff ring.
 
 Next in order (unchanged by the 2026-09-19 evening; water and fishing spots are filed below,
 not queued ahead of 1.0):
-1. The user: public GitHub repo `FableForge` -> push -> CI green; `python tools/package.py`
-   (runs the suite) -> `git tag v0.16.0`.
+1. The user: `docs/RELEASE.md` -- public GitHub repo `FableForge` -> push -> CI green;
+   `python tools/package.py` (runs the suite) -> `git tag v0.16.0`.
 2. In-game probes the user drives: map-screen travel to an own-region level through its
    entrance (fresh game); a retextured barrel; a placed preset; a placed emitter; **a placed
    fishing spot** (Actors card, new 2026-09-19); Oakvale's square oak now in the viewport;
