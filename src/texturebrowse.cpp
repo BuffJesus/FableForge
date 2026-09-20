@@ -1,5 +1,8 @@
 #include "texturebrowse.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <fstream>
 
 #include "backups.hpp"
@@ -28,10 +31,25 @@ std::string formatLabel(uint32_t f) {
     }
 }
 
+// What the list shows for an entry: the symbol as is, or for the retail `[\DEV\...\NAME.TGA]`
+// path symbols the file stem (BARREL_BRACED_1_24).
+std::string entryLabel(const std::string& symbol) {
+    if (symbol.empty() || symbol.front() != '[') return symbol;
+    const size_t slash = symbol.find_last_of("\\/");
+    std::string stem = symbol.substr(slash == std::string::npos ? 1 : slash + 1);
+    if (!stem.empty() && stem.back() == ']') stem.pop_back();
+    const size_t dot = stem.rfind('.');
+    if (dot != std::string::npos) stem.resize(dot);
+    return stem.empty() ? symbol : stem;
+}
+
+// by the label the list prints, the raw symbol, or the numeric id
 const forge::big::Entry* findEntry(const forge::big::File& file, const std::string& name, std::string* bank = nullptr) {
+    uint32_t id = 0; bool byId = !name.empty() && std::all_of(name.begin(), name.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
+    if (byId) id = uint32_t(std::strtoul(name.c_str(), nullptr, 10));
     for (const auto& b : file.banks())
         for (const auto& e : b.entries)
-            if (e.name == name) { if (bank) *bank = b.name; return &e; }
+            if (e.name == name || entryLabel(e.name) == name || (byId && e.id == id)) { if (bank) *bank = b.name; return &e; }
     return nullptr;
 }
 
@@ -43,16 +61,30 @@ bool runImport(const fs::path& gameRoot, forge::terraintex::ImportRequest ir, ui
     std::error_code ec;
     if (!fs::exists(big, ec)) { error = "no " + big.string(); return false; }
     if (!fs::exists(ir.png, ec)) { error = "no such image " + ir.png.string(); return false; }
+    if (!ir.add) {   // the importer matches the raw symbol; the user names the label (or the id)
+        try {
+            const auto file = forge::big::File::open(big);
+            const auto* e = findEntry(file, ir.entryName);
+            if (!e) { error = "no texture named " + ir.entryName; return false; }
+            ir.entryName = e->name;
+        } catch (const std::exception& ex) { error = ex.what(); return false; }
+    }
     if (!backupOnce(big, error)) return false;
     ir.srcBig = big;
     ir.outBig = big.string() + ".atlas-tmp";
     const auto r = forge::terraintex::importPng(ir);
-    if (!r.ok) { fs::remove(ir.outBig, ec); error = r.output.empty() ? r.command : r.output; return false; }
+    if (!r.ok) {
+        fs::remove(ir.outBig, ec);
+        error = r.output.empty() ? r.command : r.output;
+        for (const auto& e : r.validation.errors) error += (error.empty() ? "" : "; ") + e;
+        if (error.empty()) error = "texture import failed";
+        return false;
+    }
     fs::rename(ir.outBig, big, ec);
     if (ec) { error = "cannot replace textures.big: " + ec.message(); return false; }
     idOut = r.entryId;
     const auto& v = r.validation;
-    notes.push_back((ir.add ? "appended " : "replaced ") + ir.entryName + " (id " + std::to_string(r.entryId) + ", " + std::to_string(v.info.frameWidth) + "x" +
+    notes.push_back((ir.add ? "appended " : "replaced ") + entryLabel(ir.entryName) + " (id " + std::to_string(r.entryId) + ", " + std::to_string(v.info.frameWidth) + "x" +
                     std::to_string(v.info.frameHeight) + " " + formatLabel(v.info.pixelFormat) + ", " + std::to_string(int(v.info.mipLevels)) + " mips) in textures.big from " + ir.png.filename().string());
     for (const auto& w : v.warnings) notes.push_back("warning: " + w);
     if (!v.ok) { for (const auto& e : v.errors) notes.push_back("ERROR: " + e); error = "the written entry does not match the retail texture contract"; return false; }
@@ -68,15 +100,7 @@ std::vector<TextureRow> listTextures(const fs::path& texturesBig, std::string& e
             for (const auto& e : b.entries) {
                 TextureRow r;
                 r.bank = b.name; r.name = e.name; r.id = e.id; r.bytes = e.length;
-                r.label = e.name;
-                if (!e.name.empty() && e.name.front() == '[') {
-                    const size_t slash = e.name.find_last_of("\\/");
-                    std::string stem = e.name.substr(slash == std::string::npos ? 1 : slash + 1);
-                    if (!stem.empty() && stem.back() == ']') stem.pop_back();
-                    const size_t dot = stem.rfind('.');
-                    if (dot != std::string::npos) stem.resize(dot);
-                    if (!stem.empty()) r.label = stem;
-                }
+                r.label = entryLabel(e.name);
                 forge::terraintex::TextureInfo info; std::string ierr;
                 if (forge::terraintex::parseTextureInfo(e.subHeader.data(), e.subHeader.size(), info, ierr)) {
                     r.width = info.frameWidth; r.height = info.frameHeight;
