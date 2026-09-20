@@ -37,8 +37,9 @@ not queued ahead of 1.0):
 4. With the harness: foliage brush (its step (a), decoding the chunk's existing groups, is
    what the 2026-09-19 lattice fix delivered for the exporter). Without: **STB compaction
    (1.0-rc #4) -- bank level DONE 2026-09-19, chunk level open**, chunk-audit --all parallel.
-5. Post-1.0: **0.18 Water** (below) -- the RE is done, the paint side works today; the
-   writer waits until 1.0 ships.
+5. Post-1.0, planned only (all 2026-09-19): **0.18 Water** (RE done, paint works today),
+   **0.19 World in 3D** (renderer multi-terrain), **0.20 Mod packs v1** (the legacy
+   `mods`/`fmp`/`stage` family + design docs, now in `docs/modding/`).
 
 Install state: retail per `forge backups` (9 backed-up files, 0 differ) -- the STB's
 `.atlas-orig` baseline already carries a `__ENGINE_SEA_STATIC_MAP_BANK_FILE__ForgeTest64`
@@ -336,6 +337,43 @@ sits against the world before moving it.
 Evidence needed before shipping: memory at 20 textured terrains (a 2-texel albedo is
 ~0.5 MB per map, fine), and that the world offsets match the in-game placement (the
 `retail smoke` exports with `--world` already line maps up in Blender, so this is proven).
+
+### 0.20 — "Mod packs v1: stack, order, install, uninstall" (post-1.0; researched 2026-09-19, M)
+
+What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
+<base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff
+`.patch`, in argument order = load order; field-level `game.bin` merge, loose-TNG thing merge by
+UID, `.qst` statement union; `tools/forge-cli/main.cpp:8007-8130`), `forge mods analyze`
+(cross-mod def conflicts, :4637), `forge fmp list/apply/extract/export`, `forge tng
+conflicts/merge`, `forge qst merge --picks`, and `forge stage/unstage` (`libs/forgecore/src/stage.cpp`:
+copies an overlay in, `.forgebak` originals, `forge_stage_manifest.json`). The design is in
+`docs/modding/MOD_PACKS.md` / `LOAD_ORDER.md` / `FMP_FORMAT.md` (ported from the legacy repo).
+FableTLC's Oakvale Reborn installer is a *second* layer on top of a stage (`.ovrbak`, hashed
+receipt), and the New Oakvale playtest is a sidecar-DLL bundle that replaces nothing.
+
+The gaps: **one pack at a time** (`stage.cpp:35` refuses a second stage); no pack identity
+(no name/version/hashes in the manifest, no persisted load order); three backup conventions
+(`.forgebak`, `.atlas-orig`, `.ovrbak`) that don't know each other; merge does not cover
+WAD-resident TNG/LEV, `text.big`, `names.bin` link fixups for `.fmp`, `FSE/quests.lua`
+unions, textures/STB; conflict reports are per-family, not over a whole order; ForgeFSE loads
+one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
+
+1. `modpack.json` (name, version, group, sources dir/.fmp/.patch/FSE tree) + the
+   `fableforge.stage_overlay.v1` file list with sha256 (already emitted by
+   `FableTLC tools/oakvale_reborn/build_custom_intro.py`). *S*
+2. `forge mods list/add/remove/order` persisting `<root>/forge_mods.json`; `forge mods build`
+   = `modsMerge` over the ordered list. *S*
+3. Deploy = rebuild from the order onto the retail baseline (`.atlas-orig`), staged once;
+   uninstall = drop from the order and rebuild; the three backup suffixes unified behind
+   `albion::backups`. *M*
+4. `forge mods conflicts`: `modsAnalyze` + `tngConflicts` + `.qst` intersection over the whole
+   order as one JSON; GUI per-row winner picker feeding `--picks`. *M*
+5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
+   *M*
+6. FSE Lua packs: union `quests.lua` / `FSE_Master.lua` per pack via `forge::questdeploy`,
+   id-collision check; sidecar DLL stays the fallback. *S*
+7. Docs: the family into `docs/CLI.md`; a Mods tab in the GUI last. *S*
+Later (*L*): LOOT-style masterlist + topo sort, LEV grid merge.
 
 ### 1.0-rc — "Polish, docs, and a stranger's test"
 1. Docs: ~~a 10-minute "first level" walkthrough with screenshots~~ DONE 2026-09-18
