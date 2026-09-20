@@ -82,6 +82,7 @@ game**. Concretely:
 
 | Could (post-1.0, "power")                                | Notes |
 |-----------------------------------------------------------|-------|
+| **3D world view** (the World tab in 3D, not only the 2D map-box grid) | Planned 2026-09-19, post-1.0 (see *0.19 — World in 3D*). Not an RE problem: the exporter already builds any map's terrain at its world origin (`export --world`, `world` lists every box/origin from WLD/BWD); the gap is the renderer holding ONE terrain (`gui/renderer.hpp` `upload(scene)` / `indexCount_`) |
 | Foliage brush (grass/trees) into the STB local-detail tree | `reseatFoliageZ` already walks every primitive; a writer for new instances = the "environment brush" memory item; no RE blocker |
 | Water editing (lakes/rivers via theme WaterHeight)        | RE'd from the debug build 2026-09-19 (`FableTLC docs/engine/WATER_RE.md`): water = depth-theme paint (`WATER_LAKE_{0..16}` etc., surface = ground + Σ blend·WaterHeight) — the paint side works today and gives gameplay water; the *visible* surface is a baked STB mesh retail only loads, and our deploy writes `hasWater=0`. Plan: water brush (altitude → depth mix) → `CWaterPatchMesh` writer (layout known, zeroed shore) → background sub-patch/shore/sea |
 | Prefab / preset library (village, bandit camp, shop)      | Village + spawner + creature blocks exist; a preset = a TNG fragment with relative positions |
@@ -309,6 +310,32 @@ writes `hasWater = 0` for regenerated patches, so a painted lake is invisible un
 
 Fishing spots are done (2026-09-19, Actors card + `place_fishing_spot`): a `MARKER_FISHING_SPOT`
 thing with an optional `CTCContainerRewardHero` first catch -- no water dependency.
+
+### 0.19 — "World in 3D" (post-1.0; planned 2026-09-19, not started, not the focus)
+
+The World tab keeps its 2D grid as the precise editing surface (snap, overlap refusal,
+pending moves); this adds a **3D view of a region and its neighbours** in the same viewport
+the map editor uses (fly/orbit camera, gizmos, chips), so a modder sees how their level
+sits against the world before moving it.
+
+1. Renderer: many terrains instead of one -- a `std::vector<TerrainDraw>` (VB/IB/albedo per
+   map, world offset from `forge world`) drawn with the existing shaders; `upload(scene)`
+   becomes `uploadTerrain(mapKey, scene, worldXY)` / `clearTerrains()`. Foliage/things layers
+   stay per selected map at first. *S-M.*
+2. Scope by the engine's own rule: the selected map's region + every map it *sees*
+   (`WLD SeesMap`, `world --regions`), baked with `texelsPerCell = 2` (a 128x224 map bakes
+   in ~0.1 s at 4; the region set is 10-20 maps, so a few seconds, async like the preview;
+   height-only meshes for the rest of the world as a grey horizon, optional). *M.*
+3. World tab toggle *2D | 3D*; in 3D the selected map is outlined, neighbours faded, the
+   engine's 8192 grid drawn on the ground plane; click selects a map, wheel/drag as today.
+   Moving a map in 3D reuses the 2D move queue (drag on the ground plane = same snap/refusal
+   path), so nothing new is written. *M.*
+4. Later: seam-stitch preview across the touching edge in 3D, water/sea disc, and the
+   overworld minimap tiles as the ground texture at far zoom. *Untested/unsized.*
+
+Evidence needed before shipping: memory at 20 textured terrains (a 2-texel albedo is
+~0.5 MB per map, fine), and that the world offsets match the in-game placement (the
+`retail smoke` exports with `--world` already line maps up in Blender, so this is proven).
 
 ### 1.0-rc — "Polish, docs, and a stranger's test"
 1. Docs: ~~a 10-minute "first level" walkthrough with screenshots~~ DONE 2026-09-18
