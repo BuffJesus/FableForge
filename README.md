@@ -17,9 +17,9 @@ write the result back into the game. Three small Windows executables, no depende
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
-![The Arena in FableForge](docs/screenshot_arena.png)
-![Oakvale in FableForge](docs/screenshot_oakvale.png)
-![Greatwood in FableForge](docs/screenshot_greatwood.png)
+![Oakvale in Edit mode: a placed barrel selected, gizmo up](docs/screenshot_oakvale.png)
+![Greatwood: the terrain brush over the autumn canopy](docs/screenshot_greatwood.png)
+![The Arena from the Export side](docs/screenshot_arena.png)
 
 ```
 forge list                             # every map in FinalAlbion.wad
