@@ -810,6 +810,46 @@ size_t Document::place(forge::thingplacer::Placement placement) {
     }
 }
 
+size_t Document::placeFishingSpot(const float pos[3], const std::string& reward) {
+    pushUndo();
+    try {
+        // the retail block: 32 MARKER_FISHING_SPOT things across FinalAlbion share it,
+        // one (BarrowFields) adds the reward container for a named catch
+        const std::string eol = "\r\n";
+        std::string b;
+        b += "NewThing Marker;" + eol;
+        b += "Player -1;" + eol;
+        b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
+        b += "DefinitionType \"MARKER_FISHING_SPOT\";" + eol;
+        b += "ScriptName NULL;" + eol;
+        b += "ScriptData \"NULL\";" + eol;
+        b += "ThingGamePersistent TRUE;" + eol;
+        b += "ThingLevelPersistent TRUE;" + eol;
+        b += "StartCTCPhysicsStandard;" + eol;
+        b += "PositionX " + formatFloat(pos[0]) + ";" + eol;
+        b += "PositionY " + formatFloat(pos[1]) + ";" + eol;
+        b += "PositionZ " + formatFloat(pos[2]) + ";" + eol;
+        b += "RHSetForwardX 0.0;" + eol + "RHSetForwardY 0.999994;" + eol + "RHSetForwardZ 0.0;" + eol;
+        b += "RHSetUpX 0.0;" + eol + "RHSetUpY 0.0;" + eol + "RHSetUpZ 0.999994;" + eol;
+        b += "EndCTCPhysicsStandard;" + eol;
+        b += "StartCTCEditor;" + eol + "EndCTCEditor;" + eol;
+        if (!reward.empty()) {
+            b += "StartCTCContainerRewardHero;" + eol;
+            b += "ContainerContents[0] \"" + reward + "\";" + eol;
+            b += "EndCTCContainerRewardHero;" + eol;
+        }
+        b += "StartCTCFishingSpot;" + eol + "EndCTCFishingSpot;" + eol;
+        b += "Health 1.0;" + eol;
+        b += "EndThing;" + eol;
+        const size_t n = file_.insertThingBlock("NULL", b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
+}
+
 size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<std::string>& families,
                                         float radius, int activeLimit, const std::string& scriptName) {
     if (families.empty()) throw std::invalid_argument("a spawner needs at least one creature family");

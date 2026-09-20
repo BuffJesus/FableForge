@@ -775,6 +775,41 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
     theme::endCard();
 }
 
+bool App::placeFishingSpot(const std::string& reward) {
+    if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
+    float focus[3]; camera_.focus(focus);
+    float pos[3] = {focus[0], -focus[2], focus[1]};
+    if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
+    try {
+        const size_t n = doc_.placeFishingSpot(pos, reward);
+        selectedUid_ = doc_.uidOf(n);
+        selectedThing_ = int(n);
+        renderer_.selectedThing = selectedThing_;
+        pushLog("placed a fishing spot" + (reward.empty() ? std::string() : " (first catch " + reward + ")"), 0);
+        setEditTab(2);
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
+}
+
+void App::drawFishingSpotCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##fishingspot", inner);
+    theme::label("Fishing spot");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A MARKER_FISHING_SPOT where the hero can cast a fishing rod (the retail marker; put it on a shore or pier). Optionally name an OBJECT_* def as the first catch there, the way Barrow Fields hands out OBJECT_MOONFISH; leave it empty for the game's normal fish table.");
+    ImGui::PopFont();
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::InputTextWithHint("##fishingreward", "First catch (optional, e.g. OBJECT_MOONFISH)", fishingReward_, sizeof fishingReward_);
+    ImGui::PopStyleVar();
+    auto_.registerWidget("input_fishingreward");
+    if (theme::ghostButton("Place fishing spot at view centre", ImVec2(cardInner, S(30)))) placeFishingSpot(fishingReward_);
+    auto_.registerWidget("btn_place_fishing_spot");
+    theme::endCard();
+}
+
 void App::drawSpawnerCard(float pad, float inner, float cardInner) {
     using theme::S;
     if (!documentLoaded()) return;
@@ -1505,6 +1540,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         drawVillageCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawSpawnerCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
+        drawFishingSpotCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawEffectsCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));

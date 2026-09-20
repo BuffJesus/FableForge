@@ -50,6 +50,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `select_toggle <index>` / `select_added` / `copy` / `paste` | Ctrl+click a thing into/out of the selection; select the first thing the Changes list reports as added; copy the selection as a fragment; paste it at the view centre (state `selection_count`) |
 | `place <DEFINITION> [scriptname]` | place a new thing at the camera focus, on the ground (`CREATURE_*` as the retail AICreature block) |
 | `place_village <VILLAGE_DEF> [scriptname]` / `village_member <uid\|scriptname\|0>` | place a Village thing at the camera focus; the selected thing joins/leaves a village (state `villages`, `selected_village`) |
+| `place_fishing_spot [OBJECT_DEF]` | a `MARKER_FISHING_SPOT` at the camera focus on the ground; the optional def is the first catch (`CTCContainerRewardHero`), empty = the game's fish table |
 | `link_install` / `link_remove` / `link_go` / `link_spawn` / `link_ping` / `link_poll` | the ForgeFSE live link (state `link_installed`, `link_ready`, `link_hero_map`) |
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`); one undo step |

@@ -434,6 +434,16 @@ while the link reports a live hero ("quit to the main menu first"). The
 experiments from the main menu. Moving/deleting existing things live is out
 for the same reason.
 
+## Fishing spots
+
+The Actors tab's **Fishing spot** card places a `MARKER_FISHING_SPOT` at the view centre,
+on the ground, in the NULL section: the retail marker (32 across FinalAlbion) is just
+`CTCPhysicsStandard` + an empty `CTCFishingSpot` block, and Barrow Fields shows the one
+option -- a `CTCContainerRewardHero` naming the first catch (`OBJECT_MOONFISH`), which the
+card's optional field writes. Nothing in the marker references water: the fishing minigame
+is the hero's rod at the marker, so put it on a shore or pier for it to look right.
+Scripted: `place_fishing_spot [OBJECT_DEF]`. *(Untested in-game as of 2026-09-19.)*
+
 ## Enemy spawners
 
 The Edit panel's **Enemy spawner** card places a `MARKER_CREATURE_GENERATOR` thing

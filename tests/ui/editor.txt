@@ -149,6 +149,16 @@ screenshot build/ui/e4b_rule_notice.png
 undo
 wait_foliage
 frames 2
+# a fishing spot with a named first catch lands in the Actors tab as the selection
+place_fishing_spot OBJECT_MOONFISH
+wait_foliage
+frames 2
+assert_state edit_tab 2
+assert_widget btn_place_fishing_spot
+assert_log placed a fishing spot (first catch OBJECT_MOONFISH)
+undo
+wait_foliage
+frames 2
 # a particle emitter playing an effects.big entry (retail CTCDParticleEmitter block)
 place_emitter BUTTERFLY_BLUE AtlasFx
 wait_foliage

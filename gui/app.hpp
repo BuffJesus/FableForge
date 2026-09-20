@@ -395,6 +395,9 @@ private:
     void drawNewLevelCard(float pad, float inner, float cardInner);
     // enemy spawner card: CREATURE_GENERATION_FAMILY picker + radius/limit, placed at the view centre
     void drawSpawnerCard(float pad, float inner, float cardInner);
+    // fishing spot card: MARKER_FISHING_SPOT at the view centre, optional OBJECT_* first catch
+    void drawFishingSpotCard(float pad, float inner, float cardInner);
+    char fishingReward_[64] = {};
     // village card: VILLAGE_* picker; membership lives in the Selection card
     void drawVillageCard(float pad, float inner, float cardInner);
     // live link card: ForgeFSE hook install/remove, hero heartbeat, go-here / spawn-here
@@ -427,6 +430,8 @@ private:
 public:
     // scripted: place a spawner at the view centre with these families
     bool placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName = "");
+    // scripted: place a fishing spot at the view centre (reward = OBJECT_* def or empty)
+    bool placeFishingSpot(const std::string& reward);
 private:
     void startNewLevel();
     void setNewLevelOwnRegion(bool on) { newLevelOwnRegion_ = on; }
