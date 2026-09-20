@@ -14,6 +14,10 @@ UFP = os.path.join(PEEK, "UnofficialFablePatch", "Patches", "game.bin.patch")
 SPECIAL = os.path.join(PEEK, "SpecialMelee", "SpecialMeleeAbilities.fmp")
 F2 = os.path.join(PEEK, "F2MeleeWeapons")
 F2FMP = os.path.join(F2, "F2MeleeWeaponPack.fmp")
+CONTROLLER = os.path.join(PEEK, "FableControllerSupport", "Mods", "FableControllerSupport")
+WADER = os.path.join(PEEK, "WaterWader", "Mods", "WaterWader")
+DEFC = r"C:\Users\Cornelio\Documents\EgoCoreInspect\fable-defs\target\release\defc.exe"
+DEFS_TEXT = r"D:\Documents\FableTLC\unified_build\UnifiedFable\Data\Defs"
 TNGS = ["ArenaHallOfHeroes", "BanditCampPathEntrance", "BarrowFields", "BowerstoneSlumsWarehouses", "GibbetWoods", "GrannysHouse", "HookCoast"]
 
 
@@ -87,8 +91,37 @@ def main() -> int:
     if len(tngs) < 7: print("merged TNGs:", tngs); ok = False
     r = run("defs", "list", out, "game.bin", "F2_RUSTY")
     if "CInventoryItemDef_F2_RUSTY_LONGSWORD" not in r.stdout: print("F2 record missing from the merged defs"); ok = False
+    # EgoCore packs: a DLL-only mod and a DLL + text-def mod (the def part needs defc + the text tree)
+    if os.path.isdir(CONTROLLER) and os.path.isdir(WADER):
+        env = dict(os.environ)
+        defc = env.get("FORGE_DEFC", DEFC); text = env.get("FORGE_DEFS_TEXT", DEFS_TEXT)
+        have_defc = os.path.exists(defc) and os.path.isdir(text)
+        if have_defc:
+            env["FORGE_DEFC"] = defc; env["FORGE_DEFS_TEXT"] = text
+        if os.path.exists(os.path.join(root, "Mods.ini")):
+            shutil.copyfile(os.path.join(root, "Mods.ini"), os.path.join(scratch, "Mods.ini"))
+        run("mods", "add", scratch, CONTROLLER, "--name", "Controller Support")
+        run("mods", "add", scratch, WADER)
+        shutil.rmtree(out, ignore_errors=True)
+        r = subprocess.run([tool, "mods", "build", scratch, out], capture_output=True, text=True, env=env)
+        if r.returncode != 0: print("egocore build failed:", r.stdout[-800:], r.stderr[-400:]); ok = False
+        ini_path = os.path.join(out, "Mods.ini")
+        ini = open(ini_path, encoding="utf-8").read() if os.path.exists(ini_path) else ""
+        for line in ["[Mods]", "FableScriptExtender.dll=1", "FableControllerSupport\\FableControllerSupport.dll=1", "WaterWader\\WaterWader.dll=1"]:
+            if line not in ini: print("Mods.ini misses", line); print(ini); ok = False
+        for dll in ["FableControllerSupport/FableControllerSupport.dll", "WaterWader/WaterWader.dll"]:
+            if not os.path.exists(os.path.join(out, "Mods", dll)): print("DLL not installed:", dll); ok = False
+        if have_defc:
+            if "egocore FableControllerSupport: 3 .def file(s), 4 block(s) replaced, 1 added -> 14 record(s) changed (43 field(s)), 1 new, 0 skipped" not in r.stdout:
+                print("egocore def layer unexpected:", [l for l in r.stdout.splitlines() if "egocore" in l]); ok = False
+            r2 = subprocess.run([tool, "defs", "decode", out, "docs/re_reference/def_schema.json", "FABLE_XBOX_CONTROL_SCHEME_BASE"], capture_output=True, text=True)
+            if "count=71" not in r2.stdout: print("the controller mod's extra binding is missing from the merged scheme"); ok = False
+        else:
+            print("(defc / text defs not found: the EgoCore def layer part is skipped)")
+    else:
+        print("(EgoCore corpus not extracted: skipped)")
     run("mods", "remove", scratch, "F2 Melee (defs)")
-    if len(json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]) != 3: print("remove failed"); ok = False
+    if "F2 Melee (defs)" in [m["name"] for m in json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]]: print("remove failed"); ok = False
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
     print("mods test", "OK" if ok else "FAILED")

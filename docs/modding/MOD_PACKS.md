@@ -199,3 +199,15 @@ bzip2 encoder), masterlist, GUI.
 6. Registry-aware merge for quests.lua / FinalAlbion.qst.
 7. Convert Method-1 whole-file mods to deltas by diffing vs vanilla.
 8. GUI: a conflict/load-order view (the xEdit "conflict" panel, Fable-native).
+
+## 2026-09-20 status (FableForge branch `modpacks`)
+
+`forge-tools mods list/add/remove/move/enable/disable/build` keep the order in
+`<game-root>/forge_mods.json` (name, kind, source, sha256, enabled, note) and `mods build`
+composes the enabled packs onto the retail baseline. Pack shapes handled: ChocolateBox `.fmp`
+(contentType 510) and Fable Explorer `.fmp` (459), bsdiff `.patch` (against the pristine bytes:
+`<file>.retail-bak` is tried when the install's file is a re-save), a game-root tree (records
+merged, loose TNG/QST merged, every other file a whole-file layer), an EgoCore `Mods/<Name>/`
+folder (DLL registered in `Mods.ini`, `.def` text compiled with `defc` into a field-level
+layer). Not yet: `text.big`, WAD-resident TNG, `.resource` banks, conflict picks over the whole
+order, the GUI Mods tab.

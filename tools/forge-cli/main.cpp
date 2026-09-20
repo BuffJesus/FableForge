@@ -54,6 +54,7 @@
 #include "forge/rangecodec.hpp"
 #include "forge/stage.hpp"
 #include "forge/modorder.hpp"
+#include "forge/egocore.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
@@ -8087,6 +8088,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     fs::create_directories(tmp);
 
     std::vector<std::string> roots;
+    std::vector<std::string> egoFolders;
     for (size_t i = 0; i < sources.size(); ++i) {
         const std::string& s = sources[i];
         const std::string ext = fs::path(s).extension().string();
@@ -8100,6 +8102,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             roots.push_back(root);
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
             roots.push_back(s);  // already a game-root
+        } else if (fs::is_directory(s) && fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) {
+            // an EgoCore mod folder: the DLL goes into Mods/ below; its .def text becomes a defs layer now
+            egoFolders.push_back(s);
+            forge::egocore::Paths ep;
+            ep.schema = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
+            forge::egocore::Report rep;
+            const std::string root = (tmp / ("src" + std::to_string(i))).string();
+            if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, rep)) {
+                roots.push_back(root);
+                std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
+                            rep.modName.c_str(), rep.defFiles, rep.blocksReplaced, rep.blocksAdded, rep.recordsChanged, rep.fieldsApplied, rep.recordsNew, rep.recordsSkipped);
+            } else if (fs::is_directory(fs::path(s) / "Data" / "Defs") || fs::is_directory(fs::path(s) / "data" / "Defs")) {
+                std::fprintf(stderr, "egocore %s: its .def overrides were NOT applied", fs::path(s).filename().string().c_str());
+                for (const auto& n : rep.notes) std::fprintf(stderr, " -- %s", n.c_str());
+                std::fprintf(stderr, "\n");
+            }
+            for (const auto& n : rep.notes) if (rep.recordsSkipped) std::fprintf(stderr, "  %s\n", n.c_str());
         } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data")) {
             // a partial game-root tree (loose Data/Levels ...): no defs to merge, its
             // TNG / QST files join below
@@ -8197,6 +8216,42 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         std::printf("quest QST merge: %zu registries (%zu statement-merged, "
                     "%zu single-editor copies), %zu quest conflicts\n",
                     qstChangers.size(), qstMerged, qstCopied, qstConflicts);
+
+    // --- Whole-file layers: everything else a game-root tree ships (LEV, WLD, BWD, STB, INI,
+    // banks, textures ...) that no record merge covers. Load order resolves them: the last
+    // source that carries a path wins; a path several sources carry is reported.
+    {
+        std::map<std::string, std::vector<std::string>> carriers;   // rel path -> sources
+        std::map<std::string, std::string> winner;                  // rel path -> abs path
+        for (const auto& s : sources) {
+            if (!fs::is_directory(s) || fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) continue;
+            if (fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) continue;   // EgoCore: below
+            for (auto& de : fs::recursive_directory_iterator(s)) {
+                if (!de.is_regular_file()) continue;
+                const std::string rel = fs::relative(de.path(), s).generic_string();
+                std::string lower = rel; std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                const std::string ext = de.path().extension().string();
+                std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
+                if (lext == ".tng" || lext == ".qst") continue;                      // merged above
+                if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // a partial tree never ships defs we can take whole
+                carriers[lower].push_back(fs::path(s).filename().string());
+                winner[lower] = de.path().string();
+                // keep the source's own spelling for the output path
+                fs::path outPath = fs::path(outDir) / rel;
+                fs::create_directories(outPath.parent_path());
+                fs::copy_file(de.path(), outPath, fs::copy_options::overwrite_existing);
+            }
+        }
+        size_t contested = 0;
+        for (const auto& [rel, who] : carriers) if (who.size() > 1) ++contested;
+        if (!carriers.empty())
+            std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source\n", carriers.size(), contested);
+    }
+    for (const auto& folder : egoFolders) {
+        forge::egocore::Report rep;
+        forge::egocore::installDll(folder, baseRoot, outDir, rep);
+        std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", rep.modName.c_str(), rep.modName.c_str(), rep.hasDll ? " (DLL registered)" : "");
+    }
 
     if (doStage) {
         const auto result = forge::stage::apply(baseRoot, outDir);

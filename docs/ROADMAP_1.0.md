@@ -441,11 +441,25 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
 4. `forge mods conflicts`: `modsAnalyze` + `tngConflicts` + `.qst` intersection over the whole
    order as one JSON; GUI per-row winner picker feeding `--picks`. *M*
 5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
-   *M*
+   *M* -- whole-file layers of tree sources (LEV / WLD / BWD / STB / INI / banks: last source
+   wins, contested paths counted) DONE 2026-09-20; `text.big` and WAD-resident TNG still open.
 6. FSE Lua packs: union `quests.lua` / `FSE_Master.lua` per pack via `forge::questdeploy`,
    id-collision check; sidecar DLL stays the fallback. *S*
 7. Docs: the family into `docs/CLI.md`; a Mods tab in the GUI last. *S*
-8. **EgoCore mods and the older mods in one load order** (user goal, 2026-09-19: *every* older
+8. **EgoCore mods and the older mods in one load order** -- **first cut DONE 2026-09-20** (branch
+   `modpacks`, `libs/forgecore/egocore`): an `Mods/<Name>/` folder is a pack; `mods build` copies it
+   under `<out>/Mods/`, writes EgoCore's own `[Mods]` line into `Mods.ini` (FSE_Launcher loads it;
+   EgoCore's UI still lists it), and turns its `Data/Defs/*.def` text into a record layer: the
+   blocks are merged into the retail text tree (EgoCore's MergeDefFile rule), the tree is compiled
+   twice with `defc` (jamen/fable-defs, byte-deterministic; `FORGE_DEFC` / `FORGE_DEFS_TEXT`, the
+   text tree is `FableTLC unified_build/UnifiedFable/Data/Defs`) -- base and mod, BOTH with the
+   mod's added definitions so the two compiles share one index space -- and the fields that
+   differ are applied onto retail's records (def-index fields compared by resolved name, added
+   records re-pointed). Controller Support: 3 files, 4 blocks -> 14 records / 43 fields / 1 new,
+   the merged control scheme has the mod's 71st binding; Water Wader: DLL only. In `test_mods.py`.
+   Still open from the plan: `.resource` bank overrides, TNG section-merge (`TngMerger.h`), the
+   refusal when EgoCore's own `.tmp` backups show it has deployed, a shipped `defc` + text tree
+   (today they are this machine's paths). (user goal, 2026-09-19: *every* older
    mod, whatever its delivery shape -- a single `.fmp`, a loose-TNG/LEV mod, a bsdiff `.patch`, a
    Fable Explorer / ChocolateBox edit, a `.qst`, a whole-file GB pack). Evidence: the 2026 wave
    (Water Wader, Enable Sprint, Trample Vegetation, Controller Support ...) ships as
