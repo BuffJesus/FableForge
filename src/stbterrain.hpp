@@ -76,4 +76,39 @@ ForegroundLayers loadLayers(const std::filesystem::path& gameRoot, const std::st
 CellMask load(const std::filesystem::path& gameRoot, const std::string& mapName,
               int mapWidth, int mapHeight);
 
+// The baked water surface: CWaterPatchMesh::Save per foreground frame that has water
+// (FableTLC docs/engine/WATER_RE.md). Header i32 Offset.x/y (patch origin in map cells),
+// f32 WaterBodySpan, i32 WaterType, then a CRangeCompressor block of 289 x 66-byte records
+// (the 17x17 vertex grid): u16 world x/y, f32 z, i16 wave sin/cos, i16 depth, f32
+// distToShore, 12 x f32 shore look-up. The block is kept so a writer can be compared
+// byte for byte against it.
+struct WaterPatchRecord {
+    uint16_t x = 0, y = 0;
+    float z = 0;
+    int16_t waveS = 0, waveC = 0, depth = 0;
+    float distToShore = 0;
+    float shore[12] = {};
+};
+struct WaterPatch {
+    int frameIndex = 0;                  // foreground frame number (0-based, same order as loadLayers)
+    int32_t offsetX = 0, offsetY = 0;    // patch origin, map cells
+    float span = 0;
+    int32_t waterType = 0;
+    std::vector<uint8_t> block;          // the range-compressed block as stored
+    std::vector<WaterPatchRecord> records;   // 289, decoded
+};
+struct WaterPatches {
+    bool found = false;                  // an STB entry with foreground frames existed
+    int frames = 0;                      // foreground frames seen
+    int worldX = 0, worldY = 0;
+    std::vector<WaterPatch> patches;
+    std::string note;
+};
+WaterPatches loadWaterPatches(const std::filesystem::path& gameRoot, const std::string& mapName);
+constexpr size_t kWaterRecordSize = 0x42;
+constexpr size_t kWaterRecordCount = 17 * 17;
+// One record in its on-disk form.
+void packWaterRecord(const WaterPatchRecord& r, uint8_t* out);
+WaterPatchRecord unpackWaterRecord(const uint8_t* in);
+
 } // namespace albion::stbterrain

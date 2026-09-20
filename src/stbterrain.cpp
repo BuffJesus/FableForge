@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "forge/lzo.hpp"
+#include "forge/rangecodec.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbinfo.hpp"
@@ -283,6 +284,67 @@ CellMask load(const fs::path& gameRoot, const std::string& mapName, int mapWidth
     m.present = std::move(touched);
     m.presentCells = int(std::count(m.present.begin(), m.present.end(), uint8_t(1)));
     return m;
+}
+
+// ---- baked water patches (CWaterPatchMesh::Save) ----
+
+void packWaterRecord(const WaterPatchRecord& r, uint8_t* out) {
+    auto put16 = [&](size_t at, uint16_t v) { out[at] = uint8_t(v); out[at + 1] = uint8_t(v >> 8); };
+    auto putf = [&](size_t at, float v) { std::memcpy(out + at, &v, 4); };
+    put16(0, r.x); put16(2, r.y);
+    putf(4, r.z);
+    put16(8, uint16_t(r.waveS)); put16(10, uint16_t(r.waveC)); put16(12, uint16_t(r.depth));
+    putf(14, r.distToShore);
+    for (int i = 0; i < 12; ++i) putf(18 + size_t(i) * 4, r.shore[i]);
+}
+
+WaterPatchRecord unpackWaterRecord(const uint8_t* in) {
+    WaterPatchRecord r;
+    auto get16 = [&](size_t at) { return uint16_t(in[at] | (in[at + 1] << 8)); };
+    auto getf = [&](size_t at) { float v; std::memcpy(&v, in + at, 4); return v; };
+    r.x = get16(0); r.y = get16(2);
+    r.z = getf(4);
+    r.waveS = int16_t(get16(8)); r.waveC = int16_t(get16(10)); r.depth = int16_t(get16(12));
+    r.distToShore = getf(14);
+    for (int i = 0; i < 12; ++i) r.shore[i] = getf(18 + size_t(i) * 4);
+    return r;
+}
+
+WaterPatches loadWaterPatches(const fs::path& gameRoot, const std::string& mapName) {
+    WaterPatches out;
+    std::vector<uint8_t> chunk;
+    if (!findChunk(gameRoot, mapName, chunk, out.worldX, out.worldY, out.note)) return out;
+    int frameIndex = -1;
+    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+        forge::stbbake::ForegroundFrame fg;
+        try { fg = forge::stbbake::parseForegroundFrame(b); } catch (const std::exception&) { return; }
+        if (fg.layers.empty()) return;
+        ++frameIndex;
+        ++out.frames;
+        if (!fg.hasWater) return;
+        const auto& p = fg.waterPayload;
+        if (p.size() < 20) { out.note = "water payload shorter than its header"; return; }
+        WaterPatch w;
+        w.frameIndex = frameIndex;
+        auto i32 = [&](size_t at) { int32_t v; std::memcpy(&v, p.data() + at, 4); return v; };
+        auto f32 = [&](size_t at) { float v; std::memcpy(&v, p.data() + at, 4); return v; };
+        w.offsetX = i32(0); w.offsetY = i32(4); w.span = f32(8); w.waterType = i32(12);
+        const int32_t len = i32(16);
+        if (len < 0 || 20 + size_t(len) > p.size()) { out.note = "water block length out of range"; return; }
+        w.block.assign(p.begin() + 20, p.begin() + 20 + len);
+        try {
+            const auto raw = forge::rangecodec::decode(w.block.data(), w.block.size(), kWaterRecordCount, kWaterRecordSize);
+            w.records.reserve(kWaterRecordCount);
+            for (size_t i = 0; i < kWaterRecordCount; ++i) w.records.push_back(unpackWaterRecord(raw.data() + i * kWaterRecordSize));
+        } catch (const std::exception& e) {
+            out.note = std::string("water block: ") + e.what();
+            return;
+        }
+        out.patches.push_back(std::move(w));
+    });
+    out.found = out.frames > 0;
+    if (!out.found && out.note.empty()) out.note = "no foreground frames matched";
+    return out;
 }
 
 } // namespace albion::stbterrain

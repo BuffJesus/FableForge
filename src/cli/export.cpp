@@ -39,6 +39,7 @@
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
+#include "forge/rangecodec.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -62,6 +63,114 @@ int cmdList(const Install& install) {
     std::sort(maps.begin(), maps.end());
     std::printf("%zu maps in %s\n", maps.size(), wadPath.string().c_str());
     for (const auto& [n, sz] : maps) std::printf("  %-40s %8u bytes\n", n.c_str(), sz);
+    return 0;
+}
+
+// Diagnostic: the baked water patches of a map against (a) our range coder and (b) the
+// record formulas RE'd from FableWin (docs/engine/WATER_RE.md in FableTLC). This is the
+// oracle the water writer has to pass before it touches an install.
+int cmdWaterAudit(const Install& install, const std::string& target, bool verbose) {
+    namespace st = albion::stbterrain;
+    if (!install.valid) return usage();
+    fs::path temp;
+    const fs::path lev = resolveLevel(target, install, temp);
+    struct TempGuard { fs::path p; ~TempGuard() { if (!p.empty()) { std::error_code ec; fs::remove(p, ec); } } } guard{temp};
+    const auto file = forge::lev::File::open(lev);
+    const std::string name = lev.stem().string();
+    const auto wp = st::loadWaterPatches(install.root, name);
+    if (!wp.found) { std::printf("%-32s no STB frames (%s)\n", name.c_str(), wp.note.c_str()); return 1; }
+    if (wp.patches.empty()) { std::printf("%-32s %d frames, no water\n", name.c_str(), wp.frames); return 0; }
+    te::Options o; o.gameRoot = install.root; o.texturesBig = install.root / "data" / "graphics" / "pc" / "textures.big"; o.mapName = name;
+    const te::WaterLevels wl = te::buildWaterLevels(file, o);
+    const int W = file.width(), H = file.height();
+    auto ground = [&](int x, int y) { return file.heightAt(std::clamp(x, 0, W), std::clamp(y, 0, H)); };
+    // CWaterPatchMesh::Build: a vertex with no interpolated height takes the mean of the
+    // non-zero heights within +-2 cells (FindCorrectWaterLevel), else ground - 1 (sunk).
+    // The search stays inside the patch's own 17x17 height array (px, py = patch origin).
+    auto vertexLevel = [&](int x, int y, int px, int py) {
+        const float h = wl.at(x, y);
+        if (h > 0.001f) return h;
+        float sum = 0; int n = 0;
+        for (int j = std::max(py, y - 2); j <= std::min(py + 16, y + 2); ++j)
+            for (int i = std::max(px, x - 2); i <= std::min(px + 16, x + 2); ++i) { const float v = wl.at(i, j); if (v > 0.001f) { sum += v; ++n; } }
+        return n ? sum / float(n) : ground(x, y) - 1.0f;
+    };
+    size_t records = 0, exact = 0, rawOk = 0;
+    size_t zBad = 0, dBad = 0, wsBad = 0, wcBad = 0, shoreNonZero = 0, wetMismatch = 0;
+    double zMax = 0, dMax = 0, wsMax = 0, wcMax = 0, zBias = 0; size_t zBiasN = 0;
+    float dtsMin = 1e30f, dtsMax = -1e30f;
+    std::map<int, int> types;
+    if (verbose) {   // the first patch's first row, raw: x y z waveS waveC depth dist shore[0..2]
+        const auto& p = wp.patches.front();
+        std::printf("    patch 0: offset (%d,%d) span %.3f type %d, block %zu B\n", p.offsetX, p.offsetY, p.span, p.waterType, p.block.size());
+        for (size_t i = 0; i < 40 && i < p.records.size(); ++i) {
+            const auto& r = p.records[i];
+            std::printf("      [%3zu] x %5u y %5u z %9.4f wS %6d wC %6d d %5d dts %.3f shore %.3f %.3f %.3f | ground %.3f level %.3f\n", i, r.x, r.y, r.z, r.waveS, r.waveC, r.depth, r.distToShore, r.shore[0], r.shore[1], r.shore[2],
+                        ground(int(r.x) - wp.worldX, int(r.y) - wp.worldY), wl.at(int(r.x) - wp.worldX, int(r.y) - wp.worldY));
+        }
+    }
+    for (const auto& p : wp.patches) {
+        ++types[p.waterType];
+        // (a) the codec: our native encoder must reproduce the retail block; the raw form must decode
+        std::vector<uint8_t> raw(st::kWaterRecordCount * st::kWaterRecordSize);
+        for (size_t i = 0; i < p.records.size(); ++i) st::packWaterRecord(p.records[i], raw.data() + i * st::kWaterRecordSize);
+        const auto native = forge::rangecodec::encodeNative(raw.data(), st::kWaterRecordCount, st::kWaterRecordSize);
+        if (native == p.block) ++exact;
+        else if (verbose) {
+            size_t d = 0;
+            while (d < native.size() && d < p.block.size() && native[d] == p.block[d]) ++d;
+            std::printf("    codec: frame %d re-encodes to %zu B, retail %zu B, first difference at byte %zu (retail %02x ours %02x)\n",
+                        p.frameIndex, native.size(), p.block.size(), d, d < p.block.size() ? p.block[d] : 0, d < native.size() ? native[d] : 0);
+            std::printf("      retail head:"); for (size_t i = 0; i < 24 && i < p.block.size(); ++i) std::printf(" %02x", p.block[i]); std::printf("\n");
+            std::printf("      ours   head:"); for (size_t i = 0; i < 24 && i < native.size(); ++i) std::printf(" %02x", native[i]); std::printf("\n");
+        }
+        try {
+            const auto rr = forge::rangecodec::encodeRaw(raw.data(), st::kWaterRecordCount, st::kWaterRecordSize);
+            if (forge::rangecodec::decode(rr.data(), rr.size(), st::kWaterRecordCount, st::kWaterRecordSize) == raw) ++rawOk;
+        } catch (...) {}
+        // (b) the record formulas against the LEV
+        const bool ice = p.waterType == 8;
+        for (const auto& r : p.records) {
+            ++records;
+            const int x = int(r.x) - wp.worldX, y = int(r.y) - wp.worldY;
+            const float h = vertexLevel(x, y, p.offsetX, p.offsetY);
+            const float zExp = std::round(std::max(h - (ice ? 0.001f : 0.1f), 0.0f) * 256.0f) / 256.0f;
+            const double dz = std::fabs(double(r.z) - zExp);
+            if (dz > 1.0 / 256.0 + 1e-6) ++zBad;
+            zMax = std::max(zMax, dz);
+            if (wl.at(x, y) > 0.001f) { zBias += double(r.z) - (wl.at(x, y) - 0.1f); ++zBiasN; }
+            if ((wl.at(x, y) > 0.001f) != (r.depth > 0)) ++wetMismatch;
+            const float depthExp = std::clamp((r.z + 0.1f) - ground(x, y), 0.0f, 2.0f) * 32767.0f / 2.0f;
+            const double dd = std::fabs(double(r.depth) - std::round(depthExp));
+            if (dd > 1.0) ++dBad;
+            dMax = std::max(dMax, dd);
+            // world units -> turns -> radians with the float constants, the products kept in double
+            // (x87), then sin/cos: audited exact against retail (HookCoast_Sea_01, 2026-09-20)
+            const double kInv2Pi = double(float(1.0 / 6.283185307179586)), k2Pi = double(float(6.283185307179586));
+            const double ax = double(r.x) * kInv2Pi * k2Pi, ay = double(r.y) * kInv2Pi * k2Pi;
+            const double ws = std::round((std::sin(ax) + std::sin(ay)) * 32767.0 / 2.0);
+            const double wc = std::round((std::cos(ax) + std::cos(ay)) * 32767.0 / 2.0);
+            const double dws = std::fabs(double(r.waveS) - ws), dwc = std::fabs(double(r.waveC) - wc);
+            if (dws > 1.0) ++wsBad;
+            if (dwc > 1.0) ++wcBad;
+            wsMax = std::max(wsMax, dws); wcMax = std::max(wcMax, dwc);
+            bool nz = false; for (float s : r.shore) nz = nz || s != 0.0f;
+            if (nz) ++shoreNonZero;
+            dtsMin = std::min(dtsMin, r.distToShore); dtsMax = std::max(dtsMax, r.distToShore);
+            if (verbose && dd > 1.0 && dBad <= 12)
+                std::printf("    depth off at (%d,%d): retail %d, expected %.1f (z %.4f, ground %.4f, level %.4f)\n", x, y, r.depth, depthExp, r.z, ground(x, y), wl.at(x, y));
+            if (verbose && dz > 1.0 / 256.0 + 1e-6 && zBad <= 8)
+                std::printf("    z off at (%d,%d): retail %.4f, expected %.4f (level %.4f, ground %.4f)\n", x, y, r.z, zExp, wl.at(x, y), ground(x, y));
+        }
+    }
+    std::printf("%-32s %zu water patches / %d frames; types", name.c_str(), wp.patches.size(), wp.frames);
+    for (auto& [t, n] : types) std::printf(" %d:%d", t, n);
+    std::printf("; LEV wet vertices %d\n", wl.wetVertices);
+    std::printf("    codec: native re-encode byte-exact %zu/%zu, raw form decodes %zu/%zu\n", exact, wp.patches.size(), rawOk, wp.patches.size());
+    std::printf("    z:     %zu/%zu off by > 1/256 (max %.4f); mean retail z - (level - 0.1) over wet vertices = %+.4f\n", zBad, records, zMax, zBiasN ? zBias / double(zBiasN) : 0.0);
+    std::printf("    depth: %zu/%zu off by > 1 (max %.1f); wet/dry disagreements %zu\n", dBad, records, dMax, wetMismatch);
+    std::printf("    wave:  sin %zu off (max %.0f), cos %zu off (max %.0f)\n", wsBad, wsMax, wcBad, wcMax);
+    std::printf("    shore: %zu/%zu records carry shore data; distToShore %.2f .. %.2f\n", shoreNonZero, records, dtsMin, dtsMax);
     return 0;
 }
 
@@ -131,6 +240,7 @@ int runExport(const std::string& cmd, const Args& args) {
 
     std::string installArg, out, target, upArg = "y", originArg;
     bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, particles = false, world = false, water = true;
+    bool allMaps = false, verbose = false;
     int texels = 8;
     float tile = 8.0f, gain = 1.0f;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -157,6 +267,8 @@ int runExport(const std::string& cmd, const Args& args) {
         else if (a == "--origin") originArg = next();
         else if (a == "--walkable-colors") walkable = true;
         else if (a == "--quiet") quiet = true;
+        else if (a == "--all") allMaps = true;
+        else if (a == "--verbose") verbose = true;
         else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return usage(); }
         else if (target.empty()) target = a;
         else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return usage(); }
@@ -187,6 +299,20 @@ int runExport(const std::string& cmd, const Args& args) {
                 }
             std::printf("effects.big: %d parsed fully, %d partially; %d sprite systems, %d lights, %d mesh systems\n", full, partial, sprites, lights, meshes);
             return partial ? 1 : 0;
+        }
+        if (cmd == "water-audit") {   // diagnostic: retail water patches vs our codec and the RE'd record formulas
+            if (!install.valid) return usage();
+            if (allMaps) {
+                const auto wad = forge::wad::Archive::open(install.root / "data" / "Levels" / "FinalAlbion.wad");
+                std::vector<std::string> maps;
+                for (const auto& e : wad.entries()) { const fs::path p(e.name); if (lower(p.extension().string()) == ".lev") maps.push_back(p.stem().string()); }
+                std::sort(maps.begin(), maps.end());
+                int rc = 0;
+                for (const auto& m : maps) { try { rc |= cmdWaterAudit(install, m, verbose); } catch (const std::exception& e) { std::printf("%-32s error: %s\n", m.c_str(), e.what()); rc = 1; } }
+                return rc;
+            }
+            if (target.empty()) return usage();
+            return cmdWaterAudit(install, target, verbose);
         }
         if (target.empty()) return usage();
 
