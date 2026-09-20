@@ -8319,6 +8319,55 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (!carriers.empty())
             std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source\n", carriers.size(), contested);
     }
+    // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
+    // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
+    // load). Every loose FinalAlbion/*.lev / *.tng this build produced that has a WAD entry is
+    // repacked into a rebuilt FinalAlbion.wad, so the merged levels load whatever the precedence;
+    // a level the WAD never had stays loose (and is reported).
+    {
+        const fs::path baseWad = fs::path(baseRoot) / "data" / "Levels" / "FinalAlbion.wad";
+        const fs::path looseDir = fs::path(outDir) / "data" / "Levels" / "FinalAlbion";
+        if (fs::exists(baseWad) && fs::is_directory(looseDir)) {
+            std::set<std::string> known;
+            {
+                const auto archive = forge::wad::Archive::open(baseWad);
+                for (const auto& e : archive.entries()) { std::string k = e.name; std::transform(k.begin(), k.end(), k.begin(), ::tolower); known.insert(k); }
+            }
+            std::map<std::string, std::vector<uint8_t>> replacements;
+            std::vector<std::string> newLevels;
+            for (const auto& de : fs::directory_iterator(looseDir)) {
+                if (!de.is_regular_file()) continue;
+                std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext != ".lev" && ext != ".tng") continue;
+                const std::string key = "Data\\Levels\\FinalAlbion\\" + de.path().filename().string();
+                std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
+                if (known.count(lk)) replacements[key] = readAllBytes(de.path().string());
+                else newLevels.push_back(de.path().filename().string());
+            }
+            if (!replacements.empty() || !newLevels.empty()) {
+                const fs::path outWad = fs::path(outDir) / "data" / "Levels" / "FinalAlbion.wad";
+                fs::path srcWad = fs::exists(outWad) ? outWad : baseWad;   // a pack may have shipped a whole WAD as a layer
+                size_t n = 0, added = 0;
+                if (!replacements.empty()) {
+                    const fs::path tmpWad = outWad.string() + ".tmp";
+                    n = forge::wad::repack(srcWad, replacements, tmpWad);
+                    fs::rename(tmpWad, outWad);
+                    srcWad = outWad;
+                }
+                if (!newLevels.empty()) {
+                    // levels the WAD never had (a pack's own maps) become native entries, like new-level does
+                    std::vector<forge::wad::NativeEntry> natives;
+                    for (const auto& leaf : newLevels)
+                        natives.push_back({"Data\\Levels\\FinalAlbion\\" + leaf, readAllBytes((looseDir / leaf).string())});
+                    const fs::path tmpWad = outWad.string() + ".tmp";
+                    added = forge::wad::appendNativeEntries(srcWad, natives, tmpWad);
+                    fs::rename(tmpWad, outWad);
+                }
+                std::printf("FinalAlbion.wad rebuilt: %zu level file(s) repacked, %zu new level file(s) appended (their loose copies stay too)\n", n, added);
+            }
+        }
+    }
+
     for (const auto& folder : egoFolders) {
         forge::egocore::Report rep;
         forge::egocore::installDll(folder, baseRoot, outDir, rep);

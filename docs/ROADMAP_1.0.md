@@ -445,7 +445,12 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    (`mods conflicts`) DONE 2026-09-20; one JSON and the picker still open.
 5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
    *M* -- whole-file layers of tree sources (LEV / WLD / BWD / STB / INI / banks: last source
-   wins, contested paths counted) DONE 2026-09-20; `text.big` and WAD-resident TNG still open.
+   wins, contested paths counted) DONE 2026-09-20; `text.big` key union DONE 2026-09-20; the merged
+   loose FinalAlbion/*.lev|*.tng are REPACKED into FinalAlbion.wad (replaced entries, new levels
+   appended as native entries) DONE 2026-09-20 -- the GB packs (Project Seasons, AlbionSecrets) ship
+   loose levels and rename the WAD to `_FinalAlbion.wad`, i.e. modders treat the WAD as winning, so
+   the composer makes the WAD carry the merge whatever the precedence (`ENGINE_RULES` supported over
+   `stage.hpp`'s comment; still to be seen in-game).
 6. FSE Lua packs: union `quests.lua` / `FSE_Master.lua` per pack via `forge::questdeploy`,
    id-collision check; sidecar DLL stays the fallback. *S*
 7. Docs: the family into `docs/CLI.md`; a Mods tab in the GUI last. *S*

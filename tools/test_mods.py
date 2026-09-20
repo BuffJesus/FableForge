@@ -51,6 +51,8 @@ def main() -> int:
     for t in TNGS:
         src = os.path.join(root, "data", "Levels", "FinalAlbion", t + ".tng")
         if os.path.exists(src): shutil.copyfile(src, os.path.join(levels, t + ".tng"))
+    wad = os.path.join(root, "data", "Levels", "FinalAlbion.wad")
+    if os.path.exists(wad): shutil.copyfile(wad, os.path.join(scratch, "data", "Levels", "FinalAlbion.wad"))
     lang = os.path.join(root, "data", "lang", "English")
     text_src = os.path.join(lang, "text.big.retail-bak") if os.path.exists(os.path.join(lang, "text.big.retail-bak")) else os.path.join(lang, "text.big")
     if os.path.exists(text_src):
@@ -94,6 +96,10 @@ def main() -> int:
         print("no merged game.bin"); ok = False
     tngs = [f for f in os.listdir(os.path.join(out, "data", "Levels", "FinalAlbion")) if f.endswith(".tng")] if os.path.isdir(os.path.join(out, "data", "Levels", "FinalAlbion")) else []
     if len(tngs) < 7: print("merged TNGs:", tngs); ok = False
+    if os.path.exists(wad):
+        if "FinalAlbion.wad rebuilt: 8 level file(s) repacked, 0 new" not in r.stdout: print("WAD repack missing:", [l for l in r.stdout.splitlines() if "wad" in l.lower()]); ok = False
+        r2 = run("wad", "list", os.path.join(out, "data", "Levels", "FinalAlbion.wad"))
+        if "BarrowFields.tng" not in r2.stdout: print("repacked WAD unreadable"); ok = False
     r = run("defs", "list", out, "game.bin", "F2_RUSTY")
     if "CInventoryItemDef_F2_RUSTY_LONGSWORD" not in r.stdout: print("F2 record missing from the merged defs"); ok = False
     # the Fable Explorer package's Text bank reaches text.big (Special Melee shortens this tooltip)
