@@ -228,6 +228,9 @@ int usage() {
         "  forge ui clone-object-model <game-root> <donorObject> <newObject> <meshId>\n"
         "       [--schema <schema.json>] --out <out-root>\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
+        "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
+        "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
+        "       [--enum N] [--buyable] [--write]\n"
         "       [--schema <schema.json>] [--out <out.bin>] [--json]\n"
         "  forge defs roundtrip <game-root> [bin]\n"
         "  forge defs diff <root-a> <root-b> [bin] [--json]\n"
@@ -256,6 +259,9 @@ int usage() {
         "  forge script verbs [filter] [--json]\n"
         "  forge script validate <game-root> [filter] [--json]\n"
         "  forge script fixup <game-root> [--write]\n"
+        "  forge script cutscene-dump <game-root> <name> [--cs <file.cs>]\n"
+        "  forge script cutscene-set <game-root> <NAME> <file.cs> [--write]\n"
+        "  forge script cutscene-roundtrip <game-root>\n"
         "  forge chest list <game-root> [level-filter]\n"
         "  forge gamedata <game-root> [--wld <finalalbion.wld>] [--full]\n"
         "  forge quest master <finalalbion.qst> [--global name:type[:default]]...\n"
@@ -5528,6 +5534,413 @@ int scriptCutscene(const std::string& gameRoot, const std::string& which,
     return 0;
 }
 
+// `.cs` cutscene source: the authoring format for `script cutscene-set` and the
+// round-trip target of `script cutscene-dump --cs`. One string per line,
+// verbatim; `#` comments and blank lines are ignored; CRLF tolerated. A
+// `[Section]` line switches the field being filled (Macro, SkipCond, SetupCond,
+// Lights, LightScene, Sound, Answer0, Answer1); lines before any section header
+// go to Macro. Sections not mentioned stay empty.
+forge::cutscene::Def readCutsceneSource(const std::filesystem::path& path) {
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot read " + path.string());
+    forge::cutscene::Def def;
+    size_t field = 0;
+    std::string line;
+    size_t lineNo = 0;
+    while (std::getline(in, line)) {
+        ++lineNo;
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ' ||
+                                 line.back() == '\t')) {
+            line.pop_back();
+        }
+        size_t start = 0;
+        while (start < line.size() && (line[start] == ' ' || line[start] == '\t')) ++start;
+        line.erase(0, start);
+        if (line.empty() || line[0] == '#') continue;
+        if (line.front() == '[' && line.back() == ']') {
+            const std::string section = line.substr(1, line.size() - 2);
+            bool known = false;
+            for (size_t f = 0; f < forge::cutscene::kFieldCount; ++f) {
+                if (section == forge::cutscene::kFieldNames[f]) {
+                    field = f;
+                    known = true;
+                }
+            }
+            if (!known) {
+                throw std::runtime_error(path.string() + ":" + std::to_string(lineNo) +
+                                         ": unknown section [" + section + "]");
+            }
+            continue;
+        }
+        // `""` denotes an empty string entry (retail SetupCond carries one).
+        def.fields[field].push_back(line == "\"\"" ? std::string() : line);
+    }
+    return def;
+}
+
+// Lint a command list against the native verb table (see scriptValidate): an
+// unknown verb is a silent no-op in the engine, so it is an error here; a
+// prefix-slop match (the engine dispatches a longer token to a shorter verb) is
+// a warning. Returns the number of errors.
+size_t lintCutsceneCommands(const std::vector<std::string>& commands,
+                            const std::string& label) {
+    size_t errors = 0;
+    for (size_t i = 0; i < commands.size(); ++i) {
+        const std::string token = std::string(forge::cutscene::verbToken(commands[i]));
+        const std::string_view verb = forge::cutscene::resolveVerb(token);
+        if (verb.empty()) {
+            std::fprintf(stderr, "%s:%zu: unknown verb '%s' (engine ignores it): %s\n",
+                         label.c_str(), i, token.c_str(), commands[i].c_str());
+            ++errors;
+        } else if (verb.size() < forge::cutscene::comparedTokenLength(token)) {
+            std::fprintf(stderr, "%s:%zu: warning: '%s' dispatches to '%s' by prefix\n",
+                         label.c_str(), i, token.c_str(),
+                         std::string(verb).c_str());
+        }
+    }
+    return errors;
+}
+
+void printCutsceneDef(std::FILE* out, const forge::cutscene::Def& def,
+                      const std::string& banner) {
+    if (!banner.empty()) std::fprintf(out, "# %s\n", banner.c_str());
+    for (size_t f = 0; f < forge::cutscene::kFieldCount; ++f) {
+        if (def.fields[f].empty()) continue;
+        if (f != 0) std::fprintf(out, "\n[%s]\n", forge::cutscene::kFieldNames[f]);
+        for (const auto& s : def.fields[f]) {
+            std::fprintf(out, "%s\n", s.empty() ? "\"\"" : s.c_str());
+        }
+    }
+}
+
+// Print a cutscene def as `.cs` text (all eight fields), or write it to
+// `--cs <path>`. Decoding must be clean; the prefix is shown so an odd entry
+// can be spotted.
+int scriptCutsceneDump(const std::string& gameRoot, const std::string& which,
+                       const std::string& csOut) {
+    const auto scripts = openDefs(gameRoot, "script.bin");
+    const forge::bin::Entry* entry = scripts.find(which);
+    if (entry == nullptr || entry->definition != "CCutsceneDef") {
+        std::fprintf(stderr, "script cutscene-dump: no CCutsceneDef named %s\n",
+                     which.c_str());
+        return 1;
+    }
+    const size_t index = static_cast<size_t>(entry - scripts.entries().data());
+    forge::cutscene::Def def;
+    const bool clean = forge::cutscene::decodeDef(entry->data, def);
+    std::string prefixHex;
+    for (const auto b : def.prefix) {
+        char buf[4];
+        std::snprintf(buf, sizeof buf, "%02x ", b);
+        prefixHex += buf;
+    }
+    std::printf("entry %zu: %s (indexInDefinition %d, %zu bytes, %zu commands, "
+                "prefix %s%s)\n",
+                index, entry->name.c_str(), entry->indexInDefinition,
+                entry->data.size(), def.macro().size(), prefixHex.c_str(),
+                clean ? "" : ", UNCLEAN decode");
+    if (!clean) {
+        std::fprintf(stderr, "script cutscene-dump: %s does not decode as prefix + "
+                     "8 tagged fields (%zu leftover bytes)\n",
+                     entry->name.c_str(), def.leftover.size());
+        return 1;
+    }
+    const std::string banner = entry->name + " -- dumped from script.bin entry " +
+                               std::to_string(index);
+    if (csOut.empty()) {
+        printCutsceneDef(stdout, def, "");
+        return 0;
+    }
+    std::FILE* out = std::fopen(csOut.c_str(), "wb");
+    if (out == nullptr) {
+        std::fprintf(stderr, "script cutscene-dump: cannot write %s\n", csOut.c_str());
+        return 1;
+    }
+    printCutsceneDef(out, def, banner);
+    std::fclose(out);
+    std::printf("wrote %s\n", csOut.c_str());
+    return 0;
+}
+
+// Decode + re-encode every CCutsceneDef and compare bytes: the codec's
+// correctness proof over the shipped content (expect 595/595 identical).
+int scriptCutsceneRoundtrip(const std::string& gameRoot) {
+    const auto scripts = openDefs(gameRoot, "script.bin");
+    size_t total = 0, identical = 0;
+    for (const auto& entry : scripts.entries()) {
+        if (entry.definition != "CCutsceneDef") continue;
+        ++total;
+        forge::cutscene::Def def;
+        const bool clean = forge::cutscene::decodeDef(entry.data, def);
+        const bool same = clean && forge::cutscene::encodeDef(def) == entry.data;
+        if (same) {
+            ++identical;
+        } else {
+            std::printf("DIFFER %s (%s, %zu bytes)\n", entry.name.c_str(),
+                        clean ? "re-encode differs" : "unclean decode",
+                        entry.data.size());
+        }
+    }
+    std::printf("%zu / %zu CCutsceneDef payloads round-trip byte-identical\n",
+                identical, total);
+    return identical == total ? 0 : 1;
+}
+
+// Author a cutscene from a `.cs` source. An existing CCutsceneDef of that name
+// is replaced field-for-field (its 5-byte prefix kept); a new name is appended
+// as a new CCutsceneDef (retail prefix). Dry run unless --write; --write backs
+// script.bin/names.bin up to *.forgebak first, like script fixup, and proves the
+// entry reloads identically before reporting success.
+int scriptCutsceneSet(const std::string& gameRoot, const std::string& name,
+                      const std::string& csPath, bool write) {
+    namespace fs = std::filesystem;
+    const fs::path defsDir = fs::path(gameRoot) / "data" / "CompiledDefs";
+    const fs::path namesPath = defsDir / "names.bin";
+    const fs::path binPath = defsDir / "script.bin";
+    auto file = forge::bin::File::open(namesPath, binPath);
+
+    forge::cutscene::Def def = readCutsceneSource(csPath);
+    if (def.macro().empty()) {
+        std::fprintf(stderr, "script cutscene-set: %s has no Macro commands\n",
+                     csPath.c_str());
+        return 1;
+    }
+    size_t errors = lintCutsceneCommands(def.macro(), csPath + " [Macro]");
+    errors += lintCutsceneCommands(def.skipCond(), csPath + " [SkipCond]");
+    if (errors != 0) {
+        std::fprintf(stderr, "script cutscene-set: %zu unknown verb(s); not written\n",
+                     errors);
+        return 1;
+    }
+
+    const forge::bin::Entry* existing = file.find(name);
+    if (existing != nullptr && existing->definition != "CCutsceneDef") {
+        std::fprintf(stderr, "script cutscene-set: %s exists as %s, not CCutsceneDef\n",
+                     name.c_str(), existing->definition.c_str());
+        return 1;
+    }
+
+    std::string action;
+    if (existing != nullptr) {
+        forge::cutscene::Def before;
+        if (!forge::cutscene::decodeDef(existing->data, before)) {
+            std::fprintf(stderr, "script cutscene-set: %s does not decode cleanly; "
+                         "refusing to replace it\n", name.c_str());
+            return 1;
+        }
+        def.prefix = before.prefix;
+        action = "replace " + name + " (" + std::to_string(before.macro().size()) +
+                 " -> " + std::to_string(def.macro().size()) + " commands)";
+    } else {
+        action = "append " + name + " as a new CCutsceneDef (" +
+                 std::to_string(def.macro().size()) + " commands)";
+    }
+    const std::vector<uint8_t> payload = forge::cutscene::encodeDef(def);
+
+    std::printf("%s, %zu bytes\n", action.c_str(), payload.size());
+    printCutsceneDef(stdout, def, "");
+    if (!write) {
+        std::printf("dry run: pass --write to apply (backs up script.bin/"
+                    "names.bin to *.forgebak first).\n");
+        return 0;
+    }
+
+    for (const auto& p : {namesPath, binPath}) {
+        const fs::path backup = fs::path(p).replace_extension(
+            p.extension().string() + ".forgebak");
+        if (!fs::exists(backup)) fs::copy_file(p, backup);
+    }
+    size_t landed = 0;
+    if (existing != nullptr) {
+        landed = static_cast<size_t>(existing - file.entries().data());
+        file.setEntryData(landed, payload);
+    } else {
+        landed = file.addEntry("CCutsceneDef", name, payload);
+    }
+    file.save(namesPath, binPath);
+
+    const auto reloaded = forge::bin::File::open(namesPath, binPath);
+    const forge::bin::Entry* check = reloaded.find(name);
+    if (check == nullptr || check->data != payload) {
+        std::fprintf(stderr, "script cutscene-set: reload mismatch for %s -- restore "
+                     "the *.forgebak files\n", name.c_str());
+        return 1;
+    }
+    std::printf("wrote %s: entry %zu %s (indexInDefinition %d), %zu bytes verified "
+                "on reload. Reverting: restore the *.forgebak files.\n",
+                binPath.string().c_str(), landed, name.c_str(),
+                check->indexInDefinition, payload.size());
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// forge title add: append a new hero title to game.bin by cloning a retail one.
+//
+// A hero title is an inventory item: one OBJECT_HERO_TITLE_* entry (401 B) plus
+// three unnamed sub-defs it links to by GLOBAL ENTRY INDEX -- CInventoryItemDef
+// (GUI name/description text ids, IsBuyable), CStockItemDef (shop price/visibility)
+// and CHeroTitleDef (EHeroTitle enum + the three villager speech-group text ids:
+// GreetToHero / CommentAtHero / CommentToSelf). Inside the OBJECT payload the
+// per-title bytes are three (subDefIndex, ownIndex) u32 pairs at 21/25 (inventory),
+// 33/37 (title), 45/49 (stock) -- value-verified across every retail title: the
+// 401-byte OBJECTs are byte-identical apart from those six words. The hero's title
+// is held as a def index (CTCHero::GetHeroTitleDefIndex) and villagers read the
+// speech groups through the sub-def (CTCHero::PeekHeroTitleSubDef), and the four
+// beginner titles all share EHeroTitle 0, so the enum is not a table key: an
+// appended title with a borrowed enum value is engine-safe (FableTLC
+// docs/journal 2026-09-19 OAKVALE_REBORN, "titles").
+//
+// Text ids are given by NUMBER (text.big entry ids): the caller stages text.big
+// first (the group entries are type-1 members lists) and reads the ids back.
+// ---------------------------------------------------------------------------
+namespace {
+
+struct TitleLinks {
+    size_t inventory = 0, title = 0, stock = 0;
+};
+
+uint32_t rdU32(const std::vector<uint8_t>& d, size_t off) {
+    if (off + 4 > d.size()) throw std::runtime_error("payload too short");
+    return static_cast<uint32_t>(d[off]) | (static_cast<uint32_t>(d[off + 1]) << 8) |
+           (static_cast<uint32_t>(d[off + 2]) << 16) | (static_cast<uint32_t>(d[off + 3]) << 24);
+}
+void wrU32(std::vector<uint8_t>& d, size_t off, uint32_t v) {
+    if (off + 4 > d.size()) throw std::runtime_error("payload too short");
+    d[off] = static_cast<uint8_t>(v); d[off + 1] = static_cast<uint8_t>(v >> 8);
+    d[off + 2] = static_cast<uint8_t>(v >> 16); d[off + 3] = static_cast<uint8_t>(v >> 24);
+}
+
+// Position of the value bytes of a crc0-tagged top-level field, or npos.
+size_t taggedValueOffset(const std::vector<uint8_t>& d, std::string_view field) {
+    const uint32_t tag = forge::defdecode::fieldTag(field);
+    for (size_t off = 0; off + 4 <= d.size(); ++off)
+        if (rdU32(d, off) == tag) return off + 4;
+    return std::string::npos;
+}
+void setTaggedU32(std::vector<uint8_t>& d, std::string_view field, uint32_t v, const char* what) {
+    const size_t off = taggedValueOffset(d, field);
+    if (off == std::string::npos)
+        throw std::runtime_error(std::string("field tag not found: ") + std::string(field) + " in " + what);
+    wrU32(d, off, v);
+}
+void setTaggedBool(std::vector<uint8_t>& d, std::string_view field, bool v, const char* what) {
+    const size_t off = taggedValueOffset(d, field);
+    if (off == std::string::npos)
+        throw std::runtime_error(std::string("field tag not found: ") + std::string(field) + " in " + what);
+    d[off] = v ? 1 : 0;
+}
+
+}  // namespace
+
+struct TitleAddArgs {
+    std::string gameRoot, newName, donor;
+    uint32_t gui = 0, desc = 0, greet = 0, comment = 0, self = 0;
+    std::optional<uint32_t> enumValue;
+    bool buyable = false;
+    bool write = false;
+};
+
+int titleAdd(const TitleAddArgs& a) {
+    namespace fs = std::filesystem;
+    const fs::path defsDir = fs::path(a.gameRoot) / "data" / "CompiledDefs";
+    const fs::path namesPath = defsDir / "names.bin";
+    const fs::path binPath = defsDir / "game.bin";
+    auto file = forge::bin::File::open(namesPath, binPath);
+
+    if (a.newName.rfind("OBJECT_HERO_TITLE_", 0) != 0) {
+        std::fprintf(stderr, "title add: the new name must start with OBJECT_HERO_TITLE_\n");
+        return 1;
+    }
+    if (file.find(a.newName) != nullptr) {
+        std::fprintf(stderr, "title add: %s already exists\n", a.newName.c_str());
+        return 1;
+    }
+    const forge::bin::Entry* donor = file.find(a.donor);
+    if (donor == nullptr || donor->definition != "OBJECT" || donor->data.size() != 401) {
+        std::fprintf(stderr, "title add: donor %s is not a 401-byte OBJECT_HERO_TITLE entry\n",
+                     a.donor.c_str());
+        return 1;
+    }
+    const size_t donorIndex = static_cast<size_t>(donor - file.entries().data());
+    TitleLinks links{rdU32(donor->data, 21), rdU32(donor->data, 33), rdU32(donor->data, 45)};
+    for (size_t off : {25u, 37u, 49u})
+        if (rdU32(donor->data, off) != donorIndex) {
+            std::fprintf(stderr, "title add: donor self-reference at %zu is not its own index\n", off);
+            return 1;
+        }
+    const auto& es = file.entries();
+    auto expect = [&](size_t idx, const char* def) {
+        if (idx >= es.size() || es[idx].definition != def)
+            throw std::runtime_error(std::string("donor sub-def ") + def + " missing at " + std::to_string(idx));
+    };
+    expect(links.inventory, "CInventoryItemDef");
+    expect(links.title, "CHeroTitleDef");
+    expect(links.stock, "CStockItemDef");
+
+    // Snapshot before addEntry() reallocates.
+    std::vector<uint8_t> inv = es[links.inventory].data;
+    std::vector<uint8_t> stock = es[links.stock].data;
+    std::vector<uint8_t> title = es[links.title].data;
+    std::vector<uint8_t> obj = donor->data;
+
+    setTaggedU32(inv, "ItemDescription", a.gui, "CInventoryItemDef");
+    setTaggedU32(inv, "ItemDetails", a.desc, "CInventoryItemDef");
+    setTaggedBool(inv, "IsBuyable", a.buyable, "CInventoryItemDef");
+    setTaggedBool(stock, "CanBeDisplayedInShop", a.buyable, "CStockItemDef");
+    setTaggedU32(title, "HeroTitleGuiTag", a.gui, "CHeroTitleDef");
+    setTaggedU32(title, "HeroTitleGreetToHeroTag", a.greet, "CHeroTitleDef");
+    setTaggedU32(title, "HeroTitleCommentAtHeroTag", a.comment, "CHeroTitleDef");
+    setTaggedU32(title, "HeroTitleCommentToSelfTag", a.self, "CHeroTitleDef");
+    setTaggedBool(title, "IsBuyable", a.buyable, "CHeroTitleDef");
+    if (a.enumValue) setTaggedU32(title, "Title", *a.enumValue, "CHeroTitleDef");
+    const uint32_t enumUsed = rdU32(title, taggedValueOffset(title, "Title"));
+
+    // Landing indices: sub-defs first in the donor's order, then the OBJECT.
+    const size_t base = es.size();
+    const size_t newInv = base, newStock = base + 1, newTitle = base + 2, newObj = base + 3;
+    wrU32(obj, 21, static_cast<uint32_t>(newInv));   wrU32(obj, 25, static_cast<uint32_t>(newObj));
+    wrU32(obj, 33, static_cast<uint32_t>(newTitle)); wrU32(obj, 37, static_cast<uint32_t>(newObj));
+    wrU32(obj, 45, static_cast<uint32_t>(newStock)); wrU32(obj, 49, static_cast<uint32_t>(newObj));
+
+    std::printf("%s: clone of %s (OBJECT %zu; sub-defs %zu/%zu/%zu) -> entries %zu..%zu\n"
+                "  gui=%u desc=%u greet=%u comment=%u self=%u enum=%u buyable=%d\n",
+                a.newName.c_str(), a.donor.c_str(), donorIndex, links.inventory, links.stock,
+                links.title, newInv, newObj, a.gui, a.desc, a.greet, a.comment, a.self, enumUsed,
+                a.buyable ? 1 : 0);
+    if (!a.write) {
+        std::printf("dry run: pass --write to apply (backs up game.bin/names.bin to *.forgebak first).\n");
+        return 0;
+    }
+    for (const auto& p : {namesPath, binPath}) {
+        const fs::path backup = fs::path(p).replace_extension(p.extension().string() + ".forgebak");
+        if (!fs::exists(backup)) fs::copy_file(p, backup);
+    }
+    if (file.addEntry("CInventoryItemDef", "", inv) != newInv ||
+        file.addEntry("CStockItemDef", "", stock) != newStock ||
+        file.addEntry("CHeroTitleDef", "", title) != newTitle ||
+        file.addEntry("OBJECT", a.newName, obj) != newObj) {
+        std::fprintf(stderr, "title add: landing indices moved; nothing saved\n");
+        return 1;
+    }
+    file.save(namesPath, binPath);
+
+    const auto reloaded = forge::bin::File::open(namesPath, binPath);
+    const forge::bin::Entry* check = reloaded.find(a.newName);
+    const auto& re = reloaded.entries();
+    const bool ok = check != nullptr && check->data == obj &&
+                    re.size() > newObj && re[newInv].data == inv && re[newStock].data == stock &&
+                    re[newTitle].data == title &&
+                    static_cast<size_t>(check - re.data()) == newObj;
+    if (!ok) {
+        std::fprintf(stderr, "title add: reload mismatch -- restore the *.forgebak files\n");
+        return 1;
+    }
+    std::printf("wrote %s: %s at entry %zu (indexInDefinition %d), sub-defs verified on reload. "
+                "Reverting: restore the *.forgebak files.\n",
+                binPath.string().c_str(), a.newName.c_str(), newObj, check->indexInDefinition);
+    return 0;
+}
+
 // Aggregate verb histogram across every CCutsceneDef in script.bin: total
 // occurrences, how many cutscenes use the verb, and one example command. This
 // is the GUI bootstrap payload for timeline labeling and verb pickers.
@@ -10709,6 +11122,45 @@ int main(int argc, char** argv) {
         if (args.size() >= 4 && args[0] == "script" && args[1] == "cutscene") {
             return scriptCutscene(args[2], args[3],
                                   args.size() > 4 && args[4] == "--json");
+        }
+        if (args.size() >= 4 && args[0] == "script" && args[1] == "cutscene-dump") {
+            std::string csOut;
+            for (size_t i = 4; i + 1 < args.size(); ++i) {
+                if (args[i] == "--cs") csOut = args[i + 1];
+            }
+            return scriptCutsceneDump(args[2], args[3], csOut);
+        }
+        if (args.size() >= 5 && args[0] == "script" && args[1] == "cutscene-set") {
+            const bool write =
+                std::find(args.begin() + 5, args.end(), "--write") != args.end();
+            return scriptCutsceneSet(args[2], args[3], args[4], write);
+        }
+        if (args.size() >= 4 && args[0] == "title" && args[1] == "add") {
+            TitleAddArgs t;
+            t.gameRoot = args[2];
+            t.newName = args[3];
+            for (size_t i = 4; i < args.size(); ++i) {
+                const std::string& a = args[i];
+                auto next = [&]() -> std::string { return i + 1 < args.size() ? args[++i] : std::string(); };
+                if (a == "--donor") t.donor = next();
+                else if (a == "--gui") t.gui = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--desc") t.desc = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--greet") t.greet = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--comment") t.comment = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--self") t.self = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--enum") t.enumValue = static_cast<uint32_t>(std::stoul(next()));
+                else if (a == "--buyable") t.buyable = true;
+                else if (a == "--write") t.write = true;
+                else { std::fprintf(stderr, "title add: unknown option %s\n", a.c_str()); return 2; }
+            }
+            if (t.donor.empty() || !t.gui || !t.desc || !t.greet || !t.comment || !t.self) {
+                std::fprintf(stderr, "title add: --donor, --gui, --desc, --greet, --comment and --self are required\n");
+                return 2;
+            }
+            return titleAdd(t);
+        }
+        if (args.size() >= 3 && args[0] == "script" && args[1] == "cutscene-roundtrip") {
+            return scriptCutsceneRoundtrip(args[2]);
         }
         if (args.size() >= 3 && args[0] == "chest" && args[1] == "list") {
             return chestList(args[2], args.size() > 3 ? args[3] : "");
