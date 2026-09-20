@@ -79,6 +79,7 @@ int usage() {
         "  forge heights <map.lev> <x,y> ...                 bilinear LEV heights at map-local points (the in-game harness oracle)\n"
         "  forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>\n"
         "  forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>   (stbbake::bakeHeightfield on one chunk)\n"
+        "  forge water-audit <map>|--all [--verbose]        the baked water patches vs our codec, the RE'd record formulas and our own writer\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"

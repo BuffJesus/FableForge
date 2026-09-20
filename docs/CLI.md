@@ -37,6 +37,7 @@ diagnostics (read-only, print what the engine's data says):
   forge heights <map.lev> <x,y> ...                 bilinear LEV heights at map-local points (the in-game harness oracle)
   forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>
   forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>   (stbbake::bakeHeightfield on one chunk)
+  forge water-audit <map>|--all [--verbose]        the baked water patches vs our codec, the RE'd record formulas and our own writer
 
 export options:
   --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)
