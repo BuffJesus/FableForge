@@ -355,9 +355,17 @@ Evidence needed before shipping: memory at 20 textured terrains (a 2-texel albed
    identical against the pre-split binary). The automation dispatcher is `gui/automation.cpp` too.
 4. STB compaction: ~~an STB-level compaction that drops superseded payloads~~ DONE 2026-09-19
    (`forge compact-stb`, Setup panel button, `src/stbcompact`, unit test; 574.4 -> 571.2 MB
-   on the install, payloads verified; needs one in-game run on a compacted bank). Still open:
-   a `chunk-compact` pass re-laying fg run / LOD blocks / LD section contiguously (all three
-   reference sets are already collected in `stbrelocate::run`).
+   on the install, payloads verified; needs one in-game run on a compacted bank). Still open,
+   scoped 2026-09-19 (M, not started): a `chunk-compact` pass. `stbrelocate::run` already
+   classifies every frame (foreground run, patch LOD file blocks, the local-detail section,
+   and the "unreferenced" patches retail itself carries) and rewrites each family's absolute
+   pointers for a *translation*; compaction is the same walk with a global re-lay: (1) measure
+   = slot gaps + superseded foliage sections (`chunk-compact --dry-run <map>` first, there is
+   no grown chunk in the retail install to measure), (2) re-lay fg frames in 2048-aligned
+   slots, LOD blocks, then the LD section in `SaveFileBlock` order, patching the record's
+   directory pointers exactly as the relocation does, (3) gate = `chunk-audit` clean +
+   relocate-and-back digest identical + `compact(compact(x)) == compact(x)`; in-game with
+   the user before it ships.
 5. A "stranger's test": fresh Windows VM or a second PC, retail Steam install, the zip only —
    follow the walkthrough; every step that needs a workaround becomes a bug.
 
