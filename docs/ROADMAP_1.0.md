@@ -508,6 +508,11 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    - EgoCore's own deploy is then never run (its dirty flags stay clean because we never touch
      its `.tmp` backups); the game is launched from Steam / FableForge. A documented rule, and
      a check that refuses to stage when EgoCore's backups show it has deployed.
+   - GB packs DONE 2026-09-20 (`tools/test_gbpack.py`, Project Seasons under the UFP): the parked
+     `_FinalAlbion.wad` and `userst.ini` are never layers, identical whole files are skipped
+     (streamed compare), the 794 loose levels are repacked into the real WAD, ProjectAutumn/ +
+     the whole STB / banks ride as whole-file layers; 24 s. AlbionSecrets Modpack has the same
+     shape (zip peeked, not extracted).
    - Test matrix from the corpus (`work/nexus_mods/CATALOGUE.md`): Unofficial Patch + Aeon
      Edition (bsdiff vs whole game.bin); Ultimate Spell Pack + mfvicli Better* (18 + 35 fmps on
      the same spell defs -- the field-merge case); Connected Regions (397 loose LEV/TNG + WLD)

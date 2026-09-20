@@ -215,7 +215,11 @@ per-row picks (`forge_mods_picks.txt`; the Mods tab's Conflicts card), EgoCore `
 overrides (`Data/<path>/<bank>.big/[<SubBank>/]<Entry>.resource` [+ `.header`]: entry-level layers
 over the banks, replaced or appended with the next id, applied in load order after the whole-file
 layers so a whole bank a tree ships is their base), and thing provenance (`forge_mods_provenance.json`
-from the build; the editor's badges / filter / *Back to retail*).
+from the build; the editor's badges / filter / *Back to retail*). GB packs (Project Seasons, 2026-09-20,
+`tools/test_gbpack.py`): the parked `_FinalAlbion.wad` and a shipped `userst.ini` are not layers,
+whole files identical to the install are skipped, the 794 loose levels are repacked into the real WAD
+(448 TNGs, provenance for each), the new `ProjectAutumn/` folder and the whole STB / banks ride as
+whole-file layers; UFP's bsdiff underneath composes without a conflict -- 24 s.
 
 Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,

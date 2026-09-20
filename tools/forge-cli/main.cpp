@@ -493,6 +493,7 @@ int stbExtract(const std::string& path, const std::string& outDir,
 }
 
 std::vector<uint8_t> readAllBytes(const std::string& path); // defined below
+bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path& b); // defined below
 void writeAllBytes(const std::string& path, const std::vector<uint8_t>& data);
 
 int wadAppendNativeBatch(const std::string& src, const std::string& out,
@@ -7569,6 +7570,22 @@ int questMaster(const std::string& qstPath,
 }
 
 // --- bsdiff .patch ingestion -------------------------------------------------
+// two files byte-identical? Streamed (the GB packs ship 900 MB STBs), size first.
+bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path& b) {
+    std::error_code ec;
+    if (!std::filesystem::exists(a, ec) || !std::filesystem::exists(b, ec)) return false;
+    if (std::filesystem::file_size(a, ec) != std::filesystem::file_size(b, ec)) return false;
+    std::ifstream fa(a, std::ios::binary), fb(b, std::ios::binary);
+    std::vector<char> ba(1 << 20), bb(1 << 20);
+    while (fa && fb) {
+        fa.read(ba.data(), std::streamsize(ba.size()));
+        fb.read(bb.data(), std::streamsize(bb.size()));
+        if (fa.gcount() != fb.gcount() || !std::equal(ba.begin(), ba.begin() + fa.gcount(), bb.begin())) return false;
+        if (fa.gcount() == 0) break;
+    }
+    return true;
+}
+
 std::vector<uint8_t> readAllBytes(const std::string& path) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
@@ -8492,6 +8509,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     {
         struct Carrier { std::string label; fs::path src; std::string rel; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
+        std::set<std::string> settingsSkipped, parkedWad;
+        size_t unchanged = 0;
+        std::error_code ec;
         for (size_t si = 0; si < sources.size(); ++si) {
             const std::string& s = sources[si];
             if (!fs::is_directory(s)) continue;
@@ -8505,6 +8525,14 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
                 if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
                 if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
+                if (lower == "userst.ini" || lower == "usersettings.ini") { settingsSkipped.insert(srcLabel(si)); continue; }   // the player's own settings stay theirs
+                // the GB packs park the retail WAD as `_FinalAlbion.wad` so their loose levels load; the
+                // parked copy is not content (the loose levels are repacked into the real WAD below)
+                if (lower == "data/levels/_finalalbion.wad") { parkedWad.insert(srcLabel(si)); continue; }   // the engine never reads that name
+                // a file identical to the install's is not a layer (a pack ships its whole tree)
+                fs::path basePath = fs::path(baseRoot) / rel;
+                if (!fs::exists(basePath, ec)) basePath = fs::path(baseRoot) / fs::path(rel).parent_path() / de.path().filename();
+                if (filesIdentical(de.path(), basePath)) { ++unchanged; continue; }
                 carriers[lower].push_back({srcLabel(si), de.path(), rel});
             }
         }
@@ -8519,10 +8547,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 else for (const auto& c : who) if (c.label == pk->second) win = &c;
             }
             bool agree = true;
-            if (who.size() > 1) {
-                const auto first = readAllBytes(who.front().src.string());
-                for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = readAllBytes(who[ci].src.string()) == first;
-            }
+            for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = filesIdentical(who[ci].src, who.front().src);
             if (who.size() > 1 && !agree) {
                 ++contested;
                 json mods = json::array();
@@ -8535,9 +8560,11 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             fs::create_directories(outPath.parent_path());
             fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
         }
-        if (jsonOutput) rep["files"] = {{"copied", carriers.size()}, {"contested", fileRows}};
-        if (!carriers.empty())
-            if (!jsonOutput) std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source\n", carriers.size(), contested);
+        if (jsonOutput) rep["files"] = {{"copied", carriers.size()}, {"unchanged", unchanged}, {"contested", fileRows}, {"settings_skipped", std::vector<std::string>(settingsSkipped.begin(), settingsSkipped.end())}, {"parked_wad", std::vector<std::string>(parkedWad.begin(), parkedWad.end())}};
+        if (!carriers.empty() || unchanged)
+            if (!jsonOutput) std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source, %zu identical to the install skipped\n", carriers.size(), contested, unchanged);
+        for (const auto& l : settingsSkipped) if (!jsonOutput) std::printf("  %s ships userst.ini: not applied (your settings stay yours)\n", l.c_str());
+        for (const auto& l : parkedWad) if (!jsonOutput) std::printf("  %s parks the retail WAD as _FinalAlbion.wad: skipped, its loose levels are repacked into FinalAlbion.wad instead\n", l.c_str());
     }
     // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
     // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
