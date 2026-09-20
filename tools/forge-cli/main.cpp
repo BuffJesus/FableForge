@@ -7926,9 +7926,34 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             }
         }
     }
-    if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty())
-        std::fprintf(stderr, "  warning: Text bank has %zu string(s) for text.big, NOT applied (text.big merge is a follow-up)\n", text->entries.size());
     game.save(defsOut / "names.bin", defsOut / "game.bin");
+    // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
+    // applied to every language's text.big the base install has (the package names none)
+    if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty()) {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        size_t langs = 0, strings = 0, bad = 0;
+        if (fs::is_directory(langRoot))
+            for (const auto& lang : fs::directory_iterator(langRoot)) {
+                const fs::path src = lang.path() / "text.big";
+                if (!fs::exists(src)) continue;
+                auto file = forge::big::File::open(src);
+                size_t applied = 0;
+                for (const auto& e : text->entries) {
+                    try {
+                        auto value = forge::textbig::decode(pkg.entryData(e), 0);
+                        forge::textbig::upsertString(file, e.name, std::move(value));
+                        ++applied;
+                    } catch (const std::exception& ex) {
+                        if (langs == 0) { ++bad; std::fprintf(stderr, "  warning: Text %s: %s\n", e.name.c_str(), ex.what()); }
+                    }
+                }
+                const fs::path dst = fs::path(outRoot) / "data" / "lang" / lang.path().filename() / "text.big";
+                fs::create_directories(dst.parent_path());
+                writeAllBytes(dst.string(), file.serialize());
+                ++langs; strings = applied;
+            }
+        std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n", strings, langs, bad ? " (some payloads did not decode)" : "");
+    }
 
     // Copy the untouched sibling bins so the out-root is a complete install.
     for (const char* sib : {"script.bin", "frontend.bin"}) {
@@ -8216,6 +8241,50 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         std::printf("quest QST merge: %zu registries (%zu statement-merged, "
                     "%zu single-editor copies), %zu quest conflicts\n",
                     qstChangers.size(), qstMerged, qstCopied, qstConflicts);
+
+    // --- text.big key union: every root whose data/lang/<L>/text.big differs from the base
+    // contributes its changed or new strings (by name); a name several roots change takes
+    // the load-order winner.
+    {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        size_t langsMerged = 0, keysApplied = 0, keysContested = 0;
+        if (fs::is_directory(langRoot))
+            for (const auto& lang : fs::directory_iterator(langRoot)) {
+                const fs::path basePath = lang.path() / "text.big";
+                if (!fs::exists(basePath)) continue;
+                std::vector<std::string> changers;
+                for (const auto& r : roots) {
+                    const fs::path p = fs::path(r) / "data" / "lang" / lang.path().filename() / "text.big";
+                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back(p.string());
+                }
+                if (changers.empty()) continue;
+                auto base = forge::big::File::open(basePath);
+                std::map<std::string, std::vector<uint8_t>> baseByName;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
+                std::map<std::string, int> touched;
+                for (const auto& c : changers) {
+                    auto f = forge::big::File::open(c);
+                    for (const auto& b : f.banks())
+                        for (const auto& e : b.entries) {
+                            if (e.name.empty()) continue;
+                            const auto data = f.entryData(e);
+                            const auto it = baseByName.find(e.name);
+                            if (it != baseByName.end() && it->second == data) continue;
+                            try {
+                                forge::textbig::upsertString(base, e.name, forge::textbig::decode(data, 0));
+                                ++keysApplied; ++touched[e.name];
+                            } catch (const std::exception&) {}
+                        }
+                }
+                for (const auto& [k, n] : touched) if (n > 1) ++keysContested;
+                const fs::path dst = fs::path(outDir) / "data" / "lang" / lang.path().filename() / "text.big";
+                fs::create_directories(dst.parent_path());
+                writeAllBytes(dst.string(), base.serialize());
+                ++langsMerged;
+            }
+        if (langsMerged)
+            std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
+    }
 
     // --- Whole-file layers: everything else a game-root tree ships (LEV, WLD, BWD, STB, INI,
     // banks, textures ...) that no record merge covers. Load order resolves them: the last

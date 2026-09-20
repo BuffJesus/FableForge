@@ -51,6 +51,11 @@ def main() -> int:
     for t in TNGS:
         src = os.path.join(root, "data", "Levels", "FinalAlbion", t + ".tng")
         if os.path.exists(src): shutil.copyfile(src, os.path.join(levels, t + ".tng"))
+    lang = os.path.join(root, "data", "lang", "English")
+    text_src = os.path.join(lang, "text.big.retail-bak") if os.path.exists(os.path.join(lang, "text.big.retail-bak")) else os.path.join(lang, "text.big")
+    if os.path.exists(text_src):
+        os.makedirs(os.path.join(scratch, "data", "lang", "English"))
+        shutil.copyfile(text_src, os.path.join(scratch, "data", "lang", "English", "text.big"))
     ok = True
 
     def run(*args, expect=0):
@@ -91,6 +96,12 @@ def main() -> int:
     if len(tngs) < 7: print("merged TNGs:", tngs); ok = False
     r = run("defs", "list", out, "game.bin", "F2_RUSTY")
     if "CInventoryItemDef_F2_RUSTY_LONGSWORD" not in r.stdout: print("F2 record missing from the merged defs"); ok = False
+    # the Fable Explorer package's Text bank reaches text.big (Special Melee shortens this tooltip)
+    merged_text = os.path.join(out, "data", "lang", "English", "text.big")
+    if os.path.exists(os.path.join(scratch, "data", "lang", "English", "text.big")):
+        r = run("text", "show", merged_text, "TEXT_GUI_EXPSPEND_PHYSICAL_STRENGTH_LEVEL3")
+        if "heavy weapons" in r.stdout or "Physique dictates" not in r.stdout:
+            print("Special Melee's text.big change did not land:", r.stdout[:300]); ok = False
     # EgoCore packs: a DLL-only mod and a DLL + text-def mod (the def part needs defc + the text tree)
     if os.path.isdir(CONTROLLER) and os.path.isdir(WADER):
         env = dict(os.environ)
