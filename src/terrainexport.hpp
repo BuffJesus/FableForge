@@ -113,6 +113,19 @@ struct ThemeLayer {
 // WaterType != 0, smoothed over the 5x5 window (and extended 2 cells onto the bank),
 // placed 0.1 below that level, with the in-game depth fade (0..2 units) kept per
 // vertex. Cells whose sheet is entirely below the ground are not emitted.
+// The engine's water level per LEV vertex (CEngineMap::PeekInterpolatedWaterHeight(x, y, 2)):
+// ground + depth averaged over the 5x5 window of wet cells, 0 where no water reaches.
+// The same numbers feed the exporter's surface and the STB water patch writer.
+struct WaterLevels {
+    int width = 0, height = 0;        // vertices per side (cells + 1)
+    std::vector<float> level;         // row-major, index = y * width + x; 0 = dry
+    std::vector<uint8_t> ice;         // 1 = the 5x5 window is mostly EWaterType 8 (ice)
+    std::vector<int> type;            // dominant WaterType of the wet cell (0 = dry)
+    int wetVertices = 0;
+    bool empty() const { return wetVertices == 0; }
+    float at(int x, int y) const { return (x < 0 || y < 0 || x >= width || y >= height) ? 0.0f : level[size_t(y) * width + x]; }
+};
+
 struct WaterMesh {
     std::vector<float> positions;     // xyz, already in the requested up-axis space
     std::vector<uint8_t> ice;         // per vertex: 1 = frozen (EWaterType 8, Hook Coast ice)
@@ -141,6 +154,7 @@ struct Scene {
     int nameResolvedThemes = 0;     // slots resolved by NAME because the stored def index was stale
     bool walkableColor = false;
     bool layers = false;
+    WaterLevels waterLevels;        // the per-vertex level grid the surface was built from
     WaterMesh water;
     bool engineBake = false;        // albedo came from the STB foreground passes
     int enginePasses = 0;           // texture passes composited
@@ -207,6 +221,10 @@ private:
 // Texture failures degrade to warnings and an untextured scene, never throw,
 // so the plain heightmap always comes out. Without a ready `context`, one is
 // built from `options.gameRoot` / `options.texturesBig` for this call.
+// The water level grid alone: resolves the LEV's themes against the install's ENGINE_THEMEs
+// (WaterType / WaterHeight) and runs the engine's 5x5 interpolation. No textures are decoded.
+WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context = nullptr);
+
 Scene buildScene(const forge::lev::File& level, const Options& options,
                  const Context* context = nullptr);
 

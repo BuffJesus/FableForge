@@ -568,10 +568,13 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
 // absolute surface. Where the smoothed sheet dips under the ground it is hidden;
 // where it is less than 2 units deep the in-game shader fades it out, which is
 // what makes shores read as shores. The fade is exported as COLOR_0 alpha.
-void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options) {
+WaterLevels computeWaterLevels(const forge::lev::File& level, const Scene& scene, const std::map<int, size_t>& slotToLayer) {
+    WaterLevels out;
     const int cx = level.cellsX(), cy = level.cellsY();
-    if (cx <= 1 || cy <= 1) return;
+    out.width = cx; out.height = cy;
+    if (cx <= 1 || cy <= 1) return out;
     std::vector<float> depth(size_t(cx) * cy, 0.0f);
+    std::vector<int> ctype(size_t(cx) * cy, 0);
     std::vector<uint8_t> ice(size_t(cx) * cy, 0);     // dominant water slot is EWaterType 8 (ice)
     int wet = 0;
     for (int y = 0; y < cy; ++y)
@@ -590,13 +593,17 @@ void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int,
                 }
                 d += float(v.themeWeight[s]) / 255.0f * L.waterHeight;
             }
-            if (hasWater && d > 0.001f) { depth[size_t(y) * cx + x] = d; ice[size_t(y) * cx + x] = bestType == 8 ? 1 : 0; ++wet; }
+            if (hasWater && d > 0.001f) { depth[size_t(y) * cx + x] = d; ice[size_t(y) * cx + x] = bestType == 8 ? 1 : 0; ctype[size_t(y) * cx + x] = bestType; ++wet; }
         }
-    if (wet == 0) return;
+    out.wetVertices = wet;
+    out.level.assign(depth.size(), 0.0f);
+    out.ice.assign(depth.size(), 0);
+    out.type = ctype;
+    if (wet == 0) return out;
     auto ground = [&](int x, int y) { return level.heightAt(x, y); };
     // PeekInterpolatedWaterHeight(x, y, 2).
-    std::vector<float> lvl(depth.size(), 0.0f);
-    std::vector<uint8_t> cellIce(depth.size(), 0);
+    std::vector<float>& lvl = out.level;
+    std::vector<uint8_t>& cellIce = out.ice;
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
             int cxm = x, cym = y;
@@ -613,6 +620,19 @@ void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int,
                     if (depth[size_t(j) * cx + i] > 0.001f) { sum += ground(i, j) + depth[size_t(j) * cx + i]; ++n; iceN += ice[size_t(j) * cx + i]; }
             if (n) { lvl[size_t(y) * cx + x] = sum / float(n); cellIce[size_t(y) * cx + x] = iceN * 2 > n; }
         }
+    return out;
+}
+
+void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options) {
+    const int cx = level.cellsX(), cy = level.cellsY();
+    if (cx <= 1 || cy <= 1) return;
+    scene.waterLevels = computeWaterLevels(level, scene, slotToLayer);
+    const int wet = scene.waterLevels.wetVertices;
+    if (wet == 0) return;
+    auto ground = [&](int x, int y) { return level.heightAt(x, y); };
+    const std::vector<float>& lvl = scene.waterLevels.level;
+    const std::vector<uint8_t>& cellIce = scene.waterLevels.ice;
+    const std::vector<float> depth(lvl.size(), 0.0f);   // (only its size is used below)
     WaterMesh& w = scene.water;
     w.wetVertices = wet;
     std::vector<int> vidx(depth.size(), -1);
@@ -647,6 +667,9 @@ void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int,
         }
 }
 
+void resolveThemeLayers(const forge::lev::File& level, Context::Impl& ctx, const Options& options, Scene& scene, std::map<int, size_t>& slotToLayer);
+void finishTextures(const forge::lev::File& level, const Options& options, Context::Impl& ctx, TextureCache& cache, Scene& scene, const std::map<int, size_t>& slotToLayer);
+
 Scene buildScene(const forge::lev::File& level, const Options& options, const Context* context) {
     Scene scene = buildMesh(level, options);
     if (!options.textures) return scene;
@@ -662,10 +685,32 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     }
     Context::Impl& ctx = context->impl();
     TextureCache& cache = ctx.cache;
-    const auto rows = forge::terraintex::resolvePalette(level, ctx.library);
-
-    // 3. Per-slot layers.
     std::map<int, size_t> slotToLayer;
+    resolveThemeLayers(level, ctx, options, scene, slotToLayer);
+    if (options.water) buildWater(level, scene, slotToLayer, options);
+    if (options.log && !scene.water.empty())
+        options.log("water: " + std::to_string(scene.water.wetVertices) + " wet vertices, " +
+                    std::to_string(scene.water.indices.size() / 3) + " triangles");
+    finishTextures(level, options, ctx, cache, scene, slotToLayer);
+    return scene;
+}
+
+WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context) {
+    Scene scene;
+    Context local;
+    if (!context || !context->ready()) {
+        std::string error;
+        if (!local.load(options.gameRoot, options.texturesBig, error)) return WaterLevels{};
+        context = &local;
+    }
+    std::map<int, size_t> slotToLayer;
+    resolveThemeLayers(level, context->impl(), options, scene, slotToLayer);
+    return computeWaterLevels(level, scene, slotToLayer);
+}
+
+// 3. Per-slot layers: the LEV palette resolved against the install's ENGINE_THEMEs.
+void resolveThemeLayers(const forge::lev::File& level, Context::Impl& ctx, const Options& options, Scene& scene, std::map<int, size_t>& slotToLayer) {
+    const auto rows = forge::terraintex::resolvePalette(level, ctx.library);
     for (const auto& r : rows) {
         ThemeLayer layer;
         layer.slot = r.slot;
@@ -703,11 +748,9 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         scene.themes.push_back(layer);
     }
     if (options.log) options.log(std::to_string(scene.themes.size()) + " ground themes in use");
-    if (options.water) buildWater(level, scene, slotToLayer, options);
-    if (options.log && !scene.water.empty())
-        options.log("water: " + std::to_string(scene.water.wetVertices) + " wet vertices, " +
-                    std::to_string(scene.water.indices.size() / 3) + " triangles");
+}
 
+void finishTextures(const forge::lev::File& level, const Options& options, Context::Impl& ctx, TextureCache& cache, Scene& scene, const std::map<int, size_t>& slotToLayer) {
     // Decode every referenced texture once.
     std::map<uint32_t, const Image*> imgs;
     for (auto& layer : scene.themes) {
@@ -746,7 +789,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             const int tpc = std::max(options.texelsPerCell, 1);
             const int cx = level.cellsX(), cy = level.cellsY();
             const uint32_t W = uint32_t(scene.mapWidth) * tpc, H = uint32_t(scene.mapHeight) * tpc;
-            if (W == 0 || H == 0) return scene;
+            if (W == 0 || H == 0) return;
             struct Pass { uint32_t tex; uint8_t dir; float alpha; };
             std::vector<std::vector<Pass>> passes(size_t(cx) * cy);
             std::map<uint32_t, const Image*> layerImgs;
@@ -849,7 +892,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             scene.hasAlbedo = true;
             scene.engineBake = true;
             scene.enginePasses = passCount;
-            return scene;
+            return;
         }
         if (options.log) options.log("no STB foreground passes for this map (" + fl.note + "); baking from the LEV theme blend");
     }
@@ -858,7 +901,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     const int tpc = std::max(options.texelsPerCell, 1);
     const int cx = level.cellsX();
     const uint32_t W = uint32_t(scene.mapWidth) * tpc, H = uint32_t(scene.mapHeight) * tpc;
-    if (W == 0 || H == 0) return scene;
+    if (W == 0 || H == 0) return;
     if (options.log) options.log("baking " + std::to_string(W) + "x" + std::to_string(H) + " albedo");
     scene.albedo = rgbaImage(W, H, std::vector<uint8_t>(size_t(W) * H * 4, 255), "albedo");
     const float tile = options.tileSize > 0 ? options.tileSize : 4.0f;
@@ -938,7 +981,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         }
     });
     scene.hasAlbedo = true;
-    return scene;
+    return;
 }
 
 // ------------------------------------------------------------------- writers
