@@ -8,6 +8,10 @@ is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge
 `libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
 the CLI split (the evening run; see the last commit for the run after the thumbnails).
 
+**2026-09-19 (last):** the release zip was dry-run from a clean folder (all three exes + GUI
+against the Steam install), CI re-checked against the current targets, scripted runs now drop
+real mouse input (flake hardening), the Nexus corpus is on disk for 0.20 (`work/nexus_mods/`).
+
 **2026-09-19 (late):** the 1.0 "Must" table closed two rows -- *refuses to damage a running
 game* (one guard for every writer, matched to the target install, proven with the game up) and
 *runs on a clean machine* (static exes verified) -- plus `docs/RELEASE.md`. Open for 1.0 now:

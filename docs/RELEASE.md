@@ -24,6 +24,9 @@ the two in-game items are the human part.
 6. Unzip on a machine/VM without the repo, point it at a retail Steam install, run
    `docs/FIRST_LEVEL.md` end to end (the stranger's test, 1.0-rc #5). Every workaround is a
    bug to fix before tagging.
+   *(Local dry run 2026-09-19: the 0.16.0 zip unpacked to a scratch folder found the Steam
+   install by itself; `forge list/info/export --foliage --things`, `forge-tools defs list` and the
+   GUI through `wait_foliage` all worked from there. The other-machine run is still owed.)*
 7. `git tag v<version>` -> push with tags -> GitHub Actions green (the workflow builds with
    the same MinGW/CMake profile and runs the offline suite) -> attach the zip to the release.
 8. Post: the Discord thread with the zip link, the walkthrough's first screenshot and the
