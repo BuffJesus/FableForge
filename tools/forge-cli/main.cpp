@@ -7894,8 +7894,15 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     // preserving existing offsets and appending any new record names, so the
     // copied script/frontend bins still resolve against it.
     auto game = openDefs(baseRoot, "game.bin");
-    size_t replaced = 0, added = 0;
-    if (const auto* bank = pkg.findBank("GameBINEntries")) {
+    size_t replaced = 0, added = 0, skippedUntyped = 0;
+    // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
+    // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
+    // package (contentType 459: banks Settings / Objects / ObjectLinks / Text, entries
+    // untyped -- ObjectLinks is .NET-serialised link metadata, Text holds text.big strings).
+    // A replacement needs no type; a new record without one cannot be added.
+    for (const char* bankName : {"GameBINEntries", "Objects"}) {
+        const auto* bank = pkg.findBank(bankName);
+        if (bank == nullptr) continue;
         for (const auto& e : bank->entries) {
             auto data = pkg.entryData(e);
             const forge::bin::Entry* existing =
@@ -7904,12 +7911,17 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 game.setEntryData((size_t)(existing - game.entries().data()),
                                   std::move(data));
                 ++replaced;
-            } else {
+            } else if (!e.definition.empty() && e.definition != "-") {
                 game.addEntry(e.definition, e.name, std::move(data));
                 ++added;
+            } else {
+                std::fprintf(stderr, "  warning: %s: new record %s has no def type in this package; not added\n", bankName, e.name.c_str());
+                ++skippedUntyped;
             }
         }
     }
+    if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty())
+        std::fprintf(stderr, "  warning: Text bank has %zu string(s) for text.big, NOT applied (text.big merge is a follow-up)\n", text->entries.size());
     game.save(defsOut / "names.bin", defsOut / "game.bin");
 
     // Copy the untouched sibling bins so the out-root is a complete install.
@@ -7985,25 +7997,82 @@ int fmpExport(const std::string& baseRoot, const std::string& moddedRoot,
 
 // Apply a bsdiff game.bin.patch onto a base game-root, producing a full root
 // (patched game.bin + copied sibling bins). Used to normalize .patch mods.
+// A bsdiff `.patch` names its target by its own stem (`game.bin.patch`, `FinalAlbion.wad.patch`,
+// `gui_spell_heal.wmv.patch`): the file of that name under the base root's data tree gets
+// patched into the out root; the sibling defs are copied so the out root opens as an install.
+// bsdiff needs the exact bytes the patch was made against. An install whose game.bin was ever
+// re-saved by a def tool (records identical, chunks re-compressed) is not that file, so a
+// result that does not parse is retried against `<file>.retail-bak` when one sits next to the
+// base file, and refused with the reason otherwise.
+static std::filesystem::path findUnderData(const std::filesystem::path& root, const std::string& leaf) {
+    namespace fs = std::filesystem;
+    const fs::path data = root / "data";
+    if (!fs::is_directory(data)) return {};
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(data, ec), end; it != end; it.increment(ec)) {
+        if (ec) break;
+        if (it->is_regular_file(ec) && it->path().filename().string() == leaf) return it->path();
+    }
+    return {};
+}
+
 void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
                  const std::string& outRoot) {
     namespace fs = std::filesystem;
-    const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
-    const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
-    fs::create_directories(defsOut);
-    const auto oldFile = readAllBytes((baseDefs / "game.bin").string());
+    const std::string leaf = fs::path(patchPath).stem().string();   // game.bin.patch -> game.bin
+    fs::path target = findUnderData(baseRoot, leaf);
+    if (target.empty()) throw std::runtime_error("patch " + patchPath + ": no file named " + leaf + " under " + baseRoot + "/data");
+    const fs::path rel = fs::relative(target, baseRoot);
+    const fs::path out = fs::path(outRoot) / rel;
+    fs::create_directories(out.parent_path());
     const auto patch = readAllBytes(patchPath);
-    writeAllBytes((defsOut / "game.bin").string(),
-                  forge::bspatch::apply(oldFile, patch));
-    for (const char* sib : {"names.bin", "script.bin", "frontend.bin"})
-        if (fs::exists(baseDefs / sib))
-            fs::copy_file(baseDefs / sib, defsOut / sib,
-                          fs::copy_options::overwrite_existing);
+    const bool isBin = fs::path(leaf).extension() == ".bin";
+    auto tryApply = [&](const fs::path& oldPath) -> bool {
+        const auto oldFile = readAllBytes(oldPath.string());
+        auto result = forge::bspatch::apply(oldFile, patch);
+        if (isBin) {
+            // a defs bin must open; garbage means the patch was made against other bytes
+            const fs::path probeDir = fs::temp_directory_path() / "forge_patch_probe";
+            fs::remove_all(probeDir); fs::create_directories(probeDir / "data" / "CompiledDefs");
+            writeAllBytes((probeDir / "data" / "CompiledDefs" / leaf).string(), result);
+            const fs::path names = target.parent_path() / "names.bin";
+            const fs::path namesBak = fs::path(names.string() + ".retail-bak");
+            fs::copy_file(fs::exists(namesBak) && oldPath.string().find(".retail-bak") != std::string::npos ? namesBak : names,
+                          probeDir / "data" / "CompiledDefs" / "names.bin", fs::copy_options::overwrite_existing);
+            try {
+                auto probe = openDefs(probeDir.string(), leaf);
+                (void)probe.entries().size();
+            } catch (const std::exception&) { return false; }
+        }
+        writeAllBytes(out.string(), result);
+        return true;
+    };
+    bool ok = tryApply(target), usedBak = false;
+    if (!ok) {
+        const fs::path bak = fs::path(target.string() + ".retail-bak");
+        if (fs::exists(bak) && tryApply(bak)) {
+            usedBak = true;
+            std::printf("  %s: the install's %s is not the bytes the patch was made against; applied to %s instead\n", fs::path(patchPath).filename().string().c_str(), leaf.c_str(), bak.filename().string().c_str());
+            ok = true;
+        }
+    }
+    if (!ok)
+        throw std::runtime_error("patch " + fs::path(patchPath).filename().string() + ": the result does not parse -- " + leaf +
+                                 " in " + baseRoot + " is not the pristine retail file this bsdiff was made against (a re-saved bin has the same records in different bytes); "
+                                 "put the retail file back (Steam verify, or a <file>.retail-bak next to it) and retry");
+    if (isBin) {
+        // the sibling bins so the out root opens as an install
+        const fs::path baseDefs = target.parent_path(), defsOut = out.parent_path();
+        for (const char* sib : {"names.bin", "script.bin", "frontend.bin"}) {
+            // a pristine game.bin pairs with the pristine names.bin (offsets differ after a re-save)
+            fs::path src = baseDefs / sib;
+            if (usedBak && fs::exists(fs::path(src.string() + ".retail-bak"))) src = fs::path(src.string() + ".retail-bak");
+            if (fs::exists(src) && !fs::exists(defsOut / sib))
+                fs::copy_file(src, defsOut / sib, fs::copy_options::overwrite_existing);
+        }
+    }
 }
 
-// Top-level heterogeneous mod merge: normalize each source (game-root dir, .fmp,
-// or bsdiff .patch) to a game-root, then run the field-level game.bin merge over
-// all of them in load order, writing a drop-in overlay (optionally staged).
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sources,
               const std::string& fieldSchema, bool doStage, bool jsonOutput) {
@@ -8026,6 +8095,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             roots.push_back(root);
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
             roots.push_back(s);  // already a game-root
+        } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data")) {
+            // a partial game-root tree (loose Data/Levels ...): no defs to merge, its
+            // TNG / QST files join below
         } else {
             std::fprintf(stderr, "mods merge: unrecognized source (need dir/.fmp/"
                                  ".patch): %s\n", s.c_str());
