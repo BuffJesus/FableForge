@@ -67,7 +67,7 @@ int usage() {
         "  forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
         "  forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
         "  forge entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
-        "  forge backups   |   forge restore [--forget]      (every .atlas-orig / .atlas-created under the install; restore puts the retail files back)\n"
+        "  forge backups   |   forge restore [--forget]      (every .forge-orig / .forge-created (and the older .atlas-*, .forgebak, .ovrbak) under the install; restore puts the retail files back)\n"
         "  forge compact-stb [--dry-run]                     (rewrite FinalAlbion_RT.stb without the dead payloads deploys leave behind; every payload verified byte-identical)\n"
         "  forge region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_X>] [--display <name>] [--worldmap 0|1]   (a region's def/minimap/name, WLD + BWD)\n"
         "  forge world-stitch <map> [<map2>] [--feather <cells>|auto] [--dry-run] [--install <root>]\n"

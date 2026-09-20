@@ -62,7 +62,8 @@ std::optional<int> runInstall(const std::string& cmd, const Args& args) {
         if (cmd == "backups") {
             size_t changed = 0;
             for (const auto& e : entries) {
-                std::printf("  %s  %-70s %s\n", e.differs ? (e.created ? "NEW " : "EDIT") : "same", e.file.string().c_str(), e.when.c_str());
+                const char* tag = !e.differs ? "same" : e.kind == albion::backups::Kind::Created ? "NEW " : e.kind == albion::backups::Kind::Staged ? "MODS" : e.kind == albion::backups::Kind::Overlay ? "OVR " : "EDIT";
+                std::printf("  %s  %-70s %s\n", tag, e.file.string().c_str(), e.when.c_str());
                 changed += e.differs;
             }
             std::printf("%zu backed-up file(s), %zu differ from their backup%s\n", entries.size(), changed, albion::backups::gameRunning() ? " (Fable.exe is running)" : "");

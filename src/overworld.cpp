@@ -1,3 +1,4 @@
+#include "backups.hpp"
 #include "overworld.hpp"
 
 #include <algorithm>
@@ -36,11 +37,7 @@ std::string stemOf(const std::string& levelName) {
     return fs::path(levelName).stem().string();
 }
 
-bool backupOnce(const fs::path& p, std::string& error) {
-    const fs::path b = p.string() + ".atlas-orig";
-    try { if (fs::exists(p) && !fs::exists(b)) fs::copy_file(p, b); return true; }
-    catch (const std::exception& e) { error = e.what(); return false; }
-}
+bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
 
 std::vector<uint8_t> readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);

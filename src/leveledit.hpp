@@ -197,7 +197,7 @@ public:
 
     // Writes the loose data/Levels/FinalAlbion/<map>.tng (creating the folders).
     bool saveLoose(const std::filesystem::path& gameRoot, std::string& error);
-    // Replaces the map's entry in FinalAlbion.wad (backup FinalAlbion.wad.atlas-orig
+    // Replaces the map's entry in FinalAlbion.wad (backup FinalAlbion.wad.forge-orig
     // is made once, the first time the archive is touched).
     bool deployWad(const std::filesystem::path& gameRoot, std::string& error);
     // Marks the current text as the saved baseline.
@@ -238,7 +238,7 @@ public:
     int paletteSlotOf(const std::string& name) const;
     // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
     // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,
-    // patched in place; one-time .atlas-orig backups). `notes` gets the bake log.
+    // patched in place; one-time .forge-orig backups). `notes` gets the bake log.
     // `library` (the install's ENGINE_THEME defs) is needed when themes were
     // painted: the layer meshes are regenerated from the LEV themes then.
     bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,

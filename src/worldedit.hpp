@@ -3,7 +3,7 @@
 // into the game's four world containers (BWD + WLD + WAD + STB) with the
 // terrain chunk translated to the new origin (src/stbrelocate). The install part is forgecore's
 // worldinstall (the library form of `forge world install-level`); FableForge adds
-// the re-bake, the .atlas-orig backups and the donor lookup.
+// the re-bake, the .forge-orig backups and the donor lookup.
 
 #include <filesystem>
 #include <functional>
@@ -103,7 +103,7 @@ bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelReq
 // 256x256 DXT3 entry MINIMAP_<NAME> and register the name in the
 // PLAYER_GUI defs (registerMinimapGraphic) so the engine resolves it. Uses the
 // FableTLC texture writer through forgecore's import driver. One-time
-// .atlas-orig backups of textures.big and game.bin/names.bin. `entryName` may
+// .forge-orig backups of textures.big and game.bin/names.bin. `entryName` may
 // name the entry (default MINIMAP_<NAME>); an existing entry of that name is
 // replaced.
 bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string& levelName,
@@ -115,7 +115,7 @@ bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string
 // GetMiniMapGraphic, FableWin 0x236e25f), NOT through the bank's TOC symbols:
 // a renamed or appended texture is invisible until it is registered there.
 // Adds/updates `name` -> `id` in PLAYER_GUI_PC (and PLAYER_GUI_DEFAULT when it
-// carries the map) of data/CompiledDefs/game.bin, one-time .atlas-orig backups.
+// carries the map) of data/CompiledDefs/game.bin, one-time .forge-orig backups.
 bool registerMinimapGraphic(const std::filesystem::path& gameRoot, const std::string& name, uint32_t id,
                             std::vector<std::string>& notes, std::string& error);
 
@@ -124,7 +124,7 @@ bool registerMinimapGraphic(const std::filesystem::path& gameRoot, const std::st
 // global id) and a new ENGINE_THEME def is appended to game.bin as a copy of
 // `donor` with its base/background (and cliff) textures pointed at the new
 // entry (bump maps cleared). Existing def indices are untouched (append only).
-// One-time .atlas-orig backups of textures.big, names.bin and game.bin.
+// One-time .forge-orig backups of textures.big, names.bin and game.bin.
 struct CustomThemeRequest {
     std::filesystem::path png;        // the ground texture (power-of-two square, e.g. 512x512)
     std::filesystem::path cliffPng;   // optional: a different texture for steep faces (default: the same)
@@ -139,7 +139,7 @@ struct CustomThemeResult {
 bool createCustomTheme(const std::filesystem::path& gameRoot, const CustomThemeRequest& req,
                        CustomThemeResult& out, std::string& error);
 
-// One-time .atlas-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
+// One-time .forge-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
 // then the staged atomic install. The new level's LEV/TNG are the donor's
 // current bytes (a loose donor .lev/.tng wins over the WAD copy, like the game).
 bool createLevelFromDonor(const std::filesystem::path& gameRoot, const NewLevelRequest& request,

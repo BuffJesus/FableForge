@@ -1,3 +1,4 @@
+#include "backups.hpp"
 #include "worldedit.hpp"
 #include "gtg.hpp"
 
@@ -43,11 +44,7 @@ std::string lower(std::string s) {
     return s;
 }
 
-bool backupOnce(const fs::path& p, std::string& error) {
-    const fs::path b = p.string() + ".atlas-orig";
-    try { if (fs::exists(p) && !fs::exists(b)) fs::copy_file(p, b); return true; }
-    catch (const std::exception& e) { error = e.what(); return false; }
-}
+bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
 
 std::vector<uint8_t> readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
@@ -127,7 +124,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.newLevelName = req.name;
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
-        ir.backupSuffix.clear();   // FableForge keeps its own .atlas-orig copies
+        ir.backupSuffix.clear();   // FableForge keeps its own .forge-orig copies
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("reading the donor level");
 

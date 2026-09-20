@@ -1,7 +1,7 @@
 // The Textures tab's model: browse textures.big by bank, decode one entry for a
 // preview, export it as PNG, replace it from a PNG (same slot, allocated size kept, the
 // entry's own pixel format) or add a new one. Writes go through forgecore's native
-// texturewrite (the 0.14 importer, validated in-game) with a one-time .atlas-orig backup
+// texturewrite (the 0.14 importer, validated in-game) with a one-time .forge-orig backup
 // and are refused while the game runs.
 #pragma once
 

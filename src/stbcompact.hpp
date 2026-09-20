@@ -2,7 +2,7 @@
 // that changes a chunk's size appends the new payload and a cloned table and
 // leaves the old ones behind; retail's own bake did the same (~3.4 MB of dead
 // bytes ship in the retail bank). This rewrites the bank as live payloads +
-// one table, takes the one-time .atlas-orig backup like a deploy, verifies
+// one table, takes the one-time .forge-orig backup like a deploy, verifies
 // every payload byte-identical through a fresh parse, and swaps the file in.
 // A running game holds the bank open, so the swap fails there and nothing is lost.
 #pragma once

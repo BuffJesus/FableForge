@@ -1,3 +1,4 @@
+#include "backups.hpp"
 #include "stbcompact.hpp"
 
 #include <stdexcept>
@@ -21,8 +22,8 @@ Result compact(const fs::path& installRoot) {
     try {
         const auto before = forge::stb::compactMeasure(stb);
         if (before.deadBytes() == 0) { r.ok = true; r.alreadyCompact = true; r.report = before; return r; }
-        const fs::path orig = stb.string() + ".atlas-orig";
-        if (!fs::exists(orig)) fs::copy_file(stb, orig);   // the one-time retail backup, like every deploy
+        std::string berr;
+        if (!albion::backups::backupOnce(stb, berr)) throw std::runtime_error(berr);   // the one-time retail backup, like every deploy
         // write beside the bank, verify every payload survived, then swap in
         const fs::path tmp = stb.string() + ".compact-tmp";
         r.report = forge::stb::compactBank(stb, tmp);

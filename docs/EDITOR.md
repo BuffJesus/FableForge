@@ -19,8 +19,15 @@ MSYS2 MinGW and runs the offline checks (unit, LZO, the no-install GUI script).
 
 ## Backups and restore
 
-Every writer keeps `<file>.atlas-orig` (the untouched original, once) or marks a
-file it created with `<file>.atlas-created`. `src/backups.{hpp,cpp}` scans the
+Every writer keeps `<file>.forge-orig` (the untouched original, once) or marks a
+file it created with `<file>.forge-created`; installs touched before the rename carry
+the same as `.forge-orig` / `.forge-created` and are read as-is (a file keeps whichever
+it has). The two other conventions are known too: `.forgebak` (what a staged mod deploy
+put aside; Undeploy consumes it) and `.ovrbak` (FableTLC's overlay installer).
+*Restore the retail files* reverts a staged deploy through its manifest first, then puts
+every original back -- and an original that was taken on top of a stage (its `.forgebak`
+is older) is rebased onto the reverted file instead of copied back over it.
+`src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
 CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over
 the live file (the backup stays as the baseline), created files are deleted.
@@ -37,7 +44,7 @@ payloads only through the table and the common header names entries by id, so
 `forge::stb::compactBank` rewrites the bank as `[header][live payloads in table order,
 aligned][one table]` -- ids, names, sizes, payload bytes and the table metadata verbatim,
 only offsets and the table pointer change; compacting a compact bank reproduces it byte
-for byte (unit test). `src/stbcompact` wraps it: one-time `.atlas-orig` backup, write to
+for byte (unit test). `src/stbcompact` wraps it: one-time `.forge-orig` backup, write to
 `.compact-tmp`, re-parse and compare every payload, then swap (a running game holds the
 bank open and the swap fails cleanly). CLI `forge compact-stb [--dry-run]`; the Setup panel
 shows *Static-map bank: N MB, M MB reclaimable* with *Compact the bank* (background job,
@@ -89,7 +96,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 * **Save / deploy**: `Write into FinalAlbion.wad` is the primary action -- it
   replaces the archive entry through `forge::wad::repack`
   (same-size payloads are patched in place, larger ones appended; every byte
-  the reader does not interpret is preserved). One-time `.atlas-orig` backups.
+  the reader does not interpret is preserved). One-time `.forge-orig` backups.
   The game loads levels from the WAD, so deploy is what makes edits visible
   in-game; saved games cache region entities, so start a new game or enter the
   region fresh to see them. `Save draft` keeps the loose
@@ -127,7 +134,7 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
      regions that own this map: contains + sees, overlapping placement) are
      loaded from the WAD so the shared-edge vertices sample them like the
      retail bake did. The chunk keeps its size and is written in place.
-  One-time `.atlas-orig` backups of all three files. Baking StartOakValeWest
+  One-time `.forge-orig` backups of all three files. Baking StartOakValeWest
   (128x224, 113 patches + 112 layer frames) takes about 4 s.
 * **Verified**: the identity bake reproduces every vertex height of the
   retail chunk; a sculpted hill bakes with max |dh| = 0 against the LEV on
@@ -217,8 +224,8 @@ mouse via relative motion, keyboard):
   show .tng changes) and checks that each ScriptName exists in the running
   game at the position the loose .tng says. Verified 2026-09-16: a barrel
   placed and written into FinalAlbion.wad is found at exactly its position.
-* `restore_install.sh` -- puts the `.atlas-orig` backups back and removes only
-  the loose files FableForge created (`.atlas-created` marker).
+* `restore_install.sh` -- puts the `.forge-orig` backups back and removes only
+  the loose files FableForge created (`.forge-created` marker).
 * `patch_stb_chunk.sh` -- write a same-size chunk into `FinalAlbion_RT.stb`
   (bisecting a bad bake: splice donor/baked regions and test each in-game).
 * `crash_catcher.py`, `trace_lzo_calls.py`, `trace_bp_stack.py`,
@@ -425,7 +432,7 @@ Scripts: `place_village <VILLAGE_DEF> [scriptname]`, `village_member
 The *Live link* card (2026-09-17, in-game verified) talks to the running game
 with no native code: *Install into ForgeFSE* writes `FSE/AtlasLink/atlas_link.lua`
 and appends a tagged `Main()` hook to `FSE/PartyMode/PartyMode.lua` (one-time
-`.atlas-orig`; *Remove the hook* takes it out again, byte-exact). The hook
+`.forge-orig`; *Remove the hook* takes it out again, byte-exact). The hook
 starts an `AtlasLink` quest thread that polls `FSE/AtlasLink/cmd.lua` with
 `loadfile()` every 0.5 s -- the FSE Lua state has no `io` library, so the command
 is a Lua chunk returning a table -- runs it through the quest API and answers in
@@ -535,7 +542,7 @@ entries (live probe, 2026-08), so a dedicated region past that is never
 reachable. The card therefore always attaches to an existing region; the CLI's
 `--dedicated` keeps the old behaviour and warns. Refusals (duplicate name,
 off-grid origin, overlapping box) happen before any file is touched; the four
-containers get one-time `.atlas-orig` backups and are replaced with staged
+containers get one-time `.forge-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
@@ -547,7 +554,7 @@ keeps its allocated size and pixel format, mips are rebuilt, the entry is valida
 against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
 barrel is: select it, click its texture, *Replace from image*. One-time
-`textures.big.atlas-orig` backup; refused while the game runs. CLI: `FableForge
+`textures.big.forge-orig` backup; refused while the game runs. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 
 ## Mods tab
@@ -596,7 +603,7 @@ name `MINIMAP_<LEVEL>` and registered in the `PLAYER_GUI_PC` /
 `PLAYER_GUI_DEFAULT` defs' `MiniMapGraphics` map in `game.bin` -- that map is what
 retail resolves a region's `MiniMapGraphic` through (`CTCInventoryBase::
 GetMiniMapGraphic`). No retail slot is taken any more; `forge minimap-register
-<name> <id>` does the registration alone. One-time `.atlas-orig` backups of
+<name> <id>` does the registration alone. One-time `.forge-orig` backups of
 `textures.big`, `game.bin` and `names.bin`. (The paragraphs below describe the
 earlier slot-replacement approach and why it was needed.)
 

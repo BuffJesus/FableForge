@@ -44,7 +44,7 @@ std::optional<RegionEntrance> entranceOf(const std::filesystem::path& gameRoot, 
 // Write (or move) the slot's region entrance: one REGION_ENTRANCE_POINT and one
 // HOLY_SITE_PLAYER_START "<levelName>HSP" at `pos` facing `forward` (map-local). An
 // existing entrance authored by FableForge (same HSP name) is updated in place; retail ones
-// are left alone and a second entrance is appended. One-time .atlas-orig backup.
+// are left alone and a second entrance is appended. One-time .forge-orig backup.
 bool setRegionEntrance(const std::filesystem::path& gameRoot, int slot, const std::string& levelName,
                        const float pos[3], const float forward[2], std::vector<std::string>& notes, std::string& error);
 

@@ -167,7 +167,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   FinalAlbion.wad** puts the edited file into the archive the game actually loads
   (the primary action); **Save draft** keeps a loose
   `data/Levels/FinalAlbion/<map>.tng` working copy that only FableForge reads. Both keep
-  a one-time `.atlas-orig` backup of what was there.
+  a one-time `.forge-orig` backup of what was there.
 * When you place a creature or spawner, or create a level with its own region, a
   note under that button repeats the engine rule that applies (new game / adult
   hero / region table cached in saves). *Got it* hides it for the session.
@@ -177,7 +177,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   it in `FinalAlbion.wad` and re-bakes the map's terrain chunk inside
   `FinalAlbion_RT.stb` from the edited heights, with the neighbouring maps supplying
   the shared-edge samples, so the visible mesh, collision and camera bounds all follow.
-  One-time `.atlas-orig` backups. The chunk's trees and grass ride the sculpted
+  One-time `.forge-orig` backups. The chunk's trees and grass ride the sculpted
   ground; *Re-seat objects on the new ground* moves placed things with it.
 * **Paint ground**: brush any ground theme of the map's palette, add any
   `ENGINE_THEME` the game has to the palette, or turn your own PNG into a theme

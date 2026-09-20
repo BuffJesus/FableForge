@@ -470,7 +470,7 @@ bool App::deployDocument() {
     if (gameWriteBlocked("deploy")) return false;
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
-    pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.atlas-orig)", 3);
+    pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
     return true;
 }
 
@@ -903,7 +903,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank"}, cardInner);
     auto_.registerWidget("seg_new_level_mode");
     ImGui::PushFont(fontSmall_);
-    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain chunk translated to the new origin: ground, LOD, water, trees and grass) into the world as a new level owned by an existing region. One-time .atlas-orig backups of the .bwd/.wld/.wad/.stb.");
+    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain chunk translated to the new origin: ground, LOD, water, trees and grass) into the world as a new level owned by an existing region. One-time .forge-orig backups of the .bwd/.wld/.wad/.stb.");
     else theme::hint(("A flat level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
     ImGui::PopFont();
     if (newLevelMode_ == 1) {
@@ -953,7 +953,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map when it does not get its own (existing saves see it at once).");
     theme::toggle("Own region + minimap", &newLevelOwnRegion_);
     auto_.registerWidget("toggle_new_level_own_region");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The level gets its own region: its own name on the map screen and a minimap baked from its\nterrain (appended to textures.big and registered; one-time .atlas-orig backups).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The level gets its own region: its own name on the map screen and a minimap baked from its\nterrain (appended to textures.big and registered; one-time .forge-orig backups).");
     if (newLevelOwnRegion_) {
         int mode = newLevelDedicated_ ? 0 : 1;
         if (theme::segmented("##ownmode", mode, {"New region slot", "Take over a filler"}, cardInner)) newLevelDedicated_ = mode == 0;
@@ -1611,9 +1611,9 @@ void App::drawEditFooter(float pad, float inner) {
         } else if (!confirmTerrainDeploy_) {
             if (theme::primaryButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .atlas-orig backups of all three files.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of all three files.");
         } else {
-            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev, FinalAlbion.wad and FinalAlbion_RT.stb? (one-time .atlas-orig backups)";
+            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev, FinalAlbion.wad and FinalAlbion_RT.stb? (one-time .forge-orig backups)";
             const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(36), "btn_terrain_deploy_confirm");
             if (r != 0) confirmTerrainDeploy_ = false;
             if (r > 0) startTerrainDeploy();
@@ -1626,9 +1626,9 @@ void App::drawEditFooter(float pad, float inner) {
     if (!confirmDeploy_) {
         if (theme::primaryButton("Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.atlas-orig.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.forge-orig.");
     } else {
-        const std::string q = "Replace " + doc_.mapName() + ".tng inside FinalAlbion.wad? The game reads it on the next visit (one-time .atlas-orig backup).";
+        const std::string q = "Replace " + doc_.mapName() + ".tng inside FinalAlbion.wad? The game reads it on the next visit (one-time .forge-orig backup).";
         const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(42), "btn_deploy_confirm");
         if (r != 0) confirmDeploy_ = false;
         if (r > 0) deployDocument();
@@ -1636,7 +1636,7 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();
     auto_.registerWidget("btn_save");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; Atlas reopens it).\nA one-time backup of any existing file is kept as .atlas-orig.", doc_.mapName().c_str());
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; Atlas reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
     if (dirty) {
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
@@ -1682,7 +1682,7 @@ void App::drawEntranceCard(float pad, float inner, float cardInner) {
     ImGui::PopFont();
     if (theme::ghostButton(e ? "Move the entrance to the view centre" : "Set the entrance at the view centre", ImVec2(cardInner, S(28))) && doc_.worldSlot()) setEntranceHere();
     auto_.registerWidget("btn_set_entrance");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes FinalAlbion.gtg (one-time .atlas-orig backup). Retail entrances are left in place; a second one is added for this map.");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes FinalAlbion.gtg (one-time .forge-orig backup). Retail entrances are left in place; a second one is added for this map.");
     theme::endCard();
 }
 

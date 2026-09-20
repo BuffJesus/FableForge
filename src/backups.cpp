@@ -1,5 +1,7 @@
 #include "backups.hpp"
 
+#include "forge/stage.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -8,6 +10,7 @@
 #include <ctime>
 #include <cwctype>
 #include <fstream>
+#include <map>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -21,9 +24,6 @@ namespace fs = std::filesystem;
 namespace albion::backups {
 
 namespace {
-
-const char* kOrig = ".atlas-orig";
-const char* kCreated = ".atlas-created";
 
 bool endsWith(const std::string& s, const char* suffix) {
     const size_t n = std::strlen(suffix);
@@ -69,15 +69,28 @@ void scanDir(const fs::path& dir, std::vector<Entry>& out) {
         if (!it.is_regular_file(ec)) continue;
         const std::string name = it.path().filename().string();
         Entry e;
-        if (endsWith(name, kOrig)) {
+        auto strip = [&](const char* suffix) { return dir / name.substr(0, name.size() - std::strlen(suffix)); };
+        if (endsWith(name, kOrigSuffix) || endsWith(name, kLegacyOrigSuffix)) {
             e.backup = it.path();
-            e.file = dir / name.substr(0, name.size() - std::strlen(kOrig));
+            e.file = strip(endsWith(name, kOrigSuffix) ? kOrigSuffix : kLegacyOrigSuffix);
+            e.kind = Kind::Original;
             e.differs = !sameBytes(e.file, e.backup);
-        } else if (endsWith(name, kCreated)) {
+        } else if (endsWith(name, kCreatedSuffix) || endsWith(name, kLegacyCreatedSuffix)) {
             e.backup = it.path();
-            e.file = dir / name.substr(0, name.size() - std::strlen(kCreated));
+            e.file = strip(endsWith(name, kCreatedSuffix) ? kCreatedSuffix : kLegacyCreatedSuffix);
+            e.kind = Kind::Created;
             e.created = true;
             e.differs = fs::exists(e.file, ec);
+        } else if (endsWith(name, kStagedSuffix)) {
+            e.backup = it.path();
+            e.file = strip(kStagedSuffix);
+            e.kind = Kind::Staged;
+            e.differs = !sameBytes(e.file, e.backup);
+        } else if (endsWith(name, kOverlaySuffix)) {
+            e.backup = it.path();
+            e.file = strip(kOverlaySuffix);
+            e.kind = Kind::Overlay;
+            e.differs = !sameBytes(e.file, e.backup);
         } else continue;
         e.size = fs::exists(e.file, ec) ? fs::file_size(e.file, ec) : 0;
         e.when = stamp(e.backup);
@@ -87,6 +100,31 @@ void scanDir(const fs::path& dir, std::vector<Entry>& out) {
 
 } // namespace
 
+fs::path originalOf(const fs::path& file) {
+    std::error_code ec;
+    const fs::path legacy = file.string() + kLegacyOrigSuffix;
+    if (fs::exists(legacy, ec)) return legacy;
+    return file.string() + kOrigSuffix;
+}
+
+bool hasOriginal(const fs::path& file) {
+    std::error_code ec;
+    return fs::exists(originalOf(file), ec);
+}
+
+bool backupOnce(const fs::path& file, std::string& error) {
+    try {
+        if (fs::exists(file) && !hasOriginal(file)) fs::copy_file(file, file.string() + kOrigSuffix);
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+void markCreated(const fs::path& file) {
+    std::error_code ec;
+    if (fs::exists(file.string() + kLegacyCreatedSuffix, ec)) return;
+    std::ofstream(file.string() + kCreatedSuffix) << "created by FableForge\n";
+}
+
 std::vector<Entry> scan(const fs::path& gameRoot) {
     std::vector<Entry> out;
     scanDir(gameRoot, out);
@@ -95,6 +133,7 @@ std::vector<Entry> scan(const fs::path& gameRoot) {
     scanDir(gameRoot / "data" / "CompiledDefs", out);
     scanDir(gameRoot / "data" / "graphics" / "pc", out);
     scanDir(gameRoot / "data" / "Misc" / "pc", out);
+    scanDir(gameRoot / "data" / "lang" / "English", out);
     scanDir(gameRoot / "FSE", out);
     scanDir(gameRoot / "FSE" / "PartyMode", out);
     std::sort(out.begin(), out.end(), [](const Entry& a, const Entry& b) { return a.file < b.file; });
@@ -161,8 +200,9 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
         return true;
     }
     if (!fs::exists(e.backup, ec)) { error = "backup missing: " + e.backup.string(); return false; }
+    if (e.kind == Kind::Staged) keepBackup = true;   // the stage manifest still names it
     // copy through a temp file so an interrupted restore never leaves a half file
-    const fs::path tmp = e.file.string() + ".atlas-restore";
+    const fs::path tmp = e.file.string() + ".forge-restore";
     fs::copy_file(e.backup, tmp, fs::copy_options::overwrite_existing, ec);
     if (ec) { error = "cannot copy " + e.backup.string() + ": " + ec.message(); return false; }
     fs::rename(tmp, e.file, ec);
@@ -174,8 +214,35 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
 size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::string>& notes, std::string& error) {
     if (gameRunningIn(gameRoot)) { error = "Fable.exe is running; quit the game first (the engine holds these files open)"; return 0; }
     size_t n = 0;
+    std::error_code ec;
+    // an original taken while a stage was live is the staged content, not retail: the stage's
+    // older .forgebak is the true original. Those originals are rebased onto the reverted file
+    // below instead of being copied back over it.
+    std::vector<fs::path> rebase;
+    {
+        std::map<fs::path, fs::file_time_type> staged;
+        const auto before = scan(gameRoot);
+        for (const auto& e : before) if (e.kind == Kind::Staged) staged[e.file] = fs::last_write_time(e.backup, ec);
+        for (const auto& e : before)
+            if (e.kind == Kind::Original && staged.count(e.file) && fs::last_write_time(e.backup, ec) > staged[e.file]) rebase.push_back(e.file);
+    }
+    // a staged deploy first, through its manifest (restores and removes what it put there)
+    if (fs::exists(forge::stage::manifestPath(gameRoot), ec)) {
+        try {
+            const auto r = forge::stage::revert(gameRoot);
+            notes.push_back("reverted the staged deploy: " + std::to_string(r.restored.size()) + " restored, " + std::to_string(r.removed.size()) + " removed");
+            n += r.restored.size() + r.removed.size();
+            for (const auto& f : rebase) {
+                const fs::path orig = originalOf(f);
+                if (!fs::exists(f, ec)) continue;
+                fs::copy_file(f, orig, fs::copy_options::overwrite_existing, ec);
+                notes.push_back((ec ? "could not rebase " : "rebased ") + orig.filename().string() + " onto the reverted file (it was taken on top of the stage)");
+            }
+        } catch (const std::exception& ex) { error = ex.what(); notes.push_back(std::string("failed: ") + ex.what()); rebase.clear(); }
+    } else rebase.clear();
     for (const auto& e : scan(gameRoot)) {
         if (!e.differs) continue;
+        if (e.kind == Kind::Staged) { notes.push_back("left " + e.file.string() + " (a .forgebak outside any stage manifest; undeploy or remove it by hand)"); continue; }
         std::string err;
         if (!restore(e, keepBackup, err)) { error = err; notes.push_back("failed: " + err); continue; }
         notes.push_back((e.created ? "removed " : "restored ") + e.file.string());

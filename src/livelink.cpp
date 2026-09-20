@@ -1,3 +1,4 @@
+#include "backups.hpp"
 #include "livelink.hpp"
 
 #include <chrono>
@@ -151,8 +152,8 @@ bool install(const fs::path& root, std::string& error, const std::string& host) 
     if (at != std::string::npos) body.replace(at, 5, cmd);
     if (!writeAll(script, body, error)) return false;
     if (isInstalled(root, host)) return true;
-    const fs::path backup = master.string() + ".atlas-orig";
-    if (!fs::exists(backup)) fs::copy_file(master, backup, ec);
+    std::string berr;
+    albion::backups::backupOnce(master, berr);
     return writeAll(master, readAll(master) + hookText(script), error);
 }
 

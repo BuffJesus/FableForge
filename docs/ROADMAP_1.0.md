@@ -435,11 +435,16 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    game-root trees as TNG sources, and bsdiff against the pristine bytes (this install's game.bin
    is a record-identical re-save; `<file>.retail-bak` is tried when the result does not parse).
    Unofficial Patch + Special Melee + F2 Melee build into one game.bin + 8 TNGs. *S*
-3. Deploy = rebuild from the order onto the retail baseline (`.atlas-orig`), staged once;
+3. Deploy = rebuild from the order onto the retail baseline (`.forge-orig`), staged once;
    uninstall = drop from the order and rebuild; the three backup suffixes unified behind
    `albion::backups`. *M* -- `mods deploy` (revert the previous stage, rebuild, stage) and
    `mods undeploy` DONE 2026-09-20 on the `.forgebak` stage (round-trips byte-identical; empty
-   folders pruned); the backup-suffix unification is still open.
+   folders pruned). Suffixes DONE 2026-09-20: new writes keep `.forge-orig` / `.forge-created`
+   (`backups::backupOnce` / `markCreated`, one helper instead of six copies); the scanner reads
+   the legacy `.atlas-*`, the stage's `.forgebak` and the overlay installer's `.ovrbak` with a kind
+   per row; `restore` reverts a stage through its manifest first and rebases an original that
+   was taken on top of a stage (this install's WAD/WLD/BWD/STB originals are that case).
+   `tools/test_backups.py` in check_all.
 4. `forge mods conflicts`: `modsAnalyze` + `tngConflicts` + `.qst` intersection over the whole
    order as one JSON; GUI per-row winner picker feeding `--picks`. *M* -- DONE 2026-09-20:
    `mods conflicts --json` is ONE report (sources, defs, tng, qst, text, files, wad, summary) with

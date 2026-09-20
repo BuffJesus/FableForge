@@ -14,11 +14,7 @@ namespace albion::texbrowse {
 namespace fs = std::filesystem;
 
 namespace {
-bool backupOnce(const fs::path& p, std::string& error) {
-    const fs::path b = p.string() + ".atlas-orig";
-    try { if (fs::exists(p) && !fs::exists(b)) fs::copy_file(p, b); return true; }
-    catch (const std::exception& e) { error = e.what(); return false; }
-}
+bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
 
 fs::path bigPath(const fs::path& gameRoot) { return gameRoot / "data" / "graphics" / "pc" / "textures.big"; }
 

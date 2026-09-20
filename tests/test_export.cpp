@@ -663,7 +663,7 @@ void testGtg(const fs::path& dir) {
     std::vector<std::string> notes; std::string err;
     const float pos[3] = {32.0f, 48.0f, 12.5f}, fwd[2] = {0.0f, 1.0f};
     CHECK(albion::editor::setRegionEntrance(root, 7, "MyLevel", pos, fwd, notes, err));
-    CHECK(fs::exists(root / "data" / "Levels" / "FinalAlbion.gtg.atlas-orig"));
+    CHECK(fs::exists(root / "data" / "Levels" / "FinalAlbion.gtg.forge-orig"));
     auto e = albion::editor::entranceOf(root, 7, err);
     CHECK(e && near(e->pos[0], 32.0f) && near(e->pos[2], 12.5f) && e->startScript == "MyLevelHSP");
     {
@@ -708,7 +708,7 @@ void testGtg(const fs::path& dir) {
         CHECK(g.sections.size() == 3 && g.eol == "\r\n" && g.serialize() == crlf);
         fs::create_directories(root / "data" / "Levels", ec);
         { std::ofstream(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary) << crlf; }
-        fs::remove(root / "data" / "Levels" / "FinalAlbion.gtg.atlas-orig", ec);
+        fs::remove(root / "data" / "Levels" / "FinalAlbion.gtg.forge-orig", ec);
         CHECK(albion::editor::setRegionEntrance(root, 2, "Crlf", pos, fwd, notes, err));
         std::ifstream in(root / "data" / "Levels" / "FinalAlbion.gtg", std::ios::binary);
         std::stringstream ss; ss << in.rdbuf();

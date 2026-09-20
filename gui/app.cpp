@@ -302,7 +302,7 @@ void App::drawSetupPanel() {
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
         ImGui::PushTextWrapPos(S(530));
-        ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? installPath_.c_str() : "The Steam or GOG folder that holds Fable.exe (Steam: steamapps\\common\\Fable The Lost Chapters). Nothing in it is changed until you write something; every file touched gets a one-time .atlas-orig backup.");
+        ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? installPath_.c_str() : "The Steam or GOG folder that holds Fable.exe (Steam: steamapps\\common\\Fable The Lost Chapters). Nothing in it is changed until you write something; every file touched gets a one-time .forge-orig backup.");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(8)));
         auto row = [&](bool ok, const char* what, const char* enables, const char* without) {
@@ -342,7 +342,8 @@ void App::drawSetupPanel() {
                 ImGui::PopStyleColor();
                 ImGui::PushFont(fontSmall_);
                 for (const auto& e : backupList_) {
-                    ImGui::TextColored(theme::vec(e.differs ? theme::Warn : theme::Faint), "%s  %s", e.differs ? (e.created ? "new " : "edit") : "same", fs::relative(e.file, installPath_).string().c_str());
+                    const char* tag = !e.differs ? "same" : e.kind == backups::Kind::Created ? "new " : e.kind == backups::Kind::Staged ? "mods" : e.kind == backups::Kind::Overlay ? "ovr " : "edit";
+                    ImGui::TextColored(theme::vec(e.differs ? theme::Warn : theme::Faint), "%s  %s", tag, fs::relative(e.file, installPath_).string().c_str());
                 }
                 ImGui::PopFont();
                 ImGui::EndChild();
@@ -1794,7 +1795,7 @@ void App::drawActions(float width) {
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hint("Textures live in data/graphics/pc/textures.big. Replacing one changes every object that uses it; the original archive is backed up once as textures.big.atlas-orig (Setup > Restore puts it back).");
+        theme::hint("Textures live in data/graphics/pc/textures.big. Replacing one changes every object that uses it; the original archive is backed up once as textures.big.forge-orig (Setup > Restore puts it back).");
         ImGui::PopFont();
     } else if (worldMode_) {
         drawWorldFooter(pad, inner);

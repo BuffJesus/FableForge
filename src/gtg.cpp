@@ -1,3 +1,4 @@
+#include "backups.hpp"
 #include "gtg.hpp"
 
 #include <algorithm>
@@ -26,11 +27,7 @@ bool writeText(const fs::path& p, const std::string& text, std::string& error) {
     return bool(out);
 }
 
-bool backupOnce(const fs::path& p, std::string& error) {
-    const fs::path b = p.string() + ".atlas-orig";
-    try { if (fs::exists(p) && !fs::exists(b)) fs::copy_file(p, b); return true; }
-    catch (const std::exception& e) { error = e.what(); return false; }
-}
+bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
 
 std::string fmt(float v) {
     char b[48];

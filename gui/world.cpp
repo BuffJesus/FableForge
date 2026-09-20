@@ -529,7 +529,7 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
     theme::beginCard("##worldhelp", inner);
     theme::label("What a move writes");
     ImGui::PushFont(fontSmall_);
-    theme::hint("FinalAlbion.wld MapX/MapY and the .bwd box (all three copies the game reads), and the map's terrain chunk in FinalAlbion_RT.stb translated to the new origin: ground and background LOD meshes, water, tree/grass placements. Placed objects (.tng) are map-local and stay as they are. Maps that touched the moved one get their shared edges re-baked. One-time .atlas-orig backups; saves cache the region table, so start a new game to walk the new layout.");
+    theme::hint("FinalAlbion.wld MapX/MapY and the .bwd box (all three copies the game reads), and the map's terrain chunk in FinalAlbion_RT.stb translated to the new origin: ground and background LOD meshes, water, tree/grass placements. Placed objects (.tng) are map-local and stay as they are. Maps that touched the moved one get their shared edges re-baked. One-time .forge-orig backups; saves cache the region table, so start a new game to walk the new layout.");
     ImGui::PopFont();
     theme::endCard();
 }
@@ -561,8 +561,8 @@ void App::drawWorldFooter(float pad, float inner) {
             auto_.registerWidget("btn_world_revert");
         }
     } else {
-        const int r = confirmRow(worldPending_.empty() ? "Rewrite FinalAlbion.wld / .bwd with these region changes? (one-time .atlas-orig backups)"
-                                                       : "Rewrite FinalAlbion.wld / .bwd and translate the moved maps' terrain chunks in FinalAlbion_RT.stb? (one-time .atlas-orig backups)",
+        const int r = confirmRow(worldPending_.empty() ? "Rewrite FinalAlbion.wld / .bwd with these region changes? (one-time .forge-orig backups)"
+                                                       : "Rewrite FinalAlbion.wld / .bwd and translate the moved maps' terrain chunks in FinalAlbion_RT.stb? (one-time .forge-orig backups)",
                                  worldPending_.empty() ? "Yes, write them" : "Yes, move them", inner, S(42), "btn_world_apply_confirm");
         if (r != 0) confirmWorldApply_ = false;
         if (r > 0) worldApply();

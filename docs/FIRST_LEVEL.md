@@ -7,7 +7,7 @@ the retail Steam install, so what you see is what the tool does today.
 
 Before you start: **close Fable**. FableForge refuses to write while the game runs
 (it would crash it), and every game file it touches is backed up once as
-`<file>.atlas-orig` -- *Setup > Restore the retail files* puts everything back.
+`<file>.forge-orig` -- *Setup > Restore the retail files* puts everything back.
 
 ## 1. Point it at the game
 

@@ -124,7 +124,7 @@ def main() -> int:
     if line is None or "baked at" in line or f" {nx} " not in line:
         print("STB info block origin not updated"); ok = False
     for c in CONTAINERS[:4]:   # a world move never touches the .gtg
-        if not os.path.exists(os.path.join(sl, c + ".atlas-orig")):
+        if not any(os.path.exists(os.path.join(sl, c + sfx)) for sfx in (".forge-orig", ".atlas-orig")):
             print("missing backup", c); ok = False
     # the export path still reads the moved map at its new place
     r = subprocess.run([cli, "export", a.map, "--install", scratch, "--out", os.path.join(scratch, "moved.glb"), "--no-textures", "--world", "--quiet"], capture_output=True, text=True)

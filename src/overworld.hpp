@@ -78,7 +78,7 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
 struct OwnerEdit { std::string map, region; };
 struct SeesEdit { std::string region, map; bool sees = true; };
 
-// Apply moves and region edits in one go. One-time .atlas-orig backups of the
+// Apply moves and region edits in one go. One-time .forge-orig backups of the
 // four containers. The WLD is edited line-precisely; the BWD is compiled from
 // the edited WLD (forgecore's compileFromWld, checked byte-exact against the
 // current BWD before anything is written; a mismatch falls back to box edits

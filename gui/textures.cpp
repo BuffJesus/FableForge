@@ -218,7 +218,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             ImGui::PopStyleVar();
             auto_.registerWidget("input_tex_image");
             ImGui::PushFont(fontSmall_);
-            theme::hint("Same slot, same pixel format, mips rebuilt; every object using this texture changes. One-time textures.big.atlas-orig backup; refused while the game runs.");
+            theme::hint("Same slot, same pixel format, mips rebuilt; every object using this texture changes. One-time textures.big.forge-orig backup; refused while the game runs.");
             ImGui::PopFont();
             if (theme::primaryButton("Replace this texture", ImVec2(cardInner, S(30)), texImagePath_[0] != 0)) replaceSelectedTexture(texImagePath_);
             auto_.registerWidget("btn_tex_replace");

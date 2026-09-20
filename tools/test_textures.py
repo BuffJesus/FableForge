@@ -37,8 +37,8 @@ def main() -> int:
         ok = False
     else:
         print("GUI textures script PASS")
-    if not os.path.exists(os.path.join(scratch, "data", "graphics", "pc", "textures.big.atlas-orig")):
-        print("no textures.big.atlas-orig backup"); ok = False
+    if not any(os.path.exists(os.path.join(scratch, "data", "graphics", "pc", "textures.big" + sfx)) for sfx in (".forge-orig", ".atlas-orig")):
+        print("no textures.big.forge-orig backup"); ok = False
     r = subprocess.run([cli, "textures", "ATLAS_UI_TEX", "--install", scratch], capture_output=True, text=True)
     if "ATLAS_UI_TEX" not in r.stdout or "DXT3" not in r.stdout:
         print("the added texture is not listed:", r.stdout[-300:]); ok = False

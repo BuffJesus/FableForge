@@ -36,6 +36,7 @@ def main():
     ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)
     ok &= run("textures tab (scratch textures.big)", [sys.executable, "tools/test_textures.py"], capture_output=True)
     ok &= run("mod load order (scratch root; skips without the corpus)", [sys.executable, "tools/test_mods.py"], capture_output=True)
+    ok &= run("backup manager (every suffix, stage revert + rebase)", [sys.executable, "tools/test_backups.py"], capture_output=True)
     ok &= run("docs name real commands", [sys.executable, "tools/check_docs_commands.py"], capture_output=True)
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1

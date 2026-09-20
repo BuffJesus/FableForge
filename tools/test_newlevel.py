@@ -61,7 +61,7 @@ def main() -> int:
     if leftovers:
         print("temp files left behind:", leftovers); ok = False
     for c in CONTAINERS[:4]:   # the .gtg is only written for an own-region level (below)
-        if not os.path.exists(os.path.join(scratch, "data", "Levels", c + ".atlas-orig")):
+        if not any(os.path.exists(os.path.join(scratch, "data", "Levels", c + sfx)) for sfx in (".forge-orig", ".atlas-orig")):
             print("missing backup for", c); ok = False
 
     # blank level from scratch (no donor geometry): CLI, by theme name
