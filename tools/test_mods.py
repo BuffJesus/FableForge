@@ -195,6 +195,42 @@ def main() -> int:
         if base_px is None or px_of(merged) != base_px: print("vanilla pick did not keep the retail thing:", px_of(merged), "!=", base_px); ok = False
         os.remove(picks)
         run("mods", "remove", scratch, "TreeB")   # the Mods tab script adds it again for its Conflicts card
+    # EgoCore .resource bank overrides (ModBankPatcher's layout): a synthetic asset mod replaces one
+    # frontend.big entry with another's payload and appends a new entry with a .header
+    fb = os.path.join(root, "data", "graphics", "pc", "frontend.big")
+    ego = os.path.join(ROOT, "build", "ui_mods_root_ego"); shutil.rmtree(ego, ignore_errors=True)
+    if os.path.exists(fb):
+        os.makedirs(os.path.join(scratch, "data", "graphics", "pc"), exist_ok=True)
+        shutil.copyfile(fb, os.path.join(scratch, "data", "graphics", "pc", "frontend.big"))
+        x = os.path.join(ROOT, "build", "ui_mods_bigx"); shutil.rmtree(x, ignore_errors=True)
+        run("big", "extract", fb, x, "GBANK_FRONT_END_PC")
+        bank = os.path.join(x, "GBANK_FRONT_END_PC")
+        modbank = os.path.join(ego, "Mods", "ResTest", "Data", "graphics", "pc", "frontend.big", "GBANK_FRONT_END_PC")
+        os.makedirs(modbank)
+        open(os.path.join(ego, "Mods", "ResTest", "ResTest.dll"), "wb").write(b"not a dll")
+        bg1 = open(os.path.join(bank, "FRONTEND_KEYBOARD_BG_01_SPRITE.bin"), "rb").read()
+        bg2 = open(os.path.join(bank, "FRONTEND_KEYBOARD_BG_02_SPRITE.bin"), "rb").read()
+        open(os.path.join(modbank, "FRONTEND_KEYBOARD_BG_01_SPRITE.resource"), "wb").write(bg2)
+        open(os.path.join(modbank, "FORGE_RES_TEST.resource"), "wb").write(bg1)
+        open(os.path.join(modbank, "FORGE_RES_TEST.header"), "wb").write(b"HDRHDRHDR")
+        run("mods", "add", scratch, os.path.join(ego, "Mods", "ResTest"))
+        rep = json.loads(run("mods", "build", scratch, out, "--json").stdout)
+        egorows = [e for e in rep.get("egocore", []) if e.get("mod") == "ResTest"]
+        if not egorows or egorows[0].get("resource_replaced") != 1 or egorows[0].get("resource_added") != 1:
+            print("resource overrides not reported:", egorows); ok = False
+        outbank = os.path.join(out, "data", "graphics", "pc", "frontend.big")
+        y = os.path.join(ROOT, "build", "ui_mods_bigy"); shutil.rmtree(y, ignore_errors=True)
+        run("big", "extract", outbank, y, "GBANK_FRONT_END_PC")
+        got1 = os.path.join(y, "GBANK_FRONT_END_PC", "FRONTEND_KEYBOARD_BG_01_SPRITE.bin")
+        gotn = os.path.join(y, "GBANK_FRONT_END_PC", "FORGE_RES_TEST.bin")
+        if not os.path.exists(got1) or open(got1, "rb").read() != bg2: print("replaced entry payload wrong"); ok = False
+        if not os.path.exists(gotn) or open(gotn, "rb").read() != bg1: print("appended entry missing or wrong"); ok = False
+        listing = run("fmp", "list", outbank).stdout
+        if "FORGE_RES_TEST" not in listing or "HDRHDRHDR" not in listing: print("appended entry lacks its header:", listing[-300:]); ok = False
+        run("mods", "remove", scratch, "ResTest")
+        os.remove(os.path.join(scratch, "data", "graphics", "pc", "frontend.big"))
+        if not a.keep:
+            for d in (x, y, ego): shutil.rmtree(d, ignore_errors=True)
     # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):

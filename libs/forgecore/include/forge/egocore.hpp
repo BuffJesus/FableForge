@@ -28,6 +28,8 @@ struct Report {
     bool hasDll = false;
     size_t defFiles = 0, blocksReplaced = 0, blocksAdded = 0;
     size_t recordsChanged = 0, fieldsApplied = 0, recordsNew = 0, recordsSkipped = 0;
+    size_t resourceReplaced = 0, resourceAdded = 0;   // bank entries from .resource overrides
+    std::vector<std::string> resourceBanks;           // the banks written (data/... relative)
     std::vector<std::string> notes;
 };
 
@@ -49,5 +51,14 @@ std::string mergeDefText(const std::string& target, const std::string& mod, Repo
 std::string mergeDefText(const std::string& target, const std::string& mod, Report& report, std::vector<std::string>* addedBlocks);
 
 std::filesystem::path findDefc(const Paths& paths);
+
+// The mod's asset overrides as bank layers (EgoCore's ModBankPatcher convention): every
+// `Data/<path>/<bank>.big/[<SubBank>/]<Entry>.resource` [+ `.header` = the entry's info block]
+// replaces that entry's payload (and info) in a copy of the bank, or appends a new entry with the
+// next id when the bank has no such name. The bank is read from <outRoot> when an earlier layer of
+// the same build already wrote it, else from <gameRoot>, and written to <outRoot>/data/<path>.
+// Returns the number of overrides applied (0 = the mod ships none).
+size_t applyResourceOverrides(const std::filesystem::path& modFolder, const std::filesystem::path& gameRoot,
+                              const std::filesystem::path& outRoot, Report& report);
 
 } // namespace forge::egocore

@@ -470,9 +470,11 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    differ are applied onto retail's records (def-index fields compared by resolved name, added
    records re-pointed). Controller Support: 3 files, 4 blocks -> 14 records / 43 fields / 1 new,
    the merged control scheme has the mod's 71st binding; Water Wader: DLL only. In `test_mods.py`.
-   Still open from the plan: `.resource` bank overrides, TNG section-merge (`TngMerger.h`), the
-   refusal when EgoCore's own `.tmp` backups show it has deployed, a shipped `defc` + text tree
-   (today they are this machine's paths). (user goal, 2026-09-19: *every* older
+   Still open from the plan: TNG section-merge (`TngMerger.h`) and a shipped text tree (the text
+   Data/Defs is this machine's path; `defc.exe` ships in the zip). `.resource` bank overrides DONE
+   2026-09-20 (`egocore::applyResourceOverrides`, ModBankPatcher's layout incl. the graphics
+   MipSize0 zeroing; replaced / appended entries; `test_mods.py` over frontend.big); the `.tmp`
+   refusal DONE 2026-09-20. (user goal, 2026-09-19: *every* older
    mod, whatever its delivery shape -- a single `.fmp`, a loose-TNG/LEV mod, a bsdiff `.patch`, a
    Fable Explorer / ChocolateBox edit, a `.qst`, a whole-file GB pack). Evidence: the 2026 wave
    (Water Wader, Enable Sprint, Trample Vegetation, Controller Support ...) ships as

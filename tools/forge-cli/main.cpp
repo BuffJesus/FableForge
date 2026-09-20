@@ -8565,8 +8565,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     for (const auto& folder : egoFolders) {
         forge::egocore::Report erep;
         forge::egocore::installDll(folder, baseRoot, outDir, erep);
-        if (jsonOutput) rep["egocore"].push_back({{"mod", erep.modName}, {"dll", erep.hasDll}});
-        if (!jsonOutput) std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", erep.modName.c_str(), erep.modName.c_str(), erep.hasDll ? " (DLL registered)" : "");
+        // .resource bank overrides are entry-level layers over the banks (over a whole bank a tree
+        // shipped, like records over game.bin), applied in load order among the EgoCore mods
+        const size_t res = forge::egocore::applyResourceOverrides(folder, baseRoot, outDir, erep);
+        for (const auto& n : erep.notes) std::fprintf(stderr, "egocore %s: %s\n", erep.modName.c_str(), n.c_str());
+        if (jsonOutput) rep["egocore"].push_back({{"mod", erep.modName}, {"dll", erep.hasDll}, {"resource_replaced", erep.resourceReplaced}, {"resource_added", erep.resourceAdded}, {"banks", erep.resourceBanks}});
+        if (!jsonOutput) {
+            std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", erep.modName.c_str(), erep.modName.c_str(), erep.hasDll ? " (DLL registered)" : "");
+            if (res) std::printf("egocore %s: %zu bank entr%s from .resource files (%zu replaced, %zu added) in %zu bank(s)\n", erep.modName.c_str(), res, res == 1 ? "y" : "ies", erep.resourceReplaced, erep.resourceAdded, erep.resourceBanks.size());
+        }
     }
 
     if (doStage) {

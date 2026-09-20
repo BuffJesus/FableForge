@@ -16,6 +16,7 @@
 #include <windows.h>
 #endif
 
+#include "forge/big.hpp"
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/defschema.hpp"
@@ -339,6 +340,111 @@ void installDll(const fs::path& modFolder, const fs::path& gameRoot, const fs::p
     std::string text;
     for (const auto& l : lines) text += l + "\n";
     writeText(outRoot / "Mods.ini", text);
+}
+
+namespace {
+
+std::string lowerCopy(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return s;
+}
+
+std::vector<uint8_t> readBytes(const fs::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+} // namespace
+
+size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoot, const fs::path& outRoot, Report& report) {
+    std::error_code ec;
+    fs::path modData = modFolder / "Data";
+    if (!fs::is_directory(modData, ec)) modData = modFolder / "data";
+    if (!fs::is_directory(modData, ec)) return 0;
+
+    // one override: the bank it targets (data-relative, as the mod spells it), the sub-bank (empty =
+    // any), the entry name, and the files
+    struct Override { std::string bankRel, subBank, entry; fs::path resource, header; };
+    std::map<std::string, std::vector<Override>> byBank;   // lower bankRel -> overrides, in directory order
+    for (const auto& de : fs::recursive_directory_iterator(modData, ec)) {
+        if (!de.is_regular_file(ec) || lowerCopy(de.path().extension().string()) != ".resource") continue;
+        // the nearest ancestor named like a bank (x.big / x.lut / x.lug) is the target
+        fs::path bankDir;
+        for (fs::path parent = de.path().parent_path(); parent != modData && !parent.empty(); parent = parent.parent_path()) {
+            const std::string leaf = lowerCopy(parent.filename().string());
+            if (leaf.find(".big") != std::string::npos || leaf.find(".lut") != std::string::npos || leaf.find(".lug") != std::string::npos) { bankDir = parent; break; }
+        }
+        if (bankDir.empty()) { report.notes.push_back(de.path().filename().string() + ": not under a <bank>.big folder; skipped"); continue; }
+        Override o;
+        o.bankRel = fs::relative(bankDir, modData, ec).generic_string();
+        o.subBank = de.path().parent_path() != bankDir ? de.path().parent_path().filename().string() : "";
+        o.entry = de.path().stem().string();
+        o.resource = de.path();
+        const fs::path hdr = de.path().parent_path() / (o.entry + ".header");
+        if (fs::exists(hdr, ec)) o.header = hdr;
+        byBank[lowerCopy(o.bankRel)].push_back(std::move(o));
+    }
+
+    size_t applied = 0;
+    for (auto& [lowerRel, overrides] : byBank) {
+        const std::string& rel = overrides.front().bankRel;
+        const fs::path outBank = outRoot / "data" / rel;
+        fs::path srcBank = outBank;                                        // an earlier layer of this build
+        if (!fs::exists(srcBank, ec)) srcBank = gameRoot / "data" / rel;   // else the install's bank
+        if (!fs::exists(srcBank, ec)) srcBank = gameRoot / "Data" / rel;
+        if (!fs::exists(srcBank, ec)) { report.notes.push_back(rel + ": no such bank in the install; " + std::to_string(overrides.size()) + " override(s) skipped"); continue; }
+        big::File file;
+        try { file = big::File::open(srcBank); }
+        catch (const std::exception& e) { report.notes.push_back(rel + ": " + e.what()); continue; }
+        const bool graphics = lowerRel.find("graphics.big") != std::string::npos;
+        for (const auto& o : overrides) {
+            const std::string want = lowerCopy(o.entry);
+            big::Bank* bank = nullptr;
+            big::Entry* target = nullptr;
+            for (auto& b : file.banks()) {
+                if (!o.subBank.empty() && lowerCopy(b.name) != lowerCopy(o.subBank)) continue;
+                for (auto& e : b.entries) if (lowerCopy(e.name) == want) { bank = &b; target = &e; break; }
+                if (target) break;
+            }
+            std::vector<uint8_t> header;
+            if (!o.header.empty()) {
+                header = readBytes(o.header);
+                // EgoCore zeroes CGraphicHeader::MipSize0 (u32 at +24) of a graphics entry it patches: the
+                // .resource payload is the plain mip chain, not the retail chunk-compressed mip 0
+                if (graphics && header.size() >= 28) std::fill(header.begin() + 24, header.begin() + 28, uint8_t(0));
+            }
+            if (target) {
+                target->data = readBytes(o.resource);
+                target->length = uint32_t(target->data.size());
+                if (!header.empty()) target->subHeader = header;
+                ++report.resourceReplaced;
+            } else {
+                // a new entry: in the named sub-bank (or the first one), the next id, modelled on its last entry
+                if (!o.subBank.empty()) bank = file.findBank(o.subBank);
+                if (!bank && !file.banks().empty()) bank = &file.banks().front();
+                if (!bank) { report.notes.push_back(rel + ": no sub-bank for " + o.entry + "; skipped"); continue; }
+                big::Entry e;
+                uint32_t maxId = 0;
+                for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
+                if (!bank->entries.empty()) { const auto& model = bank->entries.back(); e.magic = model.magic; e.devFileType = model.devFileType; }
+                e.id = maxId + 1;
+                e.type = graphics ? 1 : 0;
+                e.name = o.entry;
+                e.subHeader = header;
+                e.data = readBytes(o.resource);
+                e.length = uint32_t(e.data.size());
+                bank->entries.push_back(std::move(e));
+                ++report.resourceAdded;
+            }
+            ++applied;
+        }
+        const auto bytes = file.serialize();
+        fs::create_directories(outBank.parent_path(), ec);
+        std::ofstream out(outBank, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        report.resourceBanks.push_back(rel);
+    }
+    return applied;
 }
 
 } // namespace forge::egocore
