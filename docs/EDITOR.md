@@ -556,7 +556,11 @@ The fifth panel tab is the install's mod load order (`forge_mods.json` next to F
 the same file `forge-tools mods list/add/...` edits). Each row is a mod: enable checkbox,
 move up/down, remove, the name and its kind (`.fmp`, bsdiff `.patch`, `.qst`, a folder with
 `Data/`, an EgoCore `Mods/<Name>/` folder). *Add a mod* takes a path (and an optional name)
-and hashes the source. *Check conflicts* prints the dry-run report; *Build and deploy*
+and hashes the source. *Check conflicts* dry-runs the whole order and fills a Conflicts card:
+one row per record / thing / quest / string / file that several enabled mods want differently
+(agreeing edits are not conflicts; records that differ in different fields merge per field),
+with the winner the load order gives it and a combo to pick another mod or *vanilla*; picks
+live in `forge_mods_picks.txt` next to the order and deploy applies them. *Build and deploy*
 reverts the previous deploy, builds the whole order onto the retail files and stages it
 (originals kept as `.forgebak`); *Undeploy* puts the retail files back. All three run the
 shipped `forge-tools.exe` as a process and stream its output into the Activity log.

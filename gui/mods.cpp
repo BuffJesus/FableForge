@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 #ifdef _WIN32
@@ -18,6 +19,7 @@
 
 #include "backups.hpp"
 #include "forge/modorder.hpp"
+#include "nlohmann/json.hpp"
 #include "theme.hpp"
 
 namespace fs = std::filesystem;
@@ -53,6 +55,7 @@ void App::setModsMode(bool on) {
 }
 
 void App::refreshModOrder() {
+    modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
     try { modOrder_ = mo::load(saveRoot()); modOrderError_.clear(); }
     catch (const std::exception& e) { modOrderError_ = e.what(); modOrder_ = mo::Order(); }
 }
@@ -92,7 +95,8 @@ bool App::runModsTool(const std::string& verb) {
         pushLog("mods: Fable is running from this install; quit to the desktop before deploying", 2);
         return false;
     }
-    const std::string cmd = "\"\"" + tool.string() + "\" mods " + verb + " \"" + saveRoot() + "\" 2>&1\"";
+    // conflicts: one JSON report over the whole order; deploy/undeploy: the text report, streamed
+    const std::string cmd = "\"\"" + tool.string() + "\" mods " + verb + " \"" + saveRoot() + "\"" + (verb == "conflicts" ? " --json" : "") + " 2>&1\"";
     modsVerb_ = verb;
     pushLog("mods: " + verb + " ...", 0);
     modsFuture_ = std::async(std::launch::async, [cmd]() {
@@ -111,9 +115,97 @@ bool App::runModsTool(const std::string& verb) {
     return true;
 }
 
+// forge_mods_picks.txt: `key<TAB>winner` per line (forge-tools loadPicks), the keys namespaced by stage
+void App::loadModPicks() {
+    modPicks_.clear();
+    std::ifstream in(fs::path(saveRoot()) / "forge_mods_picks.txt");
+    std::string line;
+    while (std::getline(in, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        size_t sep = line.find('\t');
+        if (sep == std::string::npos) sep = line.find('=');
+        if (sep == std::string::npos) continue;
+        modPicks_[line.substr(0, sep)] = line.substr(sep + 1);
+    }
+}
+
+void App::saveModPicks() {
+    const fs::path path = fs::path(saveRoot()) / "forge_mods_picks.txt";
+    std::error_code ec;
+    if (modPicks_.empty()) { fs::remove(path, ec); return; }
+    std::ofstream out(path, std::ios::binary);
+    out << "# FableForge: the winners picked on the Mods tab; forge-tools mods deploy reads this file\n";
+    for (const auto& [k, v] : modPicks_) out << k << '\t' << v << '\n';
+}
+
+bool App::modPick(const std::string& key, const std::string& winner) {
+    const ModConflict* row = nullptr;
+    for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
+    if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
+    if (winner == "-") modPicks_.erase(row->key);
+    else modPicks_[row->key] = winner;
+    saveModPicks();
+    pushLog("mods: " + row->label + " -> " + (winner == "-" ? "load order" : winner) + " (forge_mods_picks.txt; deploy applies it)", 0);
+    return true;
+}
+
+// the conflict report: every row a thing several enabled mods want differently, with the winner the
+// load order (or a pick) gives it
+static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
+    using nlohmann::json;
+    auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
+    if (rep.contains("defs"))
+        for (const auto& c : rep["defs"].value("conflicts", json::array()))
+            rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+    if (rep.contains("tng"))
+        for (const auto& l : rep["tng"].value("levels", json::array()))
+            for (const auto& c : l.value("conflicts", json::array())) {
+                const std::string level = l.value("level", ""), thing = c.value("thing", "");
+                rows.push_back({"thing", "tng:" + level + "|" + thing, level + "  " + thing, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+            }
+    if (rep.contains("qst"))
+        for (const auto& f : rep["qst"].value("files", json::array()))
+            for (const auto& c : f.value("conflicts", json::array())) {
+                const std::string file = f.value("file", ""), quest = c.value("quest", "");
+                std::vector<std::string> m;
+                for (const auto& w : c.value("wanted", json::array())) m.push_back(w.value("mod", ""));
+                rows.push_back({"quest", "qst:" + file + "|" + quest, file + "  " + quest, m, c.value("winner", ""), c.value("overridden", false)});
+            }
+    if (rep.contains("text"))
+        for (const auto& c : rep["text"].value("contested", json::array())) {
+            const std::string lang = c.value("language", ""), name = c.value("name", "");
+            rows.push_back({"string", "text:" + lang + "|" + name, lang + "  " + name, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+        }
+    if (rep.contains("files"))
+        for (const auto& c : rep["files"].value("contested", json::array()))
+            rows.push_back({"file", "file:" + c.value("path", ""), c.value("path", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+}
+
 void App::pollModsTool() {
     if (!modsFuture_.valid() || modsFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const ModsToolResult r = modsFuture_.get();
+    if (modsVerb_ == "conflicts" && r.rc == 0) {
+        std::string text;
+        for (const auto& l : r.lines) { text += l; text += '\n'; }
+        try {
+            const auto rep = nlohmann::json::parse(text.substr(text.find('{')));
+            modConflicts_.clear();
+            collectConflicts(rep, modConflicts_);
+            loadModPicks();
+            modReportLoaded_ = true;
+            const auto& sm = rep.value("summary", nlohmann::json::object());
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file",
+                          modConflicts_.size(), size_t(sm.value("sources", 0)), size_t(sm.value("defs_conflicts", 0)), size_t(sm.value("tng_conflicts", 0)),
+                          size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)));
+            modReportSummary_ = buf;
+            pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
+            return;
+        } catch (const std::exception& e) {
+            pushLog(std::string("mods conflicts: report not readable: ") + e.what(), 2);
+        }
+    }
     for (const auto& l : r.lines) {
         const bool warn = l.find("warning") != std::string::npos || l.find("conflict") != std::string::npos;
         pushLog("mods " + modsVerb_ + ": " + l, warn ? 1 : 0);
@@ -160,6 +252,51 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
+    if (modReportLoaded_) {
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##modconflicts", inner);
+        theme::label("Conflicts");
+        ImGui::PushFont(fontSmall_);
+        theme::hint(modReportSummary_.c_str());
+        if (!modConflicts_.empty()) theme::hint("Each row is one thing several mods want differently; the load order decides unless you pick. Picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
+        ImGui::PopFont();
+        if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
+        // one row = the kind and the label (ellipsised to the card), then the winner combo
+        auto fit = [](const std::string& text, float width) {
+            if (ImGui::CalcTextSize(text.c_str()).x <= width) return text;
+            std::string t = text;
+            while (t.size() > 4 && ImGui::CalcTextSize((t + "...").c_str()).x > width) t.pop_back();
+            return t + "...";
+        };
+        const float comboW = S(170);
+        for (size_t i = 0; i < modConflicts_.size() && i < 400; ++i) {
+            const auto& c = modConflicts_[i];
+            ImGui::PushID(int(i));
+            if (i) ImGui::Dummy(ImVec2(0, S(2)));
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", c.kind.c_str());
+            ImGui::SameLine(S(52));
+            ImGui::TextUnformatted(fit(c.label, cardInner - S(52)).c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", c.label.c_str());
+            ImGui::PopFont();
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
+            const auto pk = modPicks_.find(c.key);
+            const std::string current = pk != modPicks_.end() ? pk->second : c.winner;
+            const std::string shown = (pk != modPicks_.end() ? "* " : "") + current;
+            ImGui::SetNextItemWidth(comboW);
+            if (ImGui::BeginCombo("##winner", shown.c_str())) {
+                if (ImGui::Selectable("load order", pk == modPicks_.end())) modPick(c.key, "-");
+                for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && pk != modPicks_.end())) modPick(c.key, m);
+                if (ImGui::Selectable("vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
+                ImGui::EndCombo();
+            }
+            ImGui::PopID();
+        }
+        if (modConflicts_.size() > 400) ImGui::TextColored(theme::vec(theme::Faint), "... %zu more (forge-tools mods conflicts --json lists them all)", modConflicts_.size() - 400);
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
+    }
+
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##modadd", inner);
     theme::label("Add a mod");
@@ -192,7 +329,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (theme::ghostButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy (back to the retail files)", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
     auto_.registerWidget("btn_mods_undeploy");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Deploy reverts the previous deploy first, builds the whole order and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
+    theme::hint("Deploy reverts the previous deploy first, builds the whole order with your picks and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
     ImGui::PopFont();
     theme::endCard();
 }

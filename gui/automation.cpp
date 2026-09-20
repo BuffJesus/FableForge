@@ -243,6 +243,12 @@ bool Automation::tick(App& app) {
     else if (cmd == "mods_undeploy") { if (!app.runModsTool("undeploy")) fail("mods_undeploy refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "mods_conflicts") { if (!app.runModsTool("conflicts")) fail("mods_conflicts refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "wait_mods") { app.pollModsTool(); waitOn(!app.modsBusy(), "mods tool"); }
+    else if (cmd == "mod_pick") {   // mod_pick <key|*> <winner|->  (the winner is the rest after the first space; "*" = the first conflict row)
+        std::string key = rest, winner;
+        const size_t sp = rest.find(' ');
+        if (sp != std::string::npos) { key = rest.substr(0, sp); winner = rest.substr(sp + 1); }
+        if (!app.modPick(key, winner)) fail("mod_pick failed: " + rest); else note("ok   " + line); ++pc_;
+    }
     else if (cmd == "world_select") { app.worldSelect(rest); if (app.worldSelected().empty()) fail("world_select: no map " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_move") {   // world_move <map> <x> <y>: queue a move (refused moves fail the script)
         std::istringstream rs(rest); std::string m; int x = 0, y = 0; rs >> m >> x >> y;

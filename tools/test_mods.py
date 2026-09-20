@@ -87,11 +87,18 @@ def main() -> int:
     out = os.path.join(ROOT, "build", "ui_mods_out")
     shutil.rmtree(out, ignore_errors=True)
     r = run("mods", "build", scratch, out)
-    if "112 changes applied (95 new records)" not in r.stdout:
+    import re as _re
+    m = _re.search(r"(\d+) changes applied \((\d+) new records\)", r.stdout)
+    # UFP's ~17 records + Special Melee's 9 + F2's 95 additions; one fewer when the install's game.bin is the pristine bytes
+    if not m or int(m.group(2)) != 95 or not 110 <= int(m.group(1)) <= 112:
         print("build output unexpected:", r.stdout[-800:]); ok = False
-    if "applied to game.bin.retail-bak instead" not in r.stdout and os.path.exists(os.path.join(defs, "game.bin.retail-bak")):
+    bak = os.path.join(defs, "game.bin.retail-bak")
+    resaved = os.path.exists(bak) and open(bak, "rb").read() != open(os.path.join(defs, "game.bin"), "rb").read()
+    if resaved and "applied to game.bin.retail-bak instead" not in r.stdout:
         # the install's game.bin is a re-save; the patch must have gone to the pristine copy
         print("expected the pristine fallback for the bsdiff patch:", r.stdout[-400:]); ok = False
+    if not resaved and "retail-bak instead" in r.stdout:
+        print("pristine game.bin should take the patch directly"); ok = False
     if not os.path.exists(os.path.join(out, "data", "CompiledDefs", "game.bin")):
         print("no merged game.bin"); ok = False
     tngs = [f for f in os.listdir(os.path.join(out, "data", "Levels", "FinalAlbion")) if f.endswith(".tng")] if os.path.isdir(os.path.join(out, "data", "Levels", "FinalAlbion")) else []
@@ -152,6 +159,42 @@ def main() -> int:
     if os.path.isdir(os.path.join(scratch, "Mods")) and any(os.scandir(os.path.join(scratch, "Mods"))): print("undeploy left Mods/ content"); ok = False
     run("mods", "remove", scratch, "F2 Melee (defs)")
     if "F2 Melee (defs)" in [m["name"] for m in json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]]: print("remove failed"); ok = False
+    # one JSON report over the whole order + picks: a second tree that moves one thing F2 also moves
+    # is the only real conflict (agreeing edits are not one); a pick names the loser, a vanilla pick keeps retail
+    treeb = os.path.join(ROOT, "build", "ui_mods_root_treeB"); shutil.rmtree(treeb, ignore_errors=True)
+    f2tng = os.path.join(F2, "Data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng")
+    if os.path.exists(f2tng):
+        import re
+        txt = open(f2tng, encoding="latin-1").read()
+        m = re.search(r"UID (\d+);(?:(?!EndThing).)*?PositionX (-?[0-9.]+);", txt, re.S)
+        uid, px = m.group(1), m.group(2)
+        txt = txt[:m.start(2)] + str(round(float(px) + 1.5, 5)) + txt[m.end(2):]
+        os.makedirs(os.path.join(treeb, "Data", "Levels", "FinalAlbion"))
+        open(os.path.join(treeb, "Data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"), "w", encoding="latin-1").write(txt)
+        run("mods", "add", scratch, treeb, "--name", "TreeB")
+        rep = json.loads(run("mods", "conflicts", scratch, "--json").stdout)
+        for k in ("sources", "defs", "tng", "qst", "text", "files", "summary"):
+            if k not in rep: print("conflicts --json lacks", k); ok = False
+        if rep.get("summary", {}).get("tng_conflicts") != 1: print("expected exactly one thing conflict:", rep.get("summary")); ok = False
+        rows = [c for l in rep["tng"]["levels"] for c in l.get("conflicts", [])]
+        if not rows or rows[0]["thing"] != "uid:" + uid or rows[0]["winner"] != "TreeB": print("thing conflict row wrong:", rows[:1]); ok = False
+        picks = os.path.join(scratch, "forge_mods_picks.txt")
+        merged = os.path.join(out, "data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng")
+        def px_of(path):
+            t = open(path, encoding="latin-1").read()
+            mm = re.search(r"UID " + uid + r";(?:(?!EndThing).)*?PositionX (-?[0-9.]+);", t, re.S)
+            return mm.group(1) if mm else None
+        with open(picks, "w") as f: f.write("tng:FinalAlbion/ArenaHallOfHeroes.tng|uid:%s\tF2 Melee (levels)\n" % uid)
+        rep = json.loads(run("mods", "build", scratch, out, "--json").stdout)
+        rows = [c for l in rep["tng"]["levels"] for c in l.get("conflicts", [])]
+        if not rows or rows[0]["winner"] != "F2 Melee (levels)" or not rows[0]["overridden"]: print("pick not honoured:", rows[:1]); ok = False
+        if px_of(merged) != px: print("picked version not in the merged TNG:", px_of(merged), "!=", px); ok = False
+        with open(picks, "w") as f: f.write("tng:FinalAlbion/ArenaHallOfHeroes.tng|uid:%s\tvanilla\n" % uid)
+        run("mods", "build", scratch, out)
+        base_px = px_of(os.path.join(scratch, "data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"))
+        if base_px is None or px_of(merged) != base_px: print("vanilla pick did not keep the retail thing:", px_of(merged), "!=", base_px); ok = False
+        os.remove(picks)
+        run("mods", "remove", scratch, "TreeB")   # the Mods tab script adds it again for its Conflicts card
     # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):
@@ -162,7 +205,7 @@ def main() -> int:
         if r.returncode != 0 or not tail or "RESULT PASS" not in tail[-1]:
             print("ui mods failed:", " | ".join(tail[-8:])); ok = False
     if not a.keep:
-        shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
+        shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True); shutil.rmtree(treeb, ignore_errors=True)
     print("mods test", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

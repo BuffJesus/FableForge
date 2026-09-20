@@ -495,6 +495,22 @@ private:
     struct ModsToolResult { std::vector<std::string> lines; int rc = 0; };
     std::future<ModsToolResult> modsFuture_;
     std::string modsVerb_;
+    // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
+    // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
+public:
+    struct ModConflict { std::string kind, key, label; std::vector<std::string> mods; std::string winner; bool overridden = false; };
+private:
+    std::vector<ModConflict> modConflicts_;
+    std::map<std::string, std::string> modPicks_;
+    bool modReportLoaded_ = false;
+    std::string modReportSummary_;
+    void loadModPicks();
+    void saveModPicks();
+public:
+    size_t modConflictCount() const { return modConflicts_.size(); }
+    // pick a winner for a conflict (by its key, or the first row when key is "*"); "-" = back to load order
+    bool modPick(const std::string& key, const std::string& winner);
+private:
     bool texturesMode_ = false;
     bool texturesLoaded_ = false;
     std::vector<texbrowse::TextureRow> texRows_;

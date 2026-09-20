@@ -441,8 +441,11 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    `mods undeploy` DONE 2026-09-20 on the `.forgebak` stage (round-trips byte-identical; empty
    folders pruned); the backup-suffix unification is still open.
 4. `forge mods conflicts`: `modsAnalyze` + `tngConflicts` + `.qst` intersection over the whole
-   order as one JSON; GUI per-row winner picker feeding `--picks`. *M* -- the dry-run report
-   (`mods conflicts`) DONE 2026-09-20; one JSON and the picker still open.
+   order as one JSON; GUI per-row winner picker feeding `--picks`. *M* -- DONE 2026-09-20:
+   `mods conflicts --json` is ONE report (sources, defs, tng, qst, text, files, wad, summary) with
+   every stage's rows labelled by the order's mod names; agreeing edits are not conflicts; picks
+   (`forge_mods_picks.txt`, namespaced keys, mod name or `vanilla`) drive every stage of
+   build / deploy; the Mods tab's Conflicts card is the picker (`tests/ui/mods.txt`).
 5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
    *M* -- whole-file layers of tree sources (LEV / WLD / BWD / STB / INI / banks: last source
    wins, contested paths counted) DONE 2026-09-20; `text.big` key union DONE 2026-09-20; the merged

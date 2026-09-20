@@ -254,9 +254,10 @@ int usage() {
         "  forge mods list <game-root> [--json]                       the load order in <game-root>/forge_mods.json\n"
         "  forge mods add <game-root> <source> [--name N] [--at i] [--note text]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
-        "  forge mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]   (= mods merge over the enabled order)\n"
-        "  forge mods conflicts <game-root> [--json]                  a dry-run build: the conflict report over the whole order, nothing written\n"
-        "  forge mods deploy <game-root>   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
+        "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
+        "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
+        "  forge mods deploy <game-root> [--picks f]   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
+        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>; winner = a mod name or vanilla\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -1067,57 +1068,67 @@ int tngConflicts(const std::string& basePath,
 // (later mod wins) with a reported conflict count. Additions from all mods are
 // kept. Removals are NOT applied (conservative — keeps content). The level analog
 // of `defs merge`; turns whole-file-conflicting TNGs into a merged level.
-struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; };
+struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false; };
+struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; std::vector<TngConflictRow> rows; };
 
 // Thing-level merge: base TNG + mod TNGs (load order) -> outPath. A thing is keyed
 // by UID; a thing only one mod changes auto-merges, same-thing changes take the
-// load-order winner. Returns stats. Shared by `tng merge` and `mods merge`.
-TngMergeResult mergeTngFiles(const std::string& basePath,
-                             const std::vector<std::string>& modPaths,
-                             const std::string& outPath) {
+// load-order winner unless `picks` names one (thing key -> mod label, or "vanilla"
+// to keep the base thing). Shared by `tng merge` and `mods merge`.
+TngMergeResult mergeTngLabeled(const std::string& basePath,
+                               const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path) in load order
+                               const std::string& outPath,
+                               const std::map<std::string, std::string>& picks) {
     namespace fs = std::filesystem;
     auto out = forge::tng::File::parse(basePath);
 
     std::map<std::string, std::string> baseSig;  // key -> signature
     for (const auto& t : out.things()) baseSig[thingKey(t)] = thingSignature(t);
 
-    std::map<std::string, std::string> touchedBy;  // key -> last mod
-    TngMergeResult r;
-
-    for (const auto& modPath : modPaths) {
-        const fs::path mp(modPath);
-        std::string modName = mp.parent_path().filename().string();
-        if (modName.empty()) modName = mp.filename().string();
-        const auto mod = forge::tng::File::parse(modPath);
-
+    struct Version { std::string mod; forge::tng::Thing thing; bool isAdd; };
+    std::map<std::string, std::vector<Version>> versions;   // key -> every mod's version, in load order
+    std::vector<std::string> order;                          // first-seen order for stable output
+    for (const auto& [label, path] : mods) {
+        const auto mod = forge::tng::File::parse(path);
         for (const auto& mt : mod.things()) {
             const std::string key = thingKey(mt);
-            const std::string sig = thingSignature(mt);
             auto bit = baseSig.find(key);
             const bool isAdd = bit == baseSig.end();
-            const bool isChange = !isAdd && sig != bit->second;
-            if (!isAdd && !isChange) continue;  // identical to base
-
-            if (touchedBy.count(key)) ++r.conflicts;  // >1 mod touches this thing
-            touchedBy[key] = modName;
-
-            if (isAdd) {
-                out.addThing(mt);
-                baseSig[key] = sig;  // now present
-                ++r.added;
-            } else {
-                // Locate the (possibly moved) thing in out by key and replace.
-                size_t idx = out.things().size();
-                for (size_t i = 0; i < out.things().size(); ++i) {
-                    if (thingKey(out.things()[i]) == key) { idx = i; break; }
-                }
-                if (idx < out.things().size()) {
-                    out.replaceThing(idx, mt);
-                    baseSig[key] = sig;
-                }
-            }
-            ++r.applied;
+            if (!isAdd && thingSignature(mt) == bit->second) continue;  // identical to base
+            if (!versions.count(key)) order.push_back(key);
+            versions[key].push_back({label, mt, isAdd});
         }
+    }
+
+    TngMergeResult r;
+    for (const auto& key : order) {
+        const auto& vs = versions[key];
+        const Version* win = &vs.back();
+        bool overridden = false, keepBase = false;
+        if (auto pk = picks.find(key); pk != picks.end()) {
+            overridden = true;
+            if (pk->second == "vanilla") keepBase = true;
+            else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+        }
+        bool agree = true;   // the same edit from several mods is not a conflict
+        for (const auto& v : vs) if (thingSignature(v.thing) != thingSignature(vs.front().thing)) { agree = false; break; }
+        if (vs.size() > 1 && !agree) {   // >1 mod wants a different version of this thing
+            TngConflictRow row;
+            row.thing = key; row.winner = keepBase ? "vanilla" : win->mod; row.overridden = overridden;
+            for (const auto& v : vs) row.mods.push_back(v.mod);
+            r.rows.push_back(row);
+            ++r.conflicts;
+        }
+        if (keepBase) continue;
+        if (win->isAdd) {
+            out.addThing(win->thing);
+            ++r.added;
+        } else {
+            // Locate the (possibly moved) thing in out by key and replace.
+            for (size_t i = 0; i < out.things().size(); ++i)
+                if (thingKey(out.things()[i]) == key) { out.replaceThing(i, win->thing); break; }
+        }
+        ++r.applied;
     }
 
     fs::create_directories(fs::path(outPath).parent_path());
@@ -1127,6 +1138,21 @@ TngMergeResult mergeTngFiles(const std::string& basePath,
     ofs.close();
     r.things = out.things().size();
     return r;
+}
+
+// `tng merge` form: the mod label is the TNG's folder name (or the file's)
+TngMergeResult mergeTngFiles(const std::string& basePath,
+                             const std::vector<std::string>& modPaths,
+                             const std::string& outPath) {
+    namespace fs = std::filesystem;
+    std::vector<std::pair<std::string, std::string>> mods;
+    for (const auto& modPath : modPaths) {
+        const fs::path mp(modPath);
+        std::string modName = mp.parent_path().filename().string();
+        if (modName.empty()) modName = mp.filename().string();
+        mods.push_back({modName, modPath});
+    }
+    return mergeTngLabeled(basePath, mods, outPath, {});
 }
 
 int tngMerge(const std::string& basePath,
@@ -1230,21 +1256,18 @@ int qstRoundtrip(const std::string& path) {
 // preserved), new AddQuest/AddTestQuest statements append at end; same-name
 // flag conflicts take the load-order winner unless a pick overrides. Shared
 // by `qst merge` and `mods merge`.
-forge::qst::MergeResult mergeQstFiles(
-    const std::string& basePath, const std::vector<std::string>& modPaths,
+forge::qst::MergeResult mergeQstLabeled(
+    const std::string& basePath, const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path)
     const std::string& outPath,
     const std::map<std::string, std::string>& picks) {
     namespace fs = std::filesystem;
     const auto base = forge::qst::File::parse(basePath);
     std::vector<forge::qst::File> files;
-    files.reserve(modPaths.size());
+    files.reserve(mods.size());
     std::vector<forge::qst::MergeInput> inputs;
-    for (const auto& modPath : modPaths) {
-        const fs::path mp(modPath);
-        std::string modName = mp.parent_path().filename().string();
-        if (modName.empty()) modName = mp.filename().string();
+    for (const auto& [label, modPath] : mods) {
         files.push_back(forge::qst::File::parse(modPath));
-        inputs.push_back({modName, &files.back()});
+        inputs.push_back({label, &files.back()});
     }
     auto result = forge::qst::merge(base, inputs, picks);
 
@@ -1254,6 +1277,22 @@ forge::qst::MergeResult mergeQstFiles(
     const std::string serialized = result.merged.serialize();
     ofs.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
     return result;
+}
+
+// `qst merge` form: the mod label is the QST's folder name (or the file's)
+forge::qst::MergeResult mergeQstFiles(
+    const std::string& basePath, const std::vector<std::string>& modPaths,
+    const std::string& outPath,
+    const std::map<std::string, std::string>& picks) {
+    namespace fs = std::filesystem;
+    std::vector<std::pair<std::string, std::string>> mods;
+    for (const auto& modPath : modPaths) {
+        const fs::path mp(modPath);
+        std::string modName = mp.parent_path().filename().string();
+        if (modName.empty()) modName = mp.filename().string();
+        mods.push_back({modName, modPath});
+    }
+    return mergeQstLabeled(basePath, mods, outPath, picks);
 }
 
 int qstMerge(const std::string& basePath,
@@ -4295,10 +4334,22 @@ int defsDecode(const std::string& gameRoot, const std::string& schemaPath,
 // --------------------------------------------------------------------------
 std::string defaultDefSchemaPath() {
     namespace fs = std::filesystem;
-    for (const char* cand : {"docs/re_reference/def_schema.json",
-                             "../docs/re_reference/def_schema.json",
-                             "D:/Code/FableForge-legacy/docs/re_reference/def_schema.json"})
-        if (fs::exists(cand)) return cand;
+    std::vector<fs::path> cands = {"docs/re_reference/def_schema.json", "../docs/re_reference/def_schema.json"};
+#ifdef _WIN32
+    {   // the release zip: docs/re_reference next to the exe (the GUI runs forge-tools from its own folder)
+        char buf[MAX_PATH];
+        const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            const fs::path exeDir = fs::path(std::string(buf, n)).parent_path();
+            cands.push_back(exeDir / "docs" / "re_reference" / "def_schema.json");
+            cands.push_back(exeDir / ".." / "docs" / "re_reference" / "def_schema.json");
+        }
+    }
+#endif
+    cands.push_back("D:/Code/FableForge-legacy/docs/re_reference/def_schema.json");
+    std::error_code ec;
+    for (const auto& cand : cands)
+        if (fs::exists(cand, ec)) return cand.generic_string();
     return {};
 }
 
@@ -4744,11 +4795,14 @@ int modsAnalyze(const std::string& baseRoot,
 int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::string& bin, const std::vector<std::string>& modRoots,
               const std::string& picksPath, const std::string& fieldSchemaPath,
-              bool jsonOutput) {
+              bool jsonOutput,
+              json* reportOut = nullptr,                                     // `mods merge --json`: the report goes here, nothing is printed
+              const std::map<std::string, std::string>* picksMap = nullptr,  // picks already parsed (the mods family), else picksPath
+              const std::vector<std::string>* rootLabels = nullptr) {        // mod labels parallel to modRoots, else the folder names
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
-    const std::map<std::string, std::string> picks = loadPicks(picksPath);
+    const std::map<std::string, std::string> picks = picksMap ? *picksMap : loadPicks(picksPath);
 
     // Optional field-level schema. When present, records that >1 mod changes are
     // composed PER FIELD (different fields auto-merge; only same-field/differing
@@ -4775,8 +4829,9 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     struct Version { std::string mod, definition; std::vector<uint8_t> data; };
     std::map<std::string, std::vector<Version>> changes;
     std::vector<std::string> order;  // first-seen order for stable output
-    for (const auto& modRoot : modRoots) {
-        const std::string modName = fs::path(modRoot).filename().string();
+    for (size_t mi = 0; mi < modRoots.size(); ++mi) {
+        const auto& modRoot = modRoots[mi];
+        const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
         for (const auto& me : mod.entries()) {
             if (me.name.empty()) continue;
@@ -4810,7 +4865,10 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         const std::string pick = pk != picks.end() ? pk->second : std::string();
 
         // Single mod touches it, and it exists (or is a lone add): apply as-is.
-        if (vers.size() == 1) {
+        // every mod that carries the same bytes agrees: no conflict, the shared version applies
+        bool agree = true;
+        for (const auto& v : vers) if (v.data != vers.front().data || v.definition != vers.front().definition) { agree = false; break; }
+        if (vers.size() == 1 || (agree && pick.empty())) {
             const auto& v = vers.front();
             if (inBase) merged.setEntryData(idx->second, v.data);
             else { nameToIndex[name] = merged.addEntry(v.definition, name, v.data);
@@ -4885,7 +4943,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     fs::create_directories(defsOut);
     merged.save(defsOut / "names.bin", defsOut / bin);
 
-    if (jsonOutput) {
+    if (jsonOutput || reportOut) {
         json conflictRows = json::array();
         for (const auto& c : conflicts) {
             json fc = json::array();
@@ -4898,21 +4956,24 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                                     {"field_conflicts", fc},
                                     {"overridden", picks.count(c.record) > 0}});
         }
-        std::puts(json{{"bin", bin},
-                       {"mods", modRoots},
-                       {"field_level", schema.has_value()},
-                       {"conflicts", conflictRows},
-                       {"summary",
-                        {{"applied", applied},
-                         {"added", addedTotal},
-                         {"record_conflicts", conflicts.size()},
-                         {"field_merged_records", fieldMergedRecords},
-                         {"auto_merged_fields", autoFields},
-                         {"field_conflicts", fieldConflictParts},
-                         {"overridden", overridden},
-                         {"merged_entries", merged.entries().size()}}}}
-                      .dump(2)
-                      .c_str());
+        json labels = json::array();
+        for (size_t mi = 0; mi < modRoots.size(); ++mi)
+            labels.push_back(rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoots[mi]).filename().string());
+        json rep{{"bin", bin},
+                 {"mods", labels},
+                 {"field_level", schema.has_value()},
+                 {"conflicts", conflictRows},
+                 {"summary",
+                  {{"applied", applied},
+                   {"added", addedTotal},
+                   {"record_conflicts", conflicts.size()},
+                   {"field_merged_records", fieldMergedRecords},
+                   {"auto_merged_fields", autoFields},
+                   {"field_conflicts", fieldConflictParts},
+                   {"overridden", overridden},
+                   {"merged_entries", merged.entries().size()}}}};
+        if (reportOut) *reportOut = std::move(rep);
+        else std::puts(rep.dump(2).c_str());
         return 0;
     }
 
@@ -7890,7 +7951,7 @@ int bigList(const std::string& path, const std::string& nameFilter, bool jsonOut
 // record/field-level merge only needs the payloads. Full link fixup + names.bin
 // merge is a follow-up for producing a directly-playable install from an .fmp.
 int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
-             const std::string& outRoot) {
+             const std::string& outRoot, bool quiet = false) {
     namespace fs = std::filesystem;
     const auto pkg = forge::big::File::open(fmpPath);
 
@@ -7954,7 +8015,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 writeAllBytes(dst.string(), file.serialize());
                 ++langs; strings = applied;
             }
-        std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n", strings, langs, bad ? " (some payloads did not decode)" : "");
+        if (!quiet) std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n", strings, langs, bad ? " (some payloads did not decode)" : "");
     }
 
     // Copy the untouched sibling bins so the out-root is a complete install.
@@ -7974,7 +8035,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                          b, bank->entries.size());
     }
 
-    std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added)\n",
+    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added)\n",
                 fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added);
     return 0;
 }
@@ -8050,7 +8111,7 @@ static std::filesystem::path findUnderData(const std::filesystem::path& root, co
 }
 
 void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
-                 const std::string& outRoot) {
+                 const std::string& outRoot, bool quiet = false) {
     namespace fs = std::filesystem;
     const std::string leaf = fs::path(patchPath).stem().string();   // game.bin.patch -> game.bin
     fs::path target = findUnderData(baseRoot, leaf);
@@ -8085,7 +8146,7 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
         const fs::path bak = fs::path(target.string() + ".retail-bak");
         if (fs::exists(bak) && tryApply(bak)) {
             usedBak = true;
-            std::printf("  %s: the install's %s is not the bytes the patch was made against; applied to %s instead\n", fs::path(patchPath).filename().string().c_str(), leaf.c_str(), bak.filename().string().c_str());
+            if (!quiet) std::printf("  %s: the install's %s is not the bytes the patch was made against; applied to %s instead\n", fs::path(patchPath).filename().string().c_str(), leaf.c_str(), bak.filename().string().c_str());
             ok = true;
         }
     }
@@ -8106,46 +8167,99 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
     }
 }
 
+// Picks file for the whole order (forge_mods_picks.txt next to forge_mods.json, or --picks):
+// one `key<TAB>winner` per line, the key namespaced by merge stage --
+//   <Record> or defs:<Record>          a game.bin record (as `defs merge --picks`)
+//   tng:<level path>|<thing key>       a thing of a level (`FinalAlbion/Arena.tng|uid:...`)
+//   qst:<qst path>|<quest name>        a quest flag
+//   text:<language>|<string name>      a text.big string
+//   file:<data/... path, lower-case>   a whole-file layer
+// the winner is a mod label of the order, or "vanilla" to keep the retail version.
+struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file; };
+ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
+    ModsPicks p;
+    for (const auto& [k, v] : all) {
+        const size_t colon = k.find(':');
+        const std::string ns = colon == std::string::npos ? "" : k.substr(0, colon);
+        const std::string key = colon == std::string::npos ? k : k.substr(colon + 1);
+        if (ns == "tng") p.tng[key] = v;
+        else if (ns == "qst") p.qst[key] = v;
+        else if (ns == "text") p.text[key] = v;
+        else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
+        else if (ns == "defs") p.defs[key] = v;
+        else p.defs[k] = v;
+    }
+    return p;
+}
+std::string modsPicksDefault(const std::string& root) {
+    const std::filesystem::path p = std::filesystem::path(root) / "forge_mods_picks.txt";
+    std::error_code ec;
+    return std::filesystem::exists(p, ec) ? p.string() : std::string();
+}
+
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sources,
-              const std::string& fieldSchema, bool doStage, bool jsonOutput) {
+              const std::string& fieldSchema, bool doStage, bool jsonOutput,
+              const std::vector<std::string>& labels, const std::string& picksPath) {
     namespace fs = std::filesystem;
     const fs::path tmp = fs::temp_directory_path() / "forge_mods_merge";
     fs::remove_all(tmp);
     fs::create_directories(tmp);
 
+    // the label a source carries through every report row: the order's name, else the file / folder name
+    auto srcLabel = [&](size_t i) {
+        if (i < labels.size() && !labels[i].empty()) return labels[i];
+        const fs::path sp(sources[i]);
+        return fs::is_directory(sp) ? sp.filename().string() : sp.stem().string();
+    };
+    auto tmpRoot = [&](size_t i) {
+        std::string leaf = srcLabel(i);
+        for (auto& ch : leaf) if (!std::isalnum(static_cast<unsigned char>(ch))) ch = '_';
+        return (tmp / (std::to_string(i) + "_" + leaf)).string();
+    };
+    const ModsPicks picks = splitModsPicks(loadPicks(picksPath));
+    json rep;   // `--json`: the one report, printed at the end
+    {
+        json srcs = json::array();
+        for (size_t i = 0; i < sources.size(); ++i) srcs.push_back({{"label", srcLabel(i)}, {"source", sources[i]}});
+        rep["sources"] = srcs;
+        rep["picks"] = picksPath;
+    }
+
     std::vector<std::string> roots;
+    std::vector<std::string> rootLabels;   // parallel to roots
     std::vector<std::string> egoFolders;
     for (size_t i = 0; i < sources.size(); ++i) {
         const std::string& s = sources[i];
         const std::string ext = fs::path(s).extension().string();
         if (ext == ".fmp" || ext == ".FMP") {
-            const std::string root = (tmp / ("src" + std::to_string(i))).string();
-            fmpApply(baseRoot, s, root);
-            roots.push_back(root);
+            const std::string root = tmpRoot(i);
+            fmpApply(baseRoot, s, root, jsonOutput);
+            roots.push_back(root); rootLabels.push_back(srcLabel(i));
         } else if (ext == ".patch" || ext == ".PATCH") {
-            const std::string root = (tmp / ("src" + std::to_string(i))).string();
-            patchToRoot(baseRoot, s, root);
-            roots.push_back(root);
+            const std::string root = tmpRoot(i);
+            patchToRoot(baseRoot, s, root, jsonOutput);
+            roots.push_back(root); rootLabels.push_back(srcLabel(i));
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
-            roots.push_back(s);  // already a game-root
+            roots.push_back(s); rootLabels.push_back(srcLabel(i));  // already a game-root
         } else if (fs::is_directory(s) && fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) {
             // an EgoCore mod folder: the DLL goes into Mods/ below; its .def text becomes a defs layer now
             egoFolders.push_back(s);
             forge::egocore::Paths ep;
             ep.schema = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
-            forge::egocore::Report rep;
-            const std::string root = (tmp / ("src" + std::to_string(i))).string();
-            if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, rep)) {
-                roots.push_back(root);
-                std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
-                            rep.modName.c_str(), rep.defFiles, rep.blocksReplaced, rep.blocksAdded, rep.recordsChanged, rep.fieldsApplied, rep.recordsNew, rep.recordsSkipped);
+            forge::egocore::Report erep;
+            const std::string root = tmpRoot(i);
+            if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, erep)) {
+                roots.push_back(root); rootLabels.push_back(srcLabel(i));
+                if (jsonOutput) rep["egocore_defs"].push_back({{"mod", erep.modName}, {"def_files", erep.defFiles}, {"records_changed", erep.recordsChanged}, {"fields", erep.fieldsApplied}, {"new", erep.recordsNew}, {"skipped", erep.recordsSkipped}});
+                if (!jsonOutput) std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
+                            erep.modName.c_str(), erep.defFiles, erep.blocksReplaced, erep.blocksAdded, erep.recordsChanged, erep.fieldsApplied, erep.recordsNew, erep.recordsSkipped);
             } else if (fs::is_directory(fs::path(s) / "Data" / "Defs") || fs::is_directory(fs::path(s) / "data" / "Defs")) {
                 std::fprintf(stderr, "egocore %s: its .def overrides were NOT applied", fs::path(s).filename().string().c_str());
-                for (const auto& n : rep.notes) std::fprintf(stderr, " -- %s", n.c_str());
+                for (const auto& n : erep.notes) std::fprintf(stderr, " -- %s", n.c_str());
                 std::fprintf(stderr, "\n");
             }
-            for (const auto& n : rep.notes) if (rep.recordsSkipped) std::fprintf(stderr, "  %s\n", n.c_str());
+            for (const auto& n : erep.notes) if (erep.recordsSkipped) std::fprintf(stderr, "  %s\n", n.c_str());
         } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data")) {
             // a partial game-root tree (loose Data/Levels ...): no defs to merge, its
             // TNG / QST files join below
@@ -8156,11 +8270,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         }
     }
 
-    std::printf("normalized %zu source(s) -> %zu game-root(s); field-level merge:\n",
+    if (!jsonOutput) std::printf("normalized %zu source(s) -> %zu game-root(s); field-level merge:\n",
                 sources.size(), roots.size());
+    json defsRep;
+    // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
+    const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
-                             fieldSchema, jsonOutput);
+                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels);
     if (rc != 0) return rc;
+    if (jsonOutput) rep["defs"] = defsRep;
 
     // --- Level TNG merge (loose .tng under data/Levels of dir sources) ---------
     // .fmp/.patch temp roots carry no loose TNGs (their level data lives in a WAD
@@ -8174,7 +8292,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string& s = sources[si];
             const fs::path srcLevels = fs::path(s) / "data" / "Levels";
             if (!fs::is_directory(srcLevels)) continue;
-            const std::string label = fs::path(s).filename().string();
+            const std::string label = srcLabel(si);
             for (auto& de : fs::recursive_directory_iterator(srcLevels)) {
                 if (!de.is_regular_file()) continue;
                 const std::string ext = de.path().extension().string();
@@ -8195,25 +8313,38 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     }
 
     size_t tngCopied = 0, tngMerged = 0, tngThingConflicts = 0;
+    json tngRows = json::array();
     for (const auto& [key, changers] : tngChangers) {
         const fs::path outTng = fs::path(outDir) / "data" / "Levels" / key;
         const fs::path baseTng = baseLevels / key;
+        json row{{"level", key}, {"mods", json::array()}};
+        for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
         if (changers.size() == 1 || !fs::exists(baseTng)) {
             // Single editor (or no base to 3-way against): take the last version.
             fs::create_directories(outTng.parent_path());
             fs::copy_file(changers.back().second, outTng,
                           fs::copy_options::overwrite_existing);
             ++tngCopied;
+            row["mode"] = fs::exists(baseTng) ? "single-editor" : "new-level";
         } else {
-            std::vector<std::string> modTngs;
-            for (const auto& [lbl, path] : changers) modTngs.push_back(path);
-            const auto tr = mergeTngFiles(baseTng.string(), modTngs, outTng.string());
+            // this level's picks: `tng:<level>|<thing>` -> `<thing>`
+            std::map<std::string, std::string> levelPicks;
+            for (const auto& [k, v] : picks.tng)
+                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') levelPicks[k.substr(key.size() + 1)] = v;
+            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks);
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
+            row["mode"] = "thing-merged";
+            row["things"] = tr.things; row["applied"] = tr.applied; row["added"] = tr.added;
+            json crows = json::array();
+            for (const auto& c : tr.rows) crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner}, {"overridden", c.overridden}});
+            row["conflicts"] = crows;
         }
+        tngRows.push_back(row);
     }
+    if (jsonOutput) rep["tng"] = {{"levels", tngRows}, {"merged", tngMerged}, {"copied", tngCopied}, {"conflicts", tngThingConflicts}};
     if (!tngChangers.empty())
-        std::printf("level TNG merge: %zu levels (%zu thing-merged, %zu single-"
+        if (!jsonOutput) std::printf("level TNG merge: %zu levels (%zu thing-merged, %zu single-"
                     "editor copies), %zu thing conflicts\n",
                     tngChangers.size(), tngMerged, tngCopied, tngThingConflicts);
 
@@ -8221,26 +8352,41 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // Statement-level union keyed by quest name: flag flips in place, new
     // quests appended; same-name flag conflicts take the load-order winner.
     size_t qstCopied = 0, qstMerged = 0, qstConflicts = 0;
+    json qstRows = json::array();
     for (const auto& [key, changers] : qstChangers) {
         const fs::path outQst = fs::path(outDir) / "data" / "Levels" / key;
         const fs::path baseQst = baseLevels / key;
+        json row{{"file", key}, {"mods", json::array()}};
+        for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
         if (changers.size() == 1 || !fs::exists(baseQst)) {
             // Single editor (or no base to 3-way against): take the last version.
             fs::create_directories(outQst.parent_path());
             fs::copy_file(changers.back().second, outQst,
                           fs::copy_options::overwrite_existing);
             ++qstCopied;
+            row["mode"] = "single-editor";
         } else {
-            std::vector<std::string> modQsts;
-            for (const auto& [lbl, path] : changers) modQsts.push_back(path);
-            const auto qr = mergeQstFiles(baseQst.string(), modQsts,
-                                          outQst.string(), /*picks*/ {});
+            std::map<std::string, std::string> filePicks;   // `qst:<file>|<quest>` -> `<quest>`
+            for (const auto& [k, v] : picks.qst)
+                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') filePicks[k.substr(key.size() + 1)] = v;
+            const auto qr = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks);
             qstConflicts += qr.conflicts.size();
             ++qstMerged;
+            row["mode"] = "statement-merged";
+            row["applied"] = qr.applied; row["added_quests"] = qr.addedQuests;
+            json crows = json::array();
+            for (const auto& c : qr.conflicts) {
+                json wanted = json::array();
+                for (const auto& [m, flag] : c.wanted) wanted.push_back({{"mod", m}, {"flag", flag}});
+                crows.push_back({{"quest", c.name}, {"wanted", wanted}, {"winner", c.winner}, {"overridden", c.overridden}});
+            }
+            row["conflicts"] = crows;
         }
+        qstRows.push_back(row);
     }
+    if (jsonOutput) rep["qst"] = {{"files", qstRows}, {"merged", qstMerged}, {"copied", qstCopied}, {"conflicts", qstConflicts}};
     if (!qstChangers.empty())
-        std::printf("quest QST merge: %zu registries (%zu statement-merged, "
+        if (!jsonOutput) std::printf("quest QST merge: %zu registries (%zu statement-merged, "
                     "%zu single-editor copies), %zu quest conflicts\n",
                     qstChangers.size(), qstMerged, qstCopied, qstConflicts);
 
@@ -8250,51 +8396,77 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     {
         const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
         size_t langsMerged = 0, keysApplied = 0, keysContested = 0;
+        json textRows = json::array();
         if (fs::is_directory(langRoot))
             for (const auto& lang : fs::directory_iterator(langRoot)) {
                 const fs::path basePath = lang.path() / "text.big";
                 if (!fs::exists(basePath)) continue;
-                std::vector<std::string> changers;
-                for (const auto& r : roots) {
-                    const fs::path p = fs::path(r) / "data" / "lang" / lang.path().filename() / "text.big";
-                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back(p.string());
+                const std::string langName = lang.path().filename().string();
+                std::vector<std::pair<std::string, std::string>> changers;   // (label, path)
+                for (size_t ri = 0; ri < roots.size(); ++ri) {
+                    const fs::path p = fs::path(roots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
+                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back({rootLabels[ri], p.string()});
                 }
                 if (changers.empty()) continue;
                 auto base = forge::big::File::open(basePath);
                 std::map<std::string, std::vector<uint8_t>> baseByName;
                 for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
-                std::map<std::string, int> touched;
-                for (const auto& c : changers) {
+                struct Version { std::string mod; std::vector<uint8_t> data; };
+                std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
+                std::vector<std::string> order;
+                for (const auto& [label, c] : changers) {
                     auto f = forge::big::File::open(c);
                     for (const auto& b : f.banks())
                         for (const auto& e : b.entries) {
                             if (e.name.empty()) continue;
-                            const auto data = f.entryData(e);
+                            auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
                             if (it != baseByName.end() && it->second == data) continue;
-                            try {
-                                forge::textbig::upsertString(base, e.name, forge::textbig::decode(data, 0));
-                                ++keysApplied; ++touched[e.name];
-                            } catch (const std::exception&) {}
+                            if (!versions.count(e.name)) order.push_back(e.name);
+                            versions[e.name].push_back({label, std::move(data)});
                         }
                 }
-                for (const auto& [k, n] : touched) if (n > 1) ++keysContested;
+                for (const auto& name : order) {
+                    const auto& vs = versions[name];
+                    const Version* win = &vs.back();
+                    bool overridden = false, keepBase = false;
+                    if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
+                        overridden = true;
+                        if (pk->second == "vanilla") keepBase = true;
+                        else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+                    }
+                    bool agree = true;
+                    for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
+                    if (vs.size() > 1 && !agree) {
+                        ++keysContested;
+                        json mods = json::array();
+                        for (const auto& v : vs) mods.push_back(v.mod);
+                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
+                    }
+                    if (keepBase) continue;
+                    try {
+                        forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
+                        ++keysApplied;
+                    } catch (const std::exception&) {}
+                }
                 const fs::path dst = fs::path(outDir) / "data" / "lang" / lang.path().filename() / "text.big";
                 fs::create_directories(dst.parent_path());
                 writeAllBytes(dst.string(), base.serialize());
                 ++langsMerged;
             }
+        if (jsonOutput) rep["text"] = {{"languages", langsMerged}, {"applied", keysApplied}, {"contested", textRows}};
         if (langsMerged)
-            std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
+            if (!jsonOutput) std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
     }
 
     // --- Whole-file layers: everything else a game-root tree ships (LEV, WLD, BWD, STB, INI,
     // banks, textures ...) that no record merge covers. Load order resolves them: the last
     // source that carries a path wins; a path several sources carry is reported.
     {
-        std::map<std::string, std::vector<std::string>> carriers;   // rel path -> sources
-        std::map<std::string, std::string> winner;                  // rel path -> abs path
-        for (const auto& s : sources) {
+        struct Carrier { std::string label; fs::path src; std::string rel; };
+        std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
+        for (size_t si = 0; si < sources.size(); ++si) {
+            const std::string& s = sources[si];
             if (!fs::is_directory(s)) continue;
             if (fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) continue;   // EgoCore: below
             for (auto& de : fs::recursive_directory_iterator(s)) {
@@ -8306,18 +8478,39 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
                 if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
                 if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
-                carriers[lower].push_back(fs::path(s).filename().string());
-                winner[lower] = de.path().string();
-                // keep the source's own spelling for the output path
-                fs::path outPath = fs::path(outDir) / rel;
-                fs::create_directories(outPath.parent_path());
-                fs::copy_file(de.path(), outPath, fs::copy_options::overwrite_existing);
+                carriers[lower].push_back({srcLabel(si), de.path(), rel});
             }
         }
         size_t contested = 0;
-        for (const auto& [rel, who] : carriers) if (who.size() > 1) ++contested;
+        json fileRows = json::array();
+        for (const auto& [lower, who] : carriers) {
+            const Carrier* win = &who.back();
+            bool overridden = false, keepBase = false;
+            if (auto pk = picks.file.find(lower); pk != picks.file.end()) {
+                overridden = true;
+                if (pk->second == "vanilla") keepBase = true;
+                else for (const auto& c : who) if (c.label == pk->second) win = &c;
+            }
+            bool agree = true;
+            if (who.size() > 1) {
+                const auto first = readAllBytes(who.front().src.string());
+                for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = readAllBytes(who[ci].src.string()) == first;
+            }
+            if (who.size() > 1 && !agree) {
+                ++contested;
+                json mods = json::array();
+                for (const auto& c : who) mods.push_back(c.label);
+                fileRows.push_back({{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label}, {"overridden", overridden}});
+            }
+            if (keepBase) continue;
+            // keep the source's own spelling for the output path
+            fs::path outPath = fs::path(outDir) / win->rel;
+            fs::create_directories(outPath.parent_path());
+            fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
+        }
+        if (jsonOutput) rep["files"] = {{"copied", carriers.size()}, {"contested", fileRows}};
         if (!carriers.empty())
-            std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source\n", carriers.size(), contested);
+            if (!jsonOutput) std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source\n", carriers.size(), contested);
     }
     // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
     // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
@@ -8363,15 +8556,17 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     added = forge::wad::appendNativeEntries(srcWad, natives, tmpWad);
                     fs::rename(tmpWad, outWad);
                 }
-                std::printf("FinalAlbion.wad rebuilt: %zu level file(s) repacked, %zu new level file(s) appended (their loose copies stay too)\n", n, added);
+                if (jsonOutput) rep["wad"] = {{"repacked", n}, {"appended", added}};
+                if (!jsonOutput) std::printf("FinalAlbion.wad rebuilt: %zu level file(s) repacked, %zu new level file(s) appended (their loose copies stay too)\n", n, added);
             }
         }
     }
 
     for (const auto& folder : egoFolders) {
-        forge::egocore::Report rep;
-        forge::egocore::installDll(folder, baseRoot, outDir, rep);
-        std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", rep.modName.c_str(), rep.modName.c_str(), rep.hasDll ? " (DLL registered)" : "");
+        forge::egocore::Report erep;
+        forge::egocore::installDll(folder, baseRoot, outDir, erep);
+        if (jsonOutput) rep["egocore"].push_back({{"mod", erep.modName}, {"dll", erep.hasDll}});
+        if (!jsonOutput) std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", erep.modName.c_str(), erep.modName.c_str(), erep.hasDll ? " (DLL registered)" : "");
     }
 
     if (doStage) {
@@ -8394,8 +8589,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             return 1;
         }
         const auto result = forge::stage::apply(baseRoot, outDir);
-        std::printf("staged %zu file(s) onto %s (%zu backed up)\n",
+        if (jsonOutput) rep["stage"] = {{"staged", result.staged.size()}, {"backed_up", result.backedUp.size()}};
+        if (!jsonOutput) std::printf("staged %zu file(s) onto %s (%zu backed up)\n",
                     result.staged.size(), baseRoot.c_str(), result.backedUp.size());
+    }
+    if (jsonOutput) {
+        const size_t defsConflicts = rep.contains("defs") ? rep["defs"]["summary"]["record_conflicts"].get<size_t>() : 0;
+        rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
+                          {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0}};
+        std::puts(rep.dump(2).c_str());
     }
     return 0;
 }
@@ -11385,10 +11587,12 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
+                    std::string picksPath = modsPicksDefault(root);
+                    for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
                     const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_deploy";
                     std::filesystem::remove_all(scratch);
-                    std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson);
+                    if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath);
                     std::filesystem::remove_all(scratch);
                     return rc;
                 }
@@ -11396,25 +11600,28 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
+                    std::string picksPath = modsPicksDefault(root);
+                    for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
                     const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_conflicts";
                     std::filesystem::remove_all(scratch);
-                    std::printf("dry run of %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson);
+                    if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath);
                     std::filesystem::remove_all(scratch);
                     return rc;
                 }
                 if (args[1] == "build") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]\n"); return 2; }
-                    bool doStage = false; std::string fieldSchema;
+                    bool doStage = false; std::string fieldSchema, picksPath = modsPicksDefault(root);
                     for (size_t i = 4; i < args.size(); ++i) {
                         if (args[i] == "--stage") doStage = true;
                         else if (args[i] == "--fields" && i + 1 < args.size()) fieldSchema = args[++i];
+                        else if (args[i] == "--picks" && i + 1 < args.size()) picksPath = args[++i];
                     }
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
-                    std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson);
+                    if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
+                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson, mo::buildLabels(order), picksPath);
                 }
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
@@ -11438,7 +11645,7 @@ int main(int argc, char** argv) {
                 sources.push_back(args[i]);
             }
             (void)seenWith;
-            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson);
+            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson, {}, "");
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

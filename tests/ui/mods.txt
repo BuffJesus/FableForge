@@ -25,8 +25,24 @@ mods_undeploy
 wait_mods
 frames 2
 assert_log reverted the previous stage
+# a second tree that moves one thing F2 also moves: the one real conflict; a pick lands in forge_mods_picks.txt
+mod_add build/ui_mods_root_treeB TreeB
+frames 1
+assert_state mods_count 3
+mods_conflicts
+wait_mods
+frames 2
+assert_state mods_conflicts 1
+screenshot build/ui/m2_conflicts.png
+mod_pick * F2 Melee (levels)
+frames 1
+assert_file_contains build/ui_mods_root/forge_mods_picks.txt F2 Melee (levels)
+mod_pick * -
+frames 1
+mod_remove TreeB
 mod_remove Special Melee
 mod_remove 0
+frames 1
 frames 1
 assert_state mods_count 0
 quit

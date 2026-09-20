@@ -51,5 +51,7 @@ int indexOf(const Order& order, const std::string& nameOrIndex);   // -1 when ab
 
 // The sources modsMerge takes, enabled entries in order, resolved against the game root.
 std::vector<std::string> buildSources(const Order& order, const std::filesystem::path& gameRoot);
+// the names of the enabled mods, parallel to buildSources (the labels every merge report row carries)
+std::vector<std::string> buildLabels(const Order& order);
 
 } // namespace forge::modorder

@@ -231,6 +231,12 @@ void setEnabled(Order& order, const std::string& nameOrIndex, bool enabled) {
     order.mods[size_t(i)].enabled = enabled;
 }
 
+std::vector<std::string> buildLabels(const Order& order) {
+    std::vector<std::string> out;
+    for (const auto& e : order.mods) if (e.enabled) out.push_back(e.name);
+    return out;
+}
+
 std::vector<std::string> buildSources(const Order& order, const fs::path& gameRoot) {
     std::vector<std::string> out;
     for (const auto& e : order.mods) {
