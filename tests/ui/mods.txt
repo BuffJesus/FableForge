@@ -1,0 +1,32 @@
+# Mods tab (tools/test_mods.py): the load order of a scratch root, deploy through forge-tools.exe, undeploy.
+wait_maps
+wait_ready
+set saveroot build/ui_mods_root
+mods_tab 1
+frames 2
+assert_state mods_mode 1
+assert_widget btn_mods_deploy
+assert_widget btn_mod_add
+assert_widget input_mod_path
+mod_add work/nexus_mods/_peek/SpecialMelee/SpecialMeleeAbilities.fmp Special Melee
+mod_add work/nexus_mods/_peek/F2MeleeWeapons F2 Melee (levels)
+frames 2
+assert_state mods_count 2
+mod_move 1 0
+mod_enable 0 0
+mod_enable 0 1
+mods_deploy
+wait_mods
+frames 2
+assert_log staged
+assert_log mods deploy: done
+screenshot build/ui/m1_mods.png
+mods_undeploy
+wait_mods
+frames 2
+assert_log reverted the previous stage
+mod_remove Special Melee
+mod_remove 0
+frames 1
+assert_state mods_count 0
+quit

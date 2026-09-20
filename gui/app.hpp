@@ -20,6 +20,7 @@
 
 #include <array>
 
+#include "forge/modorder.hpp"
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "leveledit.hpp"
@@ -472,7 +473,28 @@ public:
     bool addTexture(const std::string& name, const std::string& image, const std::string& bank, const std::string& format);
     std::vector<uint32_t> selectedThingTextures() const;
     void drawTexturesPanel(float pad, float inner, float cardInner);
+    // the Mods tab (gui/mods.cpp): the save root's load order + forge-tools.exe for deploy/undeploy/conflicts
+    void setModsMode(bool on);
+    bool modsMode() const { return modsMode_; }
+    void refreshModOrder();
+    bool modAdd(const std::string& source, const std::string& name);
+    bool modRemove(const std::string& nameOrIndex);
+    bool modMove(const std::string& nameOrIndex, int to);
+    bool modEnable(const std::string& nameOrIndex, bool on);
+    bool runModsTool(const std::string& verb);   // "deploy" | "undeploy" | "conflicts"
+    bool modsBusy() const { return modsFuture_.valid(); }
+    void pollModsTool();
+    void drawModsPanel(float pad, float inner, float cardInner);
+    size_t modCount() const { return modOrder_.mods.size(); }
 private:
+    bool modsMode_ = false;
+    forge::modorder::Order modOrder_;
+    std::string modOrderError_;
+    char modAddPath_[512] = {};
+    char modAddName_[128] = {};
+    struct ModsToolResult { std::vector<std::string> lines; int rc = 0; };
+    std::future<ModsToolResult> modsFuture_;
+    std::string modsVerb_;
     bool texturesMode_ = false;
     bool texturesLoaded_ = false;
     std::vector<texbrowse::TextureRow> texRows_;

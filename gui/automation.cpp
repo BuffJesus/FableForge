@@ -229,6 +229,20 @@ bool Automation::tick(App& app) {
         if (!app.addTexture(n, img, "GBANK_MAIN_PC", fmt)) fail("texture_add failed: " + rest); else note("ok   " + line); ++pc_;
     }
     else if (cmd == "world_tab") { app.setWorldMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "mods_tab") { app.setModsMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
+    else if (cmd == "mod_add") {   // mod_add <path> [name]  (the name is the rest after the first space)
+        std::string path = rest, name;
+        const size_t sp = rest.find(' ');
+        if (sp != std::string::npos) { path = rest.substr(0, sp); name = rest.substr(sp + 1); }
+        if (!app.modAdd(path, name)) fail("mod_add failed: " + rest); else note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "mod_remove") { if (!app.modRemove(rest)) fail("mod_remove failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "mod_move") { std::istringstream rs(rest); std::string n; int to = 0; rs >> n >> to; if (!app.modMove(n, to)) fail("mod_move failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "mod_enable") { std::istringstream rs(rest); std::string n; int on = 1; rs >> n >> on; if (!app.modEnable(n, on != 0)) fail("mod_enable failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "mods_deploy") { if (!app.runModsTool("deploy")) fail("mods_deploy refused"); else note("..   " + line); ++pc_; }
+    else if (cmd == "mods_undeploy") { if (!app.runModsTool("undeploy")) fail("mods_undeploy refused"); else note("..   " + line); ++pc_; }
+    else if (cmd == "mods_conflicts") { if (!app.runModsTool("conflicts")) fail("mods_conflicts refused"); else note("..   " + line); ++pc_; }
+    else if (cmd == "wait_mods") { app.pollModsTool(); waitOn(!app.modsBusy(), "mods tool"); }
     else if (cmd == "world_select") { app.worldSelect(rest); if (app.worldSelected().empty()) fail("world_select: no map " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "world_move") {   // world_move <map> <x> <y>: queue a move (refused moves fail the script)
         std::istringstream rs(rest); std::string m; int x = 0, y = 0; rs >> m >> x >> y;

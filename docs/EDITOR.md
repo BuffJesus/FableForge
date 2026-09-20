@@ -550,6 +550,19 @@ barrel is: select it, click its texture, *Replace from image*. One-time
 `textures.big.atlas-orig` backup; refused while the game runs. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 
+## Mods tab
+
+The fifth panel tab is the install's mod load order (`forge_mods.json` next to Fable.exe,
+the same file `forge-tools mods list/add/...` edits). Each row is a mod: enable checkbox,
+move up/down, remove, the name and its kind (`.fmp`, bsdiff `.patch`, `.qst`, a folder with
+`Data/`, an EgoCore `Mods/<Name>/` folder). *Add a mod* takes a path (and an optional name)
+and hashes the source. *Check conflicts* prints the dry-run report; *Build and deploy*
+reverts the previous deploy, builds the whole order onto the retail files and stages it
+(originals kept as `.forgebak`); *Undeploy* puts the retail files back. All three run the
+shipped `forge-tools.exe` as a process and stream its output into the Activity log.
+Refused while Fable runs, and on an install EgoCore has deployed to. The rules of the merge
+are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
+
 ### Region entrance (FinalAlbion.gtg)
 
 `FinalAlbion.gtg` holds the global things per WLD map slot: the

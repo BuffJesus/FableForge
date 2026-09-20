@@ -37,6 +37,7 @@ key_up F
 frames 2
 screenshot build/ui/c2_framed.png
 # Alt + LMB orbit keeps the focus point: camera moves but the view stays on the map
+mouse_move viewport
 snapshot_camera
 key_down Alt
 mouse_down left

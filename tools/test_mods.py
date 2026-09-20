@@ -152,6 +152,15 @@ def main() -> int:
     if os.path.isdir(os.path.join(scratch, "Mods")) and any(os.scandir(os.path.join(scratch, "Mods"))): print("undeploy left Mods/ content"); ok = False
     run("mods", "remove", scratch, "F2 Melee (defs)")
     if "F2 Melee (defs)" in [m["name"] for m in json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]]: print("remove failed"); ok = False
+    # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
+    if os.path.exists(gui):
+        if os.path.exists(os.path.join(scratch, 'forge_mods.json')): os.remove(os.path.join(scratch, 'forge_mods.json'))   # the tab starts from an empty order
+        r = subprocess.run([gui, "--auto", "tests/ui/mods.txt"], capture_output=True, text=True)
+        log = os.path.join(ROOT, "tests", "ui", "mods.txt.log")
+        tail = open(log, encoding="utf-8", errors="replace").read().strip().splitlines() if os.path.exists(log) else []
+        if r.returncode != 0 or not tail or "RESULT PASS" not in tail[-1]:
+            print("ui mods failed:", " | ".join(tail[-8:])); ok = False
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
     print("mods test", "OK" if ok else "FAILED")

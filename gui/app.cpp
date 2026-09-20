@@ -1064,6 +1064,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("edit_mode=" + std::string(editMode_ ? "1" : "0"));
     v.push_back("world_mode=" + std::string(worldMode_ ? "1" : "0"));
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
+    v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
+    v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
     v.push_back("textures_count=" + std::to_string(texRows_.size()));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }
     v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));
@@ -1609,7 +1611,7 @@ void App::drawActions(float width) {
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    const float footerHeight = modsMode_ ? S(72) : texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
     // The settings stack takes what it needs (measured last frame); the activity log
     // takes the rest, never less than a few lines. On a short window the settings
     // scroll instead of pushing the export button off screen.
@@ -1626,18 +1628,24 @@ void App::drawActions(float width) {
 
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
-        int tab = texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
-        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Textures"}, inner)) {
-            if (tab == 3) setTexturesMode(true);
-            else if (tab == 2) { setTexturesMode(false); setWorldMode(true); }
-            else { setTexturesMode(false); setWorldMode(false); if (editMode_ != (tab == 1)) setEditMode(tab == 1); }
+        int tab = modsMode_ ? 4 : texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
+        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Textures", "Mods"}, inner)) {
+            if (tab == 4) setModsMode(true);
+            else if (tab == 3) { setModsMode(false); setTexturesMode(true); }
+            else if (tab == 2) { setModsMode(false); setTexturesMode(false); setWorldMode(true); }
+            else { setModsMode(false); setTexturesMode(false); setWorldMode(false); if (editMode_ != (tab == 1)) setEditMode(tab == 1); }
         }
         auto_.registerWidget("seg_panel");
     }
     ImGui::Dummy(ImVec2(0, S(8)));
 
     const float cardInner = inner - S(24);
-    if (texturesMode_) {
+    if (modsMode_) {
+        drawModsPanel(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(6)));
+        settingsContentH_ = ImGui::GetCursorPosY();
+        ImGui::EndChild();  // ##settings
+    } else if (texturesMode_) {
         drawTexturesPanel(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(6)));
         settingsContentH_ = ImGui::GetCursorPosY();
@@ -1777,7 +1785,12 @@ void App::drawActions(float width) {
     // ---- footer
     ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + pad, ImGui::GetCursorScreenPos().y), ImVec2(p0.x + width - pad, ImGui::GetCursorScreenPos().y), theme::col(theme::Border));
     ImGui::Dummy(ImVec2(0, S(8)));
-    if (texturesMode_) {
+    if (modsMode_) {
+        ImGui::SetCursorPosX(pad);
+        ImGui::PushFont(fontSmall_);
+        theme::hint("The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. The Setup card's Restore covers FableForge's own edits, not a deployed order.");
+        ImGui::PopFont();
+    } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
         theme::hint("Textures live in data/graphics/pc/textures.big. Replacing one changes every object that uses it; the original archive is backed up once as textures.big.atlas-orig (Setup > Restore puts it back).");
