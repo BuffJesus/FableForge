@@ -1142,6 +1142,52 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
     return r;
 }
 
+// EgoCore's TNG-mod header (TngMerger.h): an optional `[Settings]` block before the sections with
+// `Replace=true` (the file replaces the level whole) and `DeleteUIDs: <uid> ...` (things to drop).
+// A TNG mod without it is still partial when it carries far fewer things than the level.
+struct TngModSettings { bool replace = false; std::vector<std::string> deleteUids; bool hasHeader = false; };
+TngModSettings readTngModSettings(const std::string& path) {
+    TngModSettings st;
+    const auto bytes = readAllBytes(path);
+    const std::string text(bytes.begin(), bytes.end());
+    const size_t at = text.find("[Settings]");
+    if (at == std::string::npos) return st;
+    st.hasHeader = true;
+    size_t end = text.find("XXXSectionStart", at);
+    if (end == std::string::npos) end = text.size();
+    const std::string block = text.substr(at, end - at);
+    st.replace = block.find("Replace=true") != std::string::npos || block.find("Replace=1") != std::string::npos;
+    const size_t d = block.find("DeleteUIDs:");
+    if (d != std::string::npos) {
+        std::string cur;
+        for (size_t i = d + 11; i <= block.size(); ++i) {
+            const char c = i < block.size() ? block[i] : '\n';
+            if (std::isdigit(static_cast<unsigned char>(c))) cur += c;
+            else if (!cur.empty()) { st.deleteUids.push_back(cur); cur.clear(); if (c == '\n' || c == '\r') break; }
+            else if (c == '\n' || c == '\r') break;
+        }
+    }
+    return st;
+}
+
+// drop the things EgoCore's DeleteUIDs names from a merged TNG (by UID), in place on disk
+size_t dropThingsByUid(const std::string& tngPath, const std::vector<std::string>& uids) {
+    if (uids.empty()) return 0;
+    auto f = forge::tng::File::parse(tngPath);
+    size_t dropped = 0;
+    for (const auto& uid : uids) {
+        for (size_t i = 0; i < f.things().size(); ++i) {
+            if (auto u = f.things()[i].find("UID"); u && *u == uid) { f.removeThing(i); ++dropped; break; }
+        }
+    }
+    if (dropped) {
+        std::ofstream ofs(tngPath, std::ios::binary | std::ios::trunc);
+        const std::string out = f.serialize();
+        ofs.write(out.data(), std::streamsize(out.size()));
+    }
+    return dropped;
+}
+
 // `tng merge` form: the mod label is the TNG's folder name (or the file's)
 TngMergeResult mergeTngFiles(const std::string& basePath,
                              const std::vector<std::string>& modPaths,
@@ -8340,13 +8386,30 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const fs::path baseTng = baseLevels / key;
         json row{{"level", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
-        if (changers.size() == 1 || !fs::exists(baseTng)) {
+        // EgoCore-style partial TNG mods (a [Settings] header, or far fewer things than the level)
+        // merge even when they are the only editor: copying one would replace the level with its
+        // handful of things. Replace=true asks for exactly that copy.
+        std::vector<std::string> deleteUids;
+        bool partial = false, replaceWhole = false;
+        if (fs::exists(baseTng)) {
+            size_t baseThings = 0;
+            try { baseThings = forge::tng::File::parse(baseTng.string()).things().size(); } catch (const std::exception&) {}
+            for (const auto& [lbl, path] : changers) {
+                const auto st = readTngModSettings(path);
+                deleteUids.insert(deleteUids.end(), st.deleteUids.begin(), st.deleteUids.end());
+                if (st.replace) replaceWhole = true;
+                size_t modThings = 0;
+                try { modThings = forge::tng::File::parse(path).things().size(); } catch (const std::exception&) {}
+                if (st.hasHeader || (baseThings >= 20 && modThings * 2 < baseThings)) partial = true;
+            }
+        }
+        if (!fs::exists(baseTng) || (changers.size() == 1 && (!partial || replaceWhole))) {
             // Single editor (or no base to 3-way against): take the last version.
             fs::create_directories(outTng.parent_path());
             fs::copy_file(changers.back().second, outTng,
                           fs::copy_options::overwrite_existing);
             ++tngCopied;
-            row["mode"] = fs::exists(baseTng) ? "single-editor" : "new-level";
+            row["mode"] = !fs::exists(baseTng) ? "new-level" : replaceWhole ? "replaced" : "single-editor";
             // every thing the copy adds or changes against the base is that mod's
             try {
                 std::map<std::string, std::string> baseSig;
@@ -8371,6 +8434,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
             for (const auto& [k, m] : tr.origin) provenance[key][k] = m;
+            if (const size_t dropped = dropThingsByUid(outTng.string(), deleteUids)) row["deleted"] = dropped;
             row["mode"] = "thing-merged";
             row["things"] = tr.things; row["applied"] = tr.applied; row["added"] = tr.added;
             json crows = json::array();

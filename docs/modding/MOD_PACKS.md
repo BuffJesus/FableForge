@@ -221,7 +221,8 @@ whole files identical to the install are skipped, the 794 loose levels are repac
 (448 TNGs, provenance for each), the new `ProjectAutumn/` folder and the whole STB / banks ride as
 whole-file layers; UFP's bsdiff underneath composes without a conflict -- 24 s. FSE packs: `FSE/quests.lua`
 is a key-level union (own bytes per entry, `fse:<key>` picks, id clashes reported); an FSE-only folder is a
-tree source.
+tree source. EgoCore partial TNG mods (`[Settings]` + `Replace=true` / `DeleteUIDs:`, TngMerger.h) merge by
+UID into the level, deletions applied, even as the only editor.
 
 Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,

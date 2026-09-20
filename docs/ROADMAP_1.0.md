@@ -480,8 +480,12 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    differ are applied onto retail's records (def-index fields compared by resolved name, added
    records re-pointed). Controller Support: 3 files, 4 blocks -> 14 records / 43 fields / 1 new,
    the merged control scheme has the mod's 71st binding; Water Wader: DLL only. In `test_mods.py`.
-   Still open from the plan: TNG section-merge (`TngMerger.h`) and a shipped text tree (the text
-   Data/Defs is this machine's path; `defc.exe` ships in the zip). `.resource` bank overrides DONE
+   TNG section-merge (`TngMerger.h`) DONE 2026-09-20: an EgoCore-style partial TNG mod (a
+   `[Settings]` header with `Replace=true` / `DeleteUIDs:`, then only the things to add or replace --
+   or simply far fewer things than the level) merges into the level even when it is the only editor
+   instead of replacing it; DeleteUIDs are dropped after the merge; Replace=true copies whole.
+   Still open: a shipped text tree (the text Data/Defs is this machine's path; `defc.exe` ships in
+   the zip). `.resource` bank overrides DONE
    2026-09-20 (`egocore::applyResourceOverrides`, ModBankPatcher's layout incl. the graphics
    MipSize0 zeroing; replaced / appended entries; `test_mods.py` over frontend.big); the `.tmp`
    refusal DONE 2026-09-20. (user goal, 2026-09-19: *every* older

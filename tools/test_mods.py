@@ -267,6 +267,35 @@ def main() -> int:
     shutil.rmtree(os.path.join(scratch, "FSE"), ignore_errors=True)
     if not a.keep:
         for d in (pa, pb, pc): shutil.rmtree(d, ignore_errors=True)
+    # an EgoCore-style partial TNG mod (TngMerger.h): a [Settings] header with DeleteUIDs, then ONE
+    # thing to replace; alone in its level it must merge into the level, not replace it
+    if os.path.exists(f2tng):
+        import re as _re2
+        base_tng = os.path.join(scratch, "data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng")
+        base_txt = open(base_tng, encoding="latin-1").read()
+        things = _re2.findall(r"NewThing .*?EndThing;", base_txt, _re2.S)
+        first, second = things[0], things[1]
+        uid1 = _re2.search(r"UID (\d+);", first).group(1); uid2 = _re2.search(r"UID (\d+);", second).group(1)
+        moved = _re2.sub(r"PositionX (-?[0-9.]+);", lambda m: "PositionX %s;" % round(float(m.group(1)) + 7.25, 5), first, count=1)
+        sec = _re2.search(r"XXXSectionStart (\S+);", base_txt).group(1)
+        part = os.path.join(ROOT, "build", "ui_mods_partial"); shutil.rmtree(part, ignore_errors=True)
+        os.makedirs(os.path.join(part, "Data", "Levels", "FinalAlbion"))
+        open(os.path.join(part, "Data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"), "w", encoding="latin-1", newline="\n").write(
+            "[Settings]\nDeleteUIDs: %s\n\nVersion 2;\nXXXSectionStart %s;\n%s\nXXXSectionEnd;\n" % (uid2, sec, moved))
+        run("mods", "build", scratch, out)   # the order without the partial mod: the count to compare against
+        before_txt = open(os.path.join(out, "data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"), encoding="latin-1").read()
+        n_before = len(_re2.findall(r"NewThing ", before_txt))
+        run("mods", "add", scratch, part, "--name", "PartialTng")
+        rep = json.loads(run("mods", "build", scratch, out, "--json").stdout)
+        lvl = [l for l in rep["tng"]["levels"] if l["level"].lower().endswith("arenahallofheroes.tng")]
+        if not lvl or lvl[0]["mode"] != "thing-merged" or lvl[0].get("deleted") != 1: print("partial TNG not merged:", lvl); ok = False
+        merged_txt = open(os.path.join(out, "data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"), encoding="latin-1").read()
+        n_merged = len(_re2.findall(r"NewThing ", merged_txt))
+        if n_merged != n_before - 1: print("merged level has", n_merged, "things, expected", n_before - 1); ok = False
+        if ("UID %s;" % uid2) in merged_txt: print("DeleteUIDs not applied"); ok = False
+        if _re2.search(r"PositionX (-?[0-9.]+);", moved).group(1) not in merged_txt: print("moved thing not in the merged level"); ok = False
+        run("mods", "remove", scratch, "PartialTng")
+        if not a.keep: shutil.rmtree(part, ignore_errors=True)
     # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):
