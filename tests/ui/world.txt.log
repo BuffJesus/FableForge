@@ -1,118 +1,118 @@
-   0.12 ok   wait_maps
-   0.14 ok   set saveroot build/ui_overworld_install
-   0.30 ok   world_tab 1
-   0.31 ok   frames 3
-   0.38 ok   assert_state world_mode 1
-   0.40 ok   assert_state world_loaded 1
-   0.42 ok   assert_state world_maps 399
-   0.44 ok   assert_widget viewport
-   0.45 ok   screenshot build/ui/w1_world.png
+   0.15 ok   wait_maps
+   0.18 ok   set saveroot build/ui_overworld_install
+   0.35 ok   world_tab 1
+   0.36 ok   frames 3
+   0.41 ok   assert_state world_mode 1
+   0.42 ok   assert_state world_loaded 1
+   0.44 ok   assert_state world_maps 399
+   0.45 ok   assert_widget viewport
+   0.46 ok   screenshot build/ui/w1_world.png
    0.52 shot build/ui/w1_world.png
-   0.55 ok   world_select TeleporterGreatwood
-   0.57 ok   frames 2
-   0.62 ok   assert_state world_selected TeleporterGreatwood
-   0.64 ok   assert_state world_selected_pos 3072,2880
-   0.66 ok   assert_widget world_x
-   0.67 ok   assert_widget btn_world_move
-   0.69 ok   world_move_refused TeleporterGreatwood 3104 2880
-   0.71 ok   world_move_refused TeleporterGreatwead 1000 1000
-   0.73 ok   assert_state world_pending 0
-   0.74 ok   world_move TeleporterGreatwood 2048 8064
-   0.76 ok   frames 2
-   0.81 ok   assert_state world_pending 1
-   0.83 ok   assert_state world_selected_pos 2048,8064
-   0.85 ok   screenshot build/ui/w2_pending.png
-   0.92 shot build/ui/w2_pending.png
-   0.95 ok   assert_widget btn_world_putback
-   0.97 ..   click btn_world_putback
-   1.04 ok   frames 2
-   1.07 ok   assert_state world_pending 0
-   1.08 ok   assert_state world_selected_pos 3072,2880
-   1.10 ok   mouse_move viewport
+   0.54 ok   world_select TeleporterGreatwood
+   0.55 ok   frames 2
+   0.59 ok   assert_state world_selected TeleporterGreatwood
+   0.60 ok   assert_state world_selected_pos 3072,2880
+   0.61 ok   assert_widget world_x
+   0.62 ok   assert_widget btn_world_move
+   0.64 ok   world_move_refused TeleporterGreatwood 3104 2880
+   0.65 ok   world_move_refused TeleporterGreatwead 1000 1000
+   0.66 ok   assert_state world_pending 0
+   0.67 ok   world_move TeleporterGreatwood 2048 8064
+   0.68 ok   frames 2
+   0.72 ok   assert_state world_pending 1
+   0.73 ok   assert_state world_selected_pos 2048,8064
+   0.74 ok   screenshot build/ui/w2_pending.png
+   0.81 shot build/ui/w2_pending.png
+   0.83 ok   assert_widget btn_world_putback
+   0.84 ..   click btn_world_putback
+   0.90 ok   frames 2
+   0.94 ok   assert_state world_pending 0
+   0.96 ok   assert_state world_selected_pos 3072,2880
+   0.97 ok   mouse_move viewport
+   1.00 ok   frames 1
+   1.04 ok   world_move TeleporterGreatwood 2048 8064
+   1.06 ok   frames 1
+   1.10 ok   assert_state world_pending 1
+   1.11 ok   world_revert
    1.13 ok   frames 1
-   1.17 ok   world_move TeleporterGreatwood 2048 8064
-   1.18 ok   frames 1
-   1.22 ok   assert_state world_pending 1
-   1.24 ok   world_revert
-   1.25 ok   frames 1
-   1.29 ok   assert_state world_pending 0
-   1.30 ok   assert_state world_can_undo 1
-   1.32 ok   world_undo
-   1.34 ok   frames 1
-   1.37 ok   assert_state world_pending 1
-   1.39 ok   assert_state world_selected_pos 2048,8064
-   1.41 ok   world_undo
-   1.43 ok   frames 1
-   1.46 ok   assert_state world_pending 0
-   1.48 ok   assert_state world_selected_pos 3072,2880
-   1.49 ok   world_redo
-   1.51 ok   frames 1
-   1.55 ok   assert_state world_pending 1
-   1.56 ok   assert_widget btn_world_undo
-   1.58 ok   world_revert
-   1.60 ok   frames 1
-   1.63 ok   assert_state world_pending 0
-   1.65 ok   world_move TeleporterGreatwood 2048 8032
-   1.67 ok   world_move OrchardFarm 2112 8064
-   1.69 ok   frames 2
-   1.74 ok   assert_state world_pending 2
-   1.76 ok   assert_widget btn_world_apply
-   1.78 ..   click btn_world_apply
-   1.84 ok   frames 2
-   1.88 ok   assert_widget btn_world_apply_confirm
-   1.89 ok   world_stitch 1 -1
-   1.90 ok   assert_state world_stitch 1
-   1.91 ..   world_apply
-  30.17 ok   wait_world
-  30.18 ok   frames 3
-  30.23 ok   assert_state world_ok 1
-  30.24 ok   assert_state world_pending 0
-  30.25 ok   assert_log 1 stitched
-  30.26 ok   world_select TeleporterGreatwood
-  30.28 ok   frames 2
-  30.31 ok   assert_state world_selected_pos 2048,8032
-  30.32 ok   screenshot build/ui/w3_applied.png
-  30.40 shot build/ui/w3_applied.png
-  30.43 ok   world_stitch 0
-  30.44 ok   world_move TeleporterGreatwood 3072 2880
-  30.45 ok   world_move OrchardFarm 3200 3168
-  30.46 ..   world_apply
-  44.31 ok   wait_world
-  44.32 ok   frames 3
-  44.38 ok   assert_state world_ok 1
-  44.39 ok   world_select OrchardFarm
-  44.41 ok   frames 1
-  44.43 ok   assert_state world_selected_pos 3200,3168
-  44.45 ok   world_select OrchardFarm
-  44.46 ok   frames 2
-  44.49 ok   assert_state world_selected_owner OrchardFarm
-  44.51 ok   assert_widget combo_world_owner
-  44.52 ok   world_sees Greatwood OrchardFarm 1
-  44.53 ok   world_owner OrchardFarmEast Greatwood
-  44.54 ok   frames 2
-  44.58 ok   assert_state world_pending_sees 1
-  44.59 ok   assert_state world_pending_owners 1
-  44.61 ok   screenshot build/ui/w4_region_pending.png
-  44.67 shot build/ui/w4_region_pending.png
-  44.70 ..   world_apply
-  45.17 ok   wait_world
-  45.18 ok   frames 3
-  45.22 ok   assert_state world_ok 1
-  45.24 ok   assert_state world_pending_sees 0
-  45.25 ok   world_select OrchardFarmEast
-  45.26 ok   frames 1
-  45.28 ok   assert_state world_selected_owner Greatwood
-  45.29 ok   world_owner OrchardFarmEast OrchardFarm
-  45.31 ok   world_sees Greatwood OrchardFarm 0
-  45.32 ..   world_apply
-  45.79 ok   wait_world
-  45.80 ok   frames 3
-  45.84 ok   assert_state world_ok 1
-  45.85 ok   world_select OrchardFarmEast
-  45.87 ok   frames 1
-  45.89 ok   assert_state world_selected_owner OrchardFarm
-  45.90 ok   world_tab 0
-  45.91 ok   frames 2
-  45.92 ok   assert_state world_mode 0
-  45.93 ok   quit
+   1.17 ok   assert_state world_pending 0
+   1.19 ok   assert_state world_can_undo 1
+   1.21 ok   world_undo
+   1.22 ok   frames 1
+   1.26 ok   assert_state world_pending 1
+   1.28 ok   assert_state world_selected_pos 2048,8064
+   1.30 ok   world_undo
+   1.31 ok   frames 1
+   1.35 ok   assert_state world_pending 0
+   1.37 ok   assert_state world_selected_pos 3072,2880
+   1.39 ok   world_redo
+   1.41 ok   frames 1
+   1.45 ok   assert_state world_pending 1
+   1.47 ok   assert_widget btn_world_undo
+   1.49 ok   world_revert
+   1.50 ok   frames 1
+   1.54 ok   assert_state world_pending 0
+   1.56 ok   world_move TeleporterGreatwood 2048 8032
+   1.58 ok   world_move OrchardFarm 2112 8064
+   1.60 ok   frames 2
+   1.65 ok   assert_state world_pending 2
+   1.67 ok   assert_widget btn_world_apply
+   1.69 ..   click btn_world_apply
+   1.76 ok   frames 2
+   1.79 ok   assert_widget btn_world_apply_confirm
+   1.80 ok   world_stitch 1 -1
+   1.82 ok   assert_state world_stitch 1
+   1.83 ..   world_apply
+  22.12 ok   wait_world
+  22.13 ok   frames 3
+  22.18 ok   assert_state world_ok 1
+  22.19 ok   assert_state world_pending 0
+  22.20 ok   assert_log 1 stitched
+  22.21 ok   world_select TeleporterGreatwood
+  22.23 ok   frames 2
+  22.26 ok   assert_state world_selected_pos 2048,8032
+  22.27 ok   screenshot build/ui/w3_applied.png
+  22.34 shot build/ui/w3_applied.png
+  22.37 ok   world_stitch 0
+  22.38 ok   world_move TeleporterGreatwood 3072 2880
+  22.39 ok   world_move OrchardFarm 3200 3168
+  22.41 ..   world_apply
+  35.59 ok   wait_world
+  35.60 ok   frames 3
+  35.65 ok   assert_state world_ok 1
+  35.66 ok   world_select OrchardFarm
+  35.68 ok   frames 1
+  35.70 ok   assert_state world_selected_pos 3200,3168
+  35.72 ok   world_select OrchardFarm
+  35.73 ok   frames 2
+  35.76 ok   assert_state world_selected_owner OrchardFarm
+  35.78 ok   assert_widget combo_world_owner
+  35.79 ok   world_sees Greatwood OrchardFarm 1
+  35.80 ok   world_owner OrchardFarmEast Greatwood
+  35.81 ok   frames 2
+  35.85 ok   assert_state world_pending_sees 1
+  35.86 ok   assert_state world_pending_owners 1
+  35.87 ok   screenshot build/ui/w4_region_pending.png
+  35.94 shot build/ui/w4_region_pending.png
+  35.97 ..   world_apply
+  36.54 ok   wait_world
+  36.55 ok   frames 3
+  36.60 ok   assert_state world_ok 1
+  36.62 ok   assert_state world_pending_sees 0
+  36.63 ok   world_select OrchardFarmEast
+  36.64 ok   frames 1
+  36.67 ok   assert_state world_selected_owner Greatwood
+  36.68 ok   world_owner OrchardFarmEast OrchardFarm
+  36.69 ok   world_sees Greatwood OrchardFarm 0
+  36.71 ..   world_apply
+  37.28 ok   wait_world
+  37.29 ok   frames 3
+  37.34 ok   assert_state world_ok 1
+  37.35 ok   world_select OrchardFarmEast
+  37.36 ok   frames 1
+  37.39 ok   assert_state world_selected_owner OrchardFarm
+  37.40 ok   world_tab 0
+  37.41 ok   frames 2
+  37.42 ok   assert_state world_mode 0
+  37.43 ok   quit
 RESULT PASS

@@ -65,7 +65,7 @@ bool App::exportSelectedTexture(const std::string& outPath) {
 bool App::replaceSelectedTexture(const std::string& image) {
     const auto* r = selectedTexture();
     if (!r) { pushLog("textures: nothing selected", 1); return false; }
-    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("textures: the game is running (live link heartbeat); quit to the desktop first", 1); return false; }
+    if (gameWriteBlocked("textures")) return false;
     std::vector<std::string> notes; std::string err;
     const std::string name = r->name;
     if (!texbrowse::replaceTexture(saveRoot(), name, image, notes, err)) { for (const auto& n : notes) pushLog("textures: " + n, 1); pushLog("textures: " + err, 2); return false; }
@@ -78,7 +78,7 @@ bool App::replaceSelectedTexture(const std::string& image) {
 }
 
 bool App::addTexture(const std::string& name, const std::string& image, const std::string& bank, const std::string& format) {
-    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("textures: the game is running (live link heartbeat); quit to the desktop first", 1); return false; }
+    if (gameWriteBlocked("textures")) return false;
     std::vector<std::string> notes; std::string err; uint32_t id = 0;
     if (!texbrowse::addTexture(saveRoot(), bank, name, image, format, id, notes, err)) { for (const auto& n : notes) pushLog("textures: " + n, 1); pushLog("textures: " + err, 2); return false; }
     for (const auto& n : notes) pushLog("textures: " + n, 3);

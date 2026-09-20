@@ -38,7 +38,7 @@ const forge::big::Entry* findEntry(const forge::big::File& file, const std::stri
 // the importer writes a sibling file; swap it in, backup first, refuse while the game runs
 bool runImport(const fs::path& gameRoot, forge::terraintex::ImportRequest ir, uint32_t& idOut,
                std::vector<std::string>& notes, std::string& error) {
-    if (backups::gameRunning()) { error = "Fable is running; rewriting textures.big underneath it crashes it. Quit to the desktop first."; return false; }
+    if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; rewriting textures.big underneath it crashes it. Quit to the desktop first."; return false; }
     const fs::path big = bigPath(gameRoot);
     std::error_code ec;
     if (!fs::exists(big, ec)) { error = "no " + big.string(); return false; }

@@ -161,6 +161,7 @@ bool App::worldRedo() {
 
 void App::worldApply() {
     if (worldPendingCount() == 0 || worldFuture_.valid()) return;
+    if (gameWriteBlocked("world")) return;
     const std::string root = saveRoot();
     const std::vector<editor::MapMove> moves = worldPending_;
     const std::vector<editor::OwnerEdit> owners = worldOwnerEdits_;

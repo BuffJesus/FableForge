@@ -27,6 +27,10 @@ std::vector<Entry> scan(const std::filesystem::path& gameRoot);
 
 // Fable.exe running? (restores are refused then: the engine holds the files open)
 bool gameRunning();
+// Fable.exe running FROM this install (its image path under gameRoot)? A game
+// started from another copy does not hold this root's files. When the path
+// cannot be read (a protected process) the answer is the conservative one: true.
+bool gameRunningIn(const std::filesystem::path& gameRoot);
 
 // Put one entry back. `keepBackup` = leave the .atlas-orig in place (default;
 // it stays the baseline for the next edit); false removes it after restoring.

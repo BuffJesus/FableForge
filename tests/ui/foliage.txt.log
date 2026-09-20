@@ -1,123 +1,123 @@
-   0.12 ok   wait_maps
+   0.11 ok   wait_maps
    0.14 ok   wait_ready
    0.16 ok   select StartOakValeWest
-   0.25 ok   wait_loaded
-   0.59 ok   wait_foliage
-   0.60 ok   frames 3
-   0.64 ok   assert_state foliage_loaded 1
-   0.64 ok   assert_widget chip_foliage
-   0.65 ok   assert_widget chip_things
-   0.65 ok   assert_widget toggle_things
-   0.66 ok   screenshot build/ui/f1_foliage_far.png
-   0.93 shot build/ui/f1_foliage_far.png
-   0.94 ok   zoom 5
-   0.95 ok   orbit 0.4 -0.25
-   0.95 ok   frames 2
-   0.97 ok   screenshot build/ui/f2_foliage_near.png
-   1.33 shot build/ui/f2_foliage_near.png
-   1.34 ..   click chip_foliage
-   1.37 ok   frames 3
-   1.41 ok   assert_state preview_foliage 0
-   1.41 ok   screenshot build/ui/f3_foliage_off.png
-   1.74 shot build/ui/f3_foliage_off.png
-   1.75 ..   click chip_foliage
-   1.78 ok   frames 2
-   1.79 ..   click chip_things
-   1.82 ok   frames 2
-   1.85 ok   assert_state preview_things 0
-   1.86 ..   click chip_things
-   1.89 ok   frames 2
-   1.90 ok   set outdir build/ui
-   1.91 ok   set things 1
-   1.91 ok   set texels 4
-   1.92 ok   set foliage 1
-   1.92 ..   click btn_export
-   1.95 ok   frames 2
-   3.56 ok   wait_export
-   3.59 ok   assert_state export_ok 1
-   3.60 ok   assert_file build/ui/StartOakValeWest.glb
-   3.62      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-   3.62      install_valid=1
-   3.62      install_textures=1
-   3.62      install_fse=1
-   3.62      setup_open=0
-   3.62      backups_differ=0
-   3.62      maps=399
-   3.62      selected=StartOakValeWest
-   3.62      settings_scroll=0
-   3.62      settings_scrolled=0
-   3.62      hovered_window=##root/##actions_92064320
-   3.62      mouse=1254,692
-   3.62      hovered_scrollmax=0
-   3.62      wheeling_window=- scrolled_frame=-1 frame=421 hovered_flags=16777487 parent=##root parent_scrollmax=0
-   3.62      preview_loaded=1
-   3.62      preview_textured=1
-   3.62      context_ready=1
-   3.62      mode=Textured
-   3.62      rule_notice=-
-   3.62      edit_tab=0
-   3.62      toasts=2
-   3.62      help_open=0
-   3.62      tour_step=-1
-   3.62      ui_scale=1.00
-   3.62      grid=0
-   3.62      selection_count=0
-   3.62      presets=0
-   3.62      effects=0
-   3.62      entrance=-
-   3.62      cursor_ground=-
-   3.62      export_ok=1
-   3.62      export_path=build/ui\StartOakValeWest.glb
-   3.62      format=glb
-   3.62      textures=1
-   3.62      layers=0
-   3.63      walkable=0
-   3.63      texels=4
-   3.63      gain=1.00
-   3.63      mesh_vertices=29025
-   3.63      batch_active=0
-   3.63      foliage_loaded=1
-   3.63      foliage_instances=18709
-   3.63      preview_foliage=1
-   3.63      export_foliage=1
-   3.63      thing_instances=725
-   3.63      preview_things=1
-   3.63      preview_water=1
-   3.63      export_things=1
-   3.63      world=0
-   3.63      region=StartOakVale
-   3.63      batch_done=0
-   3.63      batch_failed=0
-   3.63      filter=
-   3.63      camera=146.05,56.70,-80.10
-   3.63      edit_mode=0
-   3.63      world_mode=0
-   3.63      textures_mode=0
-   3.63      textures_count=0
-   3.63      texture_selected=-
-   3.63      world_loaded=0
-   3.63      world_maps=0
-   3.63      world_selected=
-   3.63      world_pending=0
-   3.63      world_pending_owners=0
-   3.63      world_can_undo=0
-   3.63      world_can_redo=0
-   3.63      world_pending_sees=0
-   3.63      world_ok=0
-   3.63      world_stitch=0
-   3.63      paint_theme=0
-   3.63      link_installed=0
-   3.63      link_ready=0
-   3.63      link_hero_map=
-   3.63      villages=1
-   3.63      palette_named=41
-   3.63      doc_loaded=1
-   3.63      doc_things=874
-   3.63      doc_dirty=0
-   3.63      doc_changes=0
-   3.63      selected_thing=-1
-   3.63      gizmo=1
-   3.63      terrain_dirty=0
-   3.63      terrain_center_height=13.874
-   3.63 ok   quit
+   0.24 ok   wait_loaded
+   0.56 ok   wait_foliage
+   0.56 ok   frames 3
+   0.60 ok   assert_state foliage_loaded 1
+   0.61 ok   assert_widget chip_foliage
+   0.61 ok   assert_widget chip_things
+   0.62 ok   assert_widget toggle_things
+   0.62 ok   screenshot build/ui/f1_foliage_far.png
+   0.90 shot build/ui/f1_foliage_far.png
+   0.91 ok   zoom 5
+   0.92 ok   orbit 0.4 -0.25
+   0.93 ok   frames 2
+   0.94 ok   screenshot build/ui/f2_foliage_near.png
+   1.30 shot build/ui/f2_foliage_near.png
+   1.31 ..   click chip_foliage
+   1.34 ok   frames 3
+   1.38 ok   assert_state preview_foliage 0
+   1.38 ok   screenshot build/ui/f3_foliage_off.png
+   1.70 shot build/ui/f3_foliage_off.png
+   1.72 ..   click chip_foliage
+   1.74 ok   frames 2
+   1.76 ..   click chip_things
+   1.79 ok   frames 2
+   1.82 ok   assert_state preview_things 0
+   1.82 ..   click chip_things
+   1.85 ok   frames 2
+   1.87 ok   set outdir build/ui
+   1.87 ok   set things 1
+   1.88 ok   set texels 4
+   1.88 ok   set foliage 1
+   1.89 ..   click btn_export
+   1.92 ok   frames 2
+   3.38 ok   wait_export
+   3.40 ok   assert_state export_ok 1
+   3.40 ok   assert_file build/ui/StartOakValeWest.glb
+   3.42      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+   3.42      install_valid=1
+   3.42      install_textures=1
+   3.42      install_fse=1
+   3.42      setup_open=0
+   3.42      backups_differ=0
+   3.42      maps=399
+   3.42      selected=StartOakValeWest
+   3.42      settings_scroll=0
+   3.42      settings_scrolled=0
+   3.42      hovered_window=##root/##actions_92064320
+   3.42      mouse=1254,692
+   3.42      hovered_scrollmax=0
+   3.42      wheeling_window=- scrolled_frame=-1 frame=396 hovered_flags=16777487 parent=##root parent_scrollmax=0
+   3.42      preview_loaded=1
+   3.42      preview_textured=1
+   3.42      context_ready=1
+   3.42      mode=Textured
+   3.42      rule_notice=-
+   3.42      edit_tab=0
+   3.42      toasts=2
+   3.42      help_open=0
+   3.42      tour_step=-1
+   3.42      ui_scale=1.00
+   3.42      grid=0
+   3.42      selection_count=0
+   3.42      presets=0
+   3.42      effects=0
+   3.42      entrance=-
+   3.43      cursor_ground=-
+   3.43      export_ok=1
+   3.43      export_path=build/ui\StartOakValeWest.glb
+   3.43      format=glb
+   3.43      textures=1
+   3.43      layers=0
+   3.43      walkable=0
+   3.43      texels=4
+   3.43      gain=1.00
+   3.43      mesh_vertices=29025
+   3.43      batch_active=0
+   3.43      foliage_loaded=1
+   3.43      foliage_instances=18709
+   3.43      preview_foliage=1
+   3.43      export_foliage=1
+   3.43      thing_instances=725
+   3.43      preview_things=1
+   3.43      preview_water=1
+   3.43      export_things=1
+   3.43      world=0
+   3.43      region=StartOakVale
+   3.43      batch_done=0
+   3.43      batch_failed=0
+   3.43      filter=
+   3.43      camera=146.05,56.70,-80.10
+   3.43      edit_mode=0
+   3.43      world_mode=0
+   3.43      textures_mode=0
+   3.43      textures_count=0
+   3.43      texture_selected=-
+   3.43      world_loaded=0
+   3.43      world_maps=0
+   3.43      world_selected=
+   3.43      world_pending=0
+   3.43      world_pending_owners=0
+   3.43      world_can_undo=0
+   3.43      world_can_redo=0
+   3.43      world_pending_sees=0
+   3.43      world_ok=0
+   3.43      world_stitch=0
+   3.43      paint_theme=0
+   3.43      link_installed=0
+   3.43      link_ready=0
+   3.43      link_hero_map=
+   3.43      villages=1
+   3.43      palette_named=41
+   3.43      doc_loaded=1
+   3.43      doc_things=874
+   3.43      doc_dirty=0
+   3.43      doc_changes=0
+   3.43      selected_thing=-1
+   3.43      gizmo=1
+   3.43      terrain_dirty=0
+   3.43      terrain_center_height=13.874
+   3.43 ok   quit
 RESULT PASS

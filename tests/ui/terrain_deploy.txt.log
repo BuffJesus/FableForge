@@ -1,24 +1,24 @@
-   0.11 ok   wait_maps
-   0.14 ok   wait_ready
-   0.14 ok   set saveroot build/ui_overworld_install
-   0.16 ok   select Greatwood_1
-   0.22 ok   wait_loaded
-   0.23 ok   edit 1
-   0.24 ok   frames 2
-   0.28 ok   assert_state doc_loaded 1
-   0.29 ok   terrain_mode 0
-   0.30 ok   brush 10 6
-   0.31 ok   terrain_stroke 48 96 1
-   0.39 ok   frames 2
-   0.43 ok   assert_state terrain_dirty 1
-   0.44 ..   deploy_terrain
-   0.45 ok   frames 12
-   0.58 ok   screenshot build/ui/td_progress.png
-   0.90 shot build/ui/td_progress.png
-   8.93 ok   wait_terrain
-   8.94 ok   frames 3
-   9.02 ok   assert_state terrain_dirty 0
-   9.03 ok   assert_log foliage re-seated on the new ground
-   9.04 ok   assert_log re-baked terrain chunk
-   9.05 ok   quit
+   0.41 ok   wait_maps
+   0.43 ok   wait_ready
+   0.44 ok   set saveroot build/ui_overworld_install
+   0.46 ok   select Greatwood_1
+   0.54 ok   wait_loaded
+   0.55 ok   edit 1
+   0.56 ok   frames 2
+   0.62 ok   assert_state doc_loaded 1
+   0.63 ok   terrain_mode 0
+   0.64 ok   brush 10 6
+   0.65 ok   terrain_stroke 48 96 1
+   0.75 ok   frames 2
+   0.79 ok   assert_state terrain_dirty 1
+   0.81 ..   deploy_terrain
+   0.82 ok   frames 12
+   0.98 ok   screenshot build/ui/td_progress.png
+   1.20 shot build/ui/td_progress.png
+   9.70 ok   wait_terrain
+   9.71 ok   frames 3
+   9.76 ok   assert_state terrain_dirty 0
+   9.77 ok   assert_log foliage re-seated on the new ground
+   9.79 ok   assert_log re-baked terrain chunk
+   9.80 ok   quit
 RESULT PASS

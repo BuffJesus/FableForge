@@ -423,6 +423,11 @@ public:
     bool linkPing();
     bool linkReload();                     // re-stream the hero's region (he must be in this map)
     void linkPoll(bool force = false);
+    // The one running-game check every writer uses: the live-link heartbeat when the
+    // link is installed, and a Fable.exe process scan always (the engine holds the WAD,
+    // STB, textures.big and defs open; rewriting them underneath it crashes it). Logs
+    // "<what>: the game is running ..." and returns true when the write must not happen.
+    bool gameWriteBlocked(const char* what);
     const livelink::Status& linkStatus() const { return link_; }
 private:
     std::vector<std::pair<std::string, std::string>> villageList_;

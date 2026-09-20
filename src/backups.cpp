@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <cwctype>
 #include <fstream>
 
 #ifdef _WIN32
@@ -118,6 +119,39 @@ bool gameRunning() {
 #endif
 }
 
+bool gameRunningIn(const fs::path& gameRoot) {
+#ifdef _WIN32
+    std::error_code ec;
+    fs::path root = fs::weakly_canonical(gameRoot, ec);
+    if (ec) root = gameRoot;
+    std::wstring rootW = root.wstring();
+    for (auto& c : rootW) { if (c == L'/') c = L'\\'; c = wchar_t(towlower(c)); }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return false;
+    PROCESSENTRY32W pe; pe.dwSize = sizeof pe;
+    bool found = false;
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, L"Fable.exe") != 0) continue;
+            HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+            if (!h) { found = true; break; }   // cannot tell: assume it is this install
+            wchar_t buf[MAX_PATH * 2]; DWORD n = DWORD(sizeof buf / sizeof buf[0]);
+            const bool ok = QueryFullProcessImageNameW(h, 0, buf, &n) != 0;
+            CloseHandle(h);
+            if (!ok) { found = true; break; }
+            std::wstring img(buf, n);
+            for (auto& c : img) { if (c == L'/') c = L'\\'; c = wchar_t(towlower(c)); }
+            if (img.rfind(rootW, 0) == 0) { found = true; break; }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return found;
+#else
+    (void)gameRoot;
+    return false;
+#endif
+}
+
 bool restore(const Entry& e, bool keepBackup, std::string& error) {
     std::error_code ec;
     if (e.created) {
@@ -138,7 +172,7 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
 }
 
 size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::string>& notes, std::string& error) {
-    if (gameRunning()) { error = "Fable.exe is running; quit the game first (the engine holds these files open)"; return 0; }
+    if (gameRunningIn(gameRoot)) { error = "Fable.exe is running; quit the game first (the engine holds these files open)"; return 0; }
     size_t n = 0;
     for (const auto& e : scan(gameRoot)) {
         if (!e.differs) continue;

@@ -457,10 +457,16 @@ bool App::saveDocument() {
     return true;
 }
 
+bool App::gameWriteBlocked(const char* what) {
+    linkPoll(true);
+    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog(std::string(what) + ": the game is running (live link heartbeat) -- rewriting its files underneath it crashes it; quit to the desktop first", 1); return true; }
+    if (backups::gameRunningIn(saveRoot())) { pushLog(std::string(what) + ": Fable.exe is running from this install -- it holds the WAD/STB/textures/defs open and rewriting them crashes it; quit to the desktop first", 1); return true; }
+    return false;
+}
+
 bool App::deployDocument() {
     if (!documentLoaded()) return false;
-    linkPoll(true);
-    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("deploy: the game is running (live link heartbeat) -- rewriting FinalAlbion.wad underneath it crashes it; quit to the main menu first", 1); return false; }
+    if (gameWriteBlocked("deploy")) return false;
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
     pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.atlas-orig)", 3);
@@ -994,6 +1000,7 @@ void App::selectBlankSize(int w, int h) {
 
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
+    if (gameWriteBlocked("new level")) return;
     const std::string root = saveRoot();
     if (newLevelMode_ == 1) {
         editor::BlankLevelRequest req;
@@ -1034,7 +1041,7 @@ void App::startNewLevel() {
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
     linkPoll(true);
-    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("terrain: the game is running (live link heartbeat) -- rewriting FinalAlbion.wad / FinalAlbion_RT.stb underneath it crashes it; quit to the main menu first", 1); return; }
+    if (gameWriteBlocked("terrain")) return;
     if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
     editor::Document* doc = &doc_;
@@ -1646,7 +1653,7 @@ std::optional<editor::RegionEntrance> App::currentEntrance() const {
 bool App::setEntranceHere() {
     if (!documentLoaded()) { pushLog("entrance: no level document", 1); return false; }
     if (!doc_.worldSlot()) { pushLog("entrance: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
-    if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog("entrance: the game is running (live link heartbeat); quit to the main menu first", 1); return false; }
+    if (gameWriteBlocked("entrance")) return false;
     float focus[3]; camera_.focus(focus);
     float pos[3] = {focus[0], -focus[2], focus[1]};
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;

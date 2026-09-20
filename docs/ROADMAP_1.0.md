@@ -81,7 +81,7 @@ game**. Concretely:
 |-------------------------------------------------------------------------------|--------------|
 | Runs on a clean machine: no Python, no FableTLC/FableForge checkout           | **Broken** — custom textures + minimap bake shell out to `python texture_build.py` (`vendor/forgecore/src/terraintex.cpp:497-504` hard-codes `D:/Documents/FableTLC/tools`) |
 | One-click *restore my install to retail* and visible backup state             | Missing — backups are `.atlas-orig` files the user must move back by hand (we lost two loose TNGs that way today) |
-| Refuses to damage a running game                                              | Done (deploy guard on the link heartbeat) — but only when the link is installed |
+| Refuses to damage a running game                                              | **Done 2026-09-19**: every writer (deploy, terrain, new level, world moves, entrance, textures, restore, compact) goes through one guard -- the live-link heartbeat when the link is installed, and always a `Fable.exe` process scan matched to the *target install* (`backups::gameRunningIn`, so a game running from another copy or a scratch tree is not blocked); proven with the game up (`deploy: Fable.exe is running from this install ...`) |
 | New level end-to-end from the GUI (blank/copy, own region, minimap, textures, objects, NPCs, spawner) | Done, verified in-game |
 | Tells the user the engine's rules where they bite (new region needs a new game; saves cache entities; spawners need an adult hero) | Partly (notes in the log); needs to be in the UI at the point of action |
 | Export still works as before (GLB/OBJ)                                        | Done |
