@@ -427,6 +427,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
     forge::thingplacer::Placement p;
     p.definitionType = def;
     p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
+    p.scriptName = scriptName;
     p.position = {focus[0], -focus[2], focus[1]};
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
     // face the camera
