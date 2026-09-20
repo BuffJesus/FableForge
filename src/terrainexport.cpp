@@ -696,7 +696,7 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
 }
 
 WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context) {
-    Scene scene;
+    Scene scene = buildMesh(level, options);   // the vertex grid with each vertex's theme slots and weights
     Context local;
     if (!context || !context->ready()) {
         std::string error;
