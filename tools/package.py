@@ -20,7 +20,13 @@ def main():
     for f in ["FableForge.exe", "forge.exe", "forge-tools.exe"]:
         shutil.copy(os.path.join("build", f), stage)
         subprocess.run(["strip", os.path.join(stage, f)], check=False)
-    shutil.copy("README.md", stage)
+    # the user docs sit flat next to README in the zip: the repo's docs/X.md links become X.md
+    with open("README.md", encoding="utf-8") as f:
+        readme = f.read()
+    for doc in ["FIRST_LEVEL.md", "ENGINE_RULES.md", "EDITOR.md", "AUTOMATION.md", "CLI.md"]:
+        readme = readme.replace("docs/" + doc, doc)
+    with open(os.path.join(stage, "README.md"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(readme)
     shutil.copy("LICENSE", stage)
     shutil.copy(os.path.join("vendor", "VENDORED.md"), os.path.join(stage, "THIRD_PARTY.md"))
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
