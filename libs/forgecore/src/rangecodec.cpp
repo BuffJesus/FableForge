@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -562,11 +563,16 @@ struct ScriptEntry {
     uint32_t orMask = 0;
 };
 
-// The debug editor's TestRangeBias (@0x03315c00) also tries the signed minimum
-// when the signed range is narrower. The shipped FinalAlbion_RT.stb was NOT
-// written that way: with unsigned-minimum bias only, all 325 sampled retail
-// patch vertex blocks re-encode byte-identically (with the signed variant 38
-// of them differ). Keep the data's behaviour.
+// The debug editor's TestRangeBias (@0x03315c00) and retail's (@0x00f3a5d0) both try the
+// signed minimum when the signed range is narrower (seeding the signed extremes from
+// in[0] taken raw). The shipped FinalAlbion_RT.stb was NOT written that way: with
+// unsigned-minimum bias only, all 325 sampled retail patch vertex blocks re-encode
+// byte-identically (signed: 38 differ; exact port of the seeding quirk: 14/32 water
+// blocks instead of 25/32). The water blocks (forge water-audit --all, 2026-09-20)
+// re-encode 65% byte-exact; every miss is a 4-byte float-straddling block where the
+// shipped bake split into halves although our bias+strip whole candidate costs 1-2 B
+// less -- an older compressor's cost model (not the candidate set, not a tie rule, not
+// the shift byte, not byte-granular packing: all tried). Keep the data's behaviour.
 constexpr bool kSignedBias = false;
 inline uint32_t blockMask(size_t b) { return b == 4 ? 0xFFFFFFFFu : b == 2 ? 0xFFFFu : 0xFFu; }
 inline size_t blockOf(uint32_t flags) { return (flags & 0x40) ? 4 : (flags & 0x20) ? 2 : 1; }
@@ -633,8 +639,12 @@ void testRangeBias(const std::vector<uint32_t>& in, std::vector<uint32_t>& out, 
     const uint32_t mask = blockMask(b);
     const unsigned sh = unsigned(32 - b * 8) & 31;
     auto sext = [&](uint32_t v) { return int32_t(v << sh) >> sh; };
+    // FableWin 0x03315c00: the signed extremes start from in[0] taken RAW (not sign-extended),
+    // then every element (in[0] again) is folded in sign-extended; the signed bias wins when
+    // its range is narrower by unsigned comparison. The raw seed is what makes the shipped
+    // blocks re-encode byte-exact (a sign-extended seed differs on 26 of 32 Hook Coast water blocks).
     uint32_t uMin = in[0], uMax = in[0];
-    int32_t sMin = sext(in[0]), sMax = sext(in[0]);
+    int32_t sMin = int32_t(in[0]), sMax = int32_t(in[0]);
     for (uint32_t v : in) {
         const int32_t s = sext(v);
         uMin = std::min(uMin, v); uMax = std::max(uMax, v);
@@ -705,6 +715,33 @@ void compactStrip(uint32_t stripMask, uint32_t v, uint32_t& out) {
 }
 
 } // namespace
+
+std::string debugBlockCosts(const uint8_t* elems, size_t count, size_t stride, size_t offset, size_t blockSize) {
+    std::vector<uint32_t> values(count);
+    for (size_t i = 0; i < count; ++i) values[i] = readVar(elems + stride * i + offset, blockSize);
+    ScriptEntry e[5];
+    std::vector<uint32_t> a[5];
+    const uint32_t sizeFlag = blockSize == 2 ? 0x20u : blockSize == 4 ? 0x40u : 0u;
+    for (auto& x : e) x.flags = sizeFlag;
+    a[0] = values;
+    e[1] = e[0]; testRedundantBitStrip(a[0], a[1], e[1], blockSize);
+    e[2] = e[1]; testRangeBias(a[1], a[2], e[2], blockSize);
+    e[3] = e[0]; e[3].flags = (e[3].flags & ~0x1u) | 0x10u; testRangeBias(a[0], a[3], e[3], blockSize);
+    e[4] = e[3]; testRedundantBitStrip(a[3], a[4], e[4], blockSize);
+    static const char* names[5] = {"raw", "strip", "strip+bias", "bias", "bias+strip"};
+    std::string out;
+    for (int i = 0; i < 5; ++i) {
+        char buf[200];
+        std::snprintf(buf, sizeof buf, "%s: bits %d data %zu hdr %zu = %zu (flags %02x)\n", names[i], calcBitsNeeded(a[i]), memoryBitCompressed(a[i]), headerSize(e[i]), memoryBitCompressed(a[i]) + headerSize(e[i]), e[i].flags);
+        out += buf;
+    }
+    if (blockSize >= 2) {
+        std::vector<ScriptEntry> sub;
+        const size_t subCost = calcCompressionScript(sub, elems, count, stride, offset, blockSize / 2) + calcCompressionScript(sub, elems, count, stride, offset + blockSize / 2, blockSize / 2);
+        out += "split total " + std::to_string(subCost) + "\n";
+    }
+    return out;
+}
 
 std::vector<uint8_t> encodeNative(const uint8_t* elems, size_t count, size_t stride) {
     std::vector<uint8_t> out;

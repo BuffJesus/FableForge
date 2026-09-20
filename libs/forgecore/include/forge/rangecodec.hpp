@@ -17,6 +17,7 @@
 // when rewriting only heights).
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace forge::rangecodec {
@@ -71,5 +72,9 @@ std::vector<uint8_t> addColumnConstant(const uint8_t* block, size_t blockLen,
 // fallback). Reproduces retail landscape VB/IB blocks byte-for-byte from their
 // decoded elements, so an edited block packs exactly like the donor did.
 std::vector<uint8_t> encodeNative(const uint8_t* elems, size_t count, size_t stride);
+
+// Diagnostic: the five candidate costs (bytes: packed values + descriptor) the native
+// encoder weighs for one block of `blockSize` bytes at `offset`, and the split total.
+std::string debugBlockCosts(const uint8_t* elems, size_t count, size_t stride, size_t offset, size_t blockSize);
 
 } // namespace forge::rangecodec

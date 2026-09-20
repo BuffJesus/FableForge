@@ -179,6 +179,46 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
         const auto native = forge::rangecodec::encodeNative(raw.data(), st::kWaterRecordCount, st::kWaterRecordSize);
         if (native == p.block) ++exact;
         else if (verbose) {
+            // both descriptor scripts, column by column (the decoder's grammar)
+            auto describe = [&](const std::vector<uint8_t>& blk) {
+                std::vector<std::string> rows;
+                if (blk.size() < 2 || blk[0] == 0) { rows.push_back("RAW"); return rows; }
+                const uint8_t* q = blk.data() + 2; uint8_t desc = blk[1]; size_t col = 0; const uint8_t* end = blk.data() + blk.size();
+                while (int8_t(desc) >= 0 && q < end) {
+                    const size_t b0 = (desc & 0x40) ? 4 : (desc & 0x20) ? 2 : 1;
+                    const uint8_t bits = *q++;
+                    auto rd = [&]() { uint32_t v = 0; std::memcpy(&v, q, b0); q += b0; return v; };
+                    uint32_t bias = 0, orm = 0, strip = 0; uint8_t sh = 0;
+                    if (desc & 0x11) bias = rd();
+                    if (desc & 0x02) sh = *q++;
+                    if (desc & 0x08) orm = rd();
+                    if (desc & 0x04) strip = rd();
+                    char buf[160];
+                    std::snprintf(buf, sizeof buf, "col %2zu w%zu flags %02x bits %2u bias %08x sh %u or %08x strip %08x", col, b0, desc, bits, bias, sh, orm, strip);
+                    rows.push_back(buf);
+                    // skip the packed values: bits == 32 -> 4 bytes each, else ceil(count*bits/32) dwords
+                    if (bits == 32) q += 4 * st::kWaterRecordCount;
+                    else if (bits) q += 4 * ((st::kWaterRecordCount * bits + 31) / 32);
+                    col += b0;
+                    if (q >= end) break;
+                    desc = *q++;
+                }
+                return rows;
+            };
+            const auto a = describe(p.block), b = describe(native);
+            bool shownCosts = false;
+            for (size_t i = 0; i < std::max(a.size(), b.size()); ++i) {
+                const std::string ra = i < a.size() ? a[i] : "-", rb = i < b.size() ? b[i] : "-";
+                if (ra != rb) {
+                    std::printf("      retail: %s\n      ours:   %s\n", ra.c_str(), rb.c_str());
+                    if (!shownCosts) {   // the costs of the 4-byte block where the scripts first diverge
+                        shownCosts = true;
+                        size_t col = 0; std::sscanf(rb.c_str(), "col %zu", &col);
+                        const size_t blockStart = (col / 4) * 4;
+                        std::printf("      costs for the 4-byte block at %zu:\n%s", blockStart, forge::rangecodec::debugBlockCosts(raw.data(), st::kWaterRecordCount, st::kWaterRecordSize, blockStart, std::min<size_t>(4, st::kWaterRecordSize - blockStart)).c_str());
+                    }
+                }
+            }
             size_t d = 0;
             while (d < native.size() && d < p.block.size() && native[d] == p.block[d]) ++d;
             std::printf("    codec: frame %d re-encodes to %zu B, retail %zu B, first difference at byte %zu (retail %02x ours %02x)\n",
