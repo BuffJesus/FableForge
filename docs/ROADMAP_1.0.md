@@ -15,6 +15,11 @@ session on the compacted bank (121/121 heights); `ProbeOwnRegion` installed as n
 retail transition `StartOakVale -> ProbeOwnRegion`; restore -> 0 differ. Two bugs it found are fixed
 (`6cd6036` texture-export/replace by listed name; `4888f12` `place OBJECT_ <name>` dropped the ScriptName).
 Human-only leftovers: the preset in `build/ingame/release/things/04_after_probe.png`, the map-screen click.
+**Later (afternoon):** regressions for both probe bugs (`tools/test_textures.py` by listed name + id + CLI
+replace; `tests/ui/editor.txt` named barrel -> `assert_file_contains`), a 17th check `tools/check_docs_commands.py`
+(every `forge`/`forge-tools` command the shipped docs name must exist: it surfaced nine working diagnostics
+hidden from `forge --help` and 35 `forge <family>` mentions in docs/modding that are `forge-tools`), the
+walkthrough's 28 UI labels verified against the GUI source. Suite ALL PASS 17/17 at `9213b50`.
 Next: (1) ~~CI green~~ done, (2) ~~`python tools/ingame/release_probes.py`~~ done, (2b) `python tools/ingame/release_probes.py` with the game closed, then judge
 the two screenshots, (3) `tools/package.py` -> stranger's test -> `git tag v0.16.0`.
 
