@@ -211,3 +211,8 @@ merged, loose TNG/QST merged, every other file a whole-file layer), an EgoCore `
 folder (DLL registered in `Mods.ini`, `.def` text compiled with `defc` into a field-level
 layer). Not yet: `text.big`, WAD-resident TNG, `.resource` banks, conflict picks over the whole
 order, the GUI Mods tab.
+
+Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
+on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,
+640 fields auto-merged, 35 same-field conflicts decided by load order, 177 whole-record (add-add of
+identical new records), 8.5 s. `mods deploy` / `mods undeploy` round-trip a scratch root byte-identical.
