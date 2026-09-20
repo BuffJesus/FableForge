@@ -347,4 +347,71 @@ WaterPatches loadWaterPatches(const fs::path& gameRoot, const std::string& mapNa
     return out;
 }
 
+// ---- background water sub-patches ----
+
+size_t trailerWaterFlagOffset(const std::vector<uint8_t>& trailer) {
+    const size_t p = forge::stbbake::trailerWaterFlagOffset(trailer);
+    return p == SIZE_MAX ? std::string::npos : p;
+}
+
+BackgroundWater loadBackgroundWater(const fs::path& gameRoot, const std::string& mapName) {
+    BackgroundWater out;
+    std::vector<uint8_t> chunk;
+    if (!findChunk(gameRoot, mapName, chunk, out.worldX, out.worldY, out.note)) return out;
+    int frameIndex = -1;
+    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+        ++frameIndex;
+        forge::stbbake::PatchHeader h;
+        try { h = forge::stbbake::parsePatchHeader(b); } catch (...) { return; }
+        if (!h.valid || h.isWaterOnly) return;
+        forge::stbbake::PatchBody pb;
+        try { pb = forge::stbbake::parsePatchBody(b); } catch (...) { return; }
+        if (!pb.valid || pb.waterOnly) return;
+        ++out.patches;
+        const size_t flag = trailerWaterFlagOffset(pb.trailer);
+        if (flag == std::string::npos || pb.trailer[flag] == 0) return;
+        BackgroundWaterPatch w;
+        w.frameIndex = frameIndex; w.coordX = h.coord0; w.coordY = h.coord1; w.pw = h.pw; w.ph = h.ph;
+        w.patchVertices = h.vertexCount; w.trailerWaterOffset = flag;
+        w.header = h;
+        try { w.meshVertices = forge::stbbake::decodePatchVertices(pb); w.meshTriangles = forge::stbbake::patchTriangles(pb, w.meshVertices); } catch (...) {}
+        size_t p = flag + 1;
+        auto need = [&](size_t n) { return p + n <= pb.trailer.size(); };
+        auto u16 = [&]() { const uint16_t v = uint16_t(pb.trailer[p] | (pb.trailer[p + 1] << 8)); p += 2; return v; };
+        auto i32 = [&]() { int32_t v; std::memcpy(&v, pb.trailer.data() + p, 4); p += 4; return v; };
+        if (!need(16)) { out.note = "background water header truncated"; return; }
+        const uint16_t vc = u16(), tc = u16();
+        w.waterType = i32(); w.stride = i32();
+        if (w.stride != 0x38 && w.stride != 0x0c) { out.note = "unexpected background water stride"; return; }
+        const int32_t vlen = i32();
+        if (vlen < 0 || !need(size_t(vlen))) { out.note = "background water VB truncated"; return; }
+        try {
+            const auto raw = forge::rangecodec::decode(pb.trailer.data() + p, size_t(vlen), vc, size_t(w.stride));
+            p += size_t(vlen);
+            for (size_t i = 0; i < vc; ++i) {
+                const uint8_t* r = raw.data() + i * size_t(w.stride);
+                BackgroundWaterVertex v;
+                if (w.stride == 0x0c) { std::memcpy(&v.x, r, 4); std::memcpy(&v.y, r + 4, 4); std::memcpy(&v.z, r + 8, 4); }
+                else {
+                    v.x = float(uint16_t(r[0] | (r[1] << 8))); v.y = float(uint16_t(r[2] | (r[3] << 8)));
+                    std::memcpy(&v.z, r + 4, 4);
+                    for (int k = 0; k < 12; ++k) std::memcpy(&v.shore[k], r + 8 + k * 4, 4);
+                }
+                w.vertices.push_back(v);
+            }
+            if (tc) {
+                if (!need(4)) { out.note = "background water IB truncated"; return; }
+                const int32_t ilen = i32();
+                if (ilen < 0 || !need(size_t(ilen))) { out.note = "background water IB truncated"; return; }
+                const auto ib = forge::rangecodec::decode(pb.trailer.data() + p, size_t(ilen), size_t(tc) * 3, 2);
+                p += size_t(ilen);
+                for (size_t i = 0; i < size_t(tc) * 3; ++i) w.indices.push_back(uint16_t(ib[i * 2] | (ib[i * 2 + 1] << 8)));
+            }
+        } catch (const std::exception& e) { out.note = std::string("background water: ") + e.what(); return; }
+        out.water.push_back(std::move(w));
+    });
+    out.found = out.patches > 0;
+    return out;
+}
+
 } // namespace albion::stbterrain

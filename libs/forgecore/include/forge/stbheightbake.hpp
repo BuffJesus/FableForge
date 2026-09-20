@@ -6,6 +6,7 @@
 // directory is re-wired and Z-fitted. Lifted from `forge stb bake-heightfield`
 // so editors can call it; behaviour and gates are unchanged.
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -31,9 +32,18 @@ struct HeightfieldNeighbor {
 // built against it, not the LEV alone, or the depth fade and the audit disagree on the rim.
 using WaterPatchProvider = std::function<std::vector<uint8_t>(int mapPatchX, int mapPatchY, const std::vector<float>& ground)>;
 
+// The distant water of a background patch (CEngineWaterBackgroundSubPatch): the bytes from
+// the trailer's water flag on (flag + header + blocks), or empty for none. `verts` are the
+// patch's landscape vertices already at their world position; `triangles` index them.
+using BackgroundWaterProvider = std::function<std::vector<uint8_t>(const PatchHeader& header, const std::vector<PatchVertex>& verts,
+                                                                   const std::vector<std::array<uint16_t, 3>>& triangles)>;
+
 struct HeightfieldBakeOptions {
     std::vector<HeightfieldNeighbor> neighbors;
     WaterPatchProvider waterPatches;
+    // Background frames keep their fixed slots: the sub-patch is written when the frame still
+    // fits, otherwise the patch goes out without distant water (a note says so).
+    BackgroundWaterProvider backgroundWater;
     // Water blocks rarely fit the donor's foreground allocation. With this set the re-encoded
     // foreground frames may move to a 2048-aligned region appended to the chunk (the
     // quad-directory is re-pointed either way); the chunk then grows, and the caller must
@@ -59,6 +69,8 @@ struct HeightfieldBakeResult {
     std::vector<std::string> notes;
     size_t patches = 0, foregroundFrames = 0;
     size_t waterPatches = 0;              // frames given a water block by the provider
+    size_t backgroundWaterPatches = 0;    // background patches given a distant-water sub-patch
+    size_t backgroundWaterDropped = 0;    // ... and those whose sub-patch did not fit the slot
     bool foregroundMoved = false;         // frames live in an appended region (chunk grew)
 };
 

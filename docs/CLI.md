@@ -38,6 +38,7 @@ diagnostics (read-only, print what the engine's data says):
   forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>
   forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>   (stbbake::bakeHeightfield on one chunk)
   forge water-audit <map>|--all [--verbose]        the baked water patches vs our codec, the RE'd record formulas and our own writer
+  forge stb-layout <map>                            the chunk's frames in file order (physical and decoded positions) and the InfoBlock pointers
 
 export options:
   --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)

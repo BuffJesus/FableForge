@@ -715,6 +715,19 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
                     mi.levels = &state->levels; mi.ground = &state->ground; mi.worldX = wx; mi.worldY = wy; mi.bodySpan = state->span;
                     return stbwater::buildPatchPayload(mi, px, py);
                 };
+                opt.backgroundWater = [state, lev, wo, wx, wy](const forge::stbbake::PatchHeader& h, const std::vector<forge::stbbake::PatchVertex>& verts,
+                                                            const std::vector<std::array<uint16_t, 3>>& tris) {
+                    if (!state->built) {   // the foreground provider normally ran first; build against the LEV otherwise
+                        state->ground.assign(size_t(lev->cellsX()) * size_t(lev->cellsY()), 0.0f);
+                        for (int y = 0; y < lev->cellsY(); ++y) for (int x = 0; x < lev->cellsX(); ++x) state->ground[size_t(y) * lev->cellsX() + x] = forge::stbbake::quantizeEngineHeight(lev->heightAt(x, y));
+                        state->levels = terrainexport::buildWaterLevels(*lev, wo, nullptr, &state->ground);
+                        state->span = stbwater::bodySpan(state->levels);
+                        state->built = true;
+                    }
+                    stbwater::MapInput mi;
+                    mi.levels = &state->levels; mi.ground = &state->ground; mi.worldX = wx; mi.worldY = wy; mi.bodySpan = state->span;
+                    return stbwater::buildBackgroundSubPatch(mi, h, verts, tris);
+                };
                 opt.allowForegroundGrowth = true;
                 notes.push_back("water: " + std::to_string(probe.wetVertices) + " wet vertices in the LEV; water patches written for the frames that need one");
             }
@@ -774,6 +787,8 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) notes.push_back(n);
         if (baked.chunk.size() != chunk.size() && !baked.foregroundMoved) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
         if (baked.waterPatches) notes.push_back("water: " + std::to_string(baked.waterPatches) + " patch frames carry a water surface" + (baked.foregroundMoved ? " (layer frames moved to an appended region; chunk re-laid)" : ""));
+        if (baked.backgroundWaterPatches || baked.backgroundWaterDropped)
+            notes.push_back("water: distant water on " + std::to_string(baked.backgroundWaterPatches) + " background patches" + (baked.backgroundWaterDropped ? " (" + std::to_string(baked.backgroundWaterDropped) + " did not fit their slot and go without)" : ""));
         // camera height bounds in the common record
         float minH = 1e30f, maxH = -1e30f;
         for (float h : terrain_->heights) { minH = std::min(minH, h); maxH = std::max(maxH, h); }

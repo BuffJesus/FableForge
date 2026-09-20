@@ -266,6 +266,79 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
             }
         }
     }
+    // (d) the background sub-patches: vertex selection and z against the level grid
+    const auto bw = st::loadBackgroundWater(install.root, name);
+    size_t bgVerts = 0, bgZFloor = 0, bgZRaw = 0, bgZRound = 0, bgWet1 = 0, bgWet2 = 0, bgDry = 0, bgShore = 0, bgTypeOk = 0;
+    double bgZMax = 0;
+    std::map<int, int> bgTypes; std::map<int, int> bgStrides;
+    for (const auto& w : bw.water) {
+        ++bgTypes[w.waterType]; ++bgStrides[w.stride];
+        for (const auto& v : w.vertices) {
+            ++bgVerts;
+            const int x = int(std::lround(v.x)) - bw.worldX, y = int(std::lround(v.y)) - bw.worldY;
+            const float h = wl.at(x, y);
+            // PeekInterpolatedHasWaterFast(c, 1): any painted water type within +-1
+            bool wet1 = false;
+            for (int j = y - 1; j <= y + 1 && !wet1; ++j)
+                for (int i = x - 1; i <= x + 1; ++i)
+                    if (i >= 0 && j >= 0 && i < wl.width && j < wl.height && wl.type[size_t(j) * wl.width + i] != 0) { wet1 = true; break; }
+            if (wet1) ++bgWet1;
+            if (h > 0.001f) ++bgWet2; else ++bgDry;
+            if (v.z == h) ++bgZRaw;
+            if (v.z == std::floor(h * 256.0f) / 256.0f) ++bgZFloor;
+            if (v.z == std::round(h * 256.0f) / 256.0f) ++bgZRound;
+            bgZMax = std::max(bgZMax, double(std::fabs(v.z - h)));
+            bool nz = false; for (float sv : v.shore) nz = nz || sv != 0.0f; if (nz) ++bgShore;
+        }
+    }
+    // our background writer on the retail patch meshes: vertex set and z per vertex
+    size_t bwProduced = 0, bwSameCount = 0, bwSetMatch = 0, bwZExact = 0, bwZClose = 0, bwZTotal = 0, bwTypeOk = 0, bwTriSame = 0;
+    {
+        albion::stbwater::MapInput mi;
+        mi.levels = &wl; mi.ground = &groundGrid; mi.worldX = bw.worldX; mi.worldY = bw.worldY; mi.bodySpan = 0;
+        for (const auto& w : bw.water) {
+            if (w.meshVertices.empty()) continue;
+            const auto bytes = albion::stbwater::buildBackgroundSubPatch(mi, w.header, w.meshVertices, w.meshTriangles);
+            if (bytes.size() < 17) continue;
+            ++bwProduced;
+            uint16_t vc = uint16_t(bytes[1] | (bytes[2] << 8)), tc = uint16_t(bytes[3] | (bytes[4] << 8));
+            int32_t type, stride; std::memcpy(&type, bytes.data() + 5, 4); std::memcpy(&stride, bytes.data() + 9, 4);
+            int32_t vlen; std::memcpy(&vlen, bytes.data() + 13, 4);
+            if (type == w.waterType) ++bwTypeOk;
+            if (vc == w.vertices.size()) ++bwSameCount;
+            if (tc == w.indices.size() / 3) ++bwTriSame;
+            std::vector<uint8_t> raw;
+            try { raw = forge::rangecodec::decode(bytes.data() + 17, size_t(vlen), vc, size_t(stride)); } catch (...) { continue; }
+            std::map<std::pair<int, int>, float> ours;
+            for (size_t i = 0; i < vc; ++i) {
+                const uint8_t* r = raw.data() + i * size_t(stride);
+                float x, y, z;
+                if (stride == 0x0c) { std::memcpy(&x, r, 4); std::memcpy(&y, r + 4, 4); std::memcpy(&z, r + 8, 4); }
+                else { x = float(uint16_t(r[0] | (r[1] << 8))); y = float(uint16_t(r[2] | (r[3] << 8))); std::memcpy(&z, r + 4, 4); }
+                ours[{int(std::lround(x)), int(std::lround(y))}] = z;
+            }
+            bool same = ours.size() == w.vertices.size();
+            for (const auto& v : w.vertices) {
+                const auto it = ours.find({int(std::lround(v.x)), int(std::lround(v.y))});
+                if (it == ours.end()) { same = false; continue; }
+                ++bwZTotal;
+                if (it->second == v.z) ++bwZExact;
+                if (std::fabs(it->second - v.z) <= 0.004f) ++bwZClose;
+            }
+            if (same) ++bwSetMatch;
+        }
+    }
+    if (verbose && !bw.water.empty()) {
+        const auto& w = bw.water.front();
+        std::printf("    background frame %d patch (%d,%d) %dx%d, %d mesh vertices: water type %d stride %d, %zu vertices, %zu triangles\n",
+                    w.frameIndex, w.coordX, w.coordY, w.pw, w.ph, w.patchVertices, w.waterType, w.stride, w.vertices.size(), w.indices.size() / 3);
+        for (size_t i = 0; i < 12 && i < w.vertices.size(); ++i) {
+            const auto& v = w.vertices[i];
+            const int x = int(std::lround(v.x)) - bw.worldX, y = int(std::lround(v.y)) - bw.worldY;
+            std::printf("      [%2zu] (%d,%d) z %.4f | level %.4f ground %.4f shore %.2f %.2f\n", i, x, y, v.z, wl.at(x, y), ground(x, y), v.shore[0], v.shore[1]);
+        }
+        std::printf("      indices:"); for (size_t i = 0; i < 24 && i < w.indices.size(); ++i) std::printf(" %u", w.indices[i]); std::printf("\n");
+    }
     std::printf("%-32s %zu water patches / %d frames; types", name.c_str(), wp.patches.size(), wp.frames);
     for (auto& [t, n] : types) std::printf(" %d:%d", t, n);
     std::printf("; LEV wet vertices %d\n", wl.wetVertices);
@@ -276,6 +349,13 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
                 zRound, zFloor, zCeil, dFromZ, dFromH, dFromHTrunc, records);
     std::printf("    wave:  sin %zu off (max %.0f), cos %zu off (max %.0f)\n", wsBad, wsMax, wcBad, wcMax);
     std::printf("    shore: %zu/%zu records carry shore data; distToShore %.2f .. %.2f\n", shoreNonZero, records, dtsMin, dtsMax);
+    std::printf("    background: %zu sub-patches / %d patches (%s); types", bw.water.size(), bw.patches, bw.note.empty() ? "ok" : bw.note.c_str());
+    for (auto& [t, n] : bgTypes) std::printf(" %d:%d", t, n);
+    std::printf("; strides"); for (auto& [t, n] : bgStrides) std::printf(" 0x%x:%d", t, n);
+    std::printf("; %zu vertices: z == level %zu, floor %zu, round %zu (max |dz| %.4f); wet(+-1 paint) %zu, level>0 %zu, level 0 %zu; shore data %zu\n",
+                bgVerts, bgZRaw, bgZFloor, bgZRound, bgZMax, bgWet1, bgWet2, bgDry, bgShore);
+    std::printf("    background writer: %zu/%zu sub-patches produced; type %zu ok, same vertex count %zu, same vertex set %zu, same triangle count %zu; z exact %zu / within 0.004 %zu of %zu shared vertices\n",
+                bwProduced, bw.water.size(), bwTypeOk, bwSameCount, bwSetMatch, bwTriSame, bwZExact, bwZClose, bwZTotal);
     std::printf("    writer: %zu/%zu patches produced (%zu retail patches we call dry), type %zu ok, block byte-exact %zu; records xy %zu z %zu wave %zu depth %zu all %zu of %zu\n",
                 wPatches, wp.patches.size(), wMissing, wTypeOk, wBlockExact, wXY, wZ, wWave, wDepth, wRecExact, wRecords);
     return 0;

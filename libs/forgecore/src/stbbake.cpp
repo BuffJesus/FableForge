@@ -8,6 +8,7 @@
 
 
 #include <algorithm>
+#include <map>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -2678,6 +2679,61 @@ uint32_t packNormal(float nx, float ny, float nz) {
     uint32_t iy = uint32_t(r(ny * 1023.0f)) & 0x7FF;
     uint32_t iz = uint32_t(r(nz * 511.0f))  & 0x3FF;
     return ix | (iy << 11) | (iz << 22);
+}
+
+std::vector<std::array<uint16_t, 3>> patchTriangles(const PatchBody& pb, const std::vector<PatchVertex>& verts) {
+    std::vector<std::array<uint16_t, 3>> out;
+    if (!pb.ibBlock.empty() && pb.ibBlock.size() >= 4) {
+        int32_t len; std::memcpy(&len, pb.ibBlock.data(), 4);
+        const size_t count = size_t(pb.header.indexCount) + 2;
+        if (len > 0 && 4 + size_t(len) <= pb.ibBlock.size()) {
+            try {
+                const auto raw = rangecodec::decode(pb.ibBlock.data() + 4, size_t(len), count, 2);
+                std::vector<uint16_t> strip(count);
+                for (size_t i = 0; i < count; ++i) strip[i] = uint16_t(raw[i * 2] | (raw[i * 2 + 1] << 8));
+                for (size_t i = 0; i + 2 < count; ++i) {
+                    const uint16_t a = strip[i], b = strip[i + 1], c = strip[i + 2];
+                    if (a == b || b == c || a == c) continue;
+                    if (a >= verts.size() || b >= verts.size() || c >= verts.size()) continue;
+                    out.push_back((i & 1) ? std::array<uint16_t, 3>{b, a, c} : std::array<uint16_t, 3>{a, b, c});
+                }
+                return out;
+            } catch (...) { out.clear(); }
+        }
+    }
+    // the shared full-grid buffer: every cell of the pw x ph grid, two triangles
+    std::map<std::pair<uint16_t, uint16_t>, uint16_t> at;
+    uint16_t minX = 0xffff, minY = 0xffff;
+    for (const auto& v : verts) { minX = std::min(minX, v.gridX); minY = std::min(minY, v.gridY); }
+    for (size_t i = 0; i < verts.size(); ++i) at[{verts[i].gridX, verts[i].gridY}] = uint16_t(i);
+    for (int y = 0; y < pb.header.ph; ++y)
+        for (int x = 0; x < pb.header.pw; ++x) {
+            const auto a = at.find({uint16_t(minX + x), uint16_t(minY + y)}), b = at.find({uint16_t(minX + x + 1), uint16_t(minY + y)});
+            const auto c = at.find({uint16_t(minX + x), uint16_t(minY + y + 1)}), d = at.find({uint16_t(minX + x + 1), uint16_t(minY + y + 1)});
+            if (a == at.end() || b == at.end() || c == at.end() || d == at.end()) continue;
+            out.push_back({a->second, b->second, c->second});
+            out.push_back({b->second, d->second, c->second});
+        }
+    return out;
+}
+
+size_t trailerWaterFlagOffset(const std::vector<uint8_t>& trailer) {
+    size_t p = 0;
+    auto i32 = [&](size_t at) { int32_t v; std::memcpy(&v, trailer.data() + at, 4); return v; };
+    for (int strip = 0; strip < 4; ++strip) {
+        if (p + 5 > trailer.size()) return SIZE_MAX;
+        p += 5;   // u16 start, u16 length, EBOOL
+        for (int arr = 0; arr < 4; ++arr) {
+            if (p + 4 > trailer.size()) return SIZE_MAX;
+            const int32_t n = i32(p); p += 4;
+            if (n <= 0) continue;
+            if (p + 4 > trailer.size()) return SIZE_MAX;
+            const int32_t len = i32(p); p += 4;
+            if (len < 0 || p + size_t(len) > trailer.size()) return SIZE_MAX;
+            p += size_t(len);
+        }
+    }
+    return p < trailer.size() ? p : SIZE_MAX;
 }
 
 float quantizeEngineHeight(float rawHeight) {

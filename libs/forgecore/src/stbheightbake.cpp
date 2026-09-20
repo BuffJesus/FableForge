@@ -133,6 +133,11 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     forge::stbbake::EmitOptions opt;
     opt.highCompressionEdits = true;
     opt.preservePhysicalLayout = true;
+    // A distant-water sub-patch lengthens a background patch's decoded body at its very end
+    // (the trailer is the last thing in the frame, and every InfoBlock pointer indexes a
+    // control block, not a concatenation of frames), so the decoded-length gate is safe to
+    // lift for it; the physical slot check still holds.
+    if (options.backgroundWater) opt.allowSameTopologyDecodedResize = true;
 
     struct ForegroundCandidate {
         size_t frameIndex = 0;
@@ -553,7 +558,35 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         static const uint32_t patchClearLevels[] = {0u, 0x0fu, 0x1fu, 0x3fu, 0x7fu};
         std::vector<uint8_t> newBody;
         bool fits = false;
-        for (const uint32_t clear : patchClearLevels) {
+        // the distant water: built once from the retargeted vertices, tried first
+        std::vector<uint8_t> waterTrailer;
+        if (options.backgroundWater) {
+            auto placed = verts;
+            for (auto& v : placed) {
+                const int lx = int(h.coord0) + int(v.gridX) - int(oldMinX), ly = int(h.coord1) + int(v.gridY) - int(oldMinY);
+                v.gridX = uint16_t(worldX + lx); v.gridY = uint16_t(worldY + ly);
+            }
+            const size_t flag = forge::stbbake::trailerWaterFlagOffset(pb.trailer);
+            if (flag != SIZE_MAX) {
+                const auto bytes = options.backgroundWater(h, placed, forge::stbbake::patchTriangles(pb, verts));
+                if (!bytes.empty()) {
+                    waterTrailer.assign(pb.trailer.begin(), pb.trailer.begin() + std::ptrdiff_t(flag));
+                    waterTrailer.insert(waterTrailer.end(), bytes.begin(), bytes.end());
+                }
+            }
+        }
+        for (int pass = waterTrailer.empty() ? 1 : 0; pass < 2 && !fits; ++pass) {
+          forge::stbbake::PatchBody pbTry = pb;
+          if (pass == 0) pbTry.trailer = waterTrailer;
+          else if (!waterTrailer.empty()) {
+              // no water sub-patch fits: the donor trailer stays, but its own water block (if any)
+              // would describe the old paint; drop it to the bare flag
+              const size_t flag = forge::stbbake::trailerWaterFlagOffset(pb.trailer);
+              if (flag != SIZE_MAX) { pbTry.trailer.assign(pb.trailer.begin(), pb.trailer.begin() + std::ptrdiff_t(flag)); pbTry.trailer.push_back(0); }
+              ++result.backgroundWaterDropped;
+              notef("note: patch (%d,%d): its distant-water sub-patch does not fit the frame's slot; written without", int(h.coord0), int(h.coord1));
+          }
+          for (const uint32_t clear : patchClearLevels) {
             auto attempt = verts;
             for (auto& v : attempt) {
                 const int dx = int(v.gridX) - int(oldMinX);
@@ -574,7 +607,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
             }
             std::vector<uint8_t> candidateBody;
             try {
-                candidateBody = forge::stbbake::assemblePatchBodyVerticesFixedSpan(pb, attempt);
+                candidateBody = forge::stbbake::assemblePatchBodyVerticesFixedSpan(pbTry, attempt);
             } catch (const std::runtime_error&) {
                 continue;   // CRange span: try the next coarser level
             }
@@ -591,8 +624,10 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
             if (onDisk.size() > slot) continue;   // LZO frame: try the next coarser level
             newBody = std::move(candidateBody);
             fits = true;
+            if (pass == 0) ++result.backgroundWaterPatches;
             if (clear != 0) notef("note: patch frame %zu normals coarsened (clear 0x%x) to fit its %zu-byte slot", fi, clear, slot);
             break;
+          }
         }
         if (!fits)
             throw std::runtime_error("patch frame " + std::to_string(fi) + ": vertices do not fit the donor CRange span at any normal precision");

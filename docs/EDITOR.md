@@ -469,9 +469,12 @@ ground theme kept in the third slot at weight 0 (audited on every retail lake). 
 shows the surface at once; *Write terrain into the game* bakes the water patches with the
 layer meshes (`src/stbwater`; z, wave and depth columns audited exact against the 3,374
 retail water patches with `forge water-audit --all`, shore/foam data left zero). A retail
-lake keeps its own baked patches (with foam) on a pure height edit. Sea families also need a
-sea body entry for the far water, which is not written yet; the background water sub-patch
-(the surface beyond the foreground radius) is the next RE step. **Not yet seen in-game.**
+lake keeps its own baked patches (with foam) on a pure height edit. The distant water (the
+`CEngineWaterBackgroundSubPatch` in each background patch's trailer: the patch's own landscape
+triangles that touch water, z = the water level) is written too, as long as it fits the
+background frame's fixed slot -- small ponds do, a big lake may go without and the log says
+so. Sea families also need a sea body entry for the far disc, which is not written yet.
+**Not yet seen in-game.**
 Test: `python tools/test_water.py` (scratch install, `tests/ui/water.txt`).
 
 ## Fishing spots

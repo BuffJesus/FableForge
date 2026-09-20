@@ -112,4 +112,91 @@ std::vector<uint8_t> buildPatchPayload(const MapInput& in, int patchX, int patch
     return out;
 }
 
+std::vector<uint8_t> buildBackgroundSubPatch(const MapInput& in, const forge::stbbake::PatchHeader& header,
+                                             const std::vector<forge::stbbake::PatchVertex>& verts,
+                                             const std::vector<std::array<uint16_t, 3>>& triangles) {
+    std::vector<uint8_t> out;
+    (void)header;
+    if (!in.levels || in.levels->empty() || triangles.empty()) return out;
+    const terrainexport::WaterLevels& wl = *in.levels;
+    auto local = [&](uint16_t idx, int& x, int& y) { x = int(verts[idx].gridX) - in.worldX; y = int(verts[idx].gridY) - in.worldY; };
+    // PeekInterpolatedHasWaterFast(c, 1) / PeekInterpolatedWaterType(c, 1): painted water within +-1
+    auto wetType = [&](int x, int y) {
+        int counts[16] = {}; bool any = false;
+        for (int j = y - 1; j <= y + 1; ++j)
+            for (int i = x - 1; i <= x + 1; ++i) {
+                if (i < 0 || j < 0 || i >= wl.width || j >= wl.height) continue;
+                const int t = wl.type[size_t(j) * wl.width + i];
+                if (t > 0 && t < 16) { ++counts[t]; any = true; }
+            }
+        if (!any) return 0;
+        int best = 0, bestN = 0;
+        for (int t = 1; t < 16; ++t) if (counts[t] > bestN) { bestN = counts[t]; best = t; }
+        return best;
+    };
+    std::vector<int> remap(verts.size(), -1);
+    std::vector<uint16_t> order;        // sub-patch vertex -> patch vertex
+    std::vector<float> zs;
+    std::vector<uint16_t> ib;
+    int typeCounts[16] = {};
+    for (const auto& tri : triangles) {
+        int cx[3], cy[3]; bool wet = false;
+        for (int k = 0; k < 3; ++k) { local(tri[size_t(k)], cx[k], cy[k]); }
+        int tt[3];
+        for (int k = 0; k < 3; ++k) { tt[k] = wetType(cx[k], cy[k]); wet = wet || tt[k] != 0; }
+        if (!wet) continue;
+        for (int k = 0; k < 3; ++k) if (tt[k] > 0 && tt[k] < 16) ++typeCounts[tt[k]];
+        for (int k = 0; k < 3; ++k) {
+            const uint16_t vi = tri[size_t(k)];
+            if (remap[vi] < 0) {
+                remap[vi] = int(order.size());
+                order.push_back(vi);
+                float z = wl.at(cx[k], cy[k]);
+                for (int t = 0; t < 2 && z <= 0.001f; ++t) z = wl.at(cx[(k + 1 + t) % 3], cy[(k + 1 + t) % 3]);   // a dry vertex takes a mate's level
+                zs.push_back(z);
+            }
+            ib.push_back(uint16_t(remap[vi]));
+        }
+    }
+    if (order.empty()) return out;
+    int waterType = 0, bestN = 0;
+    for (int t = 1; t < 9; ++t) if (typeCounts[t] > bestN) { bestN = typeCounts[t]; waterType = t; }
+    if (waterType == 0) return out;
+    const bool sea = waterType == 3 || waterType == 4 || waterType == 5;
+    const size_t stride = sea ? 0x0c : 0x38;
+    std::vector<uint8_t> raw(order.size() * stride, 0);
+    for (size_t i = 0; i < order.size(); ++i) {
+        uint8_t* r = raw.data() + i * stride;
+        const auto& v = verts[order[i]];
+        if (sea) {
+            const float fx = float(v.gridX), fy = float(v.gridY);
+            std::memcpy(r, &fx, 4); std::memcpy(r + 4, &fy, 4); std::memcpy(r + 8, &zs[i], 4);
+        } else {
+            r[0] = uint8_t(v.gridX); r[1] = uint8_t(v.gridX >> 8); r[2] = uint8_t(v.gridY); r[3] = uint8_t(v.gridY >> 8);
+            std::memcpy(r + 4, &zs[i], 4);   // shore[12] stays zero
+        }
+    }
+    auto encode = [](const std::vector<uint8_t>& elems, size_t count, size_t st) {
+        std::vector<uint8_t> block;
+        try {
+            block = forge::rangecodec::encodeNative(elems.data(), count, st);
+            if (forge::rangecodec::decode(block.data(), block.size(), count, st) != elems) block.clear();
+        } catch (...) { block.clear(); }
+        if (block.empty()) block = forge::rangecodec::encodeRaw(elems.data(), count, st);
+        return block;
+    };
+    const auto vb = encode(raw, order.size(), stride);
+    std::vector<uint8_t> ibRaw(ib.size() * 2);
+    for (size_t i = 0; i < ib.size(); ++i) { ibRaw[i * 2] = uint8_t(ib[i]); ibRaw[i * 2 + 1] = uint8_t(ib[i] >> 8); }
+    const auto ibb = encode(ibRaw, ib.size(), 2);
+    auto put16 = [&](uint16_t v) { out.push_back(uint8_t(v)); out.push_back(uint8_t(v >> 8)); };
+    auto put32 = [&](int32_t v) { for (int b = 0; b < 4; ++b) out.push_back(uint8_t(uint32_t(v) >> (8 * b))); };
+    out.push_back(1);   // the water flag
+    put16(uint16_t(order.size())); put16(uint16_t(ib.size() / 3));
+    put32(waterType); put32(int32_t(stride));
+    put32(int32_t(vb.size())); out.insert(out.end(), vb.begin(), vb.end());
+    put32(int32_t(ibb.size())); out.insert(out.end(), ibb.begin(), ibb.end());
+    return out;
+}
+
 } // namespace albion::stbwater

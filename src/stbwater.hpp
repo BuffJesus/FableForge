@@ -12,9 +12,11 @@
 // heights when re-baking a retail map, the LEV's otherwise); distToShore 0 and the twelve
 // shore look-ups 0 (no foam: GetZeroedShoreLookUpArray).
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
+#include "forge/stbbake.hpp"
 #include "terrainexport.hpp"
 
 namespace albion::stbwater {
@@ -29,6 +31,18 @@ struct MapInput {
 // The bytes after the foreground frame's hasWater flag for the patch at map-local
 // (patchX, patchY), or empty when the patch has no water.
 std::vector<uint8_t> buildPatchPayload(const MapInput& in, int patchX, int patchY);
+
+// The distant water of one background patch (CWaterGenerator::BuildStaticMapBackgroundBuffers,
+// FableWin 0x02e067c0): every triangle of the patch's landscape mesh with a vertex within one
+// cell of painted water contributes its vertices in first-touch order; a vertex is
+// {u16 x, u16 y, f32 z = the interpolated level (a dry vertex takes a triangle mate's),
+// f32 shore[12] (zero here)} for lakes / rivers / ice, {f32 x, y, z} for the sea types;
+// WaterType = the most common type over the touched vertices. Returns the bytes from the
+// trailer's water flag on (u8 1, u16 vertexCount, u16 polyCount, i32 type, i32 stride,
+// i32 len + VB block, [i32 len + IB block]), or empty when no triangle touches water.
+std::vector<uint8_t> buildBackgroundSubPatch(const MapInput& in, const forge::stbbake::PatchHeader& header,
+                                             const std::vector<forge::stbbake::PatchVertex>& verts,
+                                             const std::vector<std::array<uint16_t, 3>>& triangles);
 
 // The wet region's bounding-box diagonal (retail's WaterBodySpan is constant per water body:
 // 181.8 on the Guild lake, 1528 on Barrow Fields' river, 465 on the Hook Coast sea).

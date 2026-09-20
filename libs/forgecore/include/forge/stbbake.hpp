@@ -19,6 +19,7 @@
 // @0x02ce30c0 (D:/Documents/FableTLC/ghidra_out/landscape_savecomp_decomp.log);
 // FableWin UpdateStaticMapPass1 @0x02d66c80 is the byte-exact bake oracle.
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -759,6 +760,14 @@ std::vector<AuthoredBackgroundPatch> buildBackgroundPatchGrid(
 // This is the read-side companion to serializePatchVB and preserves the authored
 // grid coordinates needed to map a LEV heightfield onto donor topology.
 std::vector<PatchVertex> decodePatchVertices(const PatchBody& pb);
+
+// The patch's triangles as index triples into decodePatchVertices' order: the local index
+// buffer's strip when the patch has one (degenerate steps dropped), else the full pw x ph grid.
+std::vector<std::array<uint16_t, 3>> patchTriangles(const PatchBody& pb, const std::vector<PatchVertex>& verts);
+
+// Offset of the water flag byte in a background patch trailer (past the four
+// CPatchTesselationEdgeStrips), or SIZE_MAX when the trailer does not parse.
+size_t trailerWaterFlagOffset(const std::vector<uint8_t>& trailer);
 
 // Segment a decompressed FRAME body into its Save-order spans. The texture region
 // is variable-length and not self-terminating from the header alone, so the VB

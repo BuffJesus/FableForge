@@ -80,6 +80,7 @@ int usage() {
         "  forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>\n"
         "  forge bake-terrain <chunk.bin> <map.lev> <worldX> <worldY> <out.bin>   (stbbake::bakeHeightfield on one chunk)\n"
         "  forge water-audit <map>|--all [--verbose]        the baked water patches vs our codec, the RE'd record formulas and our own writer\n"
+        "  forge stb-layout <map>                            the chunk's frames in file order (physical and decoded positions) and the InfoBlock pointers\n"
         "\n"
         "export options:\n"
         "  --out <path>        output file; .glb (default, self-contained) or .obj (+ .mtl + PNG)\n"

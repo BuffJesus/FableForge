@@ -360,9 +360,14 @@ record formulas (wave exact; z floor; depth from the bake's quantised ground; `d
 `FindCorrectWaterLevel` inside the patch); `src/stbwater` writes them, the height bake takes a
 water provider and may append the grown foreground frames to the chunk; the Terrain tab's Water
 brush paints retail's exact slot mix. `tools/test_water.py` (in check_all) paints a pond on
-BanditCampPath_1 into a scratch install: 4 water frames, byte-exact blocks, chunk parses. Waiting
-on the user for the in-game look (expected: surface within the foreground radius, no foam, no
-distant water); then step 3 (background sub-patch, 0x38 vertex still to read) and sea bodies.
+BanditCampPath_1 into a scratch install: 4 water frames, byte-exact blocks, chunk parses. Step 3's
+background sub-patch is written as well (the 0x38 vertex is `u16 x, u16 y, f32 z, f32 shore[12]`,
+from the FableWin decompile of `BuildStaticMapBackgroundBuffers`: the patch's landscape triangles
+touching painted water, z = the unquantised level; audited on retail: every sub-patch reproduced,
+z within 4 mm), but only when the background frame's fixed slot has room (the pond does; a big
+lake is dropped with a note -- growing background frames means rebasing the tree's file-block
+tuples, not done). Waiting on the user for the in-game look (expected: surface near and far, no
+foam); then sea bodies, foam, and the background-frame growth.
 
 How retail does it (from the debug build): water is **painted as depth themes** (`WaterType`
 1 lake / 2 river / 3-5 sea / 8 ice, `WaterHeight` ladder 0..16; surface = ground + Σ blend ·

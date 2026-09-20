@@ -14,11 +14,13 @@
 // by mesh walls/ceilings. The exporter therefore emits the full grid and this
 // module is kept only as a parser check.
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
 
+#include "forge/stbbake.hpp"
 #include "terrainexport.hpp"
 
 namespace albion::stbterrain {
@@ -110,5 +112,36 @@ constexpr size_t kWaterRecordCount = 17 * 17;
 // One record in its on-disk form.
 void packWaterRecord(const WaterPatchRecord& r, uint8_t* out);
 WaterPatchRecord unpackWaterRecord(const uint8_t* in);
+
+// The distant water: CEngineWaterBackgroundSubPatch::Save at the end of a background patch's
+// trailer (after the four CPatchTesselationEdgeStrips and the water flag). Built by
+// CWaterGenerator::BuildStaticMapBackgroundBuffers from the patch's own landscape mesh: every
+// triangle with a vertex near water contributes its vertices, z = the interpolated water height.
+//   u16 vertexCount, u16 polyCount, i32 WaterType, i32 stride (0x38 lake/river/ice: u16 x, u16 y,
+//   f32 z, f32 shore[12]; 0x0c sea: f32 x, f32 y, f32 z), i32 len + VB block, [i32 len + IB block]
+struct BackgroundWaterVertex { float x = 0, y = 0, z = 0; float shore[12] = {}; };
+struct BackgroundWaterPatch {
+    int frameIndex = 0;
+    int coordX = 0, coordY = 0, pw = 0, ph = 0;   // the background patch (map-local cells)
+    int patchVertices = 0;                        // the landscape mesh's vertex count
+    int32_t waterType = 0, stride = 0;
+    std::vector<BackgroundWaterVertex> vertices;  // world coordinates as stored
+    std::vector<uint16_t> indices;                // 3 per triangle
+    size_t trailerWaterOffset = 0;                // where the water flag sits in the trailer
+    forge::stbbake::PatchHeader header;           // the patch, for a writer comparison
+    std::vector<forge::stbbake::PatchVertex> meshVertices;
+    std::vector<std::array<uint16_t, 3>> meshTriangles;
+};
+struct BackgroundWater {
+    bool found = false;
+    int patches = 0;                              // background patches seen
+    int worldX = 0, worldY = 0;
+    std::vector<BackgroundWaterPatch> water;      // those with a sub-patch
+    std::string note;
+};
+BackgroundWater loadBackgroundWater(const std::filesystem::path& gameRoot, const std::string& mapName);
+// Offset of the water flag byte inside a background patch trailer (past the four edge strips),
+// or npos when the trailer does not parse.
+size_t trailerWaterFlagOffset(const std::vector<uint8_t>& trailer);
 
 } // namespace albion::stbterrain

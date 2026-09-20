@@ -192,6 +192,53 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
             std::fprintf(stderr, "%s has no static map\n", args[1].c_str()); return 1;
         } catch (const std::exception& e) { std::fprintf(stderr, "error: %s\n", e.what()); return 1; }
     }
+    if (cmd == "stb-layout") {   // diagnostic: the chunk's frames in order with physical and logical (decoded) positions, and the InfoBlock pointers
+        std::string installArg, target;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else target = args[i];
+        }
+        const Install install = findInstall(installArg);
+        if (!install.valid || target.empty()) return usage();
+        const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");
+        const forge::stb::StaticMap* map = nullptr;
+        const std::string want = lower(target) + ".lev";
+        for (const auto& m : archive.staticMaps()) if (lower(fs::path(m.levelName).filename().string()) == want) { map = &m; break; }
+        if (!map) { std::fprintf(stderr, "no static map %s\n", target.c_str()); return 1; }
+        const auto record = archive.readStaticMapRecord(*map);
+        const auto info = forge::stbinfo::readInfoBlock(record.data());
+        std::printf("%s: InfoBlock edgeHeightFilePtr %d (size %d) landscapeMapPtr %d localDetailMapPtr %d shorePointArrayStart %d (size %d) checksumBlockFilePtr %d (size %d) headerEndPtr %d\n",
+                    target.c_str(), info.edgeHeightFilePtr, info.edgeHeightFileSize, info.landscapeMapPtr, info.localDetailMapPtr, info.shorePointArrayStart, info.shorePointArraySize, info.checksumBlockFilePtr, info.checksumBlockFileSize, info.headerEndPtr);
+        const forge::stb::Entry* entry = nullptr;
+        for (const auto& e : archive.entries()) if (int32_t(e.id) == info.bankFileIndex) { entry = &e; break; }
+        if (!entry) return 1;
+        const auto chunkBytes = archive.read(*entry);
+        const auto chunk = forge::stbbake::parseChunk(chunkBytes);
+        size_t logical = 0; int shown = 0;
+        for (size_t si = 0; si < chunk.segments.size(); ++si) {
+            const auto& seg = chunk.segments[si];
+            const char* kind = seg.kind == forge::stbbake::SegKind::Frame ? "frame" : seg.kind == forge::stbbake::SegKind::Hdr ? "hdr" : "pad";
+            std::string what;
+            if (seg.kind == forge::stbbake::SegKind::Frame) {
+                size_t fi = 0; for (; fi < chunk.frameIndices.size(); ++fi) if (chunk.frameIndices[fi] == si) break;
+                std::vector<uint8_t> body;
+                try { body = forge::stbbake::decodeFrame(chunk, fi); } catch (...) {}
+                if (!body.empty()) {
+                    try { const auto h = forge::stbbake::parsePatchHeader(body); if (h.valid) what = "background patch (" + std::to_string(h.coord0) + "," + std::to_string(h.coord1) + ") " + std::to_string(h.pw) + "x" + std::to_string(h.ph) + (h.isWaterOnly ? " water-only" : ""); } catch (...) {}
+                    if (what.empty()) { try { const auto f = forge::stbbake::parseForegroundFrame(body); if (!f.layers.empty()) what = "foreground frame, " + std::to_string(f.layers.size()) + " layers" + (f.hasWater ? " + water" : ""); } catch (...) {} }
+                    if (what.empty()) what = "other frame";
+                }
+            }
+            if (seg.kind != forge::stbbake::SegKind::Pad && (shown < 400)) {
+                std::printf("  seg %3zu %-5s phys 0x%06zx +%-7zu decoded %-7u logical 0x%06zx  %s\n", si, kind, seg.start, seg.end - seg.start, seg.uncompLen, logical, what.c_str());
+                ++shown;
+            }
+            if (seg.kind == forge::stbbake::SegKind::Frame) logical += seg.uncompLen;
+            else if (seg.kind == forge::stbbake::SegKind::Hdr) logical += seg.end - seg.start;
+        }
+        std::printf("  chunk %zu bytes physical, %zu bytes logical (frames decoded + hdr verbatim)\n", chunkBytes.size(), logical);
+        return 0;
+    }
     if (cmd == "chunk-audit") {   // diagnostic: chunk-audit <map>|--all [--install <root>]: every world coordinate in the chunk must lie in the map's box
         std::string installArg, target;
         for (size_t i = 1; i < args.size(); ++i) {
