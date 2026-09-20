@@ -113,7 +113,19 @@ static std::string narrow(const wchar_t* w) {
     return s;
 }
 
+static bool g_automated = false;   // --auto: the script owns the mouse, the real one never reaches ImGui
+
+static bool isMouseMessage(UINT msg) {
+    return (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || msg == WM_MOUSELEAVE || msg == WM_NCMOUSEMOVE ||
+           msg == WM_NCMOUSELEAVE || msg == WM_SETCURSOR;
+}
+
 static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    // A scripted run used to race the user's real cursor: the backend queued WM_MOUSEMOVE
+    // between the script's move/press/release frames and ImGui trickled the press onto a
+    // frame hovering the wrong widget (the "ui paths" textures-toggle flake, and the
+    // "suites fail while Fable.exe is running" note). Real mouse input is dropped instead.
+    if (g_automated && isMouseMessage(msg)) return msg == WM_SETCURSOR ? DefWindowProcW(hwnd, msg, wp, lp) : 0;
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return true;
     switch (msg) {
         case WM_SIZE:
@@ -184,6 +196,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     app.init(g_device, g_context, hwnd, installOverride);
     DragAcceptFiles(hwnd, TRUE);
     const bool automated = app.automation().active();
+    g_automated = automated;
 
     auto last = std::chrono::steady_clock::now();
     bool running = true;

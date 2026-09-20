@@ -1,389 +1,389 @@
-   0.12 ok   wait_maps
+   0.11 ok   wait_maps
    0.14 ok   wait_ready
    0.16 ok   select StartOakValeWest
    0.25 ok   wait_loaded
-   0.56 ok   wait_foliage
-   0.57 ok   set saveroot build/ui_editor_install
-   0.58 ok   edit 1
-   0.60 ok   frames 2
-   0.67 ok   assert_state edit_mode 1
-   0.71 ok   assert_state doc_loaded 1
-   0.73 ok   assert_widget seg_gizmo
-   0.75 ok   assert_widget seg_edit_tab
-   0.77 ok   assert_widget btn_help
-   0.79 ok   tour 0
-   0.81 ok   frames 2
-   0.87 ok   assert_widget btn_tour_next
-   0.89 ..   click btn_tour_next
-   0.99 ok   frames 4
-   1.10 ok   assert_state tour_step 1
-   1.12 ok   tour -1
-   1.14 ok   frames 1
-   1.20 ok   assert_state tour_step -1
-   1.22 ok   drop build/atlas_check.png
-   1.24 ok   frames 2
-   1.31 ok   assert_state edit_tab 1
-   1.33 ok   assert_widget input_custom_png
-   1.35 ok   edit_tab 0
-   1.37 ok   frames 1
-   1.41 ok   help 1
-   1.43 ok   frames 2
-   1.50 ok   assert_state help_open 1
-   1.52 ok   assert_widget btn_help_close
-   1.54 ..   click btn_help_close
-   1.64 ok   frames 4
-   1.75 ok   assert_state help_open 0
-   1.77 ok   assert_widget btn_save
-   1.79 ok   assert_widget btn_deploy
-   1.82 ok   assert_state edit_tab 0
-   1.84 ok   edit_tab 1
-   1.86 ok   frames 1
-   1.92 ok   assert_state gizmo 4
-   1.94 ok   assert_widget seg_terrain_mode
-   1.96 ok   edit_tab 0
-   1.98 ok   frames 1
-   2.03 ok   assert_state gizmo 1
-   2.05 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
-   2.07 ok   frames 2
-   2.13 ok   frame_selected
-   2.15 ok   frames 2
-   2.21 ok   screenshot build/ui/e1_selected.png
-   2.58 shot build/ui/e1_selected.png
-   2.66 ok   move_thing 1.5 0 0
-   2.68 ok   frames 2
-   2.76 ok   assert_state doc_changes 1
-   2.79 ok   assert_state doc_dirty 1
-   2.81 ok   screenshot build/ui/e2_moved.png
-   3.18 shot build/ui/e2_moved.png
-   3.25 ok   rotate_thing 45
-   3.32 ok   scale_thing 1.5
-   3.34 ok   frames 2
-   3.42 ok   assert_state selected_scale 1.500
-   3.45 ok   duplicate_thing
-   3.56 ok   wait_foliage
-   3.58 ok   frames 2
-   3.65 ok   assert_state doc_changes 2
-   3.68 ok   screenshot build/ui/e3_duplicated.png
-   4.04 shot build/ui/e3_duplicated.png
-   4.09 ok   undo
-   4.12 ok   undo
-   4.14 ok   undo
-   4.21 ok   undo
-   4.27 ok   wait_foliage
-   4.29 ok   frames 2
-   4.38 ok   assert_state doc_changes 0
-   4.43 ok   assert_state doc_dirty 0
-   4.46 ok   place OBJECT_BARREL_BREAKABLE
-   4.55 ok   wait_foliage
-   4.57 ok   frames 2
-   4.65 ok   assert_state doc_changes 1
-   4.67 ok   frame_selected
-   4.69 ok   frames 2
-   4.75 ok   screenshot build/ui/e4_placed.png
-   5.07 shot build/ui/e4_placed.png
-   5.11 ok   select_toggle 0
-   5.13 ok   frames 1
-   5.18 ok   assert_state selection_count 2
-   5.28 ok   move_thing 2 0 0
-   5.30 ok   frames 2
-   5.38 ok   assert_state doc_changes 2
-   5.40 ok   undo
-   5.43 ok   frames 2
-   5.50 ok   assert_state doc_changes 1
-   5.54 ok   assert_state selection_count 2
-   5.58 ok   duplicate_thing
-   5.68 ok   wait_foliage
-   5.70 ok   frames 2
-   5.77 ok   assert_state selection_count 2
-   5.81 ok   assert_state doc_changes 3
-   5.83 ok   copy
-   5.95 ok   paste
-   6.05 ok   wait_foliage
-   6.07 ok   frames 2
-   6.14 ok   assert_state selection_count 2
-   6.18 ok   assert_state doc_changes 5
-   6.20 ok   screenshot build/ui/e4b_multiselect.png
-   6.52 shot build/ui/e4b_multiselect.png
-   6.56 ok   undo
+   0.57 ok   wait_foliage
+   0.58 ok   set saveroot build/ui_editor_install
+   0.59 ok   edit 1
+   0.61 ok   frames 2
+   0.69 ok   assert_state edit_mode 1
+   0.73 ok   assert_state doc_loaded 1
+   0.75 ok   assert_widget seg_gizmo
+   0.77 ok   assert_widget seg_edit_tab
+   0.79 ok   assert_widget btn_help
+   0.81 ok   tour 0
+   0.83 ok   frames 2
+   0.89 ok   assert_widget btn_tour_next
+   0.91 ..   click btn_tour_next
+   1.01 ok   frames 4
+   1.12 ok   assert_state tour_step 1
+   1.14 ok   tour -1
+   1.16 ok   frames 1
+   1.22 ok   assert_state tour_step -1
+   1.24 ok   drop build/atlas_check.png
+   1.25 ok   frames 2
+   1.33 ok   assert_state edit_tab 1
+   1.35 ok   assert_widget input_custom_png
+   1.36 ok   edit_tab 0
+   1.38 ok   frames 1
+   1.42 ok   help 1
+   1.44 ok   frames 2
+   1.52 ok   assert_state help_open 1
+   1.54 ok   assert_widget btn_help_close
+   1.56 ..   click btn_help_close
+   1.66 ok   frames 4
+   1.78 ok   assert_state help_open 0
+   1.80 ok   assert_widget btn_save
+   1.82 ok   assert_widget btn_deploy
+   1.89 ok   assert_state edit_tab 0
+   1.93 ok   edit_tab 1
+   1.96 ok   frames 1
+   2.01 ok   assert_state gizmo 4
+   2.03 ok   assert_widget seg_terrain_mode
+   2.05 ok   edit_tab 0
+   2.07 ok   frames 1
+   2.12 ok   assert_state gizmo 1
+   2.14 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+   2.16 ok   frames 2
+   2.23 ok   frame_selected
+   2.25 ok   frames 2
+   2.31 ok   screenshot build/ui/e1_selected.png
+   4.73 shot build/ui/e1_selected.png
+   4.84 ok   move_thing 1.5 0 0
+   4.88 ok   frames 2
+   4.97 ok   assert_state doc_changes 1
+   5.01 ok   assert_state doc_dirty 1
+   5.04 ok   screenshot build/ui/e2_moved.png
+   5.43 shot build/ui/e2_moved.png
+   5.54 ok   rotate_thing 45
+   5.63 ok   scale_thing 1.5
+   5.67 ok   frames 2
+   5.76 ok   assert_state selected_scale 1.500
+   5.80 ok   duplicate_thing
+   5.94 ok   wait_foliage
+   5.97 ok   frames 2
+   6.06 ok   assert_state doc_changes 2
+   6.09 ok   screenshot build/ui/e3_duplicated.png
+   6.49 shot build/ui/e3_duplicated.png
+   6.55 ok   undo
    6.59 ok   undo
-   6.76 ok   wait_foliage
-   6.78 ok   frames 2
-   6.86 ok   assert_state doc_changes 1
-   6.89 ok   select_added
-   6.91 ok   frames 1
-   6.96 ok   assert_state selected_def OBJECT_BARREL_BREAKABLE
-   7.00 ok   assert_state selection_count 1
-   7.03 ok   delete_thing
-   7.13 ok   wait_foliage
-   7.15 ok   frames 2
-   7.22 ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken
-   7.32 ok   wait_foliage
-   7.34 ok   frames 2
-   7.41 ok   assert_state doc_changes 1
-   7.44 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
-   7.48 ok   assert_state rule_notice creature
-   7.50 ok   assert_widget btn_rule_creature
-   7.52 ok   dismiss_rule creature
-   7.55 ok   frames 2
-   7.62 ok   assert_state rule_notice -
-   7.64 ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken2
-   7.75 ok   wait_foliage
-   7.77 ok   frames 2
-   7.84 ok   assert_state rule_notice -
-   7.87 ok   undo
-   7.97 ok   wait_foliage
-   7.99 ok   frames 2
-   8.05 ok   place_spawner 15 4 WASPS_01 AtlasSpawnerRule
-   8.18 ok   wait_foliage
-   8.20 ok   frames 2
-   8.28 ok   assert_state rule_notice spawner
-   8.31 ok   assert_state edit_tab 2
-   8.33 ok   assert_widget btn_rule_spawner
-   8.35 ok   screenshot build/ui/e4b_rule_notice.png
-   8.66 shot build/ui/e4b_rule_notice.png
-   8.71 ok   undo
-   8.82 ok   wait_foliage
-   8.84 ok   frames 2
-   8.90 ok   place_fishing_spot OBJECT_MOONFISH
-   9.01 ok   wait_foliage
-   9.03 ok   frames 2
-   9.11 ok   assert_state edit_tab 2
-   9.13 ok   assert_widget btn_place_fishing_spot
-   9.15 ok   assert_log placed a fishing spot (first catch OBJECT_MOONFISH)
-   9.17 ok   undo
-   9.28 ok   wait_foliage
-   9.30 ok   frames 2
-   9.36 ok   place_emitter BUTTERFLY_BLUE AtlasFx
-   9.46 ok   wait_foliage
-   9.49 ok   frames 2
-   9.56 ok   assert_state selected_def PARTICLE_EMITTER_PLACEABLE
-   9.60 ok   assert_state edit_tab 2
-   9.61 ok   assert_widget list_effects
-   9.64 ok   undo
-   9.75 ok   wait_foliage
-   9.77 ok   frames 2
-   9.83 ok   edit_tab 2
-   9.85 ok   frames 1
-   9.96 ok   assert_widget list_presets
-  10.77 ok   preset_place Cottage furniture
-  10.89 ok   wait_foliage
-  10.91 ok   frames 2
-  11.00 ok   assert_state selection_count 16
-  11.03 ok   screenshot build/ui/e5_preset.png
-  11.35 shot build/ui/e5_preset.png
-  11.40 ok   undo
-  11.51 ok   wait_foliage
-  11.53 ok   frames 2
-  11.61 ok   assert_state selection_count 0
-  11.63 ok   place_village VILLAGE_OAKVALE_INTRO AtlasVillage
-  11.75 ok   wait_foliage
-  11.77 ok   frames 2
-  11.86 ok   assert_state villages 2
-  11.90 ok   assert_state selected_def VILLAGE_OAKVALE_INTRO
-  11.93 ok   select_def CREATURE_NEW_CHICKEN_01 -> 55
-  11.95 ok   frames 1
-  12.00 ok   assert_state selected_village 0
-  12.02 ok   assert_widget combo_village
-  12.05 ok   village_member AtlasVillage
-  12.07 ok   frames 1
-  12.13 ok   assert_state selected_village AtlasVillage
-  12.16 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
-  12.19 ok   village_member 0
-  12.21 ok   frames 1
-  12.26 ok   assert_state selected_village 0
-  12.28 ok   undo
-  12.31 ok   undo
-  12.34 ok   undo
-  12.37 ok   undo
-  12.52 ok   wait_foliage
-  12.54 ok   frames 2
-  12.61 ok   assert_state doc_changes 0
-  12.65 ok   assert_state doc_changes 0
-  12.67 ok   pick 0.5 0.5 -> thing 31
-  12.69 ok   frames 1
-  12.73 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
-  12.74 ok   frame_selected
-  12.76 ok   frames 2
-  12.82 ok   gizmo 1
-  12.84 ..   drag_gizmo 60 0
-  13.13 ok   frames 3
-  13.22 ok   assert_state doc_changes 1
-  13.24 ok   screenshot build/ui/e5_gizmo_drag.png
-  13.60 shot build/ui/e5_gizmo_drag.png
-  13.64 ok   undo
-  13.67 ok   frames 1
-  13.71 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
-  13.77 ok   move_thing 0 0 1
-  13.79 ok   frames 1
-  13.83 ok   save_level
-  13.85 ok   assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
-  13.89 ok   assert_state doc_dirty 0
-  13.91 ok   edit 1
-  13.92 ok   terrain_mode 0
-  13.94 ok   brush 8 6
-  13.97 ok   frames 2
-  14.03 ok   assert_widget seg_terrain_mode
-  14.06 ok   assert_state terrain_dirty 0
-  14.08 ok   terrain_stroke 64 112 1
-  14.10 ok   frames 2
-  14.18 ok   assert_state terrain_dirty 1
-  14.20 ok   camera 64 112 20 0.8 0.9 60
-  14.22 ok   frames 2
-  14.28 ok   screenshot build/ui/e6_terrain_hill.png
-  14.68 shot build/ui/e6_terrain_hill.png
-  14.72 ok   mode walkable
-  14.74 ok   terrain_mode 5
-  14.76 ok   brush 10 1
-  14.78 ok   terrain_stroke 64 112 1
-  14.81 ok   frames 2
-  14.86 ok   screenshot build/ui/e7_terrain_blocked.png
-  15.19 shot build/ui/e7_terrain_blocked.png
-  15.23 ok   mode textured
-  15.25 ok   undo
-  15.28 ok   undo
-  15.30 ok   frames 2
-  15.38 ok   assert_state terrain_dirty 0
-  15.40 ok   terrain_mode 6
-  15.42 ok   frames 1
-  15.45 ok   assert_widget combo_paint_theme
-  15.47 ok   assert_widget input_themesearch
-  15.51 ok   assert_state palette_named 41
-  15.53 ok   add_theme PATH_COBBLES_IRREGULAR_ET
-  15.56 ok   frames 1
-  15.60 ok   assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
-  15.63 ok   assert_state palette_named 42
-  15.65 ok   brush 6 10
-  15.67 ok   terrain_stroke 64 112 1
-  15.70 ok   frames 2
-  15.78 ok   assert_state terrain_dirty 1
-  15.81 ok   undo
-  15.83 ok   frames 2
-  15.91 ok   assert_state terrain_dirty 1
-  15.95 ok   assert_state palette_named 42
-  15.97 ok   undo
-  16.00 ok   frames 2
-  16.07 ok   assert_state terrain_dirty 0
-  16.11 ok   assert_state palette_named 41
-  16.13 ok   redo
-  16.16 ok   frames 2
-  16.23 ok   assert_state palette_named 42
-  16.25 ok   undo
-  16.28 ok   frames 2
-  16.35 ok   assert_state terrain_dirty 0
-  16.37 ok   camera 64 112 20 0.8 0.9 60
-  16.39 ok   place OBJECT_BARREL_BREAKABLE
-  16.41 ok   frames 1
-  16.51 ok   assert_state selected_ground_delta 0.00
-  16.53 ok   terrain_mode 0
-  16.55 ok   brush 8 6
-  16.57 ok   terrain_stroke 64 112 1
-  16.59 ok   frames 2
-  16.67 ok   assert_state terrain_dirty 1
-  16.72 ok   reseat_things
-  16.74 ok   frames 1
-  16.78 ok   assert_log object(s) re-seated on the sculpted ground
-  16.81 ok   assert_state selected_ground_delta 0.00
-  16.84 ok   undo
-  16.87 ok   undo
-  16.89 ok   undo
-  16.92 ok   frames 2
-  17.03 ok   assert_state terrain_dirty 0
-  17.06 ok   assert_state doc_dirty 0
-  17.08 ok   set unsaved_prompt 1
-  17.10 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
-  17.16 ok   move_thing 0 0 0.5
-  17.18 ok   frames 1
-  17.22 ok   select Greatwood_1
-  17.24 ok   frames 2
-  17.31 ok   assert_widget btn_unsaved_cancel
-  17.32 ok   screenshot build/ui/e8_unsaved_prompt.png
-  17.70 shot build/ui/e8_unsaved_prompt.png
-  17.74 ..   click btn_unsaved_discard
-  17.84 ok   frames 3
-  17.90 ok   assert_state selected Greatwood_1
-  17.91 ok   set unsaved_prompt 0
-  17.93      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-  17.93      install_valid=1
-  17.93      install_textures=1
-  17.93      install_fse=1
-  17.93      setup_open=0
-  17.93      backups_differ=0
-  17.93      maps=399
-  17.93      selected=Greatwood_1
-  17.93      settings_scroll=0
-  17.93      settings_scrolled=0
-  17.93      hovered_window=##root/##viewport_61898038
-  17.93      mouse=713,463
-  17.93      hovered_scrollmax=0
-  17.93      wheeling_window=- scrolled_frame=-1 frame=545 hovered_flags=16777503 parent=##root parent_scrollmax=0
-  17.93      preview_loaded=1
-  17.93      preview_textured=1
-  17.93      context_ready=1
-  17.93      mode=Textured
-  17.93      rule_notice=spawner
-  17.93      edit_tab=1
-  17.93      toasts=1
-  17.93      help_open=0
-  17.93      tour_step=-1
-  17.93      ui_scale=1.00
-  17.93      grid=0
-  17.93      selection_count=0
-  17.93      presets=4
-  17.93      effects=1165
-  17.93      entrance=-
-  17.93      cursor_ground=55.3,99.3,46.0
-  17.93      export_ok=0
-  17.93      export_path=
-  17.93      format=glb
-  17.93      textures=1
-  17.93      layers=0
-  17.93      walkable=0
-  17.93      texels=8
-  17.93      gain=1.00
-  17.93      mesh_vertices=18721
-  17.93      batch_active=0
-  17.93      foliage_loaded=0
-  17.93      foliage_instances=0
-  17.93      preview_foliage=1
-  17.93      export_foliage=1
-  17.93      thing_instances=0
-  17.93      preview_things=1
-  17.93      preview_water=1
-  17.93      export_things=1
-  17.93      world=0
-  17.93      region=GreatwoodEntrance
-  17.93      batch_done=0
-  17.93      batch_failed=0
-  17.93      filter=
-  17.93      camera=154.49,152.52,7.43
-  17.93      edit_mode=1
-  17.93      world_mode=0
-  17.93      textures_mode=0
-  17.93      textures_count=0
-  17.93      texture_selected=-
-  17.93      world_loaded=0
-  17.93      world_maps=0
-  17.93      world_selected=
-  17.93      world_pending=0
-  17.93      world_pending_owners=0
-  17.93      world_can_undo=0
-  17.93      world_can_redo=0
-  17.93      world_pending_sees=0
-  17.93      world_ok=0
-  17.93      world_stitch=0
-  17.93      paint_theme=42
-  17.93      link_installed=0
-  17.93      link_ready=0
-  17.93      link_hero_map=
-  17.93      villages=2
-  17.93      palette_named=29
-  17.93      doc_loaded=1
-  17.93      doc_things=313
-  17.93      doc_dirty=0
-  17.93      doc_changes=0
-  17.93      selected_thing=-1
-  17.93      gizmo=4
-  17.93      terrain_dirty=0
-  17.93      terrain_center_height=42.442
-  17.94 ok   quit
+   6.67 ok   undo
+   6.71 ok   undo
+   6.74 ok   wait_foliage
+   6.77 ok   frames 2
+   6.86 ok   assert_state doc_changes 0
+   6.92 ok   assert_state doc_dirty 0
+   6.95 ok   place OBJECT_BARREL_BREAKABLE
+   7.09 ok   wait_foliage
+   7.11 ok   frames 2
+   7.20 ok   assert_state doc_changes 1
+   7.23 ok   frame_selected
+   7.26 ok   frames 2
+   7.34 ok   screenshot build/ui/e4_placed.png
+   7.67 shot build/ui/e4_placed.png
+   7.71 ok   select_toggle 0
+   7.74 ok   frames 1
+   7.81 ok   assert_state selection_count 2
+   7.91 ok   move_thing 2 0 0
+   7.94 ok   frames 2
+   8.03 ok   assert_state doc_changes 2
+   8.06 ok   undo
+   8.09 ok   frames 2
+   8.18 ok   assert_state doc_changes 1
+   8.23 ok   assert_state selection_count 2
+   8.29 ok   duplicate_thing
+   8.43 ok   wait_foliage
+   8.46 ok   frames 2
+   8.54 ok   assert_state selection_count 2
+   8.58 ok   assert_state doc_changes 3
+   8.60 ok   copy
+   8.75 ok   paste
+   8.89 ok   wait_foliage
+   8.91 ok   frames 2
+   9.00 ok   assert_state selection_count 2
+   9.04 ok   assert_state doc_changes 5
+   9.07 ok   screenshot build/ui/e4b_multiselect.png
+   9.38 shot build/ui/e4b_multiselect.png
+   9.45 ok   undo
+   9.49 ok   undo
+   9.56 ok   wait_foliage
+   9.58 ok   frames 2
+   9.67 ok   assert_state doc_changes 1
+   9.71 ok   select_added
+   9.74 ok   frames 1
+   9.80 ok   assert_state selected_def OBJECT_BARREL_BREAKABLE
+   9.85 ok   assert_state selection_count 1
+   9.89 ok   delete_thing
+  10.02 ok   wait_foliage
+  10.04 ok   frames 2
+  10.13 ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken
+  10.26 ok   wait_foliage
+  10.29 ok   frames 2
+  10.39 ok   assert_state doc_changes 1
+  10.44 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+  10.49 ok   assert_state rule_notice creature
+  10.52 ok   assert_widget btn_rule_creature
+  10.54 ok   dismiss_rule creature
+  10.57 ok   frames 2
+  10.65 ok   assert_state rule_notice -
+  10.69 ok   place CREATURE_NEW_CHICKEN_01 AtlasChicken2
+  10.82 ok   wait_foliage
+  10.85 ok   frames 2
+  10.95 ok   assert_state rule_notice -
+  10.98 ok   undo
+  11.10 ok   wait_foliage
+  11.12 ok   frames 2
+  11.21 ok   place_spawner 15 4 WASPS_01 AtlasSpawnerRule
+  11.36 ok   wait_foliage
+  11.39 ok   frames 2
+  11.48 ok   assert_state rule_notice spawner
+  11.53 ok   assert_state edit_tab 2
+  11.56 ok   assert_widget btn_rule_spawner
+  11.58 ok   screenshot build/ui/e4b_rule_notice.png
+  11.91 shot build/ui/e4b_rule_notice.png
+  11.96 ok   undo
+  12.08 ok   wait_foliage
+  12.11 ok   frames 2
+  12.18 ok   place_fishing_spot OBJECT_MOONFISH
+  12.31 ok   wait_foliage
+  12.33 ok   frames 2
+  12.43 ok   assert_state edit_tab 2
+  12.45 ok   assert_widget btn_place_fishing_spot
+  12.47 ok   assert_log placed a fishing spot (first catch OBJECT_MOONFISH)
+  12.50 ok   undo
+  12.64 ok   wait_foliage
+  12.67 ok   frames 2
+  12.76 ok   place_emitter BUTTERFLY_BLUE AtlasFx
+  12.90 ok   wait_foliage
+  12.93 ok   frames 2
+  13.02 ok   assert_state selected_def PARTICLE_EMITTER_PLACEABLE
+  13.08 ok   assert_state edit_tab 2
+  13.10 ok   assert_widget list_effects
+  13.13 ok   undo
+  13.26 ok   wait_foliage
+  13.29 ok   frames 2
+  13.37 ok   edit_tab 2
+  13.40 ok   frames 1
+  13.46 ok   assert_widget list_presets
+  14.59 ok   preset_place Cottage furniture
+  14.73 ok   wait_foliage
+  14.76 ok   frames 2
+  14.89 ok   assert_state selection_count 16
+  14.92 ok   screenshot build/ui/e5_preset.png
+  15.32 shot build/ui/e5_preset.png
+  15.41 ok   undo
+  15.55 ok   wait_foliage
+  15.59 ok   frames 2
+  15.73 ok   assert_state selection_count 0
+  15.76 ok   place_village VILLAGE_OAKVALE_INTRO AtlasVillage
+  15.88 ok   wait_foliage
+  15.91 ok   frames 2
+  16.03 ok   assert_state villages 2
+  16.08 ok   assert_state selected_def VILLAGE_OAKVALE_INTRO
+  16.11 ok   select_def CREATURE_NEW_CHICKEN_01 -> 55
+  16.13 ok   frames 1
+  16.19 ok   assert_state selected_village 0
+  16.21 ok   assert_widget combo_village
+  16.25 ok   village_member AtlasVillage
+  16.28 ok   frames 1
+  16.35 ok   assert_state selected_village AtlasVillage
+  16.39 ok   assert_state selected_def CREATURE_NEW_CHICKEN_01
+  16.42 ok   village_member 0
+  16.44 ok   frames 1
+  16.51 ok   assert_state selected_village 0
+  16.55 ok   undo
+  16.58 ok   undo
+  16.61 ok   undo
+  16.65 ok   undo
+  16.81 ok   wait_foliage
+  16.83 ok   frames 2
+  16.91 ok   assert_state doc_changes 0
+  16.94 ok   assert_state doc_changes 0
+  16.96 ok   pick 0.5 0.5 -> thing 31
+  16.98 ok   frames 1
+  17.02 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+  17.04 ok   frame_selected
+  17.06 ok   frames 2
+  17.13 ok   gizmo 1
+  17.15 ..   drag_gizmo 60 0
+  17.48 ok   frames 3
+  17.58 ok   assert_state doc_changes 1
+  17.60 ok   screenshot build/ui/e5_gizmo_drag.png
+  17.97 shot build/ui/e5_gizmo_drag.png
+  18.02 ok   undo
+  18.04 ok   frames 1
+  18.08 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+  18.14 ok   move_thing 0 0 1
+  18.17 ok   frames 1
+  18.22 ok   save_level
+  18.24 ok   assert_file build/ui_editor_install/data/Levels/FinalAlbion/StartOakValeWest.tng
+  18.27 ok   assert_state doc_dirty 0
+  18.30 ok   edit 1
+  18.32 ok   terrain_mode 0
+  18.34 ok   brush 8 6
+  18.36 ok   frames 2
+  18.43 ok   assert_widget seg_terrain_mode
+  18.47 ok   assert_state terrain_dirty 0
+  18.50 ok   terrain_stroke 64 112 1
+  18.52 ok   frames 2
+  18.60 ok   assert_state terrain_dirty 1
+  18.62 ok   camera 64 112 20 0.8 0.9 60
+  18.64 ok   frames 2
+  18.70 ok   screenshot build/ui/e6_terrain_hill.png
+  19.12 shot build/ui/e6_terrain_hill.png
+  19.16 ok   mode walkable
+  19.18 ok   terrain_mode 5
+  19.20 ok   brush 10 1
+  19.22 ok   terrain_stroke 64 112 1
+  19.25 ok   frames 2
+  19.31 ok   screenshot build/ui/e7_terrain_blocked.png
+  19.63 shot build/ui/e7_terrain_blocked.png
+  19.67 ok   mode textured
+  19.70 ok   undo
+  19.72 ok   undo
+  19.75 ok   frames 2
+  19.83 ok   assert_state terrain_dirty 0
+  19.85 ok   terrain_mode 6
+  19.87 ok   frames 1
+  19.91 ok   assert_widget combo_paint_theme
+  19.93 ok   assert_widget input_themesearch
+  19.97 ok   assert_state palette_named 41
+  19.99 ok   add_theme PATH_COBBLES_IRREGULAR_ET
+  20.01 ok   frames 1
+  20.06 ok   assert_log ground theme PATH_COBBLES_IRREGULAR_ET in palette slot
+  20.10 ok   assert_state palette_named 42
+  20.12 ok   brush 6 10
+  20.14 ok   terrain_stroke 64 112 1
+  20.17 ok   frames 2
+  20.25 ok   assert_state terrain_dirty 1
+  20.28 ok   undo
+  20.31 ok   frames 2
+  20.39 ok   assert_state terrain_dirty 1
+  20.43 ok   assert_state palette_named 42
+  20.46 ok   undo
+  20.48 ok   frames 2
+  20.56 ok   assert_state terrain_dirty 0
+  20.59 ok   assert_state palette_named 41
+  20.62 ok   redo
+  20.64 ok   frames 2
+  20.72 ok   assert_state palette_named 42
+  20.75 ok   undo
+  20.78 ok   frames 2
+  20.85 ok   assert_state terrain_dirty 0
+  20.87 ok   camera 64 112 20 0.8 0.9 60
+  20.90 ok   place OBJECT_BARREL_BREAKABLE
+  20.93 ok   frames 1
+  21.02 ok   assert_state selected_ground_delta 0.00
+  21.04 ok   terrain_mode 0
+  21.06 ok   brush 8 6
+  21.09 ok   terrain_stroke 64 112 1
+  21.11 ok   frames 2
+  21.18 ok   assert_state terrain_dirty 1
+  21.23 ok   reseat_things
+  21.26 ok   frames 1
+  21.31 ok   assert_log object(s) re-seated on the sculpted ground
+  21.34 ok   assert_state selected_ground_delta 0.00
+  21.37 ok   undo
+  21.40 ok   undo
+  21.43 ok   undo
+  21.46 ok   frames 2
+  21.60 ok   assert_state terrain_dirty 0
+  21.65 ok   assert_state doc_dirty 0
+  21.68 ok   set unsaved_prompt 1
+  21.70 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+  21.80 ok   move_thing 0 0 0.5
+  21.83 ok   frames 1
+  21.89 ok   select Greatwood_1
+  21.91 ok   frames 2
+  21.98 ok   assert_widget btn_unsaved_cancel
+  22.00 ok   screenshot build/ui/e8_unsaved_prompt.png
+  22.39 shot build/ui/e8_unsaved_prompt.png
+  22.45 ..   click btn_unsaved_discard
+  22.58 ok   frames 3
+  22.65 ok   assert_state selected Greatwood_1
+  22.66 ok   set unsaved_prompt 0
+  22.68      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+  22.68      install_valid=1
+  22.68      install_textures=1
+  22.68      install_fse=1
+  22.68      setup_open=0
+  22.68      backups_differ=0
+  22.68      maps=399
+  22.68      selected=Greatwood_1
+  22.68      settings_scroll=0
+  22.68      settings_scrolled=0
+  22.68      hovered_window=##root/##viewport_61898038
+  22.68      mouse=713,463
+  22.68      hovered_scrollmax=0
+  22.68      wheeling_window=- scrolled_frame=-1 frame=539 hovered_flags=16777503 parent=##root parent_scrollmax=0
+  22.68      preview_loaded=1
+  22.68      preview_textured=1
+  22.68      context_ready=1
+  22.68      mode=Textured
+  22.68      rule_notice=spawner
+  22.68      edit_tab=1
+  22.68      toasts=1
+  22.68      help_open=0
+  22.68      tour_step=-1
+  22.69      ui_scale=1.00
+  22.69      grid=0
+  22.69      selection_count=0
+  22.69      presets=4
+  22.69      effects=1165
+  22.69      entrance=-
+  22.69      cursor_ground=55.3,99.3,46.0
+  22.69      export_ok=0
+  22.69      export_path=
+  22.69      format=glb
+  22.69      textures=1
+  22.69      layers=0
+  22.69      walkable=0
+  22.69      texels=8
+  22.69      gain=1.00
+  22.69      mesh_vertices=18721
+  22.69      batch_active=0
+  22.69      foliage_loaded=0
+  22.69      foliage_instances=0
+  22.69      preview_foliage=1
+  22.69      export_foliage=1
+  22.69      thing_instances=0
+  22.69      preview_things=1
+  22.69      preview_water=1
+  22.69      export_things=1
+  22.69      world=0
+  22.69      region=GreatwoodEntrance
+  22.69      batch_done=0
+  22.69      batch_failed=0
+  22.69      filter=
+  22.69      camera=154.49,152.52,7.43
+  22.69      edit_mode=1
+  22.69      world_mode=0
+  22.69      textures_mode=0
+  22.69      textures_count=0
+  22.69      texture_selected=-
+  22.69      world_loaded=0
+  22.69      world_maps=0
+  22.69      world_selected=
+  22.69      world_pending=0
+  22.69      world_pending_owners=0
+  22.69      world_can_undo=0
+  22.69      world_can_redo=0
+  22.69      world_pending_sees=0
+  22.69      world_ok=0
+  22.69      world_stitch=0
+  22.69      paint_theme=42
+  22.69      link_installed=0
+  22.69      link_ready=0
+  22.69      link_hero_map=
+  22.69      villages=2
+  22.69      palette_named=29
+  22.69      doc_loaded=1
+  22.69      doc_things=313
+  22.69      doc_dirty=0
+  22.69      doc_changes=0
+  22.69      selected_thing=-1
+  22.69      gizmo=4
+  22.69      terrain_dirty=0
+  22.69      terrain_center_height=42.442
+  22.70 ok   quit
 RESULT PASS

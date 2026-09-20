@@ -1,144 +1,144 @@
    0.11 ok   wait_maps
    0.13 ok   frames 2
-   0.15 ok   screenshot build/ui/01_empty.png
+   0.14 ok   screenshot build/ui/01_empty.png
    0.20 shot build/ui/01_empty.png
    0.21 ok   assert_widget btn_export
    0.22 ok   assert_widget input_filter
    0.22 ok   assert_state install_valid 1
    0.24 ok   select Greatwood_1
-   0.25 ok   wait_ready
-   0.31 ok   wait_loaded
-   0.31 ok   frames 3
-   0.34 ok   assert_state preview_loaded 1
-   0.35 ok   assert_state preview_textured 1
-   0.36 ok   screenshot build/ui/02_textured.png
-   0.63 shot build/ui/02_textured.png
-   0.71 ..   click chip_wireframe
-   0.74 ok   frames 3
-   0.76 ok   assert_state mode Wireframe
-   0.77 ok   screenshot build/ui/03_wireframe.png
-   0.94 shot build/ui/03_wireframe.png
-   0.95 ..   click chip_walkable
-   0.97 ok   frames 3
-   1.00 ok   screenshot build/ui/04_walkable.png
-   1.23 shot build/ui/04_walkable.png
-   1.24 ..   click chip_height
-   1.26 ok   frames 3
-   1.28 ok   screenshot build/ui/05_height.png
-   1.56 shot build/ui/05_height.png
-   1.57 ..   click chip_textured
-   1.60 ok   orbit 0.6 -0.2
-   1.60 ok   zoom 2
-   1.61 ok   frames 2
-   1.62 ok   screenshot build/ui/06_orbited.png
-   1.83 shot build/ui/06_orbited.png
-   1.84 ok   filter oakvale
-   1.84 ok   frames 2
-   1.86 ok   screenshot build/ui/07_filtered.png
-   2.06 shot build/ui/07_filtered.png
-   2.07 ok   filter
-   2.07 ok   set outdir build/ui
-   2.08 ok   set texels 4
-   2.08 ..   click btn_export
-   2.11 ok   frames 2
-   2.78 ok   wait_export
-   2.79 ok   frames 2
-   2.81 ok   assert_state export_ok 1
-   2.81 ok   assert_file build/ui/Greatwood_1.glb
-   2.82 ok   screenshot build/ui/08_exported.png
-   3.03 shot build/ui/08_exported.png
-   3.04      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-   3.04      install_valid=1
-   3.04      install_textures=1
-   3.04      install_fse=1
-   3.04      setup_open=0
-   3.04      backups_differ=0
-   3.04      maps=399
-   3.04      selected=Greatwood_1
-   3.04      settings_scroll=0
-   3.04      settings_scrolled=0
-   3.04      hovered_window=##root/##actions_92064320
-   3.04      mouse=1254,692
-   3.04      hovered_scrollmax=0
-   3.04      wheeling_window=- scrolled_frame=-1 frame=224 hovered_flags=16777487 parent=##root parent_scrollmax=0
-   3.04      preview_loaded=1
-   3.04      preview_textured=1
-   3.04      context_ready=1
-   3.04      mode=Textured
-   3.04      rule_notice=-
-   3.04      edit_tab=0
-   3.04      toasts=2
-   3.04      help_open=0
-   3.04      tour_step=-1
-   3.04      ui_scale=1.00
-   3.04      grid=0
-   3.04      selection_count=0
-   3.05      presets=0
-   3.05      effects=0
-   3.05      entrance=37.1,38.9,40.1
-   3.05      cursor_ground=-
-   3.05      export_ok=1
-   3.05      export_path=build/ui\Greatwood_1.glb
-   3.05      format=glb
-   3.05      textures=1
-   3.05      layers=0
-   3.05      walkable=0
-   3.05      texels=4
-   3.05      gain=1.00
-   3.05      mesh_vertices=18721
-   3.05      batch_active=0
-   3.05      foliage_loaded=1
-   3.05      foliage_instances=19369
-   3.05      preview_foliage=1
-   3.05      export_foliage=1
-   3.05      thing_instances=232
-   3.05      preview_things=1
-   3.05      preview_water=1
-   3.05      export_things=1
-   3.05      world=0
-   3.05      region=GreatwoodEntrance
-   3.05      batch_done=0
-   3.05      batch_failed=0
-   3.05      filter=
-   3.05      camera=166.58,100.27,-75.55
-   3.05      edit_mode=0
-   3.05      world_mode=0
-   3.05      textures_mode=0
-   3.05      textures_count=0
-   3.05      texture_selected=-
-   3.05      world_loaded=0
-   3.05      world_maps=0
-   3.05      world_selected=
-   3.05      world_pending=0
-   3.05      world_pending_owners=0
-   3.05      world_can_undo=0
-   3.05      world_can_redo=0
-   3.05      world_pending_sees=0
-   3.05      world_ok=0
-   3.05      world_stitch=0
-   3.05      paint_theme=0
-   3.05      link_installed=0
-   3.05      link_ready=0
-   3.05      link_hero_map=
-   3.05      villages=2
-   3.05      palette_named=29
-   3.05      doc_loaded=1
-   3.05      doc_things=313
-   3.05      doc_dirty=0
-   3.05      doc_changes=0
-   3.05      selected_thing=-1
-   3.05      gizmo=1
-   3.05      terrain_dirty=0
-   3.05      terrain_center_height=42.442
-   3.05 ok   setup 1
-   3.44 ok   frames 2
-   3.47 ok   assert_state setup_open 1
-   3.48 ok   assert_widget btn_setup_continue
-   3.49 ok   assert_state install_textures 1
-   3.50 ok   screenshot build/ui/s_setup.png
-   3.67 shot build/ui/s_setup.png
-   3.68 ..   click btn_setup_continue
-   3.71 ok   frames 2
-   3.73 ok   assert_state setup_open 0
-   3.74 ok   quit
+   0.24 ok   wait_ready
+   0.30 ok   wait_loaded
+   0.30 ok   frames 3
+   0.33 ok   assert_state preview_loaded 1
+   0.34 ok   assert_state preview_textured 1
+   0.35 ok   screenshot build/ui/02_textured.png
+   0.62 shot build/ui/02_textured.png
+   0.72 ..   click chip_wireframe
+   0.75 ok   frames 3
+   0.77 ok   assert_state mode Wireframe
+   0.78 ok   screenshot build/ui/03_wireframe.png
+   0.95 shot build/ui/03_wireframe.png
+   0.96 ..   click chip_walkable
+   0.99 ok   frames 3
+   1.01 ok   screenshot build/ui/04_walkable.png
+   1.24 shot build/ui/04_walkable.png
+   1.25 ..   click chip_height
+   1.28 ok   frames 3
+   1.30 ok   screenshot build/ui/05_height.png
+   1.58 shot build/ui/05_height.png
+   1.59 ..   click chip_textured
+   1.62 ok   orbit 0.6 -0.2
+   1.63 ok   zoom 2
+   1.63 ok   frames 2
+   1.65 ok   screenshot build/ui/06_orbited.png
+   1.86 shot build/ui/06_orbited.png
+   1.87 ok   filter oakvale
+   1.87 ok   frames 2
+   1.89 ok   screenshot build/ui/07_filtered.png
+   2.09 shot build/ui/07_filtered.png
+   2.10 ok   filter
+   2.11 ok   set outdir build/ui
+   2.11 ok   set texels 4
+   2.12 ..   click btn_export
+   2.14 ok   frames 2
+   2.82 ok   wait_export
+   2.82 ok   frames 2
+   2.84 ok   assert_state export_ok 1
+   2.85 ok   assert_file build/ui/Greatwood_1.glb
+   2.86 ok   screenshot build/ui/08_exported.png
+   3.07 shot build/ui/08_exported.png
+   3.09      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+   3.09      install_valid=1
+   3.09      install_textures=1
+   3.09      install_fse=1
+   3.09      setup_open=0
+   3.09      backups_differ=0
+   3.09      maps=399
+   3.09      selected=Greatwood_1
+   3.09      settings_scroll=0
+   3.09      settings_scrolled=0
+   3.09      hovered_window=##root/##actions_92064320
+   3.09      mouse=1254,692
+   3.09      hovered_scrollmax=0
+   3.09      wheeling_window=- scrolled_frame=-1 frame=224 hovered_flags=16777487 parent=##root parent_scrollmax=0
+   3.09      preview_loaded=1
+   3.09      preview_textured=1
+   3.09      context_ready=1
+   3.09      mode=Textured
+   3.09      rule_notice=-
+   3.09      edit_tab=0
+   3.09      toasts=2
+   3.09      help_open=0
+   3.09      tour_step=-1
+   3.09      ui_scale=1.00
+   3.09      grid=0
+   3.09      selection_count=0
+   3.09      presets=0
+   3.09      effects=0
+   3.09      entrance=37.1,38.9,40.1
+   3.09      cursor_ground=-
+   3.09      export_ok=1
+   3.09      export_path=build/ui\Greatwood_1.glb
+   3.09      format=glb
+   3.09      textures=1
+   3.09      layers=0
+   3.09      walkable=0
+   3.09      texels=4
+   3.09      gain=1.00
+   3.09      mesh_vertices=18721
+   3.09      batch_active=0
+   3.09      foliage_loaded=1
+   3.09      foliage_instances=19369
+   3.09      preview_foliage=1
+   3.09      export_foliage=1
+   3.09      thing_instances=232
+   3.09      preview_things=1
+   3.09      preview_water=1
+   3.09      export_things=1
+   3.09      world=0
+   3.09      region=GreatwoodEntrance
+   3.09      batch_done=0
+   3.09      batch_failed=0
+   3.09      filter=
+   3.09      camera=166.58,100.27,-75.55
+   3.09      edit_mode=0
+   3.09      world_mode=0
+   3.09      textures_mode=0
+   3.09      textures_count=0
+   3.09      texture_selected=-
+   3.09      world_loaded=0
+   3.09      world_maps=0
+   3.09      world_selected=
+   3.09      world_pending=0
+   3.09      world_pending_owners=0
+   3.09      world_can_undo=0
+   3.09      world_can_redo=0
+   3.09      world_pending_sees=0
+   3.09      world_ok=0
+   3.09      world_stitch=0
+   3.09      paint_theme=0
+   3.09      link_installed=0
+   3.09      link_ready=0
+   3.09      link_hero_map=
+   3.09      villages=2
+   3.09      palette_named=29
+   3.09      doc_loaded=1
+   3.09      doc_things=313
+   3.09      doc_dirty=0
+   3.09      doc_changes=0
+   3.09      selected_thing=-1
+   3.09      gizmo=1
+   3.09      terrain_dirty=0
+   3.09      terrain_center_height=42.442
+   3.10 ok   setup 1
+   3.61 ok   frames 2
+   3.65 ok   assert_state setup_open 1
+   3.66 ok   assert_widget btn_setup_continue
+   3.67 ok   assert_state install_textures 1
+   3.68 ok   screenshot build/ui/s_setup.png
+   3.86 shot build/ui/s_setup.png
+   3.87 ..   click btn_setup_continue
+   3.91 ok   frames 2
+   3.93 ok   assert_state setup_open 0
+   3.94 ok   quit
 RESULT PASS

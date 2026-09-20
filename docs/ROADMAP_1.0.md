@@ -26,8 +26,11 @@ the Oakvale Reborn session (`forge-tools script cutscene-*`, `title add`); a **f
 Oakvale's town-square oak -- `docs/TODO.md` foliage block); and a **perf fix** in the shared
 frame walker (23 GB of memset per map; boot + open Oakvale 3.65 s -> 0.79 s, the suite's
 deploy checks ~35% faster). Suite ALL PASS 16/16 after each. Known flake: the synthetic-click
-suites (`ui paths` textures checkbox, `ui foliage`) occasionally miss a click under the full
-run and pass alone.
+suites (`ui paths` textures checkbox, `ui foliage`) occasionally missed a click under the full
+run and passed alone; since 2026-09-19 (late) `--auto` drops all real mouse messages before
+ImGui sees them (the only path by which the user's cursor could reach a scripted click) --
+a hardening, not a proven fix: a cursor-wiggle control run did not reproduce the flake on the
+old binary either. Watch the next few full runs.
 
 State: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 + tour, 0.16 3/4,
 0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 2/3 (walkthrough, CLI reference),

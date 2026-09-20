@@ -1,133 +1,133 @@
    0.12 ok   wait_maps
-   0.14 ok   wait_ready
-   0.16 ok   select Arena
-   0.19 ok   wait_loaded
-   0.20 ok   frames 2
-   0.21 ok   screenshot build/ui/c0_start.png
-   0.39 shot build/ui/c0_start.png
-   0.42 ok   mouse_move viewport
-   0.43 ok   snapshot_camera
-   0.43 ok   mouse_down right
-   0.44 ok   key_down W
-   0.45 ok   frames 30
-   0.61 ok   key_up W
-   0.62 ok   assert_camera_moved 0.5  (moved 2.753641)
-   0.63 ok   snapshot_camera
-   0.64 ok   mouse_delta 80 0
-   0.65 ok   frames 2
-   0.66 ok   mouse_delta 80 0
-   0.67 ok   frames 2
-   0.69 ok   mouse_up right
-   0.70 ok   screenshot build/ui/c1_after_fly_look.png
-   1.04 shot build/ui/c1_after_fly_look.png
-   1.06 ok   snapshot_camera
-   1.06 ok   mouse_down middle
-   1.07 ok   mouse_delta 60 40
-   1.08 ok   frames 2
-   1.10 ok   mouse_delta 60 40
-   1.11 ok   frames 2
-   1.12 ok   mouse_up middle
-   1.13 ok   assert_camera_moved 0.5  (moved 17.193531)
-   1.14 ok   key_down F
-   1.15 ok   frames 2
-   1.17 ok   key_up F
-   1.18 ok   frames 2
-   1.19 ok   screenshot build/ui/c2_framed.png
-   1.53 shot build/ui/c2_framed.png
-   1.54 ok   snapshot_camera
-   1.54 ok   key_down Alt
-   1.56 ok   mouse_down left
-   1.57 ok   mouse_delta 120 0
-   1.58 ok   frames 2
-   1.59 ok   mouse_delta 120 0
-   1.60 ok   frames 2
-   1.62 ok   mouse_up left
-   1.63 ok   key_up Alt
-   1.64 ok   assert_camera_moved 0.5  (moved 81.073448)
-   1.64 ok   screenshot build/ui/c3_orbited.png
-   1.97 shot build/ui/c3_orbited.png
-   1.99      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-   1.99      install_valid=1
-   1.99      install_textures=1
-   1.99      install_fse=1
-   1.99      setup_open=0
-   1.99      backups_differ=0
-   1.99      maps=399
-   1.99      selected=Arena
-   1.99      settings_scroll=0
-   1.99      settings_scrolled=0
-   1.99      hovered_window=##root/##actions_92064320/##settings_CD5EA619
-   1.99      mouse=1198,533
-   1.99      hovered_scrollmax=216
-   1.99      wheeling_window=- scrolled_frame=-1 frame=122 hovered_flags=16777479 parent=##root/##actions_92064320 parent_scrollmax=0
-   1.99      preview_loaded=1
-   1.99      preview_textured=1
-   1.99      context_ready=1
-   1.99      mode=Textured
-   1.99      rule_notice=-
-   1.99      edit_tab=0
-   1.99      toasts=1
-   1.99      help_open=0
-   1.99      tour_step=-1
-   1.99      ui_scale=1.00
-   1.99      grid=0
-   1.99      selection_count=0
-   1.99      presets=0
-   1.99      effects=0
-   1.99      entrance=32.1,52.3,100.0
-   1.99      cursor_ground=-
-   1.99      export_ok=0
-   1.99      export_path=
-   1.99      format=glb
-   1.99      textures=1
-   1.99      layers=0
-   1.99      walkable=0
-   1.99      texels=8
-   1.99      gain=1.00
-   1.99      mesh_vertices=4225
-   1.99      batch_active=0
-   1.99      foliage_loaded=1
-   1.99      foliage_instances=0
-   1.99      preview_foliage=1
-   1.99      export_foliage=1
-   1.99      thing_instances=155
-   1.99      preview_things=1
-   1.99      preview_water=1
-   1.99      export_things=1
-   1.99      world=0
-   1.99      region=Arena
-   1.99      batch_done=0
-   1.99      batch_failed=0
-   1.99      filter=
-   1.99      camera=-12.54,130.33,-10.44
-   2.00      edit_mode=0
-   2.00      world_mode=0
-   2.00      textures_mode=0
-   2.00      textures_count=0
-   2.00      texture_selected=-
-   2.00      world_loaded=0
-   2.00      world_maps=0
-   2.00      world_selected=
-   2.00      world_pending=0
-   2.00      world_pending_owners=0
-   2.00      world_can_undo=0
-   2.00      world_can_redo=0
-   2.00      world_pending_sees=0
-   2.00      world_ok=0
-   2.00      world_stitch=0
-   2.00      paint_theme=0
-   2.00      link_installed=0
-   2.00      link_ready=0
-   2.00      link_hero_map=
-   2.00      villages=0
-   2.00      palette_named=8
-   2.00      doc_loaded=1
-   2.00      doc_things=355
-   2.00      doc_dirty=0
-   2.00      doc_changes=0
-   2.00      selected_thing=-1
-   2.00      gizmo=1
-   2.00      terrain_dirty=0
-   2.00      terrain_center_height=99.785
-   2.00 ok   quit
+   0.15 ok   wait_ready
+   0.17 ok   select Arena
+   0.20 ok   wait_loaded
+   0.21 ok   frames 2
+   0.23 ok   screenshot build/ui/c0_start.png
+   0.40 shot build/ui/c0_start.png
+   0.43 ok   mouse_move viewport
+   0.44 ok   snapshot_camera
+   0.44 ok   mouse_down right
+   0.45 ok   key_down W
+   0.47 ok   frames 30
+   0.63 ok   key_up W
+   0.64 ok   assert_camera_moved 0.5  (moved 2.807635)
+   0.65 ok   snapshot_camera
+   0.65 ok   mouse_delta 80 0
+   0.66 ok   frames 2
+   0.68 ok   mouse_delta 80 0
+   0.69 ok   frames 2
+   0.71 ok   mouse_up right
+   0.72 ok   screenshot build/ui/c1_after_fly_look.png
+   1.07 shot build/ui/c1_after_fly_look.png
+   1.08 ok   snapshot_camera
+   1.08 ok   mouse_down middle
+   1.09 ok   mouse_delta 60 40
+   1.10 ok   frames 2
+   1.12 ok   mouse_delta 60 40
+   1.13 ok   frames 2
+   1.14 ok   mouse_up middle
+   1.15 ok   assert_camera_moved 0.5  (moved 17.193531)
+   1.16 ok   key_down F
+   1.17 ok   frames 2
+   1.18 ok   key_up F
+   1.19 ok   frames 2
+   1.21 ok   screenshot build/ui/c2_framed.png
+   1.56 shot build/ui/c2_framed.png
+   1.57 ok   snapshot_camera
+   1.58 ok   key_down Alt
+   1.59 ok   mouse_down left
+   1.60 ok   mouse_delta 120 0
+   1.61 ok   frames 2
+   1.63 ok   mouse_delta 120 0
+   1.64 ok   frames 2
+   1.65 ok   mouse_up left
+   1.66 ok   key_up Alt
+   1.67 ok   assert_camera_moved 0.5  (moved 81.073448)
+   1.68 ok   screenshot build/ui/c3_orbited.png
+   2.01 shot build/ui/c3_orbited.png
+   2.03      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+   2.03      install_valid=1
+   2.03      install_textures=1
+   2.03      install_fse=1
+   2.03      setup_open=0
+   2.03      backups_differ=0
+   2.03      maps=399
+   2.03      selected=Arena
+   2.03      settings_scroll=0
+   2.03      settings_scrolled=0
+   2.03      hovered_window=##root/##actions_92064320/##settings_CD5EA619
+   2.03      mouse=1198,533
+   2.03      hovered_scrollmax=216
+   2.03      wheeling_window=- scrolled_frame=-1 frame=124 hovered_flags=16777479 parent=##root/##actions_92064320 parent_scrollmax=0
+   2.03      preview_loaded=1
+   2.03      preview_textured=1
+   2.03      context_ready=1
+   2.03      mode=Textured
+   2.03      rule_notice=-
+   2.03      edit_tab=0
+   2.03      toasts=1
+   2.03      help_open=0
+   2.03      tour_step=-1
+   2.03      ui_scale=1.00
+   2.03      grid=0
+   2.03      selection_count=0
+   2.03      presets=0
+   2.03      effects=0
+   2.03      entrance=32.1,52.3,100.0
+   2.03      cursor_ground=-
+   2.03      export_ok=0
+   2.03      export_path=
+   2.03      format=glb
+   2.03      textures=1
+   2.03      layers=0
+   2.03      walkable=0
+   2.03      texels=8
+   2.03      gain=1.00
+   2.03      mesh_vertices=4225
+   2.03      batch_active=0
+   2.03      foliage_loaded=1
+   2.03      foliage_instances=0
+   2.03      preview_foliage=1
+   2.03      export_foliage=1
+   2.03      thing_instances=155
+   2.03      preview_things=1
+   2.03      preview_water=1
+   2.03      export_things=1
+   2.03      world=0
+   2.03      region=Arena
+   2.03      batch_done=0
+   2.03      batch_failed=0
+   2.03      filter=
+   2.03      camera=-12.54,130.33,-10.44
+   2.03      edit_mode=0
+   2.03      world_mode=0
+   2.03      textures_mode=0
+   2.03      textures_count=0
+   2.03      texture_selected=-
+   2.03      world_loaded=0
+   2.03      world_maps=0
+   2.03      world_selected=
+   2.03      world_pending=0
+   2.03      world_pending_owners=0
+   2.03      world_can_undo=0
+   2.03      world_can_redo=0
+   2.03      world_pending_sees=0
+   2.03      world_ok=0
+   2.04      world_stitch=0
+   2.04      paint_theme=0
+   2.04      link_installed=0
+   2.04      link_ready=0
+   2.04      link_hero_map=
+   2.04      villages=0
+   2.04      palette_named=8
+   2.04      doc_loaded=1
+   2.04      doc_things=355
+   2.04      doc_dirty=0
+   2.04      doc_changes=0
+   2.04      selected_thing=-1
+   2.04      gizmo=1
+   2.04      terrain_dirty=0
+   2.04      terrain_center_height=99.785
+   2.04 ok   quit
 RESULT PASS
