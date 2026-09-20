@@ -17,7 +17,12 @@ try:
 except ImportError:
     Image = None
 
-VIEWPORT = (330, 130, 1050, 780)   # x0, y0, x1, y1 of the 3D view in a 1440x900 window
+# the inner part of the 3D view as fractions of the window: the panels are fixed-width, so a
+# window the desktop clamped (a fullscreen game at 1024x768 shrinks it) still lands inside
+VIEWPORT_FRAC = (0.25, 0.16, 0.70, 0.85)
+def viewport(img):
+    w, h = img.size
+    return (int(w * VIEWPORT_FRAC[0]), int(h * VIEWPORT_FRAC[1]), int(w * VIEWPORT_FRAC[2]), int(h * VIEWPORT_FRAC[3]))
 ACCENT = (0x8B, 0x5C, 0xF6)
 
 def stats(img, box):
@@ -78,22 +83,25 @@ def main():
             imgs[k] = Image.open(p)
         if len(imgs) == len(shots):
             # empty state: viewport is mostly background
-            d, mean, bg = stats(imgs["01_empty.png"], VIEWPORT)
+            d, mean, bg = stats(imgs["01_empty.png"], viewport(imgs["01_empty.png"]))
             if bg < 0.85: fails.append(f"01 empty viewport should be mostly background (bg={bg:.2f})")
             # textured: lots of colour, little background
-            d, mean, bg = stats(imgs["02_textured.png"], VIEWPORT)
+            d, mean, bg = stats(imgs["02_textured.png"], viewport(imgs["02_textured.png"]))
             if d < 400: fails.append(f"02 textured viewport has too few colours ({d})")
             if bg > 0.7: fails.append(f"02 textured viewport mostly background (bg={bg:.2f})")
             if not (mean[0] > mean[2]): fails.append(f"02 textured mean colour not earthy: {mean}")
             # modes differ from textured
             for k in ["03_wireframe.png", "04_walkable.png", "05_height.png"]:
-                f = diff_fraction(imgs["02_textured.png"], imgs[k], VIEWPORT)
+                f = diff_fraction(imgs["02_textured.png"], imgs[k], viewport(imgs[k]))
                 if f < 0.25: fails.append(f"{k} barely differs from textured ({f:.2f})")
-            # height ramp is violet-ish (blue > red > green on average)
-            d, mean, bg = stats(imgs["05_height.png"], VIEWPORT)
+            # height ramp is violet-ish (blue > green on average) where the ground is: the lower-right of
+            # the view, clear of the tree canopy that a small (clamped) window pushes into the middle
+            w, h = imgs["05_height.png"].size
+            ground = (int(w * 0.45), int(h * 0.55), int(w * 0.72), int(h * 0.86))
+            d, mean, bg = stats(imgs["05_height.png"], ground)
             if not (mean[2] > mean[1]): fails.append(f"05 height ramp not violet: {mean}")
             # orbit changed the view
-            f = diff_fraction(imgs["02_textured.png"], imgs["06_orbited.png"], VIEWPORT)
+            f = diff_fraction(imgs["02_textured.png"], imgs["06_orbited.png"], viewport(imgs["06_orbited.png"]))
             if f < 0.2: fails.append(f"06 orbit/zoom did not change the view ({f:.2f})")
             # filter narrows the explorer (fewer distinct rows -> more background in list area)
             list_box = (0, 140, 300, 860)

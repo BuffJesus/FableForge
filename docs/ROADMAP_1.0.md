@@ -515,13 +515,17 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
      Controller Support (DLL + text defs + fmp) on top of all of it. *M*
 9. **Mod content in the editor.** After `mods build` + stage, a map opens with the merged TNG,
    so things a mod placed are ordinary things: selectable, movable, deployable through the WAD
-   writer. Missing is provenance -- each thing carries a badge *retail / <mod>* from the
-   per-mod thing diff by UID (`tng conflicts` already computes it), a filter to show one mod's
-   things, and "revert this thing to retail / to mod X". New `OBJECT_*` defs a mod adds appear
-   in *Add an object* because the palette reads the staged `game.bin`; their thumbnails need
-   the mod's `graphics.big` entries, which the same staged install provides. Verify in-game
-   first whether retail reads loose `Data/Levels/*.tng` at all (`ENGINE_RULES` says the WAD
-   wins; Connected Regions ships 397 loose TNGs). *M*
+   writer. Provenance DONE 2026-09-20: `mods build` writes `forge_mods_provenance.json`
+   (level -> `uid:<n>` -> mod; the thing merge's winner, the first mod for agreeing edits, every
+   added/changed thing of a single-editor copy) which the stage carries next to `forge_mods.json`;
+   the editor badges those things in *Objects in this map*, filters by *Placed by* (everyone /
+   retail only / one mod), and *Back to retail* on a selected thing writes a vanilla pick for the
+   next deploy (`tests/ui/mods.txt`). Provenance is by bytes: a ChocolateBox re-save (F2 Melee)
+   touches every thing of its levels (float formatting, defaulted properties), so every one is
+   badged -- a semantic thing signature needs the engine's property defaults (open). Still open:
+   thumbnails for a mod's new `OBJECT_*` defs (needs its `graphics.big` entries), and the in-game
+   check whether retail reads loose `Data/Levels/*.tng` at all (`ENGINE_RULES` says the WAD wins;
+   Connected Regions ships 397 loose TNGs). *M*
 Later (*L*): LOOT-style masterlist + topo sort, LEV grid merge.
 
 ### 1.0-rc — "Polish, docs, and a stranger's test"

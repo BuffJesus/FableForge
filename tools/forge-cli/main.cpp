@@ -1069,7 +1069,7 @@ int tngConflicts(const std::string& basePath,
 // kept. Removals are NOT applied (conservative — keeps content). The level analog
 // of `defs merge`; turns whole-file-conflicting TNGs into a merged level.
 struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false; };
-struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; std::vector<TngConflictRow> rows; };
+struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; std::vector<TngConflictRow> rows; std::map<std::string, std::string> origin; };   // origin: thing key -> the mod whose version landed
 
 // Thing-level merge: base TNG + mod TNGs (load order) -> outPath. A thing is keyed
 // by UID; a thing only one mod changes auto-merges, same-thing changes take the
@@ -1120,6 +1120,7 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
             ++r.conflicts;
         }
         if (keepBase) continue;
+        r.origin[key] = agree ? vs.front().mod : win->mod;   // the same edit from several mods: the first that made it
         if (win->isAdd) {
             out.addThing(win->thing);
             ++r.added;
@@ -8314,6 +8315,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     size_t tngCopied = 0, tngMerged = 0, tngThingConflicts = 0;
     json tngRows = json::array();
+    json provenance;   // level -> thing key -> mod, for the editor's badges (forge_mods_provenance.json)
     for (const auto& [key, changers] : tngChangers) {
         const fs::path outTng = fs::path(outDir) / "data" / "Levels" / key;
         const fs::path baseTng = baseLevels / key;
@@ -8326,6 +8328,21 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                           fs::copy_options::overwrite_existing);
             ++tngCopied;
             row["mode"] = fs::exists(baseTng) ? "single-editor" : "new-level";
+            // every thing the copy adds or changes against the base is that mod's
+            try {
+                std::map<std::string, std::string> baseSig;
+                if (fs::exists(baseTng)) {
+                    const auto baseFile = forge::tng::File::parse(baseTng.string());
+                    for (const auto& t : baseFile.things()) baseSig[thingKey(t)] = thingSignature(t);
+                }
+                json& lvl = provenance[key];
+                const auto modFile = forge::tng::File::parse(changers.back().second);
+                for (const auto& t : modFile.things()) {
+                    const std::string k = thingKey(t);
+                    const auto it = baseSig.find(k);
+                    if (it == baseSig.end() || it->second != thingSignature(t)) lvl[k] = changers.back().first;
+                }
+            } catch (const std::exception&) {}
         } else {
             // this level's picks: `tng:<level>|<thing>` -> `<thing>`
             std::map<std::string, std::string> levelPicks;
@@ -8334,6 +8351,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks);
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
+            for (const auto& [k, m] : tr.origin) provenance[key][k] = m;
             row["mode"] = "thing-merged";
             row["things"] = tr.things; row["applied"] = tr.applied; row["added"] = tr.added;
             json crows = json::array();
@@ -8343,6 +8361,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         tngRows.push_back(row);
     }
     if (jsonOutput) rep["tng"] = {{"levels", tngRows}, {"merged", tngMerged}, {"copied", tngCopied}, {"conflicts", tngThingConflicts}};
+    if (!provenance.empty()) {
+        // next to forge_mods.json once staged: the editor badges the things a mod placed or changed
+        json labels = json::array();
+        for (size_t i = 0; i < sources.size(); ++i) labels.push_back(srcLabel(i));
+        writeAllBytes((fs::path(outDir) / "forge_mods_provenance.json").string(), [&] {
+            const std::string t = json{{"version", 1}, {"mods", labels}, {"levels", provenance}}.dump(2);
+            return std::vector<uint8_t>(t.begin(), t.end());
+        }());
+    }
     if (!tngChangers.empty())
         if (!jsonOutput) std::printf("level TNG merge: %zu levels (%zu thing-merged, %zu single-"
                     "editor copies), %zu thing conflicts\n",

@@ -21,6 +21,21 @@ frames 2
 assert_log staged
 assert_log mods deploy: done
 screenshot build/ui/m1_mods.png
+# the deploy's provenance sidecar: the editor badges the things F2's (re-saved) TNG carries
+select ArenaHallOfHeroes
+wait_loaded
+mods_tab 0
+edit 1
+frames 2
+assert_state origin_mods 1
+assert_state origin_things 212
+edit_tab 0
+frames 1
+assert_widget combo_origin
+screenshot build/ui/m3_provenance.png
+edit 0
+mods_tab 1
+frames 1
 mods_undeploy
 wait_mods
 frames 2

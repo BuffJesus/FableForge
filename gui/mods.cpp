@@ -139,6 +139,12 @@ void App::saveModPicks() {
     for (const auto& [k, v] : modPicks_) out << k << '\t' << v << '\n';
 }
 
+void App::setModPick(const std::string& key, const std::string& winner) {
+    if (modPicks_.empty()) loadModPicks();
+    if (winner == "-") modPicks_.erase(key); else modPicks_[key] = winner;
+    saveModPicks();
+}
+
 bool App::modPick(const std::string& key, const std::string& winner) {
     const ModConflict* row = nullptr;
     for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }

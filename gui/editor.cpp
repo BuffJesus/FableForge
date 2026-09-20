@@ -3,8 +3,11 @@
 // layout, explorer, export and automation.
 
 #include "app.hpp"
+
+#include "nlohmann/json.hpp"
 #include "effects.hpp"
 
+#include <fstream>
 #include <algorithm>
 #include <functional>
 #include <cmath>
@@ -58,6 +61,37 @@ void App::openDocument() {
     if (!derr.empty()) pushLog("editor: " + derr, 1);
     docLoadedFor_ = selectedName_;
     syncedRevision_ = doc_.revision();
+    loadThingOrigins();
+}
+
+// forge_mods_provenance.json next to forge_mods.json (the save root): the mod that placed or
+// last changed each thing of this map, by "uid:<n>". Absent = no mod deploy = no badges.
+void App::loadThingOrigins() {
+    thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
+    std::error_code ec;
+    const fs::path path = fs::path(saveRoot()) / "forge_mods_provenance.json";
+    if (!fs::exists(path, ec) || !documentLoaded()) return;
+    try {
+        std::ifstream in(path);
+        const auto j = nlohmann::json::parse(in);
+        const std::string key = "FinalAlbion/" + doc_.mapName() + ".tng";
+        const auto& levels = j.value("levels", nlohmann::json::object());
+        for (auto it = levels.begin(); it != levels.end(); ++it) {
+            std::string k = it.key(), want = key;
+            std::transform(k.begin(), k.end(), k.begin(), ::tolower); std::transform(want.begin(), want.end(), want.begin(), ::tolower);
+            if (k != want) continue;
+            for (auto t = it.value().begin(); t != it.value().end(); ++t) {
+                thingOrigin_[t.key()] = t.value().get<std::string>();
+                if (std::find(originMods_.begin(), originMods_.end(), t.value().get<std::string>()) == originMods_.end()) originMods_.push_back(t.value().get<std::string>());
+            }
+        }
+    } catch (const std::exception& e) { pushLog(std::string("editor: forge_mods_provenance.json: ") + e.what(), 1); }
+}
+
+const char* App::originOf(uint64_t uid) const {
+    if (thingOrigin_.empty()) return nullptr;
+    const auto it = thingOrigin_.find("uid:" + std::to_string(uid));
+    return it == thingOrigin_.end() ? nullptr : it->second.c_str();
 }
 
 void App::setEditMode(bool on) {
@@ -1367,6 +1401,18 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::TextUnformatted(s.definition.c_str());
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
+        if (const char* o = originOf(s.uid)) {
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Accent), "placed or changed by %s", o);
+            ImGui::PopFont();
+            ImGui::SameLine();
+            if (theme::ghostButton("Back to retail", ImVec2(S(110), S(22)))) {
+                setModPick("tng:FinalAlbion/" + doc_.mapName() + ".tng|uid:" + std::to_string(s.uid), "vanilla");
+                pushLog("mods: " + s.definition + " picked back to retail (forge_mods_picks.txt; deploy again from the Mods tab)", 0);
+            }
+            auto_.registerWidget("btn_thing_retail");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes a vanilla pick for this thing; the next Build and deploy on the Mods tab leaves it as retail has it.");
+        }
         if (nSel > 1) {
             ImGui::PushFont(fontSmall_);
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
@@ -1462,6 +1508,17 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     ImGui::InputTextWithHint("##thingsearch", "Filter by definition or script name", thingSearch_, sizeof thingSearch_);
     ImGui::PopStyleVar();
     auto_.registerWidget("input_thingsearch");
+    if (!originMods_.empty()) {   // a mod deploy is on this install: filter the list by who placed what
+        ImGui::SetNextItemWidth(cardInner);
+        const std::string shown = originFilter_.empty() ? "Placed by: everyone (retail + mods)" : originFilter_ == "retail" ? "Placed by: retail only" : "Placed by: " + originFilter_;
+        if (ImGui::BeginCombo("##originfilter", shown.c_str())) {
+            if (ImGui::Selectable("everyone (retail + mods)", originFilter_.empty())) originFilter_.clear();
+            if (ImGui::Selectable("retail only", originFilter_ == "retail")) originFilter_ = "retail";
+            for (const auto& m : originMods_) if (ImGui::Selectable(m.c_str(), originFilter_ == m)) originFilter_ = m;
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_origin");
+    }
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##thinglist", ImVec2(cardInner, S(150)), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
@@ -1472,6 +1529,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         const auto s = doc_.summary(i);
         if (!s.hasFrame || s.type == "Marker" || s.type == "TrackNode") continue;
         if (thingSearch_[0] && !contains(s.definition, thingSearch_) && !contains(s.scriptName, thingSearch_)) continue;
+        if (!originFilter_.empty()) {
+            const char* o = originOf(s.uid);
+            if (originFilter_ == "retail" ? o != nullptr : (!o || originFilter_ != o)) continue;
+        }
         rows.push_back(int(i));
     }
     ImGuiListClipper clipper;
@@ -1482,10 +1543,23 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             const auto s = doc_.summary(size_t(i));
             std::string labelText = s.definition;
             if (!s.scriptName.empty()) labelText += "  (" + s.scriptName + ")";
+            const char* origin = originOf(s.uid);
+            if (origin) {   // leave the badge its room: ellipsise the label
+                const float room = cardInner - ImGui::CalcTextSize(origin).x - S(28);
+                if (ImGui::CalcTextSize(labelText.c_str()).x > room) {
+                    while (labelText.size() > 4 && ImGui::CalcTextSize((labelText + "...").c_str()).x > room) labelText.pop_back();
+                    labelText += "...";
+                }
+            }
             labelText += "##t" + std::to_string(i);
             const bool inSel = i == selectedThing_ || std::find(renderer_.alsoSelected.begin(), renderer_.alsoSelected.end(), i) != renderer_.alsoSelected.end();
             if (ImGui::Selectable(labelText.c_str(), inSel)) { if (ImGui::GetIO().KeyCtrl) toggleSelect(i); else selectThing(i); }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { selectThing(i); frameSelected(); }
+            if (origin) {   // the mod badge, right-aligned on the row
+                const float w = ImGui::CalcTextSize(origin).x;
+                ImGui::SameLine(std::max(0.0f, cardInner - w - S(12)));
+                ImGui::TextColored(theme::vec(theme::Accent), "%s", origin);
+            }
         }
     }
     ImGui::PopFont();

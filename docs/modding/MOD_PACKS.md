@@ -214,7 +214,8 @@ undeploy, conflicts through `forge-tools.exe`), one JSON conflict report over ev
 per-row picks (`forge_mods_picks.txt`; the Mods tab's Conflicts card), EgoCore `.resource` bank
 overrides (`Data/<path>/<bank>.big/[<SubBank>/]<Entry>.resource` [+ `.header`]: entry-level layers
 over the banks, replaced or appended with the next id, applied in load order after the whole-file
-layers so a whole bank a tree ships is their base).
+layers so a whole bank a tree ships is their base), and thing provenance (`forge_mods_provenance.json`
+from the build; the editor's badges / filter / *Back to retail*).
 
 Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,

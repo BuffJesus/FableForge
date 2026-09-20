@@ -567,7 +567,11 @@ and hashes the source. *Check conflicts* dry-runs the whole order and fills a Co
 one row per record / thing / quest / string / file that several enabled mods want differently
 (agreeing edits are not conflicts; records that differ in different fields merge per field),
 with the winner the load order gives it and a combo to pick another mod or *vanilla*; picks
-live in `forge_mods_picks.txt` next to the order and deploy applies them. *Build and deploy*
+live in `forge_mods_picks.txt` next to the order and deploy applies them. A deploy also
+leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
+the Edit tab badges those things in *Objects in this map*, *Placed by* filters the list
+(everyone / retail only / one mod) and *Back to retail* on a selected thing writes a vanilla
+pick for the next deploy. *Build and deploy*
 reverts the previous deploy, builds the whole order onto the retail files and stages it
 (originals kept as `.forgebak`); *Undeploy* puts the retail files back. All three run the
 shipped `forge-tools.exe` as a process and stream its output into the Activity log.

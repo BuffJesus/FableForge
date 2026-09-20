@@ -346,6 +346,13 @@ private:
     char defSearch_[64] = {};
     std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
     char thingSearch_[64] = {};
+    // forge_mods_provenance.json (written by a mod deploy): "uid:<n>" -> mod for the open map;
+    // badges in the object list, an origin filter, "back to retail" = a vanilla pick
+    std::map<std::string, std::string> thingOrigin_;
+    std::vector<std::string> originMods_;
+    std::string originFilter_;   // "" = every object, "retail", or a mod name
+    void loadThingOrigins();
+    const char* originOf(uint64_t uid) const;
     bool confirmDeploy_ = false;
     // engine-rule notice at the point of action (0.15 #2): raised by the action that the
     // rule applies to, drawn directly under that action's button, dismissed per rule for
@@ -510,6 +517,8 @@ public:
     size_t modConflictCount() const { return modConflicts_.size(); }
     // pick a winner for a conflict (by its key, or the first row when key is "*"); "-" = back to load order
     bool modPick(const std::string& key, const std::string& winner);
+    // set or clear ("-") one pick directly (no report needed): the editor's "back to retail"
+    void setModPick(const std::string& key, const std::string& winner);
 private:
     bool texturesMode_ = false;
     bool texturesLoaded_ = false;
