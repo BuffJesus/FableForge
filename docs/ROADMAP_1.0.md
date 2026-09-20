@@ -437,9 +437,12 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    Unofficial Patch + Special Melee + F2 Melee build into one game.bin + 8 TNGs. *S*
 3. Deploy = rebuild from the order onto the retail baseline (`.atlas-orig`), staged once;
    uninstall = drop from the order and rebuild; the three backup suffixes unified behind
-   `albion::backups`. *M*
+   `albion::backups`. *M* -- `mods deploy` (revert the previous stage, rebuild, stage) and
+   `mods undeploy` DONE 2026-09-20 on the `.forgebak` stage (round-trips byte-identical; empty
+   folders pruned); the backup-suffix unification is still open.
 4. `forge mods conflicts`: `modsAnalyze` + `tngConflicts` + `.qst` intersection over the whole
-   order as one JSON; GUI per-row winner picker feeding `--picks`. *M*
+   order as one JSON; GUI per-row winner picker feeding `--picks`. *M* -- the dry-run report
+   (`mods conflicts`) DONE 2026-09-20; one JSON and the picker still open.
 5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
    *M* -- whole-file layers of tree sources (LEV / WLD / BWD / STB / INI / banks: last source
    wins, contested paths counted) DONE 2026-09-20; `text.big` and WAD-resident TNG still open.

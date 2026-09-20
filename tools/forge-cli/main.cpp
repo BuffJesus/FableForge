@@ -256,6 +256,7 @@ int usage() {
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--json]                  a dry-run build: the conflict report over the whole order, nothing written\n"
+        "  forge mods deploy <game-root>   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -11269,7 +11270,7 @@ int main(int argc, char** argv) {
             }
             return modsAnalyze(args[2], modRoots, asJson);
         }
-        if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build" || args[1] == "conflicts")) {
+        if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build" || args[1] == "conflicts" || args[1] == "deploy" || args[1] == "undeploy")) {
             namespace mo = forge::modorder;
             const std::string root = args[2];
             const bool asJson = args.back() == "--json";
@@ -11319,6 +11320,27 @@ int main(int argc, char** argv) {
                     mo::save(root, order);
                     for (size_t i = 0; i < order.mods.size(); ++i) std::printf("  %2zu %s\n", i, order.mods[i].name.c_str());
                     return 0;
+                }
+                if (args[1] == "deploy" || args[1] == "undeploy") {
+                    // deploy = the install rebuilt from the order: a previous stage is reverted first (its
+                    // .forgebak originals come back), the order is built into a scratch folder and staged;
+                    // undeploy = revert alone. Uninstalling a mod is `mods remove` + `mods deploy`.
+                    if (std::filesystem::exists(forge::stage::manifestPath(root))) {
+                        const auto r = forge::stage::revert(root);
+                        std::printf("reverted the previous stage: %zu restored, %zu removed\n", r.restored.size(), r.removed.size());
+                    } else if (args[1] == "undeploy") {
+                        std::printf("nothing staged on %s\n", root.c_str());
+                    }
+                    if (args[1] == "undeploy") return 0;
+                    const auto order = mo::load(root);
+                    const auto sources = mo::buildSources(order, root);
+                    if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
+                    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_deploy";
+                    std::filesystem::remove_all(scratch);
+                    std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson);
+                    std::filesystem::remove_all(scratch);
+                    return rc;
                 }
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
                     const auto order = mo::load(root);

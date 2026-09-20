@@ -131,6 +131,19 @@ def main() -> int:
             print("(defc / text defs not found: the EgoCore def layer part is skipped)")
     else:
         print("(EgoCore corpus not extracted: skipped)")
+    # deploy = revert + rebuild + stage; undeploy = revert: the root comes back byte-identical
+    def digest(p):
+        import hashlib
+        return hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.exists(p) else None
+    before = digest(os.path.join(defs, "game.bin"))
+    r = subprocess.run([tool, "mods", "deploy", scratch], capture_output=True, text=True, env=env if os.path.isdir(CONTROLLER) else None)
+    if r.returncode != 0 or "staged" not in r.stdout: print("deploy failed:", r.stdout[-600:], r.stderr[-400:]); ok = False
+    if digest(os.path.join(defs, "game.bin")) == before: print("deploy did not change game.bin"); ok = False
+    r = subprocess.run([tool, "mods", "deploy", scratch], capture_output=True, text=True, env=env if os.path.isdir(CONTROLLER) else None)
+    if "reverted the previous stage" not in r.stdout: print("second deploy did not revert first:", r.stdout[-400:]); ok = False
+    r = run("mods", "undeploy", scratch)
+    if digest(os.path.join(defs, "game.bin")) != before: print("undeploy did not restore game.bin"); ok = False
+    if os.path.isdir(os.path.join(scratch, "Mods")) and any(os.scandir(os.path.join(scratch, "Mods"))): print("undeploy left Mods/ content"); ok = False
     run("mods", "remove", scratch, "F2 Melee (defs)")
     if "F2 Melee (defs)" in [m["name"] for m in json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]]: print("remove failed"); ok = False
     if not a.keep:

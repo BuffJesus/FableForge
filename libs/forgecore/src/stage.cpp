@@ -92,6 +92,13 @@ Result revert(const fs::path& gameRoot) {
         } else {
             fs::remove(target);
             result.removed.push_back(relative);
+            // the folders the stage created for it (Mods/<Name>/ ...) go too, while empty
+            std::error_code ec;
+            const fs::path rootCanon = fs::weakly_canonical(gameRoot, ec);
+            for (fs::path dir = target.parent_path();
+                 fs::weakly_canonical(dir, ec) != rootCanon && dir.has_parent_path() && fs::is_directory(dir, ec) && fs::is_empty(dir, ec);
+                 dir = dir.parent_path())
+                if (!fs::remove(dir, ec)) break;
         }
     }
     fs::remove(manifest);
