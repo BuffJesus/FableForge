@@ -42,6 +42,7 @@
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
 #include "forge/rangecodec.hpp"
+#include "forge/terraintex.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -119,6 +120,43 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     double zMax = 0, dMax = 0, wsMax = 0, wcMax = 0, zBias = 0; size_t zBiasN = 0;
     float dtsMin = 1e30f, dtsMax = -1e30f;
     std::map<int, int> types;
+    if (verbose) {   // how retail mixes the slots of wet cells: a histogram of (water slots, ground slots) and samples
+        const auto lib = te::Context(); (void)lib;
+        std::map<std::string, int> mixes; int shown = 0;
+        te::Options po = o; te::Context pc; std::string perr; pc.loadDefs(install.root, perr);
+        const auto rows = forge::terraintex::resolvePalette(file, *pc.themeLibrary());
+        std::map<int, std::pair<std::string, float>> slotInfo;   // slot -> (name, WaterHeight)
+        for (const auto& r : rows) {
+            const auto* t = r.paletteName.empty() ? nullptr : pc.themeLibrary()->byName(r.paletteName);
+            if (!t && r.resolved) t = pc.themeLibrary()->byDefIndex(r.defIndex);
+            slotInfo[r.slot] = {r.paletteName.empty() ? r.defName : r.paletteName, t ? t->waterHeight : -1.0f};
+        }
+        for (int y = 0; y < wl.height; ++y)
+            for (int x = 0; x < wl.width; ++x) {
+                if (wl.level[size_t(y) * wl.width + x] <= 0.001f || wl.type[size_t(y) * wl.width + x] == 0) continue;
+                std::string key; float depth = 0; int waterSlots = 0;
+                for (int k = 0; k < 3; ++k) {
+                    const int slot = file.themeIndexAt(x, y, k); const int w = file.themeStrengthAt(x, y, k);
+                    const auto it = slotInfo.find(slot);
+                    const float wh = it != slotInfo.end() ? it->second.second : -1.0f;
+                    if (w == 0) continue;
+                    if (wh > 0 || (it != slotInfo.end() && it->second.first.rfind("WATER", 0) == 0) || (it != slotInfo.end() && it->second.first.rfind("SEA", 0) == 0)) { ++waterSlots; depth += float(w) / 255.0f * std::max(wh, 0.0f); }
+                }
+                key = std::to_string(waterSlots) + " water slot(s)";
+                ++mixes[key];
+                if (shown < 12 && (x % 7 == 0)) {
+                    ++shown;
+                    std::printf("    cell (%d,%d) ground %.2f:", x, y, groundLev(x, y));
+                    for (int k = 0; k < 3; ++k) {
+                        const int slot = file.themeIndexAt(x, y, k); const int w = file.themeStrengthAt(x, y, k);
+                        const auto it = slotInfo.find(slot);
+                        std::printf("  [%s w%d h%.0f]", it != slotInfo.end() ? it->second.first.c_str() : "?", w, it != slotInfo.end() ? it->second.second : -1.0f);
+                    }
+                    std::printf("  -> depth %.3f, level %.3f\n", depth, wl.level[size_t(y) * wl.width + x]);
+                }
+            }
+        for (auto& [k, n] : mixes) std::printf("    wet cells with %s: %d\n", k.c_str(), n);
+    }
     if (verbose) {   // every patch's header, then the first patch's first rows
         for (const auto& p : wp.patches) {
             int wet = 0; float zmin = 1e30f, zmax = -1e30f;
