@@ -71,6 +71,9 @@ public:
     // entity_scripts field is kept verbatim). Every other byte is preserved.
     std::string withQuest(const std::string& name, const std::string& file,
                           long long id) const;
+    // The same with an entry's raw bytes (`Key = { ... }` as another registry spells it):
+    // replaces the entry of that key in place, else appends it. The mod-pack union.
+    std::string withEntry(const std::string& key, const std::string& rawEntry) const;
 
 private:
     std::string source_;

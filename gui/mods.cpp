@@ -183,6 +183,12 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             const std::string lang = c.value("language", ""), name = c.value("name", "");
             rows.push_back({"string", "text:" + lang + "|" + name, lang + "  " + name, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
         }
+    if (rep.contains("fse")) {
+        for (const auto& c : rep["fse"].value("contested", json::array()))
+            rows.push_back({"fse", "fse:" + c.value("quest", ""), "quests.lua  " + c.value("quest", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+        for (const auto& c : rep["fse"].value("id_clashes", json::array()))   // informational: no pick fixes an id, the mod needs a new one
+            rows.push_back({"fse id", "", "id " + std::to_string(c.value("id", 0LL)) + ": " + c.value("quest", "") + " (" + c.value("mod", "") + ") also " + c.value("also", ""), {}, "", false});
+    }
     if (rep.contains("files"))
         for (const auto& c : rep["files"].value("contested", json::array()))
             rows.push_back({"file", "file:" + c.value("path", ""), c.value("path", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
@@ -285,6 +291,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             ImGui::TextUnformatted(fit(c.label, cardInner - S(52)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", c.label.c_str());
             ImGui::PopFont();
+            if (c.key.empty()) { ImGui::PopID(); continue; }   // informational row (an id clash): nothing to pick
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
             const auto pk = modPicks_.find(c.key);
             const std::string current = pk != modPicks_.end() ? pk->second : c.winner;

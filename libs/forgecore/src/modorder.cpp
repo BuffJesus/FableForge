@@ -121,7 +121,7 @@ Kind classify(const fs::path& source) {
     if (fs::is_directory(source, ec)) {
         const std::string leaf = source.filename().string();
         if (fs::exists(source / (leaf + ".dll"), ec)) return Kind::EgoCore;
-        if (fs::is_directory(source / "Data", ec) || fs::is_directory(source / "data", ec)) return Kind::Tree;
+        if (fs::is_directory(source / "Data", ec) || fs::is_directory(source / "data", ec) || fs::is_directory(source / "FSE", ec)) return Kind::Tree;   // an FSE-only pack (quests + scripts) is a tree too
         // a folder holding a single pack file
         int files = 0; fs::path only;
         for (const auto& de : fs::directory_iterator(source, ec)) if (de.is_regular_file(ec)) { ++files; only = de.path(); }
@@ -194,7 +194,7 @@ Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const
     abs = fs::weakly_canonical(abs, ec);
     Entry e;
     e.kind = classify(abs);
-    if (e.kind == Kind::Unknown) throw std::runtime_error("not a mod source (need .fmp / .patch / .qst / a folder with Data/ / an EgoCore Mods/<Name>/ folder): " + abs.string());
+    if (e.kind == Kind::Unknown) throw std::runtime_error("not a mod source (need .fmp / .patch / .qst / a folder with Data/ or FSE/ / an EgoCore Mods/<Name>/ folder): " + abs.string());
     e.sha256 = sha256Of(abs);
     for (const auto& m : order.mods)
         if (m.sha256 == e.sha256) throw std::runtime_error("already in the order as \"" + m.name + "\" (same contents)");

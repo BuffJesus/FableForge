@@ -231,6 +231,42 @@ def main() -> int:
         os.remove(os.path.join(scratch, "data", "graphics", "pc", "frontend.big"))
         if not a.keep:
             for d in (x, y, ego): shutil.rmtree(d, ignore_errors=True)
+    # FSE quest-registry union: two packs that each add a quest to FSE/quests.lua (whole-file layers
+    # would have kept only the last), one key both define differently, and an id two quests share
+    base_lua = os.path.join(scratch, "FSE", "quests.lua")
+    os.makedirs(os.path.dirname(base_lua), exist_ok=True)
+    open(base_lua, "w", newline="\n").write('Quests = {\n    Retail = { name="Retail", file="Retail/Retail", id=9001, entity_scripts={} },\n}\n')
+    def fse_pack(name, entries):
+        d = os.path.join(ROOT, "build", "ui_mods_fse_" + name); shutil.rmtree(d, ignore_errors=True)
+        os.makedirs(os.path.join(d, "FSE"))
+        body = "".join("    %s = { name=\"%s\", file=\"%s/%s\", id=%d, entity_scripts={} },\n" % (k, k, k, k, i) for k, i in entries)
+        open(os.path.join(d, "FSE", "quests.lua"), "w", newline="\n").write("Quests = {\n    Retail = { name=\"Retail\", file=\"Retail/Retail\", id=9001, entity_scripts={} },\n" + body + "}\n")
+        for k, _ in entries:
+            os.makedirs(os.path.join(d, "FSE", k)); open(os.path.join(d, "FSE", k, k + ".lua"), "w").write("-- " + k)
+        return d
+    pa = fse_pack("A", [("Alpha", 60001)])
+    pb = fse_pack("B", [("Alpha", 60005), ("Beta", 60002)])
+    pc = fse_pack("C", [("Gamma", 60002)])
+    for d, n in ((pa, "FseA"), (pb, "FseB"), (pc, "FseC")): run("mods", "add", scratch, d, "--name", n)
+    rep = json.loads(run("mods", "build", scratch, out, "--json").stdout)
+    fse = rep.get("fse", {})
+    if fse.get("applied") != 3: print("fse union applied", fse.get("applied")); ok = False
+    if [c["quest"] for c in fse.get("contested", [])] != ["Alpha"] or fse["contested"][0]["winner"] != "FseB": print("fse contested wrong:", fse.get("contested")); ok = False
+    if len(fse.get("id_clashes", [])) != 1 or fse["id_clashes"][0]["id"] != 60002: print("id clash not reported:", fse.get("id_clashes")); ok = False
+    merged = open(os.path.join(out, "FSE", "quests.lua")).read()
+    for needle in ("Retail = {", "Alpha = {", "id=60005", "Beta = {", "Gamma = {"):
+        if needle not in merged: print("merged quests.lua lacks", needle); print(merged); ok = False
+    if "id=60001" in merged: print("loser's Alpha survived"); ok = False
+    for k in ("Alpha", "Beta", "Gamma"):
+        if not os.path.exists(os.path.join(out, "FSE", k, k + ".lua")): print("quest script not carried:", k); ok = False
+    with open(os.path.join(scratch, "forge_mods_picks.txt"), "w") as f: f.write("fse:Alpha\tFseA\n")
+    run("mods", "build", scratch, out)
+    if "id=60001" not in open(os.path.join(out, "FSE", "quests.lua")).read(): print("fse pick not honoured"); ok = False
+    os.remove(os.path.join(scratch, "forge_mods_picks.txt"))
+    for n in ("FseA", "FseB", "FseC"): run("mods", "remove", scratch, n)
+    shutil.rmtree(os.path.join(scratch, "FSE"), ignore_errors=True)
+    if not a.keep:
+        for d in (pa, pb, pc): shutil.rmtree(d, ignore_errors=True)
     # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):

@@ -257,7 +257,7 @@ int usage() {
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
         "  forge mods deploy <game-root> [--picks f]   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
-        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>; winner = a mod name or vanilla\n"
+        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, fse:<quest key>; winner = a mod name or vanilla\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -8191,9 +8191,10 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
 //   tng:<level path>|<thing key>       a thing of a level (`FinalAlbion/Arena.tng|uid:...`)
 //   qst:<qst path>|<quest name>        a quest flag
 //   text:<language>|<string name>      a text.big string
+//   fse:<quest key>                    an FSE/quests.lua entry
 //   file:<data/... path, lower-case>   a whole-file layer
 // the winner is a mod label of the order, or "vanilla" to keep the retail version.
-struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file; };
+struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse; };
 ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
     ModsPicks p;
     for (const auto& [k, v] : all) {
@@ -8203,6 +8204,7 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
         if (ns == "tng") p.tng[key] = v;
         else if (ns == "qst") p.qst[key] = v;
         else if (ns == "text") p.text[key] = v;
+        else if (ns == "fse") p.fse[key] = v;
         else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
         else if (ns == "defs") p.defs[key] = v;
         else p.defs[k] = v;
@@ -8278,7 +8280,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 std::fprintf(stderr, "\n");
             }
             for (const auto& n : erep.notes) if (erep.recordsSkipped) std::fprintf(stderr, "  %s\n", n.c_str());
-        } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data")) {
+        } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data") || fs::is_directory(fs::path(s) / "FSE")) {
             // a partial game-root tree (loose Data/Levels ...): no defs to merge, its
             // TNG / QST files join below
         } else {
@@ -8503,6 +8505,83 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             if (!jsonOutput) std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
     }
 
+    // --- FSE quest registry union: every dir source whose FSE/quests.lua differs from the base
+    // contributes its entries (by key, its own bytes); a key several mods define takes the load-
+    // order winner (`fse:<key>` picks); ids that collide across mods are reported. The quests'
+    // own Lua files ride as whole-file layers below.
+    {
+        const fs::path baseLua = fs::path(baseRoot) / "FSE" / "quests.lua";
+        struct Version { std::string mod, raw; long long id = 0; bool hasId = false; std::string file; };
+        std::map<std::string, std::vector<Version>> versions;   // key -> every mod's entry, in load order
+        std::vector<std::string> order;
+        bool any = false;
+        if (fs::exists(baseLua)) {
+            for (size_t si = 0; si < sources.size(); ++si) {
+                const fs::path p = fs::path(sources[si]) / "FSE" / "quests.lua";
+                if (!fs::is_directory(sources[si]) || !fs::exists(p) || filesIdentical(p, baseLua)) continue;
+                try {
+                    const auto base = forge::questdeploy::QuestsLua::parse(baseLua);
+                    const auto mod = forge::questdeploy::QuestsLua::parse(p);
+                    for (const auto& q : mod.quests()) {
+                        const std::string raw = mod.source().substr(q.begin, q.end - q.begin);
+                        if (const auto* b = base.find(q.key); b && base.source().substr(b->begin, b->end - b->begin) == raw) continue;   // as retail has it
+                        if (!versions.count(q.key)) order.push_back(q.key);
+                        versions[q.key].push_back({srcLabel(si), raw, q.id, q.hasId, q.file});
+                        any = true;
+                    }
+                } catch (const std::exception& e) {
+                    std::fprintf(stderr, "%s: FSE/quests.lua: %s (taken as a whole file instead)\n", srcLabel(si).c_str(), e.what());
+                }
+            }
+        }
+        if (any) {
+            auto reg = forge::questdeploy::QuestsLua::parse(baseLua);
+            std::map<long long, std::string> idOwner;   // id -> "key (mod)"
+            for (const auto& q : reg.quests()) if (q.hasId) idOwner[q.id] = q.key + " (retail)";
+            for (const auto& es : reg.quests()) for (const auto& e : es.entityScripts) idOwner[e.id] = es.key + "/" + e.name + " (retail)";
+            size_t applied = 0, contested = 0, idClashes = 0;
+            json fseRows = json::array(), idRows = json::array();
+            std::string text = reg.source();
+            for (const auto& key : order) {
+                const auto& vs = versions[key];
+                const Version* win = &vs.back();
+                bool overridden = false, keepBase = false;
+                if (auto pk = picks.fse.find(key); pk != picks.fse.end()) {
+                    overridden = true;
+                    if (pk->second == "vanilla") keepBase = true;
+                    else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+                }
+                bool agree = true;
+                for (const auto& v : vs) if (v.raw != vs.front().raw) { agree = false; break; }
+                if (vs.size() > 1 && !agree) {
+                    ++contested;
+                    json mods = json::array();
+                    for (const auto& v : vs) mods.push_back(v.mod);
+                    fseRows.push_back({{"quest", key}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
+                }
+                if (keepBase) continue;
+                if (win->hasId) {
+                    const auto it = idOwner.find(win->id);
+                    if (it != idOwner.end() && it->second.rfind(key + " ", 0) != 0) {
+                        ++idClashes;
+                        idRows.push_back({{"quest", key}, {"mod", win->mod}, {"id", win->id}, {"also", it->second}});
+                    }
+                    idOwner[win->id] = key + " (" + win->mod + ")";
+                }
+                text = forge::questdeploy::QuestsLua::parseText(text, "quests.lua").withEntry(key, win->raw);
+                ++applied;
+            }
+            const fs::path dst = fs::path(outDir) / "FSE" / "quests.lua";
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), std::vector<uint8_t>(text.begin(), text.end()));
+            if (jsonOutput) rep["fse"] = {{"applied", applied}, {"contested", fseRows}, {"id_clashes", idRows}};
+            if (!jsonOutput) {
+                std::printf("FSE quests.lua union: %zu quest entr%s applied, %zu contested (load order decided), %zu id clash%s\n", applied, applied == 1 ? "y" : "ies", contested, idClashes, idClashes == 1 ? "" : "es");
+                for (const auto& r : idRows) std::printf("  id %lld: %s from %s also belongs to %s (the second registration loses in FSE; give one a new id)\n", r["id"].get<long long>(), r["quest"].get<std::string>().c_str(), r["mod"].get<std::string>().c_str(), r["also"].get<std::string>().c_str());
+            }
+        }
+    }
+
     // --- Whole-file layers: everything else a game-root tree ships (LEV, WLD, BWD, STB, INI,
     // banks, textures ...) that no record merge covers. Load order resolves them: the last
     // source that carries a path wins; a path several sources carry is reported.
@@ -8526,6 +8605,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
                 if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
                 if (lower == "userst.ini" || lower == "usersettings.ini") { settingsSkipped.insert(srcLabel(si)); continue; }   // the player's own settings stay theirs
+                if (lower == "fse/quests.lua" && fs::exists(fs::path(baseRoot) / "FSE" / "quests.lua")) continue;   // merged above
                 // the GB packs park the retail WAD as `_FinalAlbion.wad` so their loose levels load; the
                 // parked copy is not content (the loose levels are repacked into the real WAD below)
                 if (lower == "data/levels/_finalalbion.wad") { parkedWad.insert(srcLabel(si)); continue; }   // the engine never reads that name
@@ -8657,7 +8737,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (jsonOutput) {
         const size_t defsConflicts = rep.contains("defs") ? rep["defs"]["summary"]["record_conflicts"].get<size_t>() : 0;
         rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
-                          {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0}};
+                          {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
+                          {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
         std::puts(rep.dump(2).c_str());
     }
     return 0;

@@ -341,6 +341,23 @@ std::string QuestsLua::withQuest(const std::string& name,
     return out + insertion + source_.substr(splitAt);
 }
 
+std::string QuestsLua::withEntry(const std::string& key, const std::string& rawEntry) const {
+    const QuestRef* existing = find(key);
+    if (existing) return source_.substr(0, existing->begin) + rawEntry + source_.substr(existing->end);
+    std::string out = source_.substr(0, tableClose_);
+    size_t splitAt = tableClose_;
+    if (!quests_.empty()) {
+        const size_t lastEnd = quests_.back().end;
+        const size_t next = skipWs(source_, lastEnd);
+        if (next >= tableClose_ || source_[next] != ',')
+            out = source_.substr(0, lastEnd) + "," + source_.substr(lastEnd, tableClose_ - lastEnd);
+    }
+    std::string insertion;
+    if (out.empty() || out.back() != '\n') insertion += eol_;
+    insertion += "    " + rawEntry + "," + eol_;
+    return out + insertion + source_.substr(splitAt);
+}
+
 // --- deploy --------------------------------------------------------------------
 
 DeployPlan planDeploy(const questnodes::Graph& graph, const fs::path& gameRoot,

@@ -460,7 +460,12 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
    the composer makes the WAD carry the merge whatever the precedence (`ENGINE_RULES` supported over
    `stage.hpp`'s comment; still to be seen in-game).
 6. FSE Lua packs: union `quests.lua` / `FSE_Master.lua` per pack via `forge::questdeploy`,
-   id-collision check; sidecar DLL stays the fallback. *S*
+   id-collision check; sidecar DLL stays the fallback. *S* -- `quests.lua` DONE 2026-09-20: a tree
+   (or FSE-only folder, now a source) whose `FSE/quests.lua` differs from the install's contributes
+   its entries by key with its own bytes (`QuestsLua::withEntry`); a key several mods define is a
+   conflict (`fse:<key>` picks, the Conflicts card); ids shared across quests / entity scripts are
+   reported as clashes (informational rows -- the mod needs a new id); the quests' Lua files ride
+   as whole-file layers. `FSE_Master.lua` stays a whole-file layer (one Master per install).
 7. Docs: the family into `docs/CLI.md`; a Mods tab in the GUI last. *S* -- the Mods tab DONE
    2026-09-20 (`gui/mods.cpp`: load order with add/remove/move/enable, Check conflicts / Build and
    deploy / Undeploy through `forge-tools.exe`; `tests/ui/mods.txt` runs inside `test_mods.py`).
