@@ -9,3 +9,6 @@ dist/
 
 # local corpora, playtest bundles, scratch
 work/
+
+# scripted-UI run logs (rewritten by every suite run)
+tests/ui/*.log

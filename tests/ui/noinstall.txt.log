@@ -1,9 +1,0 @@
-   0.06 ok   frames 5
-   0.10 ok   assert_state install_valid 0
-   0.10 ok   assert_state maps 0
-   0.11 ok   assert_widget btn_export
-   0.11 ok   assert_widget btn_change_install
-   0.12 ok   screenshot build/ui/n1_noinstall.png
-   0.17 shot build/ui/n1_noinstall.png
-   0.17 ok   quit
-RESULT PASS
