@@ -352,6 +352,11 @@ Evidence needed before shipping: memory at 20 textured terrains (a 2-texel albed
 
 ### 0.20 — "Mod packs v1: stack, order, install, uninstall" (post-1.0; researched 2026-09-19, M)
 
+Corpus for testing: `work/nexus_mods/CATALOGUE.md` (2026-09-19; 19 small mods here, the GB-size
+ones in `D:/Downloads`: Aeon Edition, Lost Content, Project Seasons, AlbionSecrets Modpack, Expanded
+Chapters, Dragon Cliff). What a Fable mod *is*, by archive contents: `.fmp` (dominant), loose
+game-root trees, bsdiff `.patch`, `.qst`, EgoCore `Mods/<Name>/` folders, whole-file GB packs.
+
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff
 `.patch`, in argument order = load order; field-level `game.bin` merge, loose-TNG thing merge by
@@ -385,6 +390,49 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
 6. FSE Lua packs: union `quests.lua` / `FSE_Master.lua` per pack via `forge::questdeploy`,
    id-collision check; sidecar DLL stays the fallback. *S*
 7. Docs: the family into `docs/CLI.md`; a Mods tab in the GUI last. *S*
+8. **EgoCore mods and the older mods in one load order** (user goal, 2026-09-19: *every* older
+   mod, whatever its delivery shape -- a single `.fmp`, a loose-TNG/LEV mod, a bsdiff `.patch`, a
+   Fable Explorer / ChocolateBox edit, a `.qst`, a whole-file GB pack). Evidence: the 2026 wave
+   (Water Wader, Enable Sprint, Trample Vegetation, Controller Support ...) ships as
+   `Mods/<Name>/<Name>.dll` [+ `Data/Defs/*.def` text defs, `<Name>_Info.txt`], and EgoCore
+   (`C:/Users/Cornelio/Documents/EgoCoreInspect`, `EgoCore/Mods/ModManagerBackend.h`) is a
+   *second mod manager*: `mods.ini` `[Mods]` lines `Name\Name.dll=1` with FSE as the "core mod",
+   four kinds it detects (DLL / asset `.resource` bank overrides + loose assets / text `.def`
+   merged then recompiled by its own compiler / TNG section-merged, `TngMerger.h`), and a deploy
+   that restores "vanilla" from its own `.tmp` backups, patches banks, compiles defs, merges
+   TNGs, launches. Two deployers on one install fight (its "vanilla" restore undoes a FableForge
+   stage and vice versa), so the rule is **one composer, record-level layers**:
+   - Every mod is normalised to the same intermediate form before ordering: layers of
+     game.bin/names.bin records (field-level), TNG things by UID, `.qst` statements, text.big
+     keys, bank entries, plus whole-file assets (LEV, WAD/STB payloads) that only load-order
+     can resolve. `.fmp` and bsdiff `.patch` are applied to a retail copy and diffed back to
+     layers (`modsMerge` already does the first half), so the Unofficial Patch's
+     `game.bin.patch` (bsdiff over retail bytes) still lands underneath Aeon Edition's whole
+     `game.bin` instead of failing on it; a Fable Explorer edit is just a game-root tree.
+   - An EgoCore mod folder is one more pack type: the DLL stays in `Mods/<Name>/` and is
+     registered by writing only the `[Mods]` lines of `mods.ini` (EgoCore's exact format, so
+     EgoCore's own UI still shows it); its `.def` text is compiled with our def pipeline
+     (EgoCore's `FableDefCompiler` is the oracle; the names.bin crc0 is already verified
+     13593/13593) into the same record layer an `.fmp` becomes, so an EgoCore def mod and a
+     2020 `.fmp` conflict-check and field-merge in one report; its TNGs go through our thing
+     merge; `.resource` bank entries through our big writers.
+   - EgoCore's own deploy is then never run (its dirty flags stay clean because we never touch
+     its `.tmp` backups); the game is launched from Steam / FableForge. A documented rule, and
+     a check that refuses to stage when EgoCore's backups show it has deployed.
+   - Test matrix from the corpus (`work/nexus_mods/CATALOGUE.md`): Unofficial Patch + Aeon
+     Edition (bsdiff vs whole game.bin); Ultimate Spell Pack + mfvicli Better* (18 + 35 fmps on
+     the same spell defs -- the field-merge case); Connected Regions (397 loose LEV/TNG + WLD)
+     + Project Seasons (whole WAD/STB) -- the whole-file load-order case; Water Wader +
+     Controller Support (DLL + text defs + fmp) on top of all of it. *M*
+9. **Mod content in the editor.** After `mods build` + stage, a map opens with the merged TNG,
+   so things a mod placed are ordinary things: selectable, movable, deployable through the WAD
+   writer. Missing is provenance -- each thing carries a badge *retail / <mod>* from the
+   per-mod thing diff by UID (`tng conflicts` already computes it), a filter to show one mod's
+   things, and "revert this thing to retail / to mod X". New `OBJECT_*` defs a mod adds appear
+   in *Add an object* because the palette reads the staged `game.bin`; their thumbnails need
+   the mod's `graphics.big` entries, which the same staged install provides. Verify in-game
+   first whether retail reads loose `Data/Levels/*.tng` at all (`ENGINE_RULES` says the WAD
+   wins; Connected Regions ships 397 loose TNGs). *M*
 Later (*L*): LOOT-style masterlist + topo sort, LEV grid merge.
 
 ### 1.0-rc — "Polish, docs, and a stranger's test"

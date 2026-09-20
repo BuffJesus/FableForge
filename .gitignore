@@ -6,3 +6,6 @@ out/
 *.mtl
 __pycache__/
 dist/
+
+# local corpora, playtest bundles, scratch
+work/
