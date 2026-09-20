@@ -40,6 +40,8 @@ static void createRenderTarget() {
 
 static void cleanupRenderTarget() { if (g_rtv) { g_rtv->Release(); g_rtv = nullptr; } }
 
+static std::string g_deviceError;
+
 static bool createDevice(HWND hwnd) {
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount = 2;
@@ -56,10 +58,16 @@ static bool createDevice(HWND hwnd) {
     D3D_FEATURE_LEVEL got;
     HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, levels, 3,
                                                D3D11_SDK_VERSION, &sd, &g_swapChain, &g_device, &got, &g_context);
+    const HRESULT hwHr = hr;
     if (FAILED(hr))  // no usable GPU: software rasterizer keeps the app alive on anything
         hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, levels, 3,
                                            D3D11_SDK_VERSION, &sd, &g_swapChain, &g_device, &got, &g_context);
-    if (FAILED(hr)) return false;
+    if (FAILED(hr)) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "D3D11CreateDeviceAndSwapChain failed: hardware 0x%08lx, WARP 0x%08lx", (unsigned long)hwHr, (unsigned long)hr);
+        g_deviceError = buf;
+        return false;
+    }
     createRenderTarget();
     return true;
 }
@@ -172,6 +180,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
                               nullptr, nullptr, wc.hInstance, nullptr);
     if (!createDevice(hwnd)) {
         cleanupDevice();
+        if (!autoScript.empty()) {   // scripted run (CI): no dialog; say why on stderr and in the script's log
+            std::fprintf(stderr, "FableForge: %s\n", g_deviceError.c_str());
+            std::ofstream(autoScript + ".log", std::ios::trunc) << "FAIL " << g_deviceError << "\n";
+            return 1;
+        }
         MessageBoxW(nullptr, L"Direct3D 11 is not available on this machine.", L"FableForge", MB_OK);
         return 1;
     }

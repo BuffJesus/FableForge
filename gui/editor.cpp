@@ -781,13 +781,13 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
     theme::endCard();
 }
 
-bool App::placeFishingSpot(const std::string& reward) {
+bool App::placeFishingSpot(const std::string& reward, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     float focus[3]; camera_.focus(focus);
     float pos[3] = {focus[0], -focus[2], focus[1]};
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
-        const size_t n = doc_.placeFishingSpot(pos, reward);
+        const size_t n = doc_.placeFishingSpot(pos, reward, scriptName);
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;

@@ -45,6 +45,10 @@ jobs:
       - name: GUI without an install (D3D11 WARP)
         run: ./build/FableForge.exe --auto tests/ui/noinstall.txt --install "D:/definitely/not/fable"
 
+      - name: GUI run log
+        if: always()
+        run: cat tests/ui/noinstall.txt.log || echo "(no log written)"
+
       - name: CLI usage
         run: ./build/forge.exe || true
 

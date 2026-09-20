@@ -810,7 +810,7 @@ size_t Document::place(forge::thingplacer::Placement placement) {
     }
 }
 
-size_t Document::placeFishingSpot(const float pos[3], const std::string& reward) {
+size_t Document::placeFishingSpot(const float pos[3], const std::string& reward, const std::string& scriptName) {
     pushUndo();
     try {
         // the retail block: 32 MARKER_FISHING_SPOT things across FinalAlbion share it,
@@ -821,7 +821,7 @@ size_t Document::placeFishingSpot(const float pos[3], const std::string& reward)
         b += "Player -1;" + eol;
         b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
         b += "DefinitionType \"MARKER_FISHING_SPOT\";" + eol;
-        b += "ScriptName NULL;" + eol;
+        b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
         b += "ScriptData \"NULL\";" + eol;
         b += "ThingGamePersistent TRUE;" + eol;
         b += "ThingLevelPersistent TRUE;" + eol;

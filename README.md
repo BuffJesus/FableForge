@@ -6,12 +6,13 @@ library lives on inside it as `libs/forgecore`). Settings and presets carry over
 View, export and edit **Fable: The Lost Chapters** maps — terrain, ground textures,
 grass, trees, water and placed objects — straight from your Steam install. Export to
 `.glb` (glTF binary) or `.obj`, or move, add and remove the objects of a level and
-write the result back into the game. Two small Windows executables, no dependencies:
+write the result back into the game. Three small Windows executables, no dependencies:
 
 * **`FableForge.exe`** — pick your install, browse the 399 maps on the left,
   see the map in 3D in the middle, export or edit on the right. Drag a `.lev`
   onto the window to open a loose file (drop a PNG to make a ground texture from it). Export one map or all of them.
 * **`forge.exe`** — the same exporter as a command line tool.
+* **`forge-tools.exe`** — the modding toolchain CLI (defs, quests, scripts, mods; `docs/modding/`).
 
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
@@ -30,7 +31,19 @@ forge effects BRAZIERFIREFINAL         # what a particle effect is made of
 ```
 
 
+## Get it
+
+Download `FableForge-<version>-win64.zip` from the [Releases](https://github.com/BuffJesus/FableForge/releases)
+page, unzip it anywhere and run `FableForge.exe`; it finds the Steam install by itself (or point it at one).
+Nothing to install: the exes are static, Windows 10/11 needs nothing else.
+
 New here? Read **[docs/FIRST_LEVEL.md](docs/FIRST_LEVEL.md)** -- your first level in ten minutes, with screenshots.
+
+**Your install is safe.** Every file FableForge writes into the game is backed up first
+(`forge backups` lists them); `forge restore` -- or *Restore the retail files* on the GUI's Setup panel -- puts the retail
+files back. Every writer refuses to touch an install the game is currently running from. The
+engine's own rules (a new region needs a new game, saves cache a level's entities, ...) are in
+[docs/ENGINE_RULES.md](docs/ENGINE_RULES.md).
 
 ## What you get
 
@@ -204,7 +217,7 @@ The GUI is tested by scripting itself (`--auto`, see `docs/AUTOMATION.md`): real
 clicks on real widgets, state assertions, and pixel checks on backbuffer screenshots.
 
 MinGW-w64 (WinLibs) or MSVC, C++20. The format parsers are a pinned snapshot
-of [FableForge](https://github.com/BuffJesus)'s `forgecore` (see `vendor/VENDORED.md`).
+of the original FableForge toolchain's `forgecore` (now `libs/forgecore`, see `vendor/VENDORED.md`).
 MIT licensed; the shipped binaries contain no GPL code (LZO1X decoding is a
 clean-room implementation verified against minilzo in the test suite).
 

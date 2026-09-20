@@ -320,8 +320,9 @@ bool Automation::tick(App& app) {
         if (!uid && rest != "0") for (const auto& v : app.doc_.villages()) if (v.scriptName == rest || v.definition == rest) uid = v.uid;
         if ((!uid && rest != "0") || !app.setSelectedVillage(uid)) fail("village_member failed: " + rest); else note("ok   " + line); ++pc_;
     }
-    else if (cmd == "place_fishing_spot") {   // place_fishing_spot [OBJECT_DEF]  (the first catch; empty = the game's table)
-        if (!app.placeFishingSpot(rest)) fail("place_fishing_spot failed: " + rest); else note("ok   " + line);
+    else if (cmd == "place_fishing_spot") {   // place_fishing_spot [OBJECT_DEF|-] [scriptname]  (the first catch; empty or - = the game's table)
+        std::istringstream rs(rest); std::string reward, sn; rs >> reward >> sn; if (reward == "-") reward.clear();
+        if (!app.placeFishingSpot(reward, sn)) fail("place_fishing_spot failed: " + rest); else note("ok   " + line);
         ++pc_;
     }
     else if (cmd == "place_spawner") {   // place_spawner <radius> <limit> <FAMILY[,FAMILY...]> [scriptname]

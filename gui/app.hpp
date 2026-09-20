@@ -445,7 +445,7 @@ public:
     // scripted: place a spawner at the view centre with these families
     bool placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName = "");
     // scripted: place a fishing spot at the view centre (reward = OBJECT_* def or empty)
-    bool placeFishingSpot(const std::string& reward);
+    bool placeFishingSpot(const std::string& reward, const std::string& scriptName = "");
 private:
     void startNewLevel();
     void setNewLevelOwnRegion(bool on) { newLevelOwnRegion_ = on; }

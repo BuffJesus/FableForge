@@ -135,7 +135,7 @@ public:
     // an empty CTCFishingSpot block; BarrowFields/Bordello/Darkwood_9 shape). With
     // `reward` (an OBJECT_* def, e.g. OBJECT_MOONFISH) it also carries the retail
     // CTCContainerRewardHero so the first catch there is that item. Map-local.
-    size_t placeFishingSpot(const float pos[3], const std::string& reward = "");
+    size_t placeFishingSpot(const float pos[3], const std::string& reward = "", const std::string& scriptName = "");
     // A creature (NPC, animal, guard...) as the retail AICreature thing: a
     // CTCPhysicsNavigator frame, targetable/talk blocks, VillageMember 0 for
     // villager defs, and the world-space InitialPos the engine reads (map
