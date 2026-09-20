@@ -1,12 +1,19 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-## Resume here (2026-09-18, evening -- after the rename)
+## Resume here (2026-09-19, night)
 
 This repo IS FableForge now (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo
 is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge.exe` (CLI,
 `src/cli/*.cpp`), `buildorge-tools.exe` (the legacy CLI, 133 commands, `tools/forge-cli`).
 `libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
 the CLI split (the evening run; see the last commit for the run after the thumbnails).
+
+**2026-09-19 (night, later):** fishing spots (Actors card, `place_fishing_spot`), STB bank
+compaction (`forge compact-stb`, Setup button, unit test), and four milestones *planned only*
+-- 0.18 Water (RE'd from the debug build), 0.19 World in 3D, 0.20 Mod packs v1 (legacy
+family researched, design docs ported), chunk-compact scoped. Suite ALL PASS 16/16.
+Nothing new is in-game tested: the probe list in *Next in order* #2 grew by a fishing spot and
+a compacted-bank session.
 
 **2026-09-19 (evening):** three commits on top of the rename: the cutscene/title tooling from
 the Oakvale Reborn session (`forge-tools script cutscene-*`, `title add`); a **foliage fix**
