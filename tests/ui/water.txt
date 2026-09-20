@@ -1,4 +1,4 @@
-# Water writer (tools/test_water.py): paint a lake theme on a dry map and write the terrain
+# Water brush + writer (tools/test_water.py): fill a pond on a dry map with the water brush and write the terrain
 # into a scratch copy of the containers; the deploy must emit CWaterPatchMesh frames.
 wait_maps
 wait_ready
@@ -9,15 +9,22 @@ wait_foliage
 edit 1
 frames 2
 edit_tab 1
-terrain_mode 6
+terrain_mode 7
 frames 1
-add_theme WATER_LAKE_8
-frames 1
-assert_log ground theme WATER_LAKE_8 in palette slot
-brush 10 0.5
+assert_widget combo_water_family
+assert_widget input_water_altitude
+water_family WATER_LAKE
+water_altitude 24.5
+brush 10 1
 terrain_stroke 128 32 1
 frames 2
 assert_state terrain_dirty 1
+# the six rungs joined the palette on the first stroke
+assert_log ground theme WATER_LAKE_0 in palette slot
+assert_log ground theme WATER_LAKE_16 in palette slot
+camera 128 32 23 0.8 0.7 40
+frames 60
+screenshot build/ui/w1_pond.png
 deploy_terrain
 wait_terrain
 frames 2

@@ -64,12 +64,19 @@ struct TerrainState {
 };
 
 struct TerrainBrush {
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme };
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, Water };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
     float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth/theme)
     uint8_t themeIndex = 0;    // Theme: LEV palette slot to paint
+    // Water: a body with a flat surface at `waterAltitude`. Every vertex inside the radius whose
+    // ground lies below it gets retail's mix -- the smallest depth rung whose WaterHeight >= the
+    // depth, weighted so weight/255 * WaterHeight = depth, and the family's 0-rung for the rest
+    // (audited on every retail lake: two water slots, the third slot at weight 0). `waterRungs`
+    // are (palette slot, WaterHeight) of the family's themes, the 0-rung included.
+    float waterAltitude = 0;
+    std::vector<std::pair<uint8_t, float>> waterRungs;
 };
 
 struct ThingSummary {

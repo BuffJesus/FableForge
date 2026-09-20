@@ -338,6 +338,8 @@ bool Automation::tick(App& app) {
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
     else if (cmd == "terrain_mode") { app.setTerrainMode(std::atoi(rest.c_str())); app.setGizmoOp(4); note("ok   " + line); ++pc_; }
     else if (cmd == "paint_theme") { app.setPaintTheme(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "water_family") { if (!app.setWaterFamily(rest)) fail("water_family failed: " + rest); else note("ok   " + line); ++pc_; }   // water_family <PREFIX> e.g. WATER_LAKE
+    else if (cmd == "water_altitude") { app.setWaterAltitude(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "new_level") {   // new_level <name> <x> <y> [region]: fill the card and start the install
         std::istringstream rs(rest); std::string name, region; int x = 0, y = 0; rs >> name >> x >> y >> region;
         app.setNewLevel(name, x, y, region); app.startNewLevel(); note("..   " + line); ++pc_; }

@@ -452,6 +452,28 @@ while the link reports a live hero ("quit to the main menu first"). The
 experiments from the main menu. Moving/deleting existing things live is out
 for the same reason.
 
+## Water
+
+Water in Fable is **painted**: an `ENGINE_THEME` carries a `WaterType` and a `WaterHeight`
+(a depth above the ground), retail ships them as depth ladders (`WATER_LAKE_0/1/2/4/8/16`,
+`WATER_RIVER_*`, `SEA_OAKVALE_*`, `WATER_HCICE_*`, the Brightwood / Darkwood / Witchwood lake
+sets...), and the engine's surface at a vertex is ground + Σ blend × WaterHeight. Gameplay
+(wading, the depth fade) follows the paint alone; the **visible surface** is a mesh the bake
+stores in the STB (`CWaterPatchMesh`, one per 16x16 patch) that retail only loads.
+
+The Terrain tab's **Water** brush fills a body: pick a family, set the surface altitude
+(*Cursor +1* takes the ground under the cursor plus one), stroke. Every cell inside the
+brush whose ground lies below the altitude gets retail's exact mix -- the smallest rung whose
+depth covers it, weighted so the surface comes out flat, plus the family's 0-rung, the old
+ground theme kept in the third slot at weight 0 (audited on every retail lake). The preview
+shows the surface at once; *Write terrain into the game* bakes the water patches with the
+layer meshes (`src/stbwater`; z, wave and depth columns audited exact against the 3,374
+retail water patches with `forge water-audit --all`, shore/foam data left zero). A retail
+lake keeps its own baked patches (with foam) on a pure height edit. Sea families also need a
+sea body entry for the far water, which is not written yet; the background water sub-patch
+(the surface beyond the foreground radius) is the next RE step. **Not yet seen in-game.**
+Test: `python tools/test_water.py` (scratch install, `tests/ui/water.txt`).
+
 ## Fishing spots
 
 The Actors tab's **Fishing spot** card places a `MARKER_FISHING_SPOT` at the view centre,

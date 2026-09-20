@@ -199,6 +199,12 @@ public:
     void terrainStroke(float x, float y, float seconds);
     void setTerrainMode(int m) { terrainMode_ = m; }
     void setPaintTheme(int slot) { paintTheme_ = slot; }
+    // the water brush (terrain mode 7): a body family (a depth ladder of ENGINE_THEMEs sharing a
+    // name prefix, WATER_LAKE / WATER_RIVER / SEA_OAKVALE / WATER_HCICE ...) and a surface altitude
+    bool setWaterFamily(const std::string& prefix);
+    void setWaterAltitude(float z) { waterAltitude_ = z; }
+    struct WaterFamily { std::string prefix; int waterType = 0; std::vector<std::pair<std::string, float>> rungs; };   // (theme name, WaterHeight)
+    const std::vector<WaterFamily>& waterFamilies();
     void setBrush(float radius, float strength) { brushRadius_ = radius; brushStrength_ = strength; }
     bool terrainDeployBusy() const { return terrainDeployFuture_.valid(); }
     void deployTerrain() { startTerrainDeploy(); }
@@ -369,8 +375,13 @@ public:
 private:
     void drawRuleNotice(const char* key, float width);
     // terrain tool (gizmoOp_ == 4)
-    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme
+    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme, 7 water
     int paintTheme_ = 0;             // LEV palette slot for mode 6
+    std::string waterFamily_ = "WATER_LAKE";
+    float waterAltitude_ = 0;        // the surface the water brush fills up to (map units); 0 = not set
+    std::vector<WaterFamily> waterFamilies_;
+    bool waterFamiliesBuilt_ = false;
+    bool fillWaterBrush(editor::TerrainBrush& b);   // rungs into the palette, altitude default
     uint64_t syncedThemeRev_ = 0;
     bool rebakePending_ = false;     // a theme stroke ended: re-bake the ground albedo from the LEV
     void startThemeRebake();

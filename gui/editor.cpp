@@ -6,6 +6,7 @@
 #include "effects.hpp"
 
 #include <algorithm>
+#include <map>
 #include <functional>
 #include <cmath>
 #include <cstdio>
@@ -534,10 +535,11 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     int mode = terrainMode_;
     if (io.KeyShift && (mode == 0 || mode == 1)) mode = 1 - mode;
     if (io.KeyShift && (mode == 4 || mode == 5)) mode = 9 - mode;
-    b.mode = mode == 0 ? M::Raise : mode == 1 ? M::Lower : mode == 2 ? M::Flatten : mode == 3 ? M::Smooth : mode == 4 ? M::Walkable : mode == 5 ? M::Blocked : M::Theme;
+    b.mode = mode == 0 ? M::Raise : mode == 1 ? M::Lower : mode == 2 ? M::Flatten : mode == 3 ? M::Smooth : mode == 4 ? M::Walkable : mode == 5 ? M::Blocked : mode == 6 ? M::Theme : M::Water;
     b.x = brushFable_[0]; b.y = brushFable_[1];
     b.radius = brushRadius_; b.strength = brushStrength_;
     b.themeIndex = uint8_t(paintTheme_);
+    if (b.mode == M::Water && !fillWaterBrush(b)) return;
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
     if (!doc_.strokeActive() && lmb && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && brushHit_ && !io.KeyAlt) {
         doc_.beginStroke(b);
@@ -553,12 +555,84 @@ void App::terrainStroke(float x, float y, float seconds) {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
     editor::TerrainBrush b;
     using M = editor::TerrainBrush::Mode;
-    b.mode = terrainMode_ == 0 ? M::Raise : terrainMode_ == 1 ? M::Lower : terrainMode_ == 2 ? M::Flatten : terrainMode_ == 3 ? M::Smooth : terrainMode_ == 4 ? M::Walkable : terrainMode_ == 5 ? M::Blocked : M::Theme;
+    b.mode = terrainMode_ == 0 ? M::Raise : terrainMode_ == 1 ? M::Lower : terrainMode_ == 2 ? M::Flatten : terrainMode_ == 3 ? M::Smooth : terrainMode_ == 4 ? M::Walkable : terrainMode_ == 5 ? M::Blocked : terrainMode_ == 6 ? M::Theme : M::Water;
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
     b.themeIndex = uint8_t(paintTheme_);
+    if (b.mode == M::Water && !fillWaterBrush(b)) return;
     doc_.beginStroke(b);
     doc_.applyBrush(b, seconds);
     doc_.endStroke();
+}
+
+// Every water body family the install's ENGINE_THEMEs offer: themes with a WaterType, grouped by
+// the name left after the depth suffix (WATER_LAKE_8 -> WATER_LAKE, WATER_HCICE_0_25 -> WATER_HCICE),
+// kept when the group has a 0-rung and at least one deeper rung.
+const std::vector<App::WaterFamily>& App::waterFamilies() {
+    if (waterFamiliesBuilt_) return waterFamilies_;
+    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+    if (!lib) return waterFamilies_;
+    std::map<std::string, WaterFamily> byPrefix;
+    for (const auto& th : lib->themes()) {
+        if (!th.decoded || th.waterType == 0) continue;
+        std::string prefix = th.name;
+        // strip trailing _<digits> groups
+        for (;;) {
+            const size_t us = prefix.rfind('_');
+            if (us == std::string::npos || us + 1 >= prefix.size()) break;
+            bool digits = true;
+            for (size_t i = us + 1; i < prefix.size(); ++i) digits = digits && std::isdigit(static_cast<unsigned char>(prefix[i]));
+            if (!digits) break;
+            prefix.resize(us);
+        }
+        if (prefix == th.name) continue;
+        auto& f = byPrefix[prefix];
+        f.prefix = prefix; f.waterType = th.waterType;
+        f.rungs.emplace_back(th.name, th.waterHeight);
+    }
+    for (auto& [k, f] : byPrefix) {
+        bool zero = false, deep = false;
+        for (const auto& [n, h] : f.rungs) { zero = zero || h <= 0.0f; deep = deep || h > 0.0f; }
+        if (!zero || !deep) continue;
+        std::sort(f.rungs.begin(), f.rungs.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+        waterFamilies_.push_back(f);
+    }
+    // the plain lake first, then the rest alphabetically
+    std::stable_sort(waterFamilies_.begin(), waterFamilies_.end(), [](const WaterFamily& a, const WaterFamily& b) {
+        const bool la = a.prefix == "WATER_LAKE", lb = b.prefix == "WATER_LAKE";
+        return la != lb ? la : a.prefix < b.prefix;
+    });
+    waterFamiliesBuilt_ = true;
+    return waterFamilies_;
+}
+
+bool App::setWaterFamily(const std::string& prefix) {
+    for (const auto& f : waterFamilies()) if (f.prefix == prefix) { waterFamily_ = prefix; return true; }
+    pushLog("water: no water theme family named " + prefix, 1);
+    return false;
+}
+
+bool App::fillWaterBrush(editor::TerrainBrush& b) {
+    const WaterFamily* fam = nullptr;
+    for (const auto& f : waterFamilies()) if (f.prefix == waterFamily_) { fam = &f; break; }
+    if (!fam) { pushLog("water: pick a water body family first", 1); return false; }
+    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+    if (!lib) return false;
+    b.waterRungs.clear();
+    for (const auto& [name, h] : fam->rungs) {
+        const auto* th = lib->byName(name);
+        if (!th) continue;
+        const bool had = doc_.paletteSlotOf(th->name) >= 0;
+        const int slot = doc_.addGroundTheme(th->name, th->defIndex);   // the palette keeps it (no-op when present)
+        if (slot < 0) { pushLog("water: the LEV palette has no free slot for " + name, 1); return false; }
+        if (!had) pushLog("ground theme " + th->name + " in palette slot " + std::to_string(slot) + " (water brush)", 0);
+        b.waterRungs.emplace_back(uint8_t(slot), h);
+    }
+    if (waterAltitude_ == 0.0f) {   // first use: a shallow pond around the cursor
+        const auto g = doc_.terrainHeight(b.x, b.y);
+        waterAltitude_ = g.value_or(0.0f) + 1.0f;
+    }
+    b.waterAltitude = waterAltitude_;
+    return b.waterRungs.size() >= 2;
 }
 
 void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
@@ -1248,9 +1322,34 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         int shape = terrainMode_ < 4 ? terrainMode_ : -1;
         if (theme::segmented("##tmode", shape, {"Raise", "Lower", "Flatten", "Smooth"}, cardInner) && shape >= 0) terrainMode_ = shape;
         auto_.registerWidget("seg_terrain_mode");
-        int walk = (terrainMode_ >= 4 && terrainMode_ <= 6) ? terrainMode_ - 4 : -1;
-        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked", "Paint ground"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
+        int walk = (terrainMode_ >= 4 && terrainMode_ <= 7) ? terrainMode_ - 4 : -1;
+        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked", "Paint ground", "Water"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
         auto_.registerWidget("seg_terrain_walk");
+        if (terrainMode_ == 7) {
+            // the water brush: a body family and the surface altitude it fills up to
+            const auto& fams = waterFamilies();
+            ImGui::SetNextItemWidth(cardInner);
+            if (ImGui::BeginCombo("##waterfamily", waterFamily_.c_str())) {
+                for (const auto& f : fams) {
+                    char lbl[160]; std::snprintf(lbl, sizeof lbl, "%s   (%zu rungs, type %d)", f.prefix.c_str(), f.rungs.size(), f.waterType);
+                    if (ImGui::Selectable(lbl, f.prefix == waterFamily_)) waterFamily_ = f.prefix;
+                }
+                if (fams.empty()) ImGui::TextColored(theme::vec(theme::Faint), "ENGINE_THEME library not loaded yet");
+                ImGui::EndCombo();
+            }
+            auto_.registerWidget("combo_water_family");
+            char alt[48]; std::snprintf(alt, sizeof alt, "%.2f", waterAltitude_);
+            theme::labelValue("Surface altitude", alt, cardInner);
+            ImGui::SetNextItemWidth(cardInner - S(120));
+            ImGui::InputFloat("##wateralt", &waterAltitude_, 0.25f, 1.0f, "%.2f");
+            auto_.registerWidget("input_water_altitude");
+            ImGui::SameLine();
+            if (theme::ghostButton("Cursor +1", ImVec2(S(110), S(24))) && brushHit_) waterAltitude_ = doc_.terrainHeight(brushFable_[0], brushFable_[1]).value_or(0.0f) + 1.0f;
+            auto_.registerWidget("btn_water_altitude_cursor");
+            ImGui::PushFont(fontSmall_);
+            theme::hint("Fills every cell inside the brush whose ground lies below the altitude with the family's depth themes, mixed the way retail lakes are (so the game's own water follows: wading, depth fade, the baked surface on the next terrain write). Sea families also need a sea body for the far water, which is not written yet.");
+            ImGui::PopFont();
+        }
         if (terrainMode_ == 6) {
             // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name), named slots
             const forge::lev::File* lev = doc_.level();

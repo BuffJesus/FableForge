@@ -394,6 +394,46 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
+    if (brush.mode == Mode::Water) {
+        // the retail lake fill: smallest rung >= depth + the 0-rung; a vertex above the surface is left alone
+        if (brush.waterRungs.size() < 2) return;
+        int zeroSlot = -1; float maxH = 0; int maxSlot = -1;
+        for (const auto& [slot, h] : brush.waterRungs) {
+            if (h <= 0.0f) zeroSlot = slot;
+            if (h > maxH) { maxH = h; maxSlot = slot; }
+        }
+        if (zeroSlot < 0 || maxSlot < 0) return;
+        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
+        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
+        size_t painted = 0;
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const float dx = float(x) - brush.x, dy = float(y) - brush.y;
+                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
+                const float depth = brush.waterAltitude - level_->heightAt(x, y);
+                if (depth <= 0.01f) continue;
+                int rung = maxSlot; float rungH = maxH;
+                for (const auto& [slot, h] : brush.waterRungs)
+                    if (h > 0.0f && h >= depth && h < rungH) { rung = slot; rungH = h; }
+                const int w = std::clamp(int(std::lround(255.0f * std::min(depth, rungH) / rungH)), 1, 255);
+                // the third slot keeps whatever ground theme was dominant, at weight 0 (retail's shape)
+                uint8_t keep = level_->themeIndexAt(x, y, 0);
+                for (int k = 0; k < 3; ++k) {
+                    const uint8_t si = level_->themeIndexAt(x, y, k);
+                    bool isRung = false;
+                    for (const auto& [slot, h] : brush.waterRungs) isRung = isRung || slot == si;
+                    if (!isRung) { keep = si; break; }
+                }
+                std::array<uint8_t, 3> idx = {uint8_t(rung), uint8_t(zeroSlot), keep};
+                std::array<uint8_t, 3> str = {uint8_t(w), uint8_t(255 - w), 0};
+                level_->setThemeBlendAt(x, y, idx, str);
+                const size_t i = size_t(y) * cx + x;
+                for (int k = 0; k < 3; ++k) { working_->themeIndex[i][k] = idx[size_t(k)]; working_->themeStrength[i][k] = str[size_t(k)]; }
+                ++painted;
+            }
+        if (painted) ++terrainRev_;
+        return;
+    }
     forge::terrain::Brush b;
     b.centerX = brush.x; b.centerY = brush.y; b.radius = brush.radius;
     switch (brush.mode) {

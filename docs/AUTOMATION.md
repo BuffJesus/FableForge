@@ -68,7 +68,9 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |
-| `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |
+| `terrain_mode <0-7>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint ground, 7 water (also selects the tool) |
+| `water_family <PREFIX>` | the water brush's body family: a depth ladder of ENGINE_THEMEs sharing a name prefix (`WATER_LAKE`, `WATER_RIVER`, `SEA_OAKVALE`, `WATER_HCICE`, ...); the rungs join the LEV palette on the first stroke |
+| `water_altitude <z>` | the surface the water brush fills up to (map units); unset = cursor ground + 1 on the first stroke |
 | `brush <radius> <strength>` / `terrain_stroke <x> <y> <seconds>` | brush size; one stroke at a map-local point |
 | `new_level <name> <x> <y> [region]` / `wait_new_level` | fill the "New level" card and install (BWD/WLD/WAD/STB under the install), wait for it |
 | `new_level_own_region 0\|1` | take over a filler region slot (+ minimap bake) with the next `new_level` |
@@ -99,7 +101,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 `seg_panel`, and in Edit mode `seg_gizmo`, `toggle_snap`, `drag_px|py|pz|yaw|scale`,
 `btn_ground`, `btn_focus`, `btn_duplicate`, `btn_delete`, `input_thingsearch`,
 `input_defsearch`, `btn_place`, `btn_undo`, `btn_redo`, `btn_save`, `btn_deploy`,
-`btn_deploy_confirm`, `btn_revert`, `seg_terrain_mode`, `seg_terrain_walk`, `slider_radius`,
+`btn_deploy_confirm`, `btn_revert`, `seg_terrain_mode`, `seg_terrain_walk`, `combo_water_family`, `input_water_altitude`, `btn_water_altitude_cursor`, `slider_radius`,
 `slider_strength`, `btn_terrain_deploy`, `btn_terrain_deploy_confirm`, `btn_unsaved_save`,
 `btn_unsaved_discard`, `btn_unsaved_cancel`.
 

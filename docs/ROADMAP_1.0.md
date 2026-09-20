@@ -354,6 +354,16 @@ script + one in-game probe (a custom barrel mesh standing in Greatwood, a custom
 
 ### 0.18 — "Water" (post-1.0; RE complete 2026-09-19, see `FableTLC docs/engine/WATER_RE.md`)
 
+**Status 2026-09-20 (branch `water`, offline only):** steps 1 and 2 are built and gated without the
+game. `forge water-audit` reads every retail `CWaterPatchMesh` (3,374 patches) and pinned the
+record formulas (wave exact; z floor; depth from the bake's quantised ground; `distToShore` 0;
+`FindCorrectWaterLevel` inside the patch); `src/stbwater` writes them, the height bake takes a
+water provider and may append the grown foreground frames to the chunk; the Terrain tab's Water
+brush paints retail's exact slot mix. `tools/test_water.py` (in check_all) paints a pond on
+BanditCampPath_1 into a scratch install: 4 water frames, byte-exact blocks, chunk parses. Waiting
+on the user for the in-game look (expected: surface within the foreground radius, no foam, no
+distant water); then step 3 (background sub-patch, 0x38 vertex still to read) and sea bodies.
+
 How retail does it (from the debug build): water is **painted as depth themes** (`WaterType`
 1 lake / 2 river / 3-5 sea / 8 ice, `WaterHeight` ladder 0..16; surface = ground + Σ blend ·
 WaterHeight, `CEngineMap::PeekWaterHeight`) and the **visible surface is a baked STB mesh**
