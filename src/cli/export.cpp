@@ -27,6 +27,7 @@
 #include "effects.hpp"
 #include "foliageexport.hpp"
 #include "stbterrain.hpp"
+#include "stbwater.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
@@ -96,7 +97,7 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     auto ground = [&](int x, int y) {
         const int cx = std::clamp(x, 0, W), cy = std::clamp(y, 0, H);
         const float h = stbHeight[size_t(cy) * size_t(W + 1) + size_t(cx)];
-        return std::isnan(h) ? groundLev(cx, cy) : h;
+        return std::isnan(h) ? forge::stbbake::quantizeEngineHeight(groundLev(cx, cy)) : h;   // no layer vertex there: the bake's own quantised height
     };
     std::vector<float> groundGrid(stbHeight.size());
     for (int y = 0; y <= H; ++y) for (int x = 0; x <= W; ++x) groundGrid[size_t(y) * size_t(W + 1) + size_t(x)] = ground(x, y);
@@ -118,7 +119,12 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
     double zMax = 0, dMax = 0, wsMax = 0, wcMax = 0, zBias = 0; size_t zBiasN = 0;
     float dtsMin = 1e30f, dtsMax = -1e30f;
     std::map<int, int> types;
-    if (verbose) {   // the first patch's first row, raw: x y z waveS waveC depth dist shore[0..2]
+    if (verbose) {   // every patch's header, then the first patch's first rows
+        for (const auto& p : wp.patches) {
+            int wet = 0; float zmin = 1e30f, zmax = -1e30f;
+            for (const auto& r : p.records) { if (r.depth > 0) ++wet; zmin = std::min(zmin, r.z); zmax = std::max(zmax, r.z); }
+            std::printf("    frame %3d offset (%3d,%3d) span %9.3f type %d  wet %3d/289  z %.3f..%.3f\n", p.frameIndex, p.offsetX, p.offsetY, p.span, p.waterType, wet, zmin, zmax);
+        }
         const auto& p = wp.patches.front();
         std::printf("    patch 0: offset (%d,%d) span %.3f type %d, block %zu B\n", p.offsetX, p.offsetY, p.span, p.waterType, p.block.size());
         for (size_t i = 0; i < 40 && i < p.records.size(); ++i) {
@@ -159,8 +165,8 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
             if (r.z == std::ceil(zRaw * 256.0f) / 256.0f) ++zCeil;
             if (verbose && r.z != std::floor(zRaw * 256.0f) / 256.0f && zDumped < 40) {
                 ++zDumped;
-                std::printf("    z!=floor at (%d,%d): retail %.5f (x256 %.2f) ours raw %.5f (x256 %.2f) level %.5f ground %.5f depth %d\n",
-                            x, y, r.z, r.z * 256.0f, zRaw, zRaw * 256.0f, wl.at(x, y), ground(x, y), r.depth);
+                std::printf("    z!=floor at (%d,%d): retail %.5f (x256 %.2f) ours raw %.5f (x256 %.2f) level %.5f ground %.5f (lev %.5f) depth %d\n",
+                            x, y, r.z, r.z * 256.0f, zRaw, zRaw * 256.0f, wl.at(x, y), ground(x, y), groundLev(x, y), r.depth);
             }
             const double dz = std::fabs(double(r.z) - zExp);
             if (dz > 1.0 / 256.0 + 1e-6) ++zBad;
@@ -196,6 +202,32 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
                 std::printf("    z off at (%d,%d): retail %.4f, expected %.4f (level %.4f, ground %.4f)\n", x, y, r.z, zExp, wl.at(x, y), ground(x, y));
         }
     }
+    // (c) the writer: our payload for every retail patch, decoded and compared field by field
+    size_t wPatches = 0, wMissing = 0, wTypeOk = 0, wRecExact = 0, wZ = 0, wWave = 0, wDepth = 0, wXY = 0, wRecords = 0, wBlockExact = 0;
+    {
+        albion::stbwater::MapInput mi;
+        mi.levels = &wl; mi.ground = &groundGrid; mi.worldX = wp.worldX; mi.worldY = wp.worldY; mi.bodySpan = albion::stbwater::bodySpan(wl);
+        for (const auto& p : wp.patches) {
+            const auto payload = albion::stbwater::buildPatchPayload(mi, p.offsetX, p.offsetY);
+            if (payload.size() < 20) { ++wMissing; continue; }
+            ++wPatches;
+            int32_t type; std::memcpy(&type, payload.data() + 12, 4);
+            if (type == p.waterType) ++wTypeOk;
+            int32_t len; std::memcpy(&len, payload.data() + 16, 4);
+            std::vector<uint8_t> block(payload.begin() + 20, payload.begin() + 20 + len);
+            if (block == p.block) ++wBlockExact;
+            std::vector<uint8_t> raw;
+            try { raw = forge::rangecodec::decode(block.data(), block.size(), st::kWaterRecordCount, st::kWaterRecordSize); } catch (...) { continue; }
+            for (size_t i = 0; i < st::kWaterRecordCount && i < p.records.size(); ++i) {
+                const auto o = st::unpackWaterRecord(raw.data() + i * st::kWaterRecordSize);
+                const auto& r = p.records[i];
+                ++wRecords;
+                const bool xy = o.x == r.x && o.y == r.y, z = o.z == r.z, wv = o.waveS == r.waveS && o.waveC == r.waveC, d = o.depth == r.depth;
+                wXY += xy; wZ += z; wWave += wv; wDepth += d;
+                if (xy && z && wv && d) ++wRecExact;
+            }
+        }
+    }
     std::printf("%-32s %zu water patches / %d frames; types", name.c_str(), wp.patches.size(), wp.frames);
     for (auto& [t, n] : types) std::printf(" %d:%d", t, n);
     std::printf("; LEV wet vertices %d\n", wl.wetVertices);
@@ -206,6 +238,8 @@ int cmdWaterAudit(const Install& install, const std::string& target, bool verbos
                 zRound, zFloor, zCeil, dFromZ, dFromH, dFromHTrunc, records);
     std::printf("    wave:  sin %zu off (max %.0f), cos %zu off (max %.0f)\n", wsBad, wsMax, wcBad, wcMax);
     std::printf("    shore: %zu/%zu records carry shore data; distToShore %.2f .. %.2f\n", shoreNonZero, records, dtsMin, dtsMax);
+    std::printf("    writer: %zu/%zu patches produced (%zu retail patches we call dry), type %zu ok, block byte-exact %zu; records xy %zu z %zu wave %zu depth %zu all %zu of %zu\n",
+                wPatches, wp.patches.size(), wMissing, wTypeOk, wBlockExact, wXY, wZ, wWave, wDepth, wRecExact, wRecords);
     return 0;
 }
 

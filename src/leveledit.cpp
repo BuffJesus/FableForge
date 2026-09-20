@@ -1,4 +1,5 @@
 #include "leveledit.hpp"
+#include "stbwater.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -650,6 +651,34 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
             opt.backgroundTextures = lodTextureProvider(*lodAlbedo);
             notes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette, distant-LOD textures re-baked");
         }
+        // The visible water surface (CWaterPatchMesh per patch) for whatever water the LEV's
+        // themes paint: the level grid is the engine's own formula, the ground is the LEV being
+        // baked. Retail frames keep their block on a pure height edit (see the bake).
+        {
+            terrainexport::Options wo;
+            wo.gameRoot = gameRoot; wo.texturesBig = gameRoot / "data" / "graphics" / "pc" / "textures.big"; wo.mapName = mapName_;
+            const auto probe = terrainexport::buildWaterLevels(*level_, wo);
+            if (!probe.empty()) {
+                // the level grid is rebuilt on the first call against the bake's own ground
+                struct WaterState { terrainexport::WaterLevels levels; std::vector<float> ground; float span = 0; bool built = false; };
+                auto state = std::make_shared<WaterState>();
+                const forge::lev::File* lev = level_.get();
+                const int wx = wm->mapX, wy = wm->mapY;
+                opt.waterPatches = [state, lev, wo, wx, wy](int px, int py, const std::vector<float>& ground) {
+                    if (!state->built) {
+                        state->ground = ground;
+                        state->levels = terrainexport::buildWaterLevels(*lev, wo, nullptr, &state->ground);
+                        state->span = stbwater::bodySpan(state->levels);
+                        state->built = true;
+                    }
+                    stbwater::MapInput mi;
+                    mi.levels = &state->levels; mi.ground = &state->ground; mi.worldX = wx; mi.worldY = wy; mi.bodySpan = state->span;
+                    return stbwater::buildPatchPayload(mi, px, py);
+                };
+                opt.allowForegroundGrowth = true;
+                notes.push_back("water: " + std::to_string(probe.wetVertices) + " wet vertices in the LEV; water patches written for the frames that need one");
+            }
+        }
         // Neighbouring maps (every map a region owning this one contains or
         // sees, whose placement touches ours) supply the shared-edge samples,
         // as the retail bake did. Their LEVs come from the WAD (loose copies
@@ -703,7 +732,8 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         }
         const auto baked = forge::stbbake::bakeHeightfield(chunk, *level_, wm->mapX, wm->mapY, opt);
         for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) notes.push_back(n);
-        if (baked.chunk.size() != chunk.size()) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
+        if (baked.chunk.size() != chunk.size() && !baked.foregroundMoved) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
+        if (baked.waterPatches) notes.push_back("water: " + std::to_string(baked.waterPatches) + " patch frames carry a water surface" + (baked.foregroundMoved ? " (layer frames moved to an appended region; chunk re-laid)" : ""));
         // camera height bounds in the common record
         float minH = 1e30f, maxH = -1e30f;
         for (float h : terrain_->heights) { minH = std::min(minH, h); maxH = std::max(maxH, h); }

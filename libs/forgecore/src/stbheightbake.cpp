@@ -139,6 +139,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         std::vector<uint8_t> body;
         forge::stbbake::ForegroundFrame frame;
         std::vector<uint8_t> compressed;
+        int mapPatchX = 0, mapPatchY = 0;   // map-local origin of the 16x16 patch (set once the extent is known)
     };
     std::vector<ForegroundCandidate> foreground;
     uint16_t foregroundMinX = 0xffff, foregroundMinY = 0xffff;
@@ -181,6 +182,15 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         foregroundMaxX - foregroundMinX > lev.width() ||
         foregroundMaxY - foregroundMinY > lev.height())
         throw std::runtime_error("foreground layer mesh extent does not match LEV heightfield");
+
+    for (auto& candidate : foreground) {
+        uint16_t px = 0xffff, py = 0xffff;
+        for (const auto& layer : candidate.frame.layers)
+            for (const auto& vertex : layer.vertices) { px = std::min(px, vertex.x); py = std::min(py, vertex.y); }
+        candidate.mapPatchX = int(uint16_t(px / 16 * 16)) - int(foregroundMinX);
+        candidate.mapPatchY = int(uint16_t(py / 16 * 16)) - int(foregroundMinY);
+    }
+    size_t waterPatchesWritten = 0;
 
     auto put16At = [](std::vector<uint8_t>& bytes, size_t offset, uint16_t value) {
         bytes[offset] = uint8_t(value);
@@ -392,7 +402,14 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
                 }
                 generatedLayers.push_back(std::move(layer));
             }
-            candidate.frame.layers = std::move(generatedLayers);
+            if (generatedLayers.empty()) {
+                // every cell painted with themes that draw nothing (water depth themes alone):
+                // the engine still needs a layer mesh under it, so the donor's stays
+                notef("note: patch (%d,%d) has no drawable theme; its donor layers are kept",
+                      candidate.mapPatchX, candidate.mapPatchY);
+            } else {
+                candidate.frame.layers = std::move(generatedLayers);
+            }
             candidate.body = forge::stbbake::serializeForegroundFrame(candidate.frame);
         }
     }
@@ -408,11 +425,26 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     // frames can total a few bytes over the zero-slack donor budget.
     // Start with retail-precision normals and progressively coarsen
     // only when the fixed donor allocation requires it.
+    // the vertex heights the layer meshes get, for the water provider (built once)
+    std::vector<float> bakedGround;
+    if (options.waterPatches) {
+        bakedGround.assign(size_t(lev.width() + 1) * size_t(lev.height() + 1), 0.0f);
+        for (int ly = 0; ly <= lev.height(); ++ly)
+            for (int lx = 0; lx <= lev.width(); ++lx)
+                bakedGround[size_t(ly) * size_t(lev.width() + 1) + size_t(lx)] = sampleHeight(lx, ly);
+    }
     auto editForeground = [&](uint32_t clearBits) -> size_t {
         size_t total = 0;
         for (size_t ci = 0; ci < foreground.size(); ++ci) {
             auto& candidate = foreground[ci];
             candidate.frame = fgDonorFrames[ci];
+            // a retail frame keeps its own water block (shore/foam data we cannot regenerate) on a
+            // pure height edit; the provider decides when the frame has none or the layers are rebuilt
+            if (options.waterPatches && (!candidate.frame.hasWater || options.rebuildTopology)) {
+                auto payload = options.waterPatches(candidate.mapPatchX, candidate.mapPatchY, bakedGround);
+                candidate.frame.hasWater = !payload.empty();
+                candidate.frame.waterPayload = std::move(payload);
+            }
             for (auto& layer : candidate.frame.layers) {
                 for (auto& vertex : layer.vertices) {
                     const int lx = int(vertex.x) - int(foregroundMinX);
@@ -455,12 +487,16 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         }
         return cursor - fgRegionStart;
     };
+    bool fgGrow = false;
     for (const uint32_t clearBits : clearLevels) {
         editForeground(clearBits);
         fgTotal = alignedForegroundSpan();
         fgClear = clearBits;
         if (fgTotal <= fgBudget) { fgFits = true; break; }
+        if (options.allowForegroundGrowth) { fgFits = true; fgGrow = true; break; }   // keep retail-precision normals, grow instead
     }
+    if (options.waterPatches)
+        for (const auto& candidate : foreground) if (candidate.frame.hasWater) ++waterPatchesWritten;
     for (const auto& candidate : foreground) {
         const auto& seg = chunk.segments[chunk.frameIndices[candidate.frameIndex]];
         notef("foreground frame %zu compressed span %zu -> %zu "
@@ -478,6 +514,9 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         notef("note: coarsened foreground normal (clear 0x%x) to fit "
                     "the donor budget (%zu <= %zu bytes)",
                     fgClear, fgTotal, fgBudget);
+    if (fgGrow)
+        notef("note: foreground frames (%zu bytes) exceed the donor allocation (%zu); "
+              "they move to a region appended to the chunk", fgTotal, fgBudget);
 
     size_t patchCount = 0;
     for (size_t fi = 0; fi < chunk.frameIndices.size(); ++fi) {
@@ -586,7 +625,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     // slots, but their total still fits this allocation. Repack them as
     // a contiguous valid LZO run, rewrite all four directory offsets and
     // spans, and leave every later segment at its donor address.
-    const size_t foregroundRegionStart =
+    size_t foregroundRegionStart =
         chunk.segments[chunk.frameIndices[foreground.front().frameIndex]].start;
     const size_t lastForegroundSegment =
         chunk.frameIndices[foreground.back().frameIndex];
@@ -600,6 +639,20 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     if (foregroundRegionEnd > authoredChunk.size() ||
         foregroundRegionStart >= foregroundRegionEnd)
         throw std::runtime_error("invalid foreground frame allocation");
+    if (fgGrow) {
+        // the donor allocation becomes padding; the frames go after the last byte of the chunk
+        std::fill(authoredChunk.begin() + foregroundRegionStart,
+                  authoredChunk.begin() + foregroundRegionEnd, uint8_t(0));
+        const size_t start = (authoredChunk.size() + 2047) / 2048 * 2048;
+        size_t cursor = start;
+        for (const auto& candidate : foreground) {
+            cursor = (cursor + 2047) / 2048 * 2048;
+            cursor += candidate.compressed.size();
+        }
+        authoredChunk.resize(cursor, 0);
+        foregroundRegionStart = start;
+        foregroundRegionEnd = cursor;
+    }
     struct ForegroundMove { size_t oldStart, newStart, newSpan; };
     std::vector<ForegroundMove> foregroundMoves;
     // Retail keeps every quad-directory frameOffset on a 2048-byte
@@ -703,6 +756,8 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     result.chunk = std::move(authoredChunk);
     result.patches = patchCount;
     result.foregroundFrames = foreground.size();
+    result.waterPatches = waterPatchesWritten;
+    result.foregroundMoved = fgGrow;
     return result;
 }
 

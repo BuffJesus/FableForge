@@ -35,6 +35,7 @@ def main():
     ok &= run("new level from donor (scratch install)", [sys.executable, "tools/test_newlevel.py"], capture_output=True)
     ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)
     ok &= run("textures tab (scratch textures.big)", [sys.executable, "tools/test_textures.py"], capture_output=True)
+    ok &= run("water writer (scratch containers)", [sys.executable, "tools/test_water.py"], capture_output=True)
     ok &= run("docs name real commands", [sys.executable, "tools/check_docs_commands.py"], capture_output=True)
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1

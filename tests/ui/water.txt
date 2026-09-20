@@ -1,0 +1,28 @@
+# Water writer (tools/test_water.py): paint a lake theme on a dry map and write the terrain
+# into a scratch copy of the containers; the deploy must emit CWaterPatchMesh frames.
+wait_maps
+wait_ready
+set saveroot build/ui_water_install
+select BanditCampPath_1
+wait_loaded
+wait_foliage
+edit 1
+frames 2
+edit_tab 1
+terrain_mode 6
+frames 1
+add_theme WATER_LAKE_8
+frames 1
+assert_log ground theme WATER_LAKE_8 in palette slot
+brush 10 0.5
+terrain_stroke 128 32 1
+frames 2
+assert_state terrain_dirty 1
+deploy_terrain
+wait_terrain
+frames 2
+dump_log
+assert_log water:
+assert_log patch frames carry a water surface
+assert_state terrain_dirty 0
+quit

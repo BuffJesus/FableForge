@@ -701,9 +701,10 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
 WaterLevels buildWaterLevels(const forge::lev::File& level, const Options& options, const Context* context, const std::vector<float>* ground) {
     Scene scene = buildMesh(level, options);   // the vertex grid with each vertex's theme slots and weights
     Context local;
-    if (!context || !context->ready()) {
+    if (!context || !context->themeLibrary()) {
+        // the level needs only the ENGINE_THEME defs (WaterType / WaterHeight), never a texture
         std::string error;
-        if (!local.load(options.gameRoot, options.texturesBig, error)) return WaterLevels{};
+        if (!local.loadDefs(options.gameRoot, error)) return WaterLevels{};
         context = &local;
     }
     std::map<int, size_t> slotToLayer;
