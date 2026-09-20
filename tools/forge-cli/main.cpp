@@ -255,6 +255,7 @@ int usage() {
         "  forge mods add <game-root> <source> [--name N] [--at i] [--note text]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]   (= mods merge over the enabled order)\n"
+        "  forge mods conflicts <game-root> [--json]                  a dry-run build: the conflict report over the whole order, nothing written\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -8323,6 +8324,24 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     }
 
     if (doStage) {
+        // EgoCore's own deploy keeps `<file>.tmp` "vanilla" backups under Data/ and restores from
+        // them; two deployers on one install undo each other, so a staged EgoCore deploy is refused
+        size_t egoBackups = 0;
+        {
+            const fs::path data = fs::path(baseRoot) / "Data";
+            std::error_code ec;
+            if (fs::is_directory(data, ec))
+                for (const auto& de : fs::recursive_directory_iterator(data, ec)) {
+                    if (!de.is_regular_file(ec) || de.path().extension() != ".tmp") continue;
+                    const fs::path original = de.path().parent_path() / de.path().stem();
+                    if (fs::exists(original, ec)) ++egoBackups;
+                }
+        }
+        if (egoBackups) {
+            std::fprintf(stderr, "mods: EgoCore has deployed mods on this install (%zu .tmp backups under Data/); its Restore-vanilla and this stage would undo each other. "
+                                 "Restore vanilla in EgoCore first, then stage from here (the EgoCore mods stay in the order).\n", egoBackups);
+            return 1;
+        }
         const auto result = forge::stage::apply(baseRoot, outDir);
         std::printf("staged %zu file(s) onto %s (%zu backed up)\n",
                     result.staged.size(), baseRoot.c_str(), result.backedUp.size());
@@ -11250,7 +11269,7 @@ int main(int argc, char** argv) {
             }
             return modsAnalyze(args[2], modRoots, asJson);
         }
-        if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build")) {
+        if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build" || args[1] == "conflicts")) {
             namespace mo = forge::modorder;
             const std::string root = args[2];
             const bool asJson = args.back() == "--json";
@@ -11300,6 +11319,17 @@ int main(int argc, char** argv) {
                     mo::save(root, order);
                     for (size_t i = 0; i < order.mods.size(); ++i) std::printf("  %2zu %s\n", i, order.mods[i].name.c_str());
                     return 0;
+                }
+                if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
+                    const auto order = mo::load(root);
+                    const auto sources = mo::buildSources(order, root);
+                    if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
+                    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_conflicts";
+                    std::filesystem::remove_all(scratch);
+                    std::printf("dry run of %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson);
+                    std::filesystem::remove_all(scratch);
+                    return rc;
                 }
                 if (args[1] == "build") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]\n"); return 2; }
