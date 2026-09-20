@@ -216,3 +216,7 @@ Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) +
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,
 640 fields auto-merged, 35 same-field conflicts decided by load order, 177 whole-record (add-add of
 identical new records), 8.5 s. `mods deploy` / `mods undeploy` round-trip a scratch root byte-identical.
+GB-pack case: Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/` tree: game.bin,
+text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records both touch (Aeon wins
+by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
+the whole-file game.bin instead of failing on it.

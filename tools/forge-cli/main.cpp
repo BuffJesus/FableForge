@@ -8295,7 +8295,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         std::map<std::string, std::vector<std::string>> carriers;   // rel path -> sources
         std::map<std::string, std::string> winner;                  // rel path -> abs path
         for (const auto& s : sources) {
-            if (!fs::is_directory(s) || fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) continue;
+            if (!fs::is_directory(s)) continue;
             if (fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) continue;   // EgoCore: below
             for (auto& de : fs::recursive_directory_iterator(s)) {
                 if (!de.is_regular_file()) continue;
@@ -8304,7 +8304,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
-                if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // a partial tree never ships defs we can take whole
+                if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
+                if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
                 carriers[lower].push_back(fs::path(s).filename().string());
                 winner[lower] = de.path().string();
                 // keep the source's own spelling for the output path
