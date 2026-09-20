@@ -13,6 +13,12 @@ the two in-game items are the human part.
    screen; a retextured barrel; a placed preset; a placed particle emitter; a placed
    fishing spot; one session on a compacted bank (`forge compact-stb`). Then
    `forge restore` and `forge backups` -> 0 differ.
+   `python tools/ingame/release_probes.py` does all of it unattended (stages `things`,
+   `compact`, `region`, `restore`; `--dry-run` prints the commands): it deploys with the
+   built exes, runs the retail game on a fresh profile through the harness, and ends with the
+   restore + 0-differ check. Two items stay human: the barrel's tint and the preset are judged
+   from `build/ingame/release/things/04_after_probe.png`, and the map-screen click into the
+   own-region level (the driver proves the region load through ForgeFSE's retail transition).
 4. Version: `CMakeLists.txt` `project(... VERSION x.y.z)` and `README.md`; the zip name and
    the GUI's title come from it.
 5. `python tools/package.py` (runs the suite again unless `--no-check`) ->

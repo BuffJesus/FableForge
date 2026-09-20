@@ -1,5 +1,17 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+## Resume here (2026-09-20, afternoon)
+
+**Today:** suite ALL PASS 16/16 at `c5000b5` (the two synthetic-click suites passed under the full
+run). Public repo is live: https://github.com/BuffJesus/FableForge (`main`, CI on push + tags; the
+first run failed in "GUI without an install" with a silent exit 1 -- `47d0522` makes the GUI say the
+D3D11 HRESULTs in `--auto` mode and the workflow prints the run log; see the CI status below).
+README got a *Get it* + safety block for strangers. `tools/ingame/release_probes.py` is the
+unattended step-3 probe pass (RELEASE.md), dry-run clean, **not yet run against the game** (the
+user asked to wait). `place_fishing_spot [reward|-] [scriptname]` so the harness can find one.
+Next: (1) CI green, (2) `python tools/ingame/release_probes.py` with the game closed, then judge
+the two screenshots, (3) `tools/package.py` -> stranger's test -> `git tag v0.16.0`.
+
 ## Resume here (2026-09-20 morning; written at the end of 2026-09-19)
 
 This repo IS FableForge (`D:\Code\FableForge`, formerly Albion Atlas; the old toolchain repo is

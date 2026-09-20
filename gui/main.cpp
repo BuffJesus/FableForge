@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -105,6 +106,11 @@ static bool screenshot(const std::string& path) {
         g_context->Unmap(staging, 0);
         try {
             const auto png = albion::terrainexport::encodePng(img);
+            {   // a script's shot may name a folder nothing created yet (a bare checkout on CI)
+                std::error_code ec;
+                const auto dir = std::filesystem::path(path).parent_path();
+                if (!dir.empty()) std::filesystem::create_directories(dir, ec);
+            }
             std::ofstream f(path, std::ios::binary);
             f.write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
             ok = bool(f);
