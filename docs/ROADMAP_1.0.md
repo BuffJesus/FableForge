@@ -8,6 +8,15 @@ is `D:\Code\FableForge-legacy`). Exes: `build\FableForge.exe` (GUI), `buildorge
 `libs/forgecore` is canonical. Version 0.16.0. `tools/check_all.py` = 16 checks, ALL PASS after
 the CLI split (the evening run; see the last commit for the run after the thumbnails).
 
+**2026-09-19 (evening):** three commits on top of the rename: the cutscene/title tooling from
+the Oakvale Reborn session (`forge-tools script cutscene-*`, `title add`); a **foliage fix**
+(the frame probes read a 4-byte lattice and missed ~75% of every map's baked foliage, incl.
+Oakvale's town-square oak -- `docs/TODO.md` foliage block); and a **perf fix** in the shared
+frame walker (23 GB of memset per map; boot + open Oakvale 3.65 s -> 0.79 s, the suite's
+deploy checks ~35% faster). Suite ALL PASS 16/16 after each. Known flake: the synthetic-click
+suites (`ui paths` textures checkbox, `ui foliage`) occasionally miss a click under the full
+run and pass alone.
+
 State: 0.14 done except the public repo (user), 0.15 4/4, 0.15b 8/8 + tour, 0.16 3/4,
 0.17 2/6 (Textures tab, effect picker), 1.0-rc: docs 2/3 (walkthrough, CLI reference),
 perf (parallel albedo bake, parallel chunk-audit), main.cpp split + automation.cpp,

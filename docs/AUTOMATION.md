@@ -9,7 +9,10 @@ FableForge.exe --auto tests/ui/smoke.txt [--install <root>] [--size 1440x900]
 ```
 
 Exit code is 0 when every assertion passed. A log lands next to the script
-(`<script>.log`) ending in `RESULT PASS` / `RESULT FAIL` plus the failures.
+(`<script>.log`) ending in `RESULT PASS` / `RESULT FAIL` plus the failures. Every
+line starts with the seconds since the script loaded, so a `wait_*` line's stamp
+is how long that job took (a warm boot to `wait_ready` is ~0.15 s; opening
+Oakvale West through `wait_foliage` ~0.45 s).
 Settings persistence is disabled under `--auto` so runs are deterministic.
 
 ## Commands

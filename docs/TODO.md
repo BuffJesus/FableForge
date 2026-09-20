@@ -57,6 +57,14 @@ Targets for the remaining gaps:
   record (0x30 CMatrix3x4 + float + sphere, then float4 entries); decoded in
   `foliageexport.cpp::parseGroupFrame`. Side effect: type-0 placements after a type-2 primitive
   in the same frame were previously lost (Oakvale West 12 -> 20 trees).
+- DONE 2026-09-19: **three quarters of the baked foliage was never read.** The chunk's LZO
+  frames are packed back-to-back at byte granularity (OakValeWest_v2: 895 frames, 530 off the
+  4-byte lattice) and the three ad-hoc frame probes (`foliageexport`, `stbterrain`, forgecore
+  `foliage`) only tested aligned offsets. All three now use `stbbake::walkFramedBlocks`.
+  Oakvale West 4,453 -> 18,001 placements, 20 -> 142 trees (the town-square
+  `MESH_OAK_AUTUMN_04` inside the bench ring at 86.9,111.6 was one of the missing); every map
+  gains 3-4x. Same day: the walker zero-filled up to 64 MB per candidate offset (23 GB of memset
+  on that chunk); grow-only scratch, 945 ms -> 8 ms, boot + open Oakvale 3.65 s -> 0.79 s.
 - Any future placement doubt: `CalcObjectMatrix` `0x02ee3a00` / `Calc2DObjectMatrix` `0x02ee3850`.
 
 ## Correctness pass — DONE 2026-09-16 (see docs/SWEEP.md)
