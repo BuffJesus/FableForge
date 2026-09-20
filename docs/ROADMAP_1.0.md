@@ -24,14 +24,20 @@ ENGINE_RULES.md, object-palette mesh thumbnails. Scoped-not-started: foliage bru
 mesh/creature import (L), Blender addon bundle (vendor its Python first), STB compaction,
 texture-tab thumbnails, PiP minimap, brush falloff ring.
 
-Next in order:
+Next in order (unchanged by the 2026-09-19 evening; water and fishing spots are filed below,
+not queued ahead of 1.0):
 1. The user: public GitHub repo `FableForge` -> push -> CI green; `python tools/package.py`
    (runs the suite) -> `git tag v0.16.0`.
 2. In-game probes the user drives: map-screen travel to an own-region level through its
-   entrance (fresh game); a retextured barrel; a placed preset; a placed emitter.
+   entrance (fresh game); a retextured barrel; a placed preset; a placed emitter; **a placed
+   fishing spot** (Actors card, new 2026-09-19); Oakvale's square oak now in the viewport.
 3. Fold forge-tools families into forge / the GUI as they get UI (quests first: the legacy
    `apps/forge-gui` node canvas is the reference; `docs/re_reference/quest_node_defs.json`).
-4. With the harness: foliage brush. Without: STB compaction, chunk-audit --all parallel.
+4. With the harness: foliage brush (its step (a), decoding the chunk's existing groups, is
+   what the 2026-09-19 lattice fix delivered for the exporter). Without: **STB compaction
+   (1.0-rc #4) -- in progress 2026-09-19**, chunk-audit --all parallel.
+5. Post-1.0: **0.18 Water** (below) -- the RE is done, the paint side works today; the
+   writer waits until 1.0 ships.
 
 Install state: retail (`forge backups` -> 9 backed-up files, 0 differ). Saves: `0atlas` and
 `1234234` carry their childhood autosaves, `0aa` removed, `Cornelio` is the adult save
@@ -276,6 +282,30 @@ Order inside the milestone: textures tab (reuses 0.14) -> static mesh import -> 
 card -> effect picker. Each step gets the same treatment as everything else: scratch-install
 script + one in-game probe (a custom barrel mesh standing in Greatwood, a custom NPC found by
 `--things`, a retextured object visible in a screenshot).
+
+### 0.18 — "Water" (post-1.0; RE complete 2026-09-19, see `FableTLC docs/engine/WATER_RE.md`)
+
+How retail does it (from the debug build): water is **painted as depth themes** (`WaterType`
+1 lake / 2 river / 3-5 sea / 8 ice, `WaterHeight` ladder 0..16; surface = ground + Σ blend ·
+WaterHeight, `CEngineMap::PeekWaterHeight`) and the **visible surface is a baked STB mesh**
+(`CWaterPatchMesh::Save` in the foreground frame after `hasWater`, a background sub-patch in
+the patch trailer) that retail only loads. Gameplay water follows the paint alone; our deploy
+writes `hasWater = 0` for regenerated patches, so a painted lake is invisible until (2).
+
+1. **Water brush** (Terrain tab): surface altitude + body family (lake / river / sea / ice);
+   each cell with ground < altitude gets a two-theme mix from the family's depth ladder so
+   Σ blend · WaterHeight = altitude − ground, the ground theme kept in the third slot.
+   Preview = the exporter's existing water surface (same formula). Ships gameplay water.
+2. **Foreground writer**: `CWaterPatchMesh::Save` per touched patch (289 x 66 B, layout and
+   every constant known; shore arrays zeroed, `distToShore` large). Gate: retail patches must
+   round-trip byte-exact through the same encoder first. Expected in-game: the surface within
+   the foreground radius, no foam.
+3. **Background sub-patch + edge strips** (RE `CWaterGenerator::BuildStaticMapBackgroundBuffers`,
+   the 0x38 `CTVertexWaterBackground`, `TesselateEdge`), then the shore generator (foam),
+   then sea bodies (`__ENGINE_SEA_STATIC_MAP_BANK_FILE__*`; a lake never needs one).
+
+Fishing spots are done (2026-09-19, Actors card + `place_fishing_spot`): a `MARKER_FISHING_SPOT`
+thing with an optional `CTCContainerRewardHero` first catch -- no water dependency.
 
 ### 1.0-rc — "Polish, docs, and a stranger's test"
 1. Docs: ~~a 10-minute "first level" walkthrough with screenshots~~ DONE 2026-09-18
