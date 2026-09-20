@@ -79,7 +79,7 @@ game**. Concretely:
 
 | Must (1.0)                                                                   | Status today |
 |-------------------------------------------------------------------------------|--------------|
-| Runs on a clean machine: no Python, no FableTLC/FableForge checkout           | **Broken** — custom textures + minimap bake shell out to `python texture_build.py` (`vendor/forgecore/src/terraintex.cpp:497-504` hard-codes `D:/Documents/FableTLC/tools`) |
+| Runs on a clean machine: no Python, no FableTLC/FableForge checkout           | **Done** (native texture importer 2026-09-17; verified 2026-09-19: all three exes link `-static`, imports are Windows system DLLs + the UCRT `api-ms-win-crt-*` + `D3DCOMPILER_47` only = any Windows 10/11; `tools/package.py` zip = exes + docs + presets + `docs/re_reference` + `docs/modding`, 8.8 MB). The stranger's test (1.0-rc #5) is the final proof |
 | One-click *restore my install to retail* and visible backup state             | Missing — backups are `.atlas-orig` files the user must move back by hand (we lost two loose TNGs that way today) |
 | Refuses to damage a running game                                              | **Done 2026-09-19**: every writer (deploy, terrain, new level, world moves, entrance, textures, restore, compact) goes through one guard -- the live-link heartbeat when the link is installed, and always a `Fable.exe` process scan matched to the *target install* (`backups::gameRunningIn`, so a game running from another copy or a scratch tree is not blocked); proven with the game up (`deploy: Fable.exe is running from this install ...`) |
 | New level end-to-end from the GUI (blank/copy, own region, minimap, textures, objects, NPCs, spawner) | Done, verified in-game |
@@ -415,8 +415,8 @@ Later (*L*): LOOT-style masterlist + topo sort, LEV grid merge.
    follow the walkthrough; every step that needs a workaround becomes a bug.
 
 ### 1.0
-Tag, zip, Discord post; `docs/PLAN.md` becomes `docs/ROADMAP.md` (post-1.0 items) and the
-current PLAN's history moves to `docs/journal/`.
+Follow `docs/RELEASE.md` (tag, zip, Discord post); `docs/PLAN.md` becomes `docs/ROADMAP.md`
+(post-1.0 items) and the current PLAN's history moves to `docs/journal/`.
 
 ---
 
