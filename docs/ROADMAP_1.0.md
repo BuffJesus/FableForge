@@ -9,7 +9,13 @@ D3D11 HRESULTs in `--auto` mode and the workflow prints the run log; run 2 showe
 README got a *Get it* + safety block for strangers. `tools/ingame/release_probes.py` is the
 unattended step-3 probe pass (RELEASE.md), dry-run clean, **not yet run against the game** (the
 user asked to wait). `place_fishing_spot [reward|-] [scriptname]` so the harness can find one.
-Next: (1) ~~CI green~~ done, (2) `python tools/ingame/release_probes.py` with the game closed, then judge
+**In-game probes DONE (2026-09-20 afternoon, `release_probes.py`, all four stages PASS):** retextured barrel
+seen red in-game; barrel/emitter/fishing spot found at their exact .tng positions on a fresh game; a full
+session on the compacted bank (121/121 heights); `ProbeOwnRegion` installed as new slot 400, fresh game,
+retail transition `StartOakVale -> ProbeOwnRegion`; restore -> 0 differ. Two bugs it found are fixed
+(`6cd6036` texture-export/replace by listed name; `4888f12` `place OBJECT_ <name>` dropped the ScriptName).
+Human-only leftovers: the preset in `build/ingame/release/things/04_after_probe.png`, the map-screen click.
+Next: (1) ~~CI green~~ done, (2) ~~`python tools/ingame/release_probes.py`~~ done, (2b) `python tools/ingame/release_probes.py` with the game closed, then judge
 the two screenshots, (3) `tools/package.py` -> stranger's test -> `git tag v0.16.0`.
 
 ## Resume here (2026-09-20 morning; written at the end of 2026-09-19)

@@ -176,7 +176,7 @@ def stage_compact() -> dict:
 def stage_region() -> dict:
     out: dict = {"stage": "region"}
     r = sh([FORGE, "blank-level", OWN_LEVEL, "--size", f"{OWN_SIZE}x{OWN_SIZE}", "--height", "12",
-            "--template", START_MAP, "--own-region", "new", "--display", "Probe Own Region"])
+            "--theme", "GROUND_FOREST_LEAVES", "--own-region", "new", "--display", "Probe Own Region"])
     if r.returncode != 0 and not DRY:
         return {**out, "ok": False, "error": "blank-level: " + (r.stderr.strip() or r.stdout.strip()[-400:])}
     out["install"] = r.stdout.strip().splitlines()[-4:] if r.stdout else []
