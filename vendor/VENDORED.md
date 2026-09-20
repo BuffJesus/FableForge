@@ -36,3 +36,10 @@ resolve to meshes.
 
 Format knowledge: FableTLC decompilation project, FableForge, EgoCore (AeoN, MIT),
 FableMod / ChocolateBox decompiled references.
+
+## defc (jamen/fable-defs) -- shipped as `defc.exe` next to the exes, not vendored as source
+
+The Fable def compiler (Rust, Zlib license, https://github.com/jamen/fable-defs): compiles a text
+`Data/Defs` tree into the CompiledDefs bins byte-deterministically. FableForge runs it as a separate
+process for the EgoCore pack type (`.def` text overrides) and never links it. Found next to the
+running executable, then `FORGE_DEFC`, then PATH.

@@ -28,6 +28,14 @@ def main():
     with open(os.path.join(stage, "README.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write(readme)
     shutil.copy("LICENSE", stage)
+    # defc (jamen/fable-defs, Zlib): the def compiler the EgoCore pack type needs for .def text mods.
+    # Shipped when a build is at hand; the retail text Data/Defs tree is the user's (EgoCore users have it).
+    defc = os.environ.get("FORGE_DEFC") or r"C:\Users\Cornelio\Documents\EgoCoreInspect\fable-defs\target\release\defc.exe"
+    if os.path.exists(defc):
+        shutil.copy(defc, os.path.join(stage, "defc.exe"))
+        print("  defc.exe from", defc)
+    else:
+        print("  (no defc.exe at hand: the EgoCore .def text path will need FORGE_DEFC on the user's machine)")
     shutil.copy(os.path.join("vendor", "VENDORED.md"), os.path.join(stage, "THIRD_PARTY.md"))
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
     shutil.copy(os.path.join("docs", "EDITOR.md"), stage)

@@ -11,6 +11,11 @@
 #include <sstream>
 #include <stdexcept>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/defschema.hpp"
@@ -130,6 +135,16 @@ fs::path findDefc(const Paths& paths) {
     std::error_code ec;
     if (!paths.defc.empty() && fs::exists(paths.defc, ec)) return paths.defc;
     if (const char* env = std::getenv("FORGE_DEFC"); env && *env && fs::exists(env, ec)) return env;
+#ifdef _WIN32
+    {   // the release zip ships defc.exe next to forge-tools.exe / FableForge.exe
+        char buf[MAX_PATH];
+        const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            const fs::path beside = fs::path(std::string(buf, n)).parent_path() / "defc.exe";
+            if (fs::exists(beside, ec)) return beside;
+        }
+    }
+#endif
     return "defc.exe";   // PATH
 }
 
