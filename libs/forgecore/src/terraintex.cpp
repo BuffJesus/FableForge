@@ -452,12 +452,24 @@ std::vector<terrain::TerrainThemeMaterial> paletteMaterials(
     const lev::File& level, const ThemeLibrary& library) {
     std::vector<terrain::TerrainThemeMaterial> materials(256);
     for (const auto& r : resolvePalette(level, library)) {
-        if (!r.resolved || r.slot < 0 || r.slot >= 256) continue;
+        if (r.slot < 0 || r.slot >= 256) continue;
+        // The LEV's def index goes stale when game.bin changes (retail LEVs are: Bowerstone
+        // Bridge's "WATER_BWLAKE_8" slot indexes WATER_BWLAKE_1); the palette NAME is stable,
+        // so when it names a theme that disagrees with the index, the name wins -- the same
+        // rule the exporter applies. Without it a stale slot has no material and the layer
+        // bake drops every pass that uses it.
+        const ThemeEntry* theme = nullptr;
+        if (!r.paletteName.empty()) {
+            const ThemeEntry* byName = library.byName(r.paletteName);
+            if (byName && byName->decoded && (!r.resolved || !r.nameMatches)) theme = byName;
+        }
+        if (!theme && r.resolved) theme = library.byDefIndex(r.defIndex);
+        if (!theme) continue;
         auto& m = materials[size_t(r.slot)];
         m.available = true;
         for (int f = 0; f < 3; ++f) {
-            m.base.textures[f] = r.textures.base[f];
-            m.cliff.textures[f] = r.textures.cliff[f];
+            m.base.textures[f] = theme->textures.base[f];
+            m.cliff.textures[f] = theme->textures.cliff[f];
         }
     }
     return materials;
