@@ -74,9 +74,10 @@ game**. Concretely:
 | Could (post-1.0, "power")                                | Notes |
 |-----------------------------------------------------------|-------|
 | Foliage brush (grass/trees) into the STB local-detail tree | `reseatFoliageZ` already walks every primitive; a writer for new instances = the "environment brush" memory item; no RE blocker |
-| Water editing (lakes/rivers via theme WaterHeight)        | Themes carry water; painting a water theme already works, needs a dedicated UX + preview |
+| Water editing (lakes/rivers via theme WaterHeight)        | RE'd from the debug build 2026-09-19 (`FableTLC docs/engine/WATER_RE.md`): water = depth-theme paint (`WATER_LAKE_{0..16}` etc., surface = ground + Σ blend·WaterHeight) — the paint side works today and gives gameplay water; the *visible* surface is a baked STB mesh retail only loads, and our deploy writes `hasWater=0`. Plan: water brush (altitude → depth mix) → `CWaterPatchMesh` writer (layout known, zeroed shore) → background sub-patch/shore/sea |
 | Prefab / preset library (village, bandit camp, shop)      | Village + spawner + creature blocks exist; a preset = a TNG fragment with relative positions |
 | Multi-select, copy/paste across maps, align/snap tools    | Editor is single-selection today |
+| Fishing spots                                              | Done 2026-09-19 (Actors card + `place_fishing_spot`; retail `MARKER_FISHING_SPOT`, optional first catch); untested in-game |
 | Region entrance points (`FinalAlbion.gtg`) for map-screen travel | Format is plain TNG text (REGION_ENTRANCE_POINT things) — parseable with `forge::tng` |
 | Custom ENGINE_THEME editing (cliff PNG, bump map, water) | `theme-add` covers base+cliff; the rest are `defedit::setField` calls |
 | STB compaction after many edits                            | Chunks grow by the old foliage section per re-layout; the STB grows a chunk per replace |
