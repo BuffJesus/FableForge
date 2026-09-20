@@ -1,6 +1,7 @@
 #include "thingsexport.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -89,6 +90,9 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     scene.rootName = "Things";
     Stats st;
     auto warn = [&](const std::string& m) { scene.warnings.push_back(m); if (options.log) options.log("warning: " + m); };
+    const auto clock0 = std::chrono::steady_clock::now();
+    double geoSeconds = 0, texSeconds = 0;
+    auto ms = [&]() { return std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - clock0).count()) + " ms"; };
 
     std::string err;
     const std::string text = options.tngText.empty() ? readTng(options.gameRoot, mapName, err) : options.tngText;
@@ -114,10 +118,14 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         auto known = meshIndexById.find(modelId);
         if (known != meshIndexById.end()) return known->second;
         std::string merr;
+        const auto g0 = std::chrono::steady_clock::now();
         const auto* geo = fe::cachedMesh(modelId, merr);
+        geoSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - g0).count();
         if (!geo) { meshIndexById[modelId] = -1; if (!defWarned[def]++) warn(def + ": " + merr); return -1; }
         std::vector<std::string> mw;
+        const auto t0 = std::chrono::steady_clock::now();
         fe::Mesh m = fe::makeMesh(modelId, fe::meshName(modelId), def, *geo, options.textures, context, scene.images, textureToImage, mw);
+        texSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         for (const auto& w : mw) warn(w);
         scene.meshes.push_back(std::move(m));
         const int idx = int(scene.meshes.size() - 1);
@@ -376,6 +384,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
                 size_t kept = 0; for (const auto& part : m.parts) kept += part.indices.size() / 3;
                 options.log("    " + m.name + ": dropped " + std::to_string(m.hullTriangles) + ", kept " + std::to_string(kept));
             }
+        { char tb[96]; std::snprintf(tb, sizeof tb, "  timing: mesh decode %.0f ms, mesh build + textures %.0f ms, total %s", geoSeconds * 1000, texSeconds * 1000, ms().c_str()); options.log(tb); }
         options.log(std::to_string(st.placed) + " placed objects from " + std::to_string(st.things) + " things (" +
                     std::to_string(scene.meshes.size()) + " meshes, " + std::to_string(scene.triangleCount()) + " triangles); skipped: " +
                     std::to_string(st.noGraphic) + " without a model, " + std::to_string(st.noDef) + " unknown defs, " +

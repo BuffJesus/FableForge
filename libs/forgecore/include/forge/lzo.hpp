@@ -33,6 +33,8 @@ std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLe
 // Non-throwing probe: true only when `data` decodes to EXACTLY `out.size()`
 // bytes with no error (the frame-scanner gate in stbbake).
 bool tryDecompress(const uint8_t* data, size_t len, std::vector<uint8_t>& out);
+// Same probe into a caller-owned buffer of exactly `outLen` bytes (no fill).
+bool tryDecompress(const uint8_t* data, size_t len, uint8_t* out, size_t outLen);
 
 // Raw LZO1X decompress where only an UPPER BOUND on the output is known (the
 // Fable chunked-texture stream stores no per-chunk uncompressed length; the

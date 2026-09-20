@@ -1,135 +1,135 @@
-ok   wait_maps
-ok   wait_ready
-ok   filter Arena_Filler
-ok   frames 2
-ok   assert_widget group_Filler_Arena_01
-..   click group_Filler_Arena_01
-ok   frames 3
-ok   assert_widget row_Arena_Filler_01
-..   click row_Arena_Filler_01
-ok   wait_loaded
-ok   assert_state selected Arena_Filler_01
-ok   assert_state region Filler_Arena_01
-ok   screenshot build/ui/p1_tree_click.png
-shot build/ui/p1_tree_click.png
-ok   filter
-ok   set format obj
-ok   set outdir build/ui
-..   click toggle_textures
-ok   frames 2
-ok   assert_state textures 0
-..   click btn_export
-ok   frames 2
-ok   wait_export
-ok   assert_state export_ok 1
-ok   assert_file build/ui/Arena_Filler_01.obj
-ok   assert_file build/ui/Arena_Filler_01.mtl
-..   click toggle_textures
-ok   frames 2
-ok   assert_state textures 1
-ok   set format glb
-ok   open C:\Users\Cornelio\AppData\Local\Temp/FableForge/Arena_Filler_01.lev
-ok   wait_loaded
-ok   assert_state selected file:Arena_Filler_01
-ok   assert_widget group_Loose files
-ok   assert_widget row_file:Arena_Filler_01
-ok   screenshot build/ui/p2_loose.png
-shot build/ui/p2_loose.png
-ok   filter Arena_Filler
-ok   frames 2
-..   click btn_export_all
-ok   frames 2
-ok   assert_state batch_active 1
-ok   screenshot build/ui/p3_batch.png
-shot build/ui/p3_batch.png
-ok   wait_batch
-ok   assert_state batch_failed 0
-ok   assert_state batch_done 3
-ok   assert_file build/ui/Arena_Filler_01.glb
-ok   assert_file build/ui/Arena_Filler_02.glb
-ok   filter
-     install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
-     install_valid=1
-     install_textures=1
-     install_fse=1
-     setup_open=0
-     backups_differ=0
-     maps=400
-     selected=file:Arena_Filler_01
-     settings_scroll=0
-     settings_scrolled=0
-     hovered_window=##root/##actions_92064320
-     mouse=1254,729
-     hovered_scrollmax=0
-     wheeling_window=- scrolled_frame=-1 frame=144 hovered_flags=16777487 parent=##root parent_scrollmax=0
-     preview_loaded=1
-     preview_textured=1
-     context_ready=1
-     mode=Textured
-     rule_notice=-
-     edit_tab=0
-     toasts=4
-     help_open=0
-     tour_step=-1
-     ui_scale=1.00
-     grid=0
-     selection_count=0
-     presets=0
-     effects=0
-     entrance=-
-     cursor_ground=-
-     export_ok=1
-     export_path=build/ui\Arena_Filler_02.glb
-     format=glb
-     textures=1
-     layers=0
-     walkable=0
-     texels=8
-     gain=1.00
-     mesh_vertices=3201
-     batch_active=0
-     foliage_loaded=1
-     foliage_instances=0
-     preview_foliage=1
-     export_foliage=1
-     thing_instances=0
-     preview_things=1
-     preview_water=1
-     export_things=1
-     world=0
-     region=Loose files
-     batch_done=3
-     batch_failed=0
-     filter=
-     camera=101.25,179.35,35.71
-     edit_mode=0
-     world_mode=0
-     textures_mode=0
-     textures_count=0
-     texture_selected=-
-     world_loaded=0
-     world_maps=0
-     world_selected=
-     world_pending=0
-     world_pending_owners=0
-     world_can_undo=0
-     world_can_redo=0
-     world_pending_sees=0
-     world_ok=0
-     world_stitch=0
-     paint_theme=0
-     link_installed=0
-     link_ready=0
-     link_hero_map=
-     villages=0
-     palette_named=6
-     doc_loaded=1
-     doc_things=0
-     doc_dirty=0
-     doc_changes=0
-     selected_thing=-1
-     gizmo=1
-     terrain_dirty=0
-     terrain_center_height=120.421
-ok   quit
+   0.13 ok   wait_maps
+   0.15 ok   wait_ready
+   0.16 ok   filter Arena_Filler
+   0.16 ok   frames 2
+   0.18 ok   assert_widget group_Filler_Arena_01
+   0.18 ..   click group_Filler_Arena_01
+   0.21 ok   frames 3
+   0.23 ok   assert_widget row_Arena_Filler_01
+   0.23 ..   click row_Arena_Filler_01
+   0.29 ok   wait_loaded
+   0.30 ok   assert_state selected Arena_Filler_01
+   0.31 ok   assert_state region Filler_Arena_01
+   0.32 ok   screenshot build/ui/p1_tree_click.png
+   0.50 shot build/ui/p1_tree_click.png
+   0.51 ok   filter
+   0.52 ok   set format obj
+   0.52 ok   set outdir build/ui
+   0.53 ..   click toggle_textures
+   0.55 ok   frames 2
+   0.57 ok   assert_state textures 0
+   0.57 ..   click btn_export
+   0.60 ok   frames 2
+   0.62 ok   wait_export
+   0.63 ok   assert_state export_ok 1
+   0.63 ok   assert_file build/ui/Arena_Filler_01.obj
+   0.64 ok   assert_file build/ui/Arena_Filler_01.mtl
+   0.65 ..   click toggle_textures
+   0.67 ok   frames 2
+   0.69 ok   assert_state textures 1
+   0.69 ok   set format glb
+   0.70 ok   open C:\Users\Cornelio\AppData\Local\Temp/FableForge/Arena_Filler_01.lev
+   0.71 ok   wait_loaded
+   0.71 ok   assert_state selected file:Arena_Filler_01
+   0.72 ok   assert_widget group_Loose files
+   0.72 ok   assert_widget row_file:Arena_Filler_01
+   0.73 ok   screenshot build/ui/p2_loose.png
+   0.94 shot build/ui/p2_loose.png
+   0.95 ok   filter Arena_Filler
+   0.96 ok   frames 2
+   0.97 ..   click btn_export_all
+   1.00 ok   frames 2
+   1.01 ok   assert_state batch_active 1
+   1.02 ok   screenshot build/ui/p3_batch.png
+   1.21 shot build/ui/p3_batch.png
+   1.37 ok   wait_batch
+   1.38 ok   assert_state batch_failed 0
+   1.39 ok   assert_state batch_done 3
+   1.39 ok   assert_file build/ui/Arena_Filler_01.glb
+   1.40 ok   assert_file build/ui/Arena_Filler_02.glb
+   1.40 ok   filter
+   1.41      install=c:/programs/steam\steamapps\common\Fable The Lost Chapters
+   1.41      install_valid=1
+   1.41      install_textures=1
+   1.41      install_fse=1
+   1.41      setup_open=0
+   1.41      backups_differ=0
+   1.41      maps=400
+   1.41      selected=file:Arena_Filler_01
+   1.41      settings_scroll=0
+   1.41      settings_scrolled=0
+   1.41      hovered_window=##root/##actions_92064320
+   1.41      mouse=1254,729
+   1.41      hovered_scrollmax=0
+   1.41      wheeling_window=- scrolled_frame=-1 frame=127 hovered_flags=16777487 parent=##root parent_scrollmax=0
+   1.41      preview_loaded=1
+   1.41      preview_textured=1
+   1.41      context_ready=1
+   1.41      mode=Textured
+   1.41      rule_notice=-
+   1.41      edit_tab=0
+   1.41      toasts=4
+   1.41      help_open=0
+   1.41      tour_step=-1
+   1.41      ui_scale=1.00
+   1.41      grid=0
+   1.41      selection_count=0
+   1.41      presets=0
+   1.41      effects=0
+   1.41      entrance=-
+   1.41      cursor_ground=-
+   1.41      export_ok=1
+   1.41      export_path=build/ui\Arena_Filler_02.glb
+   1.41      format=glb
+   1.41      textures=1
+   1.41      layers=0
+   1.41      walkable=0
+   1.41      texels=8
+   1.41      gain=1.00
+   1.41      mesh_vertices=3201
+   1.41      batch_active=0
+   1.41      foliage_loaded=1
+   1.41      foliage_instances=0
+   1.41      preview_foliage=1
+   1.41      export_foliage=1
+   1.41      thing_instances=0
+   1.41      preview_things=1
+   1.41      preview_water=1
+   1.41      export_things=1
+   1.41      world=0
+   1.41      region=Loose files
+   1.41      batch_done=3
+   1.41      batch_failed=0
+   1.41      filter=
+   1.41      camera=101.25,179.35,35.71
+   1.41      edit_mode=0
+   1.41      world_mode=0
+   1.41      textures_mode=0
+   1.41      textures_count=0
+   1.41      texture_selected=-
+   1.41      world_loaded=0
+   1.41      world_maps=0
+   1.41      world_selected=
+   1.41      world_pending=0
+   1.41      world_pending_owners=0
+   1.41      world_can_undo=0
+   1.41      world_can_redo=0
+   1.41      world_pending_sees=0
+   1.41      world_ok=0
+   1.41      world_stitch=0
+   1.41      paint_theme=0
+   1.41      link_installed=0
+   1.41      link_ready=0
+   1.41      link_hero_map=
+   1.41      villages=0
+   1.41      palette_named=6
+   1.41      doc_loaded=1
+   1.41      doc_things=0
+   1.41      doc_dirty=0
+   1.41      doc_changes=0
+   1.41      selected_thing=-1
+   1.41      gizmo=1
+   1.41      terrain_dirty=0
+   1.41      terrain_center_height=120.421
+   1.42 ok   quit
 RESULT PASS

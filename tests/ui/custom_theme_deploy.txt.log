@@ -1,25 +1,25 @@
-ok   wait_maps
-ok   wait_ready
-ok   set saveroot build/ui_overworld_install
-ok   select Greatwood_1
-ok   wait_loaded
-ok   edit 1
-ok   frames 2
-ok   assert_state doc_loaded 1
-ok   terrain_mode 6
-ok   custom_theme build/atlas_check.png GROUND_ATLAS_CHECK GROUND_GRASS
-ok   frames 2
-ok   assert_log in palette slot
-ok   wait_ready
-ok   frames 2
-ok   brush 8 10
-ok   terrain_stroke 56 80 1
-ok   frames 2
-ok   assert_state terrain_dirty 1
-..   deploy_terrain
-ok   wait_terrain
-ok   frames 3
-ok   assert_state terrain_dirty 0
-ok   assert_log ground themes painted: layer meshes rebuilt
-ok   quit
+   0.11 ok   wait_maps
+   0.13 ok   wait_ready
+   0.14 ok   set saveroot build/ui_overworld_install
+   0.16 ok   select Greatwood_1
+   0.22 ok   wait_loaded
+   0.22 ok   edit 1
+   0.24 ok   frames 2
+   0.28 ok   assert_state doc_loaded 1
+   0.29 ok   terrain_mode 6
+  10.93 ok   custom_theme build/atlas_check.png GROUND_ATLAS_CHECK GROUND_GRASS
+  11.01 ok   frames 2
+  11.05 ok   assert_log in palette slot
+  11.06 ok   wait_ready
+  11.07 ok   frames 2
+  11.10 ok   brush 8 10
+  11.11 ok   terrain_stroke 56 80 1
+  11.12 ok   frames 2
+  11.17 ok   assert_state terrain_dirty 1
+  11.18 ..   deploy_terrain
+  14.72 ok   wait_terrain
+  14.73 ok   frames 3
+  14.78 ok   assert_state terrain_dirty 0
+  14.79 ok   assert_log ground themes painted: layer meshes rebuilt
+  14.80 ok   quit
 RESULT PASS

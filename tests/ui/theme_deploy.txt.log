@@ -1,24 +1,24 @@
-ok   wait_maps
-ok   wait_ready
-ok   set saveroot build/ui_overworld_install
-ok   select Greatwood_1
-ok   wait_loaded
-ok   edit 1
-ok   frames 2
-ok   assert_state doc_loaded 1
-ok   terrain_mode 6
-ok   add_theme BEACH_SAND
-ok   frames 1
-ok   assert_log in palette slot
-ok   brush 8 10
-ok   terrain_stroke 40 60 1
-ok   frames 2
-ok   assert_state terrain_dirty 1
-..   deploy_terrain
-ok   wait_terrain
-ok   frames 3
-ok   assert_state terrain_dirty 0
-ok   assert_log ground themes painted: layer meshes rebuilt
-ok   assert_log re-baked terrain chunk
-ok   quit
+   0.11 ok   wait_maps
+   0.13 ok   wait_ready
+   0.14 ok   set saveroot build/ui_overworld_install
+   0.15 ok   select Greatwood_1
+   0.21 ok   wait_loaded
+   0.22 ok   edit 1
+   0.23 ok   frames 2
+   0.27 ok   assert_state doc_loaded 1
+   0.28 ok   terrain_mode 6
+   0.29 ok   add_theme BEACH_SAND
+   0.30 ok   frames 1
+   0.41 ok   assert_log in palette slot
+   0.42 ok   brush 8 10
+   0.43 ok   terrain_stroke 40 60 1
+   0.44 ok   frames 2
+   0.48 ok   assert_state terrain_dirty 1
+   0.49 ..   deploy_terrain
+   2.94 ok   wait_terrain
+   2.95 ok   frames 3
+   3.00 ok   assert_state terrain_dirty 0
+   3.01 ok   assert_log ground themes painted: layer meshes rebuilt
+   3.02 ok   assert_log re-baked terrain chunk
+   3.03 ok   quit
 RESULT PASS

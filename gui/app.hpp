@@ -104,6 +104,7 @@ private:
     float vmX_ = 0, vmY_ = 0;
     bool haveVm_ = false;
     std::string logPath_;
+    double t0_ = 0;   // wall clock at load(); every log line carries the elapsed seconds
 };
 
 class App {

@@ -1,34 +1,34 @@
-ok   wait_maps
-ok   wait_ready
-ok   select StartOakValeWest
-ok   wait_loaded
-ok   wait_foliage
-ok   set saveroot build/ui_textures_install
-ok   edit 1
-ok   frames 2
-ok   select_def OBJECT_BARREL_BREAKABLE -> 6
-ok   frames 2
-ok   textures_tab 1
-ok   frames 3
-ok   assert_state textures_mode 1
-ok   assert_state edit_mode 1
-ok   assert_widget list_textures
-ok   texture_select 786
-ok   frames 2
-ok   assert_state texture_selected BARREL_BRACED_1_24
-ok   assert_widget img_texture
-ok   texture_export build/ui/barrel_braced.png
-ok   frames 2
-ok   assert_log wrote build/ui/barrel_braced.png
-ok   texture_replace build/ui/barrel_braced.png
-ok   frames 2
-ok   assert_log (id 786, 512x256 DXT1
-ok   assert_log in textures.big from barrel_braced.png
-ok   texture_add ATLAS_UI_TEX build/ui/barrel_braced.png dxt3
-ok   frames 2
-ok   assert_log appended ATLAS_UI_TEX (id 6294, 512x256 DXT3
-ok   assert_state texture_selected ATLAS_UI_TEX
-ok   screenshot build/ui/t1_textures.png
-shot build/ui/t1_textures.png
-ok   quit
+   0.11 ok   wait_maps
+   0.13 ok   wait_ready
+   0.16 ok   select StartOakValeWest
+   0.24 ok   wait_loaded
+   0.55 ok   wait_foliage
+   0.56 ok   set saveroot build/ui_textures_install
+   0.57 ok   edit 1
+   0.59 ok   frames 2
+   0.65 ok   select_def OBJECT_BARREL_BREAKABLE -> 6
+   0.67 ok   frames 2
+   0.74 ok   textures_tab 1
+   0.75 ok   frames 3
+   0.78 ok   assert_state textures_mode 1
+   0.80 ok   assert_state edit_mode 1
+   0.81 ok   assert_widget list_textures
+   0.81 ok   texture_select 786
+   0.82 ok   frames 2
+   0.85 ok   assert_state texture_selected BARREL_BRACED_1_24
+   0.85 ok   assert_widget img_texture
+   1.21 ok   texture_export build/ui/barrel_braced.png
+   1.21 ok   frames 2
+   1.23 ok   assert_log wrote build/ui/barrel_braced.png
+  13.67 ok   texture_replace build/ui/barrel_braced.png
+  13.68 ok   frames 2
+  13.70 ok   assert_log (id 786, 512x256 DXT1
+  13.70 ok   assert_log in textures.big from barrel_braced.png
+  19.82 ok   texture_add ATLAS_UI_TEX build/ui/barrel_braced.png dxt3
+  19.83 ok   frames 2
+  19.86 ok   assert_log appended ATLAS_UI_TEX (id 6294, 512x256 DXT3
+  19.88 ok   assert_state texture_selected ATLAS_UI_TEX
+  19.88 ok   screenshot build/ui/t1_textures.png
+  20.16 shot build/ui/t1_textures.png
+  20.17 ok   quit
 RESULT PASS

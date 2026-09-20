@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <set>
 #include <stdexcept>
 
@@ -4109,7 +4110,11 @@ std::vector<FramedBlock> walkFramedBlocks(const std::vector<uint8_t>& chunk) {
     std::vector<FramedBlock> out;
     if (chunk.size() < 8) return out;
 
-    static thread_local std::vector<uint8_t> scratch;
+    // Grow-only, uninitialised scratch: thousands of garbage offsets pass the
+    // gates below with a huge uncompLen, and a zero-filling resize per attempt
+    // cost 23 GB of memset on one retail chunk (0.9 s of a 1.0 s foliage load).
+    static thread_local std::unique_ptr<uint8_t[]> scratch;
+    static thread_local size_t scratchCap = 0;
     const size_t n = chunk.size();
     for (size_t off = 0; off + 8 < n;) {
         uint32_t uncompLen = getU32(chunk.data() + off);
@@ -4124,12 +4129,15 @@ std::vector<FramedBlock> walkFramedBlocks(const std::vector<uint8_t>& chunk) {
             ++off;
             continue;
         }
-        scratch.resize(uncompLen);
-        if (forge::lzo::tryDecompress(chunk.data() + off + 8, compLen, scratch)) {
+        if (uncompLen > scratchCap) {
+            scratchCap = std::max<size_t>(uncompLen, scratchCap * 2);
+            scratch.reset(new uint8_t[scratchCap]);
+        }
+        if (forge::lzo::tryDecompress(chunk.data() + off + 8, compLen, scratch.get(), uncompLen)) {
             FramedBlock b;
             b.frameOffset = off;
             b.compLen = compLen;
-            b.data.assign(scratch.begin(), scratch.begin() + uncompLen);
+            b.data.assign(scratch.get(), scratch.get() + uncompLen);
             out.push_back(std::move(b));
             off += 8 + compLen; // resume past the confirmed block
         } else {

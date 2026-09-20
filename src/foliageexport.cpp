@@ -1,6 +1,7 @@
 #include "foliageexport.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -418,6 +419,8 @@ size_t Scene::triangleCount() const {
 Scene load(const std::string& mapName, const Options& options, const te::Context& context) {
     Scene scene;
     scene.mapName = mapName;
+    const auto clock0 = std::chrono::steady_clock::now();
+    auto ms = [&]() { return std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - clock0).count()) + " ms"; };
 
     const fs::path stbPath = options.gameRoot / "data" / "Levels" / "FinalAlbion_RT.stb";
     if (!fs::exists(stbPath)) { warn(options, scene, "no FinalAlbion_RT.stb in this install"); return scene; }
@@ -467,7 +470,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
     if (options.log) options.log(std::to_string(raw.size()) + " baked placements in " + std::to_string(scene.groupFrames) +
                                  " cache-group frames (" + std::to_string(scene.framesDecoded) + " frames decoded), " +
                                  std::to_string(palette.entries.size()) + " scenery types" +
-                                 (pst.zsprite ? ", " + std::to_string(pst.zsprite) + " in z-sprite batches" : ""));
+                                 (pst.zsprite ? ", " + std::to_string(pst.zsprite) + " in z-sprite batches" : "") + " [" + ms() + "]");
     // A z-sprite batch is the far-LOD twin of the near single-mesh placements: the
     // same tree usually appears in both. Keep the type-0 copy, drop the twin.
     {
@@ -583,7 +586,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
                                  std::to_string(scene.unboundInstances) + " unbound");
     if (options.log) options.log(std::to_string(scene.instances.size()) + " instances placed across " +
                                  std::to_string(scene.meshes.size()) + " meshes (" +
-                                 std::to_string(scene.triangleCount()) + " triangles)");
+                                 std::to_string(scene.triangleCount()) + " triangles) [" + ms() + "]");
     return scene;
 }
 

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -38,6 +39,7 @@ void Automation::load(const std::string& scriptPath) {
     active_ = true;
     logPath_ = scriptPath + ".log";
     deadline_ = 0;
+    t0_ = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 void Automation::registerWidget(const char* id) {
@@ -57,7 +59,10 @@ void Automation::fail(const std::string& why) { failures_.push_back(why); note("
 
 void Automation::note(const std::string& what) {
     log_.push_back(what);
-    std::ofstream(logPath_, std::ios::app) << what << "\n";
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    char stamp[16];
+    std::snprintf(stamp, sizeof stamp, "%7.2f ", now - t0_);
+    std::ofstream(logPath_, std::ios::app) << stamp << what << "\n";
 }
 
 bool Automation::tick(App& app) {

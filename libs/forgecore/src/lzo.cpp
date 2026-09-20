@@ -44,9 +44,13 @@ std::vector<uint8_t> decompress(const uint8_t* data, size_t len, size_t uncompLe
 }
 
 bool tryDecompress(const uint8_t* data, size_t len, std::vector<uint8_t>& out) {
-    size_t outLen = out.size();
-    const auto st = albion::lzo1x::decompress(data, len, out.data(), &outLen);
-    return st == albion::lzo1x::Status::Ok && outLen == out.size();
+    return tryDecompress(data, len, out.data(), out.size());
+}
+
+bool tryDecompress(const uint8_t* data, size_t len, uint8_t* out, size_t outLen) {
+    size_t produced = outLen;
+    const auto st = albion::lzo1x::decompress(data, len, out, &produced);
+    return st == albion::lzo1x::Status::Ok && produced == outLen;
 }
 
 std::vector<uint8_t> decompressBounded(const uint8_t* data, size_t len,
