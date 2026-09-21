@@ -246,6 +246,7 @@ int usage() {
         "  forge big list <file.big> [bank-filter] [--json]\n"
         "  forge big extract <file.big> <out-dir> [bank-filter]\n"
         "  forge save read <FableSave-file> [--json]\n"
+        "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
         "  forge fmp list <file.fmp> [--json]\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
@@ -9883,6 +9884,64 @@ int main(int argc, char** argv) {
         }
         if (args.size() >= 4 && args[0] == "big" && args[1] == "extract") {
             return fmpExtract(args[2], args[3], args.size() > 4 ? args[4] : "");
+        }
+        if (args.size() >= 2 && args[0] == "mesh-info") {   // mesh-info <graphics.big> <MESH_NAME|id|--last> [--json]: one MBANK_ALLMESHES entry decoded (the importer's check)
+            if (args.size() < 3) { std::fprintf(stderr, "mesh-info <graphics.big> <MESH_NAME|id|--last> [--json]\n"); return 2; }
+            const bool asJson = args.back() == "--json";
+            const auto file = forge::big::File::open(args[1]);
+            const auto* bank = file.findBank("MBANK_ALLMESHES");
+            if (!bank || bank->entries.empty()) { std::fprintf(stderr, "no MBANK_ALLMESHES in %s\n", args[1].c_str()); return 1; }
+            const forge::big::Entry* e = nullptr;
+            const std::string want = args[2];
+            if (want == "--max-id") {   // the highest id in the bank (the next import takes max+1)
+                uint32_t maxId = 0; for (const auto& x : bank->entries) maxId = std::max(maxId, x.id);
+                if (asJson) std::puts(json{{"id", maxId}, {"entries", bank->entries.size()}}.dump(2).c_str()); else std::printf("MBANK_ALLMESHES: %zu entries, highest id %u\n", bank->entries.size(), maxId);
+                return 0;
+            }
+            if (want == "--last") e = &bank->entries.back();
+            else {
+                for (const auto& x : bank->entries) if (x.name == want) { e = &x; break; }
+                if (!e && !want.empty() && std::all_of(want.begin(), want.end(), ::isdigit)) { const uint32_t id = uint32_t(std::stoul(want)); for (const auto& x : bank->entries) if (x.id == id) { e = &x; break; } }
+            }
+            if (!e) { std::fprintf(stderr, "no mesh %s\n", want.c_str()); return 1; }
+            const auto g = forge::meshpreview::decodeLod0(file.entryData(*e), e->type);
+            float mn[3] = {1e9f, 1e9f, 1e9f}, mx[3] = {-1e9f, -1e9f, -1e9f};
+            for (const auto& v : g.vertices) { mn[0] = std::min(mn[0], v.x); mn[1] = std::min(mn[1], v.y); mn[2] = std::min(mn[2], v.z); mx[0] = std::max(mx[0], v.x); mx[1] = std::max(mx[1], v.y); mx[2] = std::max(mx[2], v.z); }
+            // the Info blob: PhysicsIndex, sphere, bbox, LODCount, LODSizes, SafeBoundingRadius, texture ids
+            json info;
+            const auto& sh = e->subHeader;
+            auto i32 = [&](size_t o) { int32_t v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
+            auto f32 = [&](size_t o) { float v = 0; if (o + 4 <= sh.size()) std::memcpy(&v, sh.data() + o, 4); return v; };
+            if (sh.size() >= 56) {
+                info["physics_index"] = i32(0);
+                info["sphere"] = {f32(4), f32(8), f32(12), f32(16)};
+                info["info_bbox_min"] = {f32(20), f32(24), f32(28)};
+                info["info_bbox_max"] = {f32(32), f32(36), f32(40)};
+                info["lod_count"] = i32(44);
+                const size_t lods = size_t(std::max(0, i32(44)));
+                json sizes = json::array();
+                for (size_t l = 0; l < std::min(lods, size_t(8)); ++l) sizes.push_back(i32(48 + l * 4));
+                info["lod_sizes"] = sizes;
+                const size_t o = 48 + lods * 4;
+                info["safe_radius"] = f32(o);
+                // the count cannot exceed what the blob holds (retail multi-LOD blobs lay this out differently; never trust it blindly)
+                const size_t room = sh.size() > o + 8 ? (sh.size() - o - 8) / 4 : 0;
+                const size_t n = std::min(size_t(std::max(0, i32(o + 4))), room);
+                json tex = json::array();
+                for (size_t t = 0; t < n; ++t) tex.push_back(i32(o + 8 + t * 4));
+                info["texture_ids"] = tex;
+            }
+            json j = {{"name", e->name}, {"id", e->id}, {"type", e->type}, {"payload_bytes", e->length}, {"info_bytes", sh.size()},
+                      {"vertices", g.vertices.size()}, {"triangles", g.triangles.size()}, {"materials", g.materials.size()}, {"primitives", g.primitiveCount},
+                      {"bones", g.boneCount}, {"bbox_min", {mn[0], mn[1], mn[2]}}, {"bbox_max", {mx[0], mx[1], mx[2]}},
+                      {"diffuse_of_material_0", g.materials.empty() ? 0 : g.materials.front().diffuseTexture}};
+            for (auto it = info.begin(); it != info.end(); ++it) j[it.key()] = it.value();
+            if (asJson) { std::puts(j.dump(2).c_str()); return 0; }
+            std::printf("%s: id %u type %u, %zu vertices, %zu triangles, %zu material(s), %u primitive(s), %u bone(s), payload %u bytes, info %zu bytes\n",
+                        e->name.c_str(), e->id, e->type, g.vertices.size(), g.triangles.size(), g.materials.size(), g.primitiveCount, g.boneCount, e->length, sh.size());
+            std::printf("  bounds x %.4f..%.4f  y %.4f..%.4f  z %.4f..%.4f\n", mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]);
+            if (info.contains("texture_ids")) std::printf("  info: physics %d, lods %d, textures %s\n", info["physics_index"].get<int>(), info["lod_count"].get<int>(), info["texture_ids"].dump().c_str());
+            return 0;
         }
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "list") {
             const bool asJson = !args.empty() && args.back() == "--json";

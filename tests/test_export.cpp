@@ -24,6 +24,8 @@
 #include "leveledit.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
+#include "forge/meshcompose.hpp"
+#include "forge/meshpreview.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -781,6 +783,41 @@ static void testStbCompaction(const fs::path& dir) {
     CHECK(b1 == b2);
 }
 
+// composeStatic writes what meshpreview reads back: positions exact, winding preserved, normals
+// within the 11/11/10 quantisation, UVs at the +8 bias the decoder leaves in, the Info blob's layout
+void testMeshCompose() {
+    using namespace forge::meshcompose;
+    Primitive p;
+    p.verts = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {0.5f, 0.5f, 2}};
+    p.faces = {{0, 1, 2}, {0, 2, 3}, {0, 1, 4}, {1, 2, 4}, {2, 3, 4}, {3, 0, 4}};
+    p.uvs = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0.5f, 0.5f}};
+    Material m; m.diffuseId = 1234;
+    for (bool compress : {false, true}) {
+        const auto c = composeStatic("MESH_TEST_PYRAMID", {p}, {m}, compress, 0);
+        CHECK(c.vertices == 5 && c.triangles == 6);
+        CHECK(c.info.size() == 60 + 4);
+        uint32_t lodCount = 0, lodSize = 0, texCount = 0; int32_t tex = 0;
+        std::memcpy(&lodCount, c.info.data() + 44, 4); std::memcpy(&lodSize, c.info.data() + 48, 4); std::memcpy(&texCount, c.info.data() + 56, 4); std::memcpy(&tex, c.info.data() + 60, 4);
+        CHECK(lodCount == 1 && lodSize < c.payload.size() && texCount == 1 && tex == 1234);
+        const auto g = forge::meshpreview::decodeLod0(c.payload, 1);
+        CHECK(g.vertices.size() == 5 && g.triangles.size() == 6);
+        CHECK(g.materials.size() >= 1 && g.materials.front().diffuseTexture == 1234);
+        for (size_t i = 0; i < 5; ++i) {
+            CHECK(std::fabs(g.vertices[i].x - p.verts[i].x) < 1e-6f && std::fabs(g.vertices[i].y - p.verts[i].y) < 1e-6f && std::fabs(g.vertices[i].z - p.verts[i].z) < 1e-6f);
+            CHECK(std::fabs(g.vertices[i].u - (p.uvs[i].u + 8.0f)) < 1e-3f);            // the decoder keeps the +8 bias
+            CHECK(std::fabs(g.vertices[i].v - ((1.0f - p.uvs[i].v) + 8.0f)) < 1e-3f);   // stored as 1-v
+        }
+        for (size_t i = 0; i < 6; ++i) CHECK(g.triangles[i].a == p.faces[i][0] && g.triangles[i].b == p.faces[i][1] && g.triangles[i].c == p.faces[i][2]);
+        // the apex normal points up
+        CHECK(g.vertices[4].nz > 0.9f);
+    }
+    CHECK(packNormal({0, 0, 1}) == (uint32_t(511) << 22));
+    CHECK(compressUv(0.0f) == 16384 && compressUv(1.0f) == 18432);
+    bool threw = false;
+    try { composeStatic("NOTMESH", {p}, {m}); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
@@ -798,6 +835,7 @@ int main() {
     testTerrainEditing(lev, dir);
     testNavPatch(dir);
     testGtg(dir);
+    testMeshCompose();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";

@@ -64,6 +64,8 @@ int usage() {
         "  forge world-owner <map> <region>   |   forge world-sees <region> <map> <0|1>   (region edits; world --regions lists them)\n"
         "  forge theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]\n"
         "      (a ground theme from your own texture: appended to textures.big + a new ENGINE_THEME in game.bin; paint it from the editor)\n"
+        "  forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--install <root>]\n"
+        "      (a custom static object: MESH_<NAME> appended to graphics.big, its diffuse to textures.big, an OBJECT_<NAME> def copied from the donor; Y-up model space)\n"
         "  forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
         "  forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
         "  forge entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
