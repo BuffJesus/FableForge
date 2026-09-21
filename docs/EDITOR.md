@@ -419,9 +419,10 @@ decoded back through the preview reader before anything is written; one-time
 A collision hull is written too: `MESH_<NAME>_PHYSICS`, a type-3 entry in EgoCore's
 `3DMF` form (the model's own triangles) that the render mesh's Info names as
 `PhysicsIndex` -- retail pairs every prop that way (`MESH_OBJECT_BARREL[PHYSICS]` id 168
-<- barrel Info physics 168); `--no-collision` skips it. Model space is metres, Y up; the
-mesh is written in Fable's centimetres, Z up. **Not yet:** a first in-game look at an
-imported model (retail hulls also carry `SMTH` / `UNIV` chunks EgoCore's writer omits).
+<- barrel Info physics 168); the hull carries retail's full chunk set (TRIS, SMTH, VERT,
+UNIV -- decoded from the barrel's hull; EgoCore's writer omits SMTH/UNIV); `--no-collision`
+skips it. Model space is metres, Y up; the mesh is written in Fable's centimetres, Z up.
+**Not yet:** a first in-game look at an imported model.
 
 ## Creatures (NPCs, animals, guards)
 

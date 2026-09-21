@@ -16,6 +16,8 @@ Stages (default: all, in this order):
            a real region load into it (ForgeFSE's GoToMapSlotRetailTransition); the probe logs GetRegionName
            before and after. The map-screen click itself is the one thing left to a human.
   restore  forge restore, then forge backups must report 0 differ (always run last)
+  mesh     (not default) a custom static mesh from forge mesh-import placed in StartOakValeWest, found by the
+           harness, screenshotted; `mesh_undo` puts back only the files it touched (a staged mod bundle stays)
 
   python tools/ingame/release_probes.py [--stage things,compact,region,restore] [--dry-run] [--keep]
 Reports: build/ingame/release/<stage>/report.json + the harness screenshots; summary printed at the end.
@@ -60,9 +62,11 @@ def game_running() -> bool:
 
 
 def backups_differ() -> int | None:
+    """Files FableForge's own writers changed (EDIT / NEW rows). A staged mod bundle (MODS rows) or an
+    overlay (OVR) is somebody else's deploy and is not what a probe has to put back."""
     r = sh([FORGE, "backups"])
-    m = re.search(r"(\d+) differ from their backup", r.stdout)
-    return int(m.group(1)) if m else None
+    if DRY: return 0
+    return sum(1 for l in r.stdout.splitlines() if re.match(r"\s*(EDIT|NEW )\s", l))
 
 
 def run_gui_script(name: str, lines: list[str]) -> bool:
@@ -205,7 +209,78 @@ def stage_restore() -> dict:
     return out
 
 
-STAGES = {"things": stage_things, "compact": stage_compact, "region": stage_region, "restore": stage_restore}
+def stage_mesh() -> dict:
+    """A custom static mesh (forge mesh-import) placed in the childhood map: a 1 m bright cube from a .glb
+    written here (tools/test_meshimport.py's generator), with its collision hull. The harness finds the
+    named thing and screenshots the hero standing at it; whether it renders (and whether the hero is
+    stopped by it) is judged from the shot. Not in the default stage list. Puts back only the files it
+    touched (graphics.big, textures.big, game.bin/names.bin, the map's TNG in the WAD) from their
+    originals, so a staged mod bundle on the install stays as it is."""
+    out: dict = {"stage": "mesh"}
+    sys.path.insert(0, str(ROOT / "tools"))
+    import test_meshimport as tm
+    d = OUT / "mesh"; d.mkdir(parents=True, exist_ok=True)
+    glb = d / "cube.glb"; png = d / "cube.png"
+    if not DRY:
+        tm.write_glb(glb)
+        # a loud texture: magenta / cyan checks
+        import struct, zlib
+        w = h = 64
+        rows = b"".join(b"\x00" + bytes(sum(([255, 0, 255] if ((x // 8 + y // 8) % 2) else [0, 255, 255] for x in range(w)), [])) for y in range(h))
+        def chunk(t, dd): return struct.pack(">I", len(dd)) + t + dd + struct.pack(">I", zlib.crc32(t + dd) & 0xffffffff)
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+    r = sh([FORGE, "mesh-import", glb, "FORGE_PROBE_CUBE", "--texture", png])
+    if r.returncode != 0 and not DRY:
+        return {**out, "ok": False, "error": "mesh-import: " + (r.stderr.strip() or r.stdout.strip()[-400:])}
+    out["import"] = r.stdout.strip().splitlines()[-5:] if r.stdout else []
+    cx, cy = CENTRE
+    ok = run_gui_script("mesh_place", [
+        "wait_maps", "wait_ready", f"select {START_MAP}", "wait_loaded", "wait_foliage",
+        "edit 1", "frames 2", "assert_state doc_loaded 1",
+        f"camera {cx:g} {cy:g} 20 0.8 -60 24", "frames 2",
+        "place OBJECT_FORGE_PROBE_CUBE ProbeCube", "frames 3",
+        "assert_log placed OBJECT_FORGE_PROBE_CUBE",
+        f"screenshot {d / 'editor_placed.png'}",
+        "save_level", "frames 2", "deploy_level", "frames 2", "assert_state doc_dirty 0",
+        "quit",
+    ])
+    if not ok:
+        return {**out, "ok": False, "error": "GUI placement/deploy script failed (see build/ingame/release/mesh_place.txt.log)"}
+    rep = run_harness("mesh", ["--map", START_MAP, "--new-game", "--teleport", "--centre", f"{cx:g},{cy:g}", "--things", "ProbeCube"])
+    out["things"] = rep.get("things"); out["hero_after_teleport"] = rep.get("hero_after_teleport"); out["notes"] = rep.get("notes")
+    found = rep.get("things") or {}
+    out["ok"] = rep.get("dry") or (bool(rep.get("ok")) and all(v.get("ok") for v in found.values()) and len(found) == 1)
+    out["shot"] = str(OUT / "mesh" / "04_after_probe.png")
+    out["manual"] = "whether the cube renders (magenta/cyan checks, 1 m) and stops the hero is judged from the screenshot"
+    return out
+
+
+def stage_mesh_undo() -> dict:
+    """Put back exactly what stage_mesh touched, from the originals (not `forge restore`: a staged
+    mod bundle on the install must stay)."""
+    out: dict = {"stage": "mesh_undo", "restored": []}
+    root = Path(json.loads(sh([FORGE, "backups", "--json"]).stdout).get("root", "")) if False else None
+    r = sh([FORGE, "backups"])
+    lines = [l for l in r.stdout.splitlines() if "  " in l]
+    import re as _re
+    for l in lines:
+        m = _re.match(r"\s*(same|EDIT|NEW |MODS|OVR )\s+(.*?)\s+\d{4}-\d\d-\d\d", l)
+        if not m: continue
+        path = Path(m.group(2).strip())
+        leaf = path.name.lower()
+        if leaf not in ("graphics.big", "textures.big", "game.bin", "names.bin", "finalalbion.wad", f"{START_MAP.lower()}.tng"): continue
+        if m.group(1) != "EDIT": continue
+        for sfx in (".forge-orig", ".atlas-orig"):
+            b = Path(str(path) + sfx)
+            if b.exists():
+                if not DRY: shutil.copyfile(b, path)
+                out["restored"].append(str(path)); break
+    out["ok"] = True
+    return out
+
+
+STAGES = {"things": stage_things, "compact": stage_compact, "region": stage_region, "restore": stage_restore,
+          "mesh": stage_mesh, "mesh_undo": stage_mesh_undo}
 
 
 def main() -> int:

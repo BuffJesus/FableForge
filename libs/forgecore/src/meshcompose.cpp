@@ -261,16 +261,39 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
         }
         base += uint32_t(p.verts.size()); count += uint32_t(p.verts.size());
     }
+    // retail's chunk order inside PRIM: TRIS, SMTH (a smoothing group per triangle, all 0 in
+    // retail hulls), VERT, UNIV (per vertex: the id of the first vertex at the same position);
+    // EgoCore writes TRIS + VERT only -- the two extra chunks are what retail carries
     if (!indices.empty()) {
         w.push("TRIS");
         w.u32(uint32_t(indices.size() / 3));
         for (uint16_t i : indices) putU16(w.buf, i);
+        w.pop();
+        w.push("SMTH");
+        w.u32(uint32_t(indices.size() / 3));
+        for (size_t i = 0; i < indices.size() / 3; ++i) w.u32(0);
         w.pop();
     }
     if (count) {
         w.push("VERT");
         w.u32(count);
         w.raw(verts.data(), verts.size());
+        w.pop();
+        w.push("UNIV");
+        w.u32(count);
+        std::vector<uint32_t> uniq;
+        uniq.reserve(count);
+        {
+            std::vector<std::array<float, 3>> seen;
+            for (const auto& p : prims)
+                for (const auto& v : p.verts) {
+                    uint32_t id = uint32_t(seen.size());
+                    for (size_t k = 0; k < seen.size(); ++k) if (seen[k][0] == v.x && seen[k][1] == v.y && seen[k][2] == v.z) { id = uint32_t(k); break; }
+                    if (id == seen.size()) seen.push_back({v.x, v.y, v.z});
+                    uniq.push_back(id);
+                }
+        }
+        for (uint32_t u : uniq) w.u32(u);
         w.pop();
     }
     w.pop();   // PRIM

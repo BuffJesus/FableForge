@@ -52,7 +52,7 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
 // The physics (collision) mesh a prop needs to be solid: a type-3 MBANK_ALLMESHES entry (no Info
 // blob) whose id the render mesh's Info names as PhysicsIndex. EgoCore MeshCompiler::CompilePhysics:
 // a `3DMF` chunk tree (MTLS with the default material, one SUBM "collision" with an identity TRFM
-// and a PRIM of TRIS + VERT{pos, normal, uv}) as [u32 uncompressed size][raw LZO1X]. The hull is
+// and a PRIM of TRIS + SMTH + VERT{pos, normal, uv} + UNIV, retail's chunk set) as [u32 size][raw LZO1X]. The hull is
 // the geometry itself (every primitive's triangles); normals/uvs ride along as EgoCore writes them.
 std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims);
 // the same payload before compression (for tests)
