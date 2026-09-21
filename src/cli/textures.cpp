@@ -109,8 +109,8 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         std::printf("theme %s ready: def index %u, texture %u -- paint it from the editor (Paint ground -> search the name)\n", req.name.c_str(), out.defIndex, out.baseTexture);
         return 0;
     }
-    if (cmd == "mesh-import") {   // mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--install <root>]: a custom static object
-        if (args.size() < 3) { std::fprintf(stderr, "usage: forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--install <root>]\n"); return 2; }
+    if (cmd == "mesh-import") {   // mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]: a custom static object
+        if (args.size() < 3) { std::fprintf(stderr, "usage: forge mesh-import <model.glb|.gltf|.obj> <NAME> [--texture <png> | --texture-id <n>] [--donor <OBJECT_...>] [--stored] [--no-collision] [--install <root>]\n"); return 2; }
         std::string installArg; albion::meshimport::ImportRequest req;
         req.model = args[1]; req.name = args[2];
         for (size_t i = 3; i < args.size(); ++i) {
@@ -119,6 +119,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
             else if (args[i] == "--texture-id" && i + 1 < args.size()) req.textureId = uint32_t(std::stoul(args[++i]));
             else if (args[i] == "--donor" && i + 1 < args.size()) req.donor = args[++i];
             else if (args[i] == "--stored") req.compress = false;
+            else if (args[i] == "--no-collision") req.collision = false;
             else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
         }
         const Install install = findInstall(installArg);
@@ -126,8 +127,8 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         albion::meshimport::ImportResult out; std::string err;
         if (!albion::meshimport::importModel(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
-        std::printf("%s ready: mesh %s id %u, def index %zu -- place it from the editor (Add an object -> search %s). Physics: none yet (the object may be walk-through in-game).\n",
-                    out.objectName.c_str(), out.meshName.c_str(), out.meshId, out.defIndex, out.objectName.c_str());
+        std::printf("%s ready: mesh %s id %u%s, def index %zu -- place it from the editor (Add an object -> search %s). Not yet seen in-game.\n",
+                    out.objectName.c_str(), out.meshName.c_str(), out.meshId, out.physicsId ? (", collision hull id " + std::to_string(out.physicsId)).c_str() : ", no collision hull", out.defIndex, out.objectName.c_str());
         return 0;
     }
     return std::nullopt;

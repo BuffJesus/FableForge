@@ -8,6 +8,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iterator>
 #include <limits>
@@ -9904,6 +9905,37 @@ int main(int argc, char** argv) {
                 if (!e && !want.empty() && std::all_of(want.begin(), want.end(), ::isdigit)) { const uint32_t id = uint32_t(std::stoul(want)); for (const auto& x : bank->entries) if (x.id == id) { e = &x; break; } }
             }
             if (!e) { std::fprintf(stderr, "no mesh %s\n", want.c_str()); return 1; }
+            if (e->type == 3) {   // a physics hull: [u32 size][raw LZO] of a 3DMF chunk tree; print the tree
+                const auto raw = file.entryData(*e);
+                if (raw.size() < 4) { std::fprintf(stderr, "physics entry too short\n"); return 1; }
+                uint32_t usize = 0; std::memcpy(&usize, raw.data(), 4);
+                std::vector<uint8_t> plain;
+                try { plain = forge::lzo::decompress(raw.data() + 4, raw.size() - 4, usize); } catch (const std::exception&) { plain.assign(raw.begin() + 4, raw.end()); }
+                json chunks = json::array();
+                std::function<void(size_t, size_t, int)> walk = [&](size_t at, size_t end, int depth) {
+                    while (at + 8 <= end) {
+                        const std::string tag(reinterpret_cast<const char*>(plain.data() + at), 4);
+                        uint32_t n = 0; std::memcpy(&n, plain.data() + at + 4, 4);
+                        if (!std::all_of(tag.begin(), tag.end(), [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)); }) || at + 8 + n > end) return;
+                        chunks.push_back({{"tag", tag}, {"size", n}, {"depth", depth}});
+                        if (tag == "3DRT" || tag == "MTLS" || tag == "SUBM" || tag == "PRIM" || tag == "HLPR") {
+                            size_t inner = at + 8;
+                            if (tag == "SUBM") { inner += std::strlen(reinterpret_cast<const char*>(plain.data() + inner)) + 1 + 16; }
+                            if (tag == "PRIM") inner += 4;
+                            walk(inner, at + 8 + n, depth + 1);
+                        }
+                        at += 8 + n;
+                    }
+                };
+                size_t start = 12; while (start < plain.size() && plain[start]) ++start; ++start; while (start % 4) ++start;   // >>>>3DMF, version, copyright, align
+                walk(start, plain.size(), 0);
+                json j = {{"name", e->name}, {"id", e->id}, {"type", e->type}, {"payload_bytes", e->length}, {"uncompressed", usize}, {"decoded", plain.size()},
+                          {"magic", std::string(reinterpret_cast<const char*>(plain.data()), std::min<size_t>(8, plain.size()))}, {"chunks", chunks}};
+                if (asJson) { std::puts(j.dump(2).c_str()); return 0; }
+                std::printf("%s: id %u type 3 (physics), %u bytes -> %zu uncompressed, %s\n", e->name.c_str(), e->id, e->length, plain.size(), j["magic"].get<std::string>().c_str());
+                for (const auto& c : chunks) std::printf("  %*s%s %u\n", c["depth"].get<int>() * 2, "", c["tag"].get<std::string>().c_str(), c["size"].get<uint32_t>());
+                return 0;
+            }
             const auto g = forge::meshpreview::decodeLod0(file.entryData(*e), e->type);
             float mn[3] = {1e9f, 1e9f, 1e9f}, mx[3] = {-1e9f, -1e9f, -1e9f};
             for (const auto& v : g.vertices) { mn[0] = std::min(mn[0], v.x); mn[1] = std::min(mn[1], v.y); mn[2] = std::min(mn[2], v.z); mx[0] = std::max(mx[0], v.x); mx[1] = std::max(mx[1], v.y); mx[2] = std::max(mx[2], v.z); }

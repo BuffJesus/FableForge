@@ -389,7 +389,7 @@ void App::pollMeshImport() {
     const MeshImportJob job = meshImportFuture_.get();
     if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
-    pushLog(job.objectName + " ready: find it under Add an object (physics: none yet, it may be walk-through in-game)", 3);
+    pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
     foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear();
     meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
@@ -1671,7 +1671,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("btn_mesh_import");
     ImGui::PushFont(fontSmall_);
-    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. It then shows under Add an object. Not yet: a physics hull (the object may be walk-through in-game).");
+    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. A collision hull is written from the model's own triangles (EgoCore's 3DMF physics entry). It then shows under Add an object. Not yet seen in-game.");
     ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));

@@ -416,8 +416,12 @@ decoded back through the preview reader before anything is written; one-time
 *Add an object* (the def/texture context reloads) and places like any prop. CLI:
 `forge mesh-import <model> <NAME> [--texture png | --texture-id n] [--donor OBJECT_...]`,
 `forge-tools mesh-info <graphics.big> <MESH_NAME|id|--max-id>` to inspect an entry.
-**Not yet:** a physics hull (PhysicsIndex 0 -- *untested in-game whether the object is
-walk-through*), a first in-game look at an imported model.
+A collision hull is written too: `MESH_<NAME>_PHYSICS`, a type-3 entry in EgoCore's
+`3DMF` form (the model's own triangles) that the render mesh's Info names as
+`PhysicsIndex` -- retail pairs every prop that way (`MESH_OBJECT_BARREL[PHYSICS]` id 168
+<- barrel Info physics 168); `--no-collision` skips it. Model space is metres, Y up; the
+mesh is written in Fable's centimetres, Z up. **Not yet:** a first in-game look at an
+imported model (retail hulls also carry `SMTH` / `UNIV` chunks EgoCore's writer omits).
 
 ## Creatures (NPCs, animals, guards)
 

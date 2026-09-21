@@ -49,6 +49,15 @@ struct Composed {
 Composed composeStatic(const std::string& name, const std::vector<Primitive>& prims,
                        const std::vector<Material>& materials, bool compress = true, int physicsIndex = 0);
 
+// The physics (collision) mesh a prop needs to be solid: a type-3 MBANK_ALLMESHES entry (no Info
+// blob) whose id the render mesh's Info names as PhysicsIndex. EgoCore MeshCompiler::CompilePhysics:
+// a `3DMF` chunk tree (MTLS with the default material, one SUBM "collision" with an identity TRFM
+// and a PRIM of TRIS + VERT{pos, normal, uv}) as [u32 uncompressed size][raw LZO1X]. The hull is
+// the geometry itself (every primitive's triangles); normals/uvs ride along as EgoCore writes them.
+std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims);
+// the same payload before compression (for tests)
+std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims);
+
 // EgoCore GltfMeshImporter.h PackNormal / CompressUV, exposed for tests.
 uint32_t packNormal(Vec3 n);
 int16_t compressUv(float v);

@@ -38,8 +38,11 @@ std::vector<uint8_t> readFile(const fs::path& p) {
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
-// glTF Y-up -> Fable Z-up: the inverse of the exporter's (x, z, -y)
-Vec3 toFable(float x, float y, float z) { return {x, -z, y}; }
+// glTF Y-up metres -> Fable Z-up centimetres: the inverse of the exporter's (x, z, -y) and its
+// 0.01 mesh scale (retail's barrel is z 0..132 in its mesh; 1 world unit = 1 m = 100 mesh units)
+constexpr float kMetresToMesh = 100.0f;
+Vec3 toFable(float x, float y, float z) { return {x * kMetresToMesh, -z * kMetresToMesh, y * kMetresToMesh}; }
+Vec3 toFableDir(float x, float y, float z) { return {x, -z, y}; }
 
 // ---------------------------------------------------------------- glTF 2.0
 
@@ -206,7 +209,7 @@ Model loadGltf(const fs::path& path) {
                 const auto nrm = readAccessor(g, attrs["NORMAL"].get<int>(), comps);
                 if (comps == 3 && nrm.size() / 3 == nv) {
                     p.normals.reserve(nv);
-                    for (size_t i = 0; i < nv; ++i) { float x = nrm[i * 3], y = nrm[i * 3 + 1], z = nrm[i * 3 + 2]; transformPoint(world, x, y, z, true); p.normals.push_back(toFable(x, y, z)); }
+                    for (size_t i = 0; i < nv; ++i) { float x = nrm[i * 3], y = nrm[i * 3 + 1], z = nrm[i * 3 + 2]; transformPoint(world, x, y, z, true); p.normals.push_back(toFableDir(x, y, z)); }
                 }
             }
             if (attrs.contains("TEXCOORD_0")) {
@@ -256,7 +259,7 @@ Model loadObj(const fs::path& path) {
         std::string tag; ls >> tag;
         if (tag == "v") { float x, y, z; ls >> x >> y >> z; v.push_back(toFable(x, y, z)); }
         else if (tag == "vt") { float u, w; ls >> u >> w; vt.push_back({u, 1.0f - w}); }   // OBJ v is bottom-up; glTF/Blender convention is top-down
-        else if (tag == "vn") { float x, y, z; ls >> x >> y >> z; vn.push_back(toFable(x, y, z)); }
+        else if (tag == "vn") { float x, y, z; ls >> x >> y >> z; vn.push_back(toFableDir(x, y, z)); }
         else if (tag == "usemtl") { std::string n; ls >> n; slot = ensureSlot(n.empty() ? "default" : n); }
         else if (tag == "f") {
             std::vector<uint32_t> poly;
@@ -369,7 +372,18 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             m.diffuseId = int32_t(out.textureId);
             materials.push_back(m);
         }
-        const auto composed = forge::meshcompose::composeStatic(out.meshName, model.prims, materials, req.compress, 0);
+        // 3a. the collision hull: the next id, so the render mesh's Info can name it
+        uint32_t nextId = 0;
+        {
+            const auto gfx = forge::big::File::open(gfxBig);
+            const auto* bank = gfx.findBank("MBANK_ALLMESHES");
+            if (!bank || bank->entries.empty()) { error = "graphics.big has no MBANK_ALLMESHES"; return false; }
+            for (const auto& e : bank->entries) { nextId = std::max(nextId, e.id); if (e.name == out.meshName) { error = "graphics.big already has a mesh named " + out.meshName; return false; } }
+            ++nextId;
+        }
+        std::vector<uint8_t> physics;
+        if (req.collision) { physics = forge::meshcompose::composePhysics(model.prims); out.physicsId = nextId++; }
+        const auto composed = forge::meshcompose::composeStatic(out.meshName, model.prims, materials, req.compress, int(out.physicsId));
         out.vertices = composed.vertices; out.triangles = composed.triangles; out.primitives = model.prims.size();
         // the decoder must read back what we wrote (the same reader the preview and thumbnails use)
         const auto check = forge::meshpreview::decodeLod0(composed.payload, 1);
@@ -385,27 +399,35 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             auto* bank = gfx.findBank("MBANK_ALLMESHES");
             if (!bank) { error = "graphics.big has no MBANK_ALLMESHES"; return false; }
             if (bank->entries.empty()) { error = "MBANK_ALLMESHES is empty"; return false; }
-            for (const auto& e : bank->entries) if (e.name == out.meshName) { error = "graphics.big already has a mesh named " + out.meshName; return false; }
-            uint32_t maxId = 0;
             const forge::big::Entry* modelEntry = nullptr;
-            for (const auto& e : bank->entries) { maxId = std::max(maxId, e.id); if (e.type == 1 && !modelEntry) modelEntry = &e; }
+            for (const auto& e : bank->entries) if (e.type == 1 && !modelEntry) modelEntry = &e;
             if (!modelEntry) modelEntry = &bank->entries.back();
+            if (!physics.empty()) {   // the hull first (its id was reserved above)
+                forge::big::Entry h;
+                h.magic = modelEntry->magic; h.devFileType = modelEntry->devFileType; h.type = 3;
+                h.id = out.physicsId;
+                h.name = out.meshName + "_PHYSICS";
+                h.data = physics;
+                h.length = uint32_t(physics.size());
+                bank->entries.push_back(std::move(h));
+            }
             forge::big::Entry e;
             e.magic = modelEntry->magic; e.devFileType = modelEntry->devFileType; e.type = 1;
-            e.id = maxId + 1;
+            e.id = nextId;
             e.name = out.meshName;
             e.subHeader = composed.info;
             e.data = composed.payload;
             e.length = uint32_t(composed.payload.size());
             bank->entries.push_back(std::move(e));
-            out.meshId = maxId + 1;
+            out.meshId = nextId;
             if (!backups::backupOnce(gfxBig, error)) return false;
             const auto bytes = gfx.serialize();
             const fs::path tmp = gfxBig.string() + ".forge-tmp";
             { std::ofstream o(tmp, std::ios::binary | std::ios::trunc); o.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size())); if (!o) { error = "cannot write " + tmp.string(); return false; } }
             fs::rename(tmp, gfxBig);
             out.notes.push_back("graphics.big: appended " + out.meshName + " (id " + std::to_string(out.meshId) + ", " + std::to_string(out.vertices) + " vertices, " +
-                                std::to_string(out.triangles) + " triangles, " + std::to_string(out.primitives) + " primitive(s), " + std::to_string(composed.payload.size()) + " bytes)");
+                                std::to_string(out.triangles) + " triangles, " + std::to_string(out.primitives) + " primitive(s), " + std::to_string(composed.payload.size()) + " bytes)" +
+                                (physics.empty() ? std::string(", no collision hull") : " + " + out.meshName + "_PHYSICS (id " + std::to_string(out.physicsId) + ", the model's own triangles as the hull)"));
         }
 
         // 4. the OBJECT def: the donor's bytes, Graphic.modelId repointed, the mesh size from the bounds
@@ -415,8 +437,8 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
         if (graphic.size() < 8) { error = "the donor's Graphic field is not a CEngineGraphic"; return false; }
         std::memcpy(graphic.data() + 4, &out.meshId, 4);
         forge::defedit::setFieldBytes(defs, schema, out.objectName, "Graphic", graphic);
-        const float height = composed.bbMax.z - composed.bbMin.z;
-        const float radius = 0.5f * std::max(composed.bbMax.x - composed.bbMin.x, composed.bbMax.y - composed.bbMin.y);
+        const float height = (composed.bbMax.z - composed.bbMin.z) / kMetresToMesh;   // the def's sizes are world units
+        const float radius = 0.5f * std::max(composed.bbMax.x - composed.bbMin.x, composed.bbMax.y - composed.bbMin.y) / kMetresToMesh;
         auto setf = [&](const char* field, float value) {
             try { forge::defedit::setField(defs, schema, out.objectName, field, std::to_string(value)); }
             catch (const std::exception& e) { out.notes.push_back(std::string("game.bin: ") + field + " left as the donor's (" + e.what() + ")"); }

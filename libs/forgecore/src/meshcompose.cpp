@@ -5,6 +5,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "forge/lzo.hpp"
 #include "forge/texturewrite.hpp"
 
 namespace forge::meshcompose {
@@ -200,6 +201,93 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
     putU32(info, uint32_t(texIds.size()));
     for (int32_t t : texIds) putI32(info, t);
     return c;
+}
+
+namespace {
+
+// EgoCore's ChunkWriter: TAG, u32 size placeholder, body, size patched on pop
+struct ChunkWriter {
+    std::vector<uint8_t> buf;
+    std::vector<size_t> stack;
+    void raw(const void* d, size_t n) { const auto* b = static_cast<const uint8_t*>(d); buf.insert(buf.end(), b, b + n); }
+    void tag(const char* t) { raw(t, 4); }
+    void u32(uint32_t v) { putU32(buf, v); }
+    void i32(int32_t v) { putI32(buf, v); }
+    void str(const std::string& s) { putStr(buf, s); }
+    void push(const char* t) { tag(t); stack.push_back(buf.size()); u32(0); }
+    void pop() { const size_t at = stack.back(); stack.pop_back(); const uint32_t n = uint32_t(buf.size() - at - 4); std::memcpy(buf.data() + at, &n, 4); }
+    void align() { while (buf.size() % 4) buf.push_back(0); }
+};
+
+} // namespace
+
+std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims) {
+    ChunkWriter w;
+    w.tag(">>>>"); w.tag("3DMF"); w.u32(100);
+    w.str("Copyright Big Blue Box Studios Ltd.");
+    w.align();
+    w.push("3DRT");
+    w.push("MTLS");
+    w.push("MTRL");
+    w.str("23 - Default");
+    w.u32(0);
+    w.buf.push_back(0);   // two-sided
+    const uint32_t colours[6] = {0xFF96EFF7, 0xFF96EFF7, 0xFFE5E5E5, 0x3DCCCCCC, 0x00000000, 0x3E99999A};
+    for (uint32_t c : colours) w.u32(c);
+    w.pop();
+    w.pop();
+    w.push("SUBM");
+    w.str("collision");
+    w.u32(0); w.i32(-1); w.i32(-1); w.i32(-1);   // sub-mesh index, parent, first child, next sibling
+    w.push("TRFM");
+    const float identity[12] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+    for (float f : identity) putF32(w.buf, f);
+    w.pop();
+    w.push("PRIM");
+    w.i32(0);   // physics material index
+    // every primitive's triangles into one vertex/index set (indices are u16: cap at 65535 vertices)
+    std::vector<uint16_t> indices;
+    std::vector<uint8_t> verts;
+    uint32_t base = 0, count = 0;
+    for (const auto& p : prims) {
+        const auto norms = p.normals.empty() ? std::vector<Vec3>(p.verts.size(), Vec3{0, 0, 1}) : p.normals;
+        for (const auto& f : p.faces) for (uint32_t i : f) indices.push_back(uint16_t(std::min<uint32_t>(base + i, 65535)));
+        for (size_t i = 0; i < p.verts.size(); ++i) {
+            putF32(verts, p.verts[i].x); putF32(verts, p.verts[i].y); putF32(verts, p.verts[i].z);
+            const Vec3 n = i < norms.size() ? norms[i] : Vec3{0, 0, 1};
+            putF32(verts, n.x); putF32(verts, n.y); putF32(verts, n.z);
+            const Vec2 uv = i < p.uvs.size() ? p.uvs[i] : Vec2{};
+            putF32(verts, uv.u); putF32(verts, uv.v);
+        }
+        base += uint32_t(p.verts.size()); count += uint32_t(p.verts.size());
+    }
+    if (!indices.empty()) {
+        w.push("TRIS");
+        w.u32(uint32_t(indices.size() / 3));
+        for (uint16_t i : indices) putU16(w.buf, i);
+        w.pop();
+    }
+    if (count) {
+        w.push("VERT");
+        w.u32(count);
+        w.raw(verts.data(), verts.size());
+        w.pop();
+    }
+    w.pop();   // PRIM
+    w.pop();   // SUBM
+    w.pop();   // 3DRT
+    w.u32(0);  // end marker
+    return w.buf;
+}
+
+std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims) {
+    const auto plain = composePhysicsUncompressed(prims);
+    std::vector<uint8_t> out;
+    putU32(out, uint32_t(plain.size()));
+    const auto lzo = forge::lzo::compress(plain);
+    if (lzo.empty()) out.insert(out.end(), plain.begin(), plain.end());
+    else out.insert(out.end(), lzo.begin(), lzo.end());
+    return out;
 }
 
 } // namespace forge::meshcompose

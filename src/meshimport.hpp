@@ -5,8 +5,8 @@
 // GBANK_MAIN_PC entry (the 0.14 importer), and an OBJECT_<NAME> def -- a copy of a donor
 // OBJECT with Graphic.modelId repointed and the mesh height/radius from the bounds -- so the
 // object shows in *Add an object* and places like any retail prop. One-time .forge-orig
-// backups; refused while the game runs. Model space: glTF Y-up is turned into Fable Z-up
-// (x, -z, y), the exporter's inverse; OBJ is read as Y-up too. Untested in-game so far:
+// backups; refused while the game runs. Model space: glTF Y-up metres are turned into Fable Z-up
+// centimetres (x, -z, y) * 100, the exporter's inverse; OBJ is read as Y-up metres too. Untested in-game so far:
 // physics (PhysicsIndex 0 = the mesh has no hull; the object may be walk-through).
 #include <array>
 #include <filesystem>
@@ -34,10 +34,12 @@ struct ImportRequest {
     uint32_t textureId = 0;           // ... or an existing textures.big id
     std::string donor = "OBJECT_BARREL_UNBREAKABLE";   // the OBJECT def copied for the new object
     bool compress = true;
+    bool collision = true;            // a type-3 physics entry from the model's own triangles (PhysicsIndex); false = walk-through
 };
 
 struct ImportResult {
     uint32_t meshId = 0;              // the new MBANK_ALLMESHES id (Graphic.modelId)
+    uint32_t physicsId = 0;           // the type-3 collision entry (0 = none)
     uint32_t textureId = 0;
     size_t defIndex = 0;
     size_t vertices = 0, triangles = 0, primitives = 0;

@@ -133,9 +133,14 @@ def main() -> int:
         info = json.loads(run(tools, "mesh-info", os.path.join(scratch, "data", "graphics", "graphics.big"), "MESH_" + name, "--json").stdout)
         if info.get("vertices") != 24 or info.get("triangles") != 12: print(name, "decoded geometry wrong:", info); ok = False
         if info.get("type") != 1 or info.get("id", 0) <= before.get("id", 0): print(name, "entry id/type wrong:", info); ok = False
+        if info.get("physics_index", 0) != info.get("id", 0) - 1: print(name, "PhysicsIndex should name the hull written just before:", info.get("physics_index"), info.get("id")); ok = False
+        hull = json.loads(run(tools, "mesh-info", os.path.join(scratch, "data", "graphics", "graphics.big"), "MESH_" + name + "_PHYSICS", "--json").stdout)
+        tags = [c["tag"] for c in hull.get("chunks", [])]
+        if hull.get("type") != 3 or hull.get("magic") != ">>>>3DMF" or tags != ["3DRT", "MTLS", "MTRL", "SUBM", "TRFM", "PRIM", "TRIS", "VERT"]: print(name, "hull chunk tree wrong:", hull.get("magic"), tags); ok = False
+        if hull.get("uncompressed") != hull.get("decoded"): print(name, "hull did not decompress to its declared size"); ok = False
         bb = info.get("bbox_min", []) + info.get("bbox_max", [])
-        # Y-up cube standing on y=0 -> Fable Z-up: x -0.5..0.5, y -0.5..0.5, z 0..1
-        want = [-0.5, -0.5, 0.0, 0.5, 0.5, 1.0]
+        # Y-up 1 m cube standing on y=0 -> Fable Z-up centimetres: x -50..50, y -50..50, z 0..100
+        want = [-50.0, -50.0, 0.0, 50.0, 50.0, 100.0]
         if len(bb) != 6 or any(abs(bb[i] - want[i]) > 1e-4 for i in range(6)): print(name, "bounds not Z-up:", bb); ok = False
         if info.get("texture_ids") != [info.get("diffuse_of_material_0")]: print(name, "info texture ids:", info.get("texture_ids"), info.get("diffuse_of_material_0")); ok = False
         dec = run(tools, "defs", "decode", scratch, "docs/re_reference/def_schema.json", "OBJECT_" + name).stdout
