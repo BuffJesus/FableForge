@@ -201,7 +201,7 @@ function AtlasProbe(questObject)
                     local hk, hp = pcall(function() return hero:GetPos() end)
                     if pk and cp and hk and hp then
                         local d = math.sqrt((cp.x - hp.x) * (cp.x - hp.x) + (cp.y - hp.y) * (cp.y - hp.y))
-                        Q:Log(string.format("ATLAS_PROBE|followpos|%%d|%%.3f|%%.3f|%%.3f|%%.3f", i, cp.x or 0, cp.y or 0, cp.z or 0, d))
+                        Q:Log(string.format("ATLAS_PROBE|followpos|%%d|%%.3f|%%.3f|%%.3f|%%.3f|%%.3f|%%.3f|%%.3f", i, cp.x or 0, cp.y or 0, cp.z or 0, d, hp.x or 0, hp.y or 0, hp.z or 0))
                     end
                 end
             end

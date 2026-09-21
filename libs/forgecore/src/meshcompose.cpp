@@ -221,7 +221,9 @@ struct ChunkWriter {
 
 } // namespace
 
-std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims) {
+std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims, const std::string& subMeshName) {
+    // retail's hull byte for byte in structure (MESH_OBJECT_BARREL[PHYSICS] decoded with mesh-info --raw):
+    // MTRL "Collision material" + an MTLE {1, 0} sub-chunk, the SUBM named after the mesh, no TRFM
     ChunkWriter w;
     w.tag(">>>>"); w.tag("3DMF"); w.u32(100);
     w.str("Copyright Big Blue Box Studios Ltd.");
@@ -229,20 +231,17 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
     w.push("3DRT");
     w.push("MTLS");
     w.push("MTRL");
-    w.str("23 - Default");
+    w.str("Collision material");
     w.u32(0);
     w.buf.push_back(0);   // two-sided
     const uint32_t colours[6] = {0xFF96EFF7, 0xFF96EFF7, 0xFFE5E5E5, 0x3DCCCCCC, 0x00000000, 0x3E99999A};
     for (uint32_t c : colours) w.u32(c);
+    w.push("MTLE"); w.u32(1); w.u32(0); w.pop();
     w.pop();
     w.pop();
     w.push("SUBM");
-    w.str("collision");
+    w.str(subMeshName.empty() ? std::string("collision") : subMeshName);
     w.u32(0); w.i32(-1); w.i32(-1); w.i32(-1);   // sub-mesh index, parent, first child, next sibling
-    w.push("TRFM");
-    const float identity[12] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
-    for (float f : identity) putF32(w.buf, f);
-    w.pop();
     w.push("PRIM");
     w.i32(0);   // physics material index
     // every primitive's triangles into one vertex/index set (indices are u16: cap at 65535 vertices)
@@ -251,7 +250,9 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
     uint32_t base = 0, count = 0;
     for (const auto& p : prims) {
         const auto norms = p.normals.empty() ? std::vector<Vec3>(p.verts.size(), Vec3{0, 0, 1}) : p.normals;
-        for (const auto& f : p.faces) for (uint32_t i : f) indices.push_back(uint16_t(std::min<uint32_t>(base + i, 65535)));
+        // the engine's winding, like the render index buffer (retail hull triples read 2,1,0 / 5,4,3):
+        // straight order made an inside-out hull that held the hero at the cube's centre in-game
+        for (const auto& f : p.faces) for (uint32_t i : {f[0], f[2], f[1]}) indices.push_back(uint16_t(std::min<uint32_t>(base + i, 65535)));
         for (size_t i = 0; i < p.verts.size(); ++i) {
             putF32(verts, p.verts[i].x); putF32(verts, p.verts[i].y); putF32(verts, p.verts[i].z);
             const Vec3 n = i < norms.size() ? norms[i] : Vec3{0, 0, 1};
@@ -303,8 +304,8 @@ std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& pr
     return w.buf;
 }
 
-std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims) {
-    const auto plain = composePhysicsUncompressed(prims);
+std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims, const std::string& subMeshName) {
+    const auto plain = composePhysicsUncompressed(prims, subMeshName);
     std::vector<uint8_t> out;
     putU32(out, uint32_t(plain.size()));
     const auto lzo = forge::lzo::compress(plain);

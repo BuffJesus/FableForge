@@ -382,7 +382,7 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             ++nextId;
         }
         std::vector<uint8_t> physics;
-        if (req.collision) { physics = forge::meshcompose::composePhysics(model.prims); out.physicsId = nextId++; }
+        if (req.collision) { physics = forge::meshcompose::composePhysics(model.prims, out.meshName); out.physicsId = nextId++; }
         const auto composed = forge::meshcompose::composeStatic(out.meshName, model.prims, materials, req.compress, int(out.physicsId));
         out.vertices = composed.vertices; out.triangles = composed.triangles; out.primitives = model.prims.size();
         // the decoder must read back what we wrote (the same reader the preview and thumbnails use)
@@ -406,7 +406,7 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
                 forge::big::Entry h;
                 h.magic = modelEntry->magic; h.devFileType = modelEntry->devFileType; h.type = 3;
                 h.id = out.physicsId;
-                h.name = out.meshName + "_PHYSICS";
+                h.name = out.meshName + "[PHYSICS]";   // retail's name for a hull
                 h.data = physics;
                 h.length = uint32_t(physics.size());
                 bank->entries.push_back(std::move(h));
@@ -427,7 +427,7 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             fs::rename(tmp, gfxBig);
             out.notes.push_back("graphics.big: appended " + out.meshName + " (id " + std::to_string(out.meshId) + ", " + std::to_string(out.vertices) + " vertices, " +
                                 std::to_string(out.triangles) + " triangles, " + std::to_string(out.primitives) + " primitive(s), " + std::to_string(composed.payload.size()) + " bytes)" +
-                                (physics.empty() ? std::string(", no collision hull") : " + " + out.meshName + "_PHYSICS (id " + std::to_string(out.physicsId) + ", the model's own triangles as the hull)"));
+                                (physics.empty() ? std::string(", no collision hull") : " + " + out.meshName + "[PHYSICS] (id " + std::to_string(out.physicsId) + ", the model's own triangles as the hull)"));
         }
 
         // 4. the OBJECT def: the donor's bytes, Graphic.modelId repointed, the mesh size from the bounds

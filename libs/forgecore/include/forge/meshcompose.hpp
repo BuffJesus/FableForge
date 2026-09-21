@@ -54,9 +54,9 @@ Composed composeStatic(const std::string& name, const std::vector<Primitive>& pr
 // a `3DMF` chunk tree (MTLS with the default material, one SUBM "collision" with an identity TRFM
 // and a PRIM of TRIS + SMTH + VERT{pos, normal, uv} + UNIV, retail's chunk set) as [u32 size][raw LZO1X]. The hull is
 // the geometry itself (every primitive's triangles); normals/uvs ride along as EgoCore writes them.
-std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims);
+std::vector<uint8_t> composePhysics(const std::vector<Primitive>& prims, const std::string& subMeshName = "");
 // the same payload before compression (for tests)
-std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims);
+std::vector<uint8_t> composePhysicsUncompressed(const std::vector<Primitive>& prims, const std::string& subMeshName = "");
 
 // EgoCore GltfMeshImporter.h PackNormal / CompressUV, exposed for tests.
 uint32_t packNormal(Vec3 n);

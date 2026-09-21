@@ -420,9 +420,12 @@ A collision hull is written too: `MESH_<NAME>_PHYSICS`, a type-3 entry in EgoCor
 `3DMF` form (the model's own triangles) that the render mesh's Info names as
 `PhysicsIndex` -- retail pairs every prop that way (`MESH_OBJECT_BARREL[PHYSICS]` id 168
 <- barrel Info physics 168); the hull carries retail's full chunk set (TRIS, SMTH, VERT,
-UNIV -- decoded from the barrel's hull; EgoCore's writer omits SMTH/UNIV); `--no-collision`
-skips it. Model space is metres, Y up; the mesh is written in Fable's centimetres, Z up.
-**Not yet:** a first in-game look at an imported model.
+UNIV -- decoded from the barrel's hull; EgoCore's writer omits SMTH/UNIV; the triangles in
+the engine's winding, like the render index buffer -- straight order made an inside-out hull
+that held the hero at the cube's centre); `--no-collision` skips it. Model space is metres,
+Y up; the mesh is written in Fable's centimetres, Z up. **In-game verified 2026-09-20** on a
+1 m checker cube in StartOakValeWest (`release_probes.py --stage mesh`): renders lit with
+its texture at the placed spot, and the hero is stopped by it.
 
 ## Creatures (NPCs, animals, guards)
 
