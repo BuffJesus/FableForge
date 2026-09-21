@@ -121,6 +121,8 @@ void setTextureLimit(int maxDimension);
 int textureLimit();
 
 bool openMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
+// forget the open bank and every decoded mesh (after graphics.big was rewritten: an import)
+void closeMeshBank();
 const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err);
 std::string meshName(uint32_t id);
 uint32_t meshIdByName(const std::string& name);   // 0 when unknown

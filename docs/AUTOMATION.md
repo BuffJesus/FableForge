@@ -66,6 +66,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `edit_tab <0..3>` | the Edit panel's sub-tab: 0 Objects, 1 Terrain, 2 Actors, 3 Level (state `edit_tab`; widget `seg_edit_tab`). Terrain and the terrain tool follow each other; placing a spawner/village opens Actors, a viewport pick from Terrain/Level opens Objects |
 | `dismiss_rule <creature\|spawner\|region>` | what the engine-rule notice's *Got it* does (state `rule_notice` = the key shown, `-` for none; widget `btn_rule_<key>`) |
 | `compact_stb` / `wait_compact` | compact the static-map bank in the background (Setup panel's *Compact the bank*); log line `compact: A MB -> B MB, N payloads verified byte-identical` |
+| `mesh_import <model> <NAME> [png]`, `wait_mesh_import` | the Import model card: a .glb/.gltf/.obj into graphics.big + textures.big + game.bin (off the UI thread; state `mesh_import_busy`; widgets `input_mesh_model`, `input_mesh_name`, `input_mesh_texture`, `btn_mesh_import`); the context reloads after (`wait_ready`), then `place OBJECT_<NAME>` |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |

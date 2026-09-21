@@ -147,6 +147,16 @@ def main() -> int:
         if name + "_DIFFUSE" not in tex: print(name, "diffuse texture not appended"); ok = False
     for rel in ("data/graphics/graphics.big", "data/graphics/pc/textures.big", "data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin"):
         if not os.path.exists(os.path.join(scratch, rel + ".forge-orig")): print("no backup for", rel); ok = False
+    # the editor's Import model card over the same scratch root, then the new object placed
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
+    if os.path.exists(gui):
+        r = subprocess.run([gui, "--auto", "tests/ui/meshimport.txt"], capture_output=True, text=True)
+        log = os.path.join(ROOT, "tests", "ui", "meshimport.txt.log")
+        tail = open(log, encoding="utf-8", errors="replace").read().strip().splitlines() if os.path.exists(log) else []
+        if r.returncode != 0 or not tail or "RESULT PASS" not in tail[-1]:
+            print("ui meshimport failed:", " | ".join(tail[-8:])); ok = False
+        info = json.loads(run(tools, "mesh-info", os.path.join(scratch, "data", "graphics", "graphics.big"), "MESH_FORGE_CUBE_UI", "--json").stdout)
+        if info.get("vertices") != 24: print("GUI import did not land in graphics.big:", info); ok = False
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True)
     print("mesh import test", "OK" if ok else "FAILED")

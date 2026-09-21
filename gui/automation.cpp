@@ -243,6 +243,11 @@ bool Automation::tick(App& app) {
     else if (cmd == "mods_undeploy") { if (!app.runModsTool("undeploy")) fail("mods_undeploy refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "mods_conflicts") { if (!app.runModsTool("conflicts")) fail("mods_conflicts refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "wait_mods") { app.pollModsTool(); waitOn(!app.modsBusy(), "mods tool"); }
+    else if (cmd == "mesh_import") {   // mesh_import <model> <NAME> [png]
+        std::istringstream rs(rest); std::string model, nm, png; rs >> model >> nm >> png;
+        if (!app.importMesh(model, nm, png)) fail("mesh_import refused: " + rest); else note("..   " + line); ++pc_;
+    }
+    else if (cmd == "wait_mesh_import") { app.pollMeshImport(); waitOn(!app.meshImportBusy(), "mesh import"); }
     else if (cmd == "mod_pick") {   // mod_pick <key|*> <winner|->  (the winner is the rest after the first space; "*" = the first conflict row)
         std::string key = rest, winner;
         const size_t sp = rest.find(' ');

@@ -4,6 +4,8 @@
 
 #include "app.hpp"
 
+#include "meshimport.hpp"
+
 #include "nlohmann/json.hpp"
 #include "effects.hpp"
 
@@ -363,6 +365,35 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
     // live wherever the save root points (a scratch tree in tests)
     startContextLoad(saveRoot());
     return true;
+}
+
+bool App::importMesh(const std::string& model, const std::string& name, const std::string& texturePng) {
+    if (meshImportFuture_.valid()) { pushLog("import model: still busy", 1); return false; }
+    if (ctxFuture_.valid()) { pushLog("import model: textures are still loading, try again in a moment", 1); return false; }
+    meshimport::ImportRequest req;
+    req.model = model; req.name = name; req.texturePng = texturePng;
+    pushLog("import model " + name + ": composing " + model + " into graphics.big (a copy of the bank is rewritten; a few seconds)...", 0);
+    const std::string root = saveRoot();
+    meshImportFuture_ = std::async(std::launch::async, [root, req]() {
+        MeshImportJob job;
+        meshimport::ImportResult out;
+        job.ok = meshimport::importModel(root, req, out, job.error);
+        job.notes = out.notes; job.objectName = out.objectName;
+        return job;
+    });
+    return true;
+}
+
+void App::pollMeshImport() {
+    if (!meshImportFuture_.valid() || meshImportFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+    const MeshImportJob job = meshImportFuture_.get();
+    if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
+    for (const auto& n : job.notes) pushLog("import model: " + n, 0);
+    pushLog(job.objectName + " ready: find it under Add an object (physics: none yet, it may be walk-through in-game)", 3);
+    // the def list, the thumbnails and the texture context must see the new entries
+    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear();
+    meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
+    startContextLoad(saveRoot());
 }
 
 bool App::addPaintTheme(const std::string& name) {
@@ -1612,6 +1643,36 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     auto_.registerWidget("btn_place");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, dropped onto the terrain, facing the camera.");
     drawRuleNotice("creature", cardInner);
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+
+    // ---- import model
+    pollMeshImport();
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##importmodel", inner);
+    theme::label("Import model");
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_);
+    auto_.registerWidget("input_mesh_model");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshname", "Name (becomes OBJECT_<NAME>)", meshName_, sizeof meshName_);
+    auto_.registerWidget("input_mesh_name");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshtex", "Diffuse texture PNG (optional)", meshTexturePng_, sizeof meshTexturePng_);
+    auto_.registerWidget("input_mesh_texture");
+    ImGui::PopStyleVar();
+    const bool meshBusy = meshImportFuture_.valid();
+    const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
+    if (theme::ghostButton(meshBusy ? "Importing..." : "Import into the game", ImVec2(cardInner, S(28))) && meshCan) {
+        std::string nm = meshName_;
+        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+        importMesh(meshModelPath_, nm, meshTexturePng_);
+    }
+    auto_.registerWidget("btn_mesh_import");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. It then shows under Add an object. Not yet: a physics hull (the object may be walk-through in-game).");
+    ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
     }

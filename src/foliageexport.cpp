@@ -66,6 +66,11 @@ struct MeshCache {
         }
     }
 
+    void close() {
+        std::lock_guard<std::mutex> lock(mutex);
+        big.reset(); path.clear(); byId.clear(); decoded.clear(); names.clear();
+    }
+
     const forge::meshpreview::Geometry* get(uint32_t id, std::string& err) {
         std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
@@ -88,6 +93,7 @@ MeshCache& meshCache() { static MeshCache c; return c; }
 } // namespace
 
 bool openMeshBank(const fs::path& graphicsBig, std::string& err) { return meshCache().open(graphicsBig, err); }
+void closeMeshBank() { meshCache().close(); }
 const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err) { return meshCache().get(id, err); }
 std::string meshName(uint32_t id) {
     std::lock_guard<std::mutex> lock(meshCache().mutex);

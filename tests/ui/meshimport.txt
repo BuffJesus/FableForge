@@ -1,0 +1,24 @@
+# Import model card (tools/test_meshimport.py): a .glb cube into the scratch root's banks, then placed as an object.
+wait_maps
+wait_ready
+set saveroot build/mesh_root
+select Arena
+wait_loaded
+edit 1
+frames 2
+edit_tab 0
+frames 1
+assert_widget btn_mesh_import
+assert_widget input_mesh_model
+mesh_import build/mesh_root/cube.glb FORGE_CUBE_UI build/mesh_root/wood.png
+assert_state mesh_import_busy 1
+wait_mesh_import
+frames 2
+assert_log OBJECT_FORGE_CUBE_UI ready
+wait_ready
+frames 2
+place OBJECT_FORGE_CUBE_UI ForgeCubeUi
+frames 3
+assert_log placed OBJECT_FORGE_CUBE_UI
+screenshot build/ui/m4_meshimport.png
+quit

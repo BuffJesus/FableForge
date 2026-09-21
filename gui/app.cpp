@@ -1069,6 +1069,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));
+    v.push_back("mesh_import_busy=" + std::string(meshImportFuture_.valid() ? "1" : "0"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
     v.push_back("textures_count=" + std::to_string(texRows_.size()));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }

@@ -400,6 +400,25 @@ world matrices of every instance of that thing (including spawned children)
 without touching the GPU meshes. Structural edits (add/remove/undo of those)
 reload the things layer from the in-memory `.tng` text.
 
+## Custom models (Import model)
+
+The Objects sub-tab's *Import model* card takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
+1 metre; glTF node transforms are applied, OBJ `usemtl` groups become primitives), a NAME
+and an optional diffuse PNG, and makes a new object out of it: `MESH_<NAME>` is composed
+in the compiled-mesh grammar (`forge::meshcompose`, the in-game-proven `compose_mesh`
+static path: one static block per primitive, the float 0x14/20 vertex layout, chunked
+LZO, the sentinel material, the retail ghost LOD, EgoCore's Info blob) and appended to
+`graphics.big`'s `MBANK_ALLMESHES` with the next id, the PNG to `textures.big` as
+`<NAME>_DIFFUSE`, and `OBJECT_<NAME>` to `game.bin` as a copy of the barrel's def with
+`Graphic.modelId` repointed and MeshHeight / MeshRadius from the bounds. Every payload is
+decoded back through the preview reader before anything is written; one-time
+`.forge-orig` backups; refused while the game runs. The new object then shows under
+*Add an object* (the def/texture context reloads) and places like any prop. CLI:
+`forge mesh-import <model> <NAME> [--texture png | --texture-id n] [--donor OBJECT_...]`,
+`forge-tools mesh-info <graphics.big> <MESH_NAME|id|--max-id>` to inspect an entry.
+**Not yet:** a physics hull (PhysicsIndex 0 -- *untested in-game whether the object is
+walk-through*), a first in-game look at an imported model.
+
 ## Creatures (NPCs, animals, guards)
 
 *Add an object* also lists every `CREATURE_*` definition (2026-09-17). A creature

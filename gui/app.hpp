@@ -214,6 +214,17 @@ public:
     bool createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng = "");
     char customPng_[512] = {};
     char customName_[64] = {};
+    // Import model (Edit > Objects): a .glb/.gltf/.obj becomes MESH_/OBJECT_<NAME> (src/meshimport), off the UI thread
+    char meshModelPath_[512] = {};
+    char meshName_[64] = {};
+    char meshTexturePng_[512] = {};
+    struct MeshImportJob { bool ok = false; std::string error; std::vector<std::string> notes; std::string objectName; };
+    std::future<MeshImportJob> meshImportFuture_;
+public:
+    bool importMesh(const std::string& model, const std::string& name, const std::string& texturePng);
+    bool meshImportBusy() const { return meshImportFuture_.valid(); }
+    void pollMeshImport();
+private:
     bool customThemeOpen_ = false;
     void duplicateSelected();
     void deleteSelected();
