@@ -1466,7 +1466,13 @@ void App::editorShortcuts() {
         if (ImGui::IsKeyPressed(ImGuiKey_E)) gizmoOp_ = 2;
         if (ImGui::IsKeyPressed(ImGuiKey_R)) gizmoOp_ = 3;
         if (ImGui::IsKeyPressed(ImGuiKey_T) && doc_.hasTerrain()) gizmoOp_ = 4;
-        if (gizmoOp_ == 4) {
+        // the vanilla editor switches modes with the number keys
+        if (!io.KeyCtrl) {
+            const ImGuiKey tabs[4] = {ImGuiKey_1, ImGuiKey_2, ImGuiKey_3, ImGuiKey_4};
+            for (int k = 0; k < 4; ++k)
+                if (ImGui::IsKeyPressed(tabs[k]) && (k != 1 || doc_.hasTerrain())) setEditTab(k);
+        }
+        if (gizmoOp_ == 4 && !io.KeyCtrl) {
             if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) brushRadius_ = std::max(1.0f, brushRadius_ - 1.0f);
             if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) brushRadius_ = std::min(60.0f, brushRadius_ + 1.0f);
         }
