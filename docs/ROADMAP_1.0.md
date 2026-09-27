@@ -1,5 +1,42 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+## Vanilla editor parity (Aeon's review, 2026-09-27)
+
+Aeon (Discord, 2026-09-27) reviewed the editor against the vanilla Lionhead
+editor (`FableWin.exe`, the dev build). The direction: **sift every vanilla editor function,
+reimplement it here, refine it, and only then add new features.** The static
+inventory of what vanilla has, with FableWin addresses and confidence, is
+[VANILLA_EDITOR_INVENTORY.md](VANILLA_EDITOR_INVENTORY.md) (section 7 answers
+each review point). FableWin runs from a scratch Anniversary dev tree, not the
+install. The route in is the dev profile screen, then A (Debug Profile), then 4 (edit
+FinalAlbion.wld). The on-screen walkthrough of its modes has not been done yet.
+
+Work lands on branch `feat/editor-ui-shell` (not merged). **Done** = logic under a test; **UI unseen** =
+the panel wiring builds but nobody has looked at it on screen.
+
+| # | Item (review point -> vanilla evidence) | State |
+|---|---|---|
+| 1 | Scale gizmo too sensitive | **Done** `f440eaa`. It was a compounding bug: the cumulative ImGuizmo ratio was applied per frame. |
+| 2 | Redundant top bar -> File / View / Help menu bar | **Done** `fdf48d8`. Screenshot seen. Button alignment fixed in `1a254d9` (UI unseen). |
+| 3 | Collapsible left / right panels | **Done** `fdf48d8`: chevron strips, View menu, Ctrl+[ / Ctrl+], persisted. Screenshots seen. |
+| 4 | Ground texture at the lowest mip | **Done** `1a254d9`: 4..16 texels per cell per map, GPU mips, anisotropic (UI unseen). |
+| 5 | Replace theme (pen) / Flood Replace (click) / theme eyedropper (Ctrl+click) | **Done** `0f2c3f3` (vanilla `EditReplaceEngineThemeUndoable`, `EditFloodReplaceEngineThemeUndoable`, `PaintInputPickupTheme`). UI unseen. |
+| 6 | "Replace All" | **Done** `0f2c3f3`. Not in vanilla, which floods only the connected patch. |
+| 7 | Heightmap path maker | **Done** `0f2c3f3`: Draw path, drag start -> end (vanilla `EditDrawPathPenUndoable`). UI unseen. |
+| 8 | Load other .wld files, not just FinalAlbion | Open. Vanilla: File > Load World (`*.wld`). About 15 hard-coded `FinalAlbion` sites in `gui/` and `src/`. |
+| 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | Open. Vanilla lists come from ENGINE_THEME_GROUP, then ENGINE_THEME. Local detail is not proven editor-side. |
+| 10 | Per-class property tabs (CTC editing) | Open. 5 thing classes + 27 CTC `GetPropertiesStruct` label sets are in inventory 5.4. Next: `CreateGenericVars` for value types. |
+| 11 | Actors from def entity groups by category, not Forge presets | Open. Vanilla Things tree: thing type -> non-template defs + THING_GROUP, Quick Find. |
+| 12 | Whole-world view, click a map to activate it, several maps at once | Open. Vanilla 2D world map + "Locked for editing" per region. Flat quads for maps without STB are unproven in vanilla 3D. |
+| 13 | Quest sections: toggle, choose current, add | Open. Vanilla shows/hides, chooses the current section, and moves a thing (RCtrl+;). Sections come from registered quest names only. |
+| 14 | Paint environment themes and sound themes | Open. Vanilla paints env themes through the engine path with ATMOS_THEME; sounds are the Survey > Sounds tab (SOUND_THEME layers). |
+| 15 | Nav from NAVIGATION_SEED + paint navigability | Nav lane (`HANDOFF_NAV.md`). Vanilla rebuilds nav on save and has passability, camera-passability and pref-nav brushes. |
+| 16 | Fractals | Open. Parameters in inventory 5.9; maths in `DEBUG_EDITOR_FEATURE_AUDIT.md`. |
+| 17 | Linking: parent / village / entrance<->exit ... | Open. Vanilla `EAttachModeType` has 9 link modes, with lines drawn between linked things. |
+| 18 | Skybox / colour LUT follow ENVIRONMENT_THEME | Later (optional; vanilla does not do it either). |
+| 19 | UI overhaul modelled on the vanilla editor's UI | Ongoing. Toolbar of modes, dialogs per mode, hotkeys 1-9. |
+| 20 | Remove direct object import and new-texture import from the world editor | **User's call.** Aeon advises it (complexity; an EgoCore cross-workflow later). Not done. |
+
 ## Navigation and editor research (2026-09-27)
 
 The navigation/overworld integration is on local main. The experimental,
