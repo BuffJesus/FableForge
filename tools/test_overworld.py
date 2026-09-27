@@ -257,6 +257,8 @@ def main() -> int:
                 for x in range(0, 256, 32):
                     if ((x // 32) + (y // 32)) % 2 == 0: d.rectangle([x, y, x + 31, y + 31], fill=(240, 80, 200))
             im.save(os.path.join(ROOT, "build", "atlas_check.png"))
+            ids = [int(m.group(1)) for m in re.finditer(r"^\s*(\d+)\s+[A-Z0-9_]", subprocess.run([cli, "textures", "--install", scratch], capture_output=True, text=True).stdout, re.M)]
+            new_tex = max(ids) + 1
             r = subprocess.run([gui, "--auto", "tests/ui/custom_theme_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
             log = os.path.join(ROOT, "tests", "ui", "custom_theme_deploy.txt.log")
             if r.returncode != 0:
@@ -268,12 +270,12 @@ def main() -> int:
                 print("GUI custom theme script PASS")
             r = subprocess.run([cli, "chunk-textures", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
             r2 = subprocess.run([cli, "info", os.path.join(sl, "FinalAlbion", "Greatwood_1.lev")], capture_output=True, text=True)
-            import re
+
             m = re.search(r"GROUND_ATLAS_CHECK\s+def\s+(\d+)", r2.stdout)
             if not m:
                 print("GROUND_ATLAS_CHECK is not in the deployed LEV palette"); ok = False
-            # the new texture id is 6294 on a retail textures.big (6293 entries + 1)
-            if "(6294, 6294, 0)" not in r.stdout:
+            # the new texture id is one past the bank's highest (6294 on a retail textures.big)
+            if f"({new_tex}, {new_tex}, 0)" not in r.stdout:
                 print("the deployed chunk has no layer with the custom texture:", r.stdout[-600:]); ok = False
             r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
             if "0 with findings" not in r.stdout:

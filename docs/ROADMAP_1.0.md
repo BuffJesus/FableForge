@@ -1,5 +1,34 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+## Resume here (2026-09-26)
+
+**Branches.** `modpacks` (23 commits: the whole 0.20 mod-pack composer + the 0.17 static mesh
+import, in-game verified 2026-09-20 evening) is **fast-forwarded into `main`** (user decision
+2026-09-26: release from main with mod packs in it, instead of tagging 0.16.0 first). `water`
+(11 commits, 0.18: water brush, foreground `CWaterPatchMesh` writer, background sub-patch,
+`forge water-audit`) stays a **separate branch**: never seen in-game, and its last commit records
+a range-codec mismatch against the shipped bake (an older compressor's cost model; our blocks
+decode, retail terrain blocks re-encode exactly). Merge it only after an in-game look.
+`tools/ingame/gamewin.ps1` now sends scan codes (DirectInput ignores bare virtual keys once the
+hero is in the world) and has `hold` / `lmb`.
+
+**Suite on the merged main:** 21 checks; 19 passed in the full run. `overworld moves` and `textures tab` failed because they hard-coded the next texture id as 6294, which only holds for a retail `textures.big` (the install carries three `FORGE_PROBE_CUBE*_DIFFUSE` entries from the mesh probes). Both now take the id from their scratch bank and pass.
+
+**Install caveat:** the 2026-09-20 mesh probes left 4 cubes + a barrel in StartOakValeWest and
+their mesh/def/texture entries; `release_probes.py --stage mesh_undo` puts them back. Check
+`forge backups` -> 0 differ before any release probe.
+
+**Next, in order:**
+1. Release (docs/RELEASE.md) from `main`: version, `tools/package.py`, stranger's test, tag, push.
+2. FableTLC's `docs/engine/IN_ENGINE_MODDING_ENVIRONMENT.md` §9 makes FableForge the offline half of
+   the modding plan. Its "now" items that land here: (a) an **entity annotation file** (the FGD) off
+   `defschema` for the property panel; (b) finalize the **mod manifest** (`forge_mods.json`) with the
+   script-registration block of FableTLC `docs/engine/SCRIPTING_REDESIGN.md` §6 and a folder layout
+   an engine VFS can mount; (c) a **model recipe** (the QC role) over `forge mesh-import`; (d)
+   **per-map bake as a forgecore call** (`lodbake`, `stbterrain`, `stbcompact` still live in `src/`;
+   nav is per-cell patch only).
+3. `water`: in-game look, then merge.
+
 ## Resume here (2026-09-20, afternoon)
 
 **Today:** suite ALL PASS 16/16 at `c5000b5` (the two synthetic-click suites passed under the full

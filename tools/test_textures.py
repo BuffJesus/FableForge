@@ -5,7 +5,7 @@ checks the written archive with the CLI (entry validated, backup present).
 
   python tools/test_textures.py [--root <fable-root>] [--keep]
 """
-import argparse, os, shutil, subprocess, sys
+import argparse, os, re, shutil, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +28,9 @@ def main() -> int:
     cli = os.path.join(ROOT, "build", "forge.exe")
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     ok = True
+    # the id an append gets: one past the scratch bank's highest (6294 on retail, more after mesh imports)
+    ids = [int(m.group(1)) for m in re.finditer(r"^\s*(\d+)\s+[A-Z0-9_]", subprocess.run([cli, "textures", "--install", scratch], capture_output=True, text=True).stdout, re.M)]
+    next_id = max(ids) + 1
     r = subprocess.run([gui, "--auto", "tests/ui/textures.txt"], capture_output=True, text=True, cwd=ROOT)
     log = os.path.join(ROOT, "tests", "ui", "textures.txt.log")
     if r.returncode != 0:
@@ -42,6 +45,8 @@ def main() -> int:
     r = subprocess.run([cli, "textures", "ATLAS_UI_TEX", "--install", scratch], capture_output=True, text=True)
     if "ATLAS_UI_TEX" not in r.stdout or "DXT3" not in r.stdout:
         print("the added texture is not listed:", r.stdout[-300:]); ok = False
+    elif not re.search(rf"^\s*{next_id}\s+ATLAS_UI_TEX", r.stdout, re.M):
+        print(f"the added texture did not get id {next_id}:", r.stdout[-300:]); ok = False
     # the replaced slot decodes back to (nearly) the same pixels
     # by the name the list prints (the retail symbol is a [\DEV\...\NAME.TGA] path); the id must work too
     r = subprocess.run([cli, "texture-export", "BARREL_BRACED_1_24",

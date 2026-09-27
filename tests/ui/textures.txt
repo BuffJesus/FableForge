@@ -30,7 +30,8 @@ assert_log (id 786, 512x256 DXT1
 assert_log in textures.big from barrel_braced.png
 texture_add ATLAS_UI_TEX build/ui/barrel_braced.png dxt3
 frames 2
-assert_log appended ATLAS_UI_TEX (id 6294, 512x256 DXT3
+# the id is checked by tools/test_textures.py (one past the bank's highest)
+assert_log appended ATLAS_UI_TEX (id 
 assert_state texture_selected ATLAS_UI_TEX
 screenshot build/ui/t1_textures.png
 quit
