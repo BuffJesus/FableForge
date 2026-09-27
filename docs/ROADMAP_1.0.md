@@ -32,7 +32,7 @@ the panel wiring builds but nobody has looked at it on screen.
 | 14 | Paint environment themes and sound themes | Open. Vanilla paints env themes through the engine path with ATMOS_THEME; sounds are the Survey > Sounds tab (SOUND_THEME layers). |
 | 15 | Nav from NAVIGATION_SEED + paint navigability | Nav lane (`HANDOFF_NAV.md`). Vanilla rebuilds nav on save and has passability, camera-passability and pref-nav brushes. |
 | 16 | Fractals | Open. Parameters in inventory 5.9; maths in `DEBUG_EDITOR_FEATURE_AUDIT.md`. |
-| 17 | Linking: parent / village / entrance<->exit ... | Open. Vanilla `EAttachModeType` has 9 link modes, with lines drawn between linked things. |
+| 17 | Linking: parent / village / entrance<->exit ... | **Done (stage 1)**: owner, village, home, work, wife, exit->entrance, trigger->receptor, route; pick in the view, fit check, lines (UI unseen). Open: spouse/parent (not seen as .tng fields yet), links to another map's entrance. |
 | 18 | Skybox / colour LUT follow ENVIRONMENT_THEME | Later (optional; vanilla does not do it either). |
 | 19 | UI overhaul modelled on the vanilla editor's UI | Ongoing. Toolbar of modes, dialogs per mode, hotkeys 1-9. |
 | 20 | Remove direct object import and new-texture import from the world editor | **User's call.** Aeon advises it (complexity; an EgoCore cross-workflow later). Not done. |
