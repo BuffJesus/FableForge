@@ -58,16 +58,25 @@ struct Hull {
     float radius = 0;
 };
 
+// CalculateBoundingInfo (FableWin 0x030f8770): AABB centre and half-diagonal
+// radius, not the distance to the farthest actual vertex.
+Hull buildHull(const HullMesh& mesh);
+
 // The detailed-area box a thing contributes (GetMapNavigationAreaInit: the physics
 // bounding sphere's centre +- radius, clamped to the map) in map-local units.
 struct Box { float x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
 Box detailBox(const Hull& hull, const foliageexport::Instance& instance, int mapWidth, int mapHeight);
+
+// GoToHigherDetail (0x03286830): a NODE corner must be inside a detailed area.
+// Called on the parent before subdivision, not on the resulting half-unit leaf.
+bool requestsHigherDetail(const Box& node, const std::vector<Box>& detailedAreas);
 
 // Render mesh id -> its [PHYSICS] hull (the Info blob's PhysicsIndex) -> lines, cached.
 class HullCache {
 public:
     HullCache(const forge::big::File& graphics, HullOptions options);
     const Hull* forRenderMesh(uint32_t meshId);   // nullptr: no physics hull
+    const Hull* forPhysicsMesh(uint32_t physicsId); // explicit CDoorDef collision override
 private:
     const forge::big::File& big_;
     HullOptions options_;

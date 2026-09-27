@@ -26,9 +26,12 @@ int sign(float v) { return v > 0 ? 1 : v < 0 ? -1 : 0; }
 } // namespace
 
 HullMesh decodeHull(const std::vector<uint8_t>& d, const HullOptions& options) {
+    if (d.size() < 13 || std::memcmp(d.data(), ">>>>3DMF", 8) != 0)
+        throw std::runtime_error("hull: invalid 3DMF header");
     HullMesh out;
     size_t start = 12;
     while (start < d.size() && d[start]) ++start;
+    if (start == d.size()) throw std::runtime_error("hull: unterminated name");
     ++start;
     while (start % 4) ++start;
     struct Sub { std::array<float, 12> trfm{}; bool hasTrfm = false; };
@@ -37,19 +40,23 @@ HullMesh decodeHull(const std::vector<uint8_t>& d, const HullOptions& options) {
             const std::string tag(reinterpret_cast<const char*>(d.data() + at), 4);
             const uint32_t n = rdU32(d, at + 4);
             const size_t body = at + 8;
-            if (!std::all_of(tag.begin(), tag.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)); }) || body + n > end) return;
+            if (!std::all_of(tag.begin(), tag.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)); }) || n > end - body)
+                throw std::runtime_error("hull: invalid chunk");
             if (tag == "3DRT" || tag == "MTLS" || tag == "HLPR") {
                 walk(body, body + n, sub);
             } else if (tag == "SUBM") {
                 size_t q = body;
                 while (q < body + n && d[q]) ++q;
+                if (body + n - q < 17) throw std::runtime_error("hull: truncated SUBM header");
                 q += 1 + 16;   // name, sub-mesh index, parent, first child, next sibling
                 Sub s;
                 walk(q, body + n, &s);
             } else if (tag == "TRFM" && sub) {
+                if (n < 48) throw std::runtime_error("hull: truncated TRFM");
                 for (int i = 0; i < 12; ++i) sub->trfm[size_t(i)] = rdF32(d, body + size_t(i) * 4);
                 sub->hasTrfm = true;
             } else if (tag == "PRIM") {
+                if (n < 4) throw std::runtime_error("hull: truncated PRIM");
                 // TRIS indices address this PRIM's own VERT list
                 const size_t base = out.verts.size();
                 std::vector<std::array<uint32_t, 3>> tris;
@@ -58,15 +65,19 @@ HullMesh decodeHull(const std::vector<uint8_t>& d, const HullOptions& options) {
                     const std::string t2(reinterpret_cast<const char*>(d.data() + at2), 4);
                     const uint32_t n2 = rdU32(d, at2 + 4);
                     const size_t b2 = at2 + 8;
-                    if (b2 + n2 > end2) break;
+                    if (n2 > end2 - b2) throw std::runtime_error("hull: truncated primitive chunk");
                     if (t2 == "TRIS") {
+                        if (n2 < 4) throw std::runtime_error("hull: truncated TRIS");
                         const uint32_t c = rdU32(d, b2);
+                        if (c > (n2 - 4) / 6) throw std::runtime_error("hull: triangle count exceeds TRIS");
                         for (uint32_t i = 0; i < c; ++i) {
                             uint16_t ix[3]; std::memcpy(ix, d.data() + b2 + 4 + size_t(i) * 6, 6);
                             tris.push_back({uint32_t(ix[0]), uint32_t(ix[1]), uint32_t(ix[2])});
                         }
                     } else if (t2 == "VERT") {
+                        if (n2 < 4) throw std::runtime_error("hull: truncated VERT");
                         const uint32_t c = rdU32(d, b2);
+                        if (c > (n2 - 4) / 32) throw std::runtime_error("hull: vertex count exceeds VERT");
                         for (uint32_t i = 0; i < c; ++i) {
                             const size_t o = b2 + 4 + size_t(i) * 32;
                             std::array<float, 3> v{rdF32(d, o), rdF32(d, o + 4), rdF32(d, o + 8)};
@@ -86,11 +97,13 @@ HullMesh decodeHull(const std::vector<uint8_t>& d, const HullOptions& options) {
                     if (t[0] < out.verts.size() && t[1] < out.verts.size() && t[2] < out.verts.size()) out.tris.push_back(t);
                 }
             } else if (tag == "HPNT") {
+                if (n < 21) throw std::runtime_error("hull: truncated HPNT");
                 // f32 x, y, z; i32 two indices (-1, -1 seen); ASCIIZ name
                 std::array<float, 3> p{rdF32(d, body), rdF32(d, body + 4), rdF32(d, body + 8)};
                 size_t q = body + 20;
                 std::string name;
                 while (q < body + n && d[q]) name.push_back(char(d[q++]));
+                if (q == body + n) throw std::runtime_error("hull: unterminated helper name");
                 out.helpers.push_back({name, p});
             }
             at = body + n;
@@ -145,20 +158,50 @@ std::vector<std::vector<Line>> navigationLines(const HullMesh& mesh) {
     return levels;
 }
 
+Hull buildHull(const HullMesh& mesh) {
+    Hull hull;
+    hull.levels = navigationLines(mesh);
+    if (mesh.verts.empty()) return hull;
+    std::array<float, 3> lo = mesh.verts[0], hi = mesh.verts[0];
+    for (const auto& v : mesh.verts) for (size_t k = 0; k < 3; ++k) {
+        lo[k] = std::min(lo[k], v[k]);
+        hi[k] = std::max(hi[k], v[k]);
+    }
+    for (size_t k = 0; k < 3; ++k) hull.centre[k] = 0.5f * (lo[k] + hi[k]);
+    const float dx = 0.5f * (hi[0] - lo[0]), dy = 0.5f * (hi[1] - lo[1]), dz = 0.5f * (hi[2] - lo[2]);
+    hull.radius = std::sqrt(dx * dx + dy * dy + dz * dz);
+    return hull;
+}
+
+bool requestsHigherDetail(const Box& node, const std::vector<Box>& detailedAreas) {
+    for (const auto& b : detailedAreas) {
+        // C2DBoxF::ContainsPoint: lower bounds inclusive, upper bounds exclusive.
+        const bool x = (node.x0 >= b.x0 && node.x0 < b.x1) || (node.x1 >= b.x0 && node.x1 < b.x1);
+        const bool y = (node.y0 >= b.y0 && node.y0 < b.y1) || (node.y1 >= b.y0 && node.y1 < b.y1);
+        if (x && y) return true;
+    }
+    return false;
+}
+
 HullCache::HullCache(const forge::big::File& graphics, HullOptions options) : big_(graphics), options_(options) {
     if (const auto* bank = big_.findBank("MBANK_ALLMESHES"))
         for (const auto& e : bank->entries) byId_[e.id] = &e;
 }
 
 const Hull* HullCache::forRenderMesh(uint32_t meshId) {
-    const auto it = cache_.find(meshId);
+    const auto r = byId_.find(meshId);
+    if (r == byId_.end() || r->second->subHeader.size() < 4) return nullptr;
+    uint32_t physics = 0;
+    std::memcpy(&physics, r->second->subHeader.data(), 4);
+    return physics ? forPhysicsMesh(physics) : nullptr;
+}
+
+const Hull* HullCache::forPhysicsMesh(uint32_t physicsId) {
+    const auto it = cache_.find(physicsId);
     if (it != cache_.end()) return it->second.get();
     std::unique_ptr<Hull> hull;
-    const auto r = byId_.find(meshId);
-    if (r != byId_.end() && r->second->subHeader.size() >= 4) {
-        int32_t physics = 0;
-        std::memcpy(&physics, r->second->subHeader.data(), 4);
-        const auto p = physics > 0 ? byId_.find(uint32_t(physics)) : byId_.end();
+    {
+        const auto p = byId_.find(physicsId);
         if (p != byId_.end() && p->second->type == 3) {
             const auto raw = big_.entryData(*p->second);
             if (raw.size() >= 4) {
@@ -167,24 +210,14 @@ const Hull* HullCache::forRenderMesh(uint32_t meshId) {
                 try { plain = forge::lzo::decompress(raw.data() + 4, raw.size() - 4, usize); }
                 catch (const std::exception&) { plain.assign(raw.begin() + 4, raw.end()); }
                 try {
-                    hull = std::make_unique<Hull>();
                     const auto mesh = decodeHull(plain, options_);
-                    hull->levels = navigationLines(mesh);
-                    if (!mesh.verts.empty()) {
-                        std::array<float, 3> lo = mesh.verts[0], hi = mesh.verts[0];
-                        for (const auto& v : mesh.verts) for (int k = 0; k < 3; ++k) { lo[size_t(k)] = std::min(lo[size_t(k)], v[size_t(k)]); hi[size_t(k)] = std::max(hi[size_t(k)], v[size_t(k)]); }
-                        for (int k = 0; k < 3; ++k) hull->centre[size_t(k)] = 0.5f * (lo[size_t(k)] + hi[size_t(k)]);
-                        for (const auto& v : mesh.verts) {
-                            const float dx = v[0] - hull->centre[0], dy = v[1] - hull->centre[1], dz = v[2] - hull->centre[2];
-                            hull->radius = std::max(hull->radius, std::sqrt(dx * dx + dy * dy + dz * dz));
-                        }
-                    }
+                    hull = std::make_unique<Hull>(buildHull(mesh));
                 } catch (const std::exception&) { hull.reset(); }
             }
         }
     }
     const Hull* out = hull.get();
-    cache_[meshId] = std::move(hull);
+    cache_[physicsId] = std::move(hull);
     return out;
 }
 
