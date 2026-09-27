@@ -662,6 +662,43 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
 }
 
+// A map of another world (vanilla File > Load World): the document reads the .tng
+// beside the .lev, takes its origin/slot from that .wld, and every save -- objects,
+// "deploy", terrain -- goes back to those two files, never into FinalAlbion\.
+void testExternalWorld(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const fs::path root = dir / "ext_world_root";
+    const fs::path levels = root / "data" / "Levels";
+    fs::create_directories(levels / "MyWorld");
+    const fs::path lev = writeSyntheticLev(levels / "MyWorld" / "Foo.lev", 4, 4, [](int, int) { return 2.0f; });
+    const fs::path tng = levels / "MyWorld" / "Foo.tng";
+    { std::ofstream(tng, std::ios::binary) << "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n"; }
+    const fs::path wld = levels / "MyWorld.wld";
+    { std::ofstream(wld, std::ios::binary) << "START_INITIAL_QUESTS;\r\nEND_INITIAL_QUESTS;\r\n\r\nMapUIDCount 2;\r\nThingManagerUIDCount 10;\r\n"
+        "NewMap 7;\r\nMapX 320;\r\nMapY 640;\r\nLevelName \"MyWorld\\Foo.lev\";\r\nLevelScriptName \"Foo\";\r\nMapUID 1;\r\nIsSea FALSE;\r\nLoadedOnPlayerProximity TRUE;\r\nEndMap;\r\n\r\n"
+        "NewRegion 1;\r\nRegionName \"Mine\";\r\nNewDisplayName \"Mine\";\r\nRegionDef \"\";\r\nContainsMap \"MyWorld\\Foo.lev\";\r\nEndRegion;\r\n"; }
+    ed::Document doc;
+    std::string err;
+    const ed::Document::ExternalWorld ext{wld, tng};
+    CHECK(doc.open(root, "Foo", lev, err, &ext));
+    CHECK(doc.external() && doc.hasTerrain() && doc.worldSlot() == 7);
+    ed::TerrainBrush b;
+    b.mode = ed::TerrainBrush::Mode::Raise; b.x = 2; b.y = 2; b.radius = 1.5f; b.strength = 4.0f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.5f); doc.endStroke();
+    CHECK(doc.saveTerrainLoose(root, err));
+    CHECK(std::fabs(forge::lev::File::open(lev).heightAt(2, 2) - 4.0f) < 1e-4f);
+    CHECK(doc.deployWad(root, err));          // the loose .tng beside the .lev is the deploy
+    std::vector<std::string> notes;
+    CHECK(doc.deployTerrain(root, notes, err));   // no STB for another world: loose .lev only
+    CHECK(!notes.empty() && notes.back().find("not re-baked") != std::string::npos);
+    CHECK(!fs::exists(levels / "FinalAlbion"));   // nothing written into the game's world
+    CHECK(fs::exists(tng));
+    // a missing .tng is an error, not a silent FinalAlbion lookup
+    ed::Document other;
+    const ed::Document::ExternalWorld none{wld, levels / "MyWorld" / "Nope.tng"};
+    CHECK(!other.open(root, "Nope", lev, err, &none) && err.find("Nope.tng") != std::string::npos);
+}
+
 // A walkable-paint stroke patches the level's navigation quadtree for the
 // touched cells only: a 32x32 synthetic map gets a generated tree, one cell is
 // painted blocked and one opened, and the saved .lev's tree must drop / gain
@@ -1071,6 +1108,7 @@ int main() {
     testLevelDocument();
     testTerrainEditing(lev, dir);
     testThemeToolsAndPaths(dir);
+    testExternalWorld(dir);
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();

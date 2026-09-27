@@ -89,8 +89,15 @@ public:
     // Loads <map>.tng (loose data/Levels/FinalAlbion/<map>.tng, else the
     // FinalAlbion.wad entry) and the matching .lev for ground heights (from
     // `levPath` when given). Returns false with `error` set.
+    //
+    // A map of another world (a modder's own .wld next to FinalAlbion.wld): its
+    // .wld and the .tng beside its .lev. The document then reads and saves those
+    // files; there is no WAD entry or FinalAlbion_RT.stb chunk to deploy into.
+    struct ExternalWorld { std::filesystem::path wld, tng; };
     bool open(const std::filesystem::path& gameRoot, const std::string& mapName,
-              const std::filesystem::path& levPath, std::string& error);
+              const std::filesystem::path& levPath, std::string& error,
+              const ExternalWorld* external = nullptr);
+    bool external() const { return !externalWld_.empty(); }   // a map of a world other than FinalAlbion
     // In-memory document (tests, scratch levels).
     bool openText(const std::string& mapName, std::string tngText, std::string& error);
     // Attach a .lev (ground heights + terrain editing); open() does this itself.
@@ -300,6 +307,7 @@ private:
     mutable bool dirtyValue_ = false;
     bool fromWad_ = false;
     std::filesystem::path loosePath_;
+    std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
     std::shared_ptr<forge::lev::File> level_;
     std::vector<uint8_t> navWalkable_;   // walkable bytes the level's navigation tree agrees with
 };

@@ -138,11 +138,16 @@ bool invert(const float m[16], float out[16]) {
 
 // ---------------------------------------------------------------- Document
 
-bool Document::open(const fs::path& gameRoot, const std::string& mapName, const fs::path& levPath, std::string& error) {
+bool Document::open(const fs::path& gameRoot, const std::string& mapName, const fs::path& levPath, std::string& error,
+                    const ExternalWorld* external) {
     std::string text;
     fromWad_ = false;
-    loosePath_ = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName + ".tng");
-    if (fs::exists(loosePath_)) {
+    externalWld_.clear(); externalLev_.clear();
+    loosePath_ = external ? external->tng : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName + ".tng");
+    if (external) {
+        if (!fs::exists(loosePath_)) { error = "no " + loosePath_.string() + " next to the level"; return false; }
+        text = readFile(loosePath_);
+    } else if (fs::exists(loosePath_)) {
         text = readFile(loosePath_);
     } else {
         const auto layout = forge::levelstore::detect(gameRoot);
@@ -161,10 +166,11 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
     }
     if (!openText(mapName, std::move(text), error)) return false;
     if (!levPath.empty()) loadLevel(levPath, error);
+    if (external) { externalWld_ = external->wld; externalLev_ = levPath; }
     // the map's world origin (creatures carry world-space InitialPos)
     worldX_ = worldY_ = worldSlot_ = 0;
     try {
-        const auto world = forge::wld::File::parse(gameRoot / "data" / "Levels" / "FinalAlbion.wld");
+        const auto world = forge::wld::File::parse(external ? external->wld : gameRoot / "data" / "Levels" / "FinalAlbion.wld");
         const std::string want = lower(mapName) + ".lev";
         for (const auto& m : world.maps())
             if (lower(fs::path(m.levelName).filename().string()) == want) { worldX_ = m.mapX; worldY_ = m.mapY; worldSlot_ = m.index; break; }
@@ -634,7 +640,7 @@ bool backupOnce(const fs::path& p, std::string& error) { return albion::backups:
 
 bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
-    const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+    const fs::path path = external() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     try {
         fs::create_directories(path.parent_path());
         if (!backupOnce(path, error)) return false;
@@ -677,6 +683,14 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
 bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                              const forge::terraintex::ThemeLibrary* library,
                              const std::function<void(const std::string&)>& progress) {
+    // another world's map: its .lev is the file the game loads; there is no WAD
+    // entry, and its static map lives in that world's own .stb, which the vanilla
+    // editor bakes (FableForge's STB writer is FinalAlbion_RT.stb only)
+    if (external()) {
+        if (!saveTerrainLoose(gameRoot, error, &notes)) return false;
+        notes.push_back("wrote " + externalLev_.string() + "; the world's own .stb was not re-baked");
+        return true;
+    }
     // what the .lev was before: the loose file (or its absence) and the WAD entry
     const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
@@ -1352,7 +1366,7 @@ std::vector<std::string> Document::changes() const {
 }
 
 bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
-    const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
+    const fs::path path = external() ? loosePath_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
     try {
         fs::create_directories(path.parent_path());
         const std::string text = file_.serialize();
@@ -1371,7 +1385,8 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
     // a loose-level install (no FinalAlbion.wad, the levels extracted to
     // FinalAlbion\*): the loose .tng is what the game reads, so it is the deploy.
     // Never recreate the WAD there: it would override every loose file.
-    if (forge::levelstore::detect(gameRoot).looseOnly()) return saveLoose(gameRoot, error);
+    // another world's .tng beside its .lev is likewise the file the game reads
+    if (external() || forge::levelstore::detect(gameRoot).looseOnly()) return saveLoose(gameRoot, error);
     const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
     const fs::path backup = albion::backups::originalOf(wad);
     const fs::path temp = wad.string() + ".forge-tmp";

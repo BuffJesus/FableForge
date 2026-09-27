@@ -21,6 +21,7 @@
 #include "forge/env.hpp"
 #include "forge/lev.hpp"
 #include "forge/wad.hpp"
+#include "forge/wld.hpp"
 #include "nlohmann/json.hpp"
 #include "theme.hpp"
 
@@ -560,8 +561,54 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
     return {};
 }
 
+bool App::openWorld(const std::string& wldPath) {
+    std::error_code ec;
+    const fs::path wld = fs::absolute(wldPath, ec);
+    if (!fs::is_regular_file(wld, ec) || lower(wld.extension().string()) != ".wld") { pushLog("Not a .wld file: " + wldPath, 2); return false; }
+    if (installValid_ && fs::equivalent(wld, fs::path(installPath_) / "data" / "Levels" / "FinalAlbion.wld", ec)) {
+        pushLog("FinalAlbion.wld is the game's world; its maps are already listed", 1);
+        return false;
+    }
+    forge::wld::File world;
+    try { world = forge::wld::File::parse(wld); }
+    catch (const std::exception& e) { pushLog("open world: " + std::string(e.what()), 2); return false; }
+    // LevelName is relative to the folder of the .wld (data\Levels): "X.lev", "Sub\X.lev"
+    const std::string stem = wld.stem().string();
+    maps_.erase(std::remove_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.worldFile == wld.string(); }), maps_.end());
+    std::vector<MapEntry> added;
+    int missing = 0;
+    for (const auto& m : world.maps()) {
+        std::string rel = m.levelName;
+        std::replace(rel.begin(), rel.end(), '\\', '/');
+        const fs::path lev = wld.parent_path() / fs::path(rel);
+        if (!fs::is_regular_file(lev, ec)) { ++missing; continue; }
+        std::string region = "(no region)";
+        for (const auto& r : world.regions())
+            for (const auto& c : r.containsMaps)
+                if (lower(c) == lower(m.levelName)) { region = r.regionName; break; }
+        MapEntry e;
+        e.name = lev.stem().string();
+        e.key = "world:" + stem + "/" + std::to_string(m.index);
+        e.group = stem + ": " + region;
+        e.loosePath = lev.string();
+        e.size = uint32_t(fs::file_size(lev, ec));
+        e.worldX = float(m.mapX); e.worldY = float(m.mapY); e.hasWorld = true;
+        e.worldFile = wld.string();
+        e.tngPath = fs::path(lev).replace_extension(".tng").string();
+        groupOpen_[e.group] = true;
+        added.push_back(std::move(e));
+    }
+    if (added.empty()) { pushLog("open world: " + wld.filename().string() + " lists no level found beside it (" + std::to_string(missing) + " missing)", 2); return false; }
+    maps_.insert(maps_.begin(), added.begin(), added.end());   // opened worlds first: visible without scrolling
+    pushLog("Opened world " + wld.string() + ": " + std::to_string(added.size()) + " maps" + (missing ? ", " + std::to_string(missing) + " listed levels not found" : std::string()), missing ? 1 : 0);
+    selectedName_.clear();
+    selectMap(added.front().key);
+    return true;
+}
+
 bool App::openDropped(const std::string& path) {
     const std::string ext = lower(fs::path(path).extension().string());
+    if (ext == ".wld") return openWorld(path);
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
         if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("drop: open a map with terrain first, then drop the image again to make a ground texture from it", 1); return false; }
         std::snprintf(customPng_, sizeof customPng_, "%s", fs::absolute(path).string().c_str());
@@ -1211,7 +1258,7 @@ void App::frame(float dt) {
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) openLevelFile();
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) { if (io.KeyShift) openWorldFile(); else openLevelFile(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_RightBracket)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E) && !exportFuture_.valid() && !selectedName_.empty()) startExport();
@@ -1274,6 +1321,7 @@ void App::drawMenuBar() {
     ImGui::TextColored(theme::vec(theme::Accent), "FableForge");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
     if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Open world (.wld)...", "Ctrl+Shift+O")) openWorldFile();
         if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
         ImGui::Separator();
         if (ImGui::MenuItem("Change install folder...")) changeInstall();
@@ -1347,6 +1395,13 @@ void App::drawMenuBar() {
 void App::changeInstall() {
     const std::string picked = pickFolder(hwnd_, installPath_);
     if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
+}
+
+void App::openWorldFile() {
+    static const COMDLG_FILTERSPEC types[] = {{L"Fable world (*.wld)", L"*.wld"}};
+    const std::string start = installValid_ ? (fs::path(installPath_) / "data" / "Levels").string() : std::string();
+    const std::string picked = pickPath(hwnd_, start, types, 1);
+    if (!picked.empty()) openWorld(picked);
 }
 
 void App::openLevelFile() {

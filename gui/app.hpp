@@ -47,6 +47,8 @@ struct MapEntry {
     std::string loosePath;   // set when a loose .lev overrides the WAD copy
     float worldX = 0, worldY = 0;
     bool hasWorld = false;
+    std::string worldFile;   // set for a map of an opened world other than FinalAlbion (its .wld)
+    std::string tngPath;     // ... and the .tng beside its .lev
 };
 
 struct ExportSettings {
@@ -151,6 +153,9 @@ public:
     // A file dropped on the window: .lev opens as a loose map; a .png / .jpg / .tga becomes
     // the custom-texture input (Edit > Terrain > paint) with a name guessed from the file.
     bool openDropped(const std::string& path);
+    // A world other than FinalAlbion (a .wld under data\Levels, like the vanilla
+    // editor's File > Load World): its maps join the list, grouped by region.
+    bool openWorld(const std::string& wldPath);
     void saveSettings() const;
     ExportSettings& settings() { return settings_; }
     Camera& camera() { return camera_; }
@@ -298,6 +303,7 @@ private:
     void drawPanelStrip(bool left);
     void changeInstall();
     void openLevelFile();
+    void openWorldFile();
     void drawExplorer(float width);
     void drawViewport(float width);
     void drawActions(float width);
@@ -671,7 +677,8 @@ private:
     forge::levelstore::Layout levels_;   // WAD or loose levels; decides where level writes go
     // level writes land in loose files, not FinalAlbion.wad (a loose-level install); a
     // redirected save root is judged by Document::deployWad itself
-    bool writesLoose() const { return (saveRoot_.empty() || saveRoot_ == installPath_) && levels_.looseOnly(); }
+    // the deploy is the loose file: a loose-level install, or a map of another world
+    bool writesLoose() const { return (saveRoot_.empty() || saveRoot_ == installPath_) && (levels_.looseOnly() || doc_.external()); }
     std::vector<MapEntry> maps_;
     std::string filter_;
     std::map<std::string, bool> groupOpen_;

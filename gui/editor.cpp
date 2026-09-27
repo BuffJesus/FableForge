@@ -56,7 +56,8 @@ void App::openDocument() {
     std::string err;
     const std::string lev = resolveLevPath(*e, err);
     std::string derr;
-    if (!doc_.open(installPath_, e->name, lev, derr)) {
+    const editor::Document::ExternalWorld ext{e->worldFile, e->tngPath};
+    if (!doc_.open(installPath_, e->name, lev, derr, e->worldFile.empty() ? nullptr : &ext)) {
         if (!derr.empty()) pushLog("editor: " + derr, 1);
         return;
     }
