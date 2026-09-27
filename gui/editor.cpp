@@ -391,7 +391,7 @@ void App::pollMeshImport() {
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
-    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear();
+    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
     meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
     startContextLoad(saveRoot());
 }
@@ -1529,26 +1529,48 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::InputTextWithHint("##themesearch", "Add a ground theme from the game (GRASS, COBBLES, SNOW...)", themeSearch_, sizeof themeSearch_);
             ImGui::PopStyleVar();
             auto_.registerWidget("input_themesearch");
-            if (themeSearch_[0]) {
+            {
+                // every ENGINE_THEME of the game: grouped by ENGINE_THEME_GROUP like the vanilla
+                // Themes dialog (TG_SNOWSPIRE, TG_HOOKCOAST ...), or the search's matches
                 const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+                if (themeGroupOf_.empty() && ctx_.ready())
+                    for (const auto& g : ctx_.groupedDefinitions({"ENGINE_THEME"})) themeGroupOf_[g.name] = g.group;
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-                ImGui::BeginChild("##themelist", ImVec2(cardInner, S(110)), ImGuiChildFlags_None);
+                ImGui::BeginChild("##themelist", ImVec2(cardInner, S(themeSearch_[0] ? 110 : 180)), ImGuiChildFlags_None);
                 ImGui::PopStyleColor();
                 ImGui::PushFont(fontSmall_);
+                auto themeLine = [&](const std::string& name) {
+                    const int have = doc_.paletteSlotOf(name);
+                    char lbl[200]; std::snprintf(lbl, sizeof lbl, have >= 0 ? "%s  (slot %d)" : "%s", name.c_str(), have);
+                    const float rowH = S(22);
+                    const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+                    if (ImGui::Selectable((std::string("##lib") + name).c_str(), have >= 0 && have == paintTheme_, 0, ImVec2(0, rowH))) addPaintTheme(name);
+                    themeRow(name, rowPos, rowH, lbl);
+                };
                 int shown = 0;
                 if (!lib) ImGui::TextColored(theme::vec(theme::Faint), "ENGINE_THEME library not loaded yet");
-                else
+                else if (themeSearch_[0]) {
                     for (const auto& th : lib->themes()) {
-                        if (!th.decoded || !contains(th.name, themeSearch_)) continue;
-                        const int have = doc_.paletteSlotOf(th.name);
-                        char lbl[200]; std::snprintf(lbl, sizeof lbl, have >= 0 ? "%s  (slot %d)" : "%s", th.name.c_str(), have);
-                        const float rowH = S(22);
-                        const ImVec2 rowPos = ImGui::GetCursorScreenPos();
-                        if (ImGui::Selectable((std::string("##lib") + th.name).c_str(), have >= 0 && have == paintTheme_, 0, ImVec2(0, rowH))) addPaintTheme(th.name);
-                        themeRow(th.name, rowPos, rowH, lbl);
+                        if (!th.decoded || !(contains(th.name, themeSearch_) || contains(themeGroupOf_[th.name], themeSearch_))) continue;
+                        themeLine(th.name);
                         if (++shown >= 200) break;
                     }
-                if (lib && !shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+                    if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+                } else {
+                    std::map<std::string, std::vector<std::string>> byGroup;
+                    for (const auto& th : lib->themes())
+                        if (th.decoded) {
+                            const auto g = themeGroupOf_.find(th.name);
+                            byGroup[g == themeGroupOf_.end() || g->second.empty() ? std::string("(no group)") : g->second].push_back(th.name);
+                        }
+                    for (const auto& [group, names] : byGroup) {
+                        char gh[128]; std::snprintf(gh, sizeof gh, "%s  (%zu)##tg%s", group.c_str(), names.size(), group.c_str());
+                        if (ImGui::TreeNodeEx(gh, ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                            for (const auto& n : names) themeLine(n);
+                            ImGui::TreePop();
+                        }
+                    }
+                }
                 ImGui::PopFont();
                 ImGui::EndChild();
             }

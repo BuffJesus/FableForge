@@ -368,6 +368,7 @@ private:
     // the vanilla editor's Things tree (thing type -> group -> def)
     std::vector<terrainexport::Context::GroupedDefinition> defList_;
     std::string placeDef_;           // the def the Place button puts down
+    std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)
     void drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height);
     char thingSearch_[64] = {};
     // forge_mods_provenance.json (written by a mod deploy): "uid:<n>" -> mod for the open map;
