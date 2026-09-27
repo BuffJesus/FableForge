@@ -59,6 +59,7 @@ bool invert(const float m[16], float out[16]);
 struct TerrainState {
     std::vector<float> heights;
     std::vector<uint8_t> walkable;
+    std::vector<uint8_t> cameraPassable;                // per cell (+16); walkable cells are always passable
     std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
     std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
     std::vector<forge::lev::GroundTheme> palette;       // the LEV's 256 ground-theme slots
@@ -74,7 +75,8 @@ struct TerrainBrush {
     // `replaceFrom` becomes `themeIndex` in every slot (no blending).
     // Environment / Sound: the game-map grid (vanilla ENVIRONMENT tab / Survey >
     // Sounds): `themeIndex` is the atmos palette slot / the sound index (0 = none).
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound };
+    // CameraPass / CameraBlock: the vanilla Survey > Passability camera brush (+16).
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;

@@ -186,6 +186,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
         const int cx = level_->cellsX(), cy = level_->cellsY();
         t->heights.resize(size_t(cx) * cy);
         t->walkable.resize(size_t(cx) * cy);
+        t->cameraPassable.resize(size_t(cx) * cy);
         t->themeIndex.resize(size_t(cx) * cy);
         t->themeStrength.resize(size_t(cx) * cy);
         t->palette = level_->groundThemes();
@@ -206,6 +207,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
                 const size_t i = size_t(y) * cx + x;
                 t->heights[i] = level_->heightAt(x, y);
                 t->walkable[i] = level_->walkableAt(x, y) ? 1 : 0;
+                t->cameraPassable[i] = level_->cameraPassableAt(x, y) ? 1 : 0;
                 for (int k = 0; k < 3; ++k) { t->themeIndex[i][k] = level_->themeIndexAt(x, y, k); t->themeStrength[i][k] = level_->themeStrengthAt(x, y, k); }
             }
         terrain_ = t;
@@ -364,6 +366,10 @@ void Document::writeTerrainToLevel() {
             const size_t i = size_t(y) * cx + x;
             if (level_->heightAt(x, y) != terrain_->heights[i]) level_->setHeightAt(x, y, terrain_->heights[i]);
             if (level_->walkableAt(x, y) != (terrain_->walkable[i] != 0)) level_->setWalkableAt(x, y, terrain_->walkable[i] != 0);
+            if (!terrain_->cameraPassable.empty()) {
+                const bool cam = terrain_->cameraPassable[i] != 0 || terrain_->walkable[i] != 0;   // the saver's OR
+                if (level_->cameraPassableAt(x, y) != cam) level_->setCameraPassableAt(x, y, cam);
+            }
             bool sameTheme = true;
             for (int k = 0; k < 3; ++k) sameTheme = sameTheme && level_->themeIndexAt(x, y, k) == terrain_->themeIndex[i][k] && level_->themeStrengthAt(x, y, k) == terrain_->themeStrength[i][k];
             if (!sameTheme) level_->setThemeBlendAt(x, y, terrain_->themeIndex[i], terrain_->themeStrength[i]);
@@ -400,6 +406,18 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
     if (!stroke_ || !working_) return;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     using Mode = TerrainBrush::Mode;
+    if (brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock) {
+        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
+        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
+                if (dx * dx + dy * dy <= brush.radius * brush.radius)
+                    working_->cameraPassable[size_t(y) * cx + x] = brush.mode == Mode::CameraPass ? 1 : 0;
+            }
+        ++terrainRev_;
+        return;
+    }
     if (brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
         const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
         const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
@@ -660,7 +678,7 @@ bool Document::themesDirty() const {
 bool Document::terrainDirty() const {
     if (!terrain_ || !savedTerrain_) return false;
     if (terrain_ == savedTerrain_) return false;
-    if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable ||
+    if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable || terrain_->cameraPassable != savedTerrain_->cameraPassable ||
         terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
     if (terrain_->atmosIndex != savedTerrain_->atmosIndex || terrain_->atmosStrength != savedTerrain_->atmosStrength ||
         terrain_->sound != savedTerrain_->sound) return true;

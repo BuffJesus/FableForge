@@ -767,6 +767,14 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(saved.atmosThemes()[2].name == "ENVIRONMENT_HAUNTED");
     CHECK(!doc.terrainDirty());
     CHECK(doc.undo() && doc.undo() && doc.environmentAndSoundAt(6.0f, 6.0f)->first == 0);
+    // camera passability (+16): blocked cells take the brush; walkable cells stay passable (the saver's OR)
+    CHECK(doc.terrain().cameraPassable.size() == size_t(doc.cellsX()) * doc.cellsY());
+    b.mode = ed::TerrainBrush::Mode::CameraPass; b.x = 4.5f; b.y = 4.5f; b.radius = 0.6f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    b.mode = ed::TerrainBrush::Mode::CameraBlock; b.x = 1.5f; b.y = 1.5f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    CHECK(doc.level()->cameraPassableAt(4, 4) && doc.level()->cameraPassableAt(1, 1));   // (1,1) is walkable: stays passable
+    CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
 }
 
 // The vanilla fractal generator port against the static-RE reference

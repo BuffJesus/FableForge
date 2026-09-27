@@ -345,6 +345,9 @@ void File::setWalkableAt(int x, int y, bool walkable) {
     cell(x, y)[15] = walkable ? 1 : 0;
 }
 
+bool File::cameraPassableAt(int x, int y) const { return cell(x, y)[16] != 0; }
+void File::setCameraPassableAt(int x, int y, bool passable) { cell(x, y)[16] = passable ? 1 : 0; }
+
 bool File::preferredPathAt(int x, int y) const {
     return cell(x, y)[20] != 0;
 }

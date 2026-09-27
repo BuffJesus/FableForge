@@ -119,6 +119,10 @@ public:
     size_t cellDataOffset() const { return cellsOffset_; }
     bool walkableAt(int x, int y) const;
     void setWalkableAt(int x, int y, bool walkable);
+    // +16: the camera may pass (vanilla Survey > Passability "Camera passability";
+    // CMap::SaveToFile writes camera-passable OR walkable, so walkable implies it)
+    bool cameraPassableAt(int x, int y) const;
+    void setCameraPassableAt(int x, int y, bool passable);
     bool preferredPathAt(int x, int y) const;
     void setPreferredPathAt(int x, int y, bool preferred);
     // index 0..2: up to three blended ground themes per cell.

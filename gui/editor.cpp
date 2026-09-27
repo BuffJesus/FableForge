@@ -861,6 +861,8 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
         case 7: return M::ReplaceTheme;
         case 10: return M::Environment;
         case 11: return M::Sound;
+        case 12: return M::CameraPass;
+        case 13: return M::CameraBlock;
         default: return M::Theme;
     }
 }
@@ -1672,6 +1674,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             int es = (terrainMode_ == 10 || terrainMode_ == 11) ? terrainMode_ - 10 : -1;
             if (theme::segmented("##tenv", es, {"Paint environment", "Paint sound"}, cardInner) && es >= 0) terrainMode_ = 10 + es;
             auto_.registerWidget("seg_terrain_envsound");
+        }
+        {
+            int cam = (terrainMode_ == 12 || terrainMode_ == 13) ? terrainMode_ - 12 : -1;
+            if (theme::segmented("##tcam", cam, {"Camera passable", "Camera blocked"}, cardInner) && cam >= 0) terrainMode_ = 12 + cam;
+            auto_.registerWidget("seg_terrain_camera");
+            if (terrainMode_ == 12 || terrainMode_ == 13) {
+                ImGui::PushFont(fontSmall_);
+                theme::hint("Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");
+                ImGui::PopFont();
+            }
         }
         if (terrainMode_ == 10 || terrainMode_ == 11) {
             const auto& atm = doc_.terrain().atmosPalette;
