@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FableForge VERSION 0.17.0 LANGUAGES C CXX)
+project(FableForge VERSION 0.17.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
