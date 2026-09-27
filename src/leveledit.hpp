@@ -149,6 +149,20 @@ public:
     // One undo step; returns the thing's new index (nullopt: bad index / no such section).
     std::optional<size_t> moveToSection(size_t index, const std::string& name);
 
+    // ---- per-component properties (the vanilla Thing Properties dialog's category
+    // tabs, inventory 5.4): every editable field of a thing, grouped by its CTC
+    // block ("" = the thing's own fields). UID links (Links) and the physics frame
+    // (the gizmo) are left out.
+    struct PropertyRow {
+        std::string ctc, key, value;
+        enum class Kind { Bool, Int, Float, String, Raw } kind = Kind::Raw;
+    };
+    std::vector<PropertyRow> propertiesOf(size_t index) const;
+    // Sets one field (value as the .tng spells it: TRUE, 3, 1.5, "text"); one undo
+    // step. False when the value does not fit the field's kind or the field is absent.
+    bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
+    static PropertyRow::Kind kindOf(const std::string& value);
+
     // ---- links between things: the vanilla editor's attach modes (FableWin
     // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
     // them -- a UID field on a component (or on the thing) naming another thing.

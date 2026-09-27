@@ -341,6 +341,56 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
     theme::endCard();
 }
 
+// Every other field of the selected thing, one collapsible group per component
+// (CTCDoor, CTCChest, CTCLight ...) like the vanilla Thing Properties tabs. TRUE /
+// FALSE fields are checkboxes; the rest are text fields committed on Enter or when
+// focus leaves, refused (and logged) when the value does not fit the field.
+void App::drawPropertyGrid(float cardInner) {
+    using theme::S;
+    if (selectedThing_ < 0) return;
+    const size_t idx = size_t(selectedThing_);
+    const auto rows = doc_.propertiesOf(idx);
+    if (rows.empty()) return;
+    ImGui::Dummy(ImVec2(0, S(4)));
+    theme::label("Properties");
+    ImGui::PushFont(fontSmall_);
+    using K = editor::Document::PropertyRow::Kind;
+    std::string group = "\x01";
+    bool open = false;
+    const float keyW = cardInner * 0.45f;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        if (r.ctc != group) {
+            group = r.ctc;
+            const std::string title = (group.empty() ? std::string("General") : group) + "##pg" + group;
+            open = ImGui::CollapsingHeader(title.c_str(), group.empty() || group == "CTCDoor" || group == "CTCChest" ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+        }
+        if (!open) continue;
+        ImGui::PushID(int(i));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::vec(theme::Muted), "%s", r.key.c_str());
+        ImGui::SameLine(keyW);
+        ImGui::SetNextItemWidth(cardInner - keyW);
+        std::string next;
+        bool commit = false;
+        if (r.kind == K::Bool) {
+            bool v = r.value == "TRUE";
+            if (ImGui::Checkbox("##v", &v)) { next = v ? "TRUE" : "FALSE"; commit = true; }
+        } else {
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "%s", r.value.c_str());
+            ImGui::InputText("##v", buf, sizeof buf);
+            if (ImGui::IsItemDeactivatedAfterEdit()) { next = buf; commit = true; }
+        }
+        if (commit && next != r.value) {
+            if (doc_.setPropertyValue(idx, r.ctc, r.key, next)) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);
+            else pushLog("property: " + next + " does not fit " + r.key + (r.kind == K::String ? " (a quoted \"text\")" : r.kind == K::Int ? " (a whole number)" : r.kind == K::Float ? " (a number)" : ""), 1);
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopFont();
+}
+
 void App::applySectionVisibility() {
     if (!documentLoaded()) return;
     const size_t n = renderer_.instanceCount();
@@ -1873,6 +1923,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
             ImGui::PopID();
         }
+        drawPropertyGrid(cardInner);
     }
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));

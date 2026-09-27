@@ -990,6 +990,68 @@ bool hasCtcPrefix(const forge::tng::Thing& t, std::string_view prefix) {
 }
 } // namespace
 
+Document::PropertyRow::Kind Document::kindOf(const std::string& value) {
+    using K = PropertyRow::Kind;
+    if (value == "TRUE" || value == "FALSE") return K::Bool;
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') return K::String;
+    if (value.empty()) return K::Raw;
+    size_t i = (value[0] == '-' || value[0] == '+') ? 1 : 0;
+    if (i >= value.size()) return K::Raw;
+    bool digits = false, dot = false;
+    for (; i < value.size(); ++i) {
+        const char c = value[i];
+        if (std::isdigit(static_cast<unsigned char>(c))) digits = true;
+        else if (c == '.' && !dot) dot = true;
+        else return K::Raw;
+    }
+    return !digits ? K::Raw : dot ? K::Float : K::Int;
+}
+
+namespace {
+// fields the property grid leaves to other editors
+bool hiddenProperty(const std::string& ctc, const std::string& key) {
+    const std::string k = lower(key);
+    if (k == "uid" || k == "definitiontype" || k == "versionnumber") return true;
+    if (k.size() > 3 && k.compare(k.size() - 3, 3, "uid") == 0) return true;   // links
+    if (ctc == "CTCPhysicsStandard") return true;                                // the frame: the gizmo
+    return false;
+}
+} // namespace
+
+std::vector<Document::PropertyRow> Document::propertiesOf(size_t index) const {
+    std::vector<PropertyRow> out;
+    if (index >= file_.things().size()) return out;
+    const auto& t = file_.things()[index];
+    for (const auto& p : t.properties)
+        if (!hiddenProperty("", p.key)) out.push_back({"", p.key, p.value, kindOf(p.value)});
+    for (const auto& b : t.ctcBlocks)
+        for (const auto& p : b.properties)
+            if (!hiddenProperty(b.name, p.key)) out.push_back({b.name, p.key, p.value, kindOf(p.value)});
+    return out;
+}
+
+bool Document::setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value) {
+    if (index >= file_.things().size() || hiddenProperty(ctc, key)) return false;
+    std::optional<PropertyRow> row;
+    for (const auto& r : propertiesOf(index))
+        if (r.ctc == ctc && lower(r.key) == lower(key)) row = r;
+    if (!row) return false;
+    if (row->value == value) return true;
+    using K = PropertyRow::Kind;
+    const K k = kindOf(value);
+    // keep the field's kind: an int field takes ints, a float field ints or floats, a string a quoted string
+    const bool fits = row->kind == K::Raw ? (!value.empty() && value.find(';') == std::string::npos && value.find('\n') == std::string::npos)
+                    : row->kind == K::Float ? (k == K::Float || k == K::Int)
+                    : row->kind == K::String ? (k == K::String && value.find('"', 1) == value.size() - 1)
+                    : k == row->kind;
+    if (!fits) return false;
+    pushUndo();
+    if (ctc.empty()) file_.setThingProperty(index, key, value);
+    else file_.setCtcProperty(index, ctc, key, value);
+    ++revision_;
+    return true;
+}
+
 std::vector<Document::Link> Document::linksOf(size_t index) const {
     std::vector<Link> out;
     if (index >= file_.things().size()) return out;

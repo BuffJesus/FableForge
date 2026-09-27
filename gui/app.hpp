@@ -383,6 +383,7 @@ private:
     size_t sectionsAppliedInstances_ = 0;
     bool sectionsDirty_ = true;
     void drawSectionsCard(float pad, float inner, float cardInner);
+    void drawPropertyGrid(float cardInner);
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
     std::string thingLabel(size_t index) const;

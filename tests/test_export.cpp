@@ -700,6 +700,45 @@ void testQuestSections() {
     CHECK(bare.addSection("Q_NEW") && (bare.sections() == std::vector<std::string>{"NULL", "Q_NEW"}));
 }
 
+// The per-component property grid (vanilla Thing Properties tabs): kinds, the
+// hidden fields, typed edits refused when they do not fit, one undo step each.
+void testThingProperties() {
+    namespace ed = albion::editor;
+    using K = ed::Document::PropertyRow::Kind;
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_DOOR\";\r\nScriptName NULL;\r\nScriptData \"hi\";\r\n"
+        "StartCTCPhysicsStandard;\r\nPositionX 1.0;\r\nEndCTCPhysicsStandard;\r\n"
+        "StartCTCDoor;\r\nStartOpen FALSE;\r\nLockLevel 2;\r\nEndCTCDoor;\r\n"
+        "StartCTCOwnedEntity;\r\nOwnerUID 5;\r\nEndCTCOwnedEntity;\r\n"
+        "Health 1.0;\r\nEndThing;\r\n\r\nXXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Props", tng, err));
+    const auto rows = doc.propertiesOf(0);
+    auto find = [&](const std::string& ctc, const std::string& key) -> const ed::Document::PropertyRow* {
+        for (const auto& r : rows) if (r.ctc == ctc && r.key == key) return &r;
+        return nullptr;
+    };
+    CHECK(find("", "ScriptName") && find("", "ScriptName")->kind == K::Raw);
+    CHECK(find("", "ScriptData") && find("", "ScriptData")->kind == K::String);
+    CHECK(find("", "Health") && find("", "Health")->kind == K::Float);
+    CHECK(find("CTCDoor", "StartOpen") && find("CTCDoor", "StartOpen")->kind == K::Bool);
+    CHECK(find("CTCDoor", "LockLevel") && find("CTCDoor", "LockLevel")->kind == K::Int);
+    CHECK(!find("", "UID") && !find("", "DefinitionType") && !find("CTCPhysicsStandard", "PositionX") && !find("CTCOwnedEntity", "OwnerUID"));
+    CHECK(doc.setPropertyValue(0, "CTCDoor", "StartOpen", "TRUE"));
+    CHECK(doc.text().find("StartOpen TRUE;") != std::string::npos);
+    CHECK(!doc.setPropertyValue(0, "CTCDoor", "StartOpen", "3"));      // a bool stays a bool
+    CHECK(!doc.setPropertyValue(0, "CTCDoor", "LockLevel", "2.5"));    // an int stays an int
+    CHECK(doc.setPropertyValue(0, "", "Health", "3"));                 // a float takes an int
+    CHECK(!doc.setPropertyValue(0, "", "ScriptData", "no quotes"));
+    CHECK(doc.setPropertyValue(0, "", "ScriptName", "MyDoor"));
+    CHECK(!doc.setPropertyValue(0, "", "ScriptName", "a;b"));          // would break the line
+    CHECK(!doc.setPropertyValue(0, "CTCOwnedEntity", "OwnerUID", "7"));  // links are not here
+    CHECK(doc.undo() && doc.text().find("ScriptName NULL;") != std::string::npos);
+    CHECK(doc.undo() && doc.text().find("Health 1.0;") != std::string::npos);
+}
+
 // Links between things (vanilla attach modes): a villager's village / owner / home,
 // listed, validated against the target's kind, set, cleared and undone.
 void testThingLinks() {
@@ -1187,6 +1226,7 @@ int main() {
     testExternalWorld(dir);
     testThingLinks();
     testQuestSections();
+    testThingProperties();
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();
