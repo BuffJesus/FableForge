@@ -24,9 +24,9 @@ the panel wiring builds but nobody has looked at it on screen.
 | 6 | "Replace All" | **Done** `0f2c3f3`. Not in vanilla, which floods only the connected patch. |
 | 7 | Heightmap path maker | **Done** `0f2c3f3`: Draw path, drag start -> end (vanilla `EditDrawPathPenUndoable`). UI unseen. |
 | 8 | Load other .wld files, not just FinalAlbion | Open. Vanilla: File > Load World (`*.wld`). About 15 hard-coded `FinalAlbion` sites in `gui/` and `src/`. |
-| 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | Open. Vanilla lists come from ENGINE_THEME_GROUP, then ENGINE_THEME. Local detail is not proven editor-side. |
+| 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | **Grouping done** `ec002b4`: tree by ENGINE_THEME_GROUP (UI unseen). Local detail is open; it is not proven editor-side in vanilla. |
 | 10 | Per-class property tabs (CTC editing) | Open. 5 thing classes + 27 CTC `GetPropertiesStruct` label sets are in inventory 5.4. Next: `CreateGenericVars` for value types. |
-| 11 | Actors from def entity groups by category, not Forge presets | Open. Vanilla Things tree: thing type -> non-template defs + THING_GROUP, Quick Find. |
+| 11 | Actors from def entity groups by category, not Forge presets | **Done** `80aa11d`: type -> THING_GROUP -> def tree (3,972 defs / 93 groups vs retail), Actors tab leads with creatures by group, `forge def-groups`. UI unseen. Presets card kept (user's call). Markers / villages / switches are not placeable yet. |
 | 12 | Whole-world view, click a map to activate it, several maps at once | Open. Vanilla 2D world map + "Locked for editing" per region. Flat quads for maps without STB are unproven in vanilla 3D. |
 | 13 | Quest sections: toggle, choose current, add | Open. Vanilla shows/hides, chooses the current section, and moves a thing (RCtrl+;). Sections come from registered quest names only. |
 | 14 | Paint environment themes and sound themes | Open. Vanilla paints env themes through the engine path with ATMOS_THEME; sounds are the Survey > Sounds tab (SOUND_THEME layers). |
