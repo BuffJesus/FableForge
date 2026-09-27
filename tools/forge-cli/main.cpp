@@ -9933,6 +9933,33 @@ int main(int argc, char** argv) {
         if (args.size() >= 4 && args[0] == "big" && args[1] == "extract") {
             return fmpExtract(args[2], args[3], args.size() > 4 ? args[4] : "");
         }
+        if (args.size() >= 3 && args[0] == "mesh" && args[1] == "physics-scan") {   // mesh physics-scan <graphics.big>: which [PHYSICS] hulls carry NAV_LAYER_0n helpers
+            const auto file = forge::big::File::open(args[2]);
+            const auto* bank = file.findBank("MBANK_ALLMESHES");
+            if (!bank) { std::fprintf(stderr, "no MBANK_ALLMESHES\n"); return 1; }
+            size_t hulls = 0, withHelpers = 0, withNav = 0;
+            for (const auto& e : bank->entries) {
+                if (e.type != 3) continue;
+                ++hulls;
+                const auto raw = file.entryData(e);
+                if (raw.size() < 4) continue;
+                uint32_t usize = 0; std::memcpy(&usize, raw.data(), 4);
+                std::vector<uint8_t> plain;
+                try { plain = forge::lzo::decompress(raw.data() + 4, raw.size() - 4, usize); } catch (const std::exception&) { plain.assign(raw.begin() + 4, raw.end()); }
+                const std::string s(plain.begin(), plain.end());
+                if (s.find("HLPR") != std::string::npos) ++withHelpers;
+                std::vector<std::string> navs;
+                for (size_t p = s.find("NAV_LAYER"); p != std::string::npos; p = s.find("NAV_LAYER", p + 1))
+                    navs.push_back(s.substr(p, std::min<size_t>(16, std::strlen(s.c_str() + p))));
+                if (navs.empty()) continue;
+                ++withNav;
+                std::printf("%-56s", e.name.c_str());
+                for (const auto& n : navs) std::printf(" %s", n.c_str());
+                std::printf("\n");
+            }
+            std::printf("%zu physics hulls, %zu with helper points, %zu with NAV_LAYER helpers\n", hulls, withHelpers, withNav);
+            return 0;
+        }
         if (args.size() >= 2 && args[0] == "mesh-info") {   // mesh-info <graphics.big> <MESH_NAME|id|--last> [--json]: one MBANK_ALLMESHES entry decoded (the importer's check)
             if (args.size() < 3) { std::fprintf(stderr, "mesh-info <graphics.big> <MESH_NAME|id|--last> [--json]\n"); return 2; }
             const bool asJson = args.back() == "--json";
