@@ -1,4 +1,5 @@
 #include "forge/navmesh.hpp"
+#include "navgeometry.hpp"
 
 #include <algorithm>
 #include <array>
@@ -31,21 +32,6 @@ bool finer(const DetailArea& n, const std::vector<DetailArea>& areas) {
     return false;
 }
 
-bool crosses(const Line& l, const DetailArea& b) {
-    // Segment/box clipping. Endpoint/boundary degeneracies still need wider
-    // retail comparison against C2DLineF::IntersectsWith; do not claim byte parity.
-    float enter = 0, leave = 1;
-    const float dx = l.x1 - l.x0, dy = l.y1 - l.y0;
-    const float p[] = {-dx, dx, -dy, dy};
-    const float q[] = {l.x0 - b.x0, b.x1 - l.x0, l.y0 - b.y0, b.y1 - l.y0};
-    for (int k = 0; k < 4; ++k) {
-        if (p[k] == 0) { if (q[k] < 0) return false; continue; }
-        const float t = q[k] / p[k];
-        if (p[k] < 0) enter = std::max(enter, t); else leave = std::min(leave, t);
-        if (enter > leave) return false;
-    }
-    return true;
-}
 
 std::unique_ptr<Node> build(const lev::File& file, const GroundGeometry& geometry,
                             int level, float cx, float cy) {
@@ -62,10 +48,10 @@ std::unique_ptr<Node> build(const lev::File& file, const GroundGeometry& geometr
         }
     if (allBlocked) return nullptr;
     if (!blocked) blocked = std::any_of(geometry.blockingLines.begin(), geometry.blockingLines.end(),
-                                      [&](const Line& l) { return crosses(l, box); });
+                                      [&](const Line& l) { return detail::lineBlocksArea(l, box); });
     std::vector<uint64_t> uids;
     if (!blocked) for (const auto& door : geometry.switchableLines)
-        if (std::any_of(door.lines.begin(), door.lines.end(), [&](const Line& l) { return crosses(l, box); }))
+        if (std::any_of(door.lines.begin(), door.lines.end(), [&](const Line& l) { return detail::lineBlocksArea(l, box); }))
             uids.push_back(door.uid);
     const bool maySplit = level < 5 || (level == 5 && finer(box, geometry.detailedAreas));
     auto node = std::make_unique<Node>();

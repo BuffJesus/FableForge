@@ -872,6 +872,30 @@ void testGroundNavigation(const fs::path& dir) {
     const auto empty = generateGround(lev, source, {});
     CHECK(empty.section.nodes.size() == 1 && empty.section.nodes[0].leaf);
     CHECK(empty.anchorsUsed == 1 && empty.section.positions == source.positions);
+    auto hasPoint = [](const GroundResult& result, float x, float y) {
+        for (const auto& n : result.section.nodes) if (n.leaf) {
+            const float half = 16.0f / float(1 << n.level);
+            if (x >= n.cx - half && x < n.cx + half && y >= n.cy - half && y < n.cy + half) return true;
+        }
+        return false;
+    };
+    // Native endpoint containment is half-open. A degenerate point at a cell
+    // corner blocks only its containing cell, not all four touching cells.
+    GroundGeometry point; point.blockingLines = {{16, 16, 16, 16}};
+    const auto pointTree = generateGround(lev, source, point);
+    CHECK(hasPoint(pointTree, 15.5f, 15.5f) && hasPoint(pointTree, 16.5f, 15.5f));
+    CHECK(hasPoint(pointTree, 15.5f, 16.5f) && !hasPoint(pointTree, 16.5f, 16.5f));
+    // Collinear overlap alone does not count; the top edge is exclusive and
+    // this short segment never intersects either vertical side.
+    point.blockingLines = {{15.25f, 16, 15.75f, 16}};
+    const auto edgeTree = generateGround(lev, source, point);
+    CHECK(hasPoint(edgeTree, 15.5f, 15.5f) && !hasPoint(edgeTree, 15.5f, 16.5f));
+    // Native edge intersections allow 0.0001 world units of endpoint slack.
+    auto below = source;
+    const float belowY = 4; std::memcpy(below.positions.data() + 4, &belowY, 4);
+    point.blockingLines = {{-1, 16.00005f, 33, 16.00005f}};
+    const auto nearEdge = generateGround(lev, below, point);
+    CHECK(hasPoint(nearEdge, 4.5f, 14.5f) && !hasPoint(nearEdge, 4.5f, 15.5f));
     GroundGeometry g;
     g.blockingLines = {{16.25f, 0, 16.25f, 32}};
     const auto divided = generateGround(lev, source, g);

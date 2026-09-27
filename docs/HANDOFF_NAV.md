@@ -127,8 +127,8 @@ offset so component names can be resolved without a second names-file parser.
 Further native evidence: `Initialise` `0x032851b0`, `IsAreaClear` `0x0328c7e0`,
 `SetUpRegions` `0x0328f270` in `build/nav-generator-evidence.c`; static blockers
 take precedence over switchable lines. Map-thing UIDs use the low 40 bits.
-Current region assignment and segment boundary handling still need wider parity
-checks; these are documented experimental choices, not full native ports.
+Current region/layer integration still needs wider parity checks. Segment
+boundary behavior was subsequently recovered and verified below.
 Touching-map selection does not cover oversized objects from distant maps;
 generated switchable children without explicit UIDs are reported unresolved.
 The collector follows exported render instances, so physics-only things that
@@ -175,8 +175,8 @@ certified pristine corpus.
 
 Inspected native segment/box intersection: endpoint containment plus four
 edge tests with epsilon0.0001, rejecting parallel segment intersections.
-The current clipper's degeneracies remain a known difference; no unsupported
-epsilon tweak was made to force agreement. Evidence: `build/nav-intersection-
+The initial clipper's degeneracies were a known difference, subsequently fixed
+using native execution as described below. Evidence: `build/nav-intersection-
 evidence.c`, `nav-line-intersection-evidence.c`, `nav-segment-evidence.c`.
 
 `nav-compare --details` now shows both sides of node differences, anchors,
@@ -188,3 +188,34 @@ The requested background s&box review is complete:
 FableTLC `docs/engine/IN_ENGINE_MODDING_ENVIRONMENT.md` with pinned source
 evidence and concrete acceptance examples for annotations, bake dependencies,
 package identities, presets, transactions, edit/play sessions and reload.
+
+## Native geometry oracle and integration checks
+
+Replaced generic clipping in the experimental generator with the native
+endpoint/edge predicate. `C2DLineF::IntersectsWith` (`0x0324c6d0`) normalizes
+directions, computes a float dot product/denominator and checks a computed
+intersection against both segments with epsilon0.0001. Collinear overlap alone
+does not count. Float rounding matters near parallel lines: `GFSqr`, square
+root, inverse length, normalized components and dot products each round to
+float; the numerator retains intermediate precision. Disassembly confirmed the
+rounding boundaries, including `Dot` (`0x021e3ae0`) storing to a float local
+before returning. The internal kernel is `libs/forgecore/src/navgeometry.hpp`.
+
+Added reproducible optional verification:
+`python tools/verify_debug_nav.py --debug-exe D:/Documents/FableTLC/debug_build/FableWin.exe`.
+It compiles the actual C++ kernel with the owning worktree's compiler and runs
+the debug executable's box-intersection routine under Unicorn. Only CRT fabs
+and sqrt imports are replaced by equivalent x87 instructions. The executable
+hash must match the recorded binary. This does not launch or mutate the game.
+Result: **10005/10005** edge-intersection cases agree, including random translated
+boxes, near-boundary lines, collinear edges and degenerate points. This proves
+those sampled primitive results, not full generator parity. New synthetic
+generator tests cover half-open points, collinear top edges and epsilon slack.
+All six installed-map comparisons above remain unchanged after the correction.
+
+Full suites completed ALL PASS on the navigation implementation through
+`efc02db` (`build/full-gate-current.log`) and on isolated overworld commit
+`1a60f09` (`D:/Code/FableForge-verify-ow/build/full-gate-overworld.log`). Both
+lacked the optional mod/Project Seasons corpora. The later intersection change
+passed its native oracle, core unit tests and all six map comparisons; combined
+integration validation follows before updating main.
