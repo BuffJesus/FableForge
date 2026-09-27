@@ -3,8 +3,8 @@
 Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting commit
 `8178e9b`. Workflow procedures are committed at `a9b21a3`; the experimental
 navigation implementation is committed at `91498be`. Game-install files were
-not changed. The separate overworld branch is being validated in an owned,
-isolated checkout at `D:/Code/FableForge-verify-ow` (source `1a60f09`).
+not changed. Both branches were validated and merged at `7def801` in the owned,
+isolated checkout `D:/Code/FableForge-verify-ow` (overworld source `1a60f09`).
 
 ## Setup
 
@@ -142,8 +142,7 @@ lookup and hull validation changes. After those changes, rebuilt all targets,
 reran CTest and the initial three comparisons. Synthetic tests cover blocker/detail
 splits, anchored islands, switchable links, symmetric neighbours, serialization
 round trips, invalid input and malformed hull counts. No in-game navigation
-test has been performed. Both branch merges remain pending; inspect ownership
-and new edits before testing or integrating the separate overworld worktree.
+test has been performed. Integration was completed subsequently as recorded below.
 
 The user-requested background audit is complete:
 [Debug editor feature audit](DEBUG_EDITOR_FEATURE_AUDIT.md). It records five
@@ -217,5 +216,14 @@ Full suites completed ALL PASS on the navigation implementation through
 `efc02db` (`build/full-gate-current.log`) and on isolated overworld commit
 `1a60f09` (`D:/Code/FableForge-verify-ow/build/full-gate-overworld.log`). Both
 lacked the optional mod/Project Seasons corpora. The later intersection change
-passed its native oracle, core unit tests and all six map comparisons; combined
-integration validation follows before updating main.
+passed its native oracle, core unit tests and all six map comparisons.
+
+Combined merge `7def801` builds successfully. Both CTest targets pass; the
+native geometry oracle again matches 10005/10005 when launched from a different
+working directory (all scratch writes remain in the script's owning checkout).
+The combined overworld scratch test passes, including GUI moves, terrain deploy,
+theme deploy and custom-theme deploy (`build/combined-overworld.log` in the
+integration checkout). LookoutPoint/PicnicArea retain exact comparison results;
+BarrowFields retains the documented discrepancies. Docs-command checks pass.
+The validated integration is ready for the local main fast-forward; no push or
+release is involved. Production navigation remains the existing writer.
