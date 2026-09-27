@@ -21,6 +21,7 @@
 #include "foliageexport.hpp"
 #include "terrainexport.hpp"
 #include "thingsexport.hpp"
+#include "navlines.hpp"
 #include "leveledit.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
@@ -818,6 +819,152 @@ void testMeshCompose() {
     CHECK(threw);
 }
 
+void testNavigationDetail() {
+    using namespace albion::navlines;
+    HullMesh mesh;
+    // No vertex lies at an AABB corner: a farthest-vertex sphere would be too small.
+    mesh.verts = {{-2, 0, 0}, {2, 0, 0}, {0, -3, 0}, {0, 3, 0}, {0, 0, -6}, {0, 0, 6}};
+    const auto hull = buildHull(mesh);
+    CHECK(hull.centre[0] == 0 && hull.centre[1] == 0 && hull.centre[2] == 0);
+    CHECK(std::fabs(hull.radius - 7.0f) < 1e-6f);
+    CHECK(buildHull({}).radius == 0);
+    // A parent's corner requests refinement even if this particular child is outside.
+    const std::vector<Box> areas{{16.1f, 84.58f, 25.29f, 93.77f}};
+    CHECK(requestsHigherDetail({25, 86, 26, 87}, areas));
+    CHECK(!requestsHigherDetail({25.5f, 86.5f, 26, 87}, areas));
+    CHECK(!requestsHigherDetail({26, 86, 27, 87}, areas));
+    // This is corner containment, not generic overlap, with half-open boundaries.
+    CHECK(!requestsHigherDetail({0, 0, 4, 4}, {{1, 1, 3, 3}}));
+    CHECK(requestsHigherDetail({0, 0, 1, 1}, {{1, 1, 2, 2}}));
+    CHECK(!requestsHigherDetail({2, 2, 3, 3}, {{1, 1, 2, 2}}));
+    CHECK(!requestsHigherDetail({0, 0, 1, 1}, {}));
+    bool rejected = false;
+    try { decodeHull({}, {}); } catch (const std::runtime_error&) { rejected = true; }
+    CHECK(rejected);
+    forge::meshcompose::Primitive p;
+    p.verts = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    p.faces = {{0, 1, 2}};
+    auto bytes = forge::meshcompose::composePhysicsUncompressed({p});
+    CHECK(decodeHull(bytes, {}).tris.size() == 1);
+    // Count must fit this chunk, even when the surrounding allocation has more bytes.
+    const std::string tris = "TRIS";
+    const auto at = std::search(bytes.begin(), bytes.end(), tris.begin(), tris.end());
+    CHECK(at != bytes.end());
+    if (at != bytes.end()) {
+        const size_t offset = size_t(at - bytes.begin()) + 8;
+        bytes[offset] = bytes[offset + 1] = bytes[offset + 2] = bytes[offset + 3] = 0xff;
+        rejected = false;
+        try { decodeHull(bytes, {}); } catch (const std::runtime_error&) { rejected = true; }
+        CHECK(rejected);
+    }
+}
+
+void testGroundNavigation(const fs::path& dir) {
+    using namespace forge::navmesh;
+    const auto path = writeSyntheticLev(dir / "ground_nav.lev", 32, 32, [](int, int) { return 0.0f; });
+    auto lev = forge::lev::File::open(path);
+    for (int y = 0; y < 32; ++y) for (int x = 0; x < 32; ++x) {
+        lev.setWalkableAt(x, y, true); lev.setPreferredPathAt(x, y, false);
+    }
+    RetailSection source;
+    source.name = "NULL"; source.width = source.height = 32;
+    put<float>(source.positions, 4); put<float>(source.positions, 16); put<int32_t>(source.positions, 0);
+    const auto empty = generateGround(lev, source, {});
+    CHECK(empty.section.nodes.size() == 1 && empty.section.nodes[0].leaf);
+    CHECK(empty.anchorsUsed == 1 && empty.section.positions == source.positions);
+    auto hasPoint = [](const GroundResult& result, float x, float y) {
+        for (const auto& n : result.section.nodes) if (n.leaf) {
+            const float half = 16.0f / float(1 << n.level);
+            if (x >= n.cx - half && x < n.cx + half && y >= n.cy - half && y < n.cy + half) return true;
+        }
+        return false;
+    };
+    // Native endpoint containment is half-open. A degenerate point at a cell
+    // corner blocks only its containing cell, not all four touching cells.
+    GroundGeometry point; point.blockingLines = {{16, 16, 16, 16}};
+    const auto pointTree = generateGround(lev, source, point);
+    CHECK(hasPoint(pointTree, 15.5f, 15.5f) && hasPoint(pointTree, 16.5f, 15.5f));
+    CHECK(hasPoint(pointTree, 15.5f, 16.5f) && !hasPoint(pointTree, 16.5f, 16.5f));
+    // Collinear overlap alone does not count; the top edge is exclusive and
+    // this short segment never intersects either vertical side.
+    point.blockingLines = {{15.25f, 16, 15.75f, 16}};
+    const auto edgeTree = generateGround(lev, source, point);
+    CHECK(hasPoint(edgeTree, 15.5f, 15.5f) && !hasPoint(edgeTree, 15.5f, 16.5f));
+    // Native edge intersections allow 0.0001 world units of endpoint slack.
+    auto below = source;
+    const float belowY = 4; std::memcpy(below.positions.data() + 4, &belowY, 4);
+    point.blockingLines = {{-1, 16.00005f, 33, 16.00005f}};
+    const auto nearEdge = generateGround(lev, below, point);
+    CHECK(hasPoint(nearEdge, 4.5f, 14.5f) && !hasPoint(nearEdge, 4.5f, 15.5f));
+    GroundGeometry g;
+    g.blockingLines = {{16.25f, 0, 16.25f, 32}};
+    const auto divided = generateGround(lev, source, g);
+    CHECK(divided.leavesRemoved > 0);
+    for (const auto& n : divided.section.nodes) if (n.leaf) CHECK(n.cx < 16.25f);
+    g.detailedAreas = {{15, 0, 18, 32}};
+    // Put the line in the right half: the left half remains connected to the seed.
+    g.blockingLines = {{16.75f, 0, 16.75f, 32}};
+    const auto detailed = generateGround(lev, source, g);
+    size_t halfLeaves = 0;
+    for (const auto& n : detailed.section.nodes) if (n.leaf && n.level == 6) ++halfLeaves;
+    CHECK(halfLeaves > 0);
+    g.blockingLines = {{16.25f, 0, 16.25f, 14.25f}, {16.25f, 18.75f, 16.25f, 32}};
+    g.switchableLines = {{123456789, {{16.25f, 14.25f, 16.25f, 18.75f}}}};
+    const auto door = generateGround(lev, source, g);
+    size_t switches = 0, rightLeaves = 0;
+    for (const auto& n : door.section.nodes) if (n.leaf) {
+        rightLeaves += n.cx > 17;
+        if (n.switchable) { ++switches; CHECK(n.uids == std::vector<uint64_t>{123456789}); }
+        for (const auto nb : n.neighbours) {
+            const auto it = std::find_if(door.section.nodes.begin(), door.section.nodes.end(),
+                [&](const RetailNode& b) { return b.index == nb; });
+            CHECK(it != door.section.nodes.end());
+            if (it != door.section.nodes.end()) CHECK(std::find(it->neighbours.begin(), it->neighbours.end(), n.index) != it->neighbours.end());
+        }
+    }
+    CHECK(switches > 0 && rightLeaves > 0 && door.section.regionCount == 3);
+    const auto bytes = emitNavigation(lev, RetailNav{{door.section}});
+    CHECK(std::equal(bytes.begin(), bytes.begin() + lev.navigationOffset(), lev.originalBytes().begin()));
+    const auto out = dir / "ground_nav_roundtrip.lev";
+    { std::ofstream f(out, std::ios::binary); f.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size())); }
+    const auto reread = forge::lev::File::open(out);
+    CHECK(emitNavigation(reread, parseNavigation(reread)) == bytes);
+    auto noSeeds = source; noSeeds.positions.clear();
+    const auto removed = generateGround(lev, noSeeds, {});
+    CHECK(removed.leavesRemoved == 1 && removed.section.nodes[0].marker);
+    // Native pruning retains unanchored switchable leaves as closed doors.
+    const auto closed = generateGround(lev, noSeeds, g);
+    size_t closedDoors = 0;
+    for (const auto& n : closed.section.nodes) if (n.leaf) {
+        ++closedDoors;
+        CHECK(n.switchable && n.blocked && n.region == 0);
+        for (const auto index : n.neighbours) {
+            const auto it = std::find_if(closed.section.nodes.begin(), closed.section.nodes.end(),
+                [&](const RetailNode& b) { return b.index == index; });
+            CHECK(it != closed.section.nodes.end() && it->switchable && it->blocked);
+        }
+    }
+    CHECK(closedDoors > 0 && closed.section.regionCount == 1);
+    // A seed on the right assigns the door to that side, not the first leaf
+    // encountered in geometric order. The other side becomes a second region.
+    auto rightSeed = source;
+    const float rightX = 25;
+    std::memcpy(rightSeed.positions.data(), &rightX, 4);
+    const auto fromRight = generateGround(lev, rightSeed, g);
+    for (const auto& n : fromRight.section.nodes) if (n.leaf) {
+        if (n.switchable || n.cx > 17) CHECK(n.region == 1);
+        else if (n.cx < 15) CHECK(n.region == 2);
+    }
+    auto layered = source; layered.layerCount = 2;
+    bool rejected = false;
+    try { generateGround(lev, layered, {}); } catch (const std::invalid_argument&) { rejected = true; }
+    CHECK(rejected);
+    g.switchableLines.push_back(g.switchableLines.front());
+    rejected = false;
+    try { generateGround(lev, source, g); } catch (const std::invalid_argument&) { rejected = true; }
+    CHECK(rejected);
+}
+
 int main() {
     const fs::path dir = fs::temp_directory_path() / "FableForgeTests";
     fs::create_directories(dir);
@@ -830,6 +977,8 @@ int main() {
     testPng();
     testFoliageGlb(lev, dir);
     testThingBasis();
+    testNavigationDetail();
+    testGroundNavigation(dir);
     testWater(dir);
     testLevelDocument();
     testTerrainEditing(lev, dir);

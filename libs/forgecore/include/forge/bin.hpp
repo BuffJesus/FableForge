@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,6 +40,10 @@ public:
 
     // First entry with this exact name, or nullptr.
     const Entry* find(std::string_view name) const;
+
+    // Original names.bin text offset, used by references inside compiled payloads.
+    // This describes the loaded bank, not a subsequently saved/reordered table.
+    std::optional<uint32_t> originalNameOffset(std::string_view name) const;
 
     // --- Write path. Mutate payloads (or add entries), then save both files.
     // Saving re-chunks and re-compresses, so output is not byte-identical to

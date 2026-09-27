@@ -11,6 +11,8 @@ Commands that write game files keep a one-time `<file>.forge-orig` backup and ar
 usage:
   forge list   [--install <fable-root>]
   forge info   <map|file.lev> [--install <fable-root>]
+  forge nav-lines <map> [--raw-verts] [--details] [--install <root>]
+  forge nav-compare <map> [--details] [--install <root>]   (experimental ground nav comparison; read-only)
   forge export <map|file.lev> [--out <file.glb|file.obj>] [options]
   forge new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]
   forge blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]

@@ -23,7 +23,9 @@
 // be unique, and `total` must equal the record count.
 // Region ids are the connected components of the leaf-neighbour graph with the
 // switchable (door) leaves removed; switchable leaves carry the outer region
-// and a closed one carries region 0 with no neighbours.
+// and a closed one carries region 0. Stored links between closed switchable
+// leaves can remain (e.g. BarrowFields' Demon Door); blocked is runtime state,
+// not evidence that the serialized neighbour list must be empty.
 
 #include "forge/lev.hpp"
 

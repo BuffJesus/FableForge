@@ -196,6 +196,18 @@ File File::open(const fs::path& namesPath, const fs::path& binPath) {
     return file;
 }
 
+std::optional<uint32_t> File::originalNameOffset(std::string_view name) const {
+    uint64_t offset = 4;
+    for (const auto& entry : names_) {
+        if (entry.second == name) {
+            if (offset > UINT32_MAX) throw std::runtime_error("names.bin: offset overflow");
+            return uint32_t(offset);
+        }
+        offset += entry.second.size() + 5;
+    }
+    return std::nullopt;
+}
+
 const Entry* File::find(std::string_view name) const {
     for (const Entry& entry : entries_) {
         if (entry.name == name) return &entry;

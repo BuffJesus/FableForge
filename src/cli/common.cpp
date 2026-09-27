@@ -54,6 +54,8 @@ int usage() {
         "usage:\n"
         "  forge list   [--install <fable-root>]\n"
         "  forge info   <map|file.lev> [--install <fable-root>]\n"
+        "  forge nav-lines <map> [--raw-verts] [--details] [--install <root>]\n"
+        "  forge nav-compare <map> [--details] [--install <root>]   (experimental ground nav comparison; read-only)\n"
         "  forge export <map|file.lev> [--out <file.glb|file.obj>] [options]\n"
         "  forge new-level <donor> <name> [--at x,y] [--region <host>] [--dedicated] [--no-rebake] [--install <root>]\n"
         "  forge blank-level <name> [--size WxH] [--at x,y] [--region <host>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"
