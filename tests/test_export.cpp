@@ -677,6 +677,7 @@ void testQuestSections() {
     CHECK(doc.openText("Sections", tng, err));
     CHECK((doc.sections() == std::vector<std::string>{"NULL", "Q_TEST"}));
     CHECK(doc.sectionOf(0) == "NULL" && doc.sectionOf(1) == "Q_TEST");
+    CHECK((doc.thingSections() == std::vector<std::string>{"NULL", "Q_TEST"}));
     CHECK(!doc.addSection("bad name") && !doc.addSection("q_test") && !doc.addSection(""));
     CHECK(doc.addSection("MY_QUEST") && doc.sections().size() == 3);
     CHECK(doc.text().find("XXXSectionStart MY_QUEST;\r\nXXXSectionEnd;\r\n") != std::string::npos);

@@ -28,7 +28,7 @@ the panel wiring builds but nobody has looked at it on screen.
 | 10 | Per-class property tabs (CTC editing) | Open. 5 thing classes + 27 CTC `GetPropertiesStruct` label sets are in inventory 5.4. Next: `CreateGenericVars` for value types. |
 | 11 | Actors from def entity groups by category, not Forge presets | **Done** `80aa11d`: type -> THING_GROUP -> def tree (3,972 defs / 93 groups vs retail), Actors tab leads with creatures by group, `forge def-groups`. UI unseen. Presets card kept (user's call). Markers / villages / switches are not placeable yet. |
 | 12 | Whole-world view, click a map to activate it, several maps at once | Open. Vanilla 2D world map + "Locked for editing" per region. Flat quads for maps without STB are unproven in vanilla 3D. |
-| 13 | Quest sections: toggle, choose current, add | Open. Vanilla shows/hides, chooses the current section, and moves a thing (RCtrl+;). Sections come from registered quest names only. |
+| 13 | Quest sections: toggle, choose current, add | **Done** `72037f6`: show/hide, current section for new things, add (free names, beyond vanilla), move selection (UI unseen). Later: FSE quest registration of a new section. |
 | 14 | Paint environment themes and sound themes | Open. Vanilla paints env themes through the engine path with ATMOS_THEME; sounds are the Survey > Sounds tab (SOUND_THEME layers). |
 | 15 | Nav from NAVIGATION_SEED + paint navigability | Nav lane (`HANDOFF_NAV.md`). Vanilla rebuilds nav on save and has passability, camera-passability and pref-nav brushes. |
 | 16 | Fractals | Open. Parameters in inventory 5.9; maths in `DEBUG_EDITOR_FEATURE_AUDIT.md`. |
