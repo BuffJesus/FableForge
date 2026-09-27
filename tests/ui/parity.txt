@@ -34,7 +34,7 @@ edit_tab 2
 frames 3
 assert_widget input_actorsearch
 screenshot build/ui/parity_6_actors.png
-help
+help 1
 frames 3
 screenshot build/ui/parity_7_help.png
 quit
