@@ -34,8 +34,14 @@ forge effects BRAZIERFIREFINAL         # what a particle effect is made of
 ## Get it
 
 Download `FableForge-<version>-win64.zip` from the [Releases](https://github.com/BuffJesus/FableForge/releases)
-page, unzip it anywhere and run `FableForge.exe`; it finds the Steam install by itself (or point it at one).
-Nothing to install: the exes are static, Windows 10/11 needs nothing else.
+page, unzip it anywhere and run `FableForge.exe`; it finds the Steam install by itself (or point it at one:
+the folder that holds `Fable.exe`, not its `Data` folder). Nothing to install: the exes are static, Windows 10/11 needs nothing else.
+
+Modded installs with the levels **extracted** (loose `Data\Levels\FinalAlbion\*.lev` / `*.tng`, the
+WAD renamed to e.g. `_FinalAlbion.wad` so the game reads the loose files) work as they are: the map
+list comes from the loose files and every level write (objects, terrain, new levels, world moves)
+goes to the loose files. FableForge never recreates `FinalAlbion.wad` on such an install, since the
+WAD would override every loose level.
 
 New here? Read **[docs/FIRST_LEVEL.md](docs/FIRST_LEVEL.md)** -- your first level in ten minutes, with screenshots.
 

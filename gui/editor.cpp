@@ -535,7 +535,8 @@ bool App::deployDocument() {
     if (gameWriteBlocked("deploy")) return false;
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
-    pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
+    if (writesLoose()) pushLog("wrote " + doc_.loosePath().string() + " (loose-level install: the game reads this file)", 3);
+    else pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
     return true;
 }
 
@@ -1113,7 +1114,7 @@ void App::startTerrainDeploy() {
     editor::Document* doc = &doc_;
     const std::string root = saveRoot();
     const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
-    pushLog("terrain: writing .lev, FinalAlbion.wad and re-baking the FinalAlbion_RT.stb chunk...", 0);
+    pushLog(std::string("terrain: writing .lev") + (writesLoose() ? "" : ", FinalAlbion.wad") + " and re-baking the FinalAlbion_RT.stb chunk...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
     terrainDeployFuture_ = std::async(std::launch::async, [doc, root, lib, progress]() {
@@ -1746,9 +1747,11 @@ void App::drawEditFooter(float pad, float inner) {
         } else if (!confirmTerrainDeploy_) {
             if (theme::primaryButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of all three files.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", writesLoose()
+                ? "Writes the loose .lev (this install has no FinalAlbion.wad, so the game reads it) and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of both files."
+                : "Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of all three files.");
         } else {
-            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev, FinalAlbion.wad and FinalAlbion_RT.stb? (one-time .forge-orig backups)";
+            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev" + (writesLoose() ? "" : ", FinalAlbion.wad") + " and FinalAlbion_RT.stb? (one-time .forge-orig backups)";
             const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(36), "btn_terrain_deploy_confirm");
             if (r != 0) confirmTerrainDeploy_ = false;
             if (r > 0) startTerrainDeploy();
@@ -1759,11 +1762,16 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     const float half = (inner - S(6)) * 0.5f;
     if (!confirmDeploy_) {
-        if (theme::primaryButton("Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
+        if (theme::primaryButton(writesLoose() ? "Write into the game (loose .tng)" : "Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.forge-orig.");
+        if (ImGui::IsItemHovered()) {
+            if (writesLoose()) ImGui::SetTooltip("This install has no FinalAlbion.wad: the game reads the loose files in data/Levels/FinalAlbion,\nso this writes %s.tng there. The original file is backed up once as .forge-orig.", doc_.mapName().c_str());
+            else ImGui::SetTooltip("The game loads levels from the WAD, so this is what makes the edit show up in-game.\nThe original archive is backed up once as FinalAlbion.wad.forge-orig.");
+        }
     } else {
-        const std::string q = "Replace " + doc_.mapName() + ".tng inside FinalAlbion.wad? The game reads it on the next visit (one-time .forge-orig backup).";
+        const std::string q = writesLoose()
+            ? "Write " + doc_.mapName() + ".tng into data/Levels/FinalAlbion? The game reads it on the next visit (one-time .forge-orig backup)."
+            : "Replace " + doc_.mapName() + ".tng inside FinalAlbion.wad? The game reads it on the next visit (one-time .forge-orig backup).";
         const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(42), "btn_deploy_confirm");
         if (r != 0) confirmDeploy_ = false;
         if (r > 0) deployDocument();
@@ -1771,7 +1779,10 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();
     auto_.registerWidget("btn_save");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; Atlas reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
+    if (ImGui::IsItemHovered()) {
+        if (writesLoose()) ImGui::SetTooltip("Writes data/Levels/FinalAlbion/%s.tng. This install has no FinalAlbion.wad, so the game READS this file:\na draft saved here is live on the next visit. A one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
+        else ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; FableForge reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
+    }
     if (dirty) {
         ImGui::SameLine(0, S(6));
         if (theme::dangerButton("Revert all", ImVec2(half, S(32)))) revertDocument();

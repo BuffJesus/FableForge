@@ -147,7 +147,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
 
     std::string root = installOverride;
     installSource_ = "command line";
-    if (root.empty() && !savedInstall.empty() && fs::exists(fs::path(savedInstall) / "data" / "Levels" / "FinalAlbion.wad")) {
+    if (root.empty() && !savedInstall.empty() && forge::levelstore::detect(savedInstall).valid()) {
         root = savedInstall; installSource_ = "remembered";
     }
     if (root.empty()) {
@@ -166,9 +166,14 @@ App::InstallHealth App::installHealth() const {
     if (installPath_.empty()) return h;
     const fs::path r = installPath_;
     std::error_code ec;
-    h.gameBin = fs::exists(r / "data" / "CompiledDefs" / "game.bin", ec);
-    h.wad = fs::exists(r / "data" / "Levels" / "FinalAlbion.wad", ec);
-    h.stb = fs::exists(r / "data" / "Levels" / "FinalAlbion_RT.stb", ec);
+    const fs::path gameBin = r / "data" / "CompiledDefs" / "game.bin", stb = r / "data" / "Levels" / "FinalAlbion_RT.stb";
+    h.gameBin = fs::exists(gameBin, ec);
+    h.levels = levels_.valid();   // detected by scanInstall (a directory walk: not per frame)
+    h.levelsHow = levels_.looseOnly() ? std::to_string(levels_.looseLevels) + " loose levels, no FinalAlbion.wad" : "FinalAlbion.wad";
+    h.stb = fs::exists(stb, ec);
+    if (!h.gameBin) h.missing.push_back(gameBin.string());
+    if (!h.levels) h.missing.push_back((r / "data" / "Levels" / "FinalAlbion.wad").string() + "  (or loose levels in " + (r / "data" / "Levels" / "FinalAlbion").string() + ")");
+    if (!h.stb) h.missing.push_back(stb.string());
     h.texturesBig = fs::exists(r / "data" / "graphics" / "pc" / "textures.big", ec);
     h.fse = fs::exists(r / "FSE" / "FableScriptExtender.dll", ec) && fs::exists(r / "FSE" / "PartyMode" / "PartyMode.lua", ec);
     const char* home = std::getenv("USERPROFILE");
@@ -314,7 +319,13 @@ void App::drawSetupPanel() {
             ImGui::TextColored(theme::vec(theme::Muted), "%s", ok ? enables : without);
             ImGui::PopTextWrapPos();
         };
-        row(h.gameBin && h.wad && h.stb, "game data", "levels, objects, terrain and the world editor", "no data/Levels + CompiledDefs here: this is not a Fable install");
+        const std::string dataOk = "levels (" + h.levelsHow + "), objects, terrain and the world editor";
+        row(h.gameBin && h.levels && h.stb, "game data", dataOk.c_str(), installPath_.empty() ? "no folder chosen yet" : "missing (pick the folder that holds Fable.exe, not its Data folder):");
+        if (!installPath_.empty() && !h.missing.empty()) {
+            ImGui::PushTextWrapPos(S(530));
+            for (const auto& m : h.missing) ImGui::TextColored(theme::vec(theme::Warn), "         %s", m.c_str());
+            ImGui::PopTextWrapPos();
+        }
         row(h.texturesBig, "textures.big", "textured preview, ground-theme paint, custom textures, minimaps", "no textured preview, no theme paint or custom textures (a trimmed install?)");
         row(h.fse, "ForgeFSE", "the live link to the running game (go here, spawn, follow)", "no live link: install ForgeFSE (FSE_Launcher.exe) to talk to the running game; everything else works");
         row(h.saves, "saves folder", "the in-game test harness can continue your profiles", "no My Games/Fable/Saves yet: start the game once");
@@ -455,23 +466,35 @@ void App::saveSettings() const {
     } catch (...) {}
 }
 
-void App::scanInstall(const std::string& root) {
+void App::scanInstall(const std::string& picked) {
     maps_.clear();
+    // the Data folder itself was picked: the install is its parent
+    std::string root = picked;
+    {
+        const fs::path p(picked);
+        std::error_code ec;
+        if (!fs::exists(p / "data", ec) && fs::exists(p / "CompiledDefs" / "game.bin", ec) && p.has_parent_path()) {
+            root = p.parent_path().string();
+            pushLog("that is the install's Data folder; using " + root, 1);
+        }
+    }
     installPath_ = root;
-    installValid_ = fs::exists(fs::path(root) / "data" / "CompiledDefs" / "game.bin");
-    const fs::path wadPath = fs::path(root) / "data" / "Levels" / "FinalAlbion.wad";
-    if (!fs::exists(wadPath)) {
-        installValid_ = false;
-        pushLog("Not a Fable TLC install: " + root, 2);
+    levels_ = forge::levelstore::detect(root);
+    const bool hasDefs = fs::exists(fs::path(root) / "data" / "CompiledDefs" / "game.bin");
+    installValid_ = hasDefs && levels_.valid();
+    if (!installValid_) {
+        pushLog("Not a Fable TLC install: " + root + (hasDefs ? " (no FinalAlbion.wad and no loose levels in data\\Levels\\FinalAlbion)" : " (no data\\CompiledDefs\\game.bin)"), 2);
+        if (!auto_.active()) setupOpen_ = true;   // the Setup panel lists exactly what is missing
         return;
     }
+    if (levels_.looseOnly())
+        pushLog("loose-level install: " + std::to_string(levels_.looseLevels) + " levels in data\\Levels\\FinalAlbion, no FinalAlbion.wad" +
+                (levels_.renamedWad.empty() ? "" : " (" + levels_.renamedWad.filename().string() + " is ignored, as the game ignores it)") +
+                "; level writes go to the loose files", 0);
     regions_ = te::loadRegionIndex(root);
     try {
-        const auto wad = forge::wad::Archive::open(wadPath);
-        for (const auto& e : wad.entries()) {
-            const fs::path p(e.name);
-            if (lower(p.extension().string()) != ".lev") continue;
-            MapEntry m; m.name = p.stem().string(); m.key = m.name; m.size = e.size;
+        for (const auto& lv : forge::levelstore::listLevels(levels_)) {
+            MapEntry m; m.name = lv.stem; m.key = m.name; m.size = lv.size;
             auto rg = regions_.regionOfMap.find(lower(m.name));
             m.group = rg != regions_.regionOfMap.end() ? rg->second : groupOf(m.name);
             auto og = regions_.originOfMap.find(lower(m.name));
@@ -484,9 +507,9 @@ void App::scanInstall(const std::string& root) {
             if (lower(a.group) != lower(b.group)) return lower(a.group) < lower(b.group);
             return lower(a.name) < lower(b.name);
         });
-        pushLog(std::to_string(maps_.size()) + " maps in FinalAlbion.wad", 0);
+        pushLog(std::to_string(maps_.size()) + " maps in " + levels_.describe(), 0);
     } catch (const std::exception& e) {
-        pushLog(std::string("cannot read FinalAlbion.wad: ") + e.what(), 2);
+        pushLog("cannot read " + levels_.describe() + ": " + e.what(), 2);
         installValid_ = false;
         return;
     }
@@ -523,7 +546,7 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
             std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
             return out.string();
         }
-        err = "map not found in FinalAlbion.wad";
+        err = "map not found in " + levels_.describe();
     } catch (const std::exception& ex) {
         err = ex.what();
     }
@@ -1012,6 +1035,7 @@ std::vector<std::string> App::stateDump() const {
     std::vector<std::string> v;
     v.push_back("install=" + installPath_);
     v.push_back("install_valid=" + std::string(installValid_ ? "1" : "0"));
+    v.push_back("levels_loose=" + std::string(levels_.looseOnly() ? "1" : "0"));
     { const InstallHealth h = installHealth(); v.push_back("install_textures=" + std::string(h.texturesBig ? "1" : "0")); v.push_back("install_fse=" + std::string(h.fse ? "1" : "0")); v.push_back("setup_open=" + std::string(setupOpen_ ? "1" : "0")); }
     if (installValid_) { size_t d = 0; for (const auto& e : backupList_) d += e.differs; v.push_back("backups_differ=" + std::to_string(d)); }
     v.push_back("maps=" + std::to_string(maps_.size()));
@@ -1332,7 +1356,7 @@ void App::drawExplorer(float width) {
         ImGui::SetCursorPos(ImVec2(S(16), S(20)));
         ImGui::PushTextWrapPos(width - S(24));
         ImGui::TextColored(theme::vec(theme::Faint),
-                           installValid_ ? "Reading FinalAlbion.wad..." :
+                           installValid_ ? "Reading the level list..." :
                            "No install found.\n\nClick \"Change...\" and pick your\n\"Fable The Lost Chapters\" folder.");
         ImGui::PopTextWrapPos();
     } else {

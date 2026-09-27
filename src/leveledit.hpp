@@ -252,6 +252,12 @@ public:
                           std::vector<std::string>* notes = nullptr);
 
 private:
+    // deployTerrain's three steps; deployTerrain puts the .lev (loose file and
+    // WAD entry) back when a later step fails, so the level never disagrees
+    // with its STB chunk (in a loose-level install the game reads that .lev)
+    bool deployTerrainSteps(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                            const forge::terraintex::ThemeLibrary* library,
+                            const std::function<void(const std::string&)>& progress);
     struct Snapshot { std::string tng; std::shared_ptr<const TerrainState> terrain; };
     void pushUndo();
     void restore(const Snapshot& s);

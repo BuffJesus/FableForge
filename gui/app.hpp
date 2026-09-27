@@ -20,6 +20,7 @@
 
 #include <array>
 
+#include "forge/levelstore.hpp"
 #include "forge/modorder.hpp"
 #include "imgui.h"
 #include "foliageexport.hpp"
@@ -256,7 +257,10 @@ private:
     void loadSettings(std::string& savedInstall);
     std::string settingsPath() const;
     // what the chosen folder offers: each false switches a feature off with a reason
-    struct InstallHealth { bool gameBin = false, wad = false, stb = false, texturesBig = false, fse = false, saves = false; };
+    // levels = FinalAlbion.wad or the loose FinalAlbion\*.lev files (modders' extracted installs);
+    // missing = the full path of every required file that is not there, for the Setup panel
+    struct InstallHealth { bool gameBin = false, levels = false, stb = false, texturesBig = false, fse = false, saves = false;
+                           std::string levelsHow; std::vector<std::string> missing; };
     InstallHealth installHealth() const;
     void drawSetupPanel();
     bool setupOpen_ = false;         // the Setup modal (first run, or the status click)
@@ -648,6 +652,10 @@ private:
     std::string installPath_;
     std::string installSource_;
     bool installValid_ = false;
+    forge::levelstore::Layout levels_;   // WAD or loose levels; decides where level writes go
+    // level writes land in loose files, not FinalAlbion.wad (a loose-level install); a
+    // redirected save root is judged by Document::deployWad itself
+    bool writesLoose() const { return (saveRoot_.empty() || saveRoot_ == installPath_) && levels_.looseOnly(); }
     std::vector<MapEntry> maps_;
     std::string filter_;
     std::map<std::string, bool> groupOpen_;

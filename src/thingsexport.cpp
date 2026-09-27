@@ -10,6 +10,7 @@
 
 #include "effects.hpp"
 #include "forge/tng.hpp"
+#include "forge/levelstore.hpp"
 #include "forge/wad.hpp"
 
 namespace albion::thingsexport {
@@ -38,14 +39,9 @@ std::string readTng(const fs::path& root, const std::string& mapName, std::strin
         return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     }
     try {
-        const auto wad = forge::wad::Archive::open(root / "data" / "Levels" / "FinalAlbion.wad");
-        const std::string want = lower(mapName) + ".tng";
-        for (const auto& e : wad.entries())
-            if (lower(fs::path(e.name).filename().string()) == want) {
-                const auto bytes = wad.read(e);
-                return std::string(bytes.begin(), bytes.end());
-            }
-        err = "no " + mapName + ".tng loose or in FinalAlbion.wad";
+        const auto levels = forge::levelstore::detect(root);
+        if (const auto bytes = forge::levelstore::readFile(levels, mapName + ".tng")) return std::string(bytes->begin(), bytes->end());
+        err = "no " + mapName + ".tng in " + levels.describe();
     } catch (const std::exception& e) {
         err = e.what();
     }

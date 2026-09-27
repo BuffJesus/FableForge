@@ -3,7 +3,9 @@
 // form of `forge world install-level`. All four world containers are wired in
 // one staged, atomic step -- BWD + WLD (map slot, and either a dedicated new
 // region or membership in an existing host region), WAD (the donor's .lev/.tng
-// entries cloned under the new name, optionally with custom bytes) and STB (the
+// entries cloned under the new name, optionally with custom bytes; in a
+// loose-level install with no FinalAlbion.wad, loose FinalAlbion\<new>.lev/.tng
+// files instead) and STB (the
 // terrain chunk appended with an origin-patched common record).
 //
 // Region ownership: the engine's region vector is capped at the vanilla 141
@@ -57,6 +59,7 @@ struct Result {
     int left = 0, top = 0, right = 0, bottom = 0;
     uint64_t mapUid = 0;
     bool chunkRetargeted = false;
+    std::vector<std::filesystem::path> createdFiles;   // new loose .lev/.tng (loose-level installs only)
     std::vector<std::string> notes;
 };
 

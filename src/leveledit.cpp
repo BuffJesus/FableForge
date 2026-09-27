@@ -17,6 +17,7 @@
 #include "forge/stbheightbake.hpp"
 #include "forge/stbinfo.hpp"
 #include "forge/bin.hpp"
+#include "forge/levelstore.hpp"
 #include "lodbake.hpp"
 #include "stbrelocate.hpp"
 #include "forge/wad.hpp"
@@ -144,8 +145,9 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
     if (fs::exists(loosePath_)) {
         text = readFile(loosePath_);
     } else {
-        try {
-            const auto wad = forge::wad::Archive::open(gameRoot / "data" / "Levels" / "FinalAlbion.wad");
+        const auto layout = forge::levelstore::detect(gameRoot);
+        if (layout.hasWad()) try {
+            const auto wad = forge::wad::Archive::open(layout.wad);
             const std::string want = lower(mapName) + ".tng";
             for (const auto& e : wad.entries())
                 if (lower(fs::path(e.name).filename().string()) == want) {
@@ -155,7 +157,7 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
                     break;
                 }
         } catch (const std::exception& e) { error = e.what(); return false; }
-        if (text.empty()) { error = "no " + mapName + ".tng loose or in FinalAlbion.wad"; return false; }
+        if (text.empty()) { error = "no " + mapName + ".tng loose" + (layout.hasWad() ? " or in FinalAlbion.wad" : " (no FinalAlbion.wad in this install)"); return false; }
     }
     if (!openText(mapName, std::move(text), error)) return false;
     if (!levPath.empty()) loadLevel(levPath, error);
@@ -575,6 +577,60 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
 bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                              const forge::terraintex::ThemeLibrary* library,
                              const std::function<void(const std::string&)>& progress) {
+    // what the .lev was before: the loose file (or its absence) and the WAD entry
+    const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+    const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
+    const bool hadLoose = fs::exists(loose);
+    std::string oldLoose, wadEntry;
+    std::vector<uint8_t> oldWad;
+    const auto oldSaved = savedTerrain_;
+    try {
+        if (hadLoose) oldLoose = readFile(loose);
+        if (fs::exists(wad)) {
+            const auto archive = forge::wad::Archive::open(wad);
+            const std::string want = lower(mapName_) + ".lev";
+            for (const auto& e : archive.entries())
+                if (lower(fs::path(e.name).filename().string()) == want) { wadEntry = e.name; oldWad = archive.read(e); break; }
+        }
+    } catch (const std::exception& e) { error = e.what(); return false; }
+
+    if (deployTerrainSteps(gameRoot, notes, error, library, progress)) return true;
+
+    // roll the .lev back; the STB is only written as the last step
+    std::string rollback;
+    try {
+        if (hadLoose) {
+            std::ofstream out(loose, std::ios::binary | std::ios::trunc);
+            out.write(oldLoose.data(), std::streamsize(oldLoose.size()));
+            if (!out) throw std::runtime_error("cannot restore " + loose.string());
+        } else if (fs::exists(loose)) {
+            fs::remove(loose);
+            std::error_code ec;
+            fs::remove(loose.string() + albion::backups::kCreatedSuffix, ec);
+        }
+        if (!wadEntry.empty()) {
+            const auto archive = forge::wad::Archive::open(wad);
+            for (const auto& e : archive.entries())
+                if (e.name == wadEntry && archive.read(e) != oldWad) {
+                    std::map<std::string, std::vector<uint8_t>> rep{{wadEntry, oldWad}};
+                    const fs::path temp = wad.string() + ".atlas-tmp";
+                    forge::wad::repack(wad, rep, temp);
+                    fs::rename(temp, wad);
+                    break;
+                }
+        }
+        // the edit is unsaved again. navWalkable_ stays: the in-memory level
+        // already carries the patched navigation the next save writes out
+        savedTerrain_ = oldSaved;
+    } catch (const std::exception& e) { rollback = e.what(); }
+    error += rollback.empty() ? " (the .lev was put back; nothing changed on disk)"
+                              : " (and putting the .lev back failed: " + rollback + "; restore it from the .forge-orig backup)";
+    return false;
+}
+
+bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
+                                  const forge::terraintex::ThemeLibrary* library,
+                                  const std::function<void(const std::string&)>& progress) {
     const auto stage = [&](const char* s) { if (progress) progress(s); };
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const bool themesChanged = themesDirty();
@@ -1197,6 +1253,10 @@ bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
 }
 
 bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
+    // a loose-level install (no FinalAlbion.wad, the levels extracted to
+    // FinalAlbion\*): the loose .tng is what the game reads, so it is the deploy.
+    // Never recreate the WAD there: it would override every loose file.
+    if (forge::levelstore::detect(gameRoot).looseOnly()) return saveLoose(gameRoot, error);
     const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
     const fs::path backup = albion::backups::originalOf(wad);
     const fs::path temp = wad.string() + ".forge-tmp";

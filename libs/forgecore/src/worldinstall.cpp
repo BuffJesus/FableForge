@@ -1,6 +1,7 @@
 #include "forge/worldinstall.hpp"
 
 #include "forge/bwd.hpp"
+#include "forge/levelstore.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbinfo.hpp"
 #include "forge/wad.hpp"
@@ -82,8 +83,16 @@ Result installLevel(const Request& req) {
     const fs::path wldPath = levelsDir / "FinalAlbion.wld";
     const fs::path wadPath = levelsDir / "FinalAlbion.wad";
     const fs::path stbPath = levelsDir / "FinalAlbion_RT.stb";
-    for (const auto& p : {bwdPath, wldPath, wadPath, stbPath})
+    // A loose-level install (no FinalAlbion.wad, levels extracted to FinalAlbion\)
+    // gets the new level as loose files; creating a WAD there would override
+    // every loose level the install relies on.
+    const auto layout = levelstore::detect(req.gameRoot);
+    if (!layout.valid()) throw std::runtime_error("worldinstall: " + layout.describe());
+    const bool loose = layout.looseOnly();
+    for (const auto& p : {bwdPath, wldPath, stbPath})
         if (!fs::exists(p)) throw std::runtime_error("worldinstall: " + p.string() + " not found");
+    const fs::path looseLev = levelstore::loosePath(layout, req.newLevelName + ".lev");
+    const fs::path looseTng = levelstore::loosePath(layout, req.newLevelName + ".tng");
 
     const std::string donorLev = "Data\\Levels\\FinalAlbion\\" + req.donorLevelName + ".lev";
     const std::string donorTng = "Data\\Levels\\FinalAlbion\\" + req.donorLevelName + ".tng";
@@ -121,7 +130,13 @@ Result installLevel(const Request& req) {
     wld::File wld = wld::File::parse(wldPath);
     if (bwd.findMap(req.newLevelName) || wld.findMap(wldLevel))
         throw std::runtime_error("worldinstall: a map named '" + req.newLevelName + "' already exists in the world");
-    {
+    if (loose) {
+        for (const auto& p : {looseLev, looseTng})
+            if (fs::exists(p)) throw std::runtime_error("worldinstall: " + p.string() + " already exists");
+        for (const char* ext : {".lev", ".tng"})
+            if (!fs::exists(levelstore::loosePath(layout, req.donorLevelName + ext)))
+                throw std::runtime_error("worldinstall: the donor's " + req.donorLevelName + ext + " is not in " + layout.looseDir.string());
+    } else {
         const auto archive = wad::Archive::open(wadPath);
         for (const auto& e : archive.entries())
             if (lowered(e.name) == lowered(newLev) || lowered(e.name) == lowered(newTng))
@@ -250,7 +265,9 @@ Result installLevel(const Request& req) {
     const fs::path wadTmp = wadPath.string() + ".forge-tmp";
     const fs::path wadTmp2 = wadPath.string() + ".forge-tmp2";
     const fs::path stbTmp = stbPath.string() + ".forge-tmp";
-    auto cleanup = [&]() { std::error_code ec; for (const auto& t : {bwdTmp, wldTmp, wadTmp, wadTmp2, stbTmp}) fs::remove(t, ec); };
+    const fs::path levTmp = looseLev.string() + ".forge-tmp";
+    const fs::path tngTmp = looseTng.string() + ".forge-tmp";
+    auto cleanup = [&]() { std::error_code ec; for (const auto& t : {bwdTmp, wldTmp, wadTmp, wadTmp2, stbTmp, levTmp, tngTmp}) fs::remove(t, ec); };
     fs::path wadFinal;
     try {
         bwd.write(bwdTmp);
@@ -261,12 +278,24 @@ Result installLevel(const Request& req) {
             out.write(text.data(), static_cast<std::streamsize>(text.size()));
             if (!out) throw std::runtime_error("write failed for " + wldTmp.string());
         }
-        wad::appendClonedEntries(wadPath, {{donorLev, newLev}, {donorTng, newTng}}, wadTmp);
-        std::map<std::string, std::vector<uint8_t>> repl;
-        if (!req.levBytes.empty()) repl[newLev] = req.levBytes;
-        if (!req.tngBytes.empty()) repl[newTng] = req.tngBytes;
-        if (!repl.empty()) { wad::repack(wadTmp, repl, wadTmp2); wadFinal = wadTmp2; }
-        else wadFinal = wadTmp;
+        if (loose) {
+            auto writeLoose = [&](const fs::path& tmp, const std::vector<uint8_t>& custom, const char* ext) {
+                const std::vector<uint8_t> bytes = custom.empty() ? levelstore::requireFile(layout, req.donorLevelName + ext) : custom;
+                std::ofstream out(tmp, std::ios::binary);
+                if (!out) throw std::runtime_error("cannot write " + tmp.string());
+                out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                if (!out) throw std::runtime_error("write failed for " + tmp.string());
+            };
+            writeLoose(levTmp, req.levBytes, ".lev");
+            writeLoose(tngTmp, req.tngBytes, ".tng");
+        } else {
+            wad::appendClonedEntries(wadPath, {{donorLev, newLev}, {donorTng, newTng}}, wadTmp);
+            std::map<std::string, std::vector<uint8_t>> repl;
+            if (!req.levBytes.empty()) repl[newLev] = req.levBytes;
+            if (!req.tngBytes.empty()) repl[newTng] = req.tngBytes;
+            if (!repl.empty()) { wad::repack(wadTmp, repl, wadTmp2); wadFinal = wadTmp2; }
+            else wadFinal = wadTmp;
+        }
 
         auto ib = stbinfo::readInfoBlock(commonRecord.data());
         ib.worldX = req.worldX; ib.worldY = req.worldY;
@@ -290,6 +319,7 @@ Result installLevel(const Request& req) {
             for (const auto& p : {bwdPath, wldPath, wadPath, stbPath}) {
                 const fs::path bak = p.string() + req.backupSuffix;
                 std::error_code ec;
+                if (!fs::exists(p, ec)) continue;   // no WAD in a loose-level install
                 if (!fs::exists(bak)) fs::copy_file(p, bak, ec);
             }
         auto commit = [](const fs::path& tmp, const fs::path& orig) {
@@ -315,14 +345,16 @@ Result installLevel(const Request& req) {
             result.notes.push_back("BWD mirrored to " + mirror.string());
         }
         commit(wldTmp, wldPath);
-        commit(wadFinal, wadPath);
+        if (loose) { commit(levTmp, looseLev); commit(tngTmp, looseTng); }
+        else commit(wadFinal, wadPath);
         commit(stbTmp, stbPath);
         cleanup();
     } catch (const std::exception& e) {
         cleanup();
         throw std::runtime_error(std::string("worldinstall: commit failed after staging (restore from the ") + req.backupSuffix + " files): " + e.what());
     }
-    result.notes.push_back("WAD: cloned " + req.donorLevelName + ".lev/.tng as " + req.newLevelName + (req.levBytes.empty() && req.tngBytes.empty() ? " (donor bytes)" : " (custom bytes)"));
+    result.notes.push_back(std::string(loose ? "loose FinalAlbion\\ files (no FinalAlbion.wad in this install)" : "WAD") + ": cloned " + req.donorLevelName + ".lev/.tng as " + req.newLevelName + (req.levBytes.empty() && req.tngBytes.empty() ? " (donor bytes)" : " (custom bytes)"));
+    if (loose) { result.createdFiles.push_back(looseLev); result.createdFiles.push_back(looseTng); }
     result.notes.push_back(std::string("STB: chunk appended ") + (!req.commonRecord.empty() ? "(authored from scratch)" : result.chunkRetargeted ? "(re-baked for the new origin)" : "(DONOR geometry: re-bake it for the new origin before playing)"));
     return result;
 }

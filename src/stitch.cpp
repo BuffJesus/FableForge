@@ -7,6 +7,7 @@
 
 
 #include "forge/wad.hpp"
+#include "forge/levelstore.hpp"
 #include "leveledit.hpp"
 
 namespace fs = std::filesystem;
@@ -21,19 +22,12 @@ std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(stati
 fs::path levPathFor(const fs::path& gameRoot, const std::string& stem) {
     const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (stem + ".lev");
     if (fs::exists(loose)) return loose;
-    const fs::path wadPath = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
-    const auto wad = forge::wad::Archive::open(wadPath);
-    const std::string want = lower(stem + ".lev");
-    for (const auto& e : wad.entries())
-        if (lower(fs::path(e.name).filename().string()) == want) {
-            const auto bytes = wad.read(e);
-            const fs::path tmp = fs::temp_directory_path() / "FableForge" / "stitch";
-            fs::create_directories(tmp);
-            const fs::path out = tmp / (stem + ".lev");
-            std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-            return out;
-        }
-    throw std::runtime_error(stem + ".lev is neither loose nor in FinalAlbion.wad");
+    const auto bytes = forge::levelstore::requireFile(forge::levelstore::detect(gameRoot), stem + ".lev");
+    const fs::path tmp = fs::temp_directory_path() / "FableForge" / "stitch";
+    fs::create_directories(tmp);
+    const fs::path out = tmp / (stem + ".lev");
+    std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    return out;
 }
 
 } // namespace

@@ -8,6 +8,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -54,14 +55,16 @@ void writeFile(const fs::path& p, const void* data, size_t size) {
 
 // A map's LEV as the game loads it (loose wins over the WAD), opened through
 // a temp copy because lev::File is path based.
-std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, forge::wad::Archive& wad, const std::string& stem) {
+// `wad` is null for a loose-level install (no FinalAlbion.wad).
+std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, const forge::wad::Archive* wad, const std::string& stem) {
     fs::path levFile = gameRoot / "data" / "Levels" / "FinalAlbion" / (stem + ".lev");
     if (!fs::exists(levFile)) {
         const std::string want = lower(stem + ".lev");
         levFile.clear();
-        for (const auto& e : wad.entries())
+        if (!wad) throw std::runtime_error(stem + ".lev is not in data/Levels/FinalAlbion (loose-level install, no FinalAlbion.wad)");
+        for (const auto& e : wad->entries())
             if (lower(fs::path(e.name).filename().string()) == want) {
-                const auto bytes = wad.read(e);
+                const auto bytes = wad->read(e);
                 const fs::path tmp = fs::temp_directory_path() / "FableForge" / "overworld";
                 fs::create_directories(tmp);
                 levFile = tmp / (stem + ".lev");
@@ -339,13 +342,14 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
         std::vector<forge::stb::StaticMapAppend> batch;
         bool sameSize = true;
         if (fs::exists(stbPath)) {
-            auto wad = forge::wad::Archive::open(wadPath);
+            std::optional<forge::wad::Archive> wad;   // none in a loose-level install
+            if (fs::exists(wadPath)) wad = forge::wad::Archive::open(wadPath);
             const auto archive = forge::stb::Archive::open(stbPath);
             auto wld = forge::wld::File::parse(wldPath);
             std::map<int, std::unique_ptr<forge::lev::File>> levs;
             auto levOf = [&](const WorldMapBox& b) -> forge::lev::File& {
                 auto it = levs.find(b.slot);
-                if (it == levs.end()) it = levs.emplace(b.slot, openLev(gameRoot, wad, b.name)).first;
+                if (it == levs.end()) it = levs.emplace(b.slot, openLev(gameRoot, wad ? &*wad : nullptr, b.name)).first;
                 return *it->second;
             };
             for (int slot : rebake) {
@@ -496,9 +500,11 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
         //     InitialPosX/Y in WORLD units (791/802 retail values sit in the map's
         //     world box; the only such keys) -- shift them for every moved map,
         //     in the loose file when there is one and in the WAD entry
-        if (!moveOf.empty() && fs::exists(wadPath)) {
+        //     (a loose-level install has no WAD: the loose file is the only copy)
+        if (!moveOf.empty()) {
             std::map<std::string, std::vector<uint8_t>> replacements;
-            const auto wad = forge::wad::Archive::open(wadPath);
+            std::optional<forge::wad::Archive> wad;
+            if (fs::exists(wadPath)) wad = forge::wad::Archive::open(wadPath);
             for (const auto& [slot, mv] : moveOf) {
                 const WorldMapBox* was = nullptr;
                 for (const auto& b : before.maps) if (b.slot == slot) was = &b;
@@ -507,11 +513,12 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                 const fs::path loose = levels / "FinalAlbion" / (was->name + ".tng");
                 std::string entryName;
                 const std::string want = lower(was->name + ".tng");
-                for (const auto& e : wad.entries())
-                    if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
+                if (wad)
+                    for (const auto& e : wad->entries())
+                        if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
                 std::string text;
                 if (fs::exists(loose)) { const auto b = readFile(loose); text.assign(b.begin(), b.end()); }
-                else if (!entryName.empty()) { const auto b = wad.read(*std::find_if(wad.entries().begin(), wad.entries().end(), [&](const forge::wad::Entry& e) { return e.name == entryName; })); text.assign(b.begin(), b.end()); }
+                else if (!entryName.empty()) { const auto b = wad->read(*std::find_if(wad->entries().begin(), wad->entries().end(), [&](const forge::wad::Entry& e) { return e.name == entryName; })); text.assign(b.begin(), b.end()); }
                 else continue;
                 auto tng = forge::tng::File::parseText(text, was->name + ".tng");
                 int shifted = 0;
@@ -523,7 +530,10 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                 }
                 if (!shifted) continue;
                 const std::string out = tng.serialize();
-                if (fs::exists(loose)) writeFile(loose, out.data(), out.size());
+                if (fs::exists(loose)) {
+                    if (!backupOnce(loose, error)) return false;   // in a loose-level install this is the game's copy
+                    writeFile(loose, out.data(), out.size());
+                }
                 if (!entryName.empty()) replacements[entryName] = std::vector<uint8_t>(out.begin(), out.end());
                 notes.push_back(was->name + ".tng: " + std::to_string(shifted) + " creature InitialPos shifted");
             }

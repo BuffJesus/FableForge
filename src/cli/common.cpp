@@ -43,6 +43,7 @@
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
 #include "cli/common.hpp"
+#include "forge/levelstore.hpp"
 
 namespace albion::cli {
 
@@ -138,20 +139,16 @@ fs::path resolveLevel(const std::string& arg, const Install& install, fs::path& 
     const fs::path loose = install.root / "data" / "Levels" / "FinalAlbion" / (name + ".lev");
     if (fs::exists(loose)) return loose;
 
-    const fs::path wadPath = install.root / "data" / "Levels" / "FinalAlbion.wad";
-    const auto wad = forge::wad::Archive::open(wadPath);
-    const std::string want = lower(name) + ".lev";
-    for (const auto& e : wad.entries()) {
-        const std::string leaf = lower(fs::path(e.name).filename().string());
-        if (leaf != want) continue;
-        const auto bytes = wad.read(e);
+    // not loose: the WAD entry (a loose-level install has no WAD to fall back to)
+    const auto levels = forge::levelstore::detect(install.root);
+    if (const auto bytes = forge::levelstore::readFile(levels, name + ".lev")) {
         const fs::path dir = fs::temp_directory_path() / "FableForge";
         fs::create_directories(dir);
         tempOut = dir / (name + ".lev");
-        std::ofstream(tempOut, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        std::ofstream(tempOut, std::ios::binary).write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
         return tempOut;
     }
-    throw std::runtime_error("no map named '" + name + "' in " + wadPath.string() + " (try: forge list)");
+    throw std::runtime_error("no map named '" + name + "' in " + levels.describe() + " (try: forge list)");
 }
 
 }  // namespace albion::cli

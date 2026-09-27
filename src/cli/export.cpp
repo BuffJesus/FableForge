@@ -43,6 +43,7 @@
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
 #include "cli/common.hpp"
+#include "forge/levelstore.hpp"
 
 namespace albion::cli {
 namespace {
@@ -52,16 +53,13 @@ int cmdList(const Install& install) {
         std::fprintf(stderr, "no Fable install found; pass --install <root>\n");
         return 1;
     }
-    const fs::path wadPath = install.root / "data" / "Levels" / "FinalAlbion.wad";
-    const auto wad = forge::wad::Archive::open(wadPath);
-    std::vector<std::pair<std::string, uint32_t>> maps;
-    for (const auto& e : wad.entries()) {
-        const fs::path p(e.name);
-        if (lower(p.extension().string()) == ".lev") maps.emplace_back(p.stem().string(), e.size);
-    }
+    const auto levels = forge::levelstore::detect(install.root);
+    if (!levels.valid()) { std::fprintf(stderr, "%s under %s\n", levels.describe().c_str(), install.root.string().c_str()); return 1; }
+    std::vector<std::pair<std::string, uint64_t>> maps;
+    for (const auto& lv : forge::levelstore::listLevels(levels)) maps.emplace_back(lv.stem, lv.size);
     std::sort(maps.begin(), maps.end());
-    std::printf("%zu maps in %s\n", maps.size(), wadPath.string().c_str());
-    for (const auto& [n, sz] : maps) std::printf("  %-40s %8u bytes\n", n.c_str(), sz);
+    std::printf("%zu maps in %s\n", maps.size(), (levels.hasWad() ? levels.wad : levels.looseDir).string().c_str());
+    for (const auto& [n, sz] : maps) std::printf("  %-40s %8llu bytes\n", n.c_str(), static_cast<unsigned long long>(sz));
     return 0;
 }
 

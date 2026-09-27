@@ -14,6 +14,7 @@
 #include "forge/big.hpp"
 #include "forge/bwd.hpp"
 #include "forge/lev.hpp"
+#include "forge/levelstore.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/stbheightbake.hpp"
@@ -53,14 +54,9 @@ std::vector<uint8_t> readFile(const fs::path& p) {
 }
 
 // The donor's .lev / .tng bytes as the game would load them: loose file first,
-// else the WAD entry.
-std::vector<uint8_t> levelBytes(const fs::path& gameRoot, const forge::wad::Archive& wad, const std::string& stem, const char* ext) {
-    const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (stem + ext);
-    if (fs::exists(loose)) return readFile(loose);
-    const std::string want = lower(stem + ext);
-    for (const auto& e : wad.entries())
-        if (lower(fs::path(e.name).filename().string()) == want) return wad.read(e);
-    throw std::runtime_error(stem + ext + " is neither loose nor in FinalAlbion.wad");
+// else the WAD entry (a loose-level install has no WAD).
+std::vector<uint8_t> levelBytes(const forge::levelstore::Layout& levels, const std::string& stem, const char* ext) {
+    return forge::levelstore::requireFile(levels, stem + ext);
 }
 
 bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
@@ -116,7 +112,6 @@ bool defaultEntrance(const fs::path& gameRoot, int slot, const std::string& leve
 bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, NewLevelResult& out, std::string& error) {
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
-        const fs::path wadPath = levels / "FinalAlbion.wad";
         const fs::path stbPath = levels / "FinalAlbion_RT.stb";
         forge::worldinstall::Request ir;
         ir.gameRoot = gameRoot;
@@ -129,9 +124,9 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         stage("reading the donor level");
 
         // the donor's current bytes (loose edits included) become the new level's
-        const auto wad = forge::wad::Archive::open(wadPath);
-        ir.levBytes = levelBytes(gameRoot, wad, req.donor, ".lev");
-        ir.tngBytes = levelBytes(gameRoot, wad, req.donor, ".tng");
+        const auto layout = forge::levelstore::detect(gameRoot);
+        ir.levBytes = levelBytes(layout, req.donor, ".lev");
+        ir.tngBytes = levelBytes(layout, req.donor, ".tng");
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
             stage("baking the minimap into textures.big");
@@ -176,8 +171,9 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
             if (!backupOnce(levels / f, error)) return false;
         for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
-        stage("installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
+        stage(forge::levelstore::detect(gameRoot).looseOnly() ? "installing: loose .lev/.tng + .wld / .bwd / _RT.stb" : "installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
+        for (const auto& f : r.createdFiles) albion::backups::markCreated(f);   // loose install: restore deletes them
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
@@ -462,8 +458,7 @@ bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, u
 
 bool templatePalette(const fs::path& gameRoot, const std::string& level, std::vector<std::string>& names, std::string& error) {
     try {
-        const auto wad = forge::wad::Archive::open(gameRoot / "data" / "Levels" / "FinalAlbion.wad");
-        const auto bytes = levelBytes(gameRoot, wad, level, ".lev");
+        const auto bytes = levelBytes(forge::levelstore::detect(gameRoot), level, ".lev");
         const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (level + ".palette.lev");
@@ -490,8 +485,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         }
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("authoring the level from the " + templateLevel + " skeleton");
-        const auto wad = forge::wad::Archive::open(levels / "FinalAlbion.wad");
-        const auto templateBytes = levelBytes(gameRoot, wad, templateLevel, ".lev");
+        const auto templateBytes = levelBytes(forge::levelstore::detect(gameRoot), templateLevel, ".lev");
         const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (req.name + ".lev");
@@ -585,8 +579,9 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
             if (!backupOnce(levels / f, error)) return false;
         for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
-        stage("installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
+        stage(forge::levelstore::detect(gameRoot).looseOnly() ? "installing: loose .lev/.tng + .wld / .bwd / _RT.stb" : "installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
+        for (const auto& f : r.createdFiles) albion::backups::markCreated(f);   // loose install: restore deletes them
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
