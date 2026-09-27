@@ -754,6 +754,8 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                 } catch (const std::exception&) {}
             }
         }
+        opt.deferOversizedPatches = true;   // tall edits: those patches grow below instead of failing the bake
+        opt.rebakeLodPatches = true;        // and the distant-view LOD patches follow the new ground
         const auto baked = forge::stbbake::bakeHeightfield(chunk, *level_, wm->mapX, wm->mapY, opt);
         for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) notes.push_back(n);
         if (baked.chunk.size() != chunk.size()) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
@@ -766,6 +768,19 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
         if (!backupOnce(stb, error)) return false;
         std::vector<uint8_t> outChunk = baked.chunk, outRecord = record;
         std::copy(encoded.begin(), encoded.end(), outRecord.begin());
+        // patches whose new heights outgrew their fixed slot: written here, where
+        // the frame may grow (its file block is re-laid or appended and every LOD
+        // record rebased). Before the foliage pass: it keys on the bake's frame offsets.
+        if (!baked.deferred.empty()) {
+            RelocateReport rr;
+            if (!replacePatchVertices(outChunk, outRecord, baked.deferred, rr, error)) { error = "grown terrain patches: " + error; return false; }
+            RelocateReport check; std::string cerr;
+            if (!auditChunk(outChunk, outRecord, wm->mapX, wm->mapY, level_->width(), level_->height(), check, cerr)) { error = "grown terrain patches produced a chunk that does not parse (" + cerr + ")"; return false; }
+            const size_t grown = baked.deferred.size() - baked.lodPatches;
+            if (baked.lodPatches) notes.push_back(std::to_string(baked.lodPatches) + " distant-view LOD patch(es) re-sampled from the new ground");
+            if (grown) notes.push_back(std::to_string(grown) + " terrain patch(es) outgrew their slot and were re-laid");
+            if (!rr.notes.empty()) notes.push_back(rr.notes.back());
+        }
         // the chunk's trees and grass ride the ground change (bounds grow by the
         // largest change); a re-laid foliage section can grow the chunk
         bool foliageRode = false;

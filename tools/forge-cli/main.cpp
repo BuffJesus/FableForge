@@ -1891,6 +1891,53 @@ int stbPatchVerts(const std::vector<std::string>& args) {
     return 0;
 }
 
+// Every background patch vertex inside the map vs the LEV height the bake
+// writes (quantizeEngineHeight): proves a re-baked chunk carries the edit,
+// including patches that grew out of their donor slot and were re-laid.
+int stbPatchHeights(const std::vector<std::string>& args) {
+    if (args.size() < 4) {
+        std::fprintf(stderr, "usage: forge-tools stb patch-heights <chunk.bin> <map.lev> <worldX> <worldY>\n");
+        return 1;
+    }
+    const auto raw = readAllBytes(args[0]);
+    const auto chunk = forge::stbbake::parseChunk(raw);
+    const auto lev = forge::lev::File::open(args[1]);
+    const int wx = std::stoi(args[2]), wy = std::stoi(args[3]);
+    size_t patches = 0, checked = 0, off = 0, normalsChecked = 0, normalsOff = 0, lodPatches = 0, lodNormalsOff = 0;
+    double worst = 0;
+    const forge::stbbake::HeightSampler sampler = [&](int x, int y) {
+        return forge::stbbake::quantizeEngineHeight(lev.heightAt(std::min(std::max(x, 0), lev.width() - 1), std::min(std::max(y, 0), lev.height() - 1)));
+    };
+    for (size_t fi = 0; fi < chunk.frameIndices.size(); ++fi) {
+        std::vector<uint8_t> body;
+        try { body = forge::stbbake::decodeFrame(chunk, fi); } catch (const std::exception&) { continue; }
+        const auto pb = forge::stbbake::parsePatchBody(body);
+        if (!pb.valid || pb.waterOnly) continue;
+        ++patches;
+        size_t frameOff = 0;
+        for (const auto& v : forge::stbbake::decodePatchVertices(pb)) {
+            const int lx = int(v.gridX) - wx, ly = int(v.gridY) - wy;
+            if (lx < 0 || ly < 0 || lx >= lev.width() || ly >= lev.height()) continue;
+            const double d = std::fabs(double(v.height) - double(forge::stbbake::quantizeEngineHeight(lev.heightAt(lx, ly))));
+            ++checked;
+            if (d > 1e-3) { ++off; ++frameOff; }
+            worst = std::max(worst, d);
+            // normals: interior only (the edge rows take neighbour maps' heights)
+            if (lx >= 2 && ly >= 2 && lx < lev.width() - 2 && ly < lev.height() - 2) {
+                ++normalsChecked;
+                if (v.packedNormal != forge::stbbake::packMapNormal(sampler, lx, ly)) { ++normalsOff; if (pb.header.vertexCount != uint32_t(pb.header.pw + 1) * uint32_t(pb.header.ph + 1)) ++lodNormalsOff; }
+            }
+        }
+        if (pb.header.vertexCount != uint32_t(pb.header.pw + 1) * uint32_t(pb.header.ph + 1)) ++lodPatches;
+        if (frameOff)
+            std::printf("  frame %zu @%zu: %zu of %u vertices off (patch %ux%u at %u,%u)\n", fi, chunk.segments[chunk.frameIndices[fi]].start,
+                        frameOff, unsigned(pb.header.vertexCount), unsigned(pb.header.pw), unsigned(pb.header.ph), unsigned(pb.header.coord0), unsigned(pb.header.coord1));
+    }
+    std::printf("%zu patches (%zu simplified LOD), %zu vertices checked, %zu off the LEV (worst %.4f); interior normals %zu checked, %zu differ from packMapNormal (%zu in LOD patches)\n",
+                patches, lodPatches, checked, off, worst, normalsChecked, normalsOff, lodNormalsOff);
+    return off ? 1 : 0;
+}
+
 int stbCreateTerrain(const std::vector<std::string>& args) {
     // lev background-inline world-x world-y bank-index fg-base fg-bump fg-cliff out-chunk out-info
     if (args.size() < 10) return usage();
@@ -10135,6 +10182,9 @@ int main(int argc, char** argv) {
         if (args.size() >= 4 && args[0] == "stb" && args[1] == "backgroundtreeinfo") {
             return stbBackgroundTreeInfo(
                 std::vector<std::string>(args.begin() + 2, args.end()));
+        }
+        if (args.size() >= 6 && args[0] == "stb" && args[1] == "patch-heights") {
+            return stbPatchHeights(std::vector<std::string>(args.begin() + 2, args.end()));
         }
         if (args.size() >= 4 && args[0] == "stb" && args[1] == "patchverts") {
             return stbPatchVerts(std::vector<std::string>(args.begin() + 2, args.end()));

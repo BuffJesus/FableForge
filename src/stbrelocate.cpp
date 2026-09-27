@@ -14,6 +14,7 @@
 #include "forge/lzo.hpp"
 #include "forge/rangecodec.hpp"
 #include "forge/stbbake.hpp"
+#include "forge/stbheightbake.hpp"
 #include "forge/stbinfo.hpp"
 
 namespace albion::editor {
@@ -70,6 +71,12 @@ struct Walk {
     // largest change anywhere so they stay conservative. No-ops otherwise.
     std::function<float(float, float)> dz;
     float zSlack = 0;
+
+    // replace mode (replacePatchVertices): background patches whose frame
+    // starts at a key get that vertex list (and texture) instead of their own;
+    // the frame may grow, the layout below re-lays it and rebases its refs
+    const std::map<size_t, const forge::stbbake::DeferredPatch*>* replace = nullptr;
+    size_t frameStart = 0;   // the patch frame being walked
     float rd(const uint8_t* p) const { float v; std::memcpy(&v, p, 4); return v; }
     void add(uint8_t* p, float d) { float v = rd(p) + d; std::memcpy(p, &v, 4); }
     void zPoint(uint8_t* pxy, uint8_t* pz) { if (dz && !audit) add(pz, dz(rd(pxy), rd(pxy + 4))); }
@@ -200,7 +207,28 @@ void patchTrailer(Walk& w, std::vector<uint8_t>& trailer, std::vector<uint8_t>& 
 std::vector<uint8_t> patchBody(Walk& w, const std::vector<uint8_t>& body) {
     auto pb = forge::stbbake::parsePatchBody(body);
     if (!pb.valid && !pb.waterOnly) throw std::runtime_error("patch body did not parse");
-    if (!pb.waterOnly) {
+    const forge::stbbake::DeferredPatch* repl = nullptr;
+    if (w.replace && !w.audit) {
+        const auto it = w.replace->find(w.frameStart);
+        if (it != w.replace->end()) repl = it->second;
+    }
+    if (repl) {
+        if (pb.waterOnly) throw std::runtime_error("replacement vertices for a water-only patch");
+        if (repl->vertices.size() != pb.header.vertexCount)
+            throw std::runtime_error("replacement vertex count " + std::to_string(repl->vertices.size()) + " != patch's " + std::to_string(pb.header.vertexCount));
+        const auto raw = forge::stbbake::serializePatchVB(repl->vertices);
+        const auto enc = forge::rangecodec::encodeNative(raw.data(), repl->vertices.size(), 16);
+        if (forge::rangecodec::decode(enc.data(), enc.size(), repl->vertices.size(), 16) != raw)
+            throw std::runtime_error("replacement patch VB does not decode back");
+        const int32_t len = int32_t(enc.size());
+        const uint8_t* lp = reinterpret_cast<const uint8_t*>(&len);
+        pb.vbBlock.assign(lp, lp + 4);
+        pb.vbBlock.insert(pb.vbBlock.end(), enc.begin(), enc.end());
+        if (!repl->texture.empty()) pb.texture = repl->texture;
+        w.mix(raw);
+        ++w.rep->rangeBlocks; ++w.rep->rangeBlocksResized;
+        ++w.rep->patchesReplaced;
+    } else if (!pb.waterOnly) {
         // VB: [i32 len][block vertexCount x 16]: u16 gridX, u16 gridY, f32 h, u32 normal, u16 uv, u16 uv
         std::vector<uint8_t> vb;
         Cursor c(pb.vbBlock);
@@ -731,6 +759,7 @@ bool run(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, Walk w, Relo
                 ctx.done.insert(start);
                 const auto body = forge::stbbake::decodeFrame(ctx.parsed, frameIndexOf(ctx, fs));
                 ctx.w.where = "patch frame @" + std::to_string(start);
+                ctx.w.frameStart = start;
                 const auto out = patchBody(ctx.w, body);
                 if (ctx.w.audit && out != body)
                     report.issues.push_back(ctx.w.where + ": patch body does not round-trip (" + std::to_string(out.size()) + " vs " + std::to_string(body.size()) + ")");
@@ -771,6 +800,7 @@ bool run(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, Walk w, Relo
             if (ctx.done.count(start)) continue;
             const auto body = forge::stbbake::decodeFrame(ctx.parsed, frameIndexOf(ctx, fs));
             ctx.w.where = "unreferenced frame @" + std::to_string(start);
+            ctx.w.frameStart = start;
             std::vector<uint8_t> out;
             try { out = patchBody(ctx.w, body); }
             catch (const std::exception& e) {
@@ -785,6 +815,8 @@ bool run(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, Walk w, Relo
                 if (framed.size() <= fs.slotEnd - fs.start) {
                     std::copy(framed.begin(), framed.end(), chunk.begin() + std::ptrdiff_t(fs.start));
                     std::fill(chunk.begin() + std::ptrdiff_t(fs.start + framed.size()), chunk.begin() + std::ptrdiff_t(fs.slotEnd), uint8_t(0));
+                } else if (ctx.w.replace && ctx.w.replace->count(start)) {
+                    throw std::runtime_error(ctx.w.where + ": re-baked patch outgrows its slot and no LOD record references it (nothing to rebase)");
                 } else report.notes.push_back(ctx.w.where + ": unreferenced patch left untranslated (no slot)");
             }
         }
@@ -805,6 +837,21 @@ bool reseatFoliageZ(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, s
                     float zSlack, RelocateReport& report, std::string& error) {
     Walk w; w.audit = false; w.dx = 0; w.dy = 0; w.dz = std::move(dz); w.zSlack = zSlack;
     return run(chunk, record, w, report, error);
+}
+
+bool replacePatchVertices(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record,
+                          const std::vector<forge::stbbake::DeferredPatch>& patches,
+                          RelocateReport& report, std::string& error) {
+    std::map<size_t, const forge::stbbake::DeferredPatch*> byStart;
+    for (const auto& p : patches) byStart[p.frameStart] = &p;
+    Walk w; w.audit = false; w.dx = 0; w.dy = 0; w.replace = &byStart;
+    report.patchesReplaced = 0;
+    if (!run(chunk, record, w, report, error)) return false;
+    if (size_t(report.patchesReplaced) != byStart.size()) {
+        error = "only " + std::to_string(report.patchesReplaced) + " of " + std::to_string(byStart.size()) + " deferred patches were found in the chunk";
+        return false;
+    }
+    return true;
 }
 
 bool auditChunk(const std::vector<uint8_t>& chunk, const std::vector<uint8_t>& record,

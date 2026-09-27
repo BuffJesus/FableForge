@@ -37,12 +37,35 @@ struct HeightfieldBakeOptions {
     // provider's (same dimensions/format as the one it replaces, so the patch
     // keeps its slot): the distant-LOD bake for edited levels.
     BackgroundTextureProvider backgroundTextures;
+    // A background patch whose re-encoded vertices no longer fit the donor's
+    // fixed CRange span / frame slot (a tall edit widens the value range) is
+    // normally an error. With this set it is left untouched in `chunk` and
+    // handed back in `deferred` instead, for a caller that can grow frames and
+    // rebase their file-block references (FableForge's stbrelocate).
+    bool deferOversizedPatches = false;
+    // The simplified background-LOD patches (a vertex subset, not one per grid
+    // corner) are otherwise left at the donor's heights, so the distant view
+    // keeps the old ground. Retail's LOD vertices are exact LEV samples at their
+    // positions (0 off across GuildExterior's 448), so re-sample each vertex in
+    // place; they are handed back in `deferred` (needs deferOversizedPatches).
+    bool rebakeLodPatches = false;
+};
+
+// A patch the bake could not write in place: its frame's start offset in the
+// chunk (unchanged by the bake) and the full re-baked vertex list (and the
+// replacement inline texture, empty = keep the donor's).
+struct DeferredPatch {
+    size_t frameStart = 0;
+    std::vector<PatchVertex> vertices;
+    std::vector<uint8_t> texture;
 };
 
 struct HeightfieldBakeResult {
     std::vector<uint8_t> chunk;
     std::vector<std::string> notes;
     size_t patches = 0, foregroundFrames = 0;
+    size_t lodPatches = 0;                 // simplified LOD patches re-sampled (rebakeLodPatches)
+    std::vector<DeferredPatch> deferred;   // see HeightfieldBakeOptions::deferOversizedPatches
 };
 
 // Throws std::runtime_error / std::invalid_argument on any gate failure.

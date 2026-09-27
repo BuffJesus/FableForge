@@ -28,12 +28,15 @@
 #include <string>
 #include <vector>
 
+#include "forge/stbheightbake.hpp"
+
 namespace albion::editor {
 
 struct RelocateReport {
     int foregroundFrames = 0, patchFrames = 0, groupFrames = 0, treeNodes = 0, detailNodes = 0, detailGroups = 0;
     int rangeBlocks = 0, rangeBlocksResized = 0;
     int unclassifiedFrames = 0;
+    int patchesReplaced = 0;             // replacePatchVertices
     uint64_t digest = 0;                 // FNV-1a of every decoded record/body in walk order (see auditChunk)
     std::vector<float> sites;            // every coordinate visited, walk order
     std::vector<uint8_t> siteIsX;        // 1 = an X coordinate, 0 = Y
@@ -54,6 +57,15 @@ bool relocateChunk(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, in
 // replace.
 bool reseatFoliageZ(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record, std::function<float(float, float)> dz,
                     float zSlack, RelocateReport& report, std::string& error);
+
+// The bake's deferred patches (forge::stbbake::HeightfieldBakeOptions::
+// deferOversizedPatches): each background patch frame starting at a deferred
+// frameStart gets that vertex list (and texture) written in, however large its
+// range block becomes; grown file blocks are re-laid or appended and every LOD
+// record pointing at them is rebased. Write back with the size-aware replace.
+bool replacePatchVertices(std::vector<uint8_t>& chunk, std::vector<uint8_t>& record,
+                          const std::vector<forge::stbbake::DeferredPatch>& patches,
+                          RelocateReport& report, std::string& error);
 
 // Read-only walk: every coordinate must lie within [x0-slack, x0+w+slack] etc.
 bool auditChunk(const std::vector<uint8_t>& chunk, const std::vector<uint8_t>& record,

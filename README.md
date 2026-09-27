@@ -183,6 +183,9 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   it in `FinalAlbion.wad` and re-bakes the map's terrain chunk inside
   `FinalAlbion_RT.stb` from the edited heights, with the neighbouring maps supplying
   the shared-edge samples, so the visible mesh, collision and camera bounds all follow.
+  The simplified distant-view patches are re-sampled too, so the map looks right from
+  afar, and a tall edit whose patches no longer fit their old slots grows them (the
+  chunk is re-laid). `forge-tools stb patch-heights` checks every patch against the `.lev`.
   One-time `.forge-orig` backups. The chunk's trees and grass ride the sculpted
   ground; *Re-seat objects on the new ground* moves placed things with it.
 * **Paint ground**: brush any ground theme of the map's palette, add any

@@ -485,7 +485,34 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         try { body = forge::stbbake::decodeFrame(chunk, fi); }
         catch (const std::exception&) { continue; }
         const auto h = forge::stbbake::parsePatchHeader(body);
-        if (!h.valid || h.isWaterOnly) continue;
+        if (h.isWaterOnly) continue;
+        if (!h.valid) {
+            // a simplified background-LOD patch: re-sample its vertices in place
+            if (!options.rebakeLodPatches || !options.deferOversizedPatches) continue;
+            const auto lpb = forge::stbbake::parsePatchBody(body);
+            if (!lpb.valid || lpb.waterOnly) continue;
+            auto lv = forge::stbbake::decodePatchVertices(lpb);
+            if (lv.empty()) continue;
+            uint16_t minX = 0xffff, minY = 0xffff;
+            for (const auto& v : lv) { minX = std::min(minX, v.gridX); minY = std::min(minY, v.gridY); }
+            bool inside = true;
+            for (auto& v : lv) {
+                const int lx = int(h.coord0) + int(v.gridX) - int(minX);
+                const int ly = int(h.coord1) + int(v.gridY) - int(minY);
+                if (lx < 0 || ly < 0 || lx > lev.width() || ly > lev.height()) { inside = false; break; }
+                v.gridX = uint16_t(worldX + lx);
+                v.gridY = uint16_t(worldY + ly);
+                v.height = sampleHeight(lx, ly);
+                v.packedNormal = authoredNormal(lx, ly);
+            }
+            if (!inside) { notef("note: LOD patch frame %zu reaches outside the LEV; left as is", fi); continue; }
+            DeferredPatch d;
+            d.frameStart = chunk.segments[chunk.frameIndices[fi]].start;
+            d.vertices = std::move(lv);
+            result.deferred.push_back(std::move(d));
+            ++result.lodPatches;
+            continue;
+        }
         auto pb = forge::stbbake::parsePatchBody(body);
         if (!pb.valid || pb.waterOnly) continue;
         if (options.backgroundTextures && pb.texture.size() >= 19) {
@@ -514,7 +541,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         static const uint32_t patchClearLevels[] = {0u, 0x0fu, 0x1fu, 0x3fu, 0x7fu};
         std::vector<uint8_t> newBody;
         bool fits = false;
-        for (const uint32_t clear : patchClearLevels) {
+        auto retarget = [&](uint32_t clear) {
             auto attempt = verts;
             for (auto& v : attempt) {
                 const int dx = int(v.gridX) - int(oldMinX);
@@ -533,6 +560,10 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
                 const uint32_t qz = ((packed >> 22) & 0x3ffu) & ~cz;
                 v.packedNormal = qx | (qy << 11) | (qz << 22);
             }
+            return attempt;
+        };
+        for (const uint32_t clear : patchClearLevels) {
+            const auto attempt = retarget(clear);
             std::vector<uint8_t> candidateBody;
             try {
                 candidateBody = forge::stbbake::assemblePatchBodyVerticesFixedSpan(pb, attempt);
@@ -555,8 +586,19 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
             if (clear != 0) notef("note: patch frame %zu normals coarsened (clear 0x%x) to fit its %zu-byte slot", fi, clear, slot);
             break;
         }
-        if (!fits)
-            throw std::runtime_error("patch frame " + std::to_string(fi) + ": vertices do not fit the donor CRange span at any normal precision");
+        if (!fits) {
+            if (!options.deferOversizedPatches)
+                throw std::runtime_error("patch frame " + std::to_string(fi) + ": vertices do not fit the donor CRange span at any normal precision");
+            // full precision: the caller grows the frame, so there is no budget to meet
+            DeferredPatch d;
+            d.frameStart = chunk.segments[chunk.frameIndices[fi]].start;
+            d.vertices = retarget(0);
+            d.texture = pb.texture;
+            result.deferred.push_back(std::move(d));
+            notef("note: patch frame %zu outgrows its donor span; deferred to the caller (frame grows)", fi);
+            ++patchCount;
+            continue;
+        }
         forge::stbbake::FrameEdit edit;
         edit.frameIndex = fi;
         edit.newBody = std::move(newBody);
