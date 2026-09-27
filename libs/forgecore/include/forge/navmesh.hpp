@@ -34,10 +34,14 @@ GenerateResult generateTerrain(const lev::File& file,
 struct Line { float x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
 struct DetailArea { float x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
 struct SwitchableLines { uint64_t uid = 0; std::vector<Line> lines; };
+struct RegionSeed { float x = 0, y = 0; };
 struct GroundGeometry {
     std::vector<Line> blockingLines;
     std::vector<DetailArea> detailedAreas;
     std::vector<SwitchableLines> switchableLines;
+    // Explicit ground-layer seeds from the world, independent of the saved
+    // action-point records in RetailSection::positions.
+    std::vector<RegionSeed> regionSeeds;
 };
 struct GroundResult {
     RetailSection section;
@@ -45,12 +49,13 @@ struct GroundResult {
     size_t anchorsUsed = 0;
 };
 
-// Experimental ground-layer builder from explicit geometry and a section's
-// navigation positions. Rejects stacked layers; no existing section/file is
+// Experimental ground-layer builder from explicit geometry and region seeds.
+// Rejects stacked layers; no existing section/file is
 // mutated. Retains the supplied name and raw positions. Without valid anchors
 // normal islands are removed (unlike generateTerrain's largest-island fallback),
 // while unvisited switchable leaves survive closed in region zero.
-// Caller owns quest/layer selection and thing UID recovery; missing inputs are
+// Saved positions are action points and never seed reachability. Caller owns
+// quest/layer selection and thing UID recovery; missing inputs are
 // not inferred from the retail tree. Use emitNavigation for a scratch LEV.
 GroundResult generateGround(const lev::File& file, const RetailSection& source,
                             const GroundGeometry& geometry);

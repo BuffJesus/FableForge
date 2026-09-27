@@ -59,7 +59,7 @@ struct RetailSection {
     uint32_t version = 8;
     float width = 0, height = 0;
     uint32_t regionCount = 0;
-    std::vector<uint8_t> positions;   // raw 12-byte CNavigationPosition records
+    std::vector<uint8_t> positions;   // raw 12-byte action-point CNavigationPosition records (not region seeds)
     uint32_t layerCount = 1;
     std::vector<RetailNode> nodes;    // file order
 };

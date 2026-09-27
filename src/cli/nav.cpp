@@ -199,13 +199,14 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
             std::vector<navlines::Box> boxes;
             forge::navmesh::GroundGeometry geometry;
             size_t unresolvedDoors = 0;
-            const auto switchName = defs.originalNameOffset("CTCSwitchableNavigation");
             const uint32_t componentsTag = forge::defdecode::fieldTag("Components");
-            std::map<std::string, bool> switchOf;
-            auto switchable = [&](const std::string& name) {
-                if (switchOf.contains(name)) return switchOf[name];
+            std::map<std::pair<std::string, std::string>, bool> componentOf;
+            auto hasComponent = [&](const std::string& name, const std::string& component) {
+                const auto key = std::make_pair(name, component);
+                if (componentOf.contains(key)) return componentOf[key];
+                const auto componentName = defs.originalNameOffset(component);
                 bool found = false;
-                if (const auto* e = defs.find(name); e && switchName) {
+                if (const auto* e = defs.find(name); e && componentName) {
                     // CThingComponentSet: u32 count, then {name offset, parameter, flag} (9 bytes).
                     for (size_t at = 0; at + 8 <= e->data.size(); ++at) {
                         uint32_t tagValue, count;
@@ -215,12 +216,46 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                         if (count > (e->data.size() - at - 8) / 9) throw std::runtime_error("invalid Components list in " + name);
                         for (size_t i = 0; i < count; ++i) {
                             uint32_t ref; std::memcpy(&ref, e->data.data() + at + 8 + i * 9, 4);
-                            found |= ref == *switchName;
+                            found |= ref == *componentName;
                         }
                         break;
                     }
                 }
-                return switchOf[name] = found;
+                return componentOf[key] = found;
+            };
+            auto switchable = [&](const std::string& name) { return hasComponent(name, "CTCSwitchableNavigation"); };
+            // GetMapNavigationAreaInit (0x01c905d0) gathers RegionSeeds separately
+            // from mesh ACTION_POINT dummies. SaveToFile stores ActionPoints;
+            // using those as seeds invents islands and loses region exits.
+            // Match native category order; leaf ownership/search order and
+            // GetNavigationLayerAt still need the world reconstruction.
+            auto collectSeeds = [&](const forge::tng::File& things, const std::string& mapName, float ox, float oy) {
+                for (int category = 0; category < 6; ++category) {
+                    for (size_t i = 0; i < things.things().size(); ++i) {
+                        if (things.sectionOf(i) != "NULL") continue;
+                        const auto& thing = things.things()[i];
+                        const auto def = thing.definitionType();
+                        auto has = [&](const char* component) { return thing.findCtc(component) || hasComponent(def, component); };
+                        const auto type = lower(thing.type);
+                        const bool selected = category == 0 ? type == "village" : category == 1 ? type == "aicreature" :
+                            category == 2 ? has("CTCCreatureGenerator") : category == 3 ? has("CTCDNavigationSeed") :
+                            category == 4 ? has("CTCDRegionEntrance") : has("CTCDRegionExit");
+                        if (!selected) continue;
+                        const auto* physics = thing.findCtc("CTCPhysicsStandard");
+                        if (!physics) physics = thing.findCtc("CTCPhysicsNavigator");
+                        if (!physics) continue;
+                        float x = 0, y = 0;
+                        for (const auto& property : physics->properties) {
+                            if (lower(property.key) == "positionx") x = std::stof(property.value);
+                            if (lower(property.key) == "positiony") y = std::stof(property.value);
+                        }
+                        x += ox; y += oy;
+                        if (!std::isfinite(x) || !std::isfinite(y)) throw std::runtime_error("non-finite seed position in " + mapName);
+                        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+                        geometry.regionSeeds.push_back({x, y});
+                        if (details) std::printf("  region seed (ground assumed): %s/%s %.6f,%.6f\n", mapName.c_str(), def.c_str(), x, y);
+                    }
+                }
             };
             std::map<std::string, uint32_t> closedMeshOf;
             auto closedDoorMesh = [&](const std::string& name) {
@@ -281,6 +316,7 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                 }
             };
             collect(scene, tng, map);
+            if (compare) collectSeeds(tng, map, 0, 0);
             editor::WorldLayout layout;
             if (!editor::loadWorldLayout(install.root, layout, err)) {
                 std::fprintf(stderr, "cannot inspect neighbouring detailed areas: %s\n", err.c_str());
@@ -296,6 +332,7 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                     const auto bytes = forge::levelstore::requireFile(levels, neighbour->name + ".tng");
                     const auto neighbourTng = forge::tng::File::parseText(std::string(bytes.begin(), bytes.end()), neighbour->name + ".tng");
                     collect(neighbourScene, neighbourTng, neighbour->name);
+                    if (compare) collectSeeds(neighbourTng, neighbour->name, neighbourOptions.originX, neighbourOptions.originY);
                 }
             }
             size_t l6 = 0, l6Outside = 0;
@@ -320,7 +357,7 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                         float x, y;
                         std::memcpy(&x, nav.sections[0].positions.data() + at, 4);
                         std::memcpy(&y, nav.sections[0].positions.data() + at + 4, 4);
-                        std::printf("  source anchor: %.6f,%.6f layer=%d\n", x, y, layer);
+                        std::printf("  stored action point (not a seed): %.6f,%.6f layer=%d\n", x, y, layer);
                     }
                     if (layer == 0) groundSource.positions.insert(groundSource.positions.end(),
                         nav.sections[0].positions.begin() + at, nav.sections[0].positions.begin() + at + 12);
@@ -350,7 +387,7 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                     showDifference(expected, actual, "retail");
                     showDifference(actual, expected, "generated");
                 }
-                std::printf("ground rebuild: %zu static lines, %zu switchable things, %zu unresolved doors (hull/child/UID); %zu anchors, %zu island leaves removed\n",
+                std::printf("ground rebuild: %zu static lines, %zu switchable things, %zu unresolved doors (hull/child/UID); %zu usable region seeds, %zu island leaves removed\n",
                     geometry.blockingLines.size(), geometry.switchableLines.size(), unresolvedDoors, generated.anchorsUsed, generated.leavesRemoved);
                 std::printf("node multiset (shape/type/preference/UID): %zu matched, %zu generated-only, %zu retail-only; regions %u generated / %u retail\n",
                     matched.size(), actual.size() - matched.size(), expected.size() - matched.size(), generated.section.regionCount, nav.sections[0].regionCount);
@@ -400,7 +437,7 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
                     std::printf("\n");
                 }
                 std::printf("ground region partitions: %zu shared leaves, %zu inconsistencies (region IDs may be renumbered)\n", comparedRegions, partitionMismatch);
-                std::printf("comparison only: no install writes; layer/quest selection, edge cases and region/neighbour parity remain experimental\n");
+                std::printf("comparison only: no install writes; seed layers assumed ground; layer/quest selection and region/neighbour parity remain experimental\n");
             }
         }
         std::printf("precision %.3f  recall(near lines) %.3f\n", tp + fp ? double(tp) / double(tp + fp) : 0.0,

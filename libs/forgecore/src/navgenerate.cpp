@@ -86,6 +86,9 @@ void validate(const lev::File& file, const RetailSection& source, const GroundGe
         int32_t layer; std::memcpy(&layer, source.positions.data() + at, 4);
         if (layer != 0) throw std::invalid_argument("ground nav: position refers to another layer");
     }
+    for (const auto& seed : geometry.regionSeeds)
+        if (!std::isfinite(seed.x) || !std::isfinite(seed.y))
+            throw std::invalid_argument("ground nav: non-finite region seed");
     auto validLine = [](const Line& l) {
         return std::isfinite(l.x0) && std::isfinite(l.y0) && std::isfinite(l.x1) && std::isfinite(l.y1);
     };
@@ -154,11 +157,9 @@ GroundResult generateGround(const lev::File& file, const RetailSection& source,
             }
         }
     };
-    for (size_t p = 0; p < source.positions.size(); p += 12) {
-        float x, y;
-        std::memcpy(&x, source.positions.data() + p, 4);
-        std::memcpy(&y, source.positions.data() + p + 4, 4);
-        if (!std::isfinite(x) || !std::isfinite(y) || x < 0 || y < 0 || x >= w || y >= h) continue;
+    for (const auto& seed : geometry.regionSeeds) {
+        const float x = seed.x, y = seed.y;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
         Node* n = raster[size_t(int(y * 2)) * rw + int(x * 2)];
         if (!n) continue;
         ++result.anchorsUsed;

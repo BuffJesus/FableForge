@@ -103,17 +103,17 @@ preference and switchable UIDs; neighbour comparisons ignore numeric node IDs):
 |---|---:|---:|---:|---:|
 | LookoutPoint | 1349 | 0 / 0 | 861 / 861 | 0 |
 | PicnicArea | 855 | 0 / 0 | 536 / 536 | 0 |
-| BarrowFields (ground projection) | 2224 | 4 / 0 | 1327 / 1327 retail (1330 generated) | 1 |
+| BarrowFields (ground projection) | 2224 | 0 / 0 | 1327 / 1327 | 1 |
 | Greatwood_1 | 1231 | 0 / 0 | 723 / 723 | 0 |
-| OrchardFarm (ground projection) | 1646 | 26 / 153 | 980 / 1093 retail (1011 generated) | 0 on shared leaves |
-| GuildExterior | 509 | 0 / 6 | 320 / 322 retail (320 generated) | 0 on shared leaves |
+| OrchardFarm (ground projection) | 1761 | 26 / 38 | 1052 / 1093 retail (1083 generated) | 0 on shared leaves |
+| GuildExterior | 515 | 0 / 0 | 322 / 322 | 0 |
 
 BarrowFields has two source layers; the new generator accepts one only. All
 retail ground nodes now exist with matching type/cost/UID/blocked state and
-neighbour sets. Four extra nodes remain: one internal and three ordinary leaves
-at (40.5,87.5), (41.5,86.5), (41.5,87.5), near the trader table/market stall.
-The island contains source anchor (40.197021,87.783203); do not simply remove
-it to fit the fixture. Region counts are 5 generated versus 3 retail (including
+neighbour sets. The former four extra nodes near the trader table/market stall
+came from mistaking saved action point (40.197021,87.783203) for a region seed;
+the separate seed input below resolves them. Region counts are 5 generated
+versus 3 retail (including
 region zero); retail region1 splits into generated regions1 and3. Upper-layer
 connections are not modeled. Do not promote this path to the editor writer yet.
 
@@ -166,9 +166,9 @@ Evidence: `build/nav-anchor-evidence.c`, and the existing native bodies in
 FableTLC `ghidra_out/decomp_navmesh2.c`.
 
 Broader read-only comparisons exposed the gaps in the table above. Greatwood_1's
-former differences clustered around x37..47/y119..124 (resolved below); GuildExterior lacks two half-unit
-leaves near (2.5,101.25). These are follow-up inputs to investigate, not tolerances
-to weaken. BarrowFields' loose TNG is byte-identical to the WAD entry (SHA256
+former differences clustered around x37..47/y119..124 (resolved below);
+GuildExterior's former missing half-unit leaves near (2.5,101.25) were resolved
+by the seed correction below. BarrowFields' loose TNG is byte-identical to the WAD entry (SHA256
 `FF0F5C0B18F4D3DE6F368C2A1E8634945BD7BC0022C6BCC81BE061DB96A4E73E`);
 its LEV comes from the WAD. Graphics/defs and installed data still are not a
 certified pristine corpus.
@@ -280,5 +280,48 @@ creature generators, navigation seeds, region entrances and exits. Interface 99
 is CTCDRegionEntrance (`0x01ba918f`). A scratch comparison using local TNG seed
 candidates recovers Guild completely, removes Barrow's four extra nodes and
 recovers 115 Orchard nodes; the three previous exact comparisons stay exact.
-Implementing an explicit seed input is the next step. Scratch evidence:
+The explicit seed input described below implements this distinction. Scratch evidence:
 `build/nav-region-probe.cpp`, `build/nav-scale-guild-details.log`.
+
+## Separate region seeds from serialized action points
+
+`GroundGeometry::regionSeeds` now supplies the ground builder's reachability
+inputs. `RetailSection::positions` is preserved as action-point metadata and
+never seeds a component. Regression tests put an action point on an otherwise
+unseeded island and a region seed on a map with no action points; only the
+explicit seed affects retention. Closed-door behavior and serialization still
+pass. Earlier references to saved positions as "anchors" were an incorrect
+input assumption, corrected here.
+
+The read-only CLI gathers NULL-quest seed candidates from local and touching
+map TNGs, in the native category order: villages, AI creatures, creature
+generators, navigation seeds, entrances, exits. Component presence comes from
+TNG blocks or definition Components, so custom definitions can qualify without
+hard-coded definition names. Seed positions are kept separate from serialized
+action points in both the data model and diagnostic output.
+
+Evidence: `CNavQuadTree::SaveToFile` (`0x03289b50`) reads debug this+0x70;
+`SetUpRegions` (`0x0328f270`) iterates this+0x98. `Initialise` (`0x03290030`)
+sets up regions and then removes unreachable action points, confirming their
+different roles. Exports: `build/nav-seed-storage-evidence.c`,
+`build/nav-seed-offsets.log`, `build/nav-entrance-interface.c`, plus the existing
+`GetMapNavigationAreaInit` export referenced above.
+
+Four maps now match nodes, neighbours and region partitions exactly:
+LookoutPoint, PicnicArea, Greatwood_1 and GuildExterior. BarrowFields matches all
+ground nodes and neighbour sets, with its stacked-layer region discrepancy
+remaining. OrchardFarm recovers 115 nodes and now differs by 26 generated-only /
+38 retail-only nodes. Logs: `build/nav-region-seeds-<map>.log`.
+
+Limitations remain explicit: seed layers currently assume ground rather than
+implementing `GetNavigationLayerAt`; native leaf ownership/search ordering and
+automatic child seed components are not fully reconstructed. The core preserves
+existing action-point metadata rather than re-running native action-point
+reachability filtering. These comparisons do not establish full bake parity or
+justify promotion to the production writer.
+
+Validation after the seed correction: all targets build, CTest **2/2** passes,
+all six comparison logs above reproduce, and docs-command checks pass. The full
+suite already passed on the preceding shared-scene scale fix (`a537d7f`); this
+follow-up changes only the experimental generator/diagnostic, its tests and
+metadata documentation. Latest binaries are in this lane's `build` directory.

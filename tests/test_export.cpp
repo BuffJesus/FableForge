@@ -886,7 +886,8 @@ void testGroundNavigation(const fs::path& dir) {
     RetailSection source;
     source.name = "NULL"; source.width = source.height = 32;
     put<float>(source.positions, 4); put<float>(source.positions, 16); put<int32_t>(source.positions, 0);
-    const auto empty = generateGround(lev, source, {});
+    GroundGeometry seedGeometry; seedGeometry.regionSeeds = {{4, 16}};
+    const auto empty = generateGround(lev, source, seedGeometry);
     CHECK(empty.section.nodes.size() == 1 && empty.section.nodes[0].leaf);
     CHECK(empty.anchorsUsed == 1 && empty.section.positions == source.positions);
     auto hasPoint = [](const GroundResult& result, float x, float y) {
@@ -898,7 +899,7 @@ void testGroundNavigation(const fs::path& dir) {
     };
     // Native endpoint containment is half-open. A degenerate point at a cell
     // corner blocks only its containing cell, not all four touching cells.
-    GroundGeometry point; point.blockingLines = {{16, 16, 16, 16}};
+    GroundGeometry point = seedGeometry; point.blockingLines = {{16, 16, 16, 16}};
     const auto pointTree = generateGround(lev, source, point);
     CHECK(hasPoint(pointTree, 15.5f, 15.5f) && hasPoint(pointTree, 16.5f, 15.5f));
     CHECK(hasPoint(pointTree, 15.5f, 16.5f) && !hasPoint(pointTree, 16.5f, 16.5f));
@@ -908,16 +909,25 @@ void testGroundNavigation(const fs::path& dir) {
     const auto edgeTree = generateGround(lev, source, point);
     CHECK(hasPoint(edgeTree, 15.5f, 15.5f) && !hasPoint(edgeTree, 15.5f, 16.5f));
     // Native edge intersections allow 0.0001 world units of endpoint slack.
-    auto below = source;
-    const float belowY = 4; std::memcpy(below.positions.data() + 4, &belowY, 4);
+    point.regionSeeds = {{4, 4}};
     point.blockingLines = {{-1, 16.00005f, 33, 16.00005f}};
-    const auto nearEdge = generateGround(lev, below, point);
+    const auto nearEdge = generateGround(lev, source, point);
     CHECK(hasPoint(nearEdge, 4.5f, 14.5f) && !hasPoint(nearEdge, 4.5f, 15.5f));
-    GroundGeometry g;
+    GroundGeometry g = seedGeometry;
     g.blockingLines = {{16.25f, 0, 16.25f, 32}};
     const auto divided = generateGround(lev, source, g);
     CHECK(divided.leavesRemoved > 0);
     for (const auto& n : divided.section.nodes) if (n.leaf) CHECK(n.cx < 16.25f);
+    // Saved action points do not make islands reachable. External region seeds
+    // work even when no action points were serialized (GuildExterior case).
+    auto actionOnRight = source;
+    const float rightX = 25; std::memcpy(actionOnRight.positions.data(), &rightX, 4);
+    const auto ignoredAction = generateGround(lev, actionOnRight, g);
+    CHECK(!hasPoint(ignoredAction, 25, 16) && hasPoint(ignoredAction, 4, 16));
+    CHECK(ignoredAction.section.positions == actionOnRight.positions);
+    auto noActions = source; noActions.positions.clear();
+    const auto externalSeed = generateGround(lev, noActions, g);
+    CHECK(hasPoint(externalSeed, 4, 16) && externalSeed.section.positions.empty());
     g.detailedAreas = {{15, 0, 18, 32}};
     // Put the line in the right half: the left half remains connected to the seed.
     g.blockingLines = {{16.75f, 0, 16.75f, 32}};
@@ -946,11 +956,12 @@ void testGroundNavigation(const fs::path& dir) {
     { std::ofstream f(out, std::ios::binary); f.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size())); }
     const auto reread = forge::lev::File::open(out);
     CHECK(emitNavigation(reread, parseNavigation(reread)) == bytes);
-    auto noSeeds = source; noSeeds.positions.clear();
-    const auto removed = generateGround(lev, noSeeds, {});
+    const auto removed = generateGround(lev, source, {});
     CHECK(removed.leavesRemoved == 1 && removed.section.nodes[0].marker);
+    CHECK(removed.section.positions == source.positions);
     // Native pruning retains unanchored switchable leaves as closed doors.
-    const auto closed = generateGround(lev, noSeeds, g);
+    g.regionSeeds.clear();
+    const auto closed = generateGround(lev, source, g);
     size_t closedDoors = 0;
     for (const auto& n : closed.section.nodes) if (n.leaf) {
         ++closedDoors;
@@ -964,10 +975,8 @@ void testGroundNavigation(const fs::path& dir) {
     CHECK(closedDoors > 0 && closed.section.regionCount == 1);
     // A seed on the right assigns the door to that side, not the first leaf
     // encountered in geometric order. The other side becomes a second region.
-    auto rightSeed = source;
-    const float rightX = 25;
-    std::memcpy(rightSeed.positions.data(), &rightX, 4);
-    const auto fromRight = generateGround(lev, rightSeed, g);
+    g.regionSeeds = {{25, 16}};
+    const auto fromRight = generateGround(lev, source, g);
     for (const auto& n : fromRight.section.nodes) if (n.leaf) {
         if (n.switchable || n.cx > 17) CHECK(n.region == 1);
         else if (n.cx < 15) CHECK(n.region == 2);
