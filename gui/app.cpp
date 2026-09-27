@@ -57,13 +57,15 @@ std::string fmtBytes(uint64_t b) {
     return buf;
 }
 
-std::string pickFolder(HWND owner, const std::string& initial) {
+// A folder (types == nullptr) or a file of the given types, e.g. {L"Fable level", L"*.lev"}.
+std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0) {
     std::string result;
     IFileDialog* dlg = nullptr;
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
     DWORD opts = 0;
     dlg->GetOptions(&opts);
-    dlg->SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
+    dlg->SetOptions(opts | (types ? 0 : FOS_PICKFOLDERS) | FOS_FORCEFILESYSTEM);
+    if (types) dlg->SetFileTypes(typeCount, types);
     if (!initial.empty()) {
         std::wstring w(initial.begin(), initial.end());
         IShellItem* item = nullptr;
@@ -89,6 +91,8 @@ std::string pickFolder(HWND owner, const std::string& initial) {
     dlg->Release();
     return result;
 }
+
+std::string pickFolder(HWND owner, const std::string& initial) { return pickPath(owner, initial); }
 
 void openInExplorer(const std::string& path) {
     ShellExecuteA(nullptr, "open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -448,6 +452,8 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.world = j.value("world", settings_.world);
         editTab_ = std::clamp(j.value("editTab", editTab_), 0, 3);
         settings_.uiScale = std::clamp(j.value("uiScale", settings_.uiScale), 0.8f, 1.5f);
+        settings_.showExplorer = j.value("showExplorer", settings_.showExplorer);
+        settings_.showActions = j.value("showActions", settings_.showActions);
     } catch (...) {}
 }
 
@@ -461,6 +467,7 @@ void App::saveSettings() const {
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
             {"editTab", editTab_}, {"uiScale", settings_.uiScale},
+            {"showExplorer", settings_.showExplorer}, {"showActions", settings_.showActions},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
@@ -1205,6 +1212,9 @@ void App::frame(float dt) {
     {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) openLevelFile();
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_RightBracket)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E) && !exportFuture_.valid() && !selectedName_.empty()) startExport();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !filter_.empty() && !ImGui::IsAnyItemActive()) setFilter("");
         // ? (shift+/ on most layouts) or F1: the shortcut cheat-sheet; Escape closes it
@@ -1225,23 +1235,26 @@ void App::frame(float dt) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::Begin("##root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+    ImGui::Begin("##root", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar |
                                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar(3);
 
-    drawTitleBar();
+    drawMenuBar();
 
     const float total = ImGui::GetContentRegionAvail().x;
-    const float left = std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f));
-    const float right = std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f));
-    const float middle = std::max(total - left - right, theme::S(200.0f));
+    const float strip = theme::S(14.0f);
+    const float left = settings_.showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
+    const float right = settings_.showActions ? std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f)) : 0.0f;
+    const float middle = std::max(total - left - right - strip * 2, theme::S(200.0f));
 
-    drawExplorer(left);
+    if (settings_.showExplorer) { drawExplorer(left); ImGui::SameLine(0, 0); }
+    drawPanelStrip(true);
     ImGui::SameLine(0, 0);
     drawViewport(middle);
     ImGui::SameLine(0, 0);
-    drawActions(right);
+    drawPanelStrip(false);
+    if (settings_.showActions) { ImGui::SameLine(0, 0); drawActions(right); }
     drawUnsavedPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawSetupPanel();
@@ -1251,48 +1264,59 @@ void App::frame(float dt) {
     ImGui::End();
 }
 
-void App::drawTitleBar() {
-    const ImVec2 p = ImGui::GetCursorScreenPos();
+// The menu bar: File / View / Help on the left, the install status and the two quick
+// buttons on the right. Replaces the old 52 px title strip (a modder's review called it
+// redundant); the window title already says what the program is.
+void App::drawMenuBar() {
     using theme::S;
-    const float w = ImGui::GetContentRegionAvail().x;
-    const float h = S(52.0f);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::col(theme::Bg1));
-    dl->AddLine(ImVec2(p.x, p.y + h), ImVec2(p.x + w, p.y + h), theme::col(theme::Border));
-    // accent mark
-    dl->AddRectFilled(ImVec2(p.x + S(18), p.y + S(14)), ImVec2(p.x + S(24), p.y + h - S(14)), theme::col(theme::Accent), S(3.0f));
-
-    ImGui::SetCursorScreenPos(ImVec2(p.x + S(36), p.y + S(11)));
-    ImGui::PushFont(fontTitle_);
-    ImGui::TextUnformatted("FableForge");
-    const float titleEnd = ImGui::GetItemRectMax().x;
-    ImGui::PopFont();
-    const float btnW = S(92.0f);
-    const float subtitleW = ImGui::CalcTextSize("v" ALBION_VERSION "   Fable: The Lost Chapters level editor").x;
-    if (w > S(760)) {
-        ImGui::SameLine(0, S(12));
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(8));
-        ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Faint), "v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
-        ImGui::PopFont();
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg, theme::vec(theme::Bg1));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(7)));
+    if (!ImGui::BeginMenuBar()) { ImGui::PopStyleVar(); ImGui::PopStyleColor(); return; }
+    ImGui::TextColored(theme::vec(theme::Accent), "FableForge");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
+        ImGui::Separator();
+        if (ImGui::MenuItem("Change install folder...")) changeInstall();
+        if (ImGui::MenuItem("Setup check...")) setupOpen_ = true;
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit", "Alt+F4")) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("View")) {
+        if (ImGui::MenuItem("Map list", "Ctrl+[", settings_.showExplorer)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
+        if (ImGui::MenuItem("Tool panel", "Ctrl+]", settings_.showActions)) { settings_.showActions = !settings_.showActions; saveSettings(); }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("Keyboard and mouse", "F1", helpOpen_)) helpOpen_ = !helpOpen_;
+        if (ImGui::MenuItem("Take the tour")) tourStep_ = 0;
+        ImGui::Separator();
+        ImGui::TextDisabled("FableForge v" ALBION_VERSION);
+        ImGui::EndMenu();
     }
 
-    // install status (right side), shortened from the left when there is no room
-    ImGui::PushFont(fontSmall_);
+    // right side: install status (click for the setup check), ?, Install...
+    const float barW = ImGui::GetWindowWidth();
+    const float btnW = S(84.0f), helpW = S(26.0f), gap = S(8.0f);
+    const float btnH = ImGui::GetFrameHeight() - S(6);
     // a redirected save root (scripted runs, scratch trees) is the one thing a writer
     // must not miss: every write goes there, not into the install shown
     const bool redirected = !saveRoot_.empty() && saveRoot_ != installPath_;
     std::string status = !installValid_ ? "no install selected" : redirected ? "writes -> " + saveRoot_ : installPath_;
-    const float statusMax = std::max(S(120.0f), p.x + w - btnW - S(108) - (titleEnd + (w > S(760) ? subtitleW + S(24) : S(12))));
+    ImGui::PushFont(fontSmall_);
+    const float statusMax = std::max(S(120.0f), barW - ImGui::GetCursorPosX() - btnW - helpW - gap * 4 - S(24));
     if (ImGui::CalcTextSize(status.c_str()).x > statusMax) {
         while (status.size() > 4 && ImGui::CalcTextSize(("..." + status).c_str()).x > statusMax) status.erase(0, 1);
         status = "..." + status;
     }
     const float statusW = ImGui::CalcTextSize(status.c_str()).x;
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - statusW - btnW - S(78), p.y + (h - ImGui::GetTextLineHeight()) * 0.5f));
-    const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn))
-                                    : theme::col(theme::Error);
-    dl->AddCircleFilled(ImVec2(ImGui::GetCursorScreenPos().x - S(12), ImGui::GetCursorScreenPos().y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
+    const float rowY = ImGui::GetCursorPosY();
+    ImGui::SetCursorPosX(barW - statusW - btnW - helpW - gap * 3);
+    ImGui::SetCursorPosY(rowY + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f);
+    const ImVec2 sp = ImGui::GetCursorScreenPos();
+    const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn)) : theme::col(theme::Error);
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(sp.x - S(10), sp.y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
     ImGui::TextColored(theme::vec(redirected ? theme::Warn : theme::Muted), "%s", status.c_str());
     if (ImGui::IsItemHovered()) {
         const InstallHealth h = installHealth();
@@ -1302,17 +1326,61 @@ void App::drawTitleBar() {
     }
     if (ImGui::IsItemClicked()) setupOpen_ = true;
     ImGui::PopFont();
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18) - S(38), p.y + (h - S(30)) * 0.5f));
-    if (theme::ghostButton("?", ImVec2(S(30), S(30)))) helpOpen_ = !helpOpen_;
+    ImGui::SetCursorPosY(rowY + S(3));
+    ImGui::SetCursorPosX(barW - btnW - helpW - gap * 2);
+    if (theme::ghostButton("?", ImVec2(helpW, btnH))) helpOpen_ = !helpOpen_;
     auto_.registerWidget("btn_help");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keyboard and mouse cheat-sheet  (? or F1)");
-    ImGui::SetCursorScreenPos(ImVec2(p.x + w - btnW - S(18), p.y + (h - S(30)) * 0.5f));
-    if (theme::ghostButton("Change...", ImVec2(btnW, S(30)))) {
-        const std::string picked = pickFolder(hwnd_, installPath_);
-        if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
-    }
+    ImGui::SetCursorPosY(rowY + S(3));
+    ImGui::SetCursorPosX(barW - btnW - gap);
+    if (theme::ghostButton("Install...", ImVec2(btnW, btnH))) changeInstall();
     auto_.registerWidget("btn_change_install");
-    ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + 1));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick the Fable: The Lost Chapters folder");
+    ImGui::EndMenuBar();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+}
+
+void App::changeInstall() {
+    const std::string picked = pickFolder(hwnd_, installPath_);
+    if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
+}
+
+void App::openLevelFile() {
+    static const COMDLG_FILTERSPEC types[] = {{L"Fable level (*.lev)", L"*.lev"}};
+    const std::string start = installValid_ ? (fs::path(installPath_) / "data" / "Levels").string() : std::string();
+    const std::string picked = pickPath(hwnd_, start, types, 1);
+    if (!picked.empty()) openLooseLev(picked);
+}
+
+// A side panel's inner edge: a thin full-height strip with a chevron that hides or
+// shows the panel. `left` = the strip belongs to the map list.
+void App::drawPanelStrip(bool left) {
+    using theme::S;
+    bool& shown = left ? settings_.showExplorer : settings_.showActions;
+    const float w = S(14.0f);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
+    ImGui::BeginChild(left ? "##strip_l" : "##strip_r", ImVec2(w, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+    const ImVec2 p = ImGui::GetWindowPos();
+    const float h = ImGui::GetWindowHeight();
+    ImGui::SetCursorScreenPos(p);
+    if (ImGui::InvisibleButton("##toggle", ImVec2(w, h))) { shown = !shown; saveSettings(); }
+    auto_.registerWidget(left ? "btn_toggle_explorer" : "btn_toggle_actions");
+    const bool hov = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::col(theme::Bg2));
+    const float edge = left ? p.x + w - 1 : p.x;
+    dl->AddLine(ImVec2(edge, p.y), ImVec2(edge, p.y + h), theme::col(theme::Border));
+    // the chevron points the way the panel will move
+    const bool pointLeft = left == shown;
+    const float cx = p.x + w * 0.5f, cy = p.y + h * 0.5f, a = S(3.5f);
+    const ImU32 c = theme::col(hov ? theme::Text : theme::Faint);
+    if (pointLeft) dl->AddTriangleFilled(ImVec2(cx - a, cy), ImVec2(cx + a, cy - a * 1.6f), ImVec2(cx + a, cy + a * 1.6f), c);
+    else dl->AddTriangleFilled(ImVec2(cx + a, cy), ImVec2(cx - a, cy - a * 1.6f), ImVec2(cx - a, cy + a * 1.6f), c);
+    if (hov) ImGui::SetTooltip("%s", shown ? (left ? "Hide the map list  (Ctrl+[)" : "Hide the tool panel  (Ctrl+])")
+                                           : (left ? "Show the map list  (Ctrl+[)" : "Show the tool panel  (Ctrl+])"));
+    ImGui::EndChild();
 }
 
 void App::drawExplorer(float width) {

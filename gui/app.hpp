@@ -65,6 +65,8 @@ struct ExportSettings {
     bool world = false;      // place at WLD MapX/MapY so maps line up
     int up = 0;              // 0 = Y, 1 = Z
     float uiScale = 1.0f;    // user font/UI scale on top of DPI + window size (0.8 .. 1.5)
+    bool showExplorer = true; // the left map list (View menu / Ctrl+[)
+    bool showActions = true;  // the right tool panel (View menu / Ctrl+])
     std::string outDir;
 };
 
@@ -292,7 +294,10 @@ public:
     int tourStep() const { return tourStep_; }
 private:
 
-    void drawTitleBar();
+    void drawMenuBar();
+    void drawPanelStrip(bool left);
+    void changeInstall();
+    void openLevelFile();
     void drawExplorer(float width);
     void drawViewport(float width);
     void drawActions(float width);
