@@ -374,6 +374,7 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                 // a region that owns this one, touching it at the new placement
                 forge::stbbake::HeightfieldBakeOptions opt;
                 opt.requireCanonicalSize = false;
+                opt.deferOversizedPatches = true;   // outgrown patches are written by replacePatchVertices below
                 std::set<std::string> candidates;
                 const std::string mine = lower(box->levelName);
                 for (const auto& region : wld.regions()) {
@@ -425,6 +426,15 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                         continue;
                     }
                     newChunk = std::move(baked.chunk);
+                    if (!baked.deferred.empty()) {
+                        RelocateReport gr;
+                        std::string gerr;
+                        if (!replacePatchVertices(newChunk, newRecord, baked.deferred, gr, gerr)) {
+                            notes.push_back("neighbour " + box->name + " kept its retail bake (grown patches: " + gerr + ")");
+                            continue;
+                        }
+                        notes.push_back("neighbour " + box->name + ": " + std::to_string(baked.deferred.size()) + " patch(es) outgrew their slot and were re-laid");
+                    }
                     notes.push_back("neighbour " + box->name + ": chunk re-baked, " + std::to_string(newChunk.size()) + " bytes" + (neighbourList.empty() ? "" : ", edges from " + neighbourList));
                 }
                 if (newChunk.size() != chunk.size()) sameSize = false;
