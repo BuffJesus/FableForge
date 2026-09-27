@@ -37,6 +37,7 @@ usage:
 
 diagnostics (read-only, print what the engine's data says):
   forge effects [<name>]                            every effects.big emitter parsed with the ported grammar, or one
+  forge def-groups [<TYPE>]                         defs per type under their GroupDef (THING_GROUP / ENGINE_THEME_GROUP), counted
   forge layers <map>   |   forge ground <map>   |   forge coverage <map>   (the STB's texture passes / background albedo / foreground frames)
   forge heights <map.lev> <x,y> ...                 bilinear LEV heights at map-local points (the in-game harness oracle)
   forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>

@@ -186,6 +186,21 @@ int runExport(const std::string& cmd, const Args& args) {
             std::printf("effects.big: %d parsed fully, %d partially; %d sprite systems, %d lights, %d mesh systems\n", full, partial, sprites, lights, meshes);
             return partial ? 1 : 0;
         }
+        if (cmd == "def-groups") {   // diagnostic: every def of a type under its GroupDef (the vanilla editor's lists)
+            if (!install.valid) return usage();
+            albion::terrainexport::Context ctx;
+            std::string err;
+            if (!ctx.loadDefs(install.root, err)) { std::fprintf(stderr, "%s\n", err.c_str()); return 1; }
+            const std::vector<std::string> types = target.empty()
+                ? std::vector<std::string>{"CREATURE", "OBJECT", "BUILDING", "MARKER", "SWITCH", "PHYSICAL_SWITCH", "HOLY_SITE", "VILLAGE", "NOISE", "THING"}
+                : std::vector<std::string>{target};
+            const auto defs = ctx.groupedDefinitions(types);
+            std::map<std::pair<std::string, std::string>, int> counts;
+            for (const auto& d : defs) ++counts[{d.type, d.group.empty() ? "(no group)" : d.group}];
+            for (const auto& [key, n] : counts) std::printf("%-16s %-40s %d\n", key.first.c_str(), key.second.c_str(), n);
+            std::printf("%zu defs in %zu groups\n", defs.size(), counts.size());
+            return defs.empty() ? 1 : 0;
+        }
         if (target.empty()) return usage();
 
         fs::path temp;

@@ -364,7 +364,11 @@ private:
     std::string saveRoot_;
     float settingsScroll_ = 0;       // ##settings ScrollY (state dump, wheel tests)
     char defSearch_[64] = {};
-    std::vector<std::pair<std::string, std::string>> defList_;   // (name, type) placeable definitions
+    // placeable definitions with their GroupDef (THING_GROUP), sorted type / group / name:
+    // the vanilla editor's Things tree (thing type -> group -> def)
+    std::vector<terrainexport::Context::GroupedDefinition> defList_;
+    std::string placeDef_;           // the def the Place button puts down
+    void drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height);
     char thingSearch_[64] = {};
     // forge_mods_provenance.json (written by a mod deploy): "uid:<n>" -> mod for the open map;
     // badges in the object list, an origin filter, "back to retail" = a vanilla pick

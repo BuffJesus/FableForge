@@ -194,6 +194,13 @@ public:
     // Names of every game.bin definition whose type is one of `types` (e.g.
     // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
     std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;
+    // The same, with each def's GroupDef resolved to its group's name: THING_GROUP
+    // for things (G_CREATURES_BANDIT, GO_BARRIERS...), ENGINE_THEME_GROUP for
+    // ENGINE_THEME. The vanilla editor's Things / Themes lists are built from these
+    // (docs/VANILLA_EDITOR_INVENTORY.md 5.3, 5.4). group "" = none or unreadable.
+    // Needs only the defs (ready() or loadDefs()). Sorted by type, group, name.
+    struct GroupedDefinition { std::string name, type, group; };
+    std::vector<GroupedDefinition> groupedDefinitions(const std::vector<std::string>& types) const;
     // Defs only (names.bin + game.bin, no textures.big): enough for themeLibrary().
     bool loadDefs(const std::filesystem::path& gameRoot, std::string& error);
     // The install's ENGINE_THEME library (palette slot -> textures); nullptr until ready() or loadDefs().

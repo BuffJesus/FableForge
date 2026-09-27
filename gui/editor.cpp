@@ -482,6 +482,89 @@ void App::frameSelected() {
     camera_.lookAt(c[0], c[1], c[2], camera_.yaw, std::max(camera_.pitch, 0.35f), std::max(r * 4.0f, 8.0f));
 }
 
+// The placement palette: with an empty search, a tree of type -> THING_GROUP -> def
+// (groups named by their def, G_CREATURES_BANDIT shown as "CREATURES BANDIT");
+// with a search, a flat list of matches with their group. Click selects, double-click places.
+void App::drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height) {
+    using theme::S;
+    if (defList_.empty() && ctx_.ready()) defList_ = ctx_.groupedDefinitions({"OBJECT", "BUILDING", "CREATURE"});
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+    ImGui::BeginChild(id, ImVec2(width, height), ImGuiChildFlags_None);
+    ImGui::PopStyleColor();
+    ImGui::PushFont(fontSmall_);
+    const float rowH = S(34), thumb = S(30);
+    thumbBudget_ = 1;   // one mesh decode per frame across the visible rows
+    auto row = [&](const terrainexport::Context::GroupedDefinition& d, bool showGroup) {
+        const ImVec2 rowPos = ImGui::GetCursorScreenPos();
+        if (ImGui::Selectable((std::string("##def") + d.name).c_str(), d.name == placeDef_, 0, ImVec2(0, rowH))) placeDef_ = d.name;
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { placeDef_ = d.name; placeDefinition(d.name); }
+        // thumbnail + name drawn over the row; rows off screen are not decoded
+        if (ImGui::IsItemVisible()) {
+            bool pending = false;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ID3D11ShaderResourceView* srv = defThumbnail(d.name, pending);
+            const ImVec2 p(rowPos.x + S(2), rowPos.y + (rowH - thumb) * 0.5f);
+            if (srv) dl->AddImageRounded((ImTextureID)(intptr_t)srv, p, ImVec2(p.x + thumb, p.y + thumb), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, S(4));
+            else dl->AddRectFilled(p, ImVec2(p.x + thumb, p.y + thumb), theme::col(pending ? theme::Bg2 : theme::Bg3), S(4));
+            const float ty = rowPos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+            dl->AddText(ImVec2(p.x + thumb + S(8), ty), theme::col(theme::Text), d.name.c_str());
+            if (showGroup && !d.group.empty()) {
+                const float nx = p.x + thumb + S(8) + ImGui::CalcTextSize(d.name.c_str()).x + S(10);
+                dl->AddText(ImVec2(nx, ty), theme::col(theme::Faint), d.group.c_str());
+            }
+        }
+    };
+    auto wanted = [&](const std::string& type) { return std::find(types.begin(), types.end(), type) != types.end(); };
+    if (!ctx_.ready()) ImGui::TextColored(theme::vec(theme::Faint), "Definitions load with the textures...");
+    else if (defSearch_[0]) {
+        int shown = 0;
+        for (const auto& d : defList_) {
+            if (!wanted(d.type) || !(contains(d.name, defSearch_) || contains(d.group, defSearch_))) continue;
+            row(d, true);
+            if (++shown >= 300) { ImGui::TextColored(theme::vec(theme::Faint), "...type more to narrow down"); break; }
+        }
+        if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
+    } else {
+        // defList_ is sorted type / group / name: walk it in runs
+        auto groupLabel = [](const std::string& g) {
+            if (g.empty()) return std::string("(no group)");
+            std::string s = g.rfind("GO_", 0) == 0 ? g.substr(3) : g.rfind("G_", 0) == 0 ? g.substr(2) : g;
+            for (auto& c : s) if (c == '_') c = ' ';
+            return s;
+        };
+        const bool oneType = types.size() == 1;
+        for (size_t i = 0; i < defList_.size();) {
+            const std::string& type = defList_[i].type;
+            size_t typeEnd = i;
+            while (typeEnd < defList_.size() && defList_[typeEnd].type == type) ++typeEnd;
+            if (!wanted(type)) { i = typeEnd; continue; }
+            char head[96]; std::snprintf(head, sizeof head, "%s  (%zu)", type.c_str(), typeEnd - i);
+            const bool typeOpen = oneType || ImGui::TreeNodeEx((std::string(head) + "##t" + type).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth);
+            if (typeOpen) {
+                for (size_t j = i; j < typeEnd;) {
+                    const std::string& group = defList_[j].group;
+                    size_t groupEnd = j;
+                    while (groupEnd < typeEnd && defList_[groupEnd].group == group) ++groupEnd;
+                    char gh[128]; std::snprintf(gh, sizeof gh, "%s  (%zu)##g%s%s", groupLabel(group).c_str(), groupEnd - j, type.c_str(), group.c_str());
+                    const bool old = group.find("DO_NOT_USE") != std::string::npos;
+                    if (old) ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Faint));
+                    const bool open = ImGui::TreeNodeEx(gh, ImGuiTreeNodeFlags_SpanAvailWidth);
+                    if (old) ImGui::PopStyleColor();
+                    if (open) {
+                        for (size_t k = j; k < groupEnd; ++k) row(defList_[k], false);
+                        ImGui::TreePop();
+                    }
+                    j = groupEnd;
+                }
+                if (!oneType) ImGui::TreePop();
+            }
+            i = typeEnd;
+        }
+    }
+    ImGui::PopFont();
+    ImGui::EndChild();
+}
+
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     uint32_t modelId = 0;
@@ -1704,44 +1787,14 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##add", inner);
     theme::label("Add an object");
-    if (defList_.empty() && ctx_.ready()) defList_ = ctx_.definitions({"OBJECT", "BUILDING", "CREATURE"});
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
     ImGui::InputTextWithHint("##defsearch", "Search definitions (OBJECT_..., BUILDING_..., CREATURE_...)", defSearch_, sizeof defSearch_);
     ImGui::PopStyleVar();
     auto_.registerWidget("input_defsearch");
-    static std::string placeDef;
-    if (defSearch_[0]) {
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-        ImGui::BeginChild("##deflist", ImVec2(cardInner, S(180)), ImGuiChildFlags_None);
-        ImGui::PopStyleColor();
-        ImGui::PushFont(fontSmall_);
-        int shown = 0;
-        const float rowH = S(34), thumb = S(30);
-        thumbBudget_ = 1;   // one mesh decode per frame across the visible rows
-        for (const auto& [name, type] : defList_) {
-            if (!contains(name, defSearch_)) continue;
-            const ImVec2 rowPos = ImGui::GetCursorScreenPos();
-            if (ImGui::Selectable((std::string("##def") + name).c_str(), name == placeDef, 0, ImVec2(0, rowH))) placeDef = name;
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { placeDef = name; placeDefinition(name); }
-            // thumbnail + name drawn over the row; rows off screen are not decoded
-            if (ImGui::IsItemVisible()) {
-                bool pending = false;
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                ID3D11ShaderResourceView* srv = defThumbnail(name, pending);
-                const ImVec2 p(rowPos.x + S(2), rowPos.y + (rowH - thumb) * 0.5f);
-                if (srv) dl->AddImageRounded((ImTextureID)(intptr_t)srv, p, ImVec2(p.x + thumb, p.y + thumb), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, S(4));
-                else dl->AddRectFilled(p, ImVec2(p.x + thumb, p.y + thumb), theme::col(pending ? theme::Bg2 : theme::Bg3), S(4));
-                dl->AddText(ImVec2(p.x + thumb + S(8), rowPos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f), theme::col(theme::Text), name.c_str());
-            }
-            if (++shown >= 300) { ImGui::TextColored(theme::vec(theme::Faint), "...type more to narrow down"); break; }
-        }
-        if (!shown) ImGui::TextColored(theme::vec(theme::Faint), "no match");
-        ImGui::PopFont();
-        ImGui::EndChild();
-    }
-    const std::string placeLabel = placeDef.empty() ? "Place at view centre" : "Place " + placeDef;
-    if (theme::ghostButton(placeLabel.c_str(), ImVec2(cardInner, S(30))) && !placeDef.empty()) placeDefinition(placeDef);
+    drawDefPalette("##deflist", {"OBJECT", "BUILDING", "CREATURE"}, cardInner, S(defSearch_[0] ? 180 : 240));
+    const std::string placeLabel = placeDef_.empty() ? "Place at view centre" : "Place " + placeDef_;
+    if (theme::ghostButton(placeLabel.c_str(), ImVec2(cardInner, S(30))) && !placeDef_.empty()) placeDefinition(placeDef_);
     auto_.registerWidget("btn_place");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, dropped onto the terrain, facing the camera.");
     drawRuleNotice("creature", cardInner);
@@ -1780,6 +1833,22 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
 
     if (editTab_ == 2) {
+        // creatures by their GroupDef (G_CREATURES_BANDIT, _FAE, _HOSTILE ...), like the vanilla Things tree
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##actordefs", inner);
+        theme::label("Creatures by group");
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+        ImGui::InputTextWithHint("##actorsearch", "Search creatures (CREATURE_...)", defSearch_, sizeof defSearch_);
+        ImGui::PopStyleVar();
+        auto_.registerWidget("input_actorsearch");
+        drawDefPalette("##actorlist", {"CREATURE"}, cardInner, S(260));
+        const std::string actorLabel = placeDef_.rfind("CREATURE_", 0) == 0 ? "Place " + placeDef_ : std::string("Pick a creature above");
+        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && placeDef_.rfind("CREATURE_", 0) == 0) placeDefinition(placeDef_);
+        auto_.registerWidget("btn_place_actor");
+        drawRuleNotice("creature", cardInner);
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawPresetsCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawVillageCard(pad, inner, cardInner);

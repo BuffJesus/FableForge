@@ -9,6 +9,7 @@
 #include <map>
 #include <atomic>
 #include <mutex>
+#include <tuple>
 #include <thread>
 #include <set>
 #include <stdexcept>
@@ -511,6 +512,42 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
             if (e.definition == t) { out.emplace_back(e.name, e.definition); break; }
     }
     std::sort(out.begin(), out.end());
+    return out;
+}
+
+std::vector<Context::GroupedDefinition> Context::groupedDefinitions(const std::vector<std::string>& types) const {
+    std::vector<GroupedDefinition> out;
+    if (!impl_ || !impl_->defs || !impl_->schema) return out;
+    std::lock_guard<std::mutex> lock(impl_->defMutex);
+    const auto& entries = impl_->defs->entries();
+    // one schema type per bin definition string, confirmed on its first entry
+    std::map<std::string, const forge::defschema::DefType*> typeOf;
+    for (const auto& e : entries) {
+        if (e.name.empty() || std::find(types.begin(), types.end(), e.definition) == types.end()) continue;
+        GroupedDefinition g{e.name, e.definition, {}};
+        auto hit = typeOf.find(e.definition);
+        if (hit == typeOf.end()) hit = typeOf.emplace(e.definition, forge::defdecode::resolveType(*impl_->schema, e.definition, e.data)).first;
+        if (hit->second) {
+            try {
+                const auto decoded = forge::defdecode::decode(e.data, *hit->second);
+                for (const auto& f : decoded.fields) {
+                    if (f.name != "GroupDef" || f.value.size() != 4) continue;
+                    // def references are plain entry indices; only a *_GROUP entry counts
+                    uint32_t idx = 0; std::memcpy(&idx, f.value.data(), 4);
+                    if (idx < entries.size()) {
+                        const auto& target = entries[idx];
+                        const std::string& d = target.definition;
+                        if (d.size() > 6 && d.compare(d.size() - 6, 6, "_GROUP") == 0) g.group = target.name;
+                    }
+                    break;
+                }
+            } catch (const std::exception&) {}
+        }
+        out.push_back(std::move(g));
+    }
+    std::sort(out.begin(), out.end(), [](const GroupedDefinition& a, const GroupedDefinition& b) {
+        return std::tie(a.type, a.group, a.name) < std::tie(b.type, b.group, b.name);
+    });
     return out;
 }
 

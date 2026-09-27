@@ -80,6 +80,7 @@ int usage() {
         "\n"
         "diagnostics (read-only, print what the engine's data says):\n"
         "  forge effects [<name>]                            every effects.big emitter parsed with the ported grammar, or one\n"
+        "  forge def-groups [<TYPE>]                         defs per type under their GroupDef (THING_GROUP / ENGINE_THEME_GROUP), counted\n"
         "  forge layers <map>   |   forge ground <map>   |   forge coverage <map>   (the STB's texture passes / background albedo / foreground frames)\n"
         "  forge heights <map.lev> <x,y> ...                 bilinear LEV heights at map-local points (the in-game harness oracle)\n"
         "  forge chunk-audit <map>|--all   |   forge lod-check <map>   |   forge minimap-register <MINIMAP_NAME> <texture id>\n"
