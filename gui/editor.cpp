@@ -1185,8 +1185,10 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
         float back[16]; editor::multiply(g, kToFable, back);
         editor::Frame nf;
         if (editor::matrixToFrame(back, nf)) {
+            // ImGuizmo's scale is the cumulative ratio since the drag began, so it
+            // multiplies the start scale; multiplying the per-frame scale compounded it
             const float rel = nf.scale / 100.0f;
-            nf.scale = std::clamp(gizmoFrame_.scale * rel, 0.01f, 100.0f);
+            nf.scale = std::clamp(gizmoStart_.scale * rel, 0.01f, 100.0f);
             if (gizmoOp_ != 3) nf.scale = gizmoFrame_.scale;
             if (gizmoOp_ == 3) { nf.pos[0] = gizmoFrame_.pos[0]; nf.pos[1] = gizmoFrame_.pos[1]; nf.pos[2] = gizmoFrame_.pos[2]; }
             gizmoFrame_ = nf;
