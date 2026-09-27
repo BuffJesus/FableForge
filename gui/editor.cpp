@@ -288,6 +288,72 @@ bool App::selectedPivotScreen(float& x, float& y) const {
     return true;
 }
 
+// The vanilla Quests dialog: which sections are drawn, where new things go, and a
+// thing moved between sections. A quest section loads only with its quest in-game.
+void App::drawSectionsCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##sections", inner);
+    theme::label("Quest sections");
+    const auto names = doc_.sections();
+    const auto per = doc_.thingSections();
+    std::map<std::string, size_t> counts;
+    for (const auto& n : per) ++counts[lowerCopy(n)];
+    std::vector<std::string> shown = names;
+    if (shown.empty()) shown.push_back("NULL");
+    const std::string current = lowerCopy(doc_.placementSection());
+    ImGui::PushFont(fontSmall_);
+    for (const auto& n : shown) {
+        ImGui::PushID(n.c_str());
+        const std::string key = lowerCopy(n);
+        bool vis = !hiddenSections_.count(key);
+        if (ImGui::Checkbox("##vis", &vis)) { if (vis) hiddenSections_.erase(key); else hiddenSections_.insert(key); sectionsDirty_ = true; }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show / hide this section's things in the view");
+        ImGui::SameLine();
+        const bool isCurrent = key == current || (current.empty() && key == "null");
+        char lbl[160]; std::snprintf(lbl, sizeof lbl, "%s  (%zu)%s", n.c_str(), counts[key], isCurrent ? "   <- new things go here" : "");
+        if (ImGui::Selectable(lbl, isCurrent)) doc_.setPlacementSection(n);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(key == "null" ? "The main section: always loaded." : "Loaded with its quest. Click: new things go here.");
+        ImGui::PopID();
+    }
+    ImGui::PopFont();
+    ImGui::SetNextItemWidth(cardInner - S(70));
+    ImGui::InputTextWithHint("##newsection", "New section (quest name, e.g. Q_MY_QUEST)", newSection_, sizeof newSection_, ImGuiInputTextFlags_CharsUppercase);
+    auto_.registerWidget("input_new_section");
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("Add", ImVec2(S(64), S(26))) && newSection_[0]) {
+        if (doc_.addSection(newSection_)) { doc_.setPlacementSection(newSection_); pushLog(std::string("section ") + newSection_ + " added; new things go there", 0); newSection_[0] = 0; }
+        else pushLog("section: letters, digits and _ only, and not a name already there", 1);
+    }
+    auto_.registerWidget("btn_add_section");
+    if (selectedThing_ >= 0) {
+        const std::string target = doc_.placementSection().empty() ? std::string("NULL") : doc_.placementSection();
+        const std::string mine = doc_.sectionOf(size_t(selectedThing_));
+        if (lowerCopy(mine) != lowerCopy(target)) {
+            const std::string l = "Move selection to " + target + "  (from " + mine + ")";
+            if (theme::ghostButton(l.c_str(), ImVec2(cardInner, S(26)))) {
+                if (const auto n = doc_.moveToSection(size_t(selectedThing_), target)) { selectThing(int(*n)); sectionsDirty_ = true; }
+            }
+            auto_.registerWidget("btn_move_section");
+        }
+    }
+    theme::endCard();
+}
+
+void App::applySectionVisibility() {
+    if (!documentLoaded()) return;
+    const size_t n = renderer_.instanceCount();
+    if (!sectionsDirty_ && sectionsAppliedRev_ == doc_.revision() && sectionsAppliedInstances_ == n) return;
+    sectionsDirty_ = false; sectionsAppliedRev_ = doc_.revision(); sectionsAppliedInstances_ = n;
+    const auto per = doc_.thingSections();
+    for (size_t i = 0; i < n; ++i) {
+        const int t = renderer_.instance(i).thing;
+        const bool hidden = t >= 0 && size_t(t) < per.size() && hiddenSections_.count(lowerCopy(per[size_t(t)]));
+        renderer_.setInstanceVisible(i, !hidden);
+    }
+}
+
 std::string App::thingLabel(size_t index) const {
     const auto s = doc_.summary(index);
     return s.scriptName.empty() ? s.definition : s.scriptName + " (" + s.definition + ")";
@@ -1666,6 +1732,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
     }
+
+    if (editTab_ == 0 || editTab_ == 2) { drawSectionsCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
 
     // ---- selection (Objects and Actors: both tabs place things)
     if (editTab_ == 0 || editTab_ == 2) {

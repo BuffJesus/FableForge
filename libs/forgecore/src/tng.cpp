@@ -410,6 +410,46 @@ std::string File::sectionOf(size_t thingIndex) const {
     return name;
 }
 
+std::vector<std::string> File::sectionNames() const {
+    std::vector<std::string> out;
+    for (const auto& raw : rawLines_) {
+        std::string_view logical = trim(raw);
+        if (!logical.empty() && logical.back() == ';') logical = trim(logical.substr(0, logical.size() - 1));
+        if (logical.starts_with("XXXSectionStart")) out.emplace_back(trim(logical.substr(15)));
+    }
+    return out;
+}
+
+std::vector<std::string> File::thingSections() const {
+    std::vector<std::string> out;
+    out.reserve(things_.size());
+    std::string current = "NULL";
+    size_t next = 0;
+    for (size_t i = 0; i < rawLines_.size() && next < things_.size(); ++i) {
+        if (i == things_[next].startLine) { out.push_back(current); ++next; continue; }
+        std::string_view logical = trim(rawLines_[i]);
+        if (!logical.empty() && logical.back() == ';') logical = trim(logical.substr(0, logical.size() - 1));
+        if (logical.starts_with("XXXSectionStart")) current = std::string(trim(logical.substr(15)));
+    }
+    while (out.size() < things_.size()) out.push_back(current);
+    return out;
+}
+
+bool File::addSection(std::string_view name) {
+    for (const auto& n : sectionNames())
+        if (equalsIgnoreCase(n, name)) return false;
+    const std::string& eol = lineTerminator_;
+    if (!rawLines_.empty() && !isBlankLine(rawLines_.back())) {
+        // the last line may lack a terminator: give it one before appending
+        if (rawLines_.back().find('\n') == std::string::npos) rawLines_.back() += eol;
+        rawLines_.push_back(eol);
+    }
+    rawLines_.push_back("XXXSectionStart " + std::string(name) + ';' + eol);
+    rawLines_.push_back("XXXSectionEnd;" + eol);
+    reindex();
+    return true;
+}
+
 size_t File::insertThingBlockBefore(size_t thingIndex, std::string blockText) {
     if (thingIndex >= things_.size()) {
         const std::string section = things_.empty() ? std::string("NULL") : sectionOf(things_.size() - 1);

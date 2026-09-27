@@ -132,6 +132,23 @@ public:
     size_t reseatThingsSinceSave(float tolerance = 1.0f) { return savedTerrain_ ? reseatThings(*savedTerrain_, tolerance) : 0; }
     void setProperty(size_t index, const std::string& key, const std::string& value);
 
+    // ---- quest sections (the vanilla Quests dialog, inventory 5.5): a .tng groups
+    // its things in XXXSectionStart <quest> blocks; "NULL" always loads, the
+    // others load with their quest.
+    std::vector<std::string> sections() const { return file_.sectionNames(); }
+    std::string sectionOf(size_t index) const { return file_.sectionOf(index); }
+    std::vector<std::string> thingSections() const { return file_.thingSections(); }
+    // A new empty section (letters, digits, '_'). One undo step; false when the
+    // name is invalid or taken.
+    bool addSection(const std::string& name);
+    // Where new things go (vanilla SetQuestBeingAddedTo); falls back to NULL when
+    // the section does not exist.
+    void setPlacementSection(const std::string& name) { placementSection_ = name; }
+    const std::string& placementSection() const { return placementSection_; }
+    // Moves a thing into another section (vanilla RCtrl+; AddSelectedThingToCurrentQuest).
+    // One undo step; returns the thing's new index (nullopt: bad index / no such section).
+    std::optional<size_t> moveToSection(size_t index, const std::string& name);
+
     // ---- links between things: the vanilla editor's attach modes (FableWin
     // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
     // them -- a UID field on a component (or on the thing) naming another thing.
@@ -329,6 +346,9 @@ private:
     bool fromWad_ = false;
     std::filesystem::path loosePath_;
     std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
+    std::string placementSection_ = "NULL";
+    std::string targetSection() const;   // placementSection_ when it exists, else NULL
+    size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)
     std::shared_ptr<forge::lev::File> level_;
     std::vector<uint8_t> navWalkable_;   // walkable bytes the level's navigation tree agrees with
 };

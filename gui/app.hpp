@@ -376,6 +376,14 @@ private:
     std::string placeDef_;           // the def the Place button puts down
     // link pick mode: the next viewport click on a thing sets this link of the selection
     struct LinkPick { std::string ctc, field, label; bool active = false; } linkPick_;
+    // quest sections: hidden ones (lower-case names) are not drawn or pickable
+    std::set<std::string> hiddenSections_;
+    char newSection_[64] = {};
+    uint64_t sectionsAppliedRev_ = ~0ull;
+    size_t sectionsAppliedInstances_ = 0;
+    bool sectionsDirty_ = true;
+    void drawSectionsCard(float pad, float inner, float cardInner);
+    void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
     std::string thingLabel(size_t index) const;
     std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)

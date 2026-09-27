@@ -662,6 +662,43 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
 }
 
+// Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
+// place into the current section, move a thing between sections, undo.
+void testQuestSections() {
+    namespace ed = albion::editor;
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
+        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Sections", tng, err));
+    CHECK((doc.sections() == std::vector<std::string>{"NULL", "Q_TEST"}));
+    CHECK(doc.sectionOf(0) == "NULL" && doc.sectionOf(1) == "Q_TEST");
+    CHECK(!doc.addSection("bad name") && !doc.addSection("q_test") && !doc.addSection(""));
+    CHECK(doc.addSection("MY_QUEST") && doc.sections().size() == 3);
+    CHECK(doc.text().find("XXXSectionStart MY_QUEST;\r\nXXXSectionEnd;\r\n") != std::string::npos);
+    doc.setPlacementSection("MY_QUEST");
+    forge::thingplacer::Placement pl;
+    pl.definitionType = "OBJECT_CRATE_02";
+    pl.position = {1.0f, 2.0f, 3.0f};
+    const size_t n = doc.place(pl);
+    CHECK(doc.sectionOf(n) == "MY_QUEST" && doc.summary(n).definition == "OBJECT_CRATE_02");
+    const auto moved = doc.moveToSection(n, "null");
+    CHECK(moved && doc.sectionOf(*moved) == "NULL" && doc.summary(*moved).definition == "OBJECT_CRATE_02");
+    CHECK(!doc.moveToSection(0, "NOPE"));
+    CHECK(doc.undo() && doc.sectionOf(2) == "MY_QUEST");        // the move is one step
+    doc.setPlacementSection("GONE");                              // unknown: falls back to NULL
+    const size_t m = doc.place(pl);
+    CHECK(doc.sectionOf(m) == "NULL");
+    // a file without sections gets NULL first, then the new one
+    ed::Document bare;
+    CHECK(bare.openText("Bare", "Version 2;\r\n", err));
+    CHECK(bare.addSection("Q_NEW") && (bare.sections() == std::vector<std::string>{"NULL", "Q_NEW"}));
+}
+
 // Links between things (vanilla attach modes): a villager's village / owner / home,
 // listed, validated against the target's kind, set, cleared and undone.
 void testThingLinks() {
@@ -1148,6 +1185,7 @@ int main() {
     testThemeToolsAndPaths(dir);
     testExternalWorld(dir);
     testThingLinks();
+    testQuestSections();
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();

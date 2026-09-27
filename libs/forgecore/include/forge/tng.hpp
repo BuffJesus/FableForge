@@ -102,6 +102,14 @@ public:
     // Name on the XXXSectionStart enclosing the thing ("NULL" when the file has
     // no sections).
     std::string sectionOf(size_t thingIndex) const;
+    // Every XXXSectionStart name in file order ("NULL" is the main section; the
+    // others are quest sections the engine loads with their quest).
+    std::vector<std::string> sectionNames() const;
+    // sectionOf for every thing, in one pass (index = thing index).
+    std::vector<std::string> thingSections() const;
+    // Appends an empty "XXXSectionStart <name>; XXXSectionEnd;" section. False when
+    // a section of that name (case-insensitive) already exists.
+    bool addSection(std::string_view name);
     // Insert a VERBATIM block so that it becomes thing number `thingIndex`
     // (before the thing currently there; `thingIndex == things().size()`
     // appends to the last section). Editors use it to undo a removal at the

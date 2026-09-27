@@ -1038,6 +1038,49 @@ bool Document::setLink(size_t index, const std::string& ctc, const std::string& 
     return true;
 }
 
+std::string Document::targetSection() const {
+    for (const auto& n : file_.sectionNames())
+        if (lower(n) == lower(placementSection_)) return n;
+    return "NULL";
+}
+
+size_t Document::intoPlacementSection(size_t index) {
+    const std::string want = targetSection();
+    if (index >= file_.things().size() || lower(file_.sectionOf(index)) == lower(want)) return index;
+    if (file_.sectionNames().empty()) return index;   // a file without sections has only the implicit NULL
+    const std::string block = file_.thingBlockText(index);
+    file_.removeThing(index);
+    return file_.insertThingBlock(want, block);
+}
+
+bool Document::addSection(const std::string& name) {
+    if (name.empty() || name.size() > 128) return false;
+    for (const char c : name)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
+    for (const auto& n : file_.sectionNames())
+        if (lower(n) == lower(name)) return false;
+    pushUndo();
+    if (file_.sectionNames().empty()) file_.addSection("NULL");   // keep the main section first
+    file_.addSection(name);
+    ++revision_;
+    return true;
+}
+
+std::optional<size_t> Document::moveToSection(size_t index, const std::string& name) {
+    if (index >= file_.things().size()) return std::nullopt;
+    std::string target;
+    for (const auto& n : file_.sectionNames())
+        if (lower(n) == lower(name)) target = n;
+    if (target.empty()) return std::nullopt;
+    if (lower(file_.sectionOf(index)) == lower(target)) return index;
+    pushUndo();
+    const std::string block = file_.thingBlockText(index);
+    file_.removeThing(index);
+    const size_t n = file_.insertThingBlock(target, block);
+    ++revision_;
+    return n;
+}
+
 size_t Document::duplicate(size_t index) {
     if (index >= file_.things().size()) throw std::out_of_range("duplicate: bad thing index");
     pushUndo();
@@ -1054,7 +1097,7 @@ size_t Document::place(forge::thingplacer::Placement placement) {
     try {
         const auto r = forge::thingplacer::place(file_, std::move(placement));
         ++revision_;
-        return r.thingIndex;
+        return intoPlacementSection(r.thingIndex);
     } catch (...) {
         restore(undo_.back()); undo_.pop_back();
         throw;
@@ -1092,7 +1135,7 @@ size_t Document::placeFishingSpot(const float pos[3], const std::string& reward,
         b += "StartCTCFishingSpot;" + eol + "EndCTCFishingSpot;" + eol;
         b += "Health 1.0;" + eol;
         b += "EndThing;" + eol;
-        const size_t n = file_.insertThingBlock("NULL", b);
+        const size_t n = file_.insertThingBlock(targetSection(), b);
         ++revision_;
         return n;
     } catch (...) {
@@ -1150,7 +1193,7 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
         b += "EndThing;" + eol;
         // into the NULL section (insertThingBlock places it there); appending after the
         // last thing would land in a quest-loaded section that the engine never loads
-        const size_t n = file_.insertThingBlock("NULL", b);
+        const size_t n = file_.insertThingBlock(targetSection(), b);
         ++revision_;
         return n;
     } catch (...) {
@@ -1208,7 +1251,7 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
         b += "InitialPosY " + formatFloat(pos[1] + float(worldY_)) + ";" + eol;
         b += "InitialPosZ " + formatFloat(pos[2]) + ";" + eol;
         b += "EndThing;" + eol;
-        const size_t n = file_.insertThingBlock("NULL", b);
+        const size_t n = file_.insertThingBlock(targetSection(), b);
         ++revision_;
         return n;
     } catch (...) {
@@ -1263,7 +1306,7 @@ size_t Document::placeVillage(const float pos[3], const std::string& definition,
         b += "EndCTCCreatureOpinionOfHero;" + eol;
         b += "Health 0.0;" + eol;
         b += "EndThing;" + eol;
-        const size_t n = file_.insertThingBlock("NULL", b);
+        const size_t n = file_.insertThingBlock(targetSection(), b);
         ++revision_;
         return n;
     } catch (...) {
@@ -1300,7 +1343,7 @@ size_t Document::placeEmitter(const float pos[3], const std::string& effectName,
         b += "ParticleTypeName \"" + effectName + "\";" + eol;
         b += "EndCTCDParticleEmitter;" + eol;
         b += "EndThing;" + eol;
-        const size_t n = file_.insertThingBlock("NULL", b);
+        const size_t n = file_.insertThingBlock(targetSection(), b);
         ++revision_;
         return n;
     } catch (...) {
