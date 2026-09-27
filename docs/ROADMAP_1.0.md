@@ -19,7 +19,7 @@ their mesh/def/texture entries; `release_probes.py --stage mesh_undo` puts them 
 `forge backups` -> 0 differ before any release probe.
 
 **Next, in order:**
-1. Release (docs/RELEASE.md) from `main`: version, `tools/package.py`, stranger's test, tag, push.
+1. ~~Release~~ DONE 2026-09-26: **v0.17.0** tagged and released (https://github.com/BuffJesus/FableForge/releases/tag/v0.17.0, CI green, zip attached; UI polish pass in the same release). The stranger's test is deferred by the user; the `modpacks` branch is now fully in `main`.
 2. FableTLC's `docs/engine/IN_ENGINE_MODDING_ENVIRONMENT.md` §9 makes FableForge the offline half of
    the modding plan. Its "now" items that land here: (a) an **entity annotation file** (the FGD) off
    `defschema` for the property panel; (b) finalize the **mod manifest** (`forge_mods.json`) with the
