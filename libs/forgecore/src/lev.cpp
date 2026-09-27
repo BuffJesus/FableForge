@@ -216,6 +216,55 @@ void File::setAtmosAt(int gx, int gy, const AtmosBlend& blend) {
 
 uint8_t File::soundAt(int gx, int gy) const { return gameMapCell(gx, gy)[10]; }
 
+uint8_t File::addSoundTheme(const std::string& name) {
+    for (size_t i = 0; i < themes_.size(); ++i)
+        if (themes_[i] == name) return static_cast<uint8_t>(i + 1);
+    if (name.empty() || name.size() > 255) throw std::invalid_argument("lev: bad sound theme name");
+    if (themes_.size() >= 127) throw std::runtime_error("lev: " + source_ + " already names 127 sound themes (the cell index is a signed byte)");
+    auto u32At = [&](size_t at) { uint32_t v; std::memcpy(&v, originalBytes_.data() + at, 4); return v; };
+    auto putU32 = [&](size_t at, uint32_t v) { std::memcpy(originalBytes_.data() + at, &v, 4); };
+    const size_t countAt = 25 + 0x841a;
+    if (countAt + 4 > originalBytes_.size() || u32At(countAt) != themes_.size() + 1)
+        throw std::runtime_error("lev: sound count field not where expected in " + source_);
+    const size_t at = cellsOffset_;   // the list ends where the cells begin
+    const uint32_t delta = static_cast<uint32_t>(4 + name.size());
+    std::vector<uint8_t> record(4 + name.size());
+    const uint32_t len = static_cast<uint32_t>(name.size());
+    std::memcpy(record.data(), &len, 4);
+    std::memcpy(record.data() + 4, name.data(), name.size());
+    // the nav offsets are read BEFORE the insert, then everything is shifted
+    const uint32_t nav = navOffset_;
+    std::vector<size_t> sectionOffsetFields;   // positions (pre-insert) of the TOC offset u32s
+    {
+        size_t pos = nav + 8;
+        for (size_t i = 0; i < navSections_.size(); ++i) {
+            const uint32_t n = u32At(pos);
+            pos += 4 + n;
+            sectionOffsetFields.push_back(pos);
+            pos += 4;
+        }
+    }
+    originalBytes_.insert(originalBytes_.begin() + static_cast<std::ptrdiff_t>(at), record.begin(), record.end());
+    putU32(countAt, u32At(countAt) + 1);
+    const uint32_t brush = u32At(13);
+    if (brush >= at) putU32(13, brush + delta);
+    putU32(21, nav + delta);
+    const size_t navNew = nav + delta;
+    putU32(navNew, u32At(navNew) + delta);                 // the table's end
+    for (size_t i = 0; i < sectionOffsetFields.size(); ++i) {
+        const size_t f = sectionOffsetFields[i] + delta;
+        const uint32_t sec = u32At(f) + delta;
+        putU32(f, sec);                                     // the section's offset
+        putU32(sec, u32At(sec) + delta);                    // its leading end-of-section
+        navSections_[i].offset = sec;
+    }
+    navOffset_ = static_cast<uint32_t>(navNew);
+    cellsOffset_ += delta;
+    if (gameMapOffset_) gameMapOffset_ += delta;
+    themes_.push_back(name);
+    return static_cast<uint8_t>(themes_.size());
+}
+
 void File::setSoundAt(int gx, int gy, uint8_t index) {
     if (index > themes_.size()) throw std::out_of_range("lev: sound index past the map's sound list");
     gameMapCell(gx, gy)[10] = index;

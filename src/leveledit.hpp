@@ -333,6 +333,10 @@ public:
     // An ENVIRONMENT_THEME_DAY def into a free atmos slot (the existing slot when
     // named already); -1 when full / no grid. One undo step, saved with the terrain.
     int addEnvironmentTheme(const std::string& name, uint32_t defIndex);
+    // A SOUND_THEME def into the map's sound list (lev::File::addSoundTheme re-lays the
+    // file after the list). Returns the cell index, -1 on failure (error set). Not an
+    // undo step: an unused name is harmless; it is written with the next terrain save.
+    int addSoundTheme(const std::string& name, std::string& error);
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;
@@ -385,6 +389,7 @@ private:
     std::filesystem::path loosePath_;
     std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
     std::string placementSection_ = "NULL";
+    bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
     std::string targetSection() const;   // placementSection_ when it exists, else NULL
     size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)
     std::shared_ptr<forge::lev::File> level_;

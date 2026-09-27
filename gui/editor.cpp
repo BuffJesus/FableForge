@@ -1735,11 +1735,31 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::EndCombo();
                 }
                 auto_.registerWidget("combo_sound");
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::InputTextWithHint("##soundsearch", "Add a sound from the game (WOODLAND, OCEAN...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
+                auto_.registerWidget("input_sound_search");
+                if (envSearch_[0] && ctx_.ready()) {
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                    ImGui::BeginChild("##soundlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
+                    ImGui::PopStyleColor();
+                    ImGui::PushFont(fontSmall_);
+                    for (const auto& [name, type] : ctx_.definitions({"SOUND_THEME"})) {
+                        if (!contains(name, envSearch_)) continue;
+                        if (ImGui::Selectable(name.c_str())) {
+                            std::string err;
+                            const int idx = doc_.addSoundTheme(name, err);
+                            if (idx > 0) { soundIndex_ = idx; pushLog("sound " + name + " is index " + std::to_string(idx) + " (saved with the terrain)", 0); }
+                            else pushLog("sound: " + err, 1);
+                        }
+                    }
+                    ImGui::PopFont();
+                    ImGui::EndChild();
+                }
             }
             ImGui::PushFont(fontSmall_);
             theme::hint(terrainMode_ == 10
                 ? "Paints the environment theme (an ENVIRONMENT_THEME_DAY def) on the map's 4x4-cell grid, blended like ground themes. Ctrl+click samples it. Saved with the terrain."
-                : "Paints the background sound (birds, sea, village) on the map's 4x4-cell grid. The list is the sounds this map already names; adding a new one would move the rest of the .lev, not supported yet. Ctrl+click samples it. Saved with the terrain.");
+                : "Paints the background sound (birds, sea, village) on the map's 4x4-cell grid. The list is the sounds this map names; one added from the game joins it (the .lev after the list is re-laid, every offset shifted). Ctrl+click samples it. Saved with the terrain.");
             ImGui::PopFont();
         }
         if (terrainMode_ == 7 || terrainMode_ == 8) {

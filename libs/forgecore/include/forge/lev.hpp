@@ -103,6 +103,15 @@ public:
     AtmosBlend atmosAt(int gx, int gy) const;
     // strengths must sum to 255 (slot 2 is stored as the remainder)
     void setAtmosAt(int gx, int gy, const AtmosBlend& blend);
+    // Appends a SOUND_THEME name to the map's list (or finds it) and returns its cell
+    // index (1-based). The list sits before the cells, so everything after it moves
+    // by 4 + name length; every absolute offset the engine stores is shifted with it:
+    // header BrushDataOffset (+13) and NavigationSectionsOffset (+21), the nav table's
+    // end, each section's offset and each section's leading end-of-section u32
+    // (CMap::LoadBrushesFromFile 0x02236060, CreateNavMap 0x01c8d2e0,
+    // CNavQuadTree::Save/LoadFromFile 0x03289b50/0x0328a760), plus NoSoundThemeEntries.
+    // Throws past 127 names (the cell byte is a signed char).
+    uint8_t addSoundTheme(const std::string& name);
     uint8_t soundAt(int gx, int gy) const;         // 0 = none, else soundThemes()[i - 1]
     void setSoundAt(int gx, int gy, uint8_t index);
     const std::vector<NavSectionInfo>& navSections() const { return navSections_; }

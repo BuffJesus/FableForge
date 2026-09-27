@@ -558,6 +558,16 @@ int Document::addEnvironmentTheme(const std::string& name, uint32_t defIndex) {
     return -1;
 }
 
+int Document::addSoundTheme(const std::string& name, std::string& error) {
+    if (!hasTerrain() || stroke_) { error = "no terrain, or a stroke is active"; return -1; }
+    try {
+        const int idx = level_->addSoundTheme(name);
+        soundListGrew_ = true;
+        ++terrainRev_;
+        return idx;
+    } catch (const std::exception& e) { error = e.what(); return -1; }
+}
+
 std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {
     if (!hasGameMap()) return std::nullopt;
     const TerrainState& t = liveTerrain();
@@ -677,6 +687,7 @@ bool Document::themesDirty() const {
 
 bool Document::terrainDirty() const {
     if (!terrain_ || !savedTerrain_) return false;
+    if (soundListGrew_) return true;
     if (terrain_ == savedTerrain_) return false;
     if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable || terrain_->cameraPassable != savedTerrain_->cameraPassable ||
         terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
@@ -775,6 +786,7 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
         if (!fs::exists(path)) albion::backups::markCreated(path);
         level_->save(path);
         savedTerrain_ = terrain_;
+        soundListGrew_ = false;
 
         // navigation: patch the retail quadtree for the cells whose walkable byte changed
         std::vector<std::pair<int, int>> changed;

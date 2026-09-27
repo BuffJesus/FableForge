@@ -818,6 +818,32 @@ void testFractal() {
     CHECK(doc.undo() && doc.terrain().heights[0] == 3.0f);
 }
 
+// Adding a sound name re-lays the .lev after the list: a 32x32 map with a generated
+// navigation tree keeps its cells and nodes, and every absolute offset follows.
+void testAddSoundTheme(const fs::path& dir) {
+    const fs::path base = writeSyntheticLev(dir / "sound32.lev", 32, 32, [](int x, int) { return float(x); });
+    const auto generated = forge::navmesh::generateTerrain(forge::lev::File::open(base));
+    { std::ofstream(base, std::ios::binary | std::ios::trunc).write(reinterpret_cast<const char*>(generated.levBytes.data()), std::streamsize(generated.levBytes.size())); }
+    const auto before = forge::lev::File::open(base);
+    auto after = before;
+    CHECK(after.addSoundTheme("SOUND_THEME_WOODLAND") == 1);
+    CHECK(after.addSoundTheme("SOUND_THEME_WOODLAND") == 1);          // found, not added twice
+    CHECK(after.addSoundTheme("SOUND_THEME_OCEAN") == 2);
+    const fs::path out = dir / "sound32_out.lev";
+    after.save(out);
+    const auto re = forge::lev::File::open(out);
+    CHECK((re.soundThemes() == std::vector<std::string>{"SOUND_THEME_WOODLAND", "SOUND_THEME_OCEAN"}));
+    CHECK(readAll(out).size() == readAll(base).size() + (4 + 20) + (4 + 17));
+    CHECK(re.heightAt(7, 3) == before.heightAt(7, 3) && re.walkableAt(5, 5) == before.walkableAt(5, 5));
+    const auto na = forge::navmesh::parseNavigation(before), nb = forge::navmesh::parseNavigation(re);
+    CHECK(na.sections.size() == nb.sections.size() && !nb.sections.empty());
+    for (size_t s = 0; s < na.sections.size() && s < nb.sections.size(); ++s)
+        CHECK(na.sections[s].nodes.size() == nb.sections[s].nodes.size() && na.sections[s].regionCount == nb.sections[s].regionCount);
+    const auto bytes = readAll(out);
+    CHECK(u32(bytes, re.navigationOffset()) == re.navSections()[0].offset);                 // the table's end
+    CHECK(u32(bytes, re.navSections().back().offset) == uint32_t(bytes.size()));            // the last section's end
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1385,6 +1411,7 @@ int main() {
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
     testFractal();
+    testAddSoundTheme(dir);
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);
