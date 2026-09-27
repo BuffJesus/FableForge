@@ -131,6 +131,27 @@ public:
     // The same against the terrain as last saved/deployed (the sculpt session's baseline).
     size_t reseatThingsSinceSave(float tolerance = 1.0f) { return savedTerrain_ ? reseatThings(*savedTerrain_, tolerance) : 0; }
     void setProperty(size_t index, const std::string& key, const std::string& value);
+
+    // ---- links between things: the vanilla editor's attach modes (FableWin
+    // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
+    // them -- a UID field on a component (or on the thing) naming another thing.
+    struct Link {
+        std::string ctc;       // component block ("" = a field of the thing itself)
+        std::string field;     // e.g. VillageUID
+        std::string label;     // e.g. "Village"
+        std::string wants;     // what the target should be, for the UI ("a village")
+        uint64_t target = 0;   // 0 = not linked
+        std::optional<size_t> targetIndex;   // the target in this map (nullopt: none, or another map)
+    };
+    // The link fields this thing carries (component present / field present), in a fixed order.
+    std::vector<Link> linksOf(size_t index) const;
+    // Does `target` fit the link (a village for VillageUID, a region entrance for
+    // EntranceConnectedToUID, a building for Home/WorkBuildingUID ...)? The vanilla
+    // editor offers only viable modes (GetViableAttachModesForThing).
+    bool linkTargetFits(const Link& link, size_t target) const;
+    // Sets the field to `targetUid` (0 clears). One undo step; false when the thing
+    // lacks that link.
+    bool setLink(size_t index, const std::string& ctc, const std::string& field, uint64_t targetUid);
     // Copy of a thing with a fresh UID and ScriptName NULL, inserted right
     // after the original. Returns the new index.
     size_t duplicate(size_t index);

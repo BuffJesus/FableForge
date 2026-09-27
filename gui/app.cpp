@@ -1635,6 +1635,7 @@ void App::drawViewport(float width) {
         terrainInput(origin, size);
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
+        drawLinkLines(origin, size);
         drawViewportOverlays(origin, size);
     }
     auto_.registerWidget("viewport");

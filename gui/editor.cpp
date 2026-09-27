@@ -288,11 +288,55 @@ bool App::selectedPivotScreen(float& x, float& y) const {
     return true;
 }
 
+std::string App::thingLabel(size_t index) const {
+    const auto s = doc_.summary(index);
+    return s.scriptName.empty() ? s.definition : s.scriptName + " (" + s.definition + ")";
+}
+
+// Lines from the selected thing to the things it links to (the vanilla editor's
+// DrawAttachModeLines): owner, village, home, exit -> entrance ...
+void App::drawLinkLines(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !documentLoaded() || selectedThing_ < 0) return;
+    editor::Frame from;
+    if (!doc_.frameOf(size_t(selectedThing_), from)) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    auto screen = [&](const editor::Frame& f, ImVec2& out) {
+        const float p[3] = {f.pos[0], f.pos[2] + 1.0f, -f.pos[1]};
+        float u, v;
+        if (!renderer_.project(p, u, v)) return false;
+        out = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
+        return true;
+    };
+    ImVec2 a;
+    if (!screen(from, a)) return;
+    for (const auto& l : doc_.linksOf(size_t(selectedThing_))) {
+        editor::Frame to;
+        ImVec2 b;
+        if (!l.targetIndex || !doc_.frameOf(*l.targetIndex, to) || !screen(to, b)) continue;
+        const ImU32 col = l.field == "VillageUID" ? IM_COL32(120, 200, 255, 220) : l.field == "EntranceConnectedToUID" ? IM_COL32(255, 170, 60, 220) : IM_COL32(200, 160, 255, 220);
+        dl->AddLine(a, b, col, theme::S(2.0f));
+        dl->AddCircleFilled(b, theme::S(4.0f), col);
+        dl->AddText(ImVec2((a.x + b.x) * 0.5f + theme::S(4), (a.y + b.y) * 0.5f), col, l.label.c_str());
+    }
+}
+
 int App::pickAt(float u, float v) {
     float o[3], d[3];
     renderer_.screenRay(u, v, o, d);
     float t;
     const int inst = renderer_.pick(o, d, t);
+    if (linkPick_.active) {
+        // link pick: the clicked thing becomes the target; the selection stays
+        linkPick_.active = false;
+        const int target = inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
+        if (target < 0 || selectedThing_ < 0 || target == selectedThing_) { pushLog("link: no target picked", 1); return -1; }
+        editor::Document::Link link;
+        for (const auto& l : doc_.linksOf(size_t(selectedThing_))) if (l.ctc == linkPick_.ctc && l.field == linkPick_.field) link = l;
+        if (!doc_.linkTargetFits(link, size_t(target))) { pushLog("link: " + linkPick_.label + " wants " + link.wants + "; " + thingLabel(size_t(target)) + " is not one", 1); return -1; }
+        if (doc_.setLink(size_t(selectedThing_), linkPick_.ctc, linkPick_.field, doc_.uidOf(size_t(target))))
+            pushLog("link: " + linkPick_.label + " -> " + thingLabel(size_t(target)), 0);
+        return target;
+    }
     if (inst < 0) { if (!ImGui::GetIO().KeyCtrl) selectThing(-1); return -1; }
     const int thing = renderer_.instance(size_t(inst)).thing;
     if (ImGui::GetIO().KeyCtrl) toggleSelect(thing); else selectThing(thing);
@@ -1317,7 +1361,8 @@ void App::editorShortcuts() {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) duplicateSelected();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && selectedThing_ >= 0) copySelection();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) pasteClipboard();
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && linkPick_.active) linkPick_.active = false;
+    else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
     if (ImGui::IsKeyPressed(ImGuiKey_End) && selectedThing_ >= 0) snapSelectedToGround();
 }
 
@@ -1731,6 +1776,34 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 }
                 auto_.registerWidget("combo_village");
             }
+        }
+        // the other links (owner, home, work, exit -> entrance, trigger -> receptor ...)
+        const auto links = doc_.linksOf(size_t(selectedThing_));
+        bool header = false;
+        for (const auto& l : links) {
+            if (l.field == "VillageUID") continue;   // the combo above
+            if (!header) { ImGui::Dummy(ImVec2(0, S(4))); theme::label("Links"); header = true; }
+            ImGui::PushID(l.field.c_str());
+            const bool picking = linkPick_.active && linkPick_.field == l.field && linkPick_.ctc == l.ctc;
+            const std::string target = picking ? std::string("click a thing in the view  (Esc cancels)")
+                                     : l.target == 0 ? std::string("none")
+                                     : l.targetIndex ? thingLabel(*l.targetIndex)
+                                     : "uid " + std::to_string(l.target) + " (not on this map)";
+            const float btn = S(44), x = S(22);
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", l.label.c_str());
+            ImGui::PushFont(fontSmall_);
+            if (ImGui::Selectable(target.c_str(), false, 0, ImVec2(cardInner - btn - x - S(12), 0)) && l.targetIndex) selectThing(int(*l.targetIndex));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s%s%s)\nwants %s%s", l.label.c_str(), l.ctc.empty() ? "" : l.ctc.c_str(), l.ctc.empty() ? "" : ".", l.field.c_str(), l.wants.c_str(), l.targetIndex ? "\nclick to select the target" : "");
+            ImGui::PopFont();
+            ImGui::SameLine(cardInner - btn - x - S(4));
+            if (theme::ghostButton(picking ? "..." : "Pick", ImVec2(btn, S(22)))) { linkPick_ = {l.ctc, l.field, l.label, !picking}; }
+            auto_.registerWidget(("btn_link_pick_" + l.field).c_str());
+            ImGui::SameLine(0, S(4));
+            if (theme::ghostButton("x", ImVec2(x, S(22))) && l.target) {
+                doc_.setLink(size_t(selectedThing_), l.ctc, l.field, 0);
+                pushLog("link: " + l.label + " cleared", 0);
+            }
+            ImGui::PopID();
         }
     }
     theme::endCard();

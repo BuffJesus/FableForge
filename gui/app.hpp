@@ -374,6 +374,10 @@ private:
     // the vanilla editor's Things tree (thing type -> group -> def)
     std::vector<terrainexport::Context::GroupedDefinition> defList_;
     std::string placeDef_;           // the def the Place button puts down
+    // link pick mode: the next viewport click on a thing sets this link of the selection
+    struct LinkPick { std::string ctc, field, label; bool active = false; } linkPick_;
+    void drawLinkLines(const ImVec2& origin, const ImVec2& size);
+    std::string thingLabel(size_t index) const;
     std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)
     void drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height);
     char thingSearch_[64] = {};

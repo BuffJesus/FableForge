@@ -662,6 +662,44 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
 }
 
+// Links between things (vanilla attach modes): a villager's village / owner / home,
+// listed, validated against the target's kind, set, cleared and undone.
+void testThingLinks() {
+    namespace ed = albion::editor;
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing AICreature;\r\nUID 100;\r\nDefinitionType \"CREATURE_VILLAGER\";\r\nScriptName NULL;\r\n"
+        "StartCTCVillageMember;\r\nVillageUID 0;\r\nEndCTCVillageMember;\r\n"
+        "StartCTCOwnedEntity;\r\nVersionNumber 1;\r\nEndCTCOwnedEntity;\r\n"
+        "HomeBuildingUID 0;\r\nEndThing;\r\n\r\n"
+        "NewThing Village;\r\nUID 200;\r\nDefinitionType \"VILLAGE_OAKVALE\";\r\nScriptName NULL;\r\n"
+        "StartCTCVillage;\r\nEndCTCVillage;\r\nEndThing;\r\n\r\n"
+        "NewThing Building;\r\nUID 300;\r\nDefinitionType \"BUILDING_HOUSE\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Links", tng, err));
+    auto links = doc.linksOf(0);
+    CHECK(links.size() == 3);
+    CHECK(links[0].field == "VillageUID" && links[0].target == 0 && !links[0].targetIndex);
+    CHECK(links[1].field == "OwnerUID" && links[1].target == 0);   // component present, field absent = 0
+    CHECK(links[2].field == "HomeBuildingUID" && links[2].ctc.empty());
+    CHECK(doc.linksOf(2).empty());
+    // only a village fits VillageUID, only a building fits HomeBuildingUID
+    CHECK(doc.linkTargetFits(links[0], 1) && !doc.linkTargetFits(links[0], 2));
+    CHECK(doc.linkTargetFits(links[2], 2) && !doc.linkTargetFits(links[2], 1));
+    CHECK(doc.setLink(0, "CTCVillageMember", "VillageUID", 200));
+    CHECK(doc.setLink(0, "CTCOwnedEntity", "OwnerUID", 300));        // inserted inside the block
+    CHECK(doc.setLink(0, "", "HomeBuildingUID", 300));
+    links = doc.linksOf(0);
+    CHECK(links[0].target == 200 && links[0].targetIndex == std::optional<size_t>(1));
+    CHECK(links[1].target == 300 && links[2].targetIndex == std::optional<size_t>(2));
+    CHECK(doc.text().find("OwnerUID 300;\r\nEndCTCOwnedEntity;") != std::string::npos);
+    CHECK(!doc.setLink(2, "CTCVillageMember", "VillageUID", 200));   // the building has no such link
+    CHECK(doc.undo() && doc.linksOf(0)[2].target == 0);
+    CHECK(doc.setLink(0, "CTCVillageMember", "VillageUID", 0) && doc.linksOf(0)[0].target == 0);
+}
+
 // A map of another world (vanilla File > Load World): the document reads the .tng
 // beside the .lev, takes its origin/slot from that .wld, and every save -- objects,
 // "deploy", terrain -- goes back to those two files, never into FinalAlbion\.
@@ -1109,6 +1147,7 @@ int main() {
     testTerrainEditing(lev, dir);
     testThemeToolsAndPaths(dir);
     testExternalWorld(dir);
+    testThingLinks();
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();

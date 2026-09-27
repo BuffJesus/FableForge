@@ -969,6 +969,75 @@ void Document::setProperty(size_t index, const std::string& key, const std::stri
     ++revision_;
 }
 
+namespace {
+struct LinkKind { const char* ctc; const char* field; const char* label; const char* wants; };
+// the UID links retail .tng files use (counted over the dev tree's FinalAlbion: OwnerUID 2434,
+// VillageUID 2347, EntranceConnectedToUID 200, ReceptorUID 76, route 46, home/work/wife 4-6)
+constexpr LinkKind kLinkKinds[] = {
+    {"CTCVillageMember", "VillageUID", "Village", "a village"},
+    {"CTCOwnedEntity", "OwnerUID", "Owned by", "any thing"},
+    {"", "HomeBuildingUID", "Lives in", "a building"},
+    {"", "WorkBuildingUID", "Works in", "a building"},
+    {"CTCBuyableHouse", "WifeLivingHereUID", "Wife living here", "a creature"},
+    {"CTCActionUseScriptedHook", "EntranceConnectedToUID", "Region exit to entrance", "a region entrance"},
+    {"CTCActivationTrigger", "ReceptorUID", "Activates", "an activation receptor"},
+    {"CTCPreCalculatedNavigationRoute", "ThingToCalculateRouteToUID", "Route to", "any thing"},
+};
+bool hasCtcPrefix(const forge::tng::Thing& t, std::string_view prefix) {
+    for (const auto& b : t.ctcBlocks)
+        if (b.name.compare(0, prefix.size(), prefix) == 0) return true;
+    return false;
+}
+} // namespace
+
+std::vector<Document::Link> Document::linksOf(size_t index) const {
+    std::vector<Link> out;
+    if (index >= file_.things().size()) return out;
+    const auto& t = file_.things()[index];
+    for (const auto& k : kLinkKinds) {
+        std::optional<std::string> value;
+        if (k.ctc[0]) {
+            const auto* block = t.findCtc(k.ctc);
+            if (!block) continue;
+            value = std::string("0");
+            for (const auto& p : block->properties)
+                if (lower(p.key) == lower(k.field)) { value = p.value; break; }
+        } else {
+            value = t.find(k.field);
+            if (!value) continue;
+        }
+        Link l{k.ctc, k.field, k.label, k.wants, 0, std::nullopt};
+        try { l.target = std::stoull(*value); } catch (...) { l.target = 0; }
+        if (l.target) l.targetIndex = indexOfUid(l.target);
+        out.push_back(std::move(l));
+    }
+    return out;
+}
+
+bool Document::linkTargetFits(const Link& link, size_t target) const {
+    if (target >= file_.things().size()) return false;
+    const auto& t = file_.things()[target];
+    if (link.field == "VillageUID") return t.findCtc("CTCVillage") != nullptr;
+    if (link.field == "EntranceConnectedToUID") return t.findCtc("CTCDRegionEntrance") != nullptr;
+    if (link.field == "ReceptorUID") return hasCtcPrefix(t, "CTCActivationReceptor");
+    if (link.field == "HomeBuildingUID" || link.field == "WorkBuildingUID") return lower(t.type) == "building";
+    if (link.field == "WifeLivingHereUID") return lower(t.type) == "aicreature" || lower(t.type) == "creature";
+    return true;
+}
+
+bool Document::setLink(size_t index, const std::string& ctc, const std::string& field, uint64_t targetUid) {
+    if (index >= file_.things().size()) return false;
+    const auto links = linksOf(index);
+    const auto hit = std::find_if(links.begin(), links.end(), [&](const Link& l) { return l.ctc == ctc && l.field == field; });
+    if (hit == links.end()) return false;
+    if (hit->target == targetUid) return true;
+    pushUndo();
+    if (ctc.empty()) file_.setThingProperty(index, field, std::to_string(targetUid));
+    else file_.setCtcProperty(index, ctc, field, std::to_string(targetUid));
+    ++revision_;
+    return true;
+}
+
 size_t Document::duplicate(size_t index) {
     if (index >= file_.things().size()) throw std::out_of_range("duplicate: bad thing index");
     pushUndo();
