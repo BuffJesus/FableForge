@@ -370,7 +370,9 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     device_->CreateBuffer(&cb, nullptr, &ocbuffer_);
 
     D3D11_SAMPLER_DESC sd = {};
-    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    // anisotropic: the ground is mostly seen at grazing angles, where trilinear blurs
+    sd.Filter = D3D11_FILTER_ANISOTROPIC;
+    sd.MaxAnisotropy = 8;
     sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.MaxLOD = D3D11_FLOAT32_MAX;
     device_->CreateSamplerState(&sd, &sampler_);
@@ -888,15 +890,18 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool fr
     indexCount_ = uint32_t(scene.indices.size());
 
     if (scene.hasAlbedo && scene.albedo.width && scene.albedo.height) {
+        // The ground albedo is baked at up to 16 texels per cell; without a mip chain the
+        // distant ground aliases and the minifying view shimmers. Full chain, GPU-generated.
         D3D11_TEXTURE2D_DESC td = {};
         td.Width = scene.albedo.width; td.Height = scene.albedo.height;
-        td.MipLevels = 1; td.ArraySize = 1;
+        td.MipLevels = 0; td.ArraySize = 1;
         td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
-        td.Usage = D3D11_USAGE_IMMUTABLE; td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        D3D11_SUBRESOURCE_DATA init = {scene.albedo.rgba.data(), scene.albedo.width * 4, 0};
+        td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        td.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
         ID3D11Texture2D* tex = nullptr;
-        if (SUCCEEDED(device_->CreateTexture2D(&td, &init, &tex))) {
-            device_->CreateShaderResourceView(tex, nullptr, &albedo_);
+        if (SUCCEEDED(device_->CreateTexture2D(&td, nullptr, &tex))) {
+            ctx_->UpdateSubresource(tex, 0, nullptr, scene.albedo.rgba.data(), scene.albedo.width * 4, 0);
+            if (SUCCEEDED(device_->CreateShaderResourceView(tex, nullptr, &albedo_))) ctx_->GenerateMips(albedo_);
             tex->Release();
         }
     }

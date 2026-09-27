@@ -683,7 +683,13 @@ private:
     std::string previewPendingName_;
     terrainexport::Scene previewScene_;   // kept for stats
     bool reloadWhenContextReady_ = false;
-    int previewTexels_ = 4;
+    // Viewport ground albedo density: the engine tiles 256 px theme textures every 8
+    // units (32 texels per cell); 4 per cell read as the lowest mip. As dense as a
+    // 4096 px texture allows, 4..16 per cell (HookCoast, the largest, bakes in ~1 s).
+    static int previewTexelsFor(int cellsX, int cellsY) {
+        const int longest = std::max(std::max(cellsX, cellsY), 1);
+        return std::clamp(4096 / longest, 4, 16);
+    }
     struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; bool thingsOnly = false; };
     bool previewThings_ = true;
     size_t thingInstances_ = 0;

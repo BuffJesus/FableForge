@@ -676,9 +676,8 @@ void App::startPreviewLoad() {
     const bool textured = ctx_.ready();
     reloadWhenContextReady_ = !textured;
     const te::Context* ctx = textured ? &ctx_ : nullptr;
-    const int texels = previewTexels_;
     const float gain = settings_.gain;
-    previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, texels, gain]() {
+    previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, gain]() {
         PreviewResult r; r.name = entry.key; r.textured = textured;
         std::string err;
         const std::string lev = resolveLevPath(entry, err);
@@ -687,7 +686,7 @@ void App::startPreviewLoad() {
             const auto file = forge::lev::File::open(lev);
             te::Options o;
             o.textures = textured;
-            o.texelsPerCell = texels;
+            o.texelsPerCell = previewTexelsFor(file.cellsX(), file.cellsY());
             o.gain = gain;
             o.up = te::UpAxis::Y;
             if (ctx) { o.gameRoot = ctx->gameRoot(); o.mapName = entry.key.rfind("file:", 0) == 0 ? std::string() : entry.name; }
@@ -1299,11 +1298,13 @@ void App::drawMenuBar() {
     // right side: install status (click for the setup check), ?, Install...
     const float barW = ImGui::GetWindowWidth();
     const float btnW = S(84.0f), helpW = S(26.0f), gap = S(8.0f);
-    const float btnH = ImGui::GetFrameHeight() - S(6);
+    const float barH = ImGui::GetCurrentWindow()->MenuBarHeight;   // fixed at Begin, not by the padding pushed here
+    const float btnH = barH - S(6);
     // a redirected save root (scripted runs, scratch trees) is the one thing a writer
     // must not miss: every write goes there, not into the install shown
     const bool redirected = !saveRoot_.empty() && saveRoot_ != installPath_;
     std::string status = !installValid_ ? "no install selected" : redirected ? "writes -> " + saveRoot_ : installPath_;
+    const float menuLineH = ImGui::GetTextLineHeight();
     ImGui::PushFont(fontSmall_);
     const float statusMax = std::max(S(120.0f), barW - ImGui::GetCursorPosX() - btnW - helpW - gap * 4 - S(24));
     if (ImGui::CalcTextSize(status.c_str()).x > statusMax) {
@@ -1313,7 +1314,9 @@ void App::drawMenuBar() {
     const float statusW = ImGui::CalcTextSize(status.c_str()).x;
     const float rowY = ImGui::GetCursorPosY();
     ImGui::SetCursorPosX(barW - statusW - btnW - helpW - gap * 3);
-    ImGui::SetCursorPosY(rowY + (ImGui::GetFrameHeight() - ImGui::GetTextLineHeight()) * 0.5f);
+    // the menu bar's cursor already sits inside the frame padding: centre the small
+    // font on the regular-size menu labels
+    ImGui::SetCursorPosY(rowY + (menuLineH - ImGui::GetTextLineHeight()) * 0.5f);
     const ImVec2 sp = ImGui::GetCursorScreenPos();
     const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn)) : theme::col(theme::Error);
     ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(sp.x - S(10), sp.y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
@@ -1326,12 +1329,12 @@ void App::drawMenuBar() {
     }
     if (ImGui::IsItemClicked()) setupOpen_ = true;
     ImGui::PopFont();
-    ImGui::SetCursorPosY(rowY + S(3));
+    ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetWindowPos().y + (barH - btnH) * 0.5f));
     ImGui::SetCursorPosX(barW - btnW - helpW - gap * 2);
     if (theme::ghostButton("?", ImVec2(helpW, btnH))) helpOpen_ = !helpOpen_;
     auto_.registerWidget("btn_help");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keyboard and mouse cheat-sheet  (? or F1)");
-    ImGui::SetCursorPosY(rowY + S(3));
+    ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetWindowPos().y + (barH - btnH) * 0.5f));
     ImGui::SetCursorPosX(barW - btnW - gap);
     if (theme::ghostButton("Install...", ImVec2(btnW, btnH))) changeInstall();
     auto_.registerWidget("btn_change_install");

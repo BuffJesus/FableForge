@@ -555,9 +555,9 @@ void App::startThemeRebake() {
     if (!found) return;
     const MapEntry entry = *found;
     const te::Context* ctx = &ctx_;
-    const int texels = previewTexels_;
     const float gain = settings_.gain;
     auto level = std::make_shared<forge::lev::File>(*doc_.level());   // snapshot: strokes may continue meanwhile
+    const int texels = previewTexelsFor(level->cellsX(), level->cellsY());
     previewFuture_ = std::async(std::launch::async, [entry, ctx, texels, gain, level]() {
         PreviewResult r; r.name = entry.key; r.textured = true;
         try {
