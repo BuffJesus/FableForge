@@ -278,6 +278,17 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
             if (mouseW.x >= float(x) && mouseW.x < float(x + b->w) && mouseW.y >= float(y) && mouseW.y < float(y + b->h)) worldHover_ = b->name;
         }
 
+    // double-click a map: open it in the editor (the vanilla world map's "Locked for
+    // editing" toggle takes a map from the overview into editing the same way)
+    if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !worldHover_.empty() && worldPending_.empty()) {
+        const std::string name = worldHover_;
+        worldDragging_ = false;
+        setWorldMode(false);
+        selectMap(name);
+        setEditMode(true);
+        pushLog("world: opened " + name + " for editing", 0);
+        return;
+    }
     // drag a box
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !worldPanning_) {
         if (!worldHover_.empty()) {
