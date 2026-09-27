@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "forge/lev.hpp"
+#include "forge/terrain.hpp"
 #include "forge/stb.hpp"
 #include "forge/navmesh.hpp"
 #include "forge/navpatch.hpp"
@@ -600,6 +601,67 @@ void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
     CHECK(savedSlot1);
 }
 
+// The vanilla Themes-dialog tools (eyedropper, Replace pen, Flood Replace, Replace
+// All) and the Height Toolbox's Draw Paths, on a 9x9-cell synthetic map: theme 1 in
+// two blocks split by a theme-2 band, heights = x + 10 y.
+void testThemeToolsAndPaths(const fs::path& dir) {
+    namespace ed = albion::editor;
+    // the pure blend swap: a duplicate after the swap merges, the sum stays 255
+    {
+        const auto b = forge::terrain::replaceThemeInBlend({{1, 3, 0}, {200, 55, 0}}, 1, 3);
+        CHECK(b.indices[0] == 3 && b.strengths[0] == 255 && b.strengths[1] == 0 && b.strengths[2] == 0);
+        const auto same = forge::terrain::replaceThemeInBlend({{4, 5, 6}, {100, 100, 55}}, 1, 3);
+        CHECK(same.indices[0] == 4 && same.strengths[0] == 100 && same.strengths[2] == 55);
+    }
+    const fs::path path = writeSyntheticLev(dir / "themes.lev", 8, 8, [](int x, int y) { return float(x + 10 * y); });
+    {
+        auto lev = forge::lev::File::open(path);
+        for (int y = 0; y < lev.cellsY(); ++y)
+            for (int x = 0; x < lev.cellsX(); ++x) {
+                const uint8_t slot = (x >= 3 && x <= 5) ? 2 : 1;
+                lev.setThemeBlendAt(x, y, {slot, 0, 0}, {255, 0, 0});
+            }
+        lev.save(path);
+    }
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Themes", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const int cx = doc.cellsX();
+    auto themeAt = [&](int x, int y) { return doc.terrain().themeIndex[size_t(y) * cx + x][0]; };
+    // eyedropper
+    CHECK(doc.dominantThemeAt(1.5f, 1.5f) == std::optional<uint8_t>(1));
+    CHECK(doc.dominantThemeAt(4.2f, 7.9f) == std::optional<uint8_t>(2));
+    CHECK(!doc.dominantThemeAt(-1.0f, 2.0f));
+    // flood replace stays on the clicked patch; the band blocks it
+    const uint64_t rev0 = doc.themeRevision();
+    const size_t flooded = doc.replaceTheme(1, 7, ed::Document::ReplaceScope::Connected, 1.5f, 1.5f);
+    CHECK(flooded == size_t(3 * doc.cellsY()));
+    CHECK(themeAt(0, 0) == 7 && themeAt(2, 8) == 7 && themeAt(4, 4) == 2 && themeAt(7, 4) == 1);
+    CHECK(doc.themeRevision() == rev0 + 1 && doc.themesDirty());
+    CHECK(doc.level()->themeIndexAt(0, 0, 0) == 7);                  // mirrored into the .lev
+    CHECK(doc.replaceTheme(1, 7, ed::Document::ReplaceScope::Connected, 4.5f, 4.5f) == 0);   // clicked cell lacks theme 1
+    // replace all reaches the far block; one undo step each
+    CHECK(doc.replaceTheme(1, 7, ed::Document::ReplaceScope::All) == size_t(3 * doc.cellsY()));
+    CHECK(themeAt(8, 8) == 7);
+    CHECK(doc.undo() && themeAt(8, 8) == 1 && themeAt(0, 0) == 7);
+    CHECK(doc.undo() && themeAt(0, 0) == 1);
+    // the Replace pen: only cells under the brush
+    ed::TerrainBrush b;
+    b.mode = ed::TerrainBrush::Mode::ReplaceTheme; b.replaceFrom = 2; b.themeIndex = 9; b.x = 4.5f; b.y = 4.5f; b.radius = 1.0f;
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    CHECK(themeAt(4, 4) == 9 && themeAt(4, 8) == 2 && themeAt(0, 0) == 1);
+    CHECK(doc.undo() && themeAt(4, 4) == 2);
+    // Draw Paths: vertices within the radius of (1,1)->(6,1) take the interpolated end heights (11 -> 16)
+    auto h = [&](int x, int y) { return doc.terrain().heights[size_t(y) * cx + x]; };
+    const size_t pathed = doc.drawPath(1.0f, 1.0f, 6.0f, 1.0f, 1.0f);
+    CHECK(pathed > 0);
+    CHECK(std::fabs(h(3, 2) - 13.0f) < 1e-4f && std::fabs(h(3, 0) - 13.0f) < 1e-4f && std::fabs(h(6, 1) - 16.0f) < 1e-4f);
+    CHECK(std::fabs(h(3, 4) - 43.0f) < 1e-4f);                          // outside the radius
+    CHECK(std::fabs(doc.level()->heightAt(3, 2) - 13.0f) < 1e-4f);
+    CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
+}
+
 // A walkable-paint stroke patches the level's navigation quadtree for the
 // touched cells only: a 32x32 synthetic map gets a generated tree, one cell is
 // painted blocked and one opened, and the saved .lev's tree must drop / gain
@@ -1008,6 +1070,7 @@ int main() {
     testWater(dir);
     testLevelDocument();
     testTerrainEditing(lev, dir);
+    testThemeToolsAndPaths(dir);
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();

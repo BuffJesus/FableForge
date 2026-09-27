@@ -397,8 +397,14 @@ public:
 private:
     void drawRuleNotice(const char* key, float width);
     // terrain tool (gizmoOp_ == 4)
-    int terrainMode_ = 0;            // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme
-    int paintTheme_ = 0;             // LEV palette slot for mode 6
+    // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme,
+    // 7 replace theme (pen), 8 flood replace (click), 9 draw path (drag start -> end)
+    int terrainMode_ = 0;
+    int paintTheme_ = 0;             // LEV palette slot painted (6) / put in (7, 8)
+    int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
+    bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
+    float pathStart_[2] = {0, 0};
+    void paletteCombo(const char* id, int& slot, float width);
     uint64_t syncedThemeRev_ = 0;
     bool rebakePending_ = false;     // a theme stroke ended: re-bake the ground albedo from the LEV
     void startThemeRebake();

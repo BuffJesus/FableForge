@@ -104,6 +104,12 @@ float sampleMaterialWeight(const std::vector<float>& raster,
 // three-slot palette. If absent, the weakest current slot is recycled.
 ThemeBlend paintThemeBlend(ThemeBlend current, uint8_t themeIndex, float opacity);
 
+// Every slot holding `from` takes `to` (the vanilla editor's theme Replace /
+// Flood Replace, FableWin CEditWorldMap::EditReplaceEngineThemeUndoable). Slots
+// that then share an index merge into the first, strengths summed, so the byte
+// sum stays 255; a merged-away slot keeps the index at strength 0.
+ThemeBlend replaceThemeInBlend(ThemeBlend blend, uint8_t from, uint8_t to);
+
 struct ThemeBrush {
     float centerX = 0.0f;
     float centerY = 0.0f;

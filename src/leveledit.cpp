@@ -396,6 +396,24 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
+    if (brush.mode == Mode::ReplaceTheme) {
+        // a hard swap under the pen (cell centres inside the radius), mirrored into the level like Theme
+        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
+        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
+                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
+                const size_t i = size_t(y) * cx + x;
+                const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
+                const auto next = forge::terrain::replaceThemeInBlend(blend, brush.replaceFrom, brush.themeIndex);
+                if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
+                working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
+                level_->setThemeBlendAt(x, y, next.indices, next.strengths);
+            }
+        ++terrainRev_;
+        return;
+    }
     forge::terrain::Brush b;
     b.centerX = brush.x; b.centerY = brush.y; b.radius = brush.radius;
     switch (brush.mode) {
@@ -441,6 +459,88 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
     ++revision_;
     ++terrainRev_;
     return true;
+}
+
+std::optional<uint8_t> Document::dominantThemeAt(float x, float y) const {
+    if (!hasTerrain()) return std::nullopt;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    const int ix = int(std::floor(x)), iy = int(std::floor(y));
+    if (ix < 0 || iy < 0 || ix >= cx || iy >= cy) return std::nullopt;
+    const TerrainState& t = liveTerrain();
+    const size_t i = size_t(iy) * cx + ix;
+    int best = 0;
+    for (int k = 1; k < 3; ++k)
+        if (t.themeStrength[i][k] > t.themeStrength[i][best]) best = k;
+    return t.themeIndex[i][best];
+}
+
+size_t Document::replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x, float y) {
+    if (!hasTerrain() || stroke_ || from == to) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    auto next = std::make_unique<TerrainState>(*terrain_);
+    auto holds = [&](size_t i) {
+        for (int k = 0; k < 3; ++k)
+            if (next->themeIndex[i][k] == from && next->themeStrength[i][k] > 0) return true;
+        return false;
+    };
+    std::vector<uint8_t> hit(size_t(cx) * cy, 0);
+    if (scope == ReplaceScope::All) {
+        for (size_t i = 0; i < hit.size(); ++i) hit[i] = holds(i) ? 1 : 0;
+    } else {
+        const int sx = int(std::floor(x)), sy = int(std::floor(y));
+        if (sx < 0 || sy < 0 || sx >= cx || sy >= cy || !holds(size_t(sy) * cx + sx)) return 0;
+        std::vector<std::pair<int, int>> todo{{sx, sy}};
+        hit[size_t(sy) * cx + sx] = 1;
+        while (!todo.empty()) {
+            const auto [px, py] = todo.back(); todo.pop_back();
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const int nx = px + dx, ny = py + dy;
+                    if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= cx || ny >= cy) continue;
+                    const size_t n = size_t(ny) * cx + nx;
+                    if (hit[n] || !holds(n)) continue;
+                    hit[n] = 1;
+                    todo.push_back({nx, ny});
+                }
+        }
+    }
+    size_t changed = 0;
+    for (size_t i = 0; i < hit.size(); ++i) {
+        if (!hit[i]) continue;
+        const auto blend = forge::terrain::replaceThemeInBlend({next->themeIndex[i], next->themeStrength[i]}, from, to);
+        next->themeIndex[i] = blend.indices; next->themeStrength[i] = blend.strengths;
+        ++changed;
+    }
+    if (!changed) return 0;
+    pushUndo();
+    terrain_ = std::shared_ptr<const TerrainState>(next.release());
+    hf_.reset();
+    writeTerrainToLevel();
+    ++revision_;
+    ++terrainRev_;
+    ++themeRev_;
+    return changed;
+}
+
+size_t Document::drawPath(float x0, float y0, float x1, float y1, float radius) {
+    if (!hasTerrain() || stroke_ || !(radius > 0)) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    const auto h0 = sampleHeight(*terrain_, cx, cy, x0, y0), h1 = sampleHeight(*terrain_, cx, cy, x1, y1);
+    if (!h0 || !h1) return 0;
+    const float sx = x1 - x0, sy = y1 - y0, len2 = sx * sx + sy * sy;
+    const int vx0 = std::max(0, int(std::floor(std::min(x0, x1) - radius))), vx1 = std::min(cx - 1, int(std::ceil(std::max(x0, x1) + radius)));
+    const int vy0 = std::max(0, int(std::floor(std::min(y0, y1) - radius))), vy1 = std::min(cy - 1, int(std::ceil(std::max(y0, y1) + radius)));
+    std::vector<VertexHeight> edits;
+    for (int y = vy0; y <= vy1; ++y)
+        for (int x = vx0; x <= vx1; ++x) {
+            const float t = len2 > 0 ? std::clamp(((float(x) - x0) * sx + (float(y) - y0) * sy) / len2, 0.0f, 1.0f) : 0.0f;
+            const float dx = float(x) - (x0 + sx * t), dy = float(y) - (y0 + sy * t);
+            if (dx * dx + dy * dy > radius * radius) continue;
+            const float h = *h0 + (*h1 - *h0) * t;
+            if (terrain_->heights[size_t(y) * cx + x] != h) edits.push_back({x, y, h});
+        }
+    if (edits.empty() || !setVertexHeights(edits)) return 0;
+    return edits.size();
 }
 
 bool Document::themesDirty() const {

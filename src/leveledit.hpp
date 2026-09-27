@@ -64,12 +64,15 @@ struct TerrainState {
 };
 
 struct TerrainBrush {
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme };
+    // ReplaceTheme: the vanilla Themes dialog's Replace pen -- under the brush,
+    // `replaceFrom` becomes `themeIndex` in every slot (no blending)
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
     float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth/theme)
-    uint8_t themeIndex = 0;    // Theme: LEV palette slot to paint
+    uint8_t themeIndex = 0;    // Theme / ReplaceTheme: LEV palette slot to paint
+    uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
 };
 
 struct ThingSummary {
@@ -228,6 +231,20 @@ public:
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
+    // Ground-theme tools of the vanilla editor's Themes dialog (FableWin, see
+    // docs/VANILLA_EDITOR_INVENTORY.md 5.3). Eyedropper: the strongest slot of
+    // the cell under a map-local point (EditGetMaxThemeAt); nullopt off the map.
+    std::optional<uint8_t> dominantThemeAt(float x, float y) const;
+    // Flood Replace (EditFloodReplaceEngineThemeUndoable): an 8-neighbour flood
+    // from the cell under (x, y) over the cells holding `from`, replacing it with
+    // `to`. All: every cell of the map (Replace All; not in vanilla). One undo
+    // step; returns the cells changed (0 = nothing to do, no undo step).
+    enum class ReplaceScope { Connected, All };
+    size_t replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x = 0, float y = 0);
+    // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
+    // `radius` of the segment takes the height interpolated between the ground
+    // at its two ends. One undo step; returns the vertices changed.
+    size_t drawPath(float x0, float y0, float x1, float y1, float radius);
     // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
     // map). Painting is limited to it, so any ENGINE_THEME of the game can be
     // added to a free slot: returns the slot (the existing one when the name is

@@ -301,6 +301,18 @@ size_t applyBrush(Heightfield& field, const Brush& brush) {
     return changed;
 }
 
+ThemeBlend replaceThemeInBlend(ThemeBlend blend, uint8_t from, uint8_t to) {
+    for (auto& index : blend.indices)
+        if (index == from) index = to;
+    for (int i = 0; i < 3; ++i)
+        for (int j = i + 1; j < 3; ++j)
+            if (blend.indices[j] == blend.indices[i] && blend.strengths[j] != 0) {
+                blend.strengths[i] = static_cast<uint8_t>(std::min(255u, unsigned(blend.strengths[i]) + unsigned(blend.strengths[j])));
+                blend.strengths[j] = 0;
+            }
+    return blend;
+}
+
 ThemeBlend paintThemeBlend(ThemeBlend current, uint8_t themeIndex, float opacity) {
     if (!std::isfinite(opacity)) throw std::invalid_argument("terrain: paint opacity must be finite");
     opacity = std::clamp(opacity, 0.0f, 1.0f);
