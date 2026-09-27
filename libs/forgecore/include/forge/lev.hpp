@@ -8,14 +8,24 @@
 //                      sub-version, 8 or 9), u32 uidLo, u32 uidHi,
 //                      i32 width, i32 height, u8 flag
 //   256 ground themes: char name[128] + u32 value
-//   u32 version, u32 themeCount, u8 palette[33792],
+//   u32 fileVersion, u32 soundCount, 256 atmos themes (char name[128] + u32
+//     value: the ENVIRONMENT themes painted per game-map cell),
 //   (sub-version 9 only) u32 extra,
-//   (themeCount-1) x { u32 len, char name[len] } theme strings,
-//   cells: (height+1)*(width+1) x 21B — float heightRaw at +5 (world height =
-//     raw * 2048), theme indices at +10..12, slot-0/1 strengths at +13..14
-//     (slot 2 is the implicit remainder),
-//     walkable byte at +15,
-//   opaque data up to navOffset, then navigation sections.
+//   (soundCount-1) x { u32 len, char name[len] } SOUND_THEME names (index 0 =
+//     the implicit NULL),
+//   cells: (height+1)*(width+1) x 21B -- u32 21 + u8 7 record header, float
+//     heightRaw at +5 (world height = raw * 2048), theme indices at +10..12,
+//     slot-0/1 strengths at +13..14 (slot 2 is the implicit remainder), walkable
+//     +15, camera-passable +16, old sound (fileVersion < 3) +17, shore point +19,
+//     preferred path +20,
+//   (fileVersion > 1) game-map grid: (width/4)*(height/4) x 11B CGameMapCell,
+//     one per 4x4 height cells -- u32 11 + u8 1 header, atmos slots +5..7,
+//     atmos strengths +8..9 (slot 2 the remainder), sound index +10 -- ending
+//     exactly at obsOffset,
+//   obstacle data up to navOffset, then navigation sections.
+// The atmos palette, sound list and game-map grid: FableWin CMap::LoadFromFile
+// 0x022327b0 / SaveToFile 0x02234c60, CMap::Get/SetSoundAt 0x02238d20/0x02238d90,
+// PDB CGameMapCell (checked over the dev tree's 404 levels).
 
 #include <array>
 #include <cstdint>
@@ -77,7 +87,24 @@ public:
 
     uint64_t uid() const { return uid_; }
     const std::vector<GroundTheme>& groundThemes() const { return groundThemes_; }
+    // The SOUND_THEME names of the game-map grid (index i+1 in a cell; 0 = none).
     const std::vector<std::string>& themes() const { return themes_; }
+    const std::vector<std::string>& soundThemes() const { return themes_; }
+    // The 256-slot atmos (ENVIRONMENT theme) palette; a slot named "" is unused.
+    const std::vector<GroundTheme>& atmosThemes() const { return atmosThemes_; }
+    // Name a free / existing atmos slot (patches the preserved bytes, size unchanged).
+    void setAtmosTheme(size_t slot, const std::string& name, uint32_t value);
+
+    // --- the game-map grid (environment + sound themes, one cell per 4x4) ---
+    bool hasGameMap() const { return gameMapOffset_ != 0; }
+    int gameMapWidth() const { return width_ / 4; }
+    int gameMapHeight() const { return height_ / 4; }
+    struct AtmosBlend { std::array<uint8_t, 3> indices{}; std::array<uint8_t, 3> strengths{255, 0, 0}; };
+    AtmosBlend atmosAt(int gx, int gy) const;
+    // strengths must sum to 255 (slot 2 is stored as the remainder)
+    void setAtmosAt(int gx, int gy, const AtmosBlend& blend);
+    uint8_t soundAt(int gx, int gy) const;         // 0 = none, else soundThemes()[i - 1]
+    void setSoundAt(int gx, int gy, uint8_t index);
     const std::vector<NavSectionInfo>& navSections() const { return navSections_; }
     const std::string& source() const { return source_; }
     uint32_t navigationOffset() const { return navOffset_; }
@@ -135,6 +162,11 @@ private:
     uint32_t navOffset_ = 0;
     std::vector<GroundTheme> groundThemes_;
     std::vector<std::string> themes_;
+    std::vector<GroundTheme> atmosThemes_;
+    size_t atmosPaletteOffset_ = 0;
+    size_t gameMapOffset_ = 0;          // 0 = the file has no game-map grid
+    uint8_t* gameMapCell(int gx, int gy);
+    const uint8_t* gameMapCell(int gx, int gy) const;
     std::vector<NavSectionInfo> navSections_;
     std::vector<uint8_t> cells_; // 21 bytes per cell, row-major
     std::vector<uint8_t> originalBytes_;

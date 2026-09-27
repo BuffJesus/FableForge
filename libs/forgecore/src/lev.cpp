@@ -115,9 +115,19 @@ File File::open(const fs::path& path) {
         result.groundThemes_.push_back(std::move(theme));
     }
 
-    reader.readValue<uint32_t>("cell version");
+    const uint32_t fileVersion = reader.readValue<uint32_t>("cell version");
     const uint32_t themeCount = reader.readValue<uint32_t>("theme count");
-    reader.skip(kPaletteSize);
+    result.atmosPaletteOffset_ = reader.tell();
+    result.atmosThemes_.reserve(256);
+    for (size_t i = 0; i < kPaletteSize / kThemeEntrySize; ++i) {
+        char name[128];
+        reader.read(name, sizeof(name), "atmos theme name");
+        name[127] = '\0';
+        GroundTheme theme;
+        theme.name = name;
+        theme.value = reader.readValue<uint32_t>("atmos theme value");
+        result.atmosThemes_.push_back(std::move(theme));
+    }
     if (subVersion == 9) {
         reader.readValue<uint32_t>("sub-version 9 extra");
     }
@@ -158,8 +168,68 @@ File File::open(const fs::path& path) {
         throw std::runtime_error("lev: cell grid exceeds source file in " +
                                  result.source_);
     }
+    // the game-map grid follows the height cells and ends exactly at obsOffset;
+    // anything else (older files, fileVersion 1) is treated as absent
+    if (fileVersion > 1) {
+        uint32_t obsOffset;
+        std::memcpy(&obsOffset, header + 13, 4);
+        const size_t start = result.cellsOffset_ + result.cells_.size();
+        const size_t count = static_cast<size_t>(result.width_ / 4) * static_cast<size_t>(result.height_ / 4);
+        bool ok = count > 0 && start + count * 11 == obsOffset && obsOffset <= result.originalBytes_.size();
+        for (size_t i = 0; ok && i < count; ++i) {
+            const uint8_t* r = result.originalBytes_.data() + start + i * 11;
+            ok = r[0] == 11 && r[1] == 0 && r[2] == 0 && r[3] == 0 && r[4] == 1;
+        }
+        if (ok) result.gameMapOffset_ = start;
+    }
 
     return result;
+}
+
+const uint8_t* File::gameMapCell(int gx, int gy) const {
+    if (!hasGameMap()) throw std::runtime_error("lev: " + source_ + " has no game-map grid");
+    if (gx < 0 || gy < 0 || gx >= gameMapWidth() || gy >= gameMapHeight())
+        throw std::out_of_range("lev: game-map cell out of range");
+    return originalBytes_.data() + gameMapOffset_ + (static_cast<size_t>(gy) * static_cast<size_t>(gameMapWidth()) + static_cast<size_t>(gx)) * 11;
+}
+
+uint8_t* File::gameMapCell(int gx, int gy) {
+    return const_cast<uint8_t*>(static_cast<const File*>(this)->gameMapCell(gx, gy));
+}
+
+File::AtmosBlend File::atmosAt(int gx, int gy) const {
+    const uint8_t* c = gameMapCell(gx, gy);
+    AtmosBlend b;
+    b.indices = {c[5], c[6], c[7]};
+    const unsigned stored = unsigned(c[8]) + unsigned(c[9]);
+    b.strengths = {c[8], c[9], static_cast<uint8_t>(stored >= 255 ? 0 : 255 - stored)};
+    return b;
+}
+
+void File::setAtmosAt(int gx, int gy, const AtmosBlend& blend) {
+    if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255)
+        throw std::invalid_argument("lev: atmos strengths must sum to 255");
+    uint8_t* c = gameMapCell(gx, gy);
+    c[5] = blend.indices[0]; c[6] = blend.indices[1]; c[7] = blend.indices[2];
+    c[8] = blend.strengths[0]; c[9] = blend.strengths[1];
+}
+
+uint8_t File::soundAt(int gx, int gy) const { return gameMapCell(gx, gy)[10]; }
+
+void File::setSoundAt(int gx, int gy, uint8_t index) {
+    if (index > themes_.size()) throw std::out_of_range("lev: sound index past the map's sound list");
+    gameMapCell(gx, gy)[10] = index;
+}
+
+void File::setAtmosTheme(size_t slot, const std::string& name, uint32_t value) {
+    if (slot >= atmosThemes_.size()) throw std::out_of_range("lev: atmos slot out of range");
+    if (name.size() >= 128) throw std::invalid_argument("lev: atmos theme name longer than 127 bytes");
+    uint8_t* at = originalBytes_.data() + atmosPaletteOffset_ + slot * kThemeEntrySize;
+    std::memset(at, 0, 128);
+    std::memcpy(at, name.data(), name.size());
+    std::memcpy(at + 128, &value, 4);
+    atmosThemes_[slot].name = name;
+    atmosThemes_[slot].value = value;
 }
 
 void File::checkCell(int x, int y) const {

@@ -91,6 +91,44 @@ fs::path writeSyntheticLev(const fs::path& path, int w, int h,
     return path;
 }
 
+// A fileVersion-3 .lev with the game-map grid (environment + sound themes): an
+// 8x8 map -> 2x2 game-map cells, sounds {SOUND_A, SOUND_B}, atmos slot 1 named.
+fs::path writeGameMapLev(const fs::path& path) {
+    const int w = 8, h = 8;
+    std::vector<uint8_t> b;
+    put<uint32_t>(b, 25); put<uint16_t>(b, 6404); b.insert(b.end(), 3, 0);
+    put<uint32_t>(b, 0);
+    const size_t obsPos = b.size(); put<uint32_t>(b, 0);
+    put<uint32_t>(b, 0);
+    const size_t navOffsetPos = b.size(); put<uint32_t>(b, 0);
+    b.push_back(22); b.push_back(8); b.push_back(0); b.push_back(0); b.push_back(8);
+    put<uint32_t>(b, 7); put<uint32_t>(b, 0);
+    put<int32_t>(b, w); put<int32_t>(b, h); b.push_back(0);
+    for (int i = 0; i < 256; ++i) { char name[128] = {}; if (i == 0) std::strcpy(name, "GROUND_GRASS_TEST"); b.insert(b.end(), name, name + 128); put<uint32_t>(b, i == 0 ? 1000u : 0u); }
+    put<uint32_t>(b, 3);          // file version 3
+    put<uint32_t>(b, 3);          // sound count: NULL + 2 names
+    for (int i = 0; i < 256; ++i) { char name[128] = {}; if (i == 1) std::strcpy(name, "ENVIRONMENT_UNDERTREES"); b.insert(b.end(), name, name + 128); put<uint32_t>(b, i == 1 ? 77u : 0u); }
+    for (const char* n : {"SOUND_A", "SOUND_B"}) { put<uint32_t>(b, uint32_t(std::strlen(n))); b.insert(b.end(), n, n + std::strlen(n)); }
+    for (int y = 0; y <= h; ++y)
+        for (int x = 0; x <= w; ++x) {
+            uint8_t cell[21] = {21, 0, 0, 0, 7};
+            cell[13] = 255; cell[15] = 1;
+            b.insert(b.end(), cell, cell + 21);
+        }
+    for (int i = 0; i < (w / 4) * (h / 4); ++i) {
+        uint8_t rec[11] = {11, 0, 0, 0, 1, 0, 0, 0, 255, 0, uint8_t(i == 3 ? 2 : 1)};
+        b.insert(b.end(), rec, rec + 11);
+    }
+    const uint32_t obs = uint32_t(b.size());
+    std::memcpy(&b[obsPos], &obs, 4);
+    b.insert(b.end(), 16, 0xAB);  // opaque obstacle data
+    const uint32_t navOffset = uint32_t(b.size());
+    std::memcpy(&b[navOffsetPos], &navOffset, 4);
+    put<uint32_t>(b, 0); put<uint32_t>(b, 0);
+    std::ofstream(path, std::ios::binary).write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+    return path;
+}
+
 std::vector<uint8_t> readAll(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
@@ -662,6 +700,37 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
 }
 
+// The .lev game-map grid (FableWin CGameMapCell): environment blend + sound per
+// 4x4 cells, the atmos palette and the sound list; edits patch in place.
+void testGameMapGrid(const fs::path& dir) {
+    const fs::path path = writeGameMapLev(dir / "gamemap.lev");
+    auto lev = forge::lev::File::open(path);
+    CHECK(lev.hasGameMap() && lev.gameMapWidth() == 2 && lev.gameMapHeight() == 2);
+    CHECK((lev.soundThemes() == std::vector<std::string>{"SOUND_A", "SOUND_B"}));
+    CHECK(lev.atmosThemes().size() == 256 && lev.atmosThemes()[1].name == "ENVIRONMENT_UNDERTREES" && lev.atmosThemes()[1].value == 77);
+    CHECK(lev.soundAt(0, 0) == 1 && lev.soundAt(1, 1) == 2);
+    CHECK(lev.atmosAt(0, 0).indices[0] == 0 && lev.atmosAt(0, 0).strengths[0] == 255 && lev.atmosAt(0, 0).strengths[2] == 0);
+    lev.setSoundAt(1, 0, 2);
+    lev.setAtmosAt(0, 1, {{1, 0, 0}, {200, 55, 0}});
+    lev.setAtmosTheme(2, "ENVIRONMENT_HAUNTED", 88);
+    bool threw = false;
+    try { lev.setSoundAt(0, 0, 3); } catch (const std::exception&) { threw = true; }   // past the sound list
+    CHECK(threw);
+    const fs::path out = dir / "gamemap_out.lev";
+    lev.save(out);
+    const auto before = readAll(path), after = readAll(out);
+    CHECK(before.size() == after.size());           // in place: nothing moves
+    const auto re = forge::lev::File::open(out);
+    CHECK(re.hasGameMap() && re.soundAt(1, 0) == 2 && re.soundAt(0, 0) == 1);
+    CHECK(re.atmosAt(0, 1).indices[0] == 1 && re.atmosAt(0, 1).strengths[0] == 200 && re.atmosAt(0, 1).strengths[1] == 55);
+    CHECK(re.atmosThemes()[2].name == "ENVIRONMENT_HAUNTED" && re.atmosThemes()[2].value == 88);
+    size_t diff = 0;
+    for (size_t i = 0; i < before.size(); ++i) diff += before[i] != after[i];
+    CHECK(diff > 0 && diff < 40);                    // only the touched cells + palette slot
+    // the older synthetic writer (fileVersion 1) has no grid
+    CHECK(!forge::lev::File::open(writeSyntheticLev(dir / "nogrid.lev", 4, 4, [](int, int) { return 0.0f; })).hasGameMap());
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1226,6 +1295,7 @@ int main() {
     testExternalWorld(dir);
     testThingLinks();
     testQuestSections();
+    testGameMapGrid(dir);
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

@@ -119,6 +119,24 @@ int cmdInfo(const fs::path& lev) {
     for (size_t i = 0; i < use.size(); ++i)
         if (use[i]) std::printf("    [%3zu] %-44s def %-6u %zu refs\n", i, file.groundThemes()[i].name.c_str(),
                                 file.groundThemes()[i].value, use[i]);
+    // the game-map grid: environment (atmos) and sound themes, one cell per 4x4
+    if (!file.hasGameMap()) { std::printf("  game-map grid: none (older file)\n"); return 0; }
+    std::vector<size_t> atmos(file.atmosThemes().size(), 0), sound(file.soundThemes().size() + 1, 0);
+    size_t badSound = 0;
+    for (int y = 0; y < file.gameMapHeight(); ++y)
+        for (int x = 0; x < file.gameMapWidth(); ++x) {
+            const auto a = file.atmosAt(x, y);
+            for (int s = 0; s < 3; ++s) if (a.strengths[s]) ++atmos[a.indices[s]];
+            const uint8_t snd = file.soundAt(x, y);
+            if (snd < sound.size()) ++sound[snd]; else ++badSound;
+        }
+    std::printf("  game-map grid %dx%d: environment themes:\n", file.gameMapWidth(), file.gameMapHeight());
+    for (size_t i = 0; i < atmos.size(); ++i)
+        if (atmos[i]) std::printf("    [%3zu] %-44s %zu refs\n", i, file.atmosThemes()[i].name.empty() ? "(none)" : file.atmosThemes()[i].name.c_str(), atmos[i]);
+    std::printf("  sound themes:\n");
+    for (size_t i = 0; i < sound.size(); ++i)
+        if (sound[i]) std::printf("    [%3zu] %-44s %zu cells\n", i, i == 0 ? "(none)" : file.soundThemes()[i - 1].c_str(), sound[i]);
+    if (badSound) std::printf("    %zu cells past the sound list (the engine reads them as none)\n", badSound);
     return 0;
 }
 
