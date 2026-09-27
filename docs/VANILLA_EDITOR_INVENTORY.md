@@ -369,3 +369,27 @@ The tabs are Engine, Passability, Themes, Sounds, Minimap and Reflection. The st
 3. The 3D display path for maps without static-map data: `CEditDisplayEngine::UpdateLandscapeDebugColours` `0x0207bd70`
    and the engine's missing-STB fallback.
 4. `EditFitFillerMap` `0x0297dab0`: the mountain parameters behind "Fit Neighbours".
+
+## 10. Recovered since (2026-09-27, static RE, FableWin; ported and tested)
+
+**Environment and sound themes in the .lev.** These are not stored in the 21-byte height cells. They live in a game-map grid
+(`CGameMapCell`) of `(width/4)*(height/4)` records, 11 bytes each, one per 4x4 height cells. The grid follows the
+height cells and ends exactly at `obsOffset`. It is present only when fileVersion (map header +0x8416) is above 1.
+Record layout: `u32 11, u8 1` header; atmos slots at +5..7; atmos strengths at +8..9, with slot 2 taking the
+remainder; sound index at +10, where 0 means none.
+
+Where the names come from:
+- The atmos palette is the 256 x {name[128], u32} block at map header +0x841e. The engine resolves each slot by name.
+- The sound list is the counted strings after it, with index 0 the implicit NULL.
+
+Evidence: `CMap::LoadFromFile` 0x022327b0, `SaveToFile` 0x02234c60, `Get/SetSoundAt` 0x02238d20/0x02238d90.
+Height-cell bytes: +0..4 is the record header, +9 and +18 are unused, +16 is camera-passable, +17 is the old sound
+(read only below fileVersion 3), +19 is the shore point. All 399 retail maps parse the grid
+(`forge info <map>` lists both). Adding a sound name changes the list's length, so every later offset moves,
+including obs, nav and the nav table of contents. FableForge limits painting to the map's own list.
+
+**Fractals.** `CEditFractal` is a Musgrave hybrid multifractal over 2D gradient Perlin noise, with seed 0.
+The ported code and addresses are in `libs/forgecore/include/forge/fractal.hpp`, with tests in `testFractal`.
+Several paths are dead code: the seeded `CNoise(long)` ctor, `SetNewFractalPos`, `PostProcessRescale`, and the
+ridged/hetero variants. "Apply fractal" sets heights to `fractal(world) * Scale` in world units;
+`CHeightMap::SetSizeZAt` clamps them to [0, 2048). The .lev stores height / 2048. The dialog's default Scale is 1000.
