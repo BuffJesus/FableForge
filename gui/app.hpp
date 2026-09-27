@@ -422,10 +422,14 @@ private:
     void drawRuleNotice(const char* key, float width);
     // terrain tool (gizmoOp_ == 4)
     // 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked, 6 paint theme,
-    // 7 replace theme (pen), 8 flood replace (click), 9 draw path (drag start -> end)
+    // 7 replace theme (pen), 8 flood replace (click), 9 draw path (drag start -> end),
+    // 10 paint environment (atmos), 11 paint sound -- the .lev's 4x4 game-map grid
     int terrainMode_ = 0;
     int paintTheme_ = 0;             // LEV palette slot painted (6) / put in (7, 8)
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
+    int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
+    int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
+    char envSearch_[64] = {};
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};
     void paletteCombo(const char* id, int& slot, float width);

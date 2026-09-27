@@ -731,6 +731,43 @@ void testGameMapGrid(const fs::path& dir) {
     CHECK(!forge::lev::File::open(writeSyntheticLev(dir / "nogrid.lev", 4, 4, [](int, int) { return 0.0f; })).hasGameMap());
 }
 
+// Environment + sound painting through the document (vanilla ENVIRONMENT tab and
+// Survey > Sounds): brushes on the 4x4 game-map cells, a new environment theme in
+// a free atmos slot, dirty tracking, the loose save, undo.
+void testEnvironmentAndSoundPaint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const fs::path lev = writeGameMapLev(dir / "envsound.lev");
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("EnvSound", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(lev, err));
+    CHECK(doc.hasGameMap() && doc.soundThemes().size() == 2);
+    CHECK((doc.environmentAndSoundAt(1.0f, 1.0f) == std::optional<std::pair<uint8_t, uint8_t>>(std::make_pair(uint8_t(0), uint8_t(1)))));
+    ed::TerrainBrush b;
+    b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 2; b.x = 2.0f; b.y = 2.0f; b.radius = 1.0f;   // only game cell (0,0)
+    doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+    CHECK(doc.terrainDirty());
+    CHECK(doc.environmentAndSoundAt(1.0f, 1.0f)->second == 2 && doc.environmentAndSoundAt(5.0f, 1.0f)->second == 1);
+    b.mode = ed::TerrainBrush::Mode::Environment; b.themeIndex = 1; b.x = 6.0f; b.y = 6.0f; b.strength = 10.0f;   // game cell (1,1)
+    doc.beginStroke(b); doc.applyBrush(b, 1.0f); doc.endStroke();
+    CHECK(doc.environmentAndSoundAt(6.0f, 6.0f)->first == 1 && doc.environmentAndSoundAt(1.0f, 1.0f)->first == 0);
+    CHECK(doc.addEnvironmentTheme("ENVIRONMENT_HAUNTED", 88) == 2);
+    CHECK(doc.addEnvironmentTheme("ENVIRONMENT_UNDERTREES", 77) == 1);    // already there
+    CHECK(doc.addEnvironmentTheme("ENVIRONMENT_X", 0) == -1);             // a 0 value means "no atmos"
+    const fs::path root = dir / "envsound_root";
+    CHECK(doc.saveTerrainLoose(root, err));
+    const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "EnvSound.lev");
+    CHECK(saved.hasGameMap() && saved.soundAt(0, 0) == 2 && saved.soundAt(1, 0) == 1);
+    {
+        const auto a = saved.atmosAt(1, 1);   // the painted theme holds the whole blend, in whichever slot it took
+        int best = 0; for (int k = 1; k < 3; ++k) if (a.strengths[k] > a.strengths[best]) best = k;
+        CHECK(a.indices[best] == 1 && a.strengths[best] == 255);
+    }
+    CHECK(saved.atmosThemes()[2].name == "ENVIRONMENT_HAUNTED");
+    CHECK(!doc.terrainDirty());
+    CHECK(doc.undo() && doc.undo() && doc.environmentAndSoundAt(6.0f, 6.0f)->first == 0);
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1296,6 +1333,7 @@ int main() {
     testThingLinks();
     testQuestSections();
     testGameMapGrid(dir);
+    testEnvironmentAndSoundPaint(dir);
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

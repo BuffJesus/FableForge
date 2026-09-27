@@ -515,6 +515,14 @@ std::vector<std::pair<std::string, std::string>> Context::definitions(const std:
     return out;
 }
 
+std::optional<uint32_t> Context::definitionIndex(const std::string& name) const {
+    if (!impl_ || !impl_->defs) return std::nullopt;
+    const auto& entries = impl_->defs->entries();
+    for (size_t i = 0; i < entries.size(); ++i)
+        if (entries[i].name == name) return uint32_t(i);
+    return std::nullopt;
+}
+
 std::vector<Context::GroupedDefinition> Context::groupedDefinitions(const std::vector<std::string>& types) const {
     std::vector<GroupedDefinition> out;
     if (!impl_ || !impl_->defs || !impl_->schema) return out;

@@ -61,12 +61,19 @@ struct TerrainState {
     std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
     std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
     std::vector<forge::lev::GroundTheme> palette;       // the LEV's 256 ground-theme slots
+    // the game-map grid (one cell per 4x4 height cells, when the .lev has it):
+    // environment (atmos) blend into atmosPalette, and the sound index (0 = none)
+    std::vector<std::array<uint8_t, 3>> atmosIndex, atmosStrength;
+    std::vector<uint8_t> sound;
+    std::vector<forge::lev::GroundTheme> atmosPalette;
 };
 
 struct TerrainBrush {
     // ReplaceTheme: the vanilla Themes dialog's Replace pen -- under the brush,
-    // `replaceFrom` becomes `themeIndex` in every slot (no blending)
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme };
+    // `replaceFrom` becomes `themeIndex` in every slot (no blending).
+    // Environment / Sound: the game-map grid (vanilla ENVIRONMENT tab / Survey >
+    // Sounds): `themeIndex` is the atmos palette slot / the sound index (0 = none).
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
@@ -311,6 +318,14 @@ public:
     // undo step (the palette rides in TerrainState); written with the next
     // terrain save.
     int addGroundTheme(const std::string& name, uint32_t defIndex);
+    // The game-map grid: environment + sound themes per 4x4 cells.
+    bool hasGameMap() const { return level_ && level_->hasGameMap(); }
+    const std::vector<std::string>& soundThemes() const;   // index i+1 in a cell; 0 = none
+    // An ENVIRONMENT_THEME_DAY def into a free atmos slot (the existing slot when
+    // named already); -1 when full / no grid. One undo step, saved with the terrain.
+    int addEnvironmentTheme(const std::string& name, uint32_t defIndex);
+    // What the grid holds under a map-local point: the strongest atmos slot and the sound.
+    std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;
     // Deploy: loose .lev, the FinalAlbion.wad entry, and the map's terrain chunk
     // inside FinalAlbion_RT.stb re-baked from the edited heights (same-size,

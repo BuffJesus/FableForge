@@ -189,6 +189,18 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
         t->themeIndex.resize(size_t(cx) * cy);
         t->themeStrength.resize(size_t(cx) * cy);
         t->palette = level_->groundThemes();
+        if (level_->hasGameMap()) {
+            const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
+            t->atmosIndex.resize(size_t(gw) * gh); t->atmosStrength.resize(size_t(gw) * gh); t->sound.resize(size_t(gw) * gh);
+            for (int gy = 0; gy < gh; ++gy)
+                for (int gx = 0; gx < gw; ++gx) {
+                    const size_t g = size_t(gy) * gw + gx;
+                    const auto a = level_->atmosAt(gx, gy);
+                    t->atmosIndex[g] = a.indices; t->atmosStrength[g] = a.strengths;
+                    t->sound[g] = level_->soundAt(gx, gy);
+                }
+            t->atmosPalette = level_->atmosThemes();
+        }
         for (int y = 0; y < cy; ++y)
             for (int x = 0; x < cx; ++x) {
                 const size_t i = size_t(y) * cx + x;
@@ -356,6 +368,21 @@ void Document::writeTerrainToLevel() {
             for (int k = 0; k < 3; ++k) sameTheme = sameTheme && level_->themeIndexAt(x, y, k) == terrain_->themeIndex[i][k] && level_->themeStrengthAt(x, y, k) == terrain_->themeStrength[i][k];
             if (!sameTheme) level_->setThemeBlendAt(x, y, terrain_->themeIndex[i], terrain_->themeStrength[i]);
         }
+    if (level_->hasGameMap() && !terrain_->sound.empty()) {
+        const auto& ap = level_->atmosThemes();
+        for (size_t i = 0; i < terrain_->atmosPalette.size() && i < ap.size(); ++i)
+            if (ap[i].name != terrain_->atmosPalette[i].name || ap[i].value != terrain_->atmosPalette[i].value)
+                level_->setAtmosTheme(i, terrain_->atmosPalette[i].name, terrain_->atmosPalette[i].value);
+        const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
+        for (int gy = 0; gy < gh; ++gy)
+            for (int gx = 0; gx < gw; ++gx) {
+                const size_t g = size_t(gy) * gw + gx;
+                const auto a = level_->atmosAt(gx, gy);
+                if (a.indices != terrain_->atmosIndex[g] || a.strengths != terrain_->atmosStrength[g])
+                    level_->setAtmosAt(gx, gy, {terrain_->atmosIndex[g], terrain_->atmosStrength[g]});
+                if (level_->soundAt(gx, gy) != terrain_->sound[g]) level_->setSoundAt(gx, gy, terrain_->sound[g]);
+            }
+    }
 }
 
 // ---------------------------------------------------------------- terrain
@@ -398,6 +425,28 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
             for (int x = x0; x <= x1; ++x) {
                 const size_t i = size_t(y) * cx + x;
                 for (int k = 0; k < 3; ++k) { working_->themeIndex[i][k] = level_->themeIndexAt(x, y, k); working_->themeStrength[i][k] = level_->themeStrengthAt(x, y, k); }
+            }
+        ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::Environment || brush.mode == Mode::Sound) {
+        // game-map cells (4x4 height cells each) whose centre is under the brush
+        if (!level_->hasGameMap() || working_->sound.empty()) return;
+        const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
+        const float opacity = std::clamp(brush.strength * dt, 0.0f, 1.0f);
+        for (int gy = 0; gy < gh; ++gy)
+            for (int gx = 0; gx < gw; ++gx) {
+                const float dx = float(gx) * 4.0f + 2.0f - brush.x, dy = float(gy) * 4.0f + 2.0f - brush.y;
+                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
+                const size_t g = size_t(gy) * gw + gx;
+                if (brush.mode == Mode::Sound) {
+                    if (brush.themeIndex <= level_->soundThemes().size()) working_->sound[g] = brush.themeIndex;
+                    continue;
+                }
+                forge::terrain::ThemeBlend blend{working_->atmosIndex[g], working_->atmosStrength[g]};
+                if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255) blend = {{blend.indices[0], 0, 0}, {255, 0, 0}};
+                const auto next = forge::terrain::paintThemeBlend(blend, brush.themeIndex, opacity);
+                working_->atmosIndex[g] = next.indices; working_->atmosStrength[g] = next.strengths;
             }
         ++terrainRev_;
         return;
@@ -465,6 +514,44 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
     ++revision_;
     ++terrainRev_;
     return true;
+}
+
+const std::vector<std::string>& Document::soundThemes() const {
+    static const std::vector<std::string> none;
+    return level_ ? level_->soundThemes() : none;
+}
+
+int Document::addEnvironmentTheme(const std::string& name, uint32_t defIndex) {
+    if (!hasTerrain() || stroke_ || !hasGameMap() || terrain_->atmosPalette.empty() || name.empty() || name.size() >= 128 || defIndex == 0) return -1;
+    for (size_t i = 0; i < terrain_->atmosPalette.size(); ++i)
+        if (terrain_->atmosPalette[i].name == name) return int(i);
+    // slot 0 stays the "no environment" entry retail maps paint most cells with
+    for (size_t i = 1; i < terrain_->atmosPalette.size(); ++i)
+        if (terrain_->atmosPalette[i].name.empty()) {
+            auto next = std::make_unique<TerrainState>(*terrain_);
+            next->atmosPalette[i] = {name, defIndex};
+            pushUndo();
+            terrain_ = std::shared_ptr<const TerrainState>(next.release());
+            writeTerrainToLevel();
+            ++revision_;
+            ++terrainRev_;
+            return int(i);
+        }
+    return -1;
+}
+
+std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {
+    if (!hasGameMap()) return std::nullopt;
+    const TerrainState& t = liveTerrain();
+    if (t.sound.empty()) return std::nullopt;
+    const int gx = int(std::floor(x / 4.0f)), gy = int(std::floor(y / 4.0f));
+    const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
+    if (gx < 0 || gy < 0 || gx >= gw || gy >= gh) return std::nullopt;
+    const size_t g = size_t(gy) * gw + gx;
+    int best = 0;
+    for (int k = 1; k < 3; ++k)
+        if (t.atmosStrength[g][k] > t.atmosStrength[g][best]) best = k;
+    return std::make_pair(t.atmosIndex[g][best], t.sound[g]);
 }
 
 std::optional<uint8_t> Document::dominantThemeAt(float x, float y) const {
@@ -559,6 +646,11 @@ bool Document::terrainDirty() const {
     if (terrain_ == savedTerrain_) return false;
     if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable ||
         terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
+    if (terrain_->atmosIndex != savedTerrain_->atmosIndex || terrain_->atmosStrength != savedTerrain_->atmosStrength ||
+        terrain_->sound != savedTerrain_->sound) return true;
+    if (terrain_->atmosPalette.size() != savedTerrain_->atmosPalette.size()) return true;
+    for (size_t i = 0; i < terrain_->atmosPalette.size(); ++i)
+        if (terrain_->atmosPalette[i].name != savedTerrain_->atmosPalette[i].name || terrain_->atmosPalette[i].value != savedTerrain_->atmosPalette[i].value) return true;
     if (terrain_->palette.size() != savedTerrain_->palette.size()) return true;
     for (size_t i = 0; i < terrain_->palette.size(); ++i)
         if (terrain_->palette[i].name != savedTerrain_->palette[i].name || terrain_->palette[i].value != savedTerrain_->palette[i].value) return true;

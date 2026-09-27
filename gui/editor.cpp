@@ -859,6 +859,8 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
         case 4: return M::Walkable;
         case 5: return M::Blocked;
         case 7: return M::ReplaceTheme;
+        case 10: return M::Environment;
+        case 11: return M::Sound;
         default: return M::Theme;
     }
 }
@@ -885,7 +887,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     b.mode = brushModeFor(mode);
     b.x = brushFable_[0]; b.y = brushFable_[1];
     b.radius = brushRadius_; b.strength = brushStrength_;
-    b.themeIndex = uint8_t(paintTheme_);
+    b.themeIndex = uint8_t(terrainMode_ == 10 ? envSlot_ : terrainMode_ == 11 ? soundIndex_ : paintTheme_);
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
     const bool press = lmb && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && brushHit_ && !io.KeyAlt;
@@ -896,6 +898,13 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
             if (io.KeyShift) replaceFrom_ = *t; else paintTheme_ = *t;
             const auto& pal = doc_.level()->groundThemes();
             pushLog(std::string("theme picked for ") + (io.KeyShift ? "replace: " : "paint: ") + (size_t(*t) < pal.size() ? pal[*t].name : std::to_string(*t)), 0);
+        }
+        return;
+    }
+    if (press && io.KeyCtrl && (terrainMode_ == 10 || terrainMode_ == 11)) {
+        if (const auto es = doc_.environmentAndSoundAt(brushFable_[0], brushFable_[1])) {
+            if (terrainMode_ == 10) envSlot_ = es->first; else soundIndex_ = es->second;
+            pushLog(terrainMode_ == 10 ? "environment picked" : "sound picked", 0);
         }
         return;
     }
@@ -935,7 +944,7 @@ void App::terrainStroke(float x, float y, float seconds) {
     editor::TerrainBrush b;
     b.mode = brushModeFor(terrainMode_);
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
-    b.themeIndex = uint8_t(paintTheme_);
+    b.themeIndex = uint8_t(terrainMode_ == 10 ? envSlot_ : terrainMode_ == 11 ? soundIndex_ : paintTheme_);
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     doc_.beginStroke(b);
     doc_.applyBrush(b, seconds);
@@ -957,7 +966,8 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         if (!renderer_.project(p, u, v)) return;
         pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
     }
-    const ImU32 col = terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
+    const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
+                    : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
                     : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     if (terrainMode_ == 9 && pathDrag_) {
@@ -1658,6 +1668,68 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         int tool = (terrainMode_ >= 7 && terrainMode_ <= 9) ? terrainMode_ - 7 : -1;
         if (theme::segmented("##ttool", tool, {"Replace theme", "Flood replace", "Draw path"}, cardInner) && tool >= 0) terrainMode_ = 7 + tool;
         auto_.registerWidget("seg_terrain_tool");
+        if (doc_.hasGameMap()) {
+            int es = (terrainMode_ == 10 || terrainMode_ == 11) ? terrainMode_ - 10 : -1;
+            if (theme::segmented("##tenv", es, {"Paint environment", "Paint sound"}, cardInner) && es >= 0) terrainMode_ = 10 + es;
+            auto_.registerWidget("seg_terrain_envsound");
+        }
+        if (terrainMode_ == 10 || terrainMode_ == 11) {
+            const auto& atm = doc_.terrain().atmosPalette;
+            const auto& snd = doc_.soundThemes();
+            auto atmosName = [&](int i) { return i >= 0 && size_t(i) < atm.size() && !atm[size_t(i)].name.empty() ? atm[size_t(i)].name : std::string("(no environment)"); };
+            auto soundName = [&](int i) { return i > 0 && size_t(i) <= snd.size() ? snd[size_t(i) - 1] : std::string("(no sound)"); };
+            if (brushHit_) if (const auto here = doc_.environmentAndSoundAt(brushFable_[0], brushFable_[1])) {
+                ImGui::PushFont(fontSmall_);
+                ImGui::TextColored(theme::vec(theme::Muted), "under the cursor: %s, %s", atmosName(here->first).c_str(), soundName(here->second).c_str());
+                ImGui::PopFont();
+            }
+            if (terrainMode_ == 10) {
+                theme::label("Environment theme");
+                ImGui::SetNextItemWidth(cardInner);
+                if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
+                    for (size_t i = 0; i < atm.size(); ++i) {
+                        if (i != 0 && atm[i].name.empty()) continue;
+                        if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
+                    }
+                    ImGui::EndCombo();
+                }
+                auto_.registerWidget("combo_env_slot");
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::InputTextWithHint("##envsearch", "Add an environment from the game (UNDERTREES, HAUNTED...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
+                auto_.registerWidget("input_env_search");
+                if (envSearch_[0] && ctx_.ready()) {
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                    ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
+                    ImGui::PopStyleColor();
+                    ImGui::PushFont(fontSmall_);
+                    for (const auto& [name, type] : ctx_.definitions({"ENVIRONMENT_THEME_DAY"})) {
+                        if (!contains(name, envSearch_)) continue;
+                        if (ImGui::Selectable(name.c_str())) {
+                            const auto idx = ctx_.definitionIndex(name);
+                            const int slot = idx ? doc_.addEnvironmentTheme(name, *idx) : -1;
+                            if (slot >= 0) { envSlot_ = slot; pushLog("environment " + name + " in atmos slot " + std::to_string(slot), 0); }
+                            else pushLog("environment: no free atmos slot (or no game-map grid)", 1);
+                        }
+                    }
+                    ImGui::PopFont();
+                    ImGui::EndChild();
+                }
+            } else {
+                theme::label("Sound theme");
+                ImGui::SetNextItemWidth(cardInner);
+                if (ImGui::BeginCombo("##soundidx", soundName(soundIndex_).c_str())) {
+                    for (size_t i = 0; i <= snd.size(); ++i)
+                        if (ImGui::Selectable((soundName(int(i)) + "##snd" + std::to_string(i)).c_str(), int(i) == soundIndex_)) soundIndex_ = int(i);
+                    ImGui::EndCombo();
+                }
+                auto_.registerWidget("combo_sound");
+            }
+            ImGui::PushFont(fontSmall_);
+            theme::hint(terrainMode_ == 10
+                ? "Paints the environment theme (an ENVIRONMENT_THEME_DAY def) on the map's 4x4-cell grid, blended like ground themes. Ctrl+click samples it. Saved with the terrain."
+                : "Paints the background sound (birds, sea, village) on the map's 4x4-cell grid. The list is the sounds this map already names; adding a new one would move the rest of the .lev, not supported yet. Ctrl+click samples it. Saved with the terrain.");
+            ImGui::PopFont();
+        }
         if (terrainMode_ == 7 || terrainMode_ == 8) {
             // the vanilla Themes dialog's "Theme to Replace" / "Theme to Place" pair
             theme::label("Replace this theme");
