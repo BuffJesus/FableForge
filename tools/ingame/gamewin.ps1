@@ -1,6 +1,6 @@
 # Drive the retail Fable.exe window: capture / click / key / info.
 param(
-    [ValidateSet('capture','click','move','key','info','wait')] [string]$Action = 'capture',
+    [ValidateSet('capture','click','move','key','info','wait','lmb','hold')] [string]$Action = 'capture',
     [string]$Output = 'capture.png',
     [int]$X = 0, [int]$Y = 0,
     [string]$Keys = '',
@@ -18,6 +18,7 @@ public static class AtlasQaNative {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint mapType);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
 }
@@ -67,6 +68,24 @@ switch ($Action) {
     [AtlasQaNative]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80
     [AtlasQaNative]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
   }
+  'hold' {
+    # hold one key (Keys) down for X milliseconds: movement (W/A/S/D) and charged actions; scan code for DirectInput
+    $map = @{ ENTER=0x0D; ESC=0x1B; SPACE=0x20; UP=0x26; DOWN=0x28; LEFT=0x25; RIGHT=0x27; TAB=0x09; BACK=0x08; DEL=0x2E; END=0x23 }
+    $k = $Keys.Trim()
+    $vk = if ($map.ContainsKey($k)) { $map[$k] } else { [int][char]$k.ToUpper() }
+    $sc = [AtlasQaNative]::MapVirtualKey([uint32]$vk, 0)
+    [AtlasQaNative]::keybd_event([byte]$vk,[byte]$sc,0x0008,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds ([Math]::Max(50, $X))
+    [AtlasQaNative]::keybd_event([byte]$vk,[byte]$sc,0x000A,[UIntPtr]::Zero)
+  }
+  'lmb' {
+    # left-button press/release where the in-game cursor already is (attack / confirm), X = repeat count
+    $n = [Math]::Max(1, $X)
+    for ($i = 0; $i -lt $n; $i++) {
+      [AtlasQaNative]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80
+      [AtlasQaNative]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 350
+    }
+  }
   'move' {
     [AtlasQaNative]::mouse_event(0x0001, [uint32]4294963296, [uint32]4294963296, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 150
@@ -84,8 +103,11 @@ switch ($Action) {
     foreach ($k in $Keys.Split(' ')) {
       if ($k -eq '') { continue }
       $vk = if ($map.ContainsKey($k)) { $map[$k] } else { [int][char]$k.ToUpper() }
-      [AtlasQaNative]::keybd_event([byte]$vk,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 80
-      [AtlasQaNative]::keybd_event([byte]$vk,0,2,[UIntPtr]::Zero); Start-Sleep -Milliseconds 250
+      # In-game input is DirectInput: it only sees the scan code (KEYEVENTF_SCANCODE), a bare virtual key
+      # is ignored once the hero is in the world. The frontend accepts either.
+      $sc = [AtlasQaNative]::MapVirtualKey([uint32]$vk, 0)
+      [AtlasQaNative]::keybd_event([byte]$vk,[byte]$sc,0x0008,[UIntPtr]::Zero); Start-Sleep -Milliseconds 120
+      [AtlasQaNative]::keybd_event([byte]$vk,[byte]$sc,0x000A,[UIntPtr]::Zero); Start-Sleep -Milliseconds 250
     }
   }
 }

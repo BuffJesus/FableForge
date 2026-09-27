@@ -9929,6 +9929,7 @@ int main(int argc, char** argv) {
                 };
                 size_t start = 12; while (start < plain.size() && plain[start]) ++start; ++start; while (start % 4) ++start;   // >>>>3DMF, version, copyright, align
                 walk(start, plain.size(), 0);
+                for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--raw") writeAllBytes(args[i + 1], plain);   // the decompressed 3DMF for inspection
                 json j = {{"name", e->name}, {"id", e->id}, {"type", e->type}, {"payload_bytes", e->length}, {"uncompressed", usize}, {"decoded", plain.size()},
                           {"magic", std::string(reinterpret_cast<const char*>(plain.data()), std::min<size_t>(8, plain.size()))}, {"chunks", chunks}};
                 if (asJson) { std::puts(j.dump(2).c_str()); return 0; }
