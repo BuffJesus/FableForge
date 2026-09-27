@@ -15,6 +15,7 @@
 
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
+#include "forge/fractal.hpp"
 #include "forge/stb.hpp"
 #include "forge/navmesh.hpp"
 #include "forge/navpatch.hpp"
@@ -768,6 +769,47 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.undo() && doc.undo() && doc.environmentAndSoundAt(6.0f, 6.0f)->first == 0);
 }
 
+// The vanilla fractal generator port against the static-RE reference
+// (seed-0 tables and heights computed by the recovered algorithm).
+void testFractal() {
+    namespace fr = forge::fractal;
+    const fr::Generator g;   // dialog defaults
+    const int p16[16] = {0, 86, 114, 50, 240, 208, 77, 82, 180, 118, 6, 211, 205, 182, 55, 144};
+    bool permOk = true;
+    for (int i = 0; i < 16; ++i) permOk = permOk && g.permutation()[size_t(i)] == p16[i];
+    CHECK(permOk);
+    CHECK(std::fabs(g.gradients()[0][0] - (-0.6872546076774597f)) < 1e-7f && std::fabs(g.gradients()[0][1] - 0.04230388626456261f) < 1e-7f);
+    CHECK(std::fabs(g.gradients()[1][0] - 0.7492795586585999f) < 1e-7f && std::fabs(g.gradients()[1][1] - 0.662253201007843f) < 1e-7f);
+    const uint8_t t8[8] = {106, 103, 100, 98, 95, 92, 90, 87};
+    bool tabOk = true;
+    for (int i = 0; i < 8; ++i) tabOk = tabOk && fr::Generator::rsqrtTable()[size_t(i)] == t8[i];
+    CHECK(tabOk);
+    CHECK(std::fabs(g.perlin(0.3f, 0.7f) - (-0.33992505073547363f)) < 1e-6f);
+    CHECK(std::fabs(g.perlin(10.25f, 3.5f) - 0.038245201110839844f) < 1e-6f);
+    struct Case { double x, y; float h, hFall; };
+    const Case cases[] = {{0, 0, 0.5117537975311279f, 0.0f}, {100, 200, 0.4384312629699707f, 0.0f},
+                          {2048, 2048, 0.5116974711418152f, 0.5116974711418152f}, {3000, 1500, 0.8535566926002502f, 0.5033801198005676f},
+                          {517, 3999, 1.0f, 0.0f}};
+    fr::Params fall; fall.useFalloff = true; fall.startFalloff = 500; fall.endFalloff = 1500;
+    const fr::Generator gf(fall);
+    for (const auto& c : cases) {
+        CHECK(std::fabs(g.heightAt(c.x, c.y) - c.h) < 1e-5f);
+        CHECK(std::fabs(gf.heightAt(c.x, c.y) - c.hFall) < 1e-5f);
+    }
+    fr::Params ed; ed.lacunarity = 2.7; ed.dimension = 0.2; ed.octaves = 18.5; ed.worldScaler = 0.12; ed.mapX = 679000; ed.mapY = 664100;
+    CHECK(std::fabs(fr::Generator(ed).heightAt(123, 456) - 0.5859578847885132f) < 1e-5f);   // fractional octaves
+    // applied to a document: absolute heights = fractal * scale at world = origin + local
+    const fs::path lev = writeSyntheticLev(fs::temp_directory_path() / "fableforge_fractal.lev", 4, 4, [](int, int) { return 3.0f; });
+    albion::editor::Document doc;
+    std::string err;
+    CHECK(doc.openText("Fractal", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(lev, err));
+    fr::Params ap; ap.scale = 70.0;
+    CHECK(doc.applyFractal(ap) > 0);
+    CHECK(std::fabs(doc.terrain().heights[0] - float(double(g.heightAt(0, 0)) * 70.0)) < 1e-3f);
+    CHECK(std::fabs(doc.terrain().heights[size_t(2) * 5 + 3] - float(double(g.heightAt(3, 2)) * 70.0)) < 1e-3f);
+    CHECK(doc.undo() && doc.terrain().heights[0] == 3.0f);
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1334,6 +1376,7 @@ int main() {
     testQuestSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
+    testFractal();
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

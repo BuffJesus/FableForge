@@ -615,6 +615,22 @@ size_t Document::replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, floa
     return changed;
 }
 
+size_t Document::applyFractal(const forge::fractal::Params& params) {
+    if (!hasTerrain() || stroke_) return 0;
+    const forge::fractal::Generator gen(params);
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    std::vector<VertexHeight> edits;
+    edits.reserve(size_t(cx) * cy);
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const double h = double(gen.heightAt(double(x + worldX_), double(y + worldY_))) * params.scale;
+            const float v = float(std::clamp(h, 0.0, 2047.9999));
+            if (terrain_->heights[size_t(y) * cx + x] != v) edits.push_back({x, y, v});
+        }
+    if (edits.empty() || !setVertexHeights(edits)) return 0;
+    return edits.size();
+}
+
 size_t Document::drawPath(float x0, float y0, float x1, float y1, float radius) {
     if (!hasTerrain() || stroke_ || !(radius > 0)) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();

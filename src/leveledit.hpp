@@ -30,6 +30,7 @@
 
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
+#include "forge/fractal.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/thingplacer.hpp"
 #include "forge/tng.hpp"
@@ -311,6 +312,12 @@ public:
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.
     size_t drawPath(float x0, float y0, float x1, float y1, float radius);
+    // The vanilla Fractals dialog's "Apply fractal" (CEditMap::EditGenerateFractal):
+    // every vertex SET to fractal(world position) * params.scale world units,
+    // clamped to [0, 2048) like CHeightMap::SetSizeZAt. World = the map's WLD origin
+    // + map-local, so maps done one after another meet at their seams. One undo
+    // step; returns the vertices changed.
+    size_t applyFractal(const forge::fractal::Params& params);
     // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
     // map). Painting is limited to it, so any ENGINE_THEME of the game can be
     // added to a free slot: returns the slot (the existing one when the name is

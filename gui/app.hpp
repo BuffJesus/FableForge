@@ -430,6 +430,8 @@ private:
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
     char envSearch_[64] = {};
+    forge::fractal::Params fractal_;     // the Fractals card (vanilla dialog defaults)
+    bool fractalOpen_ = false;
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};
     void paletteCombo(const char* id, int& slot, float width);

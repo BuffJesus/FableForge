@@ -1859,6 +1859,48 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::PopFont();
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
+
+        // ---- the vanilla Fractals dialog (CFractalDialog), ported generator
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##fractal", inner);
+        if (theme::ghostButton(fractalOpen_ ? "Fractal terrain  (hide)" : "Fractal terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
+        auto_.registerWidget("btn_fractal_toggle");
+        if (fractalOpen_) {
+            auto& f = fractal_;
+            ImGui::PushItemWidth(cardInner * 0.5f);
+            auto field = [&](const char* label, const char* id, double& v, double step, double lo, double hi, const char* fmt) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(theme::vec(theme::Muted), "%s", label);
+                ImGui::SameLine(cardInner * 0.5f);
+                ImGui::InputDouble(id, &v, step, step * 10.0, fmt);
+                v = std::clamp(v, lo, hi);
+            };
+            field("Lacunarity", "##flac", f.lacunarity, 0.1, 0.001, 100.0, "%.3f");
+            field("Fractal dimension", "##fdim", f.dimension, 0.01, 0.001, 10.0, "%.3f");
+            field("Octaves", "##foct", f.octaves, 1.0, 1.0, 100.0, "%.1f");
+            field("Map pos X", "##fmx", f.mapX, 250.0, -1e6, 1e6, "%.0f");
+            field("Map pos Y", "##fmy", f.mapY, 250.0, -1e6, 1e6, "%.0f");
+            field("World scaler", "##fws", f.worldScaler, 0.05, 0.001, 10.0, "%.3f");
+            field("Scale (height)", "##fsc", f.scale, 5.0, 0.001, 2048.0, "%.1f");
+            ImGui::Checkbox("Use falloff##ffo", &f.useFalloff);
+            if (f.useFalloff) {
+                field("Start falloff", "##fst", f.startFalloff, 100.0, 0.0, 10000.0, "%.0f");
+                field("End falloff", "##fen", f.endFalloff, 100.0, 0.0, 10000.0, "%.0f");
+                if (f.endFalloff <= f.startFalloff) f.endFalloff = f.startFalloff + 1.0;   // vanilla keeps start < end
+            }
+            ImGui::PopItemWidth();
+            if (theme::ghostButton("Apply fractal to this map", ImVec2(cardInner, S(28)))) {
+                const size_t n = doc_.applyFractal(f);
+                pushLog("fractal: " + std::to_string(n) + " vertices set (one undo step)", n ? 0 : 1);
+            }
+            auto_.registerWidget("btn_fractal_apply");
+            if (theme::ghostButton("Vanilla defaults", ImVec2(cardInner, S(24)))) f = forge::fractal::Params{};
+            ImGui::PushFont(fontSmall_);
+            theme::hint("The vanilla editor's generator, ported from its code: a hybrid multifractal over Perlin noise sampled at WORLD positions, so neighbouring maps done one after another meet at their seams. It SETS every height to fractal x Scale world units (it does not add); retail ground spans about 0..70, the vanilla default Scale is 1000. Falloff fades to 0 away from the world centre (2048, 2048). One undo step.");
+            ImGui::PopFont();
+        }
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
     }
 
     if (editTab_ == 0 || editTab_ == 2) { drawSectionsCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
