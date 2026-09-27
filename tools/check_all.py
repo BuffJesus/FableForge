@@ -5,13 +5,24 @@
 """
 import argparse, os, subprocess, sys, time
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def run(name, cmd, **kw):
     t0 = time.time()
     r = subprocess.run(cmd, **kw)
+    for output in (r.stdout, r.stderr):
+        if output:
+            text = output.decode(errors="replace") if isinstance(output, bytes) else output
+            if r.returncode:
+                print(text, end="" if text.endswith("\n") else "\n")
+            else:
+                for line in text.splitlines():
+                    if "skip" in line.lower(): print(line)
     print(f"[{'PASS' if r.returncode == 0 else 'FAIL'}] {name} ({time.time() - t0:.1f}s)")
     return r.returncode == 0
 
 def main():
+    os.chdir(ROOT)  # the script's owning worktree, even when launched from another checkout
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--count", type=int, default=8)
