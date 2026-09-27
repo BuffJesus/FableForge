@@ -463,26 +463,42 @@ struct Context::Impl {
     std::unique_ptr<forge::bin::File> defs;
     std::unique_ptr<forge::defschema::Schema> schema;
     std::mutex defMutex;
-    std::map<std::string, std::pair<int, uint32_t>> modelCache;
+    struct Graphic { int code = 0; uint32_t modelId = 0; float scale = 1.0f; };
+    std::map<std::string, Graphic> modelCache;
 };
 
-int Context::graphicModelId(const std::string& name, uint32_t& modelId) const {
+int Context::graphicModelId(const std::string& name, uint32_t& modelId, float* scale) const {
     modelId = 0;
+    if (scale) *scale = 1.0f;
     if (!ready() || !impl_->defs || !impl_->schema) return 0;
     std::lock_guard<std::mutex> lock(impl_->defMutex);
     auto hit = impl_->modelCache.find(name);
-    if (hit != impl_->modelCache.end()) { modelId = hit->second.second; return hit->second.first; }
+    if (hit != impl_->modelCache.end()) {
+        modelId = hit->second.modelId;
+        if (scale) *scale = hit->second.scale;
+        return hit->second.code;
+    }
     int code = 0;
+    float graphicScale = 1.0f;
     if (const auto* entry = impl_->defs->find(name)) {
         code = -1;
         if (const auto* type = forge::defdecode::resolveType(*impl_->schema, entry->definition, entry->data)) {
             const auto decoded = forge::defdecode::decode(entry->data, *type);
             code = 1;
             for (const auto& f : decoded.fields)
-                if (f.name == "Graphic" && f.value.size() >= 8) { std::memcpy(&modelId, f.value.data() + 4, 4); break; }
+                if (f.name == "Graphic" && f.value.size() >= 8) {
+                    std::memcpy(&modelId, f.value.data() + 4, 4);
+                    // Serialized CEngineGraphic: type, bank index, AnimStep,
+                    // RenderSizeX, AdditiveAlpha. GetFullScale (0x01d0a3c0)
+                    // multiplies the placed scale by RenderSizeX.
+                    if (f.value.size() >= 16) std::memcpy(&graphicScale, f.value.data() + 12, 4);
+                    if (!std::isfinite(graphicScale) || graphicScale <= 0.0f) graphicScale = 1.0f;
+                    break;
+                }
         }
     }
-    impl_->modelCache[name] = {code, modelId};
+    impl_->modelCache[name] = {code, modelId, graphicScale};
+    if (scale) *scale = graphicScale;
     return code;
 }
 

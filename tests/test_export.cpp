@@ -308,6 +308,23 @@ void testThingBasis() {
     CHECK(near(m[4], -1));
     albion::thingsexport::thingBasis(zero, up, 1.0f, m);
     CHECK(near(m[3], -1) && near(m[1], 1));
+
+    // Parent placed at scale 2 with a 3x graphic; child has a 5x graphic.
+    // Dummy translation follows the full parent scale, but dummy axis lengths
+    // and the parent's graphic scale must not leak into the child's size.
+    albion::foliageexport::Instance parent, child, grandchild;
+    parent.x = 10; parent.y = 20; parent.z = 30;
+    albion::thingsexport::thingBasis(north, up, 0.06f, parent.m);
+    const float dummy[12] = {0, 4, 0, -7, 0, 0, 0, 0, 9, 100, 200, 300};
+    albion::thingsexport::childTransform(dummy, parent, 2, 5, child);
+    CHECK(near(child.x, 4) && near(child.y, 8) && near(child.z, 48));
+    CHECK(child.hasMatrix && near(child.scale, 0.1f));
+    CHECK(near(child.m[0], 0) && near(child.m[1], -0.1f));
+    CHECK(near(child.m[3], 0.1f) && near(child.m[4], 0) && near(child.m[8], 0.1f));
+    const float next[12] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 100, 0, 0};
+    albion::thingsexport::childTransform(next, child, 2, 1, grandchild);
+    CHECK(near(grandchild.x, 4) && near(grandchild.y, -2) && near(grandchild.z, 48));
+    CHECK(near(grandchild.scale, 0.02f) && near(grandchild.m[1], -0.02f));
 }
 
 // Water: ENGINE_THEME WaterHeight is a depth above the ground. On flat ground at

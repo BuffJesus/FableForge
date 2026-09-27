@@ -80,6 +80,24 @@ void thingBasis(const float forward[3], const float up[3], float scale, float m[
     for (int k = 0; k < 3; ++k) { m[0 * 3 + k] = -r[k] * scale; m[1 * 3 + k] = -f[k] * scale; m[2 * 3 + k] = u[k] * scale; }
 }
 
+void childTransform(const float d[12], const fe::Instance& parent,
+                    float objectScale, float graphicScale, fe::Instance& child) {
+    float forward[3], up[3];
+    for (int k = 0; k < 3; ++k) {
+        forward[k] = -(d[3] * parent.m[k] + d[4] * parent.m[3 + k] + d[5] * parent.m[6 + k]);
+        up[k] = d[6] * parent.m[k] + d[7] * parent.m[3 + k] + d[8] * parent.m[6 + k];
+    }
+    // GetDummyObjectPositionStatic (0x031f7a90) normalizes the composed axes.
+    // CreateObject/CreateBuilding inherit GetScale, not GetFullScale.
+    child.scale = 0.01f * (objectScale * graphicScale);
+    thingBasis(forward, up, child.scale, child.m);
+    child.x = parent.x + d[9] * parent.m[0] + d[10] * parent.m[3] + d[11] * parent.m[6];
+    child.y = parent.y + d[9] * parent.m[1] + d[10] * parent.m[4] + d[11] * parent.m[7];
+    child.z = parent.z + d[9] * parent.m[2] + d[10] * parent.m[5] + d[11] * parent.m[8];
+    child.hasMatrix = true;
+    child.yaw = std::atan2(child.m[4], child.m[3]);
+}
+
 fe::Scene load(const std::string& mapName, const Options& options, const te::Context& context, Stats* statsOut) {
     fe::Scene scene;
     scene.mapName = mapName;
@@ -251,8 +269,8 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     // interiors (Hall of Heroes, Hobbe cave throne room...) get into the world:
     // none of them are in the .tng. Child = dummy matrix (mesh-local, cm) composed
     // with the parent's world transform; children may carry dummies of their own.
-    std::function<void(uint32_t, const fe::Instance&, int)> spawnChildren;
-    spawnChildren = [&](uint32_t parentModel, const fe::Instance& parent, int depth) {
+    std::function<void(uint32_t, const fe::Instance&, float, int)> spawnChildren;
+    spawnChildren = [&](uint32_t parentModel, const fe::Instance& parent, float objectScale, int depth) {
         if (depth > 4) return;
         std::string merr;
         const auto* geo = fe::cachedMesh(parentModel, merr);
@@ -280,31 +298,22 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             if (arg.empty()) continue;
             ++st.childThings;
             uint32_t modelId = 0;
-            const int code = context.graphicModelId(arg, modelId);
+            float graphicScale = 1.0f;
+            const int code = context.graphicModelId(arg, modelId, &graphicScale);
             if (code == 0) { if (!defWarned[arg]++) warn(arg + " (child of a mesh dummy): not in game.bin"); ++st.noDef; continue; }
             if (code < 0 || modelId == 0) { ++st.noGraphic; continue; }
             const int meshIndex = acquireMesh(modelId, arg);
             if (meshIndex < 0) { ++st.noMesh; continue; }
-            // Dummy transform: rows 0..2 = local axes, row 3 = translation (cm),
-            // row-vector convention like every CMatrix3x4 -> child = dummy * parent.
-            const float* d = h.matrix;
             fe::Instance c;
-            c.mesh = meshIndex; c.type = -1; c.prim = 0; c.hasMatrix = true;
-            for (int r = 0; r < 3; ++r)
-                for (int k = 0; k < 3; ++k)
-                    c.m[r * 3 + k] = d[r * 3 + 0] * parent.m[0 * 3 + k] + d[r * 3 + 1] * parent.m[1 * 3 + k] + d[r * 3 + 2] * parent.m[2 * 3 + k];
-            c.x = parent.x + d[9] * parent.m[0] + d[10] * parent.m[3] + d[11] * parent.m[6];
-            c.y = parent.y + d[9] * parent.m[1] + d[10] * parent.m[4] + d[11] * parent.m[7];
-            c.z = parent.z + d[9] * parent.m[2] + d[10] * parent.m[5] + d[11] * parent.m[8];
-            c.scale = parent.scale;
-            c.yaw = std::atan2(c.m[4], c.m[3]);
+            c.mesh = meshIndex; c.type = -1; c.prim = 0;
+            childTransform(h.matrix, parent, objectScale, graphicScale, c);
             c.tag = "child:" + arg;
             c.thing = parent.thing;
             scene.meshes[size_t(meshIndex)].instanceCount++;
             scene.instances.push_back(c);
             ++st.placed;
             ++st.childPlaced;
-            spawnChildren(modelId, c, depth + 1);
+            spawnChildren(modelId, c, objectScale, depth + 1);
         }
     };
 
@@ -329,6 +338,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
             }
         }
         uint32_t modelId = 0;
+        float graphicScale = 1.0f;
         std::string overrideName;
         if (const auto ov = thing.find("GraphicOverride")) {
             overrideName = unquote(*ov);
@@ -336,7 +346,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         }
         if (!overrideName.empty()) modelId = fe::meshIdByName(overrideName);
         if (modelId == 0) {
-            const int code = context.graphicModelId(def, modelId);
+            const int code = context.graphicModelId(def, modelId, &graphicScale);
             if (code == 0) { ++st.noDef; if (!defWarned[def]++) warn(def + ": not in game.bin"); continue; }
             if (code < 0) { ++st.noGraphic; continue; }   // a def type without a Graphic field (cameras, emitters, exits)
             if (modelId == 0) { ++st.noGraphic; continue; }
@@ -348,7 +358,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         float objectScale = 1.0f;
         if (const auto sc = thing.find("ObjectScale")) objectScale = float(std::atof(sc->c_str()));
         if (!std::isfinite(objectScale) || objectScale <= 0.0f) objectScale = 1.0f;
-        const float s = 0.01f * objectScale;   // mesh centimetres -> world units
+        const float s = 0.01f * (objectScale * graphicScale);   // mesh centimetres -> world units
 
         fe::Instance inst;
         inst.mesh = meshIndex;
@@ -367,7 +377,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         scene.meshes[size_t(meshIndex)].instanceCount++;
         scene.instances.push_back(inst);
         ++st.placed;
-        spawnChildren(modelId, inst, 0);
+        spawnChildren(modelId, inst, objectScale, 0);
     }
     scene.treeInstances = st.placed;
     if (options.log) {

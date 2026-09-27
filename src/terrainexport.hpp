@@ -189,7 +189,8 @@ public:
     // game.bin lookup for placed things: the definition's Graphic model id
     // (MBANK_ALLMESHES). Result codes: 1 = found (modelId set, may be 0 = no
     // model), 0 = definition not in game.bin, -1 = def type not decodable.
-    int graphicModelId(const std::string& definitionName, uint32_t& modelId) const;
+    // Optional scale is Graphic.RenderSizeX (1 for missing/invalid values).
+    int graphicModelId(const std::string& definitionName, uint32_t& modelId, float* scale = nullptr) const;
     // Names of every game.bin definition whose type is one of `types` (e.g.
     // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
     std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;

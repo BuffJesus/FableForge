@@ -12,7 +12,7 @@
 // CEngineInternalPrimitiveMeshBase::CalcObjectMatrix (retail 0x00bebaa0, debug
 // build 0x02ee3a00) composes a mesh vertex as
 //   world = pos + lx*(-right) + ly*(-forward) + lz*up,  right = forward x up,
-// with lx/ly/lz the mesh vertex scaled by 0.01 * ObjectScale (meshes are in cm).
+// with lx/ly/lz scaled by 0.01 * ObjectScale * Graphic.RenderSizeX (mesh cm).
 // Cross-checked 2026-09-16 on the Arena (oval pit axis, N/S corridors, gates,
 // audience ring and billboard facing all agree, and match MINIMAP_ARENA) and on
 // Oakvale (fence segments join end-to-end). The old ChocolateBox-derived guess
@@ -84,6 +84,11 @@ struct Stats {
 // {-right, -forward, up}. `forward`/`up` need not be normalised; a degenerate frame
 // falls back to +X forward / +Z up.
 void thingBasis(const float forward[3], const float up[3], float scale, float m[9]);
+
+// Dummy translation uses the parent's full transform. Child geometry inherits
+// ObjectScale and its own Graphic.RenderSizeX; dummy-axis lengths are discarded.
+void childTransform(const float dummy[12], const foliageexport::Instance& parent,
+                    float objectScale, float graphicScale, foliageexport::Instance& child);
 
 // Produces a foliageexport::Scene (same instance/mesh model, rootName "Things")
 // so every writer and the preview renderer work unchanged.

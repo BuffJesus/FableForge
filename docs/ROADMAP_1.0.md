@@ -1,5 +1,21 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+## Navigation and editor research (2026-09-27)
+
+The navigation/overworld integration is on local main. The experimental,
+read-only `nav-compare` path compares object hulls, detailed leaves, switchable
+doors, neighbours and regions against shipped navigation; it is not yet the
+production writer. Current results and remaining input/layer gaps are in
+[the navigation handoff](HANDOFF_NAV.md).
+
+Two research guides support the integrated modding environment work below:
+
+- [Debug editor feature audit](DEBUG_EDITOR_FEATURE_AUDIT.md): recovered native
+  evidence for missing/partial tools, unknown behavior and confirmed stubs.
+- [s&box modding inspiration](SBOX_MODDING_INSPIRATION.md): pinned source examples
+  and proposed acceptance criteria for inspector metadata, asset dependencies,
+  presets, shared transactions and eventual edit/play sessions.
+
 ## Resume here (2026-09-26)
 
 **Branches.** `modpacks` (23 commits: the whole 0.20 mod-pack composer + the 0.17 static mesh

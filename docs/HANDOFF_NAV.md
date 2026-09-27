@@ -5,6 +5,7 @@ Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting comm
 navigation implementation is committed at `91498be`. Game-install files were
 not changed. Both branches were validated and merged at `7def801` in the owned,
 isolated checkout `D:/Code/FableForge-verify-ow` (overworld source `1a60f09`).
+Local `main` and this lane were fast-forwarded to validation commit `8b5e587`.
 
 ## Setup
 
@@ -103,7 +104,7 @@ preference and switchable UIDs; neighbour comparisons ignore numeric node IDs):
 | LookoutPoint | 1349 | 0 / 0 | 861 / 861 | 0 |
 | PicnicArea | 855 | 0 / 0 | 536 / 536 | 0 |
 | BarrowFields (ground projection) | 2224 | 4 / 0 | 1327 / 1327 retail (1330 generated) | 1 |
-| Greatwood_1 | 1213 | 8 / 18 | 704 / 723 retail (718 generated) | 0 on shared leaves |
+| Greatwood_1 | 1231 | 0 / 0 | 723 / 723 | 0 |
 | OrchardFarm (ground projection) | 1646 | 26 / 153 | 980 / 1093 retail (1011 generated) | 0 on shared leaves |
 | GuildExterior | 509 | 0 / 6 | 320 / 322 retail (320 generated) | 0 on shared leaves |
 
@@ -164,8 +165,8 @@ doors, retained closed-door links and seeding from either side of a doorway.
 Evidence: `build/nav-anchor-evidence.c`, and the existing native bodies in
 FableTLC `ghidra_out/decomp_navmesh2.c`.
 
-Broader read-only comparisons exposed the gaps in the table above. Greatwood_1
-differences cluster around x37..47/y119..124; GuildExterior lacks two half-unit
+Broader read-only comparisons exposed the gaps in the table above. Greatwood_1's
+former differences clustered around x37..47/y119..124 (resolved below); GuildExterior lacks two half-unit
 leaves near (2.5,101.25). These are follow-up inputs to investigate, not tolerances
 to weaken. BarrowFields' loose TNG is byte-identical to the WAD entry (SHA256
 `FF0F5C0B18F4D3DE6F368C2A1E8634945BD7BC0022C6BCC81BE061DB96A4E73E`);
@@ -225,5 +226,59 @@ The combined overworld scratch test passes, including GUI moves, terrain deploy,
 theme deploy and custom-theme deploy (`build/combined-overworld.log` in the
 integration checkout). LookoutPoint/PicnicArea retain exact comparison results;
 BarrowFields retains the documented discrepancies. Docs-command checks pass.
-The validated integration is ready for the local main fast-forward; no push or
-release is involved. Production navigation remains the existing writer.
+The validated integration was fast-forwarded into local main at `8b5e587`; no push
+or release was performed. Production navigation remains the existing writer.
+
+## Graphic definition scale and automatic children
+
+Greatwood_1's two `OBJECT_LOOKOUT_POINT_STATUE` instances have Graphic scale 2.
+The scene loader previously used only ObjectScale, leaving their rendered mesh
+and collected physics hulls half-sized. `Context::graphicModelId` now optionally
+returns the cached Graphic scale; root instances use `0.01 * (ObjectScale *
+GraphicScale)`. Missing, nonfinite or nonpositive graphic scales fall back to 1.
+Explicit named GraphicOverride retains its existing unit graphic scale; its
+native semantics were not established by this investigation.
+
+Evidence from the same hash-pinned FableWin:
+
+- `CEngineGraphic` layout: BankIndex +0, AnimStep +4, RenderSizeX +8,
+  AdditiveAlpha +12, Type +13. Serialized Graphic stores type first, so
+  RenderSizeX is the float at byte 12. `CPersistTraits<CEngineGraphic>::TransferIn`
+  (`0x0200af80`) confirms the field sequence.
+- `SetMainGraphic` (`0x01d643d0`) copies RenderSizeX to appearance +0x74.
+  `GetFullScale` (`0x01d0a3c0`) returns appearance +0x44 times +0x74.
+  `CTCPhysicsStandard::SetPhysicsMeshBankIndex` (`0x02525db0`) uses that full scale.
+- `CTCMeshAutomaticEntityCreator::CreateObject` (`0x02570e20`) and
+  `CreateBuilding` (`0x02571d30`) pass the parent's **GetScale** to the child,
+  preserving the child's own graphic scale. `GetDummyObjectPositionStatic`
+  (`0x031f7a90`) transforms the dummy translation through the full parent matrix
+  and normalizes its composed orientation axes. Child transforms now follow
+  that distinction, including nested children.
+
+Evidence exports are under `build/nav-{fullscale,child-create,graphic-layout,
+physics-create,graphic-transfer}-evidence.c`. Tests cover a rotated, nonuniform
+dummy under a parent with ObjectScale 2 / GraphicScale 3, a child GraphicScale 5,
+and a unit-graphic grandchild. A read-only real-scene probe also checks cold and
+cached statue lookup and ObjectScale 3 / GraphicScale 2 -> mesh scale 0.06.
+
+All **1231 Greatwood nodes and 723 leaf-neighbour sets now match retail**, with
+matching region partitions. The other five comparison results are unchanged.
+The full shared-scene regression gate completed **ALL PASS** in
+`build/full-gate-scale.log`; the optional mod and Project Seasons corpus checks
+skipped because their fixtures are absent. Includes build, core tests, eight-map
+retail export smoke, UI/editor, scratch overworld/deploy and mesh-import checks.
+No in-game visual check has been performed; generation remains experimental.
+
+Further input check: GuildExterior's missing half-leaves (retail indices 16/17)
+form region 2 and link only to one another. All three serialized navigation
+positions resolve to region 1. There is no switchable leaf in that tiny region.
+This led to a newly confirmed input error: the serialized positions are **action
+points**, not region seeds. `SaveToFile` accesses this+0x70, while `SetUpRegions`
+iterates this+0x98 (debug layout; disassembly in `build/nav-seed-offsets.log`).
+`GetMapNavigationAreaInit` gathers separate seeds from villages, AI creatures,
+creature generators, navigation seeds, region entrances and exits. Interface 99
+is CTCDRegionEntrance (`0x01ba918f`). A scratch comparison using local TNG seed
+candidates recovers Guild completely, removes Barrow's four extra nodes and
+recovers 115 Orchard nodes; the three previous exact comparisons stay exact.
+Implementing an explicit seed input is the next step. Scratch evidence:
+`build/nav-region-probe.cpp`, `build/nav-scale-guild-details.log`.
