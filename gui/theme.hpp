@@ -28,6 +28,8 @@ void labelValue(const char* text, const char* value, float width);
 // Widgets. All return true when activated / changed.
 bool primaryButton(const char* label, const ImVec2& size, bool enabled = true);
 bool ghostButton(const char* label, const ImVec2& size);
+// A ghost button with red text and hover: deletes, removals, undoing an install.
+bool dangerButton(const char* label, const ImVec2& size);
 bool chip(const char* label, bool active);
 bool toggle(const char* label, bool* value);
 bool segmented(const char* id, int& value, std::initializer_list<const char*> options, float width);

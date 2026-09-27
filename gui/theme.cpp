@@ -18,7 +18,7 @@ const ImVec4 kPalette[Count] = {
     rgb(0x16, 0x15, 0x1d),         // Bg1  panels
     rgb(0x1e, 0x1c, 0x27),         // Bg2  cards, inputs
     rgb(0x27, 0x25, 0x33),         // Bg3  hovered
-    rgb(0x2a, 0x28, 0x36),         // Border
+    rgb(0x3a, 0x37, 0x4a),         // Border
     rgb(0xe6, 0xe3, 0xf0),         // Text
     rgb(0x9b, 0x97, 0xad),         // Muted
     rgb(0x6a, 0x66, 0x7c),         // Faint
@@ -59,7 +59,8 @@ void applyTheme() {
     s = ImGuiStyle();   // reset so re-applying at a new scale does not compound
     s.WindowRounding = 0; s.ChildRounding = 0; s.FrameRounding = 6; s.PopupRounding = 8;
     s.GrabRounding = 6; s.TabRounding = 6; s.ScrollbarRounding = 8;
-    s.WindowBorderSize = 0; s.ChildBorderSize = 0; s.FrameBorderSize = 0; s.PopupBorderSize = 1;
+    // frames get a 1px border: inputs, sliders and buttons sit on cards of nearly the same shade
+    s.WindowBorderSize = 0; s.ChildBorderSize = 0; s.FrameBorderSize = 1; s.PopupBorderSize = 1;
     s.WindowPadding = ImVec2(12, 12); s.FramePadding = ImVec2(10, 6); s.ItemSpacing = ImVec2(8, 8);
     s.ItemInnerSpacing = ImVec2(6, 6); s.IndentSpacing = 14; s.ScrollbarSize = 10; s.GrabMinSize = 12;
     s.ScaleAllSizes(g_scale);
@@ -71,9 +72,10 @@ void applyTheme() {
     c[ImGuiCol_PopupBg] = vec(Bg2);
     c[ImGuiCol_Border] = vec(Border);
     c[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
-    c[ImGuiCol_FrameBg] = vec(Bg2);
-    c[ImGuiCol_FrameBgHovered] = vec(Bg3);
-    c[ImGuiCol_FrameBgActive] = vec(Bg3);
+    // inputs and slider tracks are inset: darker than the card they sit on
+    c[ImGuiCol_FrameBg] = vec(Bg0);
+    c[ImGuiCol_FrameBgHovered] = rgb(0x19, 0x17, 0x22);
+    c[ImGuiCol_FrameBgActive] = rgb(0x19, 0x17, 0x22);
     c[ImGuiCol_TitleBg] = c[ImGuiCol_TitleBgActive] = c[ImGuiCol_TitleBgCollapsed] = vec(Bg1);
     c[ImGuiCol_MenuBarBg] = vec(Bg1);
     c[ImGuiCol_ScrollbarBg] = ImVec4(0, 0, 0, 0);
@@ -83,8 +85,8 @@ void applyTheme() {
     c[ImGuiCol_CheckMark] = vec(Accent);
     c[ImGuiCol_SliderGrab] = vec(Accent);
     c[ImGuiCol_SliderGrabActive] = vec(AccentHover);
-    c[ImGuiCol_Button] = vec(Bg2);
-    c[ImGuiCol_ButtonHovered] = vec(Bg3);
+    c[ImGuiCol_Button] = vec(Bg3);
+    c[ImGuiCol_ButtonHovered] = rgb(0x34, 0x31, 0x44);
     c[ImGuiCol_ButtonActive] = vec(AccentSoft);
     c[ImGuiCol_Header] = vec(AccentSoft);
     c[ImGuiCol_HeaderHovered] = vec(Bg3);
@@ -103,34 +105,47 @@ bool primaryButton(const char* label, const ImVec2& size, bool enabled) {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, enabled ? vec(AccentActive) : vec(Bg2));
     ImGui::PushStyleColor(ImGuiCol_Text, enabled ? ImVec4(1, 1, 1, 1) : vec(Faint));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, S(8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     if (!enabled) ImGui::BeginDisabled();
     const bool pressed = ImGui::Button(label, size);
     if (!enabled) ImGui::EndDisabled();
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
     return pressed && enabled;
 }
 
 bool ghostButton(const char* label, const ImVec2& size) {
-    ImGui::PushStyleColor(ImGuiCol_Button, vec(Bg2));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, vec(Bg3));
+    ImGui::PushStyleColor(ImGuiCol_Button, vec(Bg3));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x34, 0x31, 0x44));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, vec(AccentSoft));
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(Muted));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(Text));
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleColor(4);
+    return pressed;
+}
+
+bool dangerButton(const char* label, const ImVec2& size) {
+    ImGui::PushStyleColor(ImGuiCol_Button, vec(Bg3));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0xf8, 0x71, 0x71, 0.22f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0xf8, 0x71, 0x71, 0.35f));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(0xf8, 0x71, 0x71, 0.35f));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(Error));
+    const bool pressed = ImGui::Button(label, size);
+    ImGui::PopStyleColor(5);
     return pressed;
 }
 
 bool chip(const char* label, bool active) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, S(12.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(12), S(5)));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_Button, active ? vec(Accent) : ImVec4(0.12f, 0.11f, 0.16f, 0.85f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? vec(AccentHover) : vec(Bg3));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, vec(AccentActive));
     ImGui::PushStyleColor(ImGuiCol_Text, active ? ImVec4(1, 1, 1, 1) : vec(Muted));
     const bool pressed = ImGui::Button(label);
     ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     return pressed;
 }
 

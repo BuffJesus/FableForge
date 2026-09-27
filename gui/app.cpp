@@ -348,7 +348,7 @@ void App::drawSetupPanel() {
                 ImGui::PopFont();
                 ImGui::EndChild();
                 if (!confirmRestore_) {
-                    if (theme::ghostButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
+                    if (theme::dangerButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
                     auto_.registerWidget("btn_restore_all");
                 } else {
                     const int r = confirmRow("Put every backed-up file back and delete the files FableForge created? Your edits in the game are lost (loose .lev/.tng drafts stay).",
@@ -1515,7 +1515,12 @@ void App::drawViewport(float width) {
 
     // HUD: map name + stats (top-left)
     if (renderer_.hasMesh() && previewLoaded()) {
+        // text on channel 1, then a translucent backdrop behind the whole block on channel 0,
+        // so the name and stats stay readable over bright terrain
+        dl->ChannelsSplit(2);
+        dl->ChannelsSetCurrent(1);
         ImGui::SetCursorScreenPos(ImVec2(origin.x + S(16), origin.y + S(14)));
+        ImGui::BeginGroup();
         ImGui::PushFont(fontTitle_);
         const MapEntry* cur = findEntry(previewLoadedFor_);
         ImGui::TextUnformatted(cur ? cur->name.c_str() : previewLoadedFor_.c_str());
@@ -1544,6 +1549,13 @@ void App::drawViewport(float width) {
                                previewScene_.unresolvedThemes, previewScene_.themes.size());
         }
         ImGui::PopFont();
+        ImGui::EndGroup();
+        dl->ChannelsSetCurrent(0);
+        const float pad = S(8);
+        dl->AddRectFilled(ImVec2(ImGui::GetItemRectMin().x - pad, ImGui::GetItemRectMin().y - pad * 0.5f),
+                          ImVec2(ImGui::GetItemRectMax().x + pad, ImGui::GetItemRectMax().y + pad * 0.5f),
+                          (theme::col(theme::Bg0) & 0x00FFFFFF) | 0xB8000000, S(8.0f));
+        dl->ChannelsMerge();
     }
 
     // Chips along the bottom: view modes on the left, layers on the right. When the
@@ -1595,10 +1607,16 @@ void App::drawViewport(float width) {
         const char* hint = "RMB look + WASD fly   LMB dolly/turn   MMB pan   Alt+LMB orbit   Wheel zoom   F frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
         const float hintRight = lx - ImGui::CalcTextSize("Show:").x - S(8) - S(28);   // clear of the "Show:" caption
+        // the controls hint gets the same translucent pill as the HUD so it reads over any terrain
+        auto hintAt = [&](ImVec2 at) {
+            dl->AddRectFilled(ImVec2(at.x - S(8), at.y - S(3)), ImVec2(at.x + hs.x + S(8), at.y + hs.y + S(3)),
+                              (theme::col(theme::Bg0) & 0x00FFFFFF) | 0xB8000000, S(6.0f));
+            dl->AddText(at, theme::col(theme::Muted), hint);
+        };
         if (!twoRows && hintRight - hs.x > modesEnd + S(16))
-            dl->AddText(ImVec2(hintRight - hs.x, yModes + (rowH - hs.y) * 0.5f), theme::col(theme::Faint), hint);
+            hintAt(ImVec2(hintRight - hs.x, yModes + (rowH - hs.y) * 0.5f));
         else if (renderer_.hasMesh() && previewLoaded() && size.y > S(300))
-            dl->AddText(ImVec2(origin.x + S(16), origin.y + S(64) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)), theme::col(theme::Faint), hint);
+            hintAt(ImVec2(origin.x + S(16), origin.y + S(72) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)));
         ImGui::PopFont();
     }
     ImGui::EndChild();

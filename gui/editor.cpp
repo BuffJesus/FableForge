@@ -1247,7 +1247,7 @@ void App::drawUnsavedPrompt() {
         if (theme::primaryButton("Save draft", ImVec2(w, S(32)), doc_.dirty())) { saveDocument(); if (!hasUnsavedEdits()) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); } }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Discard", ImVec2(w, S(32)))) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
+        if (theme::dangerButton("Discard", ImVec2(w, S(32)))) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
         auto_.registerWidget("btn_unsaved_discard");
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Cancel", ImVec2(w, S(32)))) pendingSelect_.clear();
@@ -1501,7 +1501,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         if (theme::ghostButton("Duplicate  (Ctrl+D)", ImVec2(half, S(28)))) duplicateSelected();
         auto_.registerWidget("btn_duplicate");
         ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Delete  (Del)", ImVec2(half, S(28)))) deleteSelected();
+        if (theme::dangerButton("Delete  (Del)", ImVec2(half, S(28)))) deleteSelected();
         auto_.registerWidget("btn_delete");
         // village membership: buildings, markers and creatures belong to a Village thing by uid
         if (s.type != "Village") {
@@ -1774,7 +1774,7 @@ void App::drawEditFooter(float pad, float inner) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; Atlas reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
     if (dirty) {
         ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Revert all", ImVec2(half, S(32)))) revertDocument();
+        if (theme::dangerButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");
     }
 }

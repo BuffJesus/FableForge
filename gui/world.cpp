@@ -557,7 +557,7 @@ void App::drawWorldFooter(float pad, float inner) {
             if (theme::ghostButton(worldCanRedo() ? "Redo  (Ctrl+Y)" : "Redo", ImVec2(third, S(30))) && worldCanRedo()) worldRedo();
             auto_.registerWidget("btn_world_redo");
             ImGui::SameLine(0, S(6));
-            if (theme::ghostButton("Revert all", ImVec2(third, S(30))) && any) worldRevert();
+            if (theme::dangerButton("Revert all", ImVec2(third, S(30))) && any) worldRevert();
             auto_.registerWidget("btn_world_revert");
         }
     } else {
