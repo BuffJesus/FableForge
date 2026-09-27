@@ -202,6 +202,27 @@ Everything is written the way the game wrote it: untouched things stay byte-iden
 moved things get their position/basis lines rewritten in retail float spelling, new
 things use retail field order and the per-file UID namespace.
 
+## Custom models
+
+*Import model* (Edit tab, Objects) or `forge mesh-import <model.glb|.gltf|.obj> <NAME>
+[--texture png]` turns a static model into a placeable `OBJECT_<NAME>`: the mesh is
+appended to `graphics.big` with a collision hull (the hero walks into it, not through it),
+its texture to `textures.big`, and a definition to `game.bin` copied from a donor object.
+Model space is metres; the game's is centimetres, so the importer scales by 100.
+Static meshes only for now: no skinning, no animation.
+
+## Mod packs
+
+The **Mods** tab keeps one load order for every kind of Fable mod: `.fmp` packs,
+game-root folders, bsdiff `.patch` files, `.qst` edits, EgoCore `Mods/<Name>/` folders
+(DLL + text `.def` + `.resource` bank overrides + partial TNGs) and whole-file packs like
+Project Seasons. Mods merge record by record (a `game.bin` field, a thing by UID, a
+`.qst` statement, a `text.big` key, an `FSE/quests.lua` entry) and later mods win.
+*Check conflicts* lists every contested record in one report where you pick the winner.
+*Build and deploy* rebuilds the whole order onto the retail files; *Undeploy* puts them
+back. Things a mod placed are badged in the editor with the mod's name. Shell:
+`forge-tools mods list/add/remove/move/enable/disable/build/deploy/undeploy/conflicts`.
+
 ## Building
 
 ```
