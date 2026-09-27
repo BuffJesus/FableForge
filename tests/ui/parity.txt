@@ -1,0 +1,40 @@
+# Vanilla-parity panels (Aeon's review): sections card, grouped def tree, links +
+# property grid, theme tools, creatures by group, cheat-sheet. Screenshots for review.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+set saveroot build/ui_parity_install
+edit 1
+frames 3
+edit_tab 0
+frames 3
+assert_widget input_new_section
+assert_widget input_defsearch
+screenshot build/ui/parity_1_objects.png
+select_thing 0
+frames 3
+screenshot build/ui/parity_2_selection.png
+edit_tab 1
+frames 3
+terrain_mode 7
+frames 3
+assert_widget seg_terrain_tool
+assert_widget combo_replace_from
+assert_widget btn_replace_all
+screenshot build/ui/parity_3_replace.png
+terrain_mode 6
+frames 3
+screenshot build/ui/parity_4_themes.png
+terrain_mode 9
+frames 3
+screenshot build/ui/parity_5_path.png
+edit_tab 2
+frames 3
+assert_widget input_actorsearch
+screenshot build/ui/parity_6_actors.png
+help
+frames 3
+screenshot build/ui/parity_7_help.png
+quit
