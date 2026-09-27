@@ -23,7 +23,7 @@ the panel wiring builds but nobody has looked at it on screen.
 | 5 | Replace theme (pen) / Flood Replace (click) / theme eyedropper (Ctrl+click) | **Done** `0f2c3f3` (vanilla `EditReplaceEngineThemeUndoable`, `EditFloodReplaceEngineThemeUndoable`, `PaintInputPickupTheme`). UI unseen. |
 | 6 | "Replace All" | **Done** `0f2c3f3`. Not in vanilla, which floods only the connected patch. |
 | 7 | Heightmap path maker | **Done** `0f2c3f3`: Draw path, drag start -> end (vanilla `EditDrawPathPenUndoable`). UI unseen. |
-| 8 | Load other .wld files, not just FinalAlbion | Open. Vanilla: File > Load World (`*.wld`). About 15 hard-coded `FinalAlbion` sites in `gui/` and `src/`. |
+| 8 | Load other .wld files, not just FinalAlbion | **Done (stage 1)** `6c455b0`: File > Open world, maps grouped by region; the map's own .lev/.tng are read and saved. Later: STB bake for other worlds; world moves / regions for them. UI unseen. |
 | 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | **Grouping done** `ec002b4`: tree by ENGINE_THEME_GROUP (UI unseen). Local detail is open; it is not proven editor-side in vanilla. |
 | 10 | Per-class property tabs (CTC editing) | Open. 5 thing classes + 27 CTC `GetPropertiesStruct` label sets are in inventory 5.4. Next: `CreateGenericVars` for value types. |
 | 11 | Actors from def entity groups by category, not Forge presets | **Done** `80aa11d`: type -> THING_GROUP -> def tree (3,972 defs / 93 groups vs retail), Actors tab leads with creatures by group, `forge def-groups`. UI unseen. Presets card kept (user's call). Markers / villages / switches are not placeable yet. |
