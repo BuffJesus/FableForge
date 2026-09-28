@@ -4,12 +4,15 @@
 // go: WLD MapX/MapY, BWD boxes (all three copies) and the STB chunks
 // translated to their new origins (src/overworld + src/stbrelocate).
 #include "app.hpp"
+#include "modpack.hpp"
 #include "stitch.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <future>
+#include <iterator>
 
 #include "theme.hpp"
 
@@ -37,11 +40,30 @@ void App::setWorldMode(bool on) {
 }
 
 void App::loadWorld() {
-    const std::string root = saveRoot();
-    if (worldLoaded_ && worldLoadedFrom_ == root) return;
+    // writing into a pack: the view is the game with the pack's world files over it
+    std::string root = saveRoot();
+    const std::string key = root + "|" + packDest_;
+    if (worldLoaded_ && worldLoadedFrom_ == key) return;
     std::string err;
-    worldLoaded_ = editor::loadWorldLayout(root, world_, err);
-    worldLoadedFrom_ = root;
+    std::filesystem::path stb;                                          // the game's (the view shadow has none)
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> records;  // the pack's re-baked maps
+    if (!packDest_.empty()) {
+        const auto view = albion::modpack::viewShadowRoot();
+        if (albion::modpack::prepareShadow(root, packDest_, view, true, err)) {
+            stb = std::filesystem::path(root) / "data" / "Levels" / "FinalAlbion_RT.stb";
+            std::error_code ec;
+            const std::filesystem::path dir = std::filesystem::path(packDest_) / "stb";
+            if (std::filesystem::is_directory(dir, ec))
+                for (const auto& de : std::filesystem::directory_iterator(dir, ec))
+                    if (de.path().extension() == ".record") {
+                        std::ifstream f(de.path(), std::ios::binary);
+                        records.push_back({de.path().stem().string(), std::vector<uint8_t>(std::istreambuf_iterator<char>(f), {})});
+                    }
+            root = view.string();
+        } else pushLog("world: the pack view: " + err + " (showing the game)", 1);
+    }
+    worldLoaded_ = editor::loadWorldLayout(root, world_, err, stb, records);
+    worldLoadedFrom_ = key;
     worldPending_.clear();
     worldOwnerEdits_.clear();
     worldSeesEdits_.clear();
@@ -161,8 +183,9 @@ bool App::worldRedo() {
 
 void App::worldApply() {
     if (worldPendingCount() == 0 || worldFuture_.valid()) return;
-    if (gameWriteBlocked("world")) return;
+    if (packDest_.empty() && gameWriteBlocked("world")) return;
     const std::string root = saveRoot();
+    const std::string pack = packDest_;   // "" = the game directly
     const std::vector<editor::MapMove> moves = worldPending_;
     const std::vector<editor::OwnerEdit> owners = worldOwnerEdits_;
     const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
@@ -172,8 +195,23 @@ void App::worldApply() {
     pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
-    worldFuture_ = std::async(std::launch::async, [root, moves, owners, sees, stitch, feather, progress]() {
+    worldFuture_ = std::async(std::launch::async, [root, pack, moves, owners, sees, stitch, feather, progress]() {
         WorldJob r;
+        r.pack = pack;
+        if (!pack.empty()) {   // the same edits against a shadow of the game + pack, captured into the pack
+            r.ok = albion::modpack::intoPack(root, pack, [&](const std::filesystem::path& shadow, std::string& err) {
+                if (!editor::applyWorldEdits(shadow, moves, owners, sees, r.notes, err, progress)) return false;
+                if (!stitch) return true;
+                editor::WorldLayout after;
+                if (!editor::loadWorldLayout(shadow, after, err)) return false;
+                editor::StitchOptions so; so.feather = feather;
+                std::vector<editor::StitchReport> reports;
+                bool ok = true;
+                for (const auto& mv : moves) ok = editor::stitchNeighbours(shadow, after, mv.name, so, reports, r.notes, err) && ok;
+                return ok;
+            }, r.notes, r.error);
+            return r;
+        }
         r.ok = editor::applyWorldEdits(root, moves, owners, sees, r.notes, r.error, progress);
         if (r.ok && stitch) {
             // every moved map's seams at its new placement: shared-edge heights
@@ -541,6 +579,8 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
     theme::label("What a move writes");
     ImGui::PushFont(fontSmall_);
     theme::hint("FinalAlbion.wld MapX/MapY and the .bwd box (all three copies the game reads), and the map's terrain chunk in FinalAlbion_RT.stb translated to the new origin: ground and background LOD meshes, water, tree/grass placements. Placed objects (.tng) are map-local and stay as they are. Maps that touched the moved one get their shared edges re-baked. One-time .forge-orig backups; saves cache the region table, so start a new game to walk the new layout.");
+    if (!packDest_.empty())
+        theme::hint(("Writing into pack " + packLabel(packDest_) + ": the same edits run on a copy of the game with the pack laid over it, and what changed goes into the pack (its FinalAlbion.wld / .bwd, level files, re-baked chunks under stb/). The view shows the game + this pack. Mods > Deploy merges it map by map and region by region with the other mods.").c_str());
     ImGui::PopFont();
     theme::endCard();
 }
@@ -553,11 +593,16 @@ void App::drawWorldFooter(float pad, float inner) {
         return;
     }
     const bool any = worldPendingCount() > 0;
+    drawPackPicker(inner);
+    ImGui::SetCursorPosX(pad);
+    const bool toPack = !packDest_.empty();
+    const std::string where = toPack ? "into pack " + packLabel(packDest_) : std::string("into the game");
     if (!confirmWorldApply_) {
-        char label[96];
-        if (worldPending_.empty()) std::snprintf(label, sizeof label, any ? "Write %zu region change%s into the game" : "No pending changes", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
-        else std::snprintf(label, sizeof label, "Move %zu map%s into the game%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
-        if (theme::primaryButton(label, ImVec2(inner, S(42)), any)) confirmWorldApply_ = true;
+        char label[160];
+        if (worldPending_.empty()) std::snprintf(label, sizeof label, any ? "Write %zu region change%s %s" : "No pending changes", worldPendingCount(), worldPendingCount() == 1 ? "" : "s", where.c_str());
+        else std::snprintf(label, sizeof label, "Move %zu map%s %s%s", worldPending_.size(), worldPending_.size() == 1 ? "" : "s", where.c_str(), worldPendingCount() > worldPending_.size() ? " (+ region changes)" : "");
+        // into a pack nothing in the game changes: no confirmation
+        if (theme::primaryButton(label, ImVec2(inner, S(42)), any)) { if (toPack) worldApply(); else confirmWorldApply_ = true; }
         auto_.registerWidget("btn_world_apply");
         if (any || worldCanUndo() || worldCanRedo()) {
             const float third = (inner - 2 * S(6)) / 3.0f;

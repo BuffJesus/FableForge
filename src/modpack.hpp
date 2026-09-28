@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,23 @@ bool writeStaticMapChunk(const std::filesystem::path& stb, const std::string& ma
 // world edit (new level, map move, region edit) against a shadow copy of the containers
 // and captures it this way; `forge-tools mods capture` is the same step.
 struct CaptureReport { std::vector<std::string> files, maps, errors; };
+// The shadow a world edit into `pack` runs against: gameRoot's world containers (and
+// defs) copied to `shadow`, with the pack's current world files, level files and static
+// maps laid over them -- so edits into one pack accumulate. `viewOnly` copies just the
+// FinalAlbion.bwd / .wld (all the World view reads; kilobytes, not the 800 MB of
+// containers).
+bool prepareShadow(const std::filesystem::path& gameRoot, const std::filesystem::path& pack,
+                   const std::filesystem::path& shadow, bool viewOnly, std::string& error);
 CaptureReport capture(const std::filesystem::path& shadowRoot, const std::filesystem::path& baseRoot,
                       const std::filesystem::path& pack);
+
+// A world edit into a pack: prepareShadow (full) in a temp folder, `op` against it,
+// capture the result into the pack, remove the shadow. `op` returns false with its own
+// error to abort (nothing is captured then).
+bool intoPack(const std::filesystem::path& gameRoot, const std::filesystem::path& pack,
+              const std::function<bool(const std::filesystem::path& shadowRoot, std::string& error)>& op,
+              std::vector<std::string>& notes, std::string& error);
+// The temp folder the World view of a pack reads (prepareShadow viewOnly).
+std::filesystem::path viewShadowRoot();
 
 } // namespace albion::modpack

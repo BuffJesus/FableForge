@@ -57,7 +57,11 @@ struct WorldLayout {
     std::vector<const WorldMapBox*> touching(const WorldMapBox& box, int x, int y) const;
 };
 
-bool loadWorldLayout(const std::filesystem::path& gameRoot, WorldLayout& out, std::string& error);
+// `stbPath` reads the baked origins from another STB (a pack view's shadow has none);
+// `extraRecords` then overrides them per map: stem -> a static-map common record (a pack's stb/<map>.record)
+bool loadWorldLayout(const std::filesystem::path& gameRoot, WorldLayout& out, std::string& error,
+                     const std::filesystem::path& stbPath = {},
+                     const std::vector<std::pair<std::string, std::vector<uint8_t>>>& extraRecords = {});
 
 struct MapMove { std::string name; int x = 0, y = 0; };
 

@@ -117,21 +117,28 @@ std::vector<const WorldMapBox*> WorldLayout::touching(const WorldMapBox& box, in
     return out;
 }
 
-bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& error) {
+bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& error, const fs::path& stbPath,
+                     const std::vector<std::pair<std::string, std::vector<uint8_t>>>& extraRecords) {
     try {
         out = WorldLayout{};
         const fs::path levels = gameRoot / "data" / "Levels";
         const auto bwd = forge::bwd::File::parse(levels / "FinalAlbion.bwd");
         const auto wld = forge::wld::File::parse(levels / "FinalAlbion.wld");
         std::map<std::string, std::pair<int, int>> stbOrigins;   // lower stem -> baked origin
-        if (fs::exists(levels / "FinalAlbion_RT.stb")) {
-            const auto stb = forge::stb::Archive::open(levels / "FinalAlbion_RT.stb");
+        const fs::path stbFile = stbPath.empty() ? levels / "FinalAlbion_RT.stb" : stbPath;
+        if (fs::exists(stbFile)) {
+            const auto stb = forge::stb::Archive::open(stbFile);
             for (const auto& m : stb.staticMaps()) {
                 const auto record = stb.readStaticMapRecord(m);
                 if (record.size() < forge::stbinfo::kInfoBlockSize) continue;
                 const auto info = forge::stbinfo::readInfoBlock(record.data());
                 stbOrigins[lower(stemOf(m.levelName))] = {info.worldX, info.worldY};
             }
+        }
+        for (const auto& [stem, record] : extraRecords) {
+            if (record.size() < forge::stbinfo::kInfoBlockSize) continue;
+            const auto info = forge::stbinfo::readInfoBlock(record.data());
+            stbOrigins[lower(stem)] = {info.worldX, info.worldY};
         }
         for (const auto& r : wld.regions()) {
             out.regions.push_back(r.regionName);

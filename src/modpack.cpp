@@ -246,13 +246,72 @@ std::map<std::string, MapBytes> staticMapsOf(const fs::path& stb, const std::vec
 }
 } // namespace
 
+bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::path& shadow, bool viewOnly, std::string& error) {
+    const fs::path lv = fs::path("data") / "Levels";
+    std::error_code ec;
+    fs::remove_all(shadow, ec);
+    fs::create_directories(shadow / lv / "FinalAlbion", ec);
+    fs::create_directories(shadow / "data" / "CompiledDefs", ec);
+    if (ec) { error = "cannot create " + shadow.string() + ": " + ec.message(); return false; }
+    auto copy = [&](const fs::path& from, const fs::path& to) {
+        if (!fs::exists(from, ec)) return true;
+        fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
+        if (ec) { error = "cannot copy " + from.string() + ": " + ec.message(); return false; }
+        return true;
+    };
+    const std::vector<std::string> world = {"FinalAlbion.bwd", "FinalAlbion.wld"};
+    const std::vector<std::string> rest = {"FinalAlbion.wad", "FinalAlbion_RT.stb", "FinalAlbion.gtg"};
+    for (const auto& f : world) if (!copy(gameRoot / lv / f, shadow / lv / f)) return false;
+    if (!viewOnly) {
+        for (const auto& f : rest) if (!copy(gameRoot / lv / f, shadow / lv / f)) return false;
+        for (const char* f : {"game.bin", "names.bin"})
+            if (!copy(gameRoot / "data" / "CompiledDefs" / f, shadow / "data" / "CompiledDefs" / f)) return false;
+        if (fs::is_directory(gameRoot / lv / "FinalAlbion", ec))   // a loose-level install's levels
+            for (const auto& de : fs::directory_iterator(gameRoot / lv / "FinalAlbion", ec))
+                if (de.is_regular_file(ec) && !copy(de.path(), shadow / lv / "FinalAlbion" / de.path().filename())) return false;
+    }
+    // the pack over it
+    for (const auto& f : viewOnly ? world : std::vector<std::string>{"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.gtg"})
+        if (!copy(pack / lv / f, shadow / lv / f)) return false;
+    if (viewOnly) return true;
+    if (fs::is_directory(pack / lv / "FinalAlbion", ec))
+        for (const auto& de : fs::directory_iterator(pack / lv / "FinalAlbion", ec))
+            if (de.is_regular_file(ec) && !copy(de.path(), shadow / lv / "FinalAlbion" / de.path().filename())) return false;
+    const fs::path stbDir = pack / "stb";
+    if (fs::is_directory(stbDir, ec))
+        for (const auto& de : fs::directory_iterator(stbDir, ec)) {
+            if (!de.is_regular_file(ec) || de.path().extension() != ".chunk") continue;
+            const std::string map = de.path().stem().string();
+            if (!writeStaticMapChunk(shadow / lv / "FinalAlbion_RT.stb", map, slurpFile(de.path()), slurpFile(stbDir / (map + ".record")), error)) return false;
+        }
+    return true;
+}
+
+fs::path viewShadowRoot() { return fs::temp_directory_path() / "FableForge" / "pack_view"; }
+
+bool intoPack(const fs::path& gameRoot, const fs::path& pack, const std::function<bool(const fs::path&, std::string&)>& op,
+              std::vector<std::string>& notes, std::string& error) {
+    const fs::path shadow = fs::temp_directory_path() / "FableForge" / "pack_shadow";
+    std::error_code ec;
+    struct Cleanup { fs::path p; ~Cleanup() { std::error_code e; fs::remove_all(p, e); } } cleanup{shadow};
+    if (!prepareShadow(gameRoot, pack, shadow, false, error)) return false;
+    if (!op(shadow, error)) return false;
+    const auto rep = capture(shadow, gameRoot, pack);
+    if (!rep.errors.empty()) { error = rep.errors.front(); return false; }
+    std::string what;
+    for (const auto& f : rep.files) what += (what.empty() ? "" : ", ") + fs::path(f).filename().string();
+    for (const auto& m : rep.maps) what += (what.empty() ? "" : ", ") + ("static map " + m);
+    notes.push_back("into pack " + pack.filename().string() + ": " + (what.empty() ? std::string("no difference from the game") : what));
+    return true;
+}
+
 CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, const fs::path& pack) {
     CaptureReport rep;
     const fs::path lv = fs::path("data") / "Levels";
     std::error_code ec;
     try {
         // world files
-        for (const char* f : {"FinalAlbion.wld", "FinalAlbion.bwd"}) {
+        for (const char* f : {"FinalAlbion.wld", "FinalAlbion.bwd", "FinalAlbion.gtg"}) {   // gtg: region entrances (a whole-file layer)
             const fs::path a = shadowRoot / lv / f, b = baseRoot / lv / f;
             if (!fs::exists(a)) continue;
             const auto bytes = slurpFile(a);

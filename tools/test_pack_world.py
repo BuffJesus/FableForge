@@ -114,6 +114,43 @@ def main() -> int:
             wld = open(os.path.join(out, "data", "Levels", "FinalAlbion.wld"), encoding="latin-1").read()
             if DISPLAY not in wld: print(tag, "the built FinalAlbion.wld lacks the display name edit"); ok = False
 
+    # the editor: World-tab move + new level with "Writes go into" = a pack; the install
+    # stays untouched, the second edit builds on the first, and a build carries both
+    gui = os.path.join(ROOT, "build", "FableForge.exe")
+    g = install("gui")
+    before = {c: open(os.path.join(g, "data", "Levels", c), "rb").read() for c in ("FinalAlbion.bwd", "FinalAlbion.wld")}
+    pg = os.path.join(work, "PackG"); os.makedirs(os.path.join(pg, "assets"))
+    json.dump({"version": 1, "name": "Pack G", "models": [], "groundThemes": []}, open(os.path.join(pg, "forge_pack.json"), "w"))
+    os.makedirs(os.path.join(ROOT, "build", "ui"), exist_ok=True)
+    script = os.path.join(work, "gui.txt")
+    open(script, "w").write("\n".join([
+        "wait_maps", "wait_ready", f"set saveroot {g}", f"pack_dest {pg}",
+        "world_tab 1", "frames 3", "assert_state world_loaded 1",
+        "world_move TeleporterGreatwood 2048 8064", "frames 1", "world_apply", "wait_world", "frames 3",
+        "assert_log edits written into pack",
+        "world_select TeleporterGreatwood", "frames 1", "assert_state world_selected_pos 2048,8064",
+        "screenshot build/ui/pack_world_view.png",
+        "world_tab 0", "select TeleporterGreatwood", "wait_loaded", "edit 1", "frames 2",
+        "new_level PackGuiLevel 6400 6400", "frames 2", "wait_new_level", "frames 2",
+        "assert_log written into pack",
+        "dump_log", "quit"]) + "\n")
+    r = subprocess.run([gui, "--auto", script, "--install", a.root], capture_output=True, text=True)
+    log = open(script + ".log", encoding="utf-8", errors="replace").read() if os.path.exists(script + ".log") else ""
+    if r.returncode != 0 or "RESULT PASS" not in log: print("GUI world into a pack:"); print(log[-2000:]); ok = False
+    for c, b in before.items():
+        if open(os.path.join(g, "data", "Levels", c), "rb").read() != b: print("the GUI wrote", c, "into the install"); ok = False
+    for want in ("data/Levels/FinalAlbion.bwd", "data/Levels/FinalAlbion/PackGuiLevel.lev", "stb/PackGuiLevel.chunk", "stb/TeleporterGreatwood.chunk"):
+        if not os.path.exists(os.path.join(pg, want)): print("pack G lacks", want); ok = False
+    om = os.path.join(g, "forge_mods.json")
+    run(tools, "mods", "add", g, pg)
+    out = os.path.join(work, "out_G")
+    r = run(tools, "mods", "build", g, out, "--json")
+    wld = open(os.path.join(out, "data", "Levels", "FinalAlbion.wld"), encoding="latin-1").read() if os.path.exists(os.path.join(out, "data", "Levels", "FinalAlbion.wld")) else ""
+    if "PackGuiLevel" not in wld: print("the build lacks PackGuiLevel"); ok = False
+    i = wld.find(r'"FinalAlbion\TeleporterGreatwood.lev"')
+    blk = wld[max(0, i - 120):i]
+    if "MapX 2048;" not in blk or "MapY 8064;" not in blk: print("the build lacks the TeleporterGreatwood move:", blk); ok = False
+
     if not a.keep: shutil.rmtree(work, ignore_errors=True)
     print("pack world test", "OK" if ok else "FAILED")
     return 0 if ok else 1

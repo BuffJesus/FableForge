@@ -516,7 +516,7 @@ private:
     std::vector<std::string> blankPalette_;
     int blankTheme_ = -1;
     float blankHeight_ = 20.0f;
-    struct NewLevelJob { bool ok = false; std::string error; std::string name; bool ownRegion = false; editor::NewLevelResult result; };
+    struct NewLevelJob { bool ok = false; std::string error; std::string name, pack; bool ownRegion = false; editor::NewLevelResult result; };
     std::future<NewLevelJob> newLevelFuture_;
     void drawNewLevelCard(float pad, float inner, float cardInner);
     // enemy spawner card: CREATURE_GENERATION_FAMILY picker + radius/limit, placed at the view centre
@@ -699,7 +699,7 @@ private:
     bool worldStitch_ = false;               // average shared-edge heights with every neighbour after a move (off: retail leaves seams as they are)
     int worldStitchFeather_ = -1;            // cells the seam correction fades over (-1 = auto: one per unit of step, 4..32)
     bool worldLastOk_ = false;
-    struct WorldJob { bool ok = false; std::string error; std::vector<std::string> notes; };
+    struct WorldJob { bool ok = false; std::string error, pack; std::vector<std::string> notes; };
     std::future<WorldJob> worldFuture_;
     void terrainInput(const ImVec2& origin, const ImVec2& size);
     void drawBrushCursor(const ImVec2& origin, const ImVec2& size);

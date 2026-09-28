@@ -1931,8 +1931,12 @@ void App::selectBlankSize(int w, int h) {
 
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
-    if (gameWriteBlocked("new level")) return;
+    if (packDest_.empty() && gameWriteBlocked("new level")) return;
     const std::string root = saveRoot();
+    const std::string pack = packDest_;   // "" = the game directly
+    // into a pack the level, its world records and static map go in; its minimap would be
+    // a textures.big + game.bin write, which a pack does not carry yet
+    const bool minimap = pack.empty();
     if (newLevelMode_ == 1) {
         editor::BlankLevelRequest req;
         req.name = newLevelName_;
@@ -1943,13 +1947,17 @@ void App::startNewLevel() {
         if (blankSize_ >= 0 && blankSize_ < int(blankSizes_.size())) { req.width = blankSizes_[size_t(blankSize_)].width; req.height = blankSizes_[size_t(blankSize_)].height; }
         req.themeSlot = blankTheme_;
         req.groundHeight = blankHeight_;
+        if (!minimap) req.ownRegion.minimap = false;
         const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
         if (!lib) return;
         pushLog("new level: authoring blank " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
         beginJob(); req.progress = jobProgress();
-        newLevelFuture_ = std::async(std::launch::async, [req, root, lib]() {
-            NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
-            j.ok = editor::createBlankLevel(root, req, *lib, j.result, j.error);
+        newLevelFuture_ = std::async(std::launch::async, [req, root, lib, pack]() {
+            NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated; j.pack = pack;
+            if (pack.empty()) j.ok = editor::createBlankLevel(root, req, *lib, j.result, j.error);
+            else j.ok = albion::modpack::intoPack(root, pack, [&](const std::filesystem::path& shadow, std::string& err) {
+                return editor::createBlankLevel(shadow, req, *lib, j.result, err);
+            }, j.result.notes, j.error);
             return j;
         });
         return;
@@ -1960,11 +1968,15 @@ void App::startNewLevel() {
     req.hostRegion = newLevelRegion_;
     req.ownRegion.wanted = newLevelOwnRegion_; req.ownRegion.dedicated = newLevelDedicated_; req.ownRegion.displayName = newLevelDisplay_;
     req.worldX = newLevelX_; req.worldY = newLevelY_;
+    if (!minimap) req.ownRegion.minimap = false;
     pushLog("new level: cloning " + req.donor + " as " + req.name + " at (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "), region " + req.hostRegion + "...", 0);
     beginJob(); req.progress = jobProgress();
-    newLevelFuture_ = std::async(std::launch::async, [req, root]() {
-        NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated;
-        j.ok = editor::createLevelFromDonor(root, req, j.result, j.error);
+    newLevelFuture_ = std::async(std::launch::async, [req, root, pack]() {
+        NewLevelJob j; j.name = req.name; j.ownRegion = req.ownRegion.wanted && req.ownRegion.dedicated; j.pack = pack;
+        if (pack.empty()) j.ok = editor::createLevelFromDonor(root, req, j.result, j.error);
+        else j.ok = albion::modpack::intoPack(root, pack, [&](const std::filesystem::path& shadow, std::string& err) {
+            return editor::createLevelFromDonor(shadow, req, j.result, err);
+        }, j.result.notes, j.error);
         return j;
     });
 }
