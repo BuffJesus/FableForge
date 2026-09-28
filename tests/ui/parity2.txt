@@ -1,0 +1,45 @@
+# Vanilla-parity panels, part 2: a villager's Links + Properties, the Level tab
+# (Check the map, Tracks), the Assets pages, the Objects group tree, a fixed Actors tab.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+set saveroot build/ui_parity_install
+edit 1
+frames 3
+edit_tab 0
+select_def CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED
+frames 3
+mouse_move seg_edit_tab
+wheel -8
+frames 3
+screenshot build/ui/parity2_1_links.png
+wheel -8
+frames 3
+screenshot build/ui/parity2_2_properties.png
+edit_tab 3
+frames 3
+screenshot build/ui/parity2_3_level.png
+edit_tab 2
+frames 3
+screenshot build/ui/parity2_4_actors.png
+edit_tab 0
+select_thing -1
+frames 2
+mouse_move seg_edit_tab
+wheel -12
+frames 3
+screenshot build/ui/parity2_5_objects_tree.png
+assets_tab 1
+frames 3
+screenshot build/ui/parity2_6_assets_models.png
+assets_tab 2
+frames 3
+screenshot build/ui/parity2_7_assets_themes.png
+edit 1
+edit_tab 1
+terrain_mode 15
+frames 3
+screenshot build/ui/parity2_8_paste_nosliders.png
+quit

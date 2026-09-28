@@ -1065,7 +1065,9 @@ void testValidate() {
     CHECK(ok.openText("Ok", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
     const size_t a = ok.placeTrackNode(0, 0, 0), b = ok.placeTrackNode(5, 0, 0);
     CHECK(ok.linkTrackNodes(a, b, err) && ok.validate().empty());
-    ok.setPropertyValue(a, "", "End", "TRUE");
+    ok.setPropertyValue(b, "", "End", "FALSE");                  // a tail without End: fine (retail has one)
+    CHECK(ok.validate().empty());
+    ok.setPropertyValue(a, "", "Start", "FALSE");                // a head without Start: the engine asserts
     CHECK(ok.validate().size() == 1 && ok.validate()[0].rule == "TRACK");
 }
 

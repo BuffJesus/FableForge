@@ -262,10 +262,10 @@ void App::drawHelpOverlay() {
     struct Group { const char* title; std::vector<Row> rows; };
     const Group groups[] = {
         {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
-        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + click", "add to / remove from the selection"}, {"Ctrl + D", "duplicate"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing (Level tab lists them all)"}}},
-        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "invert: lower, or paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "theme tools: sample the theme to paint"}, {"Ctrl + Shift + click", "theme tools: sample the theme to replace"}, {"LMB drag", "Draw path: from start to end / Copy region: a rectangle"}, {"R", "Paste region: turn the copy 90 degrees"}}},
+        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + click", "add to / remove from the selection"}, {"Ctrl + D", "duplicate"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
+        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "invert: lower, or paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
-        {"Everywhere", {{"1  2  3  4", "edit tabs: objects / terrain / actors / level"}, {"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
+        {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
     };
     const float colW = S(190);
     ImGui::Columns(2, "##helpcols", false);
@@ -1547,9 +1547,14 @@ void App::drawExplorer(float width) {
     ImGui::PopStyleVar();
     auto_.registerWidget("input_filter");
     ImGui::Dummy(ImVec2(0, S(6)));
+    {
+        // a divider where the list starts: a row scrolled half under it reads as clipped, not as overlap
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(at.x + S(16), at.y - S(3)), ImVec2(at.x + width - S(16), at.y - S(3)), theme::col(theme::Border));
+    }
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
-    ImGui::BeginChild("##maplist", ImVec2(0, 0), ImGuiChildFlags_None);
+    ImGui::BeginChild("##maplist", ImVec2(-1.0f, 0), ImGuiChildFlags_None);   // 1 px short: the panel's border line stays visible
     ImGui::PopStyleColor();
     if (maps_.empty()) {
         ImGui::SetCursorPos(ImVec2(S(16), S(20)));
@@ -1620,6 +1625,13 @@ void App::drawExplorer(float width) {
             ImGui::SetCursorPos(ImVec2(S(16), S(20)));
             ImGui::TextColored(theme::vec(theme::Faint), "No map matches \"%s\"", filter_.c_str());
         }
+    }
+    if (ImGui::GetScrollY() > 0.0f) {
+        // rows scrolled under the top edge fade out instead of leaving a sliver of text
+        const ImVec2 wp = ImGui::GetWindowPos();
+        const float ww = ImGui::GetWindowWidth();
+        const ImU32 solid = theme::col(theme::Bg1), clear = solid & 0x00FFFFFF;
+        ImGui::GetWindowDrawList()->AddRectFilledMultiColor(wp, ImVec2(wp.x + ww, wp.y + S(14)), solid, solid, clear, clear);
     }
     ImGui::EndChild();
     ImGui::EndChild();
@@ -2050,7 +2062,7 @@ void App::drawActions(float width) {
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hint("Textures live in data/graphics/pc/textures.big. Replacing one changes every object that uses it; the original archive is backed up once as textures.big.forge-orig (Setup > Restore puts it back).");
+        theme::hint("The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
         ImGui::PopFont();
     } else if (worldMode_) {
         drawWorldFooter(pad, inner);

@@ -1556,10 +1556,12 @@ std::vector<Document::Issue> Document::validate(const std::function<bool(const s
             const uint64_t prev = trackLink(n, 1), next = trackLink(n, 2);
             const bool okPrev = k == 0 ? prev == 0 : prev == uidOf(tr.nodes[k - 1]);
             const bool okNext = k + 1 == tr.nodes.size() ? next == 0 : next == uidOf(tr.nodes[k + 1]);
-            const auto start = file_.things()[n].find("Start"), end = file_.things()[n].find("End");
-            const bool okEnds = start && end && (*start == "TRUE") == (k == 0) && (*end == "TRUE") == (k + 1 == tr.nodes.size());
+            // only what the engine asserts on: links that do not point back, and a head without
+            // Start TRUE (PeekTrackStartNode). A tail's End flag is not required: retail's
+            // StartOakValeWest TrackTempName30 ends on End FALSE.
+            const auto start = file_.things()[n].find("Start");
             if (!okPrev || !okNext) out.push_back({n, "TRACK", "track " + tr.name + ": a link here does not point back (the engine asserts)", false});
-            else if (!okEnds) out.push_back({n, "TRACK", "track " + tr.name + ": Start/End do not mark the ends of the chain", false});
+            else if (k == 0 && (!start || *start != "TRUE")) out.push_back({n, "TRACK", "track " + tr.name + ": the first node is not marked Start (the engine asserts)", false});
         }
     return out;
 }

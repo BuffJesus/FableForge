@@ -381,7 +381,16 @@ void App::drawPropertyGrid(float cardInner) {
         // the vanilla dialog's caption and widget for this key, when recovered
         const editor::VanillaField* vf = editor::vanillaField(r.ctc, r.key);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::vec(vf ? theme::Text : theme::Muted), "%s", vf ? vf->label : r.key.c_str());
+        {
+            // the caption fits its column: long keys end in "..." (the tooltip has the whole name)
+            std::string cap = vf ? vf->label : r.key;
+            const float room = keyW - S(10);
+            if (ImGui::CalcTextSize(cap.c_str()).x > room) {
+                while (cap.size() > 3 && ImGui::CalcTextSize((cap + "...").c_str()).x > room) cap.pop_back();
+                cap += "...";
+            }
+            ImGui::TextColored(theme::vec(vf ? theme::Text : theme::Muted), "%s", cap.c_str());
+        }
         if (ImGui::IsItemHovered()) {
             if (vf) ImGui::SetTooltip("%s  (.tng key %s)\nvanilla tab: %s%s", vf->label, r.key.c_str(), vf->category, vf->hasRange ? "" : "");
             else ImGui::SetTooltip(".tng key %s (no vanilla dialog entry recovered)", r.key.c_str());
@@ -1920,7 +1929,7 @@ void App::editorShortcuts() {
 }
 
 void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
-    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0) { gizmoWasUsing_ = false; return; }
+    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
     editor::Frame f;
     if (!frameOfSelected(f)) return;
     if (!gizmoWasUsing_) {
@@ -2301,20 +2310,30 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             if (theme::ghostButton("Your own ground texture...  (Assets tab)", ImVec2(cardInner, S(26)))) { setTexturesMode(true); assetsTab_ = 2; }
             auto_.registerWidget("btn_goto_ground_theme");
         }
+        // the brush size where a tool has one (flood / copy / paste do not); strength where it blends
+        const bool usesRadius = terrainMode_ != 8 && terrainMode_ != 14 && terrainMode_ != 15;
+        const bool usesStrength = usesRadius && terrainMode_ != 9 && terrainMode_ != 11 && terrainMode_ != 4 && terrainMode_ != 5 &&
+                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7;
         char val[48];
-        std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
-        theme::labelValue("Radius   ( [ ] )", val, cardInner);
-        ImGui::SetNextItemWidth(cardInner);
-        ImGui::SliderFloat("##radius", &brushRadius_, 1.0f, 60.0f, "");
-        auto_.registerWidget("slider_radius");
-        std::snprintf(val, sizeof val, "%.1f", brushStrength_);
-        theme::labelValue("Strength", val, cardInner);
-        ImGui::SetNextItemWidth(cardInner);
-        ImGui::SliderFloat("##strength", &brushStrength_, 0.5f, 20.0f, "");
-        auto_.registerWidget("slider_strength");
-        ImGui::PushFont(fontSmall_);
-        theme::hint("Hold LMB on the ground to paint. Shift inverts (lower / walkable). Switch the view to Walkable to see the paint. Each stroke is one undo step.");
-        ImGui::PopFont();
+        if (usesRadius) {
+            std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
+            theme::labelValue("Radius   ( [ ] )", val, cardInner);
+            ImGui::SetNextItemWidth(cardInner);
+            ImGui::SliderFloat("##radius", &brushRadius_, 1.0f, 60.0f, "");
+            auto_.registerWidget("slider_radius");
+        }
+        if (usesStrength) {
+            std::snprintf(val, sizeof val, "%.1f", brushStrength_);
+            theme::labelValue("Strength", val, cardInner);
+            ImGui::SetNextItemWidth(cardInner);
+            ImGui::SliderFloat("##strength", &brushStrength_, 0.5f, 20.0f, "");
+            auto_.registerWidget("slider_strength");
+        }
+        if (usesRadius && terrainMode_ != 9) {
+            ImGui::PushFont(fontSmall_);
+            theme::hint("Hold LMB on the ground to paint. Shift inverts (lower / walkable). Switch the view to Walkable to see the paint. Each stroke is one undo step.");
+            ImGui::PopFont();
+        }
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
 
@@ -2388,6 +2407,24 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         ImGui::Dummy(ImVec2(0, S(8)));
     }
 
+    if (editTab_ == 2) {
+        // creatures by their GroupDef (G_CREATURES_BANDIT, _FAE, _HOSTILE ...), like the vanilla Things tree
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##actordefs", inner);
+        theme::label("Creatures by group");
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+        ImGui::InputTextWithHint("##actorsearch", "Search creatures (CREATURE_...)", defSearch_, sizeof defSearch_);
+        ImGui::PopStyleVar();
+        auto_.registerWidget("input_actorsearch");
+        drawDefPalette("##actorlist", {"CREATURE"}, cardInner, S(260));
+        const std::string actorLabel = placeDef_.rfind("CREATURE_", 0) == 0 ? "Place " + placeDef_ : std::string("Pick a creature above");
+        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && placeDef_.rfind("CREATURE_", 0) == 0) placeDefinition(placeDef_);
+        auto_.registerWidget("btn_place_actor");
+        drawRuleNotice("creature", cardInner);
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
+    }
     if (editTab_ == 0 || editTab_ == 2) { drawSectionsCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
 
     // ---- selection (Objects and Actors: both tabs place things)
@@ -2629,22 +2666,6 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
 
     if (editTab_ == 2) {
-        // creatures by their GroupDef (G_CREATURES_BANDIT, _FAE, _HOSTILE ...), like the vanilla Things tree
-        ImGui::SetCursorPosX(pad);
-        theme::beginCard("##actordefs", inner);
-        theme::label("Creatures by group");
-        ImGui::SetNextItemWidth(cardInner);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-        ImGui::InputTextWithHint("##actorsearch", "Search creatures (CREATURE_...)", defSearch_, sizeof defSearch_);
-        ImGui::PopStyleVar();
-        auto_.registerWidget("input_actorsearch");
-        drawDefPalette("##actorlist", {"CREATURE"}, cardInner, S(260));
-        const std::string actorLabel = placeDef_.rfind("CREATURE_", 0) == 0 ? "Place " + placeDef_ : std::string("Pick a creature above");
-        if (theme::ghostButton(actorLabel.c_str(), ImVec2(cardInner, S(30))) && placeDef_.rfind("CREATURE_", 0) == 0) placeDefinition(placeDef_);
-        auto_.registerWidget("btn_place_actor");
-        drawRuleNotice("creature", cardInner);
-        theme::endCard();
-        ImGui::Dummy(ImVec2(0, S(8)));
         drawPresetsCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawVillageCard(pad, inner, cardInner);
