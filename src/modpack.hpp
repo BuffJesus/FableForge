@@ -8,7 +8,7 @@
 //   {
 //     "version": 1, "name": "My pack",
 //     "models":       [{"name": "MYCUBE", "model": "assets/cube.glb", "texture": "assets/wood.png",
-//                       "donor": "OBJECT_BARREL", "collision": true}],
+//                       "donor": "OBJECT_BARREL_UNBREAKABLE", "collision": true}],
 //     "groundThemes": [{"name": "GROUND_MY_MOSS", "png": "assets/moss.png", "cliffPng": "",
 //                       "donor": "GROUND_GRASS"}]
 //   }
@@ -23,7 +23,7 @@ namespace albion::modpack {
 inline constexpr const char* kFileName = "forge_pack.json";
 
 struct ModelRecipe {
-    std::string name, model, texture, donor = "OBJECT_BARREL";
+    std::string name, model, texture, donor = "OBJECT_BARREL_UNBREAKABLE";   // meshimport's default donor
     bool collision = true;
 };
 struct GroundThemeRecipe {
