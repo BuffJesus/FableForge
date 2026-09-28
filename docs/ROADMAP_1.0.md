@@ -79,12 +79,13 @@ Two research guides support the integrated modding environment work below:
 **Next (user, 2026-09-28): drive the vanilla debug editor autonomously**, note where it sucks and
 where it rocks (`docs/VANILLA_EDITOR_INVENTORY.md` section 11 has the live notes so far), and
 improve FableForge with that, per the philosophy. How to drive it: FableWin runs from
-`D:	mpablewin_editor\...\Fable` (dev profile -> A -> 4; skip the `edit_component.cpp 228`
+`D:/tmp/fablewin_editor/Fable_Anniversary-2013-02-25/Fable` (dev profile -> A -> 4; skip the `edit_component.cpp 228`
 assert with M); the scratchpad driver's window-relative `wmove/wclick/dblclick/wheel/wdrag`
 actions work (the old relative-walk ones miss the window); zoom far out to see the map grid;
 panels drag by their title bars; arrow keys and letters are mode hotkeys; ask before launching
 (it takes the screen) and never press Save all. Still to see live: getting into a level for
 Thing mode / CTC editing, ScriptBrush, Survey, Engine themes, the brush library.
+**Documentation** (user, 2026-09-28): start a proper user guide before things get too complex -- task-first pages (make a level, paint, fit fillers, mod packs, load order), screenshots from the UI scripts, kept next to the features they describe.
 Parity rows 22 (Fit Neighbours) + the vanilla wins noted so far: track **preview playback**, the
 thing list's **filters** (script-named only, sort by distance, area range).
 
