@@ -199,6 +199,23 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "track_preview") {   // track_preview <eye track #> <look track #> <seconds>: the Tracks card's Play preview
+        int e = 0, l = 1; float sec = 10; std::istringstream(rest) >> e >> l >> sec;
+        if (!app.startTrackPreview(e, l, sec)) fail("track_preview refused: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "track_preview_refused") {   // the same track twice (or a short one) must be refused
+        int e = 0, l = 0; std::istringstream(rest) >> e >> l;
+        if (app.startTrackPreview(e, l, 1.0f)) { app.stopTrackPreview(); fail("track_preview was not refused: " + rest); } else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "wait_track_preview") waitOn(!app.trackPreview_.active, "the track preview");
+    else if (cmd == "assert_camera_back") {   // the camera is where snapshot_camera left it
+        const Camera& c = app.camera();
+        const float d = std::fabs(c.posX - camSnap_[0]) + std::fabs(c.posY - camSnap_[1]) + std::fabs(c.posZ - camSnap_[2]);
+        if (d > 1e-3f) fail("camera not back: off by " + std::to_string(d)); else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "camera_above_selected") {   // camera_above_selected [distance]: look straight down at the selected thing
         editor::Frame f;
         float dist = 8;

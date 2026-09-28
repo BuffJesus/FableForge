@@ -1317,6 +1317,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("selected_thing=" + std::to_string(selectedThing_));
     v.push_back("things_first=" + std::to_string(thingsFirst_));
     v.push_back("things_shown=" + std::to_string(thingsShown_));
+    v.push_back(std::string("track_preview=") + (trackPreview_.active ? "1" : "0"));
     if (thingsFirst_ >= 0 && documentLoaded() && size_t(thingsFirst_) < doc_.thingCount()) v.push_back("things_first_def=" + doc_.summary(size_t(thingsFirst_)).definition);
     v.push_back(std::string("things_first_is_selected=") + (thingsFirst_ >= 0 && thingsFirst_ == selectedThing_ ? "1" : "0"));
     v.push_back("place_owner=" + std::string(placeOwner_ < 0 ? "auto" : placeOwner_ >= 4 ? "neutral" : std::to_string(placeOwner_)));
@@ -1366,6 +1367,7 @@ void App::frame(float dt) {
     syncInstances();
     syncTerrain();
     editorShortcuts();
+    updateTrackPreview(dt);
     if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const TerrainDeployResult r = terrainDeployFuture_.get();
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);

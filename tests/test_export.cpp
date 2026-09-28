@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "forge/heightpen.hpp"
+#include "forge/trackpath.hpp"
 #include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
@@ -783,8 +784,20 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
 }
 
-// The vanilla fractal generator port against the static-RE reference
-// (seed-0 tables and heights computed by the recovered algorithm).
+// The vanilla Preview Track path (forge/trackpath): straight segments by 3D arc length, zero-length
+// segments skipped, the end clamped to the last node.
+void testTrackPath() {
+    namespace tp = forge::trackpath;
+    const std::vector<tp::Point> pts = {{0, 0, 0}, {3, 4, 0}, {3, 4, 0}, {3, 4, 12}};
+    CHECK(tp::length(pts) == 17.0f);
+    auto near = [](const tp::Point& a, float x, float y, float z) { return std::fabs(a[0] - x) + std::fabs(a[1] - y) + std::fabs(a[2] - z) < 1e-4f; };
+    CHECK(near(tp::pointAtDistance(pts, 0.0f), 0, 0, 0));
+    CHECK(near(tp::pointAtDistance(pts, 2.5f), 1.5f, 2.0f, 0));
+    CHECK(near(tp::pointAtDistance(pts, 5.0f), 3, 4, 0));      // exactly at a joint: the next segment (strict <)
+    CHECK(near(tp::pointAtDistance(pts, 11.0f), 3, 4, 6));
+    CHECK(near(tp::pointAtDistance(pts, 99.0f), 3, 4, 12));    // past the end: the last node
+}
+
 // The vanilla Height Toolbox pens (forge/heightpen), against the properties read off FableWin.
 void testHeightPens() {
     namespace hp = forge::heightpen;
@@ -850,6 +863,8 @@ void testHeightPens() {
     }
 }
 
+// The vanilla fractal generator port against the static-RE reference
+// (seed-0 tables and heights computed by the recovered algorithm).
 void testFractal() {
     namespace fr = forge::fractal;
     const fr::Generator g;   // dialog defaults
@@ -1962,6 +1977,7 @@ int main() {
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
     testHeightPens();
+    testTrackPath();
     testFractal();
     testAddSoundTheme(dir);
     testVanillaFields();

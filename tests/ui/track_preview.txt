@@ -1,0 +1,25 @@
+# The vanilla Play Track preview: the camera rides one track looking along another, then returns.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_trackpreview_install
+edit 1
+frames 3
+edit_tab 3
+frames 3
+assert_widget btn_track_preview
+snapshot_camera
+track_preview_refused 0 0
+track_preview 0 1 1
+frames 20
+assert_state track_preview 1
+assert_camera_moved 1
+reveal btn_track_preview
+frames 2
+screenshot build/ui/track_preview.png
+wait_track_preview
+frames 2
+assert_state track_preview 0
+assert_camera_back
+quit

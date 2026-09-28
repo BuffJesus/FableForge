@@ -12,6 +12,7 @@
 #include "nlohmann/json.hpp"
 #include "effects.hpp"
 #include "forge/heightpen.hpp"
+#include "forge/trackpath.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -646,10 +647,96 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
         }
         auto_.registerWidget("btn_track_rename");
     }
+    // Preview: vanilla Play Track -- the camera along one track, looking at a point along another
+    if (trs.size() >= 2) {
+        ImGui::Dummy(ImVec2(0, S(4)));
+        theme::label("Preview a camera path");
+        auto trackCombo = [&](const char* id, const char* label, int& pick) {
+            pick = std::clamp(pick, 0, int(trs.size()) - 1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", label);
+            ImGui::SameLine(S(90));
+            ImGui::SetNextItemWidth(cardInner - S(90));
+            char cur[96]; std::snprintf(cur, sizeof cur, "%s  (%zu nodes)", trs[size_t(pick)].name.c_str(), trs[size_t(pick)].nodes.size());
+            if (ImGui::BeginCombo(id, cur)) {
+                for (size_t i = 0; i < trs.size(); ++i) {
+                    char it[112]; std::snprintf(it, sizeof it, "%s  (%zu nodes)##%s%zu", trs[i].name.c_str(), trs[i].nodes.size(), id, i);
+                    if (ImGui::Selectable(it, int(i) == pick)) pick = int(i);
+                }
+                ImGui::EndCombo();
+            }
+        };
+        trackCombo("##pveye", "Camera on", previewEyeTrack_);
+        auto_.registerWidget("combo_preview_eye");
+        trackCombo("##pvlook", "Looking at", previewLookTrack_);
+        auto_.registerWidget("combo_preview_look");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::vec(theme::Muted), "Seconds");
+        ImGui::SameLine(S(90));
+        ImGui::SetNextItemWidth(cardInner - S(90));
+        ImGui::InputFloat("##pvsec", &previewSeconds_, 0.5f, 5.0f, "%.1f");
+        previewSeconds_ = std::clamp(previewSeconds_, 1.0f, 100.0f);
+        const bool playing = trackPreview_.active;
+        if (theme::primaryButton(playing ? "Stop preview  (Esc)" : "Play preview", ImVec2(cardInner, S(28)))) {
+            if (playing) stopTrackPreview(); else startTrackPreview(previewEyeTrack_, previewLookTrack_, previewSeconds_);
+        }
+        auto_.registerWidget("btn_track_preview");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The vanilla Play Track: the camera moves along the first track at an even speed while\nlooking at a point moving along the second, both taking the seconds above; then it\nreturns to where it was. Straight lines between the nodes, as in the engine's preview.");
+    }
     ImGui::PushFont(fontSmall_);
     theme::hint("A track is a chain of TRACK_NODE_BASIC things sharing one name: village guards patrol them (GuardTrack) and cut-scene cameras can follow them. Links run head -> tail; the ends carry Start / End; no branches or loops (the engine asserts on them).");
     ImGui::PopFont();
     theme::endCard();
+}
+
+bool App::startTrackPreview(int eyeTrack, int lookTrack, float seconds) {
+    const auto& trs = cachedTracks();
+    if (eyeTrack < 0 || lookTrack < 0 || size_t(eyeTrack) >= trs.size() || size_t(lookTrack) >= trs.size()) return false;
+    // vanilla refuses one chain for both ("Unable to preview with TRACK(..) and VIEW(..)")
+    if (eyeTrack == lookTrack) { pushLog("preview: pick a different track to look at (the vanilla preview needs two)", 1); return false; }
+    auto points = [&](const editor::Document::Track& t) {
+        std::vector<forge::trackpath::Point> pts;
+        for (const size_t n : t.nodes) { editor::Frame f; if (doc_.frameOf(n, f)) pts.push_back({f.pos[0], f.pos[1], f.pos[2]}); }
+        return pts;
+    };
+    TrackPreview p;
+    p.eye = points(trs[size_t(eyeTrack)]); p.look = points(trs[size_t(lookTrack)]);
+    if (p.eye.size() < 2 || p.look.size() < 2) { pushLog("preview: both tracks need two nodes or more", 1); return false; }
+    p.eyeLength = forge::trackpath::length(p.eye); p.lookLength = forge::trackpath::length(p.look);
+    p.seconds = std::clamp(seconds, 1.0f, 100.0f);
+    p.saved = camera_;
+    p.active = true;
+    trackPreview_ = p;
+    updateTrackPreview(0.0f);
+    pushLog("preview: " + trs[size_t(eyeTrack)].name + " looking at " + trs[size_t(lookTrack)].name, 0);
+    return true;
+}
+
+void App::stopTrackPreview() {
+    if (!trackPreview_.active) return;
+    trackPreview_.active = false;
+    camera_ = trackPreview_.saved;   // vanilla restores the whole camera
+}
+
+// UpdatePreviewTrack 0x0202f380: stop at u >= 1; else eye / target at u of each track, then u += dt / T
+void App::updateTrackPreview(float dt) {
+    auto& p = trackPreview_;
+    if (!p.active) return;
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { stopTrackPreview(); return; }   // not in vanilla (it cannot be cut short)
+    if (p.u >= 1.0f) { stopTrackPreview(); return; }
+    const auto eye = forge::trackpath::pointAtDistance(p.eye, p.eyeLength * p.u);
+    const auto look = forge::trackpath::pointAtDistance(p.look, p.lookLength * p.u);
+    // Fable (x, y, z-up) -> render (x, z, -y); CCamera::PointAt: forward = target - eye, roll 0
+    const float ex = eye[0], ey = eye[2], ez = -eye[1];
+    const float fx = look[0] - ex, fy = look[2] - ey, fz = -look[1] - ez;
+    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+    if (len > 1e-4f) {
+        camera_.pitch = std::clamp(std::asin(std::clamp(-fy / len, -1.0f, 1.0f)), -1.55f, 1.55f);
+        camera_.yaw = std::atan2(-fx, -fz);
+        camera_.distance = std::max(len, 0.5f);
+    }
+    camera_.posX = ex; camera_.posY = ey; camera_.posZ = ez;
+    p.u += dt / p.seconds;
 }
 
 void App::drawTrackLines(const ImVec2& origin, const ImVec2& size) {

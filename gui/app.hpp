@@ -848,6 +848,19 @@ private:
     HWND hwnd_ = nullptr;
     Renderer renderer_;
     Camera camera_;
+    // the vanilla Tracks dialog's Preview Track (CEditControlCentre::PreviewCameraTrack): the camera rides
+    // one track and looks at a point riding another, linearly by arc length, then snaps back
+    struct TrackPreview {
+        bool active = false;
+        std::vector<std::array<float, 3>> eye, look;   // node positions, map-local Fable
+        float eyeLength = 0, lookLength = 0, seconds = 10, u = 0;
+        Camera saved;
+    } trackPreview_;
+    int previewEyeTrack_ = 0, previewLookTrack_ = 1;
+    float previewSeconds_ = 10.0f;
+    bool startTrackPreview(int eyeTrack, int lookTrack, float seconds);
+    void updateTrackPreview(float dt);
+    void stopTrackPreview();
     ViewMode mode_ = ViewMode::Textured;
     float time_ = 0;
     bool quit_ = false;
