@@ -421,6 +421,7 @@ def main() -> int:
     ap.add_argument("--report", default=str(ROOT / "build" / "ingame" / "report.json"))
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--minimap-marker", default="", help="PLAYER_GUI marker graphic (e.g. HUD_ORB_RED_SMALL) the probe puts on the hero before the final shot: shows where the HUD minimap draws him")
+    ap.add_argument("--title-timeout", type=float, default=300, help="with reference frames: how long to wait for the title screen (a modded world boots slower)")
     ap.add_argument("--title-wait", type=float, default=14, help="seconds from launch to the title screen: 14 with the stand-in logo movies; the stock movies (after a Steam verify) need about 60")
     ap.add_argument("--intro-wait", type=float, default=45, help="new game: seconds for the intro movie + first load before the skips")
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
@@ -526,7 +527,12 @@ def main() -> int:
         for name in ("AutoSave", "AutoSave.qs", "AutoSave.qs.hs"):
             dst = dst_dir / name
             save_swapped.append((dst, dst.read_bytes() if dst.exists() else None))
-            shutil.copyfile(src_dir / "AutoSave", dst)
+            # each file from its own counterpart: AutoSave.qs is the quest state, not a copy of
+            # the save (copying AutoSave over it crashed every load of a real playthrough)
+            if (src_dir / name).exists():
+                shutil.copyfile(src_dir / name, dst)
+            elif dst.exists():
+                dst.unlink()
         result["notes"].append(f"continued from {a.save_from}'s AutoSave (via {a.save_dir})")
     try:
         subprocess.Popen([str(root / "FSE_Launcher.exe")], cwd=str(root))
@@ -548,7 +554,7 @@ def main() -> int:
         watch = have_refs()
         if watch:
             # wait for the title screen itself (logo movies first; the stock ones are long)
-            if not wait_for_screen("title", shots, "01_title", timeout=240, limit=20):
+            if not wait_for_screen("title", shots, "01_title", timeout=a.title_timeout, limit=20):
                 result["notes"].append("title screen never came up"); raise RuntimeError("no title screen")
         else:
             time.sleep(a.title_wait)                     # logo movies, then the title screen
