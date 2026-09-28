@@ -465,6 +465,104 @@ void App::drawPropertyGrid(float cardInner) {
     ImGui::PopFont();
 }
 
+// The vanilla Tracks dialog: tracks are doubly-linked TrackNode chains sharing a
+// name (guard patrols, camera paths). Place / link / flip / rename / unlink.
+void App::drawTracksCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##tracks", inner);
+    const auto trs = doc_.tracks();
+    char head[64]; std::snprintf(head, sizeof head, "Tracks  (%zu)", trs.size());
+    theme::label(head);
+    ImGui::PushFont(fontSmall_);
+    const bool selIsNode = selectedThing_ >= 0 && doc_.isTrackNode(size_t(selectedThing_));
+    for (size_t i = 0; i < trs.size() && i < 60; ++i) {
+        const auto& t = trs[i];
+        const bool mine = selIsNode && std::find(t.nodes.begin(), t.nodes.end(), size_t(selectedThing_)) != t.nodes.end();
+        char row[160]; std::snprintf(row, sizeof row, "%s   %zu nodes, %.1f long##trk%zu", t.name.c_str(), t.nodes.size(), t.length, i);
+        if (ImGui::Selectable(row, mine)) { selectThing(int(t.nodes.front())); frameSelected(); }
+    }
+    if (trs.empty()) ImGui::TextColored(theme::vec(theme::Faint), "No tracks on this map.");
+    ImGui::PopFont();
+    const float half = (cardInner - S(6)) * 0.5f;
+    if (theme::ghostButton("Place node", ImVec2(half, S(26)))) {
+        float focus[3]; camera_.focus(focus);
+        const float x = focus[0], y = -focus[2];
+        const size_t n = doc_.placeTrackNode(x, y, doc_.groundHeight(x, y).value_or(focus[1]));
+        selectThing(int(n));
+        pushLog("track: node placed at the view centre (INVALID until linked)", 0);
+    }
+    auto_.registerWidget("btn_track_place");
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton(trackLinkPick_ ? "Click a node..." : "Link to...", ImVec2(half, S(26))) && selIsNode) trackLinkPick_ = !trackLinkPick_;
+    auto_.registerWidget("btn_track_link");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Select a track node, press this, then click the node it leads to (Esc cancels).\nThe joined track runs from the selected node to the clicked one and keeps the selected one's name.");
+    if (selIsNode) {
+        if (theme::ghostButton("Flip", ImVec2(half, S(26)))) doc_.flipTrack(size_t(selectedThing_));
+        auto_.registerWidget("btn_track_flip");
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Unlink node", ImVec2(half, S(26)))) doc_.unlinkTrackNode(size_t(selectedThing_));
+        auto_.registerWidget("btn_track_unlink");
+        ImGui::SetNextItemWidth(cardInner - S(76));
+        ImGui::InputTextWithHint("##trackname", "Track name (letters, digits, _)", trackName_, sizeof trackName_);
+        ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Rename", ImVec2(S(70), S(24))) && trackName_[0]) {
+            if (doc_.renameTrack(size_t(selectedThing_), trackName_)) pushLog(std::string("track renamed ") + trackName_, 0);
+            else pushLog("track: letters, digits and _ only", 1);
+        }
+        auto_.registerWidget("btn_track_rename");
+    }
+    ImGui::PushFont(fontSmall_);
+    theme::hint("A track is a chain of TRACK_NODE_BASIC things sharing one name: village guards patrol them (GuardTrack) and cut-scene cameras can follow them. Links run head -> tail; the ends carry Start / End; no branches or loops (the engine asserts on them).");
+    ImGui::PopFont();
+    theme::endCard();
+}
+
+void App::drawTrackLines(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !documentLoaded()) return;
+    const bool selIsNode = selectedThing_ >= 0 && doc_.isTrackNode(size_t(selectedThing_));
+    if (editTab_ != 3 && !selIsNode) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    auto screen = [&](size_t i, ImVec2& out) {
+        editor::Frame f;
+        if (!doc_.frameOf(i, f)) return false;
+        const float p[3] = {f.pos[0], f.pos[2] + 0.3f, -f.pos[1]};
+        float u, v;
+        if (!renderer_.project(p, u, v)) return false;
+        out = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
+        return true;
+    };
+    for (const auto& t : doc_.tracks()) {
+        const bool mine = selIsNode && std::find(t.nodes.begin(), t.nodes.end(), size_t(selectedThing_)) != t.nodes.end();
+        const ImU32 col = mine ? IM_COL32(255, 220, 90, 240) : IM_COL32(120, 200, 255, 170);
+        ImVec2 prev;
+        bool havePrev = false;
+        for (size_t k = 0; k < t.nodes.size(); ++k) {
+            ImVec2 p;
+            if (!screen(t.nodes[k], p)) { havePrev = false; continue; }
+            dl->AddCircleFilled(p, theme::S(k == 0 ? 5.0f : 3.5f), col);
+            if (havePrev) {
+                dl->AddLine(prev, p, col, theme::S(2.0f));
+                // an arrow head mid-segment: the direction the track runs
+                const ImVec2 m((prev.x + p.x) * 0.5f, (prev.y + p.y) * 0.5f), d(p.x - prev.x, p.y - prev.y);
+                const float len = std::sqrt(d.x * d.x + d.y * d.y);
+                if (len > theme::S(20)) {
+                    const ImVec2 u(d.x / len, d.y / len), n(-u.y, u.x);
+                    const float a = theme::S(6);
+                    dl->AddTriangleFilled(ImVec2(m.x + u.x * a, m.y + u.y * a), ImVec2(m.x - u.x * a + n.x * a * 0.7f, m.y - u.y * a + n.y * a * 0.7f),
+                                          ImVec2(m.x - u.x * a - n.x * a * 0.7f, m.y - u.y * a - n.y * a * 0.7f), col);
+                }
+            }
+            prev = p; havePrev = true;
+        }
+        if (mine || editTab_ == 3) {
+            ImVec2 p;
+            if (screen(t.nodes.front(), p)) dl->AddText(ImVec2(p.x + theme::S(6), p.y - theme::S(14)), col, t.name.c_str());
+        }
+    }
+}
+
 void App::applySectionVisibility() {
     if (!documentLoaded()) return;
     const size_t n = renderer_.instanceCount();
@@ -515,6 +613,15 @@ int App::pickAt(float u, float v) {
     renderer_.screenRay(u, v, o, d);
     float t;
     const int inst = renderer_.pick(o, d, t);
+    if (trackLinkPick_) {
+        trackLinkPick_ = false;
+        const int target = inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
+        if (target < 0 || selectedThing_ < 0) { pushLog("track: no node picked", 1); return -1; }
+        std::string err;
+        if (doc_.linkTrackNodes(size_t(selectedThing_), size_t(target), err)) { pushLog("track: linked", 0); selectThing(target); }
+        else pushLog("track: " + err, 1);
+        return target;
+    }
     if (linkPick_.active) {
         // link pick: the clicked thing becomes the target; the selection stays
         linkPick_.active = false;
@@ -1615,7 +1722,7 @@ void App::editorShortcuts() {
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) duplicateSelected();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && selectedThing_ >= 0) copySelection();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) pasteClipboard();
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && linkPick_.active) linkPick_.active = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && (linkPick_.active || trackLinkPick_)) { linkPick_.active = false; trackLinkPick_ = false; }
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
     if (ImGui::IsKeyPressed(ImGuiKey_End) && selectedThing_ >= 0) snapSelectedToGround();
 }
@@ -2376,6 +2483,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         drawLiveLinkCard(pad, inner, cardInner);
     }
     if (editTab_ == 3) {
+        drawTracksCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawNewLevelCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawEntranceCard(pad, inner, cardInner);

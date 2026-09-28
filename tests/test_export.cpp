@@ -900,6 +900,61 @@ void testTerrainClip(const fs::path& dir) {
     CHECK(hasGrass && other.themesDirty());
 }
 
+// Tracks (vanilla Tracks dialog): a real GuardTrack reads as one chain; place,
+// link, join, flip, rename and unlink keep the engine's invariants.
+void testTracks() {
+    namespace ed = albion::editor;
+    auto node = [](const char* uid, const char* prev, const char* next, bool start, bool end, float x) {
+        char pos[96]; std::snprintf(pos, sizeof pos, "PositionX %.6f;\r\nPositionY 0.0;\r\nPositionZ 0.0;\r\n", x);
+        return std::string("NewThing TrackNode;\r\nPlayer 0;\r\nUID ") + uid + ";\r\nDefinitionType \"TRACK_NODE_BASIC\";\r\nScriptName GuardTrack;\r\n"
+               "ScriptData \"NULL\";\r\nThingGamePersistent FALSE;\r\nThingLevelPersistent FALSE;\r\nStartCTCPhysicsStandard;\r\n" + pos +
+               "RHSetForwardX 0.0;\r\nRHSetForwardY 0.0;\r\nRHSetForwardZ 1.0;\r\nRHSetUpX 0.0;\r\nRHSetUpY -1.0;\r\nRHSetUpZ 0.0;\r\nEndCTCPhysicsStandard;\r\n"
+               "StartCTCEditor;\r\nEndCTCEditor;\r\nStartCTCVillageMember;\r\nVillageUID 0;\r\nEndCTCVillageMember;\r\nHealth 0.0;\r\n"
+               "LinkedToUID1 " + prev + ";\r\nLinkedToUID2 " + next + ";\r\nStart " + (start ? "TRUE" : "FALSE") + ";\r\nEnd " + (end ? "TRUE" : "FALSE") +
+               ";\r\nScriptName GuardTrack;\r\nEndThing;\r\n\r\n";
+    };
+    const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\n" + node("143", "0", "144", true, false, 0.0f) + node("144", "143", "0", false, true, 3.0f) + "XXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Tracks", tng, err));
+    auto tr = doc.tracks();
+    CHECK(tr.size() == 1 && tr[0].name == "GuardTrack" && tr[0].nodes == std::vector<size_t>({0, 1}) && std::fabs(tr[0].length - 3.0f) < 1e-4f);
+    // invariants over the whole file: symmetric links, head Start / tail End, one name per chain
+    auto valid = [&]() {
+        for (const auto& t : doc.tracks())
+            for (size_t i = 0; i < t.nodes.size(); ++i) {
+                const std::string txt = doc.text();
+                const auto& th = doc.summary(t.nodes[i]);
+                // the summary spells ScriptName NULL as "", the track keeps the literal
+                if (th.scriptName != t.name && !(t.name == "NULL" && th.scriptName.empty())) return false;
+                const auto rows = doc.propertiesOf(t.nodes[i]);
+                std::string start, end;
+                for (const auto& r : rows) { if (r.key == "Start") start = r.value; if (r.key == "End") end = r.value; }
+                if ((start == "TRUE") != (i == 0) || (end == "TRUE") != (i + 1 == t.nodes.size())) return false;
+            }
+        return true;
+    };
+    CHECK(valid());
+    const size_t c = doc.placeTrackNode(6.0f, 0.0f, 0.0f);
+    CHECK(doc.isTrackNode(c) && doc.tracks().size() == 2);
+    // tail 1 -> c joins: the new node takes GuardTrack
+    CHECK(doc.linkTrackNodes(1, c, err));
+    tr = doc.tracks();
+    CHECK(tr.size() == 1 && tr[0].nodes == std::vector<size_t>({0, 1, c}) && valid());
+    CHECK(doc.summary(c).scriptName == "GuardTrack" && std::fabs(tr[0].length - 6.0f) < 1e-4f);
+    CHECK(!doc.linkTrackNodes(c, 0, err));          // same track: no loops
+    CHECK(doc.flipTrack(1));
+    tr = doc.tracks();
+    CHECK(tr[0].nodes == std::vector<size_t>({c, 1, 0}) && valid());
+    CHECK(doc.renameTrack(0, "MyPatrol") && doc.text().find("ScriptName GuardTrack;") == std::string::npos);
+    CHECK(!doc.renameTrack(0, "bad name"));
+    CHECK(doc.unlinkTrackNode(1));                   // the middle: two lone nodes left
+    tr = doc.tracks();
+    CHECK(tr.size() == 3 && valid());
+    CHECK(doc.summary(1).scriptName.empty() && doc.summary(c).scriptName == "INVALID" && doc.summary(0).scriptName == "INVALID");
+    CHECK(doc.undo() && doc.tracks().size() == 1);
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1478,6 +1533,7 @@ int main() {
     testAddSoundTheme(dir);
     testVanillaFields();
     testTerrainClip(dir);
+    testTracks();
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

@@ -1699,6 +1699,7 @@ void App::drawViewport(float width) {
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
         drawLinkLines(origin, size);
+        drawTrackLines(origin, size);
         applySectionVisibility();
         drawViewportOverlays(origin, size);
     }

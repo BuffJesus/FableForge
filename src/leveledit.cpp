@@ -1279,6 +1279,161 @@ bool Document::setPropertyValue(size_t index, const std::string& ctc, const std:
     return true;
 }
 
+bool Document::isTrackNode(size_t index) const {
+    return index < file_.things().size() && lower(file_.things()[index].type) == "tracknode";
+}
+
+uint64_t Document::trackLink(size_t node, int which) const {
+    const auto v = file_.things()[node].find(which == 1 ? "LinkedToUID1" : "LinkedToUID2");
+    if (!v) return 0;
+    try { return std::stoull(*v); } catch (...) { return 0; }
+}
+
+void Document::setTrackField(size_t node, const std::string& key, const std::string& value) {
+    // ScriptName appears twice on a track node (before the CTC blocks and at the end,
+    // the loader reads the last): keep every copy equal
+    if (!file_.setThingPropertyAll(node, key, value)) file_.setThingProperty(node, key, value);
+}
+
+std::vector<size_t> Document::trackChain(size_t node) const {
+    std::vector<size_t> back{node};
+    std::set<size_t> seen{node};
+    for (size_t cur = node;;) {   // walk to the head
+        const uint64_t prev = trackLink(cur, 1);
+        const auto p = prev ? indexOfUid(prev) : std::nullopt;
+        if (!p || seen.count(*p)) break;
+        seen.insert(*p); back.push_back(*p); cur = *p;
+    }
+    std::vector<size_t> chain(back.rbegin(), back.rend());
+    for (size_t cur = node;;) {   // and to the tail
+        const uint64_t next = trackLink(cur, 2);
+        const auto n = next ? indexOfUid(next) : std::nullopt;
+        if (!n || seen.count(*n)) break;
+        seen.insert(*n); chain.push_back(*n); cur = *n;
+    }
+    return chain;
+}
+
+void Document::fixTrackEnds(const std::vector<size_t>& chain) {
+    for (size_t i = 0; i < chain.size(); ++i) {
+        setTrackField(chain[i], "Start", i == 0 ? "TRUE" : "FALSE");
+        setTrackField(chain[i], "End", i + 1 == chain.size() ? "TRUE" : "FALSE");
+    }
+}
+
+void Document::nameChain(const std::vector<size_t>& chain, const std::string& name) {
+    for (const size_t n : chain) setTrackField(n, "ScriptName", name);
+}
+
+std::vector<Document::Track> Document::tracks() const {
+    std::vector<Track> out;
+    std::set<size_t> done;
+    for (size_t i = 0; i < file_.things().size(); ++i) {
+        if (!isTrackNode(i) || done.count(i)) continue;
+        Track t;
+        t.nodes = trackChain(i);
+        for (const size_t n : t.nodes) done.insert(n);
+        t.name = file_.things()[t.nodes.front()].scriptName();
+        Frame a, b;
+        for (size_t k = 0; k + 1 < t.nodes.size(); ++k)
+            if (frameOf(t.nodes[k], a) && frameOf(t.nodes[k + 1], b))
+                t.length += std::sqrt((b.pos[0] - a.pos[0]) * (b.pos[0] - a.pos[0]) + (b.pos[1] - a.pos[1]) * (b.pos[1] - a.pos[1]) + (b.pos[2] - a.pos[2]) * (b.pos[2] - a.pos[2]));
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
+size_t Document::placeTrackNode(float x, float y, float z, const std::string& name) {
+    pushUndo();
+    const uint64_t uid = forge::thingplacer::nextUid(file_);
+    char pos[160];
+    std::snprintf(pos, sizeof pos, "PositionX %.6f;\r\nPositionY %.6f;\r\nPositionZ %.6f;\r\n", x, y, z);
+    const std::string b = std::string("NewThing TrackNode;\r\nPlayer 0;\r\nUID ") + std::to_string(uid) + ";\r\n"
+        "DefinitionType \"TRACK_NODE_BASIC\";\r\nScriptName " + name + ";\r\nScriptData \"NULL\";\r\n"
+        "ThingGamePersistent FALSE;\r\nThingLevelPersistent FALSE;\r\nStartCTCPhysicsStandard;\r\n" + pos +
+        "RHSetForwardX 0.000000;\r\nRHSetForwardY 0.000000;\r\nRHSetForwardZ 1.000000;\r\n"
+        "RHSetUpX 0.000000;\r\nRHSetUpY -1.000000;\r\nRHSetUpZ 0.000000;\r\nEndCTCPhysicsStandard;\r\n"
+        "StartCTCEditor;\r\nEndCTCEditor;\r\nStartCTCVillageMember;\r\nVillageUID 0;\r\nEndCTCVillageMember;\r\n"
+        "Health 0.0;\r\nLinkedToUID1 0;\r\nLinkedToUID2 0;\r\nStart TRUE;\r\nEnd TRUE;\r\nScriptName " + name + ";\r\nEndThing;\r\n";
+    const size_t n = file_.insertThingBlock(targetSection(), b);
+    ++revision_;
+    return n;
+}
+
+bool Document::linkTrackNodes(size_t a, size_t b, std::string& error) {
+    if (!isTrackNode(a) || !isTrackNode(b) || a == b) { error = "pick two different track nodes"; return false; }
+    auto chainA = trackChain(a), chainB = trackChain(b);
+    if (std::find(chainA.begin(), chainA.end(), b) != chainA.end()) { error = "both nodes are on the same track (no loops)"; return false; }
+    // a must end up the tail of its chain, b the head of its own: flip when that is possible
+    if (chainA.back() != a && chainA.front() == a) std::reverse(chainA.begin(), chainA.end());
+    if (chainB.front() != b && chainB.back() == b) std::reverse(chainB.begin(), chainB.end());
+    if (chainA.back() != a || chainB.front() != b) { error = "a node inside a track already has two links"; return false; }
+    pushUndo();
+    const std::string name = file_.things()[a].scriptName();
+    std::vector<size_t> joined = chainA;
+    joined.insert(joined.end(), chainB.begin(), chainB.end());
+    // re-link the whole joined chain in order (a flipped part gets its links swapped)
+    for (size_t i = 0; i < joined.size(); ++i) {
+        setTrackField(joined[i], "LinkedToUID1", std::to_string(i ? uidOf(joined[i - 1]) : 0));
+        setTrackField(joined[i], "LinkedToUID2", std::to_string(i + 1 < joined.size() ? uidOf(joined[i + 1]) : 0));
+    }
+    fixTrackEnds(joined);
+    nameChain(joined, name.empty() ? std::string("INVALID") : name);
+    ++revision_;
+    return true;
+}
+
+bool Document::flipTrack(size_t node) {
+    if (!isTrackNode(node)) return false;
+    auto chain = trackChain(node);
+    if (chain.size() < 2) return false;
+    pushUndo();
+    std::reverse(chain.begin(), chain.end());
+    for (size_t i = 0; i < chain.size(); ++i) {
+        setTrackField(chain[i], "LinkedToUID1", std::to_string(i ? uidOf(chain[i - 1]) : 0));
+        setTrackField(chain[i], "LinkedToUID2", std::to_string(i + 1 < chain.size() ? uidOf(chain[i + 1]) : 0));
+    }
+    fixTrackEnds(chain);
+    ++revision_;
+    return true;
+}
+
+bool Document::renameTrack(size_t node, const std::string& name) {
+    if (!isTrackNode(node) || name.empty()) return false;
+    for (const char c : name) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
+    pushUndo();
+    nameChain(trackChain(node), name);
+    ++revision_;
+    return true;
+}
+
+bool Document::unlinkTrackNode(size_t node) {
+    if (!isTrackNode(node)) return false;
+    const auto chain = trackChain(node);
+    if (chain.size() < 2) return false;
+    pushUndo();
+    const auto at = size_t(std::find(chain.begin(), chain.end(), node) - chain.begin());
+    const std::vector<size_t> before(chain.begin(), chain.begin() + at), after(chain.begin() + at + 1, chain.end());
+    auto relink = [&](const std::vector<size_t>& part) {
+        for (size_t i = 0; i < part.size(); ++i) {
+            setTrackField(part[i], "LinkedToUID1", std::to_string(i ? uidOf(part[i - 1]) : 0));
+            setTrackField(part[i], "LinkedToUID2", std::to_string(i + 1 < part.size() ? uidOf(part[i + 1]) : 0));
+        }
+        if (!part.empty()) fixTrackEnds(part);
+    };
+    relink(before);
+    relink(after);
+    setTrackField(node, "LinkedToUID1", "0");
+    setTrackField(node, "LinkedToUID2", "0");
+    fixTrackEnds({node});
+    nameChain({node}, "NULL");
+    if (before.size() == 1) nameChain(before, "INVALID");
+    if (after.size() == 1) nameChain(after, "INVALID");
+    else if (after.size() > 1) nameChain(after, "TrackTempName" + std::to_string(++trackTempCounter_));
+    ++revision_;
+    return true;
+}
+
 std::vector<Document::Link> Document::linksOf(size_t index) const {
     std::vector<Link> out;
     if (index >= file_.things().size()) return out;

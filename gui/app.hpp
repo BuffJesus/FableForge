@@ -387,6 +387,11 @@ private:
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
+    // tracks (Level tab): the card, the pick-a-node-to-link mode, the lines in the view
+    void drawTracksCard(float pad, float inner, float cardInner);
+    void drawTrackLines(const ImVec2& origin, const ImVec2& size);
+    bool trackLinkPick_ = false;
+    char trackName_[64] = {};
     std::string thingLabel(size_t index) const;
     std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)
     void drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height);

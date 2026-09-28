@@ -273,6 +273,16 @@ void File::setCtcProperty(size_t thingIndex, std::string_view ctcName,
     reindex();
 }
 
+size_t File::setThingPropertyAll(size_t thingIndex, std::string_view key, std::string_view value) {
+    const Thing& thing = thingAt(thingIndex);
+    std::vector<size_t> lines;
+    for (const auto& p : thing.properties)
+        if (equalsIgnoreCase(p.key, key)) lines.push_back(p.line);
+    for (const size_t l : lines) replaceValueOnLine(l, value);
+    if (!lines.empty()) reindex();
+    return lines.size();
+}
+
 bool File::removeCtcProperty(size_t thingIndex, std::string_view ctcName,
                              std::string_view key) {
     const Thing& thing = thingAt(thingIndex);

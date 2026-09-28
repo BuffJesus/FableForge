@@ -185,6 +185,32 @@ public:
     bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
     static PropertyRow::Kind kindOf(const std::string& value);
 
+    // ---- tracks (the vanilla Tracks dialog, FableWin CThingTrackNode; static RE +
+    // 319 dev-tree nodes): a track is a doubly-linked chain of TrackNode things
+    // (TRACK_NODE_BASIC) sharing one name -- LinkedToUID1 = previous, LinkedToUID2 =
+    // next, Start TRUE on the head, End TRUE on the tail, no branches or loops.
+    // Village guards patrol them (GuardTrack); cut scenes preview a camera along them.
+    struct Track {
+        std::string name;
+        std::vector<size_t> nodes;   // head -> tail
+        float length = 0;            // sum of straight segments (GetTrackLength)
+    };
+    std::vector<Track> tracks() const;
+    bool isTrackNode(size_t index) const;
+    // A lone node (Start TRUE, End TRUE, named INVALID like vanilla's Shift+click) at a
+    // map-local point; returns its index. One undo step.
+    size_t placeTrackNode(float x, float y, float z, const std::string& name = "INVALID");
+    // Link a -> b (vanilla SetAsLinkedTo): both need a free slot and must be in different
+    // chains; a chain is flipped when needed so the joined track runs a -> b; the
+    // joined track takes a's name. One undo step; false when not allowed (error set).
+    bool linkTrackNodes(size_t a, size_t b, std::string& error);
+    bool flipTrack(size_t node);                           // reverse the chain (vanilla F)
+    bool renameTrack(size_t node, const std::string& name); // every node of the chain
+    // Remove the node's links (vanilla Delete in linking mode): a neighbour left alone
+    // becomes INVALID, the part after the node gets a TrackTempName<n>, the node's
+    // own name becomes empty. One undo step.
+    bool unlinkTrackNode(size_t node);
+
     // ---- links between things: the vanilla editor's attach modes (FableWin
     // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
     // them -- a UID field on a component (or on the thing) naming another thing.
@@ -409,6 +435,13 @@ private:
     std::filesystem::path loosePath_;
     std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
     std::string placementSection_ = "NULL";
+    int trackTempCounter_ = 0;
+    // track helpers (no undo step of their own)
+    uint64_t trackLink(size_t node, int which) const;          // 1 = prev, 2 = next
+    void setTrackField(size_t node, const std::string& key, const std::string& value);
+    std::vector<size_t> trackChain(size_t node) const;         // head -> tail
+    void fixTrackEnds(const std::vector<size_t>& chain);
+    void nameChain(const std::vector<size_t>& chain, const std::string& name);
     bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
     std::string targetSection() const;   // placementSection_ when it exists, else NULL
     size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)

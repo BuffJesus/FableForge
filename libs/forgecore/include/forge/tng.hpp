@@ -72,6 +72,9 @@ public:
     // "Key Value;" line just before EndThing when the key is absent.
     void setThingProperty(size_t thingIndex, std::string_view key,
                           std::string_view value);
+    // Set EVERY top-level line of `key` (a track node writes ScriptName twice).
+    // Returns how many lines changed; 0 inserts nothing (use setThingProperty).
+    size_t setThingPropertyAll(size_t thingIndex, std::string_view key, std::string_view value);
     // Remove a top-level property line. Returns false if the key is absent.
     bool removeThingProperty(size_t thingIndex, std::string_view key);
 
