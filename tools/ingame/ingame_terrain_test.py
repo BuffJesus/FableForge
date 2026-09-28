@@ -215,6 +215,11 @@ function AtlasProbe(questObject)
         -- CMiniMapDisplay::GetDrawPosition as the engine's own hero marker, which
         -- the child prologue does not show
         local hk, h = pcall(function() return Q:GetHero() end)
+        -- the childhood scripts keep the hero hidden on the minimap (SetHiddenOnMiniMap) and
+        -- a hidden thing gets no marker at all: show him, make sure the minimap is on
+        local sk, serr = pcall(function() Q:EntitySetAsHiddenOnMiniMap(h, false) end)
+        local ek, eerr = pcall(function() Q:MiniMapSetAsEnabled(true) end)
+        Q:Log("ATLAS_PROBE|unhide|" .. tostring(sk) .. "|" .. tostring(serr) .. "|" .. tostring(ek) .. "|" .. tostring(eerr))
         local mk, merr = pcall(function() Q:MiniMapAddMarker(h, ATLAS_MARKER) end)
         Q:Log("ATLAS_PROBE|marker|" .. tostring(hk and mk) .. "|" .. tostring(merr))
         local pk, hp = pcall(function() return h:GetPos() end)
