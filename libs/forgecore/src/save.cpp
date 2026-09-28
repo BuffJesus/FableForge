@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "forge/defdecode.hpp"  // fieldTag (seed-0 reflected CRC-32)
+#define MINIZ_HEADER_FILE_ONLY   // the implementation is vendor/third_party/miniz/miniz.c (forgecore_slice)
 #include "miniz/miniz.h"
 
 namespace forge::save {

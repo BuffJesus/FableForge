@@ -138,6 +138,10 @@ struct CustomThemeResult {
 };
 bool createCustomTheme(const std::filesystem::path& gameRoot, const CustomThemeRequest& req,
                        CustomThemeResult& out, std::string& error);
+// The same into an output tree (read outRoot's copy when present, else baseRoot's; write
+// outRoot; no backups): the mod composer's recipe step. outRoot == baseRoot = in place.
+bool createCustomTheme(const std::filesystem::path& baseRoot, const std::filesystem::path& outRoot,
+                       const CustomThemeRequest& req, CustomThemeResult& out, std::string& error);
 
 // One-time .forge-orig backups of FinalAlbion.bwd/.wld/.wad and FinalAlbion_RT.stb,
 // then the staged atomic install. The new level's LEV/TNG are the donor's

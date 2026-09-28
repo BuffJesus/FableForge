@@ -318,23 +318,34 @@ Model loadModel(const fs::path& path) {
 }
 
 bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResult& out, std::string& error) {
+    return importModel(gameRoot, gameRoot, req, out, error);
+}
+
+bool importModel(const fs::path& baseRoot, const fs::path& outRoot, const ImportRequest& req, ImportResult& out, std::string& error) {
     out = ImportResult{};
-    if (!validName(req.name)) { error = "name must be A-Z, 0-9 and _ (got '" + req.name + "')"; return false; }
-    if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
     std::error_code ec;
+    const bool inPlace = fs::equivalent(baseRoot, outRoot, ec) || baseRoot == outRoot;
+    if (!validName(req.name)) { error = "name must be A-Z, 0-9 and _ (got '" + req.name + "')"; return false; }
+    if (inPlace && backups::gameRunningIn(baseRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+    // read: the output tree's copy when an earlier layer wrote one, else the base; write: the output tree
+    auto readPath = [&](const fs::path& rel) { const fs::path o = outRoot / rel; return fs::exists(o, ec) ? o : baseRoot / rel; };
+    auto writePath = [&](const fs::path& rel) { const fs::path o = outRoot / rel; fs::create_directories(o.parent_path(), ec); return o; };
+    auto backupOnce = [&](const fs::path& p, std::string& err) { return !inPlace || backups::backupOnce(p, err); };
     if (!fs::exists(req.model, ec)) { error = "no such model: " + req.model.string(); return false; }
     if (!req.texturePng.empty() && !fs::exists(req.texturePng, ec)) { error = "no such image: " + req.texturePng.string(); return false; }
     try {
-        const fs::path defsDir = gameRoot / "data" / "CompiledDefs";
-        const fs::path namesBin = defsDir / "names.bin", gameBin = defsDir / "game.bin";
-        const fs::path texBig = gameRoot / "data" / "graphics" / "pc" / "textures.big";
-        fs::path gfxBig = gameRoot / "data" / "graphics" / "graphics.big";
-        if (!fs::exists(gfxBig, ec)) gfxBig = gameRoot / "data" / "graphics" / "pc" / "graphics.big";
-        if (!fs::exists(gfxBig, ec)) { error = "no graphics.big under " + (gameRoot / "data" / "graphics").string(); return false; }
+        const fs::path defsRel = fs::path("data") / "CompiledDefs";
+        const fs::path namesIn = readPath(defsRel / "names.bin"), gameIn = readPath(defsRel / "game.bin");
+        const fs::path texRel = fs::path("data") / "graphics" / "pc" / "textures.big";
+        const fs::path texIn = readPath(texRel);
+        fs::path gfxRel = fs::path("data") / "graphics" / "graphics.big";
+        if (!fs::exists(readPath(gfxRel), ec)) gfxRel = fs::path("data") / "graphics" / "pc" / "graphics.big";
+        const fs::path gfxIn = readPath(gfxRel);
+        if (!fs::exists(gfxIn, ec)) { error = "no graphics.big under " + (baseRoot / "data" / "graphics").string(); return false; }
         out.meshName = "MESH_" + req.name;
         out.objectName = "OBJECT_" + req.name;
 
-        auto defs = forge::bin::File::open(namesBin, gameBin);
+        auto defs = forge::bin::File::open(namesIn, gameIn);
         if (defs.find(out.objectName)) { error = "game.bin already has a def named " + out.objectName; return false; }
         const auto* donor = defs.find(req.donor);
         if (!donor) { error = "no OBJECT named " + req.donor + " to copy from"; return false; }
@@ -350,18 +361,19 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
         if (!req.texturePng.empty()) {
             const std::string symbol = req.name + "_DIFFUSE";
             {
-                const auto tex = forge::big::File::open(texBig);
+                const auto tex = forge::big::File::open(texIn);
                 const auto* bank = tex.findBank("GBANK_MAIN_PC");
                 if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
                 for (const auto& e : bank->entries) if (e.name == symbol) { error = "textures.big already has an entry named " + symbol; return false; }
             }
-            if (!backups::backupOnce(texBig, error)) return false;
+            const fs::path texOut = writePath(texRel);
+            if (!backupOnce(texOut, error)) return false;
             forge::terraintex::ImportRequest ir;
-            ir.png = req.texturePng; ir.srcBig = texBig; ir.outBig = texBig.string() + ".forge-tmp";
+            ir.png = req.texturePng; ir.srcBig = texIn; ir.outBig = texOut.string() + ".forge-tmp";
             ir.entryName = symbol; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt1"; ir.add = true;
             const auto r = forge::terraintex::importPng(ir);
             if (!r.ok) { error = "texture import failed: " + r.output; fs::remove(ir.outBig, ec); return false; }
-            fs::rename(ir.outBig, texBig);
+            fs::rename(ir.outBig, texOut);
             out.textureId = uint32_t(r.entryId);
             out.notes.push_back("textures.big: appended " + symbol + " (id " + std::to_string(out.textureId) + ", DXT1) from " + req.texturePng.string());
         }
@@ -375,7 +387,7 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
         // 3a. the collision hull: the next id, so the render mesh's Info can name it
         uint32_t nextId = 0;
         {
-            const auto gfx = forge::big::File::open(gfxBig);
+            const auto gfx = forge::big::File::open(gfxIn);
             const auto* bank = gfx.findBank("MBANK_ALLMESHES");
             if (!bank || bank->entries.empty()) { error = "graphics.big has no MBANK_ALLMESHES"; return false; }
             for (const auto& e : bank->entries) { nextId = std::max(nextId, e.id); if (e.name == out.meshName) { error = "graphics.big already has a mesh named " + out.meshName; return false; } }
@@ -395,7 +407,7 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
 
         // 3. graphics.big: appended MBANK_ALLMESHES entry with the next id
         {
-            auto gfx = forge::big::File::open(gfxBig);
+            auto gfx = forge::big::File::open(gfxIn);
             auto* bank = gfx.findBank("MBANK_ALLMESHES");
             if (!bank) { error = "graphics.big has no MBANK_ALLMESHES"; return false; }
             if (bank->entries.empty()) { error = "MBANK_ALLMESHES is empty"; return false; }
@@ -420,11 +432,12 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             e.length = uint32_t(composed.payload.size());
             bank->entries.push_back(std::move(e));
             out.meshId = nextId;
-            if (!backups::backupOnce(gfxBig, error)) return false;
+            const fs::path gfxOut = writePath(gfxRel);
+            if (!backupOnce(gfxOut, error)) return false;
             const auto bytes = gfx.serialize();
-            const fs::path tmp = gfxBig.string() + ".forge-tmp";
+            const fs::path tmp = gfxOut.string() + ".forge-tmp";
             { std::ofstream o(tmp, std::ios::binary | std::ios::trunc); o.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size())); if (!o) { error = "cannot write " + tmp.string(); return false; } }
-            fs::rename(tmp, gfxBig);
+            fs::rename(tmp, gfxOut);
             out.notes.push_back("graphics.big: appended " + out.meshName + " (id " + std::to_string(out.meshId) + ", " + std::to_string(out.vertices) + " vertices, " +
                                 std::to_string(out.triangles) + " triangles, " + std::to_string(out.primitives) + " primitive(s), " + std::to_string(composed.payload.size()) + " bytes)" +
                                 (physics.empty() ? std::string(", no collision hull") : " + " + out.meshName + "[PHYSICS] (id " + std::to_string(out.physicsId) + ", the model's own triangles as the hull)"));
@@ -444,8 +457,9 @@ bool importModel(const fs::path& gameRoot, const ImportRequest& req, ImportResul
             catch (const std::exception& e) { out.notes.push_back(std::string("game.bin: ") + field + " left as the donor's (" + e.what() + ")"); }
         };
         setf("MeshHeight", height); setf("ApproxMaxMeshHeight", height); setf("MeshRadius", radius);
-        if (!backups::backupOnce(namesBin, error) || !backups::backupOnce(gameBin, error)) return false;
-        defs.save(namesBin, gameBin);
+        const fs::path namesOut = writePath(defsRel / "names.bin"), gameOut = writePath(defsRel / "game.bin");
+        if (!backupOnce(namesOut, error) || !backupOnce(gameOut, error)) return false;
+        defs.save(namesOut, gameOut);
         out.defIndex = index;
         out.notes.push_back("game.bin: appended OBJECT " + out.objectName + " (def index " + std::to_string(index) + ", a copy of " + req.donor + " with Graphic.modelId " +
                             std::to_string(out.meshId) + ", height " + std::to_string(height) + ", radius " + std::to_string(radius) + ")");

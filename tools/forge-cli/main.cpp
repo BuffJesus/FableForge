@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "modpack.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
 #include "forge/bankcatalog.hpp"
@@ -8344,8 +8345,13 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     std::vector<std::string> roots;
     std::vector<std::string> rootLabels;   // parallel to roots
     std::vector<std::string> egoFolders;
+    std::vector<size_t> forgePacks;   // FableForge packs (forge_pack.json): their recipes run after the layers below
     for (size_t i = 0; i < sources.size(); ++i) {
         const std::string& s = sources[i];
+        if (fs::is_directory(s) && albion::modpack::isPack(s)) {
+            forgePacks.push_back(i);
+            continue;   // any data/ tree it carries joins the TNG / QST / whole-file layers below (sources are walked there)
+        }
         const std::string ext = fs::path(s).extension().string();
         if (ext == ".fmp" || ext == ".FMP") {
             const std::string root = tmpRoot(i);
@@ -8715,6 +8721,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
+                if (albion::modpack::isPack(s) && (lower == "forge_pack.json" || lower.rfind("assets/", 0) == 0)) continue;   // recipes: below
                 if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
                 if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
                 if (lower == "userst.ini" || lower == "usersettings.ini") { settingsSkipped.insert(srcLabel(si)); continue; }   // the player's own settings stay theirs
@@ -8820,6 +8827,18 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (!jsonOutput) {
             std::printf("egocore %s: Mods/%s/ copied%s, Mods.ini updated\n", erep.modName.c_str(), erep.modName.c_str(), erep.hasDll ? " (DLL registered)" : "");
             if (res) std::printf("egocore %s: %zu bank entr%s from .resource files (%zu replaced, %zu added) in %zu bank(s)\n", erep.modName.c_str(), res, res == 1 ? "y" : "ies", erep.resourceReplaced, erep.resourceAdded, erep.resourceBanks.size());
+        }
+    }
+
+    // FableForge packs: their recipes (model / ground-theme imports) re-run against the tree
+    // built so far, in load order -- appended ids come from the banks being built
+    for (const size_t pi : forgePacks) {
+        const auto prep = albion::modpack::apply(sources[pi], baseRoot, outDir);
+        for (const auto& e : prep.errors) std::fprintf(stderr, "pack %s: %s\n", srcLabel(pi).c_str(), e.c_str());
+        if (jsonOutput) rep["forge"].push_back({{"mod", srcLabel(pi)}, {"added", prep.added}, {"errors", prep.errors}});
+        if (!jsonOutput) {
+            std::printf("pack %s: %zu recipe(s) applied%s\n", srcLabel(pi).c_str(), prep.added.size(), prep.errors.empty() ? "" : (", " + std::to_string(prep.errors.size()) + " failed").c_str());
+            for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
         }
     }
 

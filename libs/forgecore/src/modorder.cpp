@@ -105,6 +105,7 @@ const char* kindName(Kind k) {
         case Kind::Tree: return "tree";
         case Kind::EgoCore: return "egocore";
         case Kind::Qst: return "qst";
+        case Kind::Forge: return "forge";
         default: return "unknown";
     }
 }
@@ -120,6 +121,7 @@ Kind classify(const fs::path& source) {
     }
     if (fs::is_directory(source, ec)) {
         const std::string leaf = source.filename().string();
+        if (fs::exists(source / "forge_pack.json", ec)) return Kind::Forge;   // before Tree: a pack may carry a data/ tree too
         if (fs::exists(source / (leaf + ".dll"), ec)) return Kind::EgoCore;
         if (fs::is_directory(source / "Data", ec) || fs::is_directory(source / "data", ec) || fs::is_directory(source / "FSE", ec)) return Kind::Tree;   // an FSE-only pack (quests + scripts) is a tree too
         // a folder holding a single pack file
@@ -143,7 +145,7 @@ Order load(const fs::path& gameRoot) {
         e.name = m.value("name", ""); e.source = m.value("source", ""); e.sha256 = m.value("sha256", "");
         e.enabled = m.value("enabled", true); e.note = m.value("note", "");
         const std::string k = m.value("kind", "unknown");
-        e.kind = k == "fmp" ? Kind::Fmp : k == "patch" ? Kind::Patch : k == "tree" ? Kind::Tree : k == "egocore" ? Kind::EgoCore : k == "qst" ? Kind::Qst : Kind::Unknown;
+        e.kind = k == "fmp" ? Kind::Fmp : k == "patch" ? Kind::Patch : k == "tree" ? Kind::Tree : k == "egocore" ? Kind::EgoCore : k == "qst" ? Kind::Qst : k == "forge" ? Kind::Forge : Kind::Unknown;
         order.mods.push_back(std::move(e));
     }
     return order;

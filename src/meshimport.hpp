@@ -48,5 +48,10 @@ struct ImportResult {
 };
 
 bool importModel(const std::filesystem::path& gameRoot, const ImportRequest& req, ImportResult& out, std::string& error);
+// The same into an output tree: every file is read from outRoot when it is there
+// (an earlier mod layer wrote it) else from baseRoot, and written to outRoot, with
+// no backups -- the mod composer's recipe step (forge_pack.json). With outRoot ==
+// baseRoot this is the in-place import above (one-time .forge-orig backups).
+bool importModel(const std::filesystem::path& baseRoot, const std::filesystem::path& outRoot, const ImportRequest& req, ImportResult& out, std::string& error);
 
 } // namespace albion::meshimport

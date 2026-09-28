@@ -14,7 +14,7 @@
 
 namespace forge::modorder {
 
-enum class Kind { Fmp, Patch, Tree, EgoCore, Qst, Unknown };
+enum class Kind { Fmp, Patch, Tree, EgoCore, Qst, Forge, Unknown };   // Forge: a folder with forge_pack.json (recipes + an optional tree)
 const char* kindName(Kind k);
 // By the source's shape: *.fmp, *.patch, *.qst, a folder with Data/ (tree) or <Name>.dll (EgoCore).
 Kind classify(const std::filesystem::path& source);
