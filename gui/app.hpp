@@ -100,6 +100,7 @@ private:
     double deadline_ = 0;   // wall-clock seconds for the current waiting command
     std::string pendingShot_;
     std::string clickTarget_;
+    std::string revealTarget_;   // reveal <widget>: scroll its window so the widget is on screen
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
     int dragPhase_ = 0;

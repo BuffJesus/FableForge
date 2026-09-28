@@ -46,6 +46,7 @@ void Automation::registerWidget(const char* id) {
     if (!active_) return;
     const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
     widgets_[id] = ImVec4(a.x, a.y, b.x, b.y);
+    if (!revealTarget_.empty() && revealTarget_ == id) { ImGui::ScrollToItem(ImGuiScrollFlags_AlwaysCenterY); revealTarget_.clear(); }   // scrolls the parent panels too (cards are child windows)
 }
 
 bool Automation::takeScreenshot(std::string& path) {
@@ -121,6 +122,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "frames") { waitFrames_ = std::max(1, std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "select") { app.selectMap(rest); note("ok   " + line); ++pc_; }
     else if (cmd == "filter") { app.setFilter(rest); note("ok   " + line); ++pc_; }
+    else if (cmd == "reveal") { revealTarget_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 2; }   // scroll the widget's panel to it (for screenshots)
     else if (cmd == "click") { clickTarget_ = rest; clickPhase_ = 0; note("..   " + line); ++pc_; }
     else if (cmd == "orbit") { float a = 0, b = 0; std::istringstream(rest) >> a >> b; app.camera().orbit(a, b); note("ok   " + line); ++pc_; }
     else if (cmd == "zoom") { app.camera().dolly(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }

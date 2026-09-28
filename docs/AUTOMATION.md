@@ -60,6 +60,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `theme_search <text>` | fills the *Add a ground theme from the game* box (the list shows a swatch per theme) |
 | `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image opens Assets > Ground themes with the path in the custom-texture input (state `textures_mode 1`; `textures_tab 0` returns to the map editor, `assets_tab <n>` picks the page) |
 | `set place_owner auto\|neutral\|0..3` | the owner combo (vanilla PLAYER_LIST_BOX) for the next placements; state `place_owner` |
+| `reveal <widget>` | scroll the panel holding a registered widget so it is on screen (before a `screenshot`) |
 | `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
 | `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |
 | `set section_day 0\|1`, `set section_night 0\|1`, `set section_hidden <NAME> 0\|1` | the Quest sections card's filters; state `section_day`, `section_night`, `selected_visible` |
