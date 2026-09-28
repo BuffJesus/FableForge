@@ -1783,6 +1783,8 @@ void App::editorShortcuts() {
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedThing_ >= 0) deleteSelected();
+    // vanilla saves with Ctrl+S / F6: here the draft (the loose .tng); writing into the game stays a confirmed button
+    if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && doc_.dirty()) saveDocument();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) editRedo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) duplicateSelected();
