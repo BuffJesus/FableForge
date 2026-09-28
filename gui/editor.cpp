@@ -311,9 +311,20 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
         sectionCountsCache_.clear();
         for (const auto& n : doc_.thingSections()) ++sectionCountsCache_[lowerCopy(n)];
     }
-    const auto& names = sectionNamesCache_;
-    auto& counts = sectionCountsCache_;
-    std::vector<std::string> shown = names;
+    // "<quest>%DayOnly" / "%NightOnly" rows fold into their quest (the vanilla dialog lists quests;
+    // the Day only / Night only toggles below decide whether the variants are drawn)
+    std::vector<std::string> shown;
+    std::map<std::string, size_t> counts, dayCounts, nightCounts;
+    bool anyDayNight = false;
+    for (const auto& n : sectionNamesCache_) {
+        const auto split = editor::Document::splitDayNight(n);
+        const std::string base = split.first.empty() ? std::string("NULL") : split.first;
+        if (std::none_of(shown.begin(), shown.end(), [&](const std::string& x) { return lowerCopy(x) == lowerCopy(base); })) shown.push_back(base);
+        const size_t c = sectionCountsCache_.count(lowerCopy(n)) ? sectionCountsCache_[lowerCopy(n)] : 0;
+        counts[lowerCopy(base)] += c;
+        if (split.second == 1) { dayCounts[lowerCopy(base)] += c; anyDayNight = true; }
+        if (split.second == 2) { nightCounts[lowerCopy(base)] += c; anyDayNight = true; }
+    }
     if (shown.empty()) shown.push_back("NULL");
     const std::string current = lowerCopy(doc_.placementSection());
     ImGui::PushFont(fontSmall_);
@@ -325,11 +336,25 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show / hide this section's things in the view");
         ImGui::SameLine();
         const bool isCurrent = key == current || (current.empty() && key == "null");
-        char lbl[160]; std::snprintf(lbl, sizeof lbl, "%s  (%zu)%s", n.c_str(), counts[key], isCurrent ? "   <- new things go here" : "");
-        if (ImGui::Selectable(lbl, isCurrent)) doc_.setPlacementSection(n);
+        char dn[64] = "";
+        if (dayCounts[key] || nightCounts[key]) std::snprintf(dn, sizeof dn, ", %zu day, %zu night", dayCounts[key], nightCounts[key]);
+        char lbl[200]; std::snprintf(lbl, sizeof lbl, "%s  (%zu%s)%s", n.c_str(), counts[key], dn, isCurrent ? "   <- new things go here" : "");
+        // a folded row whose plain section the file lacks (only "<quest>%NightOnly", say) cannot take new things
+        const bool exists = std::any_of(sectionNamesCache_.begin(), sectionNamesCache_.end(), [&](const std::string& x) { return lowerCopy(x) == key; });
+        if (ImGui::Selectable(lbl, isCurrent, exists ? 0 : ImGuiSelectableFlags_Disabled)) doc_.setPlacementSection(n);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(key == "null" ? "The main section: always loaded." : "Loaded with its quest. Click: new things go here.");
         ImGui::PopID();
     }
+    // vanilla Quests dialog: Day only / Night only (CQuestDialog::GetQuestsToDisplay adds the
+    // shown quests' %DayOnly / %NightOnly sections)
+    if (ImGui::Checkbox("Day-only creatures##secday", &showDayOnly_)) sectionsDirty_ = true;
+    auto_.registerWidget("check_section_day");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Draw the creatures set to appear only by day (their quest's %%DayOnly section).");
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Night-only##secnight", &showNightOnly_)) sectionsDirty_ = true;
+    auto_.registerWidget("check_section_night");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Draw the creatures set to appear only by night (their quest's %%NightOnly section).");
+    if (!anyDayNight) theme::hint("No day- or night-only creatures on this map (a creature's Properties set it).");
     ImGui::PopFont();
     ImGui::SetNextItemWidth(cardInner - S(70));
     ImGui::InputTextWithHint("##newsection", "New section (quest name, e.g. Q_MY_QUEST)", newSection_, sizeof newSection_, ImGuiInputTextFlags_CharsUppercase);
@@ -366,6 +391,18 @@ void App::drawPropertyGrid(float cardInner) {
     if (rows.empty()) return;
     ImGui::Dummy(ImVec2(0, S(4)));
     theme::label("Properties");
+    if (doc_.summary(idx).type == "AICreature") {
+        // vanilla CTCDayOrNightOnlySupport "DayNightExclusive": the creature's section carries it
+        int mode = editor::Document::splitDayNight(doc_.sectionOf(idx)).second;
+        const int before = mode;
+        theme::segmented("##daynight", mode, {"Day and night", "Day only", "Night only"}, cardInner);
+        auto_.registerWidget("seg_daynight");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("When the creature is in the world: it moves to its quest's %%DayOnly / %%NightOnly section,\nwhich the game streams in only by day / by night (vanilla DayNightExclusive).");
+        if (mode != before) {
+            if (const auto n = doc_.setDayNight(idx, mode)) { selectThing(int(*n)); sectionsDirty_ = true; }
+            return;   // indices moved: draw the grid next frame
+        }
+    }
     ImGui::PushFont(fontSmall_);
     using K = editor::Document::PropertyRow::Kind;
     std::string group = "\x01";
@@ -656,7 +693,7 @@ void App::applySectionVisibility() {
     const auto per = doc_.thingSections();
     for (size_t i = 0; i < n; ++i) {
         const int t = renderer_.instance(i).thing;
-        const bool hidden = t >= 0 && size_t(t) < per.size() && hiddenSections_.count(lowerCopy(per[size_t(t)]));
+        const bool hidden = t >= 0 && thingHiddenBySection(per, size_t(t));
         renderer_.setInstanceVisible(i, !hidden);
     }
 }
@@ -673,8 +710,10 @@ bool App::thingsStale() const {
 int App::trackNodeAt(float px, float py) const {
     int best = -1;
     float bestD = theme::S(12.0f) * theme::S(12.0f);
+    const auto per = doc_.thingSections();
     for (const auto& t : tracksCache_)
         for (const size_t n : t.nodes) {
+            if (thingHiddenBySection(per, n)) continue;   // a hidden section's nodes are not pickable either
             editor::Frame f;
             if (!doc_.frameOf(n, f)) continue;
             const float p[3] = {f.pos[0], f.pos[2] + 0.3f, -f.pos[1]};
@@ -1204,6 +1243,23 @@ void App::drawPlacementOptions(float width) {
         auto_.registerWidget("slider_place_angle");
     }
     ImGui::Dummy(ImVec2(0, S(2)));
+    {
+        // vanilla "Player Auto" combo: Auto, Player 0-3, Neutral
+        const char* owners[] = {"Auto", "Player 0", "Player 1", "Player 2", "Player 3", "Neutral"};
+        int pick = placeOwner_ < 0 ? 0 : placeOwner_ >= 4 ? 5 : placeOwner_ + 1;
+        const float labelW = S(58);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::vec(theme::Muted), "Owner");
+        ImGui::SameLine(labelW);
+        ImGui::SetNextItemWidth(width - labelW);
+        if (ImGui::Combo("##place_owner", &pick, owners, 6)) placeOwner_ = pick == 0 ? -1 : pick == 5 ? 4 : pick - 1;
+        auto_.registerWidget("combo_place_owner");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The Player field of new objects, buildings, creatures and villages.\n"
+                              "Auto: a creature takes its definition's DefaultOwner (hostiles 2), everything else Neutral (4).\n"
+                              "O applies it to the selection (Auto = Neutral there, as in the vanilla editor).");
+    }
+    ImGui::Dummy(ImVec2(0, S(2)));
     theme::toggle("Fixed height", &placeFixedHeight_);
     auto_.registerWidget("toggle_place_height");
     if (placeFixedHeight_) {
@@ -1221,6 +1277,45 @@ void App::drawPlacementOptions(float width) {
     }
 }
 
+int App::ownerFor(const std::string& def) const {
+    if (placeOwner_ >= 0) return std::min(placeOwner_, 4);
+    if (def.rfind("CREATURE_", 0) == 0) {
+        if (const auto v = ctx_.defIntField(def, "DefaultOwner")) return int(*v);
+        return 0;   // defs not readable: FableForge's old creature default
+    }
+    return 4;
+}
+
+void App::applyOwnerToSelection() {
+    if (!documentLoaded() || selectedThing_ < 0) return;
+    const int v = placeOwner_ < 0 ? 4 : std::min(placeOwner_, 4);
+    std::vector<size_t> all{size_t(selectedThing_)};
+    for (const uint64_t u : extraUids_) if (const auto i = doc_.indexOfUid(u)) all.push_back(*i);
+    // only the types whose ConstructFromParams takes an owner; markers (-1), track nodes and the hero keep theirs
+    static const std::set<std::string> owned{"AICreature", "Building", "Village", "Object", "HolySite", "PhysicalSwitch"};
+    std::vector<size_t> targets;
+    for (const size_t i : all) {
+        if (!owned.count(doc_.summary(i).type)) continue;
+        for (const auto& r : doc_.propertiesOf(i))
+            if (r.ctc.empty() && r.key == "Player") { if (r.value != std::to_string(v)) targets.push_back(i); break; }
+    }
+    if (targets.empty()) { pushLog("owner: nothing to change (only creatures, buildings, villages, objects, holy sites and switches have an owner)", 1); return; }
+    doc_.beginBatch();
+    try {
+        for (const size_t i : targets) doc_.setProperty(i, "Player", std::to_string(v));
+    } catch (const std::exception& e) { doc_.endBatch(); pushLog(std::string("owner: ") + e.what(), 2); return; }
+    doc_.endBatch();
+    pushLog("owner: Player " + std::to_string(v) + " on " + std::to_string(targets.size()) + " thing(s) (one undo step)", 0);
+}
+
+bool App::thingHiddenBySection(const std::vector<std::string>& per, size_t t) const {
+    if (t >= per.size()) return false;
+    const auto split = editor::Document::splitDayNight(per[t]);
+    const std::string base = split.first.empty() ? std::string("NULL") : split.first;
+    if (hiddenSections_.count(lowerCopy(base))) return true;
+    return (split.second == 1 && !showDayOnly_) || (split.second == 2 && !showNightOnly_);
+}
+
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     uint32_t modelId = 0;
@@ -1233,6 +1328,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
     p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
     p.scriptName = scriptName;
     p.position = {focus[0], -focus[2], focus[1]};
+    p.player = ownerFor(def);
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
     if (placeFixedHeight_) p.position.z = forge::thingplacer::constantPlacementHeight(placeHeight_, p.position.z);
     if (placeFacing_ == 1) {
@@ -1250,7 +1346,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
         const bool creature = def.rfind("CREATURE_", 0) == 0;
         const float pos[3] = {p.position.x, p.position.y, p.position.z};
         const float fwd[2] = {p.forward.x, p.forward.y};
-        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName) : doc_.place(p);
+        const size_t n = creature ? doc_.placeCreature(pos, fwd, def, scriptName, p.player) : doc_.place(p);
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
@@ -1580,7 +1676,7 @@ bool App::placeVillage(const std::string& def, const std::string& scriptName) {
     float pos[3] = {focus[0], -focus[2], focus[1]};
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
-        const size_t n = doc_.placeVillage(pos, def, scriptName);
+        const size_t n = doc_.placeVillage(pos, def, scriptName, ownerFor(def));
         selectedUid_ = doc_.uidOf(n);
         selectedThing_ = int(n);
         renderer_.selectedThing = selectedThing_;
@@ -2077,6 +2173,8 @@ void App::editorShortcuts() {
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && (linkPick_.active || trackLinkPick_)) { linkPick_.active = false; trackLinkPick_ = false; }
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
     if (ImGui::IsKeyPressed(ImGuiKey_End) && selectedThing_ >= 0) snapSelectedToGround();
+    // vanilla O: the selection takes the owner picked in Add an object (Auto = Neutral)
+    if (!io.KeyCtrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_O, false) && selectedThing_ >= 0) applyOwnerToSelection();
 }
 
 void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {

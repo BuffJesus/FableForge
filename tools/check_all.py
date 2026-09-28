@@ -45,6 +45,7 @@ def main():
     ok &= run("ui placement", [gui, "--auto", "tests/ui/placement.txt"])
     ok &= run("ui budget", [gui, "--auto", "tests/ui/budget.txt"])
     ok &= run("ui brushes", [gui, "--auto", "tests/ui/brushes.txt"])
+    ok &= run("ui owner + day/night", [gui, "--auto", "tests/ui/owner_daynight.txt"])
     ok &= run("ui no-install", [gui, "--auto", "tests/ui/noinstall.txt", "--install", "D:/definitely/not/fable"])
     ok &= run("new level from donor (scratch install)", [sys.executable, "tools/test_newlevel.py"], capture_output=True)
     ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)

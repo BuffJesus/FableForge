@@ -195,6 +195,9 @@ public:
     // model), 0 = definition not in game.bin, -1 = def type not decodable.
     // Optional scale is Graphic.RenderSizeX (1 for missing/invalid values).
     int graphicModelId(const std::string& definitionName, uint32_t& modelId, float* scale = nullptr) const;
+    // A 32-bit integer field of a game.bin definition by field name (e.g. a creature's
+    // DefaultOwner); nullopt when the def or the field is missing or undecodable.
+    std::optional<int32_t> defIntField(const std::string& definitionName, const std::string& field) const;
     // Names of every game.bin definition whose type is one of `types` (e.g.
     // {"OBJECT", "BUILDING"}), as (name, type); the editor's placement palette.
     std::vector<std::pair<std::string, std::string>> definitions(const std::vector<std::string>& types) const;

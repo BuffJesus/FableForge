@@ -545,7 +545,7 @@ unseen live; the static RE in section 10 remains the reference.
 **Menus.** File: New World, Load World, Save World, Save All, Save As, Exit. View: 2D Relief /
 3D Engine, Show Creatures / Buildings / Objects / Holy Sites / Villages. Options: Show Grid,
 Snap To Grid, Edit Script Brushes. The toolbar's "Player Auto" combo (Player 0-3, Neutral, Auto)
-sets the owner that new things get.
+sets the owner that new things get: Auto becomes 5 in `PaintInputPlaceThingAt` `0x02994490`, `CThing::ConstructFromParams` clamps 5 to Neutral (4), and `CThingAICreature::ConstructFromParams` takes the def's `DefaultOwner` (`CThingCreatureDef`+0x12C) instead. Only AICreature, Building, Village, Object, HolySite and PhysicalSwitch take an owner.
 
 **Panels seen per mode:**
 - Height toolbox, **Water** tab: Lakes (height m), Ocean, Rivers (height m), Generate / Clear,
@@ -610,6 +610,8 @@ the Engine budget survey (things / triangles / vertices / texture memory for an 
 sound themes; camera-passability and villager-preferability brushes;
 placement angle and height rules; a brush library of saved copy selections; the quest filter
 with day / night only; the owner combo.
+Ported since: placement rules, brush library, budget survey, the owner combo (with O) and the
+day / night filter (ROADMAP_1.0 rows 23, 25, 27, 28).
 
 **What works badly:** panels spawn stacked on top of each other, and dragging one also pans
 the view; the unlock-to-load step is hidden behind a backwards label; mouse-wheel zoom centres

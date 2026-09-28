@@ -1315,8 +1315,19 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("doc_dirty=" + std::string(documentLoaded() && doc_.dirty() ? "1" : "0"));
     v.push_back("doc_changes=" + std::to_string(documentLoaded() ? doc_.changes().size() : 0));
     v.push_back("selected_thing=" + std::to_string(selectedThing_));
+    v.push_back("place_owner=" + std::string(placeOwner_ < 0 ? "auto" : placeOwner_ >= 4 ? "neutral" : std::to_string(placeOwner_)));
+    v.push_back(std::string("section_day=") + (showDayOnly_ ? "1" : "0"));
+    v.push_back(std::string("section_night=") + (showNightOnly_ ? "1" : "0"));
     if (documentLoaded() && selectedThing_ >= 0) {
         v.push_back("selected_def=" + doc_.summary(size_t(selectedThing_)).definition);
+        v.push_back("selected_section=" + doc_.sectionOf(size_t(selectedThing_)));
+        {
+            std::string player = "none";
+            for (const auto& r : doc_.propertiesOf(size_t(selectedThing_)))
+                if (r.ctc.empty() && r.key == "Player") { player = r.value; break; }
+            v.push_back("selected_player=" + player);
+            v.push_back(std::string("selected_visible=") + (thingHiddenBySection(doc_.thingSections(), size_t(selectedThing_)) ? "0" : "1"));
+        }
         editor::Frame f;
         if (doc_.frameOf(size_t(selectedThing_), f)) {
             char p[128];

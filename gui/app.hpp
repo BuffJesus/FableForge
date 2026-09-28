@@ -379,6 +379,18 @@ private:
     int placeFacing_ = 0;            // 0 toward the camera, 1 random (vanilla), 2 fixed angle
     float placeAngleDeg_ = 0.0f;     // fixed angle, degrees clockwise from +Y (vanilla turns x 360)
     bool placeFixedHeight_ = false;  // vanilla "Place at constant height": absolute Z, never under the ground
+    // vanilla owner combo (NEditGui::CMenu PLAYER_LIST_BOX -> CEditControlCentre::SelectedPlayerNumber):
+    // -1 Auto, 0..3 Player N, 4 Neutral. Placement: creatures, buildings, villages, objects take it;
+    // Auto = a creature def's DefaultOwner, 4 otherwise (PaintInputPlaceThingAt 0x02994490, owner 5 ->
+    // CThing::ConstructFromParams clamps to 4, CThingAICreature::ConstructFromParams -> DefaultOwner).
+    // Markers, spawners, fishing spots, track nodes, emitters keep their fixed values (no owner there).
+    int placeOwner_ = -1;
+    int ownerFor(const std::string& definition) const;
+    void applyOwnerToSelection();    // vanilla O: PaintInputSetNearestThingOwnershipToSelectedOwner (Auto -> 4)
+    // vanilla Quests dialog "Day only" / "Night only": show the %DayOnly / %NightOnly sections of the
+    // shown quests. Vanilla starts them off (a whitelist dialog); FableForge shows everything by default.
+    bool showDayOnly_ = true, showNightOnly_ = true;
+    bool thingHiddenBySection(const std::vector<std::string>& perThingSection, size_t thing) const;
     float placeHeight_ = 0.0f;
     uint32_t placeSeed_ = 0;         // GFFloatRandom state for random angles (vanilla uses the world seed)
     // link pick mode: the next viewport click on a thing sets this link of the selection

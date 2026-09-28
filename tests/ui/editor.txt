@@ -22,13 +22,15 @@ assert_state tour_step 1
 tour -1
 frames 1
 assert_state tour_step -1
-# a dropped PNG lands in the custom-texture input on the Terrain tab (paint mode)
+# a dropped PNG opens Assets > Ground themes with the path in the custom-texture input
 drop build/atlas_check.png
 frames 2
-assert_state edit_tab 1
+assert_state textures_mode 1
 assert_widget input_custom_png
-edit_tab 0
+textures_tab 0
 frames 1
+assert_state textures_mode 0
+assert_state edit_tab 0
 help 1
 frames 2
 assert_state help_open 1

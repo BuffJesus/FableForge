@@ -1,0 +1,69 @@
+# Owner combo + day/night creatures (the vanilla PLAYER_LIST_BOX, the O key, CTCDayOrNightOnlySupport and the
+# Quests dialog's Day only / Night only).
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_owner_install
+edit 1
+frames 3
+edit_tab 0
+frames 3
+assert_widget combo_place_owner
+assert_state place_owner auto
+# Auto: an object is Neutral, a hostile creature takes its DefaultOwner, a chicken its own
+place OBJECT_BARREL_BREAKABLE
+frames 2
+assert_state selected_player 4
+place CREATURE_PRISON_GUARD
+frames 2
+assert_state selected_player 2
+place CREATURE_NEW_CHICKEN_01
+frames 2
+assert_state selected_player 0
+# an explicit owner goes to objects and creatures alike
+set place_owner 3
+place OBJECT_BARREL_BREAKABLE
+frames 2
+assert_state selected_player 3
+# O on the selection: the combo's value (Auto = Neutral)
+set place_owner 1
+owner_apply
+frames 1
+assert_state selected_player 1
+set place_owner auto
+owner_apply
+frames 1
+assert_state selected_player 4
+undo
+frames 1
+assert_state selected_player 1
+# day / night: the creature moves to NULL%DayOnly and follows the Day-only filter
+place CREATURE_PRISON_GUARD
+frames 2
+assert_widget seg_daynight
+daynight 1
+frames 2
+assert_state selected_section NULL%DayOnly
+assert_state selected_visible 1
+assert_widget check_section_day
+set section_day 0
+frames 2
+assert_state selected_visible 0
+set section_day 1
+frames 2
+assert_state selected_visible 1
+daynight 2
+frames 2
+assert_state selected_section NULL%NightOnly
+set section_night 0
+frames 2
+assert_state selected_visible 0
+set section_night 1
+daynight 0
+frames 2
+assert_state selected_section NULL
+mouse_move 20 20
+frames 3
+screenshot build/ui/owner_daynight.png
+quit

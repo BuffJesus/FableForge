@@ -220,6 +220,15 @@ bool Automation::tick(App& app) {
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "place_owner") app.placeOwner_ = val == "auto" ? -1 : val == "neutral" ? 4 : std::clamp(std::atoi(val.c_str()), 0, 4);
+        else if (key == "section_day") { app.showDayOnly_ = val == "1"; app.sectionsDirty_ = true; }
+        else if (key == "section_night") { app.showNightOnly_ = val == "1"; app.sectionsDirty_ = true; }
+        else if (key == "section_hidden") {   // set section_hidden <NAME> 0|1
+            std::istringstream vs(val); std::string name; int on = 1; vs >> name >> on;
+            std::string k = name; for (auto& c : k) c = char(std::tolower(static_cast<unsigned char>(c)));
+            if (on) app.hiddenSections_.insert(k); else app.hiddenSections_.erase(k);
+            app.sectionsDirty_ = true;
+        }
         else if (key == "place_facing") app.placeFacing_ = std::clamp(std::atoi(val.c_str()), 0, 2);
         else if (key == "place_angle") app.placeAngleDeg_ = float(std::atof(val.c_str()));
         else if (key == "place_height") { app.placeFixedHeight_ = !val.empty() && val != "off"; if (app.placeFixedHeight_) app.placeHeight_ = float(std::atof(val.c_str())); }
@@ -253,6 +262,14 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "fit_open") { app.setFitOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "fractal_open") { app.setFractalOpen(rest != "0"); note("ok   " + line); ++pc_; }
+    else if (cmd == "owner_apply") { app.applyOwnerToSelection(); note("ok   " + line); ++pc_; }   // vanilla O on the selection
+    else if (cmd == "daynight") {   // daynight 0|1|2: the selected creature's Day and night / Day only / Night only
+        const int mode = std::atoi(rest.c_str());
+        if (app.selectedThing_ < 0) fail("daynight: nothing selected");
+        else if (const auto n = app.doc_.setDayNight(size_t(app.selectedThing_), mode)) { app.selectThing(int(*n)); app.sectionsDirty_ = true; note("ok   " + line); }
+        else fail("daynight failed: " + rest);
+        ++pc_;
+    }
     else if (cmd == "clip_copy") {   // clip_copy x0 y0 x1 y1 [things 0|1]: mode 14's drag
         std::istringstream rs(rest); int x0 = 0, y0 = 0, x1 = 0, y1 = 0, th = 1; rs >> x0 >> y0 >> x1 >> y1 >> th;
         app.clipThings_ = th != 0;

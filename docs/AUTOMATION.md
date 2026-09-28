@@ -58,7 +58,11 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | *(toasts)* | every warning / error / success log line also shows for 6 s in the viewport's top-right corner (state `toasts` = how many are up); the long jobs' busy button reads `<verb>: <stage>  (N s)` from the job thread |
 | `def_search <text>` | fills the *Add an object* box (rows show a mesh thumbnail) |
 | `theme_search <text>` | fills the *Add a ground theme from the game* box (the list shows a swatch per theme) |
-| `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image lands in the custom-texture input (Terrain tab, paint mode) |
+| `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image opens Assets > Ground themes with the path in the custom-texture input (state `textures_mode 1`; `textures_tab 0` returns to the map editor, `assets_tab <n>` picks the page) |
+| `set place_owner auto\|neutral\|0..3` | the owner combo (vanilla PLAYER_LIST_BOX) for the next placements; state `place_owner` |
+| `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
+| `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |
+| `set section_day 0\|1`, `set section_night 0\|1`, `set section_hidden <NAME> 0\|1` | the Quest sections card's filters; state `section_day`, `section_night`, `selected_visible` |
 | `click chip_grid` | the LEV cell grid overlay (state `grid`); state `cursor_ground` = `x,y,h` under the mouse when it is over the ground, `-` otherwise |
 | `set uiscale <0.8..1.5>` | the *Interface > Text size* factor (state `ui_scale`; fonts rebuild) |
 | `tour <0..2\|-1>` | the first-run tour callout (state `tour_step`; widgets `btn_tour_next`, `btn_tour_skip`); starts by itself after the first Setup panel |

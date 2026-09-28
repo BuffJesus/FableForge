@@ -1161,6 +1161,52 @@ void testQuestSections() {
     CHECK(bare.addSection("Q_NEW") && (bare.sections() == std::vector<std::string>{"NULL", "Q_NEW"}));
 }
 
+// Day/night creatures (CTCDayOrNightOnlySupport): the mode lives only in the section name,
+// <quest>%DayOnly / %NightOnly, exact case as CQuestDialog::GetQuestsToDisplay builds it.
+void testDayNightSections() {
+    namespace ed = albion::editor;
+    CHECK((ed::Document::splitDayNight("NULL") == std::pair<std::string, int>{"NULL", 0}));
+    CHECK((ed::Document::splitDayNight("Q_TEST%DayOnly") == std::pair<std::string, int>{"Q_TEST", 1}));
+    CHECK((ed::Document::splitDayNight("NULL%NightOnly") == std::pair<std::string, int>{"NULL", 2}));
+    CHECK((ed::Document::splitDayNight("Q_TEST%dayonly").second == 0));   // the engine compares exactly
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Object;\r\nUID 100;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n\r\nXXXSectionStart Q_TEST;\r\n"
+        "NewThing Object;\r\nUID 200;\r\nDefinitionType \"OBJECT_CRATE_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("DayNight", tng, err));
+    const auto day = doc.setDayNight(1, 1);
+    CHECK(day && doc.sectionOf(*day) == "Q_TEST%DayOnly" && doc.summary(*day).definition == "OBJECT_CRATE_01");
+    CHECK(doc.text().find("XXXSectionStart Q_TEST%DayOnly;") != std::string::npos);
+    const auto night = doc.setDayNight(*day, 2);
+    CHECK(night && doc.sectionOf(*night) == "Q_TEST%NightOnly");
+    const auto both = doc.setDayNight(*night, 0);
+    CHECK(both && doc.sectionOf(*both) == "Q_TEST");
+    CHECK(doc.setDayNight(*both, 0) == both);                     // already there: nothing to do
+    CHECK(!doc.setDayNight(*both, 3) && !doc.setDayNight(99, 1));
+    CHECK(doc.undo() && doc.sectionOf(1) == "Q_TEST%NightOnly");   // back to night: section + move were one step
+    const auto nullDay = doc.setDayNight(0, 1);
+    CHECK(nullDay && doc.sectionOf(*nullDay) == "NULL%DayOnly");
+    // a wrong-case twin ("%dayonly", hand-edited) is refused rather than moved into (the engine would not see it)
+    ed::Document twin;
+    CHECK(twin.openText("Twin", "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Object;\r\nUID 1;\r\nDefinitionType \"OBJECT_BARREL_01\";\r\nScriptName NULL;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n\r\nXXXSectionStart NULL%dayonly;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(!twin.setDayNight(0, 1) && twin.sectionOf(0) == "NULL");
+    // placed creatures and villages carry the owner the combo resolved
+    const float pos[3] = {1.0f, 2.0f, 3.0f}, fwd[2] = {0.0f, 1.0f};
+    const size_t c = doc.placeCreature(pos, fwd, "CREATURE_PRISON_GUARD", "", 2);
+    const size_t v = doc.placeVillage(pos, "VILLAGE_TEST");
+    auto player = [&](size_t i) {
+        for (const auto& r : doc.propertiesOf(i)) if (r.ctc.empty() && r.key == "Player") return r.value;
+        return std::string("none");
+    };
+    CHECK(player(c) == "2" && player(v) == "4");
+}
+
 // The per-component property grid (vanilla Thing Properties tabs): kinds, the
 // hidden fields, typed edits refused when they do not fit, one undo step each.
 void testThingProperties() {
@@ -1846,6 +1892,7 @@ int main() {
     testExternalWorld(dir);
     testThingLinks();
     testQuestSections();
+    testDayNightSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
     testFractal();

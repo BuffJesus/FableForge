@@ -183,6 +183,15 @@ public:
     // Moves a thing into another section (vanilla RCtrl+; AddSelectedThingToCurrentQuest).
     // One undo step; returns the thing's new index (nullopt: bad index / no such section).
     std::optional<size_t> moveToSection(size_t index, const std::string& name);
+    // Day / night-only creatures (vanilla CTCDayOrNightOnlySupport, on every CREATURE_BASE_TEMPLATE
+    // def): nothing is written into the thing block -- its section carries it, "<quest>%DayOnly" or
+    // "<quest>%NightOnly" (CQuestManager::GetFullSectionNameForThing, exact case; a NULL-section
+    // creature goes to "NULL%DayOnly"). In-game such a section streams in only by day / by night.
+    // splitDayNight -> {quest part, 0 both | 1 day | 2 night}.
+    static std::pair<std::string, int> splitDayNight(const std::string& section);
+    // Move the thing to its quest section + the mode's suffix (vanilla SetFromPropertiesStruct
+    // 0x02668150), creating the section when missing. One undo step; the thing's new index.
+    std::optional<size_t> setDayNight(size_t index, int mode);
 
     // ---- per-component properties (the vanilla Thing Properties dialog's category
     // tabs, inventory 5.4): every editable field of a thing, grouped by its CTC
@@ -277,12 +286,13 @@ public:
     // CTCPhysicsNavigator frame, targetable/talk blocks, VillageMember 0 for
     // villager defs, and the world-space InitialPos the engine reads (map
     // origin from FinalAlbion.wld). Position/forward are map-local.
+    // `player`: the .tng Player field (the vanilla owner combo; App resolves Auto to the def's DefaultOwner).
     size_t placeCreature(const float pos[3], const float forward[2], const std::string& definition,
-                         const std::string& scriptName = "");
+                         const std::string& scriptName = "", int player = 0);
     // A village: the retail `Village` thing (CTCVillage + enemy/opinion blocks,
     // ThingGamePersistent) for a VILLAGE_* def. Buildings, markers and
     // creatures join it through their CTCVillageMember.VillageUID.
-    size_t placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName = "");
+    size_t placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName = "", int player = 4);
     // A particle emitter: the retail PARTICLE_EMITTER_PLACEABLE thing (CTCDParticleEmitter,
     // IndependantObject TRUE) playing the named effects.big entry. Position is map-local.
     size_t placeEmitter(const float pos[3], const std::string& effectName, const std::string& scriptName = "");

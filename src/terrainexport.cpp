@@ -504,6 +504,35 @@ int Context::graphicModelId(const std::string& name, uint32_t& modelId, float* s
     return code;
 }
 
+std::optional<int32_t> Context::defIntField(const std::string& name, const std::string& field) const {
+    if (!ready() || !impl_->defs || !impl_->schema) return std::nullopt;
+    std::lock_guard<std::mutex> lock(impl_->defMutex);
+    const auto* entry = impl_->defs->find(name);
+    if (!entry) return std::nullopt;
+    const auto* type = forge::defdecode::resolveType(*impl_->schema, entry->definition, entry->data);
+    if (!type) return std::nullopt;
+    const auto decoded = forge::defdecode::decode(entry->data, *type);
+    for (const auto& f : decoded.fields)
+        if (f.name == field && f.value.size() >= 4) {
+            int32_t v = 0;
+            std::memcpy(&v, f.value.data(), 4);
+            return v;
+        }
+    // fields the schema folds into a neighbour's blob (e.g. CREATURE DefaultOwner inside Graphic) are stored as
+    // <CCRC::Calc(0, name)> <value>: find the tag and read the long after it
+    const uint32_t tag = ~uint32_t(mz_crc32(0xFFFFFFFFu, reinterpret_cast<const unsigned char*>(field.data()), field.size()));
+    const auto& d = entry->data;
+    for (size_t i = 0; i + 8 <= d.size(); ++i) {
+        uint32_t t = 0;
+        std::memcpy(&t, d.data() + i, 4);
+        if (t != tag) continue;
+        int32_t v = 0;
+        std::memcpy(&v, d.data() + i + 4, 4);
+        return v;
+    }
+    return std::nullopt;
+}
+
 std::vector<std::pair<std::string, std::string>> Context::definitions(const std::vector<std::string>& types) const {
     std::vector<std::pair<std::string, std::string>> out;
     if (!ready() || !impl_->defs) return out;

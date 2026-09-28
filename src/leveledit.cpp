@@ -1766,6 +1766,41 @@ bool Document::addSection(const std::string& name) {
     return true;
 }
 
+std::pair<std::string, int> Document::splitDayNight(const std::string& section) {
+    const size_t p = section.find('%');
+    if (p == std::string::npos) return {section, 0};
+    const std::string suffix = section.substr(p + 1);
+    return {section.substr(0, p), suffix == "DayOnly" ? 1 : suffix == "NightOnly" ? 2 : 0};
+}
+
+std::optional<size_t> Document::setDayNight(size_t index, int mode) {
+    if (index >= file_.things().size() || mode < 0 || mode > 2) return std::nullopt;
+    std::string section = file_.sectionOf(index);
+    if (section.empty()) section = "NULL";
+    const auto split = splitDayNight(section);
+    if (split.second == mode) return index;
+    const std::string target = split.first + (mode == 1 ? "%DayOnly" : mode == 2 ? "%NightOnly" : "");
+    beginBatch();   // the new section and the move are one undo step
+    try {
+        bool have = false;
+        for (const auto& n : file_.sectionNames()) {
+            if (lower(n) != lower(target)) continue;
+            // the engine matches the suffix exactly; a wrong-case twin (hand edit) would swallow the move
+            if (n != target) { endBatch(); return std::nullopt; }
+            have = true;
+        }
+        if (!have) {
+            pushUndo();
+            if (file_.sectionNames().empty()) file_.addSection("NULL");   // keep the main section first
+            file_.addSection(target);   // '%' only through here: addSection() keeps names to A-Z, 0-9, _
+            ++revision_;
+        }
+        const auto moved = moveToSection(index, target);
+        endBatch();
+        return moved;
+    } catch (...) { endBatch(); throw; }
+}
+
 std::optional<size_t> Document::moveToSection(size_t index, const std::string& name) {
     if (index >= file_.things().size()) return std::nullopt;
     std::string target;
@@ -1902,7 +1937,7 @@ size_t Document::placeCreatureGenerator(const float pos[3], const std::vector<st
     }
 }
 
-size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName) {
+size_t Document::placeCreature(const float pos[3], const float forward[2], const std::string& definition, const std::string& scriptName, int player) {
     if (definition.empty()) throw std::invalid_argument("a creature needs a definition");
     pushUndo();
     try {
@@ -1915,7 +1950,7 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
         const bool villager = definition.find("VILLAGER") != std::string::npos;
         std::string b;
         b += "NewThing AICreature;" + eol;
-        b += "Player 0;" + eol;
+        b += "Player " + std::to_string(player) + ";" + eol;
         b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
         b += "DefinitionType \"" + definition + "\";" + eol;
         b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
@@ -1960,7 +1995,7 @@ size_t Document::placeCreature(const float pos[3], const float forward[2], const
     }
 }
 
-size_t Document::placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName) {
+size_t Document::placeVillage(const float pos[3], const std::string& definition, const std::string& scriptName, int player) {
     if (definition.empty()) throw std::invalid_argument("a village needs a definition");
     pushUndo();
     try {
@@ -1968,7 +2003,7 @@ size_t Document::placeVillage(const float pos[3], const std::string& definition,
         const std::string eol = "\r\n";
         std::string b;
         b += "NewThing Village;" + eol;
-        b += "Player 4;" + eol;
+        b += "Player " + std::to_string(player) + ";" + eol;
         b += "UID " + std::to_string(forge::thingplacer::nextUid(file_)) + ";" + eol;
         b += "DefinitionType \"" + definition + "\";" + eol;
         b += "ScriptName " + (scriptName.empty() ? std::string("NULL") : scriptName) + ";" + eol;
