@@ -8766,56 +8766,6 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (const auto& l : settingsSkipped) if (!jsonOutput) std::printf("  %s ships userst.ini: not applied (your settings stay yours)\n", l.c_str());
         for (const auto& l : parkedWad) if (!jsonOutput) std::printf("  %s parks the retail WAD as _FinalAlbion.wad: skipped, its loose levels are repacked into FinalAlbion.wad instead\n", l.c_str());
     }
-    // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
-    // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
-    // load). Every loose FinalAlbion/*.lev / *.tng this build produced that has a WAD entry is
-    // repacked into a rebuilt FinalAlbion.wad, so the merged levels load whatever the precedence;
-    // a level the WAD never had stays loose (and is reported).
-    {
-        const fs::path baseWad = fs::path(baseRoot) / "data" / "Levels" / "FinalAlbion.wad";
-        const fs::path looseDir = fs::path(outDir) / "data" / "Levels" / "FinalAlbion";
-        if (fs::exists(baseWad) && fs::is_directory(looseDir)) {
-            std::set<std::string> known;
-            {
-                const auto archive = forge::wad::Archive::open(baseWad);
-                for (const auto& e : archive.entries()) { std::string k = e.name; std::transform(k.begin(), k.end(), k.begin(), ::tolower); known.insert(k); }
-            }
-            std::map<std::string, std::vector<uint8_t>> replacements;
-            std::vector<std::string> newLevels;
-            for (const auto& de : fs::directory_iterator(looseDir)) {
-                if (!de.is_regular_file()) continue;
-                std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext != ".lev" && ext != ".tng") continue;
-                const std::string key = "Data\\Levels\\FinalAlbion\\" + de.path().filename().string();
-                std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
-                if (known.count(lk)) replacements[key] = readAllBytes(de.path().string());
-                else newLevels.push_back(de.path().filename().string());
-            }
-            if (!replacements.empty() || !newLevels.empty()) {
-                const fs::path outWad = fs::path(outDir) / "data" / "Levels" / "FinalAlbion.wad";
-                fs::path srcWad = fs::exists(outWad) ? outWad : baseWad;   // a pack may have shipped a whole WAD as a layer
-                size_t n = 0, added = 0;
-                if (!replacements.empty()) {
-                    const fs::path tmpWad = outWad.string() + ".tmp";
-                    n = forge::wad::repack(srcWad, replacements, tmpWad);
-                    fs::rename(tmpWad, outWad);
-                    srcWad = outWad;
-                }
-                if (!newLevels.empty()) {
-                    // levels the WAD never had (a pack's own maps) become native entries, like new-level does
-                    std::vector<forge::wad::NativeEntry> natives;
-                    for (const auto& leaf : newLevels)
-                        natives.push_back({"Data\\Levels\\FinalAlbion\\" + leaf, readAllBytes((looseDir / leaf).string())});
-                    const fs::path tmpWad = outWad.string() + ".tmp";
-                    added = forge::wad::appendNativeEntries(srcWad, natives, tmpWad);
-                    fs::rename(tmpWad, outWad);
-                }
-                if (jsonOutput) rep["wad"] = {{"repacked", n}, {"appended", added}};
-                if (!jsonOutput) std::printf("FinalAlbion.wad rebuilt: %zu level file(s) repacked, %zu new level file(s) appended (their loose copies stay too)\n", n, added);
-            }
-        }
-    }
-
     for (const auto& folder : egoFolders) {
         forge::egocore::Report erep;
         forge::egocore::installDll(folder, baseRoot, outDir, erep);
@@ -8850,6 +8800,131 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (!jsonOutput) {
             std::printf("pack %s: %zu recipe(s) applied%s\n", srcLabel(pi).c_str(), prep.added.size(), prep.errors.empty() ? "" : (", " + std::to_string(prep.errors.size()) + " failed").c_str());
             for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
+        }
+    }
+
+    // --- Theme palettes follow the built game.bin. A LEV palette slot stores the GLOBAL def index
+    // of its ENGINE_THEME (forge/lev.hpp), so defs a mod inserts or a recipe adds can leave a
+    // level pointing at the wrong def. The name is the truth: every loose .lev this build
+    // produced (a pack's, a mod's) is rebased by name against the built game.bin; a retail WAD
+    // level only has the slots rewritten whose theme's index moved between the base and the
+    // built game.bin (its own pre-existing staleness is not this build's to change).
+    std::map<std::string, std::vector<uint8_t>> paletteFixes;   // WAD key -> re-pointed retail .lev
+    {
+        const fs::path outDefs = fs::path(outDir) / "data" / "CompiledDefs";
+        const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
+        const fs::path looseDir = fs::path(outDir) / "data" / "Levels" / "FinalAlbion";
+        if (fs::exists(outDefs / "game.bin")) {
+            try {
+                const fs::path outNames = fs::exists(outDefs / "names.bin") ? outDefs / "names.bin" : baseDefs / "names.bin";
+                const auto builtBank = forge::bin::File::open(outNames, outDefs / "game.bin");
+                const auto baseBank = forge::bin::File::open(baseDefs / "names.bin", baseDefs / "game.bin");
+                const auto built = forge::themepalette::makeDefIndexTable(builtBank);
+                size_t looseRebased = 0, looseSlots = 0, wadRebased = 0, wadSlots = 0;
+                std::vector<std::string> unresolved;
+                std::set<std::string> looseLevs;
+                if (fs::is_directory(looseDir))
+                    for (const auto& de : fs::directory_iterator(looseDir)) {
+                        std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                        if (!de.is_regular_file() || ext != ".lev") continue;
+                        std::string lk = de.path().filename().string(); std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
+                        looseLevs.insert(lk);
+                        auto level = forge::lev::File::open(de.path());
+                        for (const auto& is : level.auditThemePalette(built))
+                            if (!is.resolvable) unresolved.push_back(de.path().stem().string() + " slot " + std::to_string(is.slot) + " " + is.name);
+                        if (const size_t n = level.rebaseThemePalette(built)) { level.save(de.path()); ++looseRebased; looseSlots += n; }
+                    }
+                // themes whose index moved: name -> (base, built)
+                std::map<std::string, std::pair<uint32_t, uint32_t>> moved;
+                const auto& be = baseBank.entries();
+                for (size_t i = 0; i < be.size(); ++i) {
+                    if (be[i].definition != forge::themepalette::kThemeDefType || be[i].name.empty()) continue;
+                    uint32_t now = 0;
+                    if (built.indexOf(be[i].name, now) && now != uint32_t(i)) moved[be[i].name] = {uint32_t(i), now};
+                }
+                const fs::path baseWad = fs::path(baseRoot) / "data" / "Levels" / "FinalAlbion.wad";
+                if (!moved.empty() && fs::exists(baseWad)) {
+                    const auto archive = forge::wad::Archive::open(baseWad);
+                    const fs::path tmpLev = tmp / "palette.lev";
+                    for (const auto& e : archive.entries()) {
+                        std::string lk = e.name; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
+                        if (lk.size() < 4 || lk.compare(lk.size() - 4, 4, ".lev") != 0) continue;
+                        if (looseLevs.count(fs::path(lk).filename().string())) continue;   // rebased above
+                        const auto bytes = archive.read(e);
+                        std::ofstream(tmpLev, std::ios::binary | std::ios::trunc).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+                        auto level = forge::lev::File::open(tmpLev);
+                        size_t n = 0;
+                        const auto& themes = level.groundThemes();
+                        for (size_t slot = 0; slot < themes.size(); ++slot) {
+                            const auto it = moved.find(themes[slot].name);
+                            if (it == moved.end() || themes[slot].value != it->second.first) continue;
+                            level.setGroundThemeValue(slot, it->second.second);
+                            ++n;
+                        }
+                        if (!n) continue;
+                        level.save(tmpLev);
+                        paletteFixes[e.name] = readAllBytes(tmpLev.string());
+                        ++wadRebased; wadSlots += n;
+                    }
+                }
+                if (jsonOutput) rep["palette"] = {{"loose_levels", looseRebased}, {"loose_slots", looseSlots}, {"wad_levels", wadRebased}, {"wad_slots", wadSlots}, {"moved_themes", moved.size()}, {"unresolved", unresolved}};
+                else {
+                    if (looseRebased || wadRebased) std::printf("theme palettes: %zu slot(s) in %zu level(s) re-pointed at the built game.bin (%zu theme(s) moved)\n", looseSlots + wadSlots, looseRebased + wadRebased, moved.size());
+                    for (const auto& u : unresolved) std::printf("theme palette: %s is not in the built game.bin (left as is)\n", u.c_str());
+                }
+            } catch (const std::exception& ex) {
+                std::fprintf(stderr, "theme palettes: %s\n", ex.what());
+            }
+        }
+    }
+
+    // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
+    // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
+    // load). Every loose FinalAlbion/*.lev / *.tng this build produced that has a WAD entry is
+    // repacked into a rebuilt FinalAlbion.wad, so the merged levels load whatever the precedence;
+    // a level the WAD never had stays loose (and is reported).
+    {
+        const fs::path baseWad = fs::path(baseRoot) / "data" / "Levels" / "FinalAlbion.wad";
+        const fs::path looseDir = fs::path(outDir) / "data" / "Levels" / "FinalAlbion";
+        if (fs::exists(baseWad) && (fs::is_directory(looseDir) || !paletteFixes.empty())) {
+            std::set<std::string> known;
+            {
+                const auto archive = forge::wad::Archive::open(baseWad);
+                for (const auto& e : archive.entries()) { std::string k = e.name; std::transform(k.begin(), k.end(), k.begin(), ::tolower); known.insert(k); }
+            }
+            std::map<std::string, std::vector<uint8_t>> replacements = paletteFixes;
+            std::vector<std::string> newLevels;
+            if (fs::is_directory(looseDir)) for (const auto& de : fs::directory_iterator(looseDir)) {
+                if (!de.is_regular_file()) continue;
+                std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext != ".lev" && ext != ".tng") continue;
+                const std::string key = "Data\\Levels\\FinalAlbion\\" + de.path().filename().string();
+                std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
+                if (known.count(lk)) replacements[key] = readAllBytes(de.path().string());
+                else newLevels.push_back(de.path().filename().string());
+            }
+            if (!replacements.empty() || !newLevels.empty()) {
+                const fs::path outWad = fs::path(outDir) / "data" / "Levels" / "FinalAlbion.wad";
+                fs::path srcWad = fs::exists(outWad) ? outWad : baseWad;   // a pack may have shipped a whole WAD as a layer
+                size_t n = 0, added = 0;
+                if (!replacements.empty()) {
+                    const fs::path tmpWad = outWad.string() + ".tmp";
+                    n = forge::wad::repack(srcWad, replacements, tmpWad);
+                    fs::rename(tmpWad, outWad);
+                    srcWad = outWad;
+                }
+                if (!newLevels.empty()) {
+                    // levels the WAD never had (a pack's own maps) become native entries, like new-level does
+                    std::vector<forge::wad::NativeEntry> natives;
+                    for (const auto& leaf : newLevels)
+                        natives.push_back({"Data\\Levels\\FinalAlbion\\" + leaf, readAllBytes((looseDir / leaf).string())});
+                    const fs::path tmpWad = outWad.string() + ".tmp";
+                    added = forge::wad::appendNativeEntries(srcWad, natives, tmpWad);
+                    fs::rename(tmpWad, outWad);
+                }
+                if (jsonOutput) rep["wad"] = {{"repacked", n}, {"appended", added}};
+                if (!jsonOutput) std::printf("FinalAlbion.wad rebuilt: %zu level file(s) repacked, %zu new level file(s) appended (their loose copies stay too)\n", n, added);
+            }
         }
     }
 
