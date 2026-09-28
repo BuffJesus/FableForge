@@ -55,6 +55,39 @@ Two research guides support the integrated modding environment work below:
   and proposed acceptance criteria for inspector metadata, asset dependencies,
   presets, shared transactions and eventual edit/play sessions.
 
+## Resume here (2026-09-28, end of day)
+
+**Branch `feat/editor-ui-shell`** (unmerged, unpushed) now also carries, all committed and tested:
+- **Mod packs, steps a-e**: recipe packs; the editor writes objects / terrain / world edits / new
+  levels INTO a pack ("Writes go into" picker in the Edit and World footers; world edits run on a
+  shadow copy and `mods capture` the difference); the composer lays pack static-map chunks into the
+  STB (appending new levels), merges FinalAlbion.bwd/.wld per map and region (`forge/worldmerge`,
+  byte-identical to sequential edits), and re-points theme palettes by name. Tests:
+  `tools/test_pack_levels.py`, `tools/test_pack_world.py`, `testWorldMerge` / `testFillerFit`.
+- **Mods tab as a plugin list**: drag to reorder, wins/loses badges from Check conflicts, pack
+  masters (`requires` in forge_pack.json, right-click a row) flagged in the list and by `mods build`
+  (`tools/test_mods_masters.py`).
+- **Fit to neighbours**: the vanilla world map's Fit Neighbours (`EditFitFillerMap`) ported from
+  its code (`forge/fillerfit`), in a floating **tool window** (Now / Fitted relief, sides lit).
+- **Tool windows** (`App::beginToolWindow`): big occasional tools pop out beside the view instead
+  of stretching the sidebar. Fit to neighbours and Fractal terrain use it (screenshots seen).
+  Candidates next: the selected thing's property grid (an inspector), New level, Check the map
+  (results list), Tracks, Region properties, Assets imports, Mods conflicts, the brush library.
+- Design philosophy (the user's): non-intimidating, intuitive, beautiful, modern, functional,
+  powerful. Port vanilla BEHAVIOUR (its algorithm, its parameters), never its UI.
+
+**Next (user, 2026-09-28): drive the vanilla debug editor autonomously**, note where it sucks and
+where it rocks (`docs/VANILLA_EDITOR_INVENTORY.md` section 11 has the live notes so far), and
+improve FableForge with that, per the philosophy. How to drive it: FableWin runs from
+`D:	mpablewin_editor\...\Fable` (dev profile -> A -> 4; skip the `edit_component.cpp 228`
+assert with M); the scratchpad driver's window-relative `wmove/wclick/dblclick/wheel/wdrag`
+actions work (the old relative-walk ones miss the window); zoom far out to see the map grid;
+panels drag by their title bars; arrow keys and letters are mode hotkeys; ask before launching
+(it takes the screen) and never press Save all. Still to see live: getting into a level for
+Thing mode / CTC editing, ScriptBrush, Survey, Engine themes, the brush library.
+Parity rows 22 (Fit Neighbours) + the vanilla wins noted so far: track **preview playback**, the
+thing list's **filters** (script-named only, sort by distance, area range).
+
 ## Resume here (2026-09-26)
 
 **Branches.** `modpacks` (23 commits: the whole 0.20 mod-pack composer + the 0.17 static mesh
