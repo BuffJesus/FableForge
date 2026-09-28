@@ -118,7 +118,7 @@ bool Automation::tick(App& app) {
     std::string rest; std::getline(ss, rest);
     while (!rest.empty() && rest.front() == ' ') rest.erase(rest.begin());
     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (deadline_ == 0) deadline_ = now + 60.0;   // generous: cold texture loads on slow disks
+    if (deadline_ == 0) deadline_ = now + (cmd == "wait_world_tiles" ? 900.0 : 60.0);   // generous: cold texture loads on slow disks; the first world-tile build
     auto waitOn = [&](bool done, const char* what) {
         if (done) { note("ok   " + line); ++pc_; deadline_ = 0; }
         else if (now > deadline_) { fail(std::string("timeout waiting for ") + what + " (" + line + ")"); ++pc_; deadline_ = 0; }
@@ -199,6 +199,13 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "wait_world_tiles") waitOn(app.worldTileTotal_ > 0 && app.worldTileWorkers_.empty(), "the world map tiles");
+    else if (cmd == "world_camera") {   // world_camera <fableX> <fableY> <height> <yaw> <pitch> <distance>: the 3D world view's camera
+        float fx = 0, fy = 0, fz = 0, yaw = 0.6f, pitch = 0.9f, dist = 800; std::istringstream(rest) >> fx >> fy >> fz >> yaw >> pitch >> dist;
+        app.worldCamera_.lookAt(fx, fz, -fy, yaw, pitch, dist); app.worldCameraSet_ = true;
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_open_3d") { app.openFromWorld3D(rest); note("ok   " + line); ++pc_; }   // the 3D view's double-click on a map
     else if (cmd == "clear_toasts") { app.toasts_.clear(); note("ok   " + line); ++pc_; }   // clean screenshots for docs
     else if (cmd == "open_world") {   // open_world <path.wld>: File > Open world without the dialog
         if (!app.openWorld(rest)) fail("open_world failed: " + rest); else note("ok   " + line);
@@ -263,6 +270,8 @@ bool Automation::tick(App& app) {
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "world_3d") app.setWorld3D(val == "1");
+        else if (key == "world_terrain") app.worldTerrain2D_ = val == "1";
         else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
         else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";

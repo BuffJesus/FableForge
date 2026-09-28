@@ -1274,6 +1274,11 @@ std::vector<std::string> App::stateDump() const {
     v.push_back(std::string("camera=") + cam);
     v.push_back("edit_mode=" + std::string(editMode_ ? "1" : "0"));
     v.push_back("world_mode=" + std::string(worldMode_ ? "1" : "0"));
+    v.push_back("world_3d=" + std::string(world3D_ ? "1" : "0"));
+    v.push_back("world_tiles=" + std::to_string(worldTiles_.size()));
+    v.push_back("world_tiles_total=" + std::to_string(worldTileTotal_));
+    v.push_back("world_tiles_busy=" + std::string(worldTileWorkers_.empty() ? "0" : "1"));
+    v.push_back("world_hover=" + worldHover_);
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
@@ -1368,6 +1373,7 @@ void App::frame(float dt) {
     syncTerrain();
     editorShortcuts();
     updateTrackPreview(dt);
+    pollWorldTiles();
     if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const TerrainDeployResult r = terrainDeployFuture_.get();
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
@@ -1382,7 +1388,7 @@ void App::frame(float dt) {
         if (r.ok && !r.pack.empty()) pushLog("world: edits written into pack " + packLabel(r.pack) + " (Mods > Deploy puts them in the game)", 3);
         else if (r.ok) pushLog("world: maps moved (start a new game to walk the new layout)", 3);
         else pushLog("world: move failed: " + r.error, 2);
-        worldLoaded_ = false;
+        worldLoaded_ = false; worldLoadedFrom_.clear();
         loadWorld();
         if (r.ok && (saveRoot_.empty() || saveRoot_ == installPath_)) { const std::string root = installPath_; scanInstall(root); }
     }
@@ -1394,12 +1400,12 @@ void App::frame(float dt) {
             pushLog("new level " + r.name + " written into pack " + packLabel(r.pack) + " (map slot " + std::to_string(r.result.mapSlot) + " in the pack's world; Mods > Deploy puts it in the game, then it opens here)", 3);
             if (r.ownRegion) raiseRule("region");
             newLevelDonor_.clear();
-            worldLoaded_ = false;
+            worldLoaded_ = false; worldLoadedFrom_.clear();
         } else if (r.ok) {
             pushLog("new level " + r.name + " installed (map slot " + std::to_string(r.result.mapSlot) + ", origin " + std::to_string(r.result.worldX) + "," + std::to_string(r.result.worldY) + ")", 3);
             if (r.ownRegion) raiseRule("region");
             newLevelDonor_.clear();
-            worldLoaded_ = false;   // the World tab re-reads the layout with the new map
+            worldLoaded_ = false; worldLoadedFrom_.clear();   // the World tab re-reads the layout with the new map
             if (saveRoot_.empty() || saveRoot_ == installPath_) {
                 // the WAD has a new entry: rescan, then open the copy (the texture context is unchanged)
                 const std::string root = installPath_;
@@ -1785,6 +1791,11 @@ void App::drawViewport(float width) {
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    if (worldMode_ && world3D_) {
+        drawWorld3D(origin, size);
+        ImGui::EndChild();
+        return;
+    }
     if (worldMode_) {
         ImGui::SetCursorScreenPos(origin);
         ImGui::InvisibleButton("##worldcanvas", ImVec2(std::max(size.x, 8.0f), std::max(size.y, 8.0f)), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);

@@ -1,0 +1,32 @@
+# The whole-world overview (vanilla world map + 3D engine view, Aeon's review item 12): every map's ground on
+# the 2D World map, the 3D fly-over, and a double-click taking a map into the editor with the camera kept.
+wait_maps
+wait_ready
+world_tab 1
+frames 5
+wait_world_tiles
+frames 3
+assert_state world_tiles_busy 0
+assert_state world_loaded 1
+assert_state world_tiles 400
+clear_toasts
+mouse_move 20 20
+frames 3
+screenshot build/ui/world_2d_tiles.png
+set world_3d 1
+frames 10
+assert_state world_3d 1
+clear_toasts
+screenshot build/ui/world_3d_overview.png
+# low over Oakvale, looking across it
+world_camera 3400 3500 40 2.4 0.35 500
+frames 10
+clear_toasts
+screenshot build/ui/world_3d_oakvale.png
+world_open_3d StartOakValeWest
+wait_loaded
+frames 5
+assert_state world_mode 0
+assert_state selected StartOakValeWest
+screenshot build/ui/world_3d_opened.png
+quit

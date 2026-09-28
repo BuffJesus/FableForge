@@ -20,6 +20,7 @@
 
 #include <array>
 
+#include "worldtiles.hpp"
 #include "forge/budget.hpp"
 #include "forge/levelstore.hpp"
 #include "forge/modorder.hpp"
@@ -796,6 +797,30 @@ private:
     void worldPushUndo();
     std::string worldSelected_;
     std::string worldHover_;
+    // ---- the whole-world overview (gui/worldview.cpp): map tiles for the textured 2D map and the 3D view
+    std::map<std::string, worldtiles::Tile> worldTiles_;
+    std::map<std::string, ID3D11ShaderResourceView*> worldTileTex_;   // owned by the renderer (uiTexture)
+    std::mutex worldTileMutex_;
+    std::vector<worldtiles::Tile> worldTileDone_;   // finished on the workers, collected on the UI thread
+    std::vector<std::future<void>> worldTileWorkers_;
+    std::shared_ptr<std::atomic<bool>> worldTileCancel_;
+    std::chrono::steady_clock::time_point worldTileStarted_;
+    size_t worldTileTotal_ = 0;
+    std::string worldTilesFor_;
+    std::map<std::string, std::pair<int, int>> worldLayerAt_;   // tiles in the 3D layer, at which origin
+    bool world3D_ = false;
+    bool worldTerrain2D_ = true;       // draw the tiles inside the 2D boxes
+    Camera worldCamera_;
+    bool worldCameraSet_ = false, worldCaptured_ = false, worldClickArmed_ = false;
+    ImVec2 worldClickPos_;
+    void startWorldTiles();
+    void stopWorldTiles();
+    void pollWorldTiles();
+    void setWorld3D(bool on);
+    void drawWorld3D(const ImVec2& origin, const ImVec2& size);
+    void openFromWorld3D(const std::string& name);
+    float worldGroundAt(float wx, float wy, bool& inside, std::string* name) const;
+    bool worldPickTile(const float o[3], const float d[3], std::string& name, float hit[3]) const;
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)
     bool worldDragging_ = false;
     int worldDragX_ = 0, worldDragY_ = 0;    // the dragged box's candidate origin (snapped)

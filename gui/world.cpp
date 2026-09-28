@@ -36,6 +36,7 @@ void App::setWorldMode(bool on) {
     if (on && editMode_) setEditMode(false);
     if (on) texturesMode_ = false;
     worldMode_ = on;
+    renderer_.worldOnly = on && world3D_;   // the map views never draw the world layer
     if (on) loadWorld();
 }
 
@@ -234,7 +235,8 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     using theme::S;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), theme::col(theme::Bg0));
-    if (!worldLoaded_ && installValid_ && !worldFuture_.valid()) loadWorld();   // invalidated by a new level / an applied job
+    // invalidated by a new level / an applied job; a failed read is not retried every frame (only when the source changes)
+    if (!worldLoaded_ && installValid_ && !worldFuture_.valid() && worldLoadedFrom_ != saveRoot() + "|" + packDest_) loadWorld();
     if (!worldLoaded_) {
         ImGui::SetCursorScreenPos(ImVec2(origin.x + S(24), origin.y + S(24)));
         ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? "The world could not be read (see the log)." : "Point FableForge at a Fable install to see its world.");
@@ -380,6 +382,13 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
         const bool isHover = b->name == worldHover_;
         ImU32 fill = regionColour(b->regionSlot, isSel ? 0.85f : isHover ? 0.75f : 0.55f);
         if (b->region.empty()) fill = ImGui::ColorConvertFloat4ToU32(ImVec4(0.4f, 0.4f, 0.45f, 0.5f));
+        const auto tex = worldTerrain2D_ ? worldTileTex_.find(b->name) : worldTileTex_.end();
+        if (tex != worldTileTex_.end() && tex->second) {
+            // the map's own ground (like the vanilla world map's loaded quads), its region as a light wash
+            dl->AddImage((ImTextureID)(intptr_t)tex->second, p0, p1);
+            fill = regionColour(b->regionSlot, isSel ? 0.30f : isHover ? 0.22f : 0.12f);
+            if (b->region.empty()) fill = ImGui::ColorConvertFloat4ToU32(ImVec4(0.4f, 0.4f, 0.45f, 0.12f));
+        }
         dl->AddRectFilled(p0, p1, fill);
         ImU32 line = theme::col(theme::Border);
         float thick = 1.0f;
@@ -435,6 +444,23 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
     using theme::S;
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##worldsel", inner);
+    {
+        // the vanilla editor's world map (2D) and its 3D engine view over every map
+        int view = world3D_ ? 1 : 0;
+        if (theme::segmented("##worldview", view, {"Map (2D)", "Fly over (3D)"}, cardInner)) setWorld3D(view == 1);
+        auto_.registerWidget("seg_world_view");
+        if (!world3D_) {
+            ImGui::Checkbox("Show the ground on the map##wt2d", &worldTerrain2D_);
+            auto_.registerWidget("check_world_terrain");
+        }
+        ImGui::PushFont(fontSmall_);
+        if (!worldTileWorkers_.empty())
+            ImGui::TextColored(theme::vec(theme::Muted), "Building map tiles: %zu / %zu (cached for next time)", worldTiles_.size(), worldTileTotal_);
+        else if (worldTileTotal_)
+            ImGui::TextColored(theme::vec(theme::Faint), "%zu map tiles", worldTiles_.size());
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(0, S(6)));
+    }
     theme::label("Selected map");
     const editor::WorldMapBox* box = world_.find(worldSelected_);
     if (!box) {

@@ -57,11 +57,16 @@ public:
     bool hasMesh() const { return indexCount_ > 0; }
     // Instance layers (0 = foliage, 1 = placed things): every instance baked
     // into world-space triangle batches, one batch per texture.
-    static constexpr int kLayers = 3;   // 0 foliage, 1 placed things, 2 neighbouring maps
+    static constexpr int kLayers = 4;   // 0 foliage, 1 placed things, 2 neighbouring maps, 3 the whole world (World tab 3D)
+    static constexpr int kWorldLayer = 3;
     bool uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    // Adds the scene's batches to the layer without clearing it (the world view streams map tiles in).
+    bool appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
     void clearLayer(int layer);
     bool hasLayer(int layer) const { return !layers_[layer].empty(); }
-    bool showLayer[kLayers] = {true, true, true};
+    bool showLayer[kLayers] = {true, true, true, true};
+    // The World tab's 3D view: draw only the world layer (no open map, things, water or overlays).
+    bool worldOnly = false;
     bool& showFoliage = showLayer[0];
     bool& showThings = showLayer[1];
     bool showWater = true;

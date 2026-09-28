@@ -67,6 +67,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `track_preview <eye #> <look #> <seconds>`, `wait_track_preview`, `assert_camera_back` | the Tracks card's Play preview (tracks by list index); state `track_preview`; the camera is back at `snapshot_camera` |
 | `open_world <path.wld>` | File > Open world without the dialog (another world's maps join the list, grouped by region) |
 | `clear_toasts` | drop the corner notices (clean screenshots for the guide) |
+| `set world_3d 0\|1`, `set world_terrain 0\|1`, `wait_world_tiles`, `world_camera <x> <y> <height> <yaw> <pitch> <distance>`, `world_open_3d <map>` | the World tab's 2D map with ground tiles / the 3D fly-over of every map; state `world_3d`, `world_tiles`, `world_tiles_total`, `world_tiles_busy`, `world_hover` |
 | `reveal <widget>` | scroll the panel holding a registered widget so it is on screen (before a `screenshot`) |
 | `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
 | `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |

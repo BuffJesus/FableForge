@@ -15,6 +15,7 @@
 
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
+#include "worldtiles.hpp"
 #include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
@@ -782,6 +783,29 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.level()->cameraPassableAt(4, 4) && doc.level()->cameraPassableAt(1, 1));   // (1,1) is walkable: stays passable
     CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
+}
+
+// World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate
+// between kept samples, and the disk cache refuses another source's key.
+void testWorldTiles(const fs::path& dir) {
+    namespace wt = albion::worldtiles;
+    CHECK(wt::strideFor(129, 225) == 6 && wt::strideFor(33, 33) == 1);
+    CHECK(wt::sampleIndex(0, 22, 129, 6) == 0 && wt::sampleIndex(20, 22, 129, 6) == 120 && wt::sampleIndex(21, 22, 129, 6) == 128);
+    wt::Tile t;
+    t.cellsX = 5; t.cellsY = 5; t.stride = 2; t.gw = 3; t.gh = 3;
+    t.heights = {0, 2, 4, 0, 2, 4, 10, 12, 14};   // rows y = 0, 2, 4
+    CHECK(std::fabs(wt::heightAt(t, 1.0f, 0.0f) - 1.0f) < 1e-4f);
+    CHECK(std::fabs(wt::heightAt(t, 4.0f, 4.0f) - 14.0f) < 1e-4f);
+    CHECK(std::fabs(wt::heightAt(t, 0.0f, 3.0f) - 5.0f) < 1e-4f);
+    t.name = "Probe"; t.ground.width = 1; t.ground.height = 1; t.ground.rgba = {1, 2, 3, 255};
+    const fs::path f = dir / "probe.tile";
+    CHECK(wt::saveTile(f, "src|1|2|t", t));
+    wt::Tile back;
+    CHECK(wt::loadTile(f, "src|1|2|t", back) && back.heights == t.heights && back.ground.rgba == t.ground.rgba && back.gw == 3);
+    CHECK(!wt::loadTile(f, "src|1|3|t", back));   // the level changed: rebuild
+    albion::foliageexport::Scene sc;
+    wt::appendMesh(t, sc, 100.0f, 200.0f);
+    CHECK(sc.meshes.size() == 1 && sc.meshes[0].geometry.vertices.size() == 9 && sc.meshes[0].parts[0].indices.size() == 24 && sc.instances[0].x == 100.0f);
 }
 
 // The vanilla Preview Track path (forge/trackpath): straight segments by 3D arc length, zero-length
@@ -1971,6 +1995,7 @@ int main() {
     testTerrainEditing(lev, dir);
     testThemeToolsAndPaths(dir);
     testExternalWorld(dir);
+    testWorldTiles(dir);
     testThingLinks();
     testQuestSections();
     testDayNightSections();

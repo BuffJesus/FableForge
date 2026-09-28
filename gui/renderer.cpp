@@ -816,6 +816,10 @@ ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img)
 
 bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up) {
     clearLayer(layer);
+    return appendLayer(layer, scene, up);
+}
+
+bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up) {
     if (scene.instances.empty()) return false;
     auto& foliage_ = layers_[layer];
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
@@ -974,7 +978,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->OMSetRenderTargets(1, &rtv_, dsv_);
     ctx_->ClearRenderTargetView(rtv_, clearCol);
     ctx_->ClearDepthStencilView(dsv_, D3D11_CLEAR_DEPTH, 1.0f, 0);
-    if (!indexCount_) return srv_;
+    if (!indexCount_ && !(worldOnly && !layers_[kWorldLayer].empty())) return srv_;
 
     D3D11_VIEWPORT vp = {0, 0, float(width), float(height), 0, 1};
     ctx_->RSSetViewports(1, &vp);
@@ -1022,11 +1026,13 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->OMSetDepthStencilState(depth_, 0);
     const float bf[4] = {0, 0, 0, 0};
     ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
-    ctx_->DrawIndexed(indexCount_, 0, 0);
+    if (!worldOnly && indexCount_) ctx_->DrawIndexed(indexCount_, 0, 0);
+    // the world view draws only its layer; the map views never draw it
+    auto layerOn = [&](int i) { return worldOnly ? i == kWorldLayer : (i != kWorldLayer && showLayer[i]); };
 
-    if (mode != ViewMode::Wireframe) {
+    if (mode != ViewMode::Wireframe || worldOnly) {
         bool any = false;
-        for (int i = 0; i < kLayers; ++i) any = any || (showLayer[i] && !layers_[i].empty());
+        for (int i = 0; i < kLayers; ++i) any = any || (layerOn(i) && !layers_[i].empty());
         if (any) {
             cb.flags[0] = 1.0f; cb.flags[1] = 1.0f;   // instance pass; y = alpha test on
             if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
@@ -1037,7 +1043,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
             ctx_->PSSetSamplers(0, 1, &wrapSampler_);
             bool currentAlpha = true;
             for (int i = 0; i < kLayers; ++i) {
-                if (!showLayer[i]) continue;
+                if (!layerOn(i)) continue;
                 for (const auto& b : layers_[i]) {
                     if (b.alpha != currentAlpha) {
                         currentAlpha = b.alpha;
@@ -1053,7 +1059,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
         }
     }
 
-    if (showThings && !instances_.empty() && mode != ViewMode::Wireframe) {
+    if (!worldOnly && showThings && !instances_.empty() && mode != ViewMode::Wireframe) {
         cb.flags[0] = 1.0f; cb.flags[1] = 1.0f;
         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
         ctx_->RSSetState(solid_);
@@ -1095,7 +1101,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
         setObject(kIdentity, kNoTint);
     }
 
-    if (showWater && waterIndexCount_ && mode != ViewMode::Wireframe) {
+    if (!worldOnly && showWater && waterIndexCount_ && mode != ViewMode::Wireframe) {
         cb.flags[0] = 2.0f; cb.flags[1] = 0.0f;
         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
         ctx_->IASetVertexBuffers(0, 1, &waterVb_, &stride, &offset);
