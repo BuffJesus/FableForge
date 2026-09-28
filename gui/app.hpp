@@ -384,6 +384,7 @@ private:
     bool sectionsDirty_ = true;
     void drawSectionsCard(float pad, float inner, float cardInner);
     void drawPropertyGrid(float cardInner);
+    struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
     std::string thingLabel(size_t index) const;

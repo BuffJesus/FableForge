@@ -381,7 +381,34 @@ void App::drawPropertyGrid(float cardInner) {
         std::string next;
         bool commit = false;
         const std::string vkind = vf ? vf->kind : "";
-        if (vkind == "def" && vf->defType[0] && ctx_.ready() && r.kind != K::Bool) {
+        int rgba[4];
+        const bool isColour = std::sscanf(r.value.c_str(), "CRGBColour(%d,%d,%d,%d)", &rgba[0], &rgba[1], &rgba[2], &rgba[3]) == 4;
+        const bool isFamily = r.key.rfind("CreatureFamilies[", 0) == 0 && r.kind == K::String;
+        if (isColour) {
+            // CTCLight / CTCSpotLight Colour: the dialog's ColourRed/Green/Blue spins as one RGBA editor,
+            // committed once the edit ends (one undo step, not one per frame of a drag)
+            const std::string id = std::to_string(idx) + "/" + r.ctc + "/" + r.key;
+            float col[4] = {rgba[0] / 255.0f, rgba[1] / 255.0f, rgba[2] / 255.0f, rgba[3] / 255.0f};
+            if (pendingColour_.live && pendingColour_.id == id) std::copy(pendingColour_.rgba, pendingColour_.rgba + 4, col);
+            if (ImGui::ColorEdit4("##v", col, ImGuiColorEditFlags_Uint8 | ImGuiColorEditFlags_AlphaBar)) {
+                pendingColour_.id = id; pendingColour_.live = true;
+                std::copy(col, col + 4, pendingColour_.rgba);
+            }
+            if (pendingColour_.live && pendingColour_.id == id && !ImGui::IsAnyItemActive() && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId)) {
+                char buf[64];
+                std::snprintf(buf, sizeof buf, "CRGBColour(%d,%d,%d,%d)", int(std::lround(col[0] * 255)), int(std::lround(col[1] * 255)), int(std::lround(col[2] * 255)), int(std::lround(col[3] * 255)));
+                next = buf; commit = true;
+                pendingColour_.live = false;
+            }
+        } else if (isFamily && ctx_.ready()) {
+            // a spawner's creature family slot: the CREATURE_GENERATION_FAMILY defs (vanilla DefIndexList)
+            const std::string cur = r.value.size() >= 2 ? r.value.substr(1, r.value.size() - 2) : r.value;
+            if (ImGui::BeginCombo("##v", cur.c_str())) {
+                for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{"CREATURE_GENERATION_FAMILY"}))
+                    if (ImGui::Selectable(name.c_str(), name == cur)) { next = "\"" + name + "\""; commit = true; }
+                ImGui::EndCombo();
+            }
+        } else if (vkind == "def" && vf->defType[0] && ctx_.ready() && r.kind != K::Bool) {
             // a def picker; the value keeps the file's spelling (quoted or bare), NULL = none
             const bool quoted = r.kind == K::String;
             std::string cur = r.value;

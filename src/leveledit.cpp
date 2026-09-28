@@ -1120,6 +1120,8 @@ constexpr LinkKind kLinkKinds[] = {
     {"CTCActionUseScriptedHook", "EntranceConnectedToUID", "Region exit to entrance", "a region entrance"},
     {"CTCActivationTrigger", "ReceptorUID", "Activates", "an activation receptor"},
     {"CTCPreCalculatedNavigationRoute", "ThingToCalculateRouteToUID", "Route to", "any thing"},
+    // the vanilla property dialog picks this one by script name (CTCActionUseScriptedHook "Camera Track")
+    {"CTCActionUseScriptedHook", "CameraTrackUID", "Camera track", "a camera track"},
 };
 bool hasCtcPrefix(const forge::tng::Thing& t, std::string_view prefix) {
     for (const auto& b : t.ctcBlocks)

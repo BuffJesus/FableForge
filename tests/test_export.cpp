@@ -954,7 +954,7 @@ void testThingLinks() {
     std::string err;
     CHECK(doc.openText("Links", tng, err));
     auto links = doc.linksOf(0);
-    CHECK(links.size() == 3);
+    CHECK(links.size() == 3);   // (a scripted hook would add Region exit + Camera track)
     CHECK(links[0].field == "VillageUID" && links[0].target == 0 && !links[0].targetIndex);
     CHECK(links[1].field == "OwnerUID" && links[1].target == 0);   // component present, field absent = 0
     CHECK(links[2].field == "HomeBuildingUID" && links[2].ctc.empty());
@@ -972,6 +972,14 @@ void testThingLinks() {
     CHECK(!doc.setLink(2, "CTCVillageMember", "VillageUID", 200));   // the building has no such link
     CHECK(doc.undo() && doc.linksOf(0)[2].target == 0);
     CHECK(doc.setLink(0, "CTCVillageMember", "VillageUID", 0) && doc.linksOf(0)[0].target == 0);
+    // a region exit's scripted hook: exit -> entrance and its camera track
+    ed::Document hook;
+    const std::string hookTng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nUID 1;\r\nDefinitionType \"OBJECT_EXIT\";\r\nScriptName NULL;\r\n"
+        "StartCTCActionUseScriptedHook;\r\nEntranceConnectedToUID 5;\r\nCameraTrackUID 9;\r\nEndCTCActionUseScriptedHook;\r\nEndThing;\r\n\r\nXXXSectionEnd;\r\n";
+    CHECK(hook.openText("Hook", hookTng, err));
+    const auto hl = hook.linksOf(0);
+    CHECK(hl.size() == 2 && hl[0].field == "EntranceConnectedToUID" && hl[0].target == 5 && hl[1].field == "CameraTrackUID" && hl[1].target == 9 && !hl[1].targetIndex);
 }
 
 // A map of another world (vanilla File > Load World): the document reads the .tng
