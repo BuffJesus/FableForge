@@ -393,3 +393,34 @@ The ported code and addresses are in `libs/forgecore/include/forge/fractal.hpp`,
 Several paths are dead code: the seeded `CNoise(long)` ctor, `SetNewFractalPos`, `PostProcessRescale`, and the
 ridged/hetero variants. "Apply fractal" sets heights to `fractal(world) * Scale` in world units;
 `CHeightMap::SetSizeZAt` clamps them to [0, 2048). The .lev stores height / 2048. The dialog's default Scale is 1000.
+
+**Tracks.** Tracks are chains of `TrackNode` things (`TRACK_NODE_BASIC`); there is no separate track object.
+- **Fields.** `LinkedToUID1` is the previous node and `LinkedToUID2` the next. `Start TRUE` marks the head and
+  `End TRUE` the tail. ScriptName, the track name, is written twice, and the loader reads the last copy.
+  A lone node is `Start TRUE, End TRUE`.
+- **Invariants the engine asserts.** Links are symmetric, a node has at most two links, and there are no
+  branches or loops. Every node in a chain has the same name. All 528 links in the dev data are symmetric.
+- **Use.** Village guards patrol along them (`GuardTrack`, 293 nodes), and cut-scene cameras follow them.
+- **Camera preview.** The camera runs along a main track while looking along a view track. Both use straight
+  segments and are sampled by arc length at `u·L`, with `u += dt/T`, so they finish together.
+- **`CameraTrackUID`.** This is on `CTCActionUseScriptedHook`, but none of its 19 values matches a thing, so
+  it looks stale. Tracks are looked up by name.
+- **Evidence.** `CThingTrackNode` Save/Load, `SetAsLinkedTo`, `FinishLinkingTracks` 0x020302d0,
+  `UpdatePreviewTrack` 0x0202f380. Ported as `Document::tracks` / `linkTrackNodes` / …, tested in `testTracks`.
+
+**Script brushes.** These are named areas that record a target state of heights, themes and things for
+`ApplyScriptBrush(name)`, stored in the .lev block at [BrushDataOffset (+13), navOffset).
+- **Byte layout.**
+  - A 33801-byte header: a 5-byte prefix, `NoBrushes`, then a 256 × {name[128], i32} theme palette.
+  - Then, per brush:
+    - a 73-byte `CFileFormatBrush` (version 2): GameArea box, ScriptName[32], CreationTimeSeconds,
+      CreationPattern, and the move/delete/add counts;
+    - W×H 14-byte cells: f32 height, u8 theme[3], u8 blend[2];
+    - move records (37 bytes), then delete and add records (13 bytes, UID only).
+- **Not used by the shipped game.** Every retail and dev level has `NoBrushes = 0`: the dev tree (457), the
+  Steam and dev WADs, and the Xbox ISO. Retail Fable.exe never calls the binding at vtable slot 0xABC.
+- **Possible engine bug (inferred from the code, not tested).** The timed apply only applies themes and
+  things when progress lands within 1e-4 of 1, so it may never finish.
+- **Evidence.** `CMap::LoadBrushesFromFile` 0x02236060 / `SaveBrushesToFile` 0x02236900,
+  `CGameScriptInterface::ApplyScriptBrush` (FableWin 0x02aa7ed0, retail 0x0088F480).
+- **Status.** Parked: no retail use, a possible apply bug, and the height units are unverified.
