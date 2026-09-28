@@ -199,6 +199,7 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "clear_toasts") { app.toasts_.clear(); note("ok   " + line); ++pc_; }   // clean screenshots for docs
     else if (cmd == "open_world") {   // open_world <path.wld>: File > Open world without the dialog
         if (!app.openWorld(rest)) fail("open_world failed: " + rest); else note("ok   " + line);
         ++pc_;

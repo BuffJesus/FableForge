@@ -66,6 +66,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `set things_script_only 0\|1`, `set things_nearest 0\|1` | the Objects list switches (vanilla Scene Browser); state `things_first` (index of the first row), `things_shown` |
 | `track_preview <eye #> <look #> <seconds>`, `wait_track_preview`, `assert_camera_back` | the Tracks card's Play preview (tracks by list index); state `track_preview`; the camera is back at `snapshot_camera` |
 | `open_world <path.wld>` | File > Open world without the dialog (another world's maps join the list, grouped by region) |
+| `clear_toasts` | drop the corner notices (clean screenshots for the guide) |
 | `reveal <widget>` | scroll the panel holding a registered widget so it is on screen (before a `screenshot`) |
 | `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
 | `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |
