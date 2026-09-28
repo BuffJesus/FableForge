@@ -1439,9 +1439,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         else if (clipDrag_ && !lmb) {
             clipDrag_ = false;
             if (brushHit_) {
-                terrainClip_ = doc_.copyTerrain(int(std::lround(clipStart_[0])), int(std::lround(clipStart_[1])), int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])));
-                clipTurns_ = 0;
-                pushLog("copied " + std::to_string(terrainClip_.w) + " x " + std::to_string(terrainClip_.h) + " vertices of ground; Paste region places it", 0);
+                copyRegion(int(std::lround(clipStart_[0])), int(std::lround(clipStart_[1])), int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])));
             }
         }
         return;
@@ -1449,9 +1447,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     if (terrainMode_ == 15) {
         if (ImGui::IsKeyPressed(ImGuiKey_R) && !io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive()) clipTurns_ = (clipTurns_ + 1) % 4;
         if (press) {
-            if (terrainClip_.empty()) { pushLog("paste: copy a region first (Copy region, drag on the ground)", 1); return; }
-            const size_t n = doc_.pasteTerrain(terrainClip_, int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])), clipTurns_, clipHeights_, clipThemes_, clipRelative_);
-            pushLog("paste: " + std::to_string(n) + " vertices (one undo step)", n ? 0 : 1);
+            pasteRegion(int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])));
         }
         return;
     }
@@ -2280,12 +2276,18 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::Checkbox("Themes##clt", &clipThemes_); ImGui::SameLine();
                     ImGui::Checkbox("Relative##clr", &clipRelative_);
                     if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the copied shape sits on the ground where you click.\nOff: the copied heights are placed as they were.");
+                    ImGui::SameLine();
                 }
+                ImGui::Checkbox("Things##clth", &clipThings_);
+                auto_.registerWidget("check_clip_things");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip(terrainMode_ == 14 ? "Also copy the objects standing inside the rectangle." : "Also place the copied objects (turned with the ground, at their old height above it).");
                 ImGui::PushFont(fontSmall_);
-                if (!terrainClip_.empty()) ImGui::TextColored(theme::vec(theme::Muted), "clipboard: %d x %d vertices, turned %d deg", terrainClip_.w, terrainClip_.h, clipTurns_ * 90);
-                theme::hint(terrainMode_ == 14 ? "Drag a rectangle on the ground to copy its heights and ground themes (the vanilla Copy and paste dialog). The copy survives switching maps."
+                if (!terrainClip_.empty()) ImGui::TextColored(theme::vec(theme::Muted), "clipboard: %d x %d vertices, %zu object%s, turned %d deg", terrainClip_.w, terrainClip_.h,
+                                                              terrainClip_.things.size(), terrainClip_.things.size() == 1 ? "" : "s", clipTurns_ * 90);
+                theme::hint(terrainMode_ == 14 ? "Drag a rectangle on the ground to copy its heights, ground themes and objects (the vanilla Copy and paste dialog). The copy survives switching maps."
                                                : "Click to paste with the copy's first corner there; R turns it 90 degrees. Themes are matched by name (a missing one takes a free palette slot). One undo step per paste.");
                 ImGui::PopFont();
+                drawBrushLibrary(cardInner);
             }
         }
         {
@@ -3761,6 +3763,95 @@ void App::drawBudgetWindow() {
         ImGui::PopFont();
     }
     endToolWindow();
+}
+
+
+// ------------------------------------------------------------ copy / paste + brush library
+// Vanilla's Copy and paste mode (CEditInputProcessCopyPaste) and its Brush library dialog
+// (CBrushLibraryDialog; SaveBrush / LoadBrush write CEditMapBrush files: cells with themes by
+// name, and things). Here a brush is a small JSON file in the library folder.
+
+bool App::copyRegion(int x0, int y0, int x1, int y1) {
+    if (!documentLoaded() || !doc_.hasTerrain()) return false;
+    terrainClip_ = doc_.copyTerrain(x0, y0, x1, y1, clipThings_);
+    clipTurns_ = 0;
+    pushLog("copied " + std::to_string(terrainClip_.w) + " x " + std::to_string(terrainClip_.h) + " vertices of ground" +
+            (clipThings_ ? " and " + std::to_string(terrainClip_.things.size()) + " object(s)" : std::string()) + "; Paste region places it", 0);
+    return !terrainClip_.empty();
+}
+
+size_t App::pasteRegion(int x, int y) {
+    if (!documentLoaded()) return 0;
+    if (terrainClip_.empty()) { pushLog("paste: copy a region first (Copy region, drag on the ground), or pick a saved brush", 1); return 0; }
+    size_t things = 0;
+    size_t n = 0;
+    try {
+        n = doc_.pasteTerrain(terrainClip_, x, y, clipTurns_, clipHeights_, clipThemes_, clipRelative_, clipThings_, &things);
+    } catch (const std::exception& e) { pushLog(std::string("paste: ") + e.what(), 2); return 0; }
+    pushLog("paste: " + std::to_string(n - things) + " vertices" + (things ? ", " + std::to_string(things) + " object(s)" : std::string()) + " (one undo step)", n ? 0 : 1);
+    return n;
+}
+
+std::filesystem::path App::brushDir() const {
+    return std::filesystem::path(settings_.outDir) / "brushes";
+}
+
+bool App::saveBrush(const std::string& rawName) {
+    std::string name;
+    for (char c : rawName) name += (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == ' ') ? c : '_';
+    while (!name.empty() && name.back() == ' ') name.pop_back();
+    if (name.empty()) { pushLog("brush: give it a name", 1); return false; }
+    if (terrainClip_.empty()) { pushLog("brush: copy a region first", 1); return false; }
+    std::string err;
+    const auto file = brushDir() / (name + ".brush.json");
+    if (!editor::saveTerrainClip(terrainClip_, file, err)) { pushLog("brush: " + err, 2); return false; }
+    brushListDirty_ = true;
+    pushLog("brush saved: " + file.string(), 3);
+    return true;
+}
+
+bool App::loadBrush(const std::string& name) {
+    std::string err;
+    editor::TerrainClip clip;
+    if (!editor::loadTerrainClip(brushDir() / (name + ".brush.json"), clip, err)) { pushLog("brush: " + err, 2); return false; }
+    terrainClip_ = std::move(clip);
+    clipTurns_ = 0;
+    terrainMode_ = 15;
+    pushLog("brush '" + name + "' on the clipboard: click the ground to paste it (R turns it)", 0);
+    return true;
+}
+
+void App::drawBrushLibrary(float cardInner) {
+    using theme::S;
+    if (brushListDirty_) {
+        brushListDirty_ = false;
+        brushList_.clear();
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(brushDir(), ec)) {
+            const std::string f = e.path().filename().string();
+            const std::string ext = ".brush.json";
+            if (f.size() > ext.size() && f.compare(f.size() - ext.size(), ext.size(), ext) == 0) brushList_.push_back(f.substr(0, f.size() - ext.size()));
+        }
+        std::sort(brushList_.begin(), brushList_.end());
+    }
+    ImGui::Dummy(ImVec2(0, S(6)));
+    theme::label("Brush library");
+    const float btnW = S(72);
+    ImGui::SetNextItemWidth(cardInner - btnW - ImGui::GetStyle().ItemSpacing.x);
+    ImGui::InputTextWithHint("##brushname", "Name for the current copy", brushName_, sizeof brushName_);
+    auto_.registerWidget("input_brush_name");
+    ImGui::SameLine();
+    if (theme::ghostButton("Save##brushsave", ImVec2(btnW, 0))) saveBrush(brushName_);
+    auto_.registerWidget("btn_brush_save");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(terrainClip_.empty() ? "Copy a region first." : "Keep the current copy as a brush you can paste on any map.");
+    ImGui::PushFont(fontSmall_);
+    if (brushList_.empty()) theme::hint("No saved brushes yet. Copy a region, name it, Save.");
+    for (const auto& b : brushList_) {
+        if (ImGui::Selectable((b + "##brush_" + b).c_str(), false)) loadBrush(b);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this brush on the clipboard and switch to Paste region.");
+    }
+    ImGui::PopFont();
+    auto_.registerWidget("list_brushes");
 }
 
 } // namespace albion::gui

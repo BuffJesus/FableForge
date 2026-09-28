@@ -865,6 +865,54 @@ void testVanillaFields() {
 
 // Copy and paste a block of ground (vanilla Copy and paste): heights + themes,
 // rotation, relative placement, themes carried by name, one undo step.
+// The brush library (vanilla Copy and paste "Copy things" + Brush library): things ride with the
+// ground, turn with it, keep their height above it; one undo step; a brush file round-trips.
+void testBrushLibrary(const fs::path& dir) {
+    namespace ed = albion::editor;
+    { std::error_code ec; fs::create_directories(dir, ec); }
+    const fs::path lev = writeSyntheticLev(dir / "brush.lev", 12, 12, [](int x, int y) { return float(x + y); });
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Brush", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(lev, err));
+    forge::thingplacer::Placement p;
+    p.definitionType = "OBJECT_CRATE_02";
+    p.position = {2.0f, 1.0f, 3.0f + 2.0f};                 // ground at (2,1) is 3: two units above it
+    p.forward = {1.0f, 0.0f, 0.0f};
+    doc.place(p);
+    p.position = {9.0f, 9.0f, 18.0f};                        // outside the copied rectangle
+    doc.place(p);
+    const size_t before = doc.thingCount();
+    const auto clip = doc.copyTerrain(0, 0, 3, 2, true);     // 4 x 3 vertices
+    CHECK(clip.w == 4 && clip.h == 3 && clip.things.size() == 1);
+    CHECK(std::fabs(clip.things[0].dx - 2.0f) < 1e-4f && std::fabs(clip.things[0].dy - 1.0f) < 1e-4f && std::fabs(clip.things[0].aboveGround - 2.0f) < 1e-3f);
+    size_t placed = 0;
+    CHECK(doc.pasteTerrain(clip, 6, 6, 1, false, false, false, true, &placed) == 1 && placed == 1);   // things only, a quarter turn
+    CHECK(doc.thingCount() == before + 1);
+    ed::Frame f;
+    CHECK(doc.frameOf(doc.thingCount() - 1, f) || doc.frameOf(before, f));
+    // a quarter turn maps clip (dx, dy) to (h - 1 - dy, dx) and +X to +Y
+    bool found = false;
+    for (size_t i = 0; i < doc.thingCount(); ++i) {
+        if (!doc.frameOf(i, f)) continue;
+        if (std::fabs(f.pos[0] - (6.0f + 1.0f)) < 1e-3f && std::fabs(f.pos[1] - (6.0f + 2.0f)) < 1e-3f) {
+            found = std::fabs(f.pos[2] - (15.0f + 2.0f)) < 1e-2f && std::fabs(f.forward[0]) < 1e-4f && f.forward[1] > 0.9f;
+        }
+    }
+    CHECK(found);
+    CHECK(doc.undo() && doc.thingCount() == before);           // one undo step
+    // the brush file round-trips
+    const fs::path file = dir / "brushes" / "test.brush.json";
+    CHECK(ed::saveTerrainClip(clip, file, err));
+    ed::TerrainClip back;
+    CHECK(ed::loadTerrainClip(file, back, err));
+    CHECK(back.w == clip.w && back.h == clip.h && back.heights == clip.heights && back.themeIndex == clip.themeIndex &&
+          back.themeStrength == clip.themeStrength && back.themes.size() == clip.themes.size() && back.themes[0].name == clip.themes[0].name &&
+          back.things.size() == 1 && back.things[0].block == clip.things[0].block && back.things[0].dx == clip.things[0].dx);
+    ed::TerrainClip bad;
+    std::ofstream(dir / "brushes" / "bad.brush.json") << "{\"format\": \"something-else\"}";
+    CHECK(!ed::loadTerrainClip(dir / "brushes" / "bad.brush.json", bad, err));
+}
+
 void testTerrainClip(const fs::path& dir) {
     namespace ed = albion::editor;
     const fs::path lev = writeSyntheticLev(dir / "clip.lev", 8, 8, [](int x, int y) { return float(x + 10 * y); });
@@ -1804,6 +1852,7 @@ int main() {
     testAddSoundTheme(dir);
     testVanillaFields();
     testTerrainClip(dir);
+    testBrushLibrary(dir / "brushlib");
     testTracks();
     testListEntries();
     testReviewFixes(dir);

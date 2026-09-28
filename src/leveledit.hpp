@@ -96,8 +96,19 @@ struct TerrainClip {
     std::vector<float> heights;
     std::vector<std::array<uint8_t, 3>> themeIndex, themeStrength;   // indices into `themes`
     std::vector<forge::lev::GroundTheme> themes;                       // name + def index per clip slot
+    // Things inside the copied rectangle (the vanilla Copy and paste dialog's "Copy things"): the
+    // thing's .tng block, its place relative to the clip's first vertex, its height above the ground
+    // there, and its orientation / scale (frame.pos unused).
+    struct Thing { std::string block; float dx = 0, dy = 0, aboveGround = 0; Frame frame; };
+    std::vector<Thing> things;
     bool empty() const { return w <= 0 || h <= 0; }
 };
+
+// A brush library entry (the vanilla Brush library: CEditInputProcessCopyPaste::SaveBrush /
+// LoadBrush, CEditMapBrush::SaveToFile -- themes by name, things by their data): a clip as a
+// small JSON file. False with `error` set on failure.
+bool saveTerrainClip(const TerrainClip& clip, const std::filesystem::path& file, std::string& error);
+bool loadTerrainClip(const std::filesystem::path& file, TerrainClip& clip, std::string& error);
 
 struct ThingSummary {
     size_t index = 0;
@@ -369,13 +380,19 @@ public:
     // at its two ends. One undo step; returns the vertices changed.
     size_t drawPath(float x0, float y0, float x1, float y1, float radius);
     // Copy the vertices of [x0..x1] x [y0..y1] (map-local, inclusive, clamped).
-    TerrainClip copyTerrain(int x0, int y0, int x1, int y1) const;
+    // withThings: also the things standing inside the rectangle (vanilla GetCopyThings).
+    TerrainClip copyTerrain(int x0, int y0, int x1, int y1, bool withThings = false) const;
     // Paste with its first vertex at (x, y), rotated by quarterTurns x 90 degrees
     // (vanilla RotateBrush steps). relative: heights keep their shape but sit on the
     // ground under the paste origin (clip height - clip corner + ground there);
     // otherwise absolute. Themes map by name into this palette (a missing one takes a
     // free slot). One undo step; returns the vertices changed.
-    size_t pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative);
+    // withThings: the clip's things too, turned with the ground and set at their old height above
+    // the (new) ground; they get fresh UIDs and no script name, like any paste. Returns the vertices
+    // changed plus the things placed; `thingsPlaced` (optional) gets the latter.
+    size_t pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative,
+                        bool withThings = false, size_t* thingsPlaced = nullptr);
+    size_t pasteTerrainCells(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative);
     // The vanilla Fractals dialog's "Apply fractal" (CEditMap::EditGenerateFractal):
     // every vertex SET to fractal(world position) * params.scale world units,
     // clamped to [0, 2048) like CHeightMap::SetSizeZAt. World = the map's WLD origin

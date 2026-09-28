@@ -253,6 +253,22 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "fit_open") { app.setFitOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "fractal_open") { app.setFractalOpen(rest != "0"); note("ok   " + line); ++pc_; }
+    else if (cmd == "clip_copy") {   // clip_copy x0 y0 x1 y1 [things 0|1]: mode 14's drag
+        std::istringstream rs(rest); int x0 = 0, y0 = 0, x1 = 0, y1 = 0, th = 1; rs >> x0 >> y0 >> x1 >> y1 >> th;
+        app.clipThings_ = th != 0;
+        if (!app.copyRegion(x0, y0, x1, y1)) fail("clip_copy failed: " + rest);
+        else note("ok   " + line + "  -> " + std::to_string(app.terrainClip_.w) + "x" + std::to_string(app.terrainClip_.h) + ", " + std::to_string(app.terrainClip_.things.size()) + " things");
+        ++pc_;
+    }
+    else if (cmd == "clip_paste") {   // clip_paste x y [turns]: mode 15's click
+        std::istringstream rs(rest); int x = 0, y = 0, t = 0; rs >> x >> y >> t;
+        app.clipTurns_ = t;
+        const size_t n = app.pasteRegion(x, y);
+        if (!n) fail("clip_paste changed nothing: " + rest); else note("ok   " + line + "  -> " + std::to_string(n) + " changes");
+        ++pc_;
+    }
+    else if (cmd == "brush_save") { if (!app.saveBrush(rest)) fail("brush_save failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "brush_load") { if (!app.loadBrush(rest)) fail("brush_load failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "budget_open") { app.setBudgetOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "budget_run") {   // budget_run [min things]: survey with the window's options, log the totals
         app.runBudgetSurvey();

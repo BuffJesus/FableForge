@@ -487,6 +487,19 @@ private:
     editor::TerrainClip terrainClip_;    // survives map changes: copy on one map, paste on another
     int clipTurns_ = 0;
     bool clipHeights_ = true, clipThemes_ = true, clipRelative_ = true;
+    bool clipThings_ = true;             // vanilla "Copy things": the things inside the rectangle ride along
+    // ---- brush library (vanilla Brush library dialog): saved copies, one .brush.json per brush
+    char brushName_[64] = {};
+    std::vector<std::string> brushList_;
+    bool brushListDirty_ = true;
+    std::filesystem::path brushDir() const;
+    void drawBrushLibrary(float cardInner);
+public:
+    bool saveBrush(const std::string& name);   // the current copy -> <brushDir>/<name>.brush.json
+    bool loadBrush(const std::string& name);   // a saved brush -> the copy clipboard, paste mode on
+    bool copyRegion(int x0, int y0, int x1, int y1);            // automation: mode 14's drag
+    size_t pasteRegion(int x, int y);                           // automation: mode 15's click
+private:
     bool clipDrag_ = false;
     float clipStart_[2] = {0, 0};
     void drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col);

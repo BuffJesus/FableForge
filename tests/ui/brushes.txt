@@ -1,0 +1,32 @@
+# Brush library (the vanilla Copy and paste "Copy things" + Brush library): copy a region with its
+# objects, save it as a brush, load it back from the library, paste it turned, undo.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+set saveroot build/ui_brush_install
+set outdir build/ui_brush_out
+edit 1
+frames 3
+edit_tab 1
+frames 3
+terrain_mode 14
+frames 3
+assert_widget check_clip_things
+clip_copy 40 100 70 130 1
+brush_save Oakvale yard
+frames 3
+brush_load Oakvale yard
+frames 4
+assert_widget list_brushes
+assert_file build/ui_brush_out/brushes/Oakvale yard.brush.json
+mouse_move 20 20
+frames 3
+screenshot build/ui/brushes_1_library.png
+clip_paste 60 20 1
+frames 4
+screenshot build/ui/brushes_2_pasted.png
+undo
+frames 3
+quit

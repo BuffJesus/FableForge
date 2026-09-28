@@ -1,7 +1,10 @@
+#include "nlohmann/json.hpp"
+#include <fstream>
 #include "backups.hpp"
 #include "leveledit.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -51,6 +54,29 @@ const forge::tng::CtcBlock* physicsOf(const forge::tng::Thing& t) {
     if (!phys) phys = t.findCtc("CTCPhysicsNavigator");
     return phys;
 }
+
+namespace {
+// Every tng::File edit re-indexes the whole file, so a frame is ~12 re-indexes: fine on one
+// thing, slow when pasting dozens into a big map (Document::paste stages each block in its own
+// one-thing file and inserts the finished text once).
+void writeFrame(forge::tng::File& file, size_t index, const Frame& frame) {
+    const auto* phys = physicsOf(file.things()[index]);
+    if (!phys) throw std::runtime_error("setFrame: thing has no physics block");
+    const std::string ctc = phys->name;
+    file.setCtcProperty(index, ctc, "PositionX", formatFloat(frame.pos[0]));
+    file.setCtcProperty(index, ctc, "PositionY", formatFloat(frame.pos[1]));
+    file.setCtcProperty(index, ctc, "PositionZ", formatFloat(frame.pos[2]));
+    file.setCtcProperty(index, ctc, "RHSetForwardX", formatFloat(frame.forward[0]));
+    file.setCtcProperty(index, ctc, "RHSetForwardY", formatFloat(frame.forward[1]));
+    file.setCtcProperty(index, ctc, "RHSetForwardZ", formatFloat(frame.forward[2]));
+    file.setCtcProperty(index, ctc, "RHSetUpX", formatFloat(frame.up[0]));
+    file.setCtcProperty(index, ctc, "RHSetUpY", formatFloat(frame.up[1]));
+    file.setCtcProperty(index, ctc, "RHSetUpZ", formatFloat(frame.up[2]));
+    const bool hasScale = file.things()[index].find("ObjectScale").has_value();
+    if (std::fabs(frame.scale - 1.0f) > 1e-6f) file.setThingProperty(index, "ObjectScale", formatFloat(frame.scale));
+    else if (hasScale) file.removeThingProperty(index, "ObjectScale");
+}
+} // namespace
 
 bool parseUid(const std::string& raw, uint64_t& out) {
     const std::string s = unquote(raw);
@@ -330,18 +356,25 @@ std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3],
     beginBatch();
     pushUndo();
     try {
+        // each block is edited in a one-thing staging file (cheap re-index) and inserted into the
+        // map once: editing it in place re-indexed the whole .tng a dozen times per thing
+        uint64_t uid = forge::thingplacer::nextUid(file_);
         for (const auto& item : fragment.items) {
-            const size_t idx = file_.sectionNames().empty() ? file_.insertThingBlockBefore(file_.things().size(), item.block)
-                                                            : file_.insertThingBlock(targetSection(), item.block);   // where new things go
-            file_.setThingProperty(idx, "UID", std::to_string(forge::thingplacer::nextUid(file_)));
-            if (file_.things()[idx].find("ScriptName")) file_.setThingProperty(idx, "ScriptName", "NULL");
-            ++revision_;
-            if (item.hasFrame) {
+            auto stage = forge::tng::File::parseText("Version 2;\r\n" + item.block, "paste");
+            if (stage.things().empty()) continue;
+            while (!forge::thingplacer::uidIsFree(file_, uid)) ++uid;
+            stage.setThingProperty(0, "UID", std::to_string(uid++));
+            if (stage.things()[0].find("ScriptName")) stage.setThingProperty(0, "ScriptName", "NULL");
+            if (item.hasFrame && physicsOf(stage.things()[0])) {
                 Frame nf = item.frame;
                 for (int k = 0; k < 3; ++k) nf.pos[k] = at[k] + (item.frame.pos[k] - fragment.centre[k]);
                 if (dropToGround) if (const auto h = groundHeight(nf.pos[0], nf.pos[1])) nf.pos[2] = *h + (item.frame.pos[2] - fragment.centre[2]);
-                setFrame(idx, nf);
+                writeFrame(stage, 0, nf);
             }
+            const std::string block = stage.thingBlockText(0);
+            const size_t idx = file_.sectionNames().empty() ? file_.insertThingBlockBefore(file_.things().size(), block)
+                                                            : file_.insertThingBlock(targetSection(), block);   // where new things go
+            ++revision_;
             out.push_back(idx);
         }
     } catch (...) { endBatch(); throw; }
@@ -701,7 +734,7 @@ size_t Document::fitToNeighbours(const forge::fillerfit::Params& params, const s
     return edits.size();
 }
 
-TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1) const {
+TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1, bool withThings) const {
     TerrainClip c;
     if (!hasTerrain()) return c;
     const int cx = level_->cellsX(), cy = level_->cellsY();
@@ -728,10 +761,68 @@ TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1) const {
             c.themeIndex.push_back(idx);
             c.themeStrength.push_back(terrain_->themeStrength[i]);
         }
+    if (withThings)
+        for (size_t i = 0; i < file_.things().size(); ++i) {
+            Frame f;
+            if (!frameOf(i, f)) continue;
+            if (f.pos[0] < float(x0) || f.pos[0] > float(x1) || f.pos[1] < float(y0) || f.pos[1] > float(y1)) continue;
+            TerrainClip::Thing t;
+            t.block = file_.thingBlockText(i);
+            t.dx = f.pos[0] - float(x0);
+            t.dy = f.pos[1] - float(y0);
+            t.aboveGround = f.pos[2] - groundHeight(f.pos[0], f.pos[1]).value_or(f.pos[2]);
+            t.frame = f;
+            c.things.push_back(std::move(t));
+        }
     return c;
 }
 
-size_t Document::pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative) {
+size_t Document::pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative,
+                              bool withThings, size_t* thingsPlaced) {
+    if (thingsPlaced) *thingsPlaced = 0;
+    if (!hasTerrain() || stroke_ || clip.empty()) return 0;
+    beginBatch();   // the ground and the things are one undo step
+    size_t changed = 0;
+    try {
+        changed = (heights || themes) ? pasteTerrainCells(clip, x, y, quarterTurns, heights, themes, relative) : 0;
+        if (withThings && !clip.things.empty()) {
+            const int turns = ((quarterTurns % 4) + 4) % 4;
+            Fragment frag;   // absolute frames, centre 0: Document::paste puts each where its frame says
+            for (const auto& t : clip.things) {
+                // the vertex grid's turn (pasteTerrainCells): output = f(source) for a point in the clip
+                float ox = t.dx, oy = t.dy;
+                if (turns == 1) { ox = float(clip.h - 1) - t.dy; oy = t.dx; }
+                else if (turns == 2) { ox = float(clip.w - 1) - t.dx; oy = float(clip.h - 1) - t.dy; }
+                else if (turns == 3) { ox = t.dy; oy = float(clip.w - 1) - t.dx; }
+                auto turn = [&](const float v[3], float out[3]) {
+                    out[2] = v[2];
+                    if (turns == 0) { out[0] = v[0]; out[1] = v[1]; }
+                    else if (turns == 1) { out[0] = -v[1]; out[1] = v[0]; }
+                    else if (turns == 2) { out[0] = -v[0]; out[1] = -v[1]; }
+                    else { out[0] = v[1]; out[1] = -v[0]; }
+                };
+                Fragment::Item item;
+                item.block = t.block;
+                item.hasFrame = true;
+                item.frame = t.frame;
+                turn(t.frame.forward, item.frame.forward);
+                turn(t.frame.up, item.frame.up);
+                item.frame.pos[0] = float(x) + ox;
+                item.frame.pos[1] = float(y) + oy;
+                item.frame.pos[2] = groundHeight(item.frame.pos[0], item.frame.pos[1]).value_or(t.frame.pos[2] - t.aboveGround) + t.aboveGround;
+                frag.items.push_back(std::move(item));
+            }
+            const float origin[3] = {0, 0, 0};
+            const size_t n = paste(frag, origin, false).size();
+            if (thingsPlaced) *thingsPlaced = n;
+            changed += n;
+        }
+    } catch (...) { endBatch(); throw; }
+    endBatch();
+    return changed;
+}
+
+size_t Document::pasteTerrainCells(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative) {
     if (!hasTerrain() || stroke_ || clip.empty() || (!heights && !themes)) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     const int turns = ((quarterTurns % 4) + 4) % 4;
@@ -1231,25 +1322,12 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
+
 void Document::setFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setFrame: bad thing index");
-    const auto& t = file_.things()[index];
-    const auto* phys = physicsOf(t);
-    if (!phys) throw std::runtime_error("setFrame: thing has no physics block");
-    const std::string ctc = phys->name;
+    if (!physicsOf(file_.things()[index])) throw std::runtime_error("setFrame: thing has no physics block");
     pushUndo();
-    file_.setCtcProperty(index, ctc, "PositionX", formatFloat(frame.pos[0]));
-    file_.setCtcProperty(index, ctc, "PositionY", formatFloat(frame.pos[1]));
-    file_.setCtcProperty(index, ctc, "PositionZ", formatFloat(frame.pos[2]));
-    file_.setCtcProperty(index, ctc, "RHSetForwardX", formatFloat(frame.forward[0]));
-    file_.setCtcProperty(index, ctc, "RHSetForwardY", formatFloat(frame.forward[1]));
-    file_.setCtcProperty(index, ctc, "RHSetForwardZ", formatFloat(frame.forward[2]));
-    file_.setCtcProperty(index, ctc, "RHSetUpX", formatFloat(frame.up[0]));
-    file_.setCtcProperty(index, ctc, "RHSetUpY", formatFloat(frame.up[1]));
-    file_.setCtcProperty(index, ctc, "RHSetUpZ", formatFloat(frame.up[2]));
-    const bool hasScale = file_.things()[index].find("ObjectScale").has_value();
-    if (std::fabs(frame.scale - 1.0f) > 1e-6f) file_.setThingProperty(index, "ObjectScale", formatFloat(frame.scale));
-    else if (hasScale) file_.removeThingProperty(index, "ObjectScale");
+    writeFrame(file_, index, frame);
     ++revision_;
 }
 
@@ -2175,6 +2253,68 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
         std::error_code ec; fs::remove(temp, ec);
         return false;
     }
+}
+
+// ---------------------------------------------------------------- brush library files
+
+bool saveTerrainClip(const TerrainClip& clip, const std::filesystem::path& file, std::string& error) {
+    try {
+        nlohmann::json j;
+        j["format"] = "fableforge-brush";
+        j["version"] = 1;
+        j["w"] = clip.w;
+        j["h"] = clip.h;
+        j["heights"] = clip.heights;
+        auto& themes = j["themes"] = nlohmann::json::array();
+        for (const auto& t : clip.themes) themes.push_back({{"name", t.name}, {"value", t.value}});
+        auto& cells = j["cells"] = nlohmann::json::array();   // per vertex: 3 theme slots + 3 strengths
+        for (size_t i = 0; i < clip.themeIndex.size(); ++i)
+            cells.push_back({clip.themeIndex[i][0], clip.themeIndex[i][1], clip.themeIndex[i][2],
+                             clip.themeStrength[i][0], clip.themeStrength[i][1], clip.themeStrength[i][2]});
+        auto& things = j["things"] = nlohmann::json::array();
+        for (const auto& t : clip.things)
+            things.push_back({{"block", t.block}, {"dx", t.dx}, {"dy", t.dy}, {"aboveGround", t.aboveGround},
+                              {"forward", {t.frame.forward[0], t.frame.forward[1], t.frame.forward[2]}},
+                              {"up", {t.frame.up[0], t.frame.up[1], t.frame.up[2]}}, {"scale", t.frame.scale}});
+        std::error_code ec;
+        if (file.has_parent_path()) std::filesystem::create_directories(file.parent_path(), ec);
+        std::ofstream out(file, std::ios::binary);
+        out << j.dump(1);
+        if (!out) { error = "cannot write " + file.string(); return false; }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool loadTerrainClip(const std::filesystem::path& file, TerrainClip& clip, std::string& error) {
+    try {
+        std::ifstream in(file, std::ios::binary);
+        if (!in) { error = "cannot read " + file.string(); return false; }
+        const nlohmann::json j = nlohmann::json::parse(in);
+        if (j.value("format", "") != "fableforge-brush") { error = file.filename().string() + " is not a FableForge brush"; return false; }
+        TerrainClip c;
+        c.w = j.at("w").get<int>();
+        c.h = j.at("h").get<int>();
+        c.heights = j.at("heights").get<std::vector<float>>();
+        for (const auto& t : j.at("themes")) c.themes.push_back({t.value("name", ""), t.value("value", 0u)});
+        for (const auto& cell : j.at("cells")) {
+            c.themeIndex.push_back({cell[0].get<uint8_t>(), cell[1].get<uint8_t>(), cell[2].get<uint8_t>()});
+            c.themeStrength.push_back({cell[3].get<uint8_t>(), cell[4].get<uint8_t>(), cell[5].get<uint8_t>()});
+        }
+        const size_t n = size_t(c.w) * size_t(c.h);
+        if (c.w <= 0 || c.h <= 0 || c.heights.size() != n || c.themeIndex.size() != n) { error = file.filename().string() + ": sizes do not match"; return false; }
+        for (const auto& idx : c.themeIndex)
+            for (uint8_t k : idx) if (k >= c.themes.size()) { error = file.filename().string() + ": theme slot out of range"; return false; }
+        for (const auto& t : j.value("things", nlohmann::json::array())) {
+            TerrainClip::Thing th;
+            th.block = t.at("block").get<std::string>();
+            th.dx = t.value("dx", 0.0f); th.dy = t.value("dy", 0.0f); th.aboveGround = t.value("aboveGround", 0.0f);
+            for (int k = 0; k < 3; ++k) { th.frame.forward[k] = t.at("forward")[k].get<float>(); th.frame.up[k] = t.at("up")[k].get<float>(); }
+            th.frame.scale = t.value("scale", 1.0f);
+            c.things.push_back(std::move(th));
+        }
+        clip = std::move(c);
+        return true;
+    } catch (const std::exception& e) { error = file.filename().string() + ": " + e.what(); return false; }
 }
 
 } // namespace albion::editor
