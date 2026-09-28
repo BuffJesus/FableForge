@@ -226,7 +226,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             ImGui::PopStyleVar();
             auto_.registerWidget("input_tex_image");
             ImGui::PushFont(fontSmall_);
-            theme::hint("Same slot, same pixel format, mips rebuilt; every object using this texture changes. One-time textures.big.forge-orig backup; refused while the game runs.");
+            theme::hintMore("Replaces the texture everywhere it is used (backed up once).", "Same slot, same pixel format, mips rebuilt; every object using this texture changes. One-time textures.big.forge-orig backup; refused while the game runs.");
             ImGui::PopFont();
             if (theme::primaryButton("Replace this texture", ImVec2(cardInner, S(30)), texImagePath_[0] != 0)) replaceSelectedTexture(texImagePath_);
             auto_.registerWidget("btn_tex_replace");
@@ -249,7 +249,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     ImGui::PopStyleVar();
     theme::segmented("##texaddfmt", texAddFormat_, {"DXT1", "DXT3 (alpha)", "ARGB8888"}, cardInner);
     ImGui::PushFont(fontSmall_);
-    theme::hint("Appended to GBANK_MAIN_PC with a new id (shown in the log) that a def or theme can reference. Nothing retail is replaced.");
+    theme::hintMore("Adds a texture a def or theme can use; nothing is replaced.", "Appended to GBANK_MAIN_PC with a new id (shown in the log) that a def or theme can reference. Nothing retail is replaced.");
     ImGui::PopFont();
     if (theme::ghostButton("Add to textures.big", ImVec2(cardInner, S(28))) && texAddName_[0] && texAddPath_[0]) {
         const char* fmts[3] = {"dxt1", "dxt3", "argb8888"};

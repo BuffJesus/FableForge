@@ -277,7 +277,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::beginCard("##modorder", inner);
     theme::label("Load order");
     ImGui::PushFont(fontSmall_);
-    theme::hint("First loads first, the last word wins. Every mod is a layer: records of game.bin, things of a level, strings of text.big, maps and regions of the world are merged; whole files (banks) are taken from the last mod that ships them. Drag a name to reorder; right-click a FableForge pack for the mods it requires. Check conflicts adds wins / loses to every row. Deploy rebuilds the install from this list onto the retail files.");
+    theme::hintMore("Top loads first; the last mod wins. Drag to reorder.", "First loads first, the last word wins. Every mod is a layer: records of game.bin, things of a level, strings of text.big, maps and regions of the world are merged; whole files (banks) are taken from the last mod that ships them. Drag a name to reorder; right-click a FableForge pack for the mods it requires. Check conflicts adds wins / loses to every row. Deploy rebuilds the install from this list onto the retail files.");
     ImGui::PopFont();
     if (!modOrderError_.empty()) ImGui::TextColored(theme::vec(theme::Warn), "%s", modOrderError_.c_str());
     if (modOrder_.mods.empty()) ImGui::TextColored(theme::vec(theme::Faint), "no mods in the order yet");
@@ -385,7 +385,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         theme::label("Conflicts");
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
-        if (!modConflicts_.empty()) theme::hint("Each row is one thing several mods want differently; the load order decides unless you pick. Picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
+        if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently; the load order decides unless you pick. Picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
         if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
         // one row = the kind and the label (ellipsised to the card), then the winner combo
@@ -441,7 +441,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("btn_mod_add");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Drop the mod's archive contents somewhere and point at the pack file or folder; the order keeps the path and a hash of the contents. bsdiff patches need the retail file they were made against.");
+    theme::hintMore("Point at the mod's pack file or folder.", "Drop the mod's archive contents somewhere and point at the pack file or folder; the order keeps the path and a hash of the contents. bsdiff patches need the retail file they were made against.");
     ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
@@ -457,7 +457,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (theme::dangerButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy (back to the retail files)", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
     auto_.registerWidget("btn_mods_undeploy");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Deploy reverts the previous deploy first, builds the whole order with your picks and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
+    theme::hintMore("Deploy builds the whole list into the game; Undeploy puts the originals back.", "Deploy reverts the previous deploy first, builds the whole order with your picks and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
     ImGui::PopFont();
     theme::endCard();
 }

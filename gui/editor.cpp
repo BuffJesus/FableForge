@@ -594,7 +594,7 @@ void App::drawCheckCard(float pad, float inner, float cardInner) {
     }
     ImGui::PopFont();
     ImGui::PushFont(fontSmall_);
-    theme::hint("V jumps to the first one. [vanilla] = the rule the Lionhead editor warns about on save (spawners without / with unknown families, receptors with both or neither flag, building camera points without an owner); [forge] = links to things missing from this map and broken track chains, which vanilla does not check.");
+    theme::hintMore("V jumps to the first problem. [vanilla] = checks the Lionhead editor makes; [forge] = extra ones.", "V jumps to the first one. [vanilla] = the rule the Lionhead editor warns about on save (spawners without / with unknown families, receptors with both or neither flag, building camera points without an owner); [forge] = links to things missing from this map and broken track chains, which vanilla does not check.");
     ImGui::PopFont();
     theme::endCard();
 }
@@ -684,7 +684,7 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The vanilla Play Track: the camera moves along the first track at an even speed while\nlooking at a point moving along the second, both taking the seconds above; then it\nreturns to where it was. Straight lines between the nodes, as in the engine's preview.");
     }
     ImGui::PushFont(fontSmall_);
-    theme::hint("A track is a chain of TRACK_NODE_BASIC things sharing one name: village guards patrol them (GuardTrack) and cut-scene cameras can follow them. Links run head -> tail; the ends carry Start / End; no branches or loops (the engine asserts on them).");
+    theme::hintMore("Tracks are named chains of nodes: guard patrols and cut-scene camera paths.", "A track is a chain of TRACK_NODE_BASIC things sharing one name: village guards patrol them (GuardTrack) and cut-scene cameras can follow them. Links run head -> tail; the ends carry Start / End; no branches or loops (the engine asserts on them).");
     ImGui::PopFont();
     theme::endCard();
 }
@@ -1907,7 +1907,7 @@ void App::drawVillageCard(float pad, float inner, float cardInner) {
     theme::beginCard("##village", inner);
     theme::label("Village");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A VILLAGE_* thing (the retail CTCVillage block: guards, crime, homes). Place it, then pick it in the Village box of each building, marker and creature that belongs to it.");
+    theme::hintMore("A village: place it, then pick it in the Village box of its members.", "A VILLAGE_* thing (the retail CTCVillage block: guards, crime, homes). Place it, then pick it in the Village box of each building, marker and creature that belongs to it.");
     ImGui::PopFont();
     if (villageList_.empty() && ctx_.ready()) villageList_ = ctx_.definitions({"VILLAGE"});
     ImGui::SetNextItemWidth(cardInner);
@@ -2023,7 +2023,7 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
     theme::label("Live link (ForgeFSE)");
     const bool installed = livelink::isInstalled(installPath_);
     ImGui::PushFont(fontSmall_);
-    theme::hint("Talks to the running game through a small Lua thread in ForgeFSE's PartyMode quest: jump the hero to the spot you are looking at (a real region transition when he is elsewhere), spawn the selected creature where it stands, follow him with the camera.");
+    theme::hintMore("Drives the running game: jump the hero here, spawn the selected creature, follow the hero.", "Talks to the running game through a small Lua thread in ForgeFSE's PartyMode quest: jump the hero to the spot you are looking at (a real region transition when he is elsewhere), spawn the selected creature where it stands, follow him with the camera.");
     if (!installed) ImGui::TextColored(theme::vec(theme::Muted), "Not installed.");
     else if (link_.heartbeatAge < 0 || link_.heartbeatAge > 5.0) ImGui::TextColored(theme::vec(theme::Muted), "%s", link_.ready ? "Installed; the game is not running (or no hero yet)." : "Installed; waiting for the game (start it through FSE_Launcher).");
     else ImGui::TextColored(theme::vec(theme::Text), "Live: hero in %s at (%.0f, %.0f, %.1f)", link_.heroMap.c_str(), link_.heroX, link_.heroY, link_.heroZ);
@@ -2070,7 +2070,7 @@ void App::drawFishingSpotCard(float pad, float inner, float cardInner) {
     theme::beginCard("##fishingspot", inner);
     theme::label("Fishing spot");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A MARKER_FISHING_SPOT where the hero can cast a fishing rod (the retail marker; put it on a shore or pier). Optionally name an OBJECT_* def as the first catch there, the way Barrow Fields hands out OBJECT_MOONFISH; leave it empty for the game's normal fish table.");
+    theme::hintMore("A fishing spot: put it on a shore or pier. Optionally pick the first catch.", "A MARKER_FISHING_SPOT where the hero can cast a fishing rod (the retail marker; put it on a shore or pier). Optionally name an OBJECT_* def as the first catch there, the way Barrow Fields hands out OBJECT_MOONFISH; leave it empty for the game's normal fish table.");
     ImGui::PopFont();
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
@@ -2089,7 +2089,7 @@ void App::drawSpawnerCard(float pad, float inner, float cardInner) {
     theme::beginCard("##spawner", inner);
     theme::label("Enemy spawner");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A MARKER_CREATURE_GENERATOR that spawns creatures from the chosen families when the hero comes within the radius (the retail self-triggering generator). Families are the game's CREATURE_GENERATION_FAMILY defs.");
+    theme::hintMore("Spawns creatures from the chosen families when the hero comes near.", "A MARKER_CREATURE_GENERATOR that spawns creatures from the chosen families when the hero comes within the radius (the retail self-triggering generator). Families are the game's CREATURE_GENERATION_FAMILY defs.");
     ImGui::PopFont();
     if (familyList_.empty()) { std::string err; familyList_ = editor::creatureFamilies(saveRoot(), err); if (familyList_.empty()) familyList_ = editor::creatureFamilies(installPath_, err); }
     ImGui::SetNextItemWidth(cardInner);
@@ -2168,7 +2168,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     theme::segmented("##newlevelmode", newLevelMode_, {"Copy of this map", "Blank"}, cardInner);
     auto_.registerWidget("seg_new_level_mode");
     ImGui::PushFont(fontSmall_);
-    if (newLevelMode_ == 0) theme::hint("Clones the map (current .lev/.tng, terrain chunk translated to the new origin: ground, LOD, water, trees and grass) into the world as a new level owned by an existing region. One-time .forge-orig backups of the .bwd/.wld/.wad/.stb.");
+    if (newLevelMode_ == 0) theme::hintMore("Copies this map into the world as a new level in an existing region.", "Clones the map (current .lev/.tng, terrain chunk translated to the new origin: ground, LOD, water, trees and grass) into the world as a new level owned by an existing region. One-time .forge-orig backups of the .bwd/.wld/.wad/.stb.");
     else theme::hint(("A flat level authored from scratch (terrain chunk built by forgecore, renders in-game): one ground theme from " + blankTemplate_ + "'s palette, every cell walkable, empty .tng. Sculpt, paint and place on it afterwards.").c_str());
     ImGui::PopFont();
     if (newLevelMode_ == 1) {
@@ -2225,7 +2225,7 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
         auto_.registerWidget("seg_new_level_own_mode");
         ImGui::PushFont(fontSmall_);
         if (newLevelDedicated_)
-            theme::hint("A brand-new region slot (no engine cap). Saves cache the region table, so start a new game -- or make your save after adding it -- to see it named and drawn.");
+            theme::hintMore("A new region: start a new game (or save after adding it) to see it.", "A brand-new region slot (no engine cap). Saves cache the region table, so start a new game -- or make your save after adding it -- to see it named and drawn.");
         else if (reusableRegions_.size() >= 2)
             theme::hint(("Takes over " + reusableRegions_.front().name + " (slot " + std::to_string(reusableRegions_.front().slot) + ", " + std::to_string(reusableRegions_.front().maps) + " map(s) -> " + reusableRegions_.back().name + "); existing saves see it.").c_str());
         else
@@ -2513,7 +2513,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::toggle("Snap (0.5 units / 15 deg / 0.1x)", &gizmoSnap_);
     auto_.registerWidget("toggle_snap");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Click an object to select it. Drag the gizmo, or type values below. Del removes, Ctrl+D duplicates, Ctrl+Z/Y undo/redo, F frames, End drops to the ground.");
+    theme::hintMore("Click to select; drag the gizmo or type values. Del deletes, Ctrl+D duplicates, End drops to the ground.", "Click an object to select it. Drag the gizmo, or type values below. Del removes, Ctrl+D duplicates, Ctrl+Z/Y undo/redo, F frames, End drops to the ground.");
     ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
@@ -2594,7 +2594,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         {
             if (terrainMode_ == 12 || terrainMode_ == 13) {
                 ImGui::PushFont(fontSmall_);
-                theme::hint("Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");
+                theme::hintMore("Where the camera may go: matters on cliffs, walls and water edges.", "Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");
                 ImGui::PopFont();
             }
         }
@@ -2698,7 +2698,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         }
         if (terrainMode_ == 9) {
             ImGui::PushFont(fontSmall_);
-            theme::hint("Drag on the ground from the start of the path to its end and release: every vertex within the radius of the line takes the height interpolated between the ground at the two ends (the vanilla Height Toolbox's Draw Paths). One undo step.");
+            theme::hintMore("Drag from the start of the path to its end: the ground between becomes a ramp.", "Drag on the ground from the start of the path to its end and release: every vertex within the radius of the line takes the height interpolated between the ground at the two ends (the vanilla Height Toolbox's Draw Paths). One undo step.");
             ImGui::PopFont();
         }
         if (terrainMode_ == 6) {
@@ -2762,7 +2762,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 ImGui::EndChild();
             }
             ImGui::PushFont(fontSmall_);
-            theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material. A theme added from the game takes a free palette slot and is written with the next terrain save.");
+            theme::hintMore("Paint the theme onto the ground; it is saved with the terrain.", "Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material. A theme added from the game takes a free palette slot and is written with the next terrain save.");
             ImGui::PopFont();
             // your own texture: the Assets tab makes a new ENGINE_THEME from a PNG
             if (theme::ghostButton("Your own ground texture...  (Assets tab)", ImVec2(cardInner, S(26)))) { setTexturesMode(true); assetsTab_ = 2; }
@@ -3266,7 +3266,7 @@ void App::drawEntranceCard(float pad, float inner, float cardInner) {
     theme::beginCard("##entrance", inner);
     theme::label("Region entrance");
     ImGui::PushFont(fontSmall_);
-    theme::hint("Where the map screen and quest teleports put the hero when he travels to this map (FinalAlbion.gtg, a REGION_ENTRANCE_POINT + a <Map>HSP start). A level installed with its own region gets one at its centre; move it here to choose the spot.");
+    theme::hintMore("Where the hero arrives when travelling to this map.", "Where the map screen and quest teleports put the hero when he travels to this map (FinalAlbion.gtg, a REGION_ENTRANCE_POINT + a <Map>HSP start). A level installed with its own region gets one at its centre; move it here to choose the spot.");
     const auto e = currentEntrance();
     if (!doc_.worldSlot()) ImGui::TextColored(theme::vec(theme::Warn), "This map is not placed in FinalAlbion.wld.");
     else if (e) ImGui::TextColored(theme::vec(theme::Muted), "Slot %d: entrance at %.1f, %.1f (h %.1f)%s%s", doc_.worldSlot(), e->pos[0], e->pos[1], e->pos[2], e->startScript.empty() ? "" : "   start ", e->startScript.c_str());
@@ -3309,7 +3309,7 @@ void App::drawEffectsCard(float pad, float inner, float cardInner) {
     theme::beginCard("##effects", inner);
     theme::label("Particle effect");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A PARTICLE_EMITTER_PLACEABLE thing playing one of the game's effects (effects.big: fires, smoke, butterflies, sparkles...). Placed half a unit above the ground at the view centre.");
+    theme::hintMore("A particle effect (fire, smoke, butterflies...) placed at the view centre.", "A PARTICLE_EMITTER_PLACEABLE thing playing one of the game's effects (effects.big: fires, smoke, butterflies, sparkles...). Placed half a unit above the ground at the view centre.");
     ImGui::PopFont();
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
@@ -3397,7 +3397,7 @@ void App::drawPresetsCard(float pad, float inner, float cardInner) {
     theme::beginCard("##presets", inner);
     theme::label("Presets");
     ImGui::PushFont(fontSmall_);
-    theme::hint("A saved group of objects placed with one click at the view centre (positions kept relative, fresh UIDs, dropped on the ground). Shipped ones come from retail maps; yours go to %APPDATA%\\FableForge\\presets.");
+    theme::hintMore("A saved group of objects, placed together at the view centre.", "A saved group of objects placed with one click at the view centre (positions kept relative, fresh UIDs, dropped on the ground). Shipped ones come from retail maps; yours go to %APPDATA%\\FableForge\\presets.");
     ImGui::PopFont();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##presetlist", ImVec2(cardInner, S(std::min(150.0f, 26.0f * float(std::max<size_t>(presets_.size(), 1)) + 8.0f))), ImGuiChildFlags_None);

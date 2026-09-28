@@ -57,14 +57,18 @@ public:
     bool hasMesh() const { return indexCount_ > 0; }
     // Instance layers (0 = foliage, 1 = placed things): every instance baked
     // into world-space triangle batches, one batch per texture.
-    static constexpr int kLayers = 4;   // 0 foliage, 1 placed things, 2 neighbouring maps, 3 the whole world (World tab 3D)
-    static constexpr int kWorldLayer = 3;
+    static constexpr int kLayers = 5;   // 0 foliage, 1 placed things, 2 neighbouring maps, 3 the whole world, 4 world detail
+    static constexpr int kWorldLayer = 3;         // World tab 3D: one low-res tile per map
+    static constexpr int kWorldDetailLayer = 4;   // World tab 3D: full terrain + foliage + things of the maps near the camera
     bool uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
     // Adds the scene's batches to the layer without clearing it (the world view streams map tiles in).
-    bool appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    bool appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag = -1);
+    // Batches appended with a tag (the world view tags them per map) can be dropped or hidden together.
+    void removeLayerTag(int layer, int tag);
+    void setLayerTagVisible(int layer, int tag, bool visible);
     void clearLayer(int layer);
     bool hasLayer(int layer) const { return !layers_[layer].empty(); }
-    bool showLayer[kLayers] = {true, true, true, true};
+    bool showLayer[kLayers] = {true, true, true, true, true};
     // The World tab's 3D view: draw only the world layer (no open map, things, water or overlays).
     bool worldOnly = false;
     bool& showFoliage = showLayer[0];
@@ -151,7 +155,7 @@ private:
     ID3D11Buffer* waterIb_ = nullptr;
     uint32_t waterIndexCount_ = 0;
     ID3D11ShaderResourceView* albedo_ = nullptr;
-    struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; };
+    struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; int tag = -1; bool visible = true; };
     std::vector<FoliageBatch> layers_[kLayers];
     struct GpuMesh {
         std::vector<FoliageBatch> parts;   // vertex buffers in mesh-local Fable axes (cm)

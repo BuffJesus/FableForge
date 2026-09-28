@@ -1279,6 +1279,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_tiles_total=" + std::to_string(worldTileTotal_));
     v.push_back("world_tiles_busy=" + std::string(worldTileWorkers_.empty() ? "0" : "1"));
     v.push_back("world_hover=" + worldHover_);
+    v.push_back("world_detail_maps=" + std::to_string(worldDetailShown_.size()));
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
@@ -2178,12 +2179,12 @@ void App::drawActions(float width) {
     if (modsMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hint("The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. The Setup card's Restore covers FableForge's own edits, not a deployed order.");
+        theme::hintMore("The load order is kept next to Fable.exe; Undeploy restores the originals.", "The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. The Setup card's Restore covers FableForge's own edits, not a deployed order.");
         ImGui::PopFont();
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hint("The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
+        theme::hintMore("The asset tools write the game's shared banks; originals are backed up once.", "The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
         ImGui::PopFont();
     } else if (worldMode_) {
         drawWorldFooter(pad, inner);

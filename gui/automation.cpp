@@ -199,6 +199,7 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "wait_world_detail") waitOn(!app.worldDetailShown_.empty() && !app.worldDetailFuture_.valid() && app.worldDetailWanting_ == 0, "world detail near the camera");
     else if (cmd == "wait_world_tiles") waitOn(app.worldTileTotal_ > 0 && app.worldTileWorkers_.empty(), "the world map tiles");
     else if (cmd == "world_camera") {   // world_camera <fableX> <fableY> <height> <yaw> <pitch> <distance>: the 3D world view's camera
         float fx = 0, fy = 0, fz = 0, yaw = 0.6f, pitch = 0.9f, dist = 800; std::istringstream(rest) >> fx >> fy >> fz >> yaw >> pitch >> dist;
@@ -272,6 +273,7 @@ bool Automation::tick(App& app) {
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
         else if (key == "world_3d") app.setWorld3D(val == "1");
         else if (key == "world_terrain") app.worldTerrain2D_ = val == "1";
+        else if (key == "world_detail") { app.worldDetailOn_ = val == "1"; if (!app.worldDetailOn_) app.clearWorldDetail(); }
         else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
         else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";

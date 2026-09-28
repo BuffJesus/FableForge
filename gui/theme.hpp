@@ -23,6 +23,8 @@ inline float S(float px) { return px * scale(); }
 void applyTheme();
 // Faint helper text that wraps inside the current content width.
 void hint(const char* text);
+// A one-line hint with the details behind a small (i) on hover: keeps panels short.
+void hintMore(const char* text, const char* details);
 // Muted label with a right-aligned value on the same line (used above sliders).
 void labelValue(const char* text, const char* value, float width);
 

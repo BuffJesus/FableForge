@@ -1,0 +1,79 @@
+# UI at one window size + UI scale (tools/ui_scale_sweep.py fills @TAG@ and @SCALE@): every main screen
+# once, for a layout review (clipping, overlap, truncation, alignment). Read-only: nothing is written.
+wait_maps
+wait_ready
+set uiscale @SCALE@
+frames 5
+select StartOakValeWest
+wait_loaded
+frames 3
+clear_toasts
+mouse_move 5 5
+frames 3
+screenshot build/ui/scale/@TAG@_01_export.png
+edit 1
+edit_tab 0
+frames 3
+select_def CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED
+frames 3
+clear_toasts
+screenshot build/ui/scale/@TAG@_02_objects_selected.png
+select_thing -1
+frames 2
+reveal combo_place_owner
+frames 3
+screenshot build/ui/scale/@TAG@_03_objects_add.png
+edit_tab 1
+terrain_mode 2
+frames 3
+screenshot build/ui/scale/@TAG@_04_terrain_flatten.png
+terrain_mode 6
+frames 3
+screenshot build/ui/scale/@TAG@_05_terrain_paint.png
+edit_tab 2
+frames 3
+screenshot build/ui/scale/@TAG@_06_actors.png
+edit_tab 3
+frames 3
+reveal btn_track_preview
+frames 3
+screenshot build/ui/scale/@TAG@_07_level_tracks.png
+edit_tab 1
+fractal_open 1
+frames 5
+screenshot build/ui/scale/@TAG@_08_fractal_window.png
+fractal_open 0
+edit 0
+world_tab 1
+frames 5
+wait_world_tiles
+frames 3
+clear_toasts
+screenshot build/ui/scale/@TAG@_09_world_2d.png
+set world_3d 1
+frames 8
+clear_toasts
+screenshot build/ui/scale/@TAG@_10_world_3d.png
+set world_3d 0
+world_tab 0
+assets_tab 2
+frames 3
+screenshot build/ui/scale/@TAG@_11_assets_themes.png
+textures_tab 0
+mods_tab 1
+frames 3
+screenshot build/ui/scale/@TAG@_12_mods.png
+mods_tab 0
+help 1
+frames 3
+screenshot build/ui/scale/@TAG@_13_help.png
+help 0
+setup 1
+frames 3
+screenshot build/ui/scale/@TAG@_14_setup.png
+setup 0
+tour 0
+frames 3
+screenshot build/ui/scale/@TAG@_15_tour.png
+tour -1
+quit

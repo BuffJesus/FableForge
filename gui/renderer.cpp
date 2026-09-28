@@ -819,7 +819,17 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
     return appendLayer(layer, scene, up);
 }
 
-bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up) {
+void Renderer::removeLayerTag(int layer, int tag) {
+    auto& v = layers_[layer];
+    for (auto& b : v) if (b.tag == tag) { release(b.vb); release(b.srv); }
+    v.erase(std::remove_if(v.begin(), v.end(), [&](const FoliageBatch& b) { return b.tag == tag; }), v.end());
+}
+
+void Renderer::setLayerTagVisible(int layer, int tag, bool visible) {
+    for (auto& b : layers_[layer]) if (b.tag == tag) b.visible = visible;
+}
+
+bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag) {
     if (scene.instances.empty()) return false;
     auto& foliage_ = layers_[layer];
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
@@ -862,6 +872,7 @@ bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrain
         b.count = uint32_t(verts.size());
         if (image >= 0 && size_t(image) < scene.images.size()) b.srv = makeTexture(scene.images[size_t(image)]);
         b.alpha = key.second;
+        b.tag = tag;
         foliage_.push_back(b);
     }
     return !foliage_.empty();
@@ -1028,7 +1039,10 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
     if (!worldOnly && indexCount_) ctx_->DrawIndexed(indexCount_, 0, 0);
     // the world view draws only its layer; the map views never draw it
-    auto layerOn = [&](int i) { return worldOnly ? i == kWorldLayer : (i != kWorldLayer && showLayer[i]); };
+    auto layerOn = [&](int i) {
+        const bool world = i == kWorldLayer || i == kWorldDetailLayer;
+        return worldOnly ? (world && showLayer[i]) : (!world && showLayer[i]);
+    };
 
     if (mode != ViewMode::Wireframe || worldOnly) {
         bool any = false;
@@ -1045,6 +1059,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
             for (int i = 0; i < kLayers; ++i) {
                 if (!layerOn(i)) continue;
                 for (const auto& b : layers_[i]) {
+                    if (!b.visible) continue;
                     if (b.alpha != currentAlpha) {
                         currentAlpha = b.alpha;
                         cb.flags[0] = 1.0f; cb.flags[1] = currentAlpha ? 1.0f : 0.0f;

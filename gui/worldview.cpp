@@ -14,6 +14,7 @@
 #include "forge/lev.hpp"
 #include "forge/levelstore.hpp"
 #include "theme.hpp"
+#include "thingsexport.hpp"
 
 namespace albion::gui {
 
@@ -135,16 +136,19 @@ void App::pollWorldTiles() {
         int x, y;
         if (worldPlacement(name, x, y) && (x != at.first || y != at.second)) { moved = true; break; }
     }
-    if (moved) { renderer_.clearLayer(Renderer::kWorldLayer); worldLayerAt_.clear(); }
-    foliageexport::Scene batch;
+    if (moved) { renderer_.clearLayer(Renderer::kWorldLayer); worldLayerAt_.clear(); clearWorldDetail(); }
     for (const auto& [name, tile] : worldTiles_) {
         if (worldLayerAt_.count(name)) continue;
         int x, y;
         if (!worldPlacement(name, x, y)) continue;
-        worldtiles::appendMesh(tile, batch, float(x), float(y));
+        foliageexport::Scene one;
+        worldtiles::appendMesh(tile, one, float(x), float(y));
+        // Y = "convert the Fable Z-up tiles to render Y-up", as the neighbour layer does; tagged per map
+        renderer_.appendLayer(Renderer::kWorldLayer, one, te::UpAxis::Y, worldTag(name));
+        renderer_.setLayerTagVisible(Renderer::kWorldLayer, worldTag(name), !worldDetailShown_.count(name));
         worldLayerAt_[name] = {x, y};
     }
-    if (!batch.instances.empty()) renderer_.appendLayer(Renderer::kWorldLayer, batch, te::UpAxis::Y);   // Y = "convert the Fable Z-up tiles to render Y-up", as the neighbour layer does
+    updateWorldDetail();
 }
 
 // The ground under a world point (Fable x, y) from the tiles; `inside` = some map covers it.
@@ -194,6 +198,131 @@ bool App::worldPickTile(const float o[3], const float d[3], std::string& name, f
     return false;
 }
 
+int App::worldTag(const std::string& name) const {
+    for (size_t i = 0; i < world_.maps.size(); ++i) if (world_.maps[i].name == name) return int(i);
+    return -1;
+}
+
+void App::clearWorldDetail() {
+    renderer_.clearLayer(Renderer::kWorldDetailLayer);
+    for (const auto& [name, on] : worldDetailShown_) renderer_.setLayerTagVisible(Renderer::kWorldLayer, worldTag(name), true);
+    worldDetailShown_.clear();
+}
+
+// Which maps get full detail: the nearest ones (by their box) to the camera's ground point, within
+// the radius; one load at a time on a worker; far ones dropped (their tile shown again).
+void App::updateWorldDetail() {
+    if (!world3D_ || !worldDetailOn_ || !ctx_.ready()) { if (!worldDetailShown_.empty()) clearWorldDetail(); return; }
+    // a finished load goes into the layer if the map is still wanted
+    if (worldDetailFuture_.valid() && worldDetailFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        WorldDetail d = worldDetailFuture_.get();
+        worldDetailLoading_.clear();
+        const int tag = worldTag(d.name);
+        if (tag >= 0 && !worldDetailShown_.count(d.name)) {
+            renderer_.appendLayer(Renderer::kWorldDetailLayer, d.ground, te::UpAxis::Y, tag);
+            if (worldDetailFoliage_) renderer_.appendLayer(Renderer::kWorldDetailLayer, d.foliage, te::UpAxis::Y, tag);
+            if (worldDetailThings_ || worldDetailCreatures_) renderer_.appendLayer(Renderer::kWorldDetailLayer, d.things, te::UpAxis::Y, tag);
+            renderer_.setLayerTagVisible(Renderer::kWorldLayer, tag, false);
+            worldDetailShown_[d.name] = true;
+        }
+    }
+    if (time_ < worldDetailNext_) return;
+    worldDetailNext_ = time_ + 0.4;
+    // the point being looked at: where the view centre meets the ground (else below the eye)
+    float gx = worldCamera_.posX, gy = -worldCamera_.posZ;
+    {
+        float o[3], d[3], hit[3];
+        renderer_.screenRay(0.5f, 0.5f, o, d);
+        std::string n;
+        if (worldPickTile(o, d, n, hit)) { gx = hit[0]; gy = -hit[2]; }
+    }
+    auto distTo = [&](const editor::WorldMapBox& b) {
+        int x, y; worldPlacement(b.name, x, y);
+        const float dx = std::max({float(x) - gx, 0.0f, gx - float(x + b.w)});
+        const float dy = std::max({float(y) - gy, 0.0f, gy - float(y + b.h)});
+        return std::sqrt(dx * dx + dy * dy);
+    };
+    // too high up to see detail: none (the camera's height over the ground stands in for zoom)
+    bool inside = false;
+    const float ground = worldGroundAt(worldCamera_.posX, -worldCamera_.posZ, inside, nullptr);
+    const float height = worldCamera_.posY - (inside ? ground : 0.0f);
+    std::vector<std::pair<float, std::string>> want;
+    if (height < worldDetailRadius_ * 2.5f)
+        for (const auto& b : world_.maps) {
+            const float d = distTo(b);
+            if (d <= worldDetailRadius_) want.push_back({d, b.name});
+        }
+    std::sort(want.begin(), want.end());
+    if (int(want.size()) > worldDetailMaps_) want.resize(size_t(worldDetailMaps_));
+    // drop what is no longer wanted
+    for (auto it = worldDetailShown_.begin(); it != worldDetailShown_.end();) {
+        const bool keep = std::any_of(want.begin(), want.end(), [&](const auto& w) { return w.second == it->first; });
+        if (keep) { ++it; continue; }
+        const int tag = worldTag(it->first);
+        renderer_.removeLayerTag(Renderer::kWorldDetailLayer, tag);
+        renderer_.setLayerTagVisible(Renderer::kWorldLayer, tag, true);
+        it = worldDetailShown_.erase(it);
+    }
+    worldDetailWanting_ = 0;
+    for (const auto& w : want) if (!worldDetailShown_.count(w.second)) ++worldDetailWanting_;
+    // start the nearest missing one
+    if (worldDetailFuture_.valid()) return;
+    for (const auto& [d, name] : want) {
+        if (worldDetailShown_.count(name)) continue;
+        const MapEntry* e = findEntry(name);
+        if (!e) continue;
+        std::string err;
+        const std::string lev = resolveLevPath(*e, err);
+        if (lev.empty()) continue;
+        int x, y; worldPlacement(name, x, y);
+        const auto ctxHold = std::make_shared<const te::Context>(ctx_);
+        const fs::path root = installPath_;
+        const float gain = settings_.gain;
+        const bool creatures = worldDetailCreatures_, things = worldDetailThings_;
+        worldDetailLoading_ = name;
+        worldDetailFuture_ = std::async(std::launch::async, [ctxHold, root, gain, lev, name, x, y, creatures, things]() {
+            WorldDetail r; r.name = name;
+            const te::Context* ctx = ctxHold.get();
+            try {
+                const auto file = forge::lev::File::open(lev);
+                te::Options o;
+                o.textures = true; o.texelsPerCell = 4; o.gain = gain; o.up = te::UpAxis::Z; o.water = false;
+                o.gameRoot = root; o.mapName = name;
+                const auto sc = te::buildScene(file, o, ctx);
+                foliageexport::Mesh m;
+                m.name = name;
+                m.geometry.vertices.reserve(sc.vertices.size());
+                for (const auto& v : sc.vertices) m.geometry.vertices.push_back({v.px, v.py, v.pz, v.nx, v.ny, v.nz, v.u, v.v});
+                foliageexport::SubMesh part;
+                part.indices = sc.indices;
+                if (sc.hasAlbedo) { part.image = 0; r.ground.images.push_back(sc.albedo); }
+                m.parts.push_back(std::move(part));
+                foliageexport::Instance inst;
+                inst.mesh = 0; inst.x = float(x); inst.y = float(y); inst.z = 0; inst.scale = 1;
+                r.ground.meshes.push_back(std::move(m));
+                r.ground.instances.push_back(inst);
+            } catch (const std::exception&) {}
+            try {
+                foliageexport::Options fo;
+                fo.gameRoot = root; fo.textures = true; fo.up = te::UpAxis::Y;
+                fo.mapLocal = false;   // STB instances are world placed already
+                r.foliage = foliageexport::load(name, fo, *ctx);
+            } catch (const std::exception&) {}
+            if (things || creatures) {
+                try {
+                    thingsexport::Options to;
+                    to.gameRoot = root; to.textures = true; to.up = te::UpAxis::Y;
+                    to.creatures = creatures;
+                    to.originX = float(x); to.originY = float(y);
+                    r.things = thingsexport::load(name, to, *ctx, nullptr);
+                } catch (const std::exception&) {}
+            }
+            return r;
+        });
+        break;
+    }
+}
+
 void App::setWorld3D(bool on) {
     world3D_ = on;
     renderer_.worldOnly = on && worldMode_;
@@ -205,7 +334,7 @@ void App::setWorld3D(bool on) {
         worldCamera_.flySpeed = 400.0f;
         worldCameraSet_ = true;
     }
-    if (!on) worldLayerAt_.clear(), renderer_.clearLayer(Renderer::kWorldLayer);
+    if (!on) worldLayerAt_.clear(), renderer_.clearLayer(Renderer::kWorldLayer), clearWorldDetail();
 }
 
 void App::drawWorld3D(const ImVec2& origin, const ImVec2& size) {

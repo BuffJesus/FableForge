@@ -452,6 +452,23 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
         if (!world3D_) {
             ImGui::Checkbox("Show the ground on the map##wt2d", &worldTerrain2D_);
             auto_.registerWidget("check_world_terrain");
+        } else {
+            // full detail near the camera (the vanilla 3D view shows the loaded maps as the game does)
+            if (ImGui::Checkbox("Full detail near the camera##wdet", &worldDetailOn_) && !worldDetailOn_) clearWorldDetail();
+            auto_.registerWidget("check_world_detail");
+            if (worldDetailOn_) {
+                bool changed = false;
+                ImGui::PushFont(fontSmall_);
+                changed |= ImGui::Checkbox("Plants##wdf", &worldDetailFoliage_); ImGui::SameLine();
+                changed |= ImGui::Checkbox("Objects##wdt", &worldDetailThings_); ImGui::SameLine();
+                changed |= ImGui::Checkbox("Creatures##wdc", &worldDetailCreatures_);
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::SliderInt("##wdmaps", &worldDetailMaps_, 1, 12, "up to %d maps");
+                auto_.registerWidget("slider_world_detail_maps");
+                if (worldDetailLoading_.size()) ImGui::TextColored(theme::vec(theme::Muted), "Loading %s...", worldDetailLoading_.c_str());
+                ImGui::PopFont();
+                if (changed) clearWorldDetail();
+            }
         }
         ImGui::PushFont(fontSmall_);
         if (!worldTileWorkers_.empty())
@@ -465,7 +482,7 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
     const editor::WorldMapBox* box = world_.find(worldSelected_);
     if (!box) {
         ImGui::PushFont(fontSmall_);
-        theme::hint("Click a map on the grid. Drag it to a new place; neighbours it touches light up. Moves are queued here and written to the game together.");
+        theme::hintMore("Drag a map to move it; moves are queued and written together.", "Click a map on the grid. Drag it to a new place; neighbours it touches light up. Moves are queued here and written to the game together.");
         ImGui::PopFont();
     } else {
         if (worldEditFor_ != box->name) { worldPlacement(box->name, worldEditX_, worldEditY_); worldEditFor_ = box->name; }
@@ -530,7 +547,7 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
         const std::string mine = worldOwnerOf(box->name);
         ImGui::PushFont(fontSmall_);
         if (touching.empty()) theme::hint("No map touches this one at its current place.");
-        else theme::hint("Which regions draw which maps across this edge: 'seen' = loaded and drawn while the player is in that region (WLD SeesMap).");
+        else theme::hintMore("Which regions draw the maps along this edge.", "Which regions draw which maps across this edge: 'seen' = loaded and drawn while the player is in that region (WLD SeesMap).");
         ImGui::PopFont();
         int row = 0;
         for (const auto* n : touching) {
@@ -599,16 +616,15 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
         theme::endCard();
     }
 
-    ImGui::Dummy(ImVec2(0, S(8)));
+    ImGui::Dummy(ImVec2(0, S(6)));
     ImGui::SetCursorPosX(pad);
-    theme::beginCard("##worldhelp", inner);
-    theme::label("What a move writes");
     ImGui::PushFont(fontSmall_);
-    theme::hint("FinalAlbion.wld MapX/MapY and the .bwd box (all three copies the game reads), and the map's terrain chunk in FinalAlbion_RT.stb translated to the new origin: ground and background LOD meshes, water, tree/grass placements. Placed objects (.tng) are map-local and stay as they are. Maps that touched the moved one get their shared edges re-baked. One-time .forge-orig backups; saves cache the region table, so start a new game to walk the new layout.");
-    if (!packDest_.empty())
-        theme::hint(("Writing into pack " + packLabel(packDest_) + ": the same edits run on a copy of the game with the pack laid over it, and what changed goes into the pack (its FinalAlbion.wld / .bwd, level files, re-baked chunks under stb/). The view shows the game + this pack. Mods > Deploy merges it map by map and region by region with the other mods.").c_str());
+    ImGui::PushTextWrapPos(pad + inner);
+    // what a move writes: only the one engine rule a user must know, the rest on hover
+    theme::hintMore("Moves are written with backups; start a new game to walk the new layout.",
+                    packDest_.empty() ? "FinalAlbion.wld MapX/MapY and the .bwd box (all three copies the game reads), and the map's terrain chunk in FinalAlbion_RT.stb translated to the new origin: ground and background LOD meshes, water, tree/grass placements. Placed objects (.tng) are map-local and stay as they are. Maps that touched the moved one get their shared edges re-baked. One-time .forge-orig backups; saves cache the region table, so start a new game to walk the new layout." : "The edits run on a copy of the game with the pack laid over it; what changed goes into the pack, and Mods > Deploy merges it with the other mods.");
+    ImGui::PopTextWrapPos();
     ImGui::PopFont();
-    theme::endCard();
 }
 
 void App::drawWorldFooter(float pad, float inner) {

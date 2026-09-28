@@ -822,6 +822,21 @@ private:
     void openFromWorld3D(const std::string& name);
     float worldGroundAt(float wx, float wy, bool& inside, std::string* name) const;
     bool worldPickTile(const float o[3], const float d[3], std::string& name, float hit[3]) const;
+    // Detail around the camera in the 3D world view: the nearest maps get their full terrain, foliage,
+    // things and creatures (streamed one map at a time, dropped when far), their low-res tile hidden.
+    struct WorldDetail { std::string name; foliageexport::Scene ground, foliage, things; };
+    bool worldDetailOn_ = true;
+    bool worldDetailFoliage_ = true, worldDetailThings_ = true, worldDetailCreatures_ = true;
+    float worldDetailRadius_ = 250.0f;   // world units around the camera's ground point
+    int worldDetailMaps_ = 6;            // at most this many maps in full detail
+    std::future<WorldDetail> worldDetailFuture_;
+    std::map<std::string, bool> worldDetailShown_;   // maps whose detail is in the layer
+    std::string worldDetailLoading_;
+    size_t worldDetailWanting_ = 0;   // wanted maps not in the layer yet (automation waits on 0)
+    double worldDetailNext_ = 0;
+    int worldTag(const std::string& name) const;
+    void updateWorldDetail();
+    void clearWorldDetail();
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)
     bool worldDragging_ = false;
     int worldDragX_ = 0, worldDragY_ = 0;    // the dragged box's candidate origin (snapped)

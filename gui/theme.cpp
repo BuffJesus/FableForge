@@ -49,6 +49,25 @@ void hint(const char* text) {
     ImGui::PopTextWrapPos();
 }
 
+void hintMore(const char* text, const char* details) {
+    // the (i) first: a wrapped hint then hangs after it instead of the marker landing mid-text
+    const float right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    ImGui::TextColored(vec(Muted), "(i)");
+    bool hovered = ImGui::IsItemHovered();
+    ImGui::SameLine(0, S(5));
+    ImGui::PushTextWrapPos(right);
+    ImGui::TextColored(vec(Faint), "%s", text);
+    ImGui::PopTextWrapPos();
+    hovered = hovered || ImGui::IsItemHovered();
+    if (hovered && details && details[0]) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(S(420));
+        ImGui::TextUnformatted(details);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 void labelValue(const char* text, const char* value, float width) {
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::TextColored(vec(Muted), "%s", text);

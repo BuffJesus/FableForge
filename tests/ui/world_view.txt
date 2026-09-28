@@ -21,8 +21,11 @@ screenshot build/ui/world_3d_overview.png
 # low over Oakvale, looking across it
 world_camera 3400 3500 40 2.4 0.35 500
 frames 10
+wait_world_detail
+frames 20
 clear_toasts
 screenshot build/ui/world_3d_oakvale.png
+dump_state
 world_open_3d StartOakValeWest
 wait_loaded
 frames 5
