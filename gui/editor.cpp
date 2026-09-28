@@ -2600,9 +2600,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::SliderFloat("##strength", &brushStrength_, 0.5f, 20.0f, "");
             auto_.registerWidget("slider_strength");
         }
-        if (usesRadius && terrainMode_ != 9) {
+        // how to use the brush, per tool (Shift only inverts raise/lower and walkable/blocked; Replace has its own hint above)
+        const char* how = nullptr;
+        if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
+        else if (terrainMode_ == 2 || terrainMode_ == 3) how = "Hold LMB on the ground to sculpt. Each stroke is one undo step.";
+        else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";
+        else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13)
+            how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
+        if (usesRadius && how) {
             ImGui::PushFont(fontSmall_);
-            theme::hint("Hold LMB on the ground to paint. Shift inverts (lower / walkable). Switch the view to Walkable to see the paint. Each stroke is one undo step.");
+            theme::hint(how);
             ImGui::PopFont();
         }
         theme::endCard();
