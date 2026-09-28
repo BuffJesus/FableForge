@@ -31,6 +31,7 @@
 
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
+#include "forge/fillerfit.hpp"
 #include "forge/fractal.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/thingplacer.hpp"
@@ -381,6 +382,17 @@ public:
     // + map-local, so maps done one after another meet at their seams. One undo
     // step; returns the vertices changed.
     size_t applyFractal(const forge::fractal::Params& params);
+    // The vanilla world-map "Fit Neighbours" (CEditWorldMap::EditFitFillerMap, ported in
+    // forge/fillerfit.hpp): the map rebuilt as a ridge that meets every touching map at
+    // the shared edge -- made for filler maps. fittedHeights previews it on the current
+    // (unsaved edits included) heights and leaves the map alone; empty when nothing
+    // touches it. fitToNeighbours applies it as one undo step, heights clamped to
+    // [0, 2048); returns the vertices changed.
+    std::vector<float> fittedHeights(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                                     forge::fillerfit::Report* report = nullptr) const;
+    size_t fitToNeighbours(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                           forge::fillerfit::Report* report = nullptr);
+    const std::vector<float>* terrainHeights() const { return terrain_ ? &terrain_->heights : nullptr; }
     // The LEV's ground-theme palette (256 fixed slots, ~30 named on a retail
     // map). Painting is limited to it, so any ENGINE_THEME of the game can be
     // added to a free slot: returns the slot (the existing one when the name is

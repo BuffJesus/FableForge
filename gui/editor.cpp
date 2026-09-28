@@ -2520,6 +2520,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         }
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
+        drawFitCard(pad, inner, cardInner);
     }
 
     if (editTab_ == 2) {
@@ -3183,6 +3184,243 @@ void App::drawRuleNotice(const char* key, float width) {
     ImGui::EndChild();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor();
+}
+
+
+// ---------------------------------------------------------------- fit to neighbours
+
+void App::startFitNeighbourLoad() {
+    if (fitFuture_.valid() || !documentLoaded()) return;
+    fitNeighboursFor_ = doc_.mapName();
+    fitNeighbours_.clear(); fitNeighboursNote_.clear(); fitPreviewKey_.clear();
+    editor::WorldLayout layout;
+    std::string err;
+    if (!editor::loadWorldLayout(installPath_, layout, err)) { fitNeighboursNote_ = err; return; }
+    const editor::WorldMapBox* box = layout.find(doc_.mapName());
+    if (!box) { fitNeighboursNote_ = doc_.mapName() + " is not placed on the world map"; return; }
+    // .lev paths here (the WAD read uses app state), the parses on the worker
+    struct Job { std::string lev, name; int x, y; };
+    std::vector<Job> jobs;
+    for (const auto* n : layout.touching(*box, box->x, box->y)) {
+        if (n->name == box->name) continue;
+        const MapEntry* e = findEntry(n->name);
+        if (!e) continue;
+        const std::string lev = resolveLevPath(*e, err);
+        if (!lev.empty()) jobs.push_back({lev, n->name, n->x, n->y});
+    }
+    fitFuture_ = std::async(std::launch::async, [jobs]() {
+        std::pair<std::vector<forge::fillerfit::Neighbour>, std::string> r;
+        for (const auto& j : jobs) {
+            try {
+                const auto lev = forge::lev::File::open(j.lev);
+                forge::fillerfit::Neighbour nb;
+                nb.name = j.name; nb.x0 = j.x; nb.y0 = j.y; nb.cellsX = lev.cellsX(); nb.cellsY = lev.cellsY();
+                nb.heights.resize(size_t(nb.cellsX) * nb.cellsY);
+                for (int y = 0; y < nb.cellsY; ++y)
+                    for (int x = 0; x < nb.cellsX; ++x) nb.heights[size_t(y) * nb.cellsX + x] = lev.heightAt(x, y);
+                r.first.push_back(std::move(nb));
+            } catch (const std::exception& e) { r.second = j.name + ": " + e.what(); }
+        }
+        return r;
+    });
+}
+
+size_t App::fitApply() {
+    if (!documentLoaded() || fitFuture_.valid() || fitNeighbours_.empty()) return 0;
+    forge::fillerfit::Report rep;
+    const size_t n = doc_.fitToNeighbours(fitParams_, fitNeighbours_, &rep);
+    fitPreviewKey_.clear();   // "now" is the fitted ground from here on
+    if (n) pushLog("fit to neighbours: " + std::to_string(n) + " vertices rebuilt to meet " + std::to_string(fitNeighbours_.size()) + " touching map(s) (one undo step; Write terrain saves it)", 3);
+    else pushLog("fit to neighbours: nothing changed", 1);
+    return n;
+}
+
+namespace {
+// a small shaded relief: elevation tint (shared range) x a north-west light
+terrainexport::Image reliefImage(const std::vector<float>& h, int cx, int cy, float lo, float hi, int longSide) {
+    // the map's own proportions (fillers are often long and thin)
+    const int iw = cx >= cy ? longSide : std::max(8, int(float(longSide) * float(cx) / float(cy)));
+    const int ih = cy >= cx ? longSide : std::max(8, int(float(longSide) * float(cy) / float(cx)));
+    terrainexport::Image img;
+    img.width = iw; img.height = ih;
+    img.rgba.resize(size_t(iw) * ih * 4);
+    const float span = std::max(hi - lo, 1e-3f);
+    auto at = [&](float fx, float fy) {
+        const int x = std::clamp(int(fx), 0, cx - 1), y = std::clamp(int(fy), 0, cy - 1);
+        return h[size_t(y) * cx + x];
+    };
+    const float sx = float(cx - 1) / float(iw - 1), sy = float(cy - 1) / float(ih - 1);
+    for (int y = 0; y < ih; ++y)
+        for (int x = 0; x < iw; ++x) {
+            const float v = at(x * sx, y * sy);
+            const float t = std::clamp((v - lo) / span, 0.0f, 1.0f);
+            // low teal -> moss -> sand -> snow
+            static const float stops[4][3] = {{38, 64, 78}, {84, 122, 82}, {186, 170, 128}, {238, 236, 228}};
+            const float f = t * 3.0f;
+            const int k = std::min(2, int(f));
+            const float u = f - float(k);
+            float c[3];
+            for (int i = 0; i < 3; ++i) c[i] = stops[k][i] + (stops[k + 1][i] - stops[k][i]) * u;
+            const float dzx = at(x * sx + 1, y * sy) - at(x * sx - 1, y * sy);
+            const float dzy = at(x * sx, y * sy + 1) - at(x * sx, y * sy - 1);
+            const float shade = std::clamp(0.78f - (dzx + dzy) * 0.06f, 0.45f, 1.15f);
+            uint8_t* px = &img.rgba[(size_t(y) * iw + x) * 4];
+            for (int i = 0; i < 3; ++i) px[i] = uint8_t(std::clamp(c[i] * shade, 0.0f, 255.0f));
+            px[3] = 255;
+        }
+    return img;
+}
+} // namespace
+
+void App::drawFitCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##fitnb", inner);
+    if (theme::ghostButton(fitOpen_ ? "Fit to neighbours  (hide)" : "Fit to neighbours...", ImVec2(cardInner, S(26)))) setFitOpen(!fitOpen_);
+    auto_.registerWidget("btn_fit_toggle");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rebuild this map as a ridge that meets every map touching it at the seam.\nThe vanilla editor's Fit Neighbours, made for the filler maps between areas.");
+    if (!fitOpen_) { theme::endCard(); ImGui::Dummy(ImVec2(0, S(8))); return; }
+
+    if (fitNeighboursFor_ != doc_.mapName() && !fitFuture_.valid()) startFitNeighbourLoad();
+    if (fitFuture_.valid() && fitFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        auto r = fitFuture_.get();
+        fitNeighbours_ = std::move(r.first);
+        if (!r.second.empty()) fitNeighboursNote_ = r.second;
+        fitPreviewKey_.clear();
+    }
+    ImGui::PushFont(fontSmall_);
+    if (fitFuture_.valid()) {
+        ImGui::TextColored(theme::vec(theme::Muted), "Reading the maps around %s...", doc_.mapName().c_str());
+        ImGui::PopFont(); theme::endCard(); ImGui::Dummy(ImVec2(0, S(8)));
+        return;
+    }
+    if (fitNeighbours_.empty()) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::TextColored(theme::vec(theme::Faint), "%s", fitNeighboursNote_.empty() ? ("Nothing touches " + doc_.mapName() + " on the world map, so there is no edge to meet.").c_str() : fitNeighboursNote_.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont(); theme::endCard(); ImGui::Dummy(ImVec2(0, S(8)));
+        return;
+    }
+    ImGui::PopFont();
+
+    // the preview: re-fit on a copy whenever a field or the ground changes
+    const auto* now = doc_.terrainHeights();
+    const int cx = doc_.cellsX(), cy = doc_.cellsY();
+    char key[256];
+    std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%zu|%llu", doc_.mapName().c_str(), fitParams_.peakHeight, fitParams_.step, fitParams_.tension,
+                  fitParams_.lowNoise, fitParams_.highNoise, fitNeighbours_.size(), (unsigned long long)doc_.terrainRevision());
+    if (now && fitPreviewKey_ != key) {
+        fitPreviewKey_ = key;
+        fitReport_ = {};
+        const auto after = doc_.fittedHeights(fitParams_, fitNeighbours_, &fitReport_);
+        fitHasResult_ = !after.empty();
+        float lo = 1e9f, hi = -1e9f;
+        for (const float v : *now) { lo = std::min(lo, v); hi = std::max(hi, v); }
+        for (const float v : after) { lo = std::min(lo, v); hi = std::max(hi, v); }
+        fitPreviewNow_ = renderer_.uiTexture("fit_now", reliefImage(*now, cx, cy, lo, hi, 128));
+        if (fitHasResult_) fitPreviewAfter_ = renderer_.uiTexture("fit_after", reliefImage(after, cx, cy, lo, hi, 128));
+    }
+
+    // which sides meet a map: a square with its four edges lit, names beside it
+    {
+        const float glyph = S(54);
+        const ImVec2 o = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float m = S(8);
+        const ImVec2 a(o.x + m, o.y + m), b(o.x + glyph - m, o.y + glyph - m);
+        dl->AddRectFilled(a, b, theme::col(theme::Bg3), S(3));
+        auto edge = [&](bool on, ImVec2 p, ImVec2 q) { dl->AddLine(p, q, on ? theme::col(theme::Accent) : theme::col(theme::Border), on ? S(3) : S(1)); };
+        edge(!fitReport_.north.empty(), a, ImVec2(b.x, a.y));
+        edge(!fitReport_.east.empty(), ImVec2(b.x, a.y), b);
+        edge(!fitReport_.south.empty(), ImVec2(a.x, b.y), b);
+        edge(!fitReport_.west.empty(), a, ImVec2(a.x, b.y));
+        ImGui::Dummy(ImVec2(glyph, glyph));
+        ImGui::SameLine(0, S(8));
+        ImGui::BeginGroup();
+        ImGui::PushFont(fontSmall_);
+        auto side = [&](const char* dir, const std::vector<std::string>& names) {
+            std::string s;
+            for (const auto& n : names) s += (s.empty() ? "" : ", ") + n;
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", dir);
+            ImGui::SameLine(S(44) + glyph);
+            ImGui::TextColored(theme::vec(names.empty() ? theme::Faint : theme::Text), "%s", names.empty() ? "open - shaped by the spline" : s.c_str());
+        };
+        side("North", fitReport_.north);
+        side("East", fitReport_.east);
+        side("South", fitReport_.south);
+        side("West", fitReport_.west);
+        ImGui::PopFont();
+        ImGui::EndGroup();
+    }
+    ImGui::Dummy(ImVec2(0, S(4)));
+
+    // now | fitted
+    if (fitPreviewNow_) {
+        const float gap = S(8);
+        const float box = std::min((cardInner - gap) * 0.5f, S(150));
+        const float aspect = float(cx) / float(std::max(cy, 1));
+        // wide maps fill the half width; tall ones may stand up to 1.6x taller
+        const ImVec2 side = aspect >= 1.0f ? ImVec2(box, box / aspect) : ImVec2(std::min(box, box * 1.6f * aspect), std::min(box * 1.6f, box / aspect));
+        ImGui::BeginGroup();
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Muted), "Now");
+        ImGui::PopFont();
+        ImGui::Image((ImTextureID)(intptr_t)fitPreviewNow_, side);
+        ImGui::EndGroup();
+        ImGui::SameLine(0, gap);
+        ImGui::BeginGroup();
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Accent), "Fitted");
+        ImGui::PopFont();
+        if (fitHasResult_ && fitPreviewAfter_) {
+            ImGui::Image((ImTextureID)(intptr_t)fitPreviewAfter_, side);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shaded relief, same colours as Now: teal low, snow high.\nThe lit edges meet the maps beside them exactly.");
+        } else ImGui::Dummy(side);
+        ImGui::EndGroup();
+    }
+    ImGui::Dummy(ImVec2(0, S(4)));
+
+    // the two fields that shape it; the rest behind Fine-tune
+    auto slider = [&](const char* label, const char* id, float& v, float lo, float hi, const char* fmt, const char* tip) {
+        char val[32];
+        std::snprintf(val, sizeof val, fmt, v);
+        theme::labelValue(label, val, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat(id, &v, lo, hi, "");
+        auto_.registerWidget(id + 2);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+    };
+    slider("Ridge height", "##fit_peak", fitParams_.peakHeight, 0.0f, 120.0f, "%.1f",
+           "How far the ridge rises above the higher of the two edges it spans (world units).\n0 = a smooth slope from edge to edge.");
+    slider("Shoulders", "##fit_step", fitParams_.step, 0.0f, 3.0f, "%.2f",
+           "Where the slopes sit on the way up: each shoulder is edge + ridge height x this.\nAbove 1 the shoulders stand higher than the ridge line and the top flattens.");
+    ImGui::PushFont(fontSmall_);
+    if (ImGui::TreeNodeEx("Fine-tune##fitfine", fitFineTune_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
+        fitFineTune_ = true;
+        ImGui::PopFont();
+        slider("Curve tension", "##fit_tension", fitParams_.tension, 0.0f, 1.0f, "%.2f",
+               "How the slopes bend between the points (cardinal spline). 0.5 is a classic smooth curve.");
+        slider("Ridge bumps", "##fit_lo", fitParams_.lowNoise, 0.0f, 12.0f, "%.1f",
+               "Random whole-unit bumps on the ridge and its shoulders (0 .. value).\nBelow 1 adds none - the vanilla default 1.5 adds up to 1.");
+        slider("Surface roughness", "##fit_hi", fitParams_.highNoise, 0.0f, 12.0f, "%.1f",
+               "Random whole-unit roughness on every inside vertex before the final smoothing pass.");
+        ImGui::PushFont(fontSmall_);
+        ImGui::TreePop();
+    } else fitFineTune_ = false;
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, S(4)));
+
+    const std::string go = "Fit " + doc_.mapName() + " to its neighbours";
+    if (theme::primaryButton(go.c_str(), ImVec2(cardInner, S(34)), fitHasResult_)) fitApply();
+    auto_.registerWidget("btn_fit_apply");
+    if (theme::ghostButton("Vanilla defaults", ImVec2(cardInner, S(24)))) fitParams_ = forge::fillerfit::Params{};
+    ImGui::PushFont(fontSmall_);
+    theme::hint("Rebuilds the whole map: the edges take the touching maps' heights, open stretches curve between them, and the inside rises to a ridge. Your objects stay where they are (re-seat them after). One undo step; Write terrain saves it.");
+    ImGui::PopFont();
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+    // a card is its own child window: scroll the panel around it (after endCard)
+    if (fitScrollTo_ > 0) { ImGui::SetScrollHereY(1.0f); --fitScrollTo_; }
 }
 
 } // namespace albion::gui

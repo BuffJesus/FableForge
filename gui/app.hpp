@@ -482,6 +482,26 @@ private:
     bool clipDrag_ = false;
     float clipStart_[2] = {0, 0};
     void drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col);
+    // Fit to neighbours (the vanilla world map's Fit Neighbours, forge/fillerfit.hpp): the
+    // touching maps' heights, read once per map on a worker; two preview images (now / fitted)
+    bool fitOpen_ = false, fitFineTune_ = false;
+    forge::fillerfit::Params fitParams_;
+    std::vector<forge::fillerfit::Neighbour> fitNeighbours_;
+    std::string fitNeighboursFor_, fitNeighboursNote_;
+    std::future<std::pair<std::vector<forge::fillerfit::Neighbour>, std::string>> fitFuture_;
+    ID3D11ShaderResourceView* fitPreviewNow_ = nullptr;     // owned by the renderer (uiTexture "fit_now" / "fit_after")
+    ID3D11ShaderResourceView* fitPreviewAfter_ = nullptr;
+    std::string fitPreviewKey_;
+    forge::fillerfit::Report fitReport_;
+    bool fitHasResult_ = false;
+    int fitScrollTo_ = 0;        // frames left to bring the opened card into view (the content height lags a frame)
+    void startFitNeighbourLoad();
+    void drawFitCard(float pad, float inner, float cardInner);
+public:
+    void setFitOpen(bool on) { fitOpen_ = on; fitScrollTo_ = on ? 3 : 0; }
+    bool fitBusy() const { return fitFuture_.valid(); }
+    size_t fitApply();   // fit the open map to its neighbours (automation / the button)
+private:
     bool fractalOpen_ = false;
     ID3D11ShaderResourceView* fractalPreview_ = nullptr;   // owned by the renderer (uiTexture "fractal")
     std::string fractalPreviewKey_;                         // params + map it was drawn for

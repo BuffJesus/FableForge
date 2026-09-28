@@ -36,6 +36,7 @@ the panel wiring builds but nobody has looked at it on screen.
 | 18 | Skybox / colour LUT follow ENVIRONMENT_THEME | Later (optional; vanilla does not do it either). |
 | 19 | UI overhaul modelled on the vanilla editor's UI | Ongoing. Toolbar of modes, dialogs per mode, hotkeys 1-9. |
 | 21 | Tracks (vanilla Tracks dialog; not in the review) | **Done** `7040517`: place / link / flip / rename / unlink TrackNode chains, lines in the view (UI unseen). Script brushes: researched, parked (no retail use; inventory 10). |
+| 22 | Fit Neighbours (vanilla world-map popup; not in the review) | **Done**: `EditFitFillerMap` ported from its code (`forge/fillerfit`, unit-tested: RNG, spline, exact seams, determinism); Fit to neighbours card with side map + Now/Fitted preview (screenshots seen). Open: the pack/World-tab entry point, several fillers at once. |
 | 20 | Remove direct object import and new-texture import from the world editor | **User's call.** Aeon advises it (complexity; an EgoCore cross-workflow later). Not done. |
 
 ## Navigation and editor research (2026-09-27)

@@ -1,0 +1,24 @@
+# Fit to neighbours (the vanilla world map's Fit Neighbours, forge/fillerfit): a filler map
+# rebuilt to meet its four touching maps. Read-only: scratch save root, no deploy.
+wait_maps
+wait_ready
+set saveroot build/ui_fit_scratch
+select Greatwood_Filler_04
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+frames 2
+fit_open 1
+frames 2
+wait_fit
+frames 4
+screenshot build/ui/fit_card.png
+fit_apply
+assert_log vertices rebuilt to meet 4 touching map
+frames 2
+fit_open 1
+frames 4
+screenshot build/ui/fit_applied.png
+dump_log
+quit

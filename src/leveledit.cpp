@@ -676,6 +676,31 @@ size_t Document::applyFractal(const forge::fractal::Params& params) {
     return edits.size();
 }
 
+std::vector<float> Document::fittedHeights(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                                           forge::fillerfit::Report* report) const {
+    if (!hasTerrain()) return {};
+    std::vector<float> h = terrain_->heights;
+    if (!forge::fillerfit::fit(h, worldX_, worldY_, level_->cellsX(), level_->cellsY(), neighbours, params, report)) return {};
+    for (auto& v : h) v = std::clamp(v, 0.0f, 2047.9999f);
+    return h;
+}
+
+size_t Document::fitToNeighbours(const forge::fillerfit::Params& params, const std::vector<forge::fillerfit::Neighbour>& neighbours,
+                                 forge::fillerfit::Report* report) {
+    if (!hasTerrain() || stroke_) return 0;
+    const auto h = fittedHeights(params, neighbours, report);
+    if (h.empty()) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    std::vector<VertexHeight> edits;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const size_t i = size_t(y) * cx + x;
+            if (terrain_->heights[i] != h[i]) edits.push_back({x, y, h[i]});
+        }
+    if (edits.empty() || !setVertexHeights(edits)) return 0;
+    return edits.size();
+}
+
 TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1) const {
     TerrainClip c;
     if (!hasTerrain()) return c;

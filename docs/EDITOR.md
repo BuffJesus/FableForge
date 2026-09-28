@@ -189,6 +189,17 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   texture context's `ThemeLibrary`. **In-game verified** (2026-09-16):
   GROUND_PATH_DRYMUD_GREEN painted into Oakvale West, deployed, the harness
   loads the region without a crash and ground heights still match 121/121.
+* **Fit to neighbours** (Terrain tab; the vanilla world map's *Fit Neighbours*,
+  `CEditWorldMap::EditFitFillerMap`, ported in `forge/fillerfit`): rebuilds the
+  open map as a ridge that meets every touching map at the shared edge -- the
+  vanilla tool for filler maps. The border takes the neighbours' edge rows, open
+  stretches are spline-filled, each column and row becomes a 5-point cardinal
+  spline (edge, shoulder, peak, shoulder, edge), then a 3x3 smoothing pass.
+  *Ridge height* / *Shoulders* shape it; *Fine-tune* holds the curve tension and
+  the two whole-unit noise amounts (vanilla PHt / TStp / Tens / LoNs / HiNs,
+  same defaults). The card shows which sides meet a map and a Now / Fitted relief
+  preview; one undo step; Write terrain saves it. Script
+  `tests/ui/fit_neighbours.txt`.
 
 ## The engine's LZO decoder (why 0.4.0 crashed)
 

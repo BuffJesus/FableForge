@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
@@ -1435,6 +1436,42 @@ static void testStbCompaction(const fs::path& dir) {
 
 // composeStatic writes what meshpreview reads back: positions exact, winding preserved, normals
 // within the 11/11/10 quantisation, UVs at the +8 bias the decoder leaves in, the Info blob's layout
+void testFillerFit() {
+    namespace ff = forge::fillerfit;
+    // GFRandom: LCG *0x24a1 +0x24df, ror 13, % range; range 0 and 1 give 0
+    uint32_t seed = 0x346780u;
+    uint32_t want = 0x346780u * 0x24a1u + 0x24dfu; want = (want >> 13) | (want << 19);
+    CHECK(ff::gfRandom(1000, seed) == want % 1000 && seed == want);
+    CHECK(ff::gfRandom(1, seed) == 0 && ff::gfRandom(0, seed) == 0);
+    // the spline passes through its control points and clamps outside [0, 1]
+    const std::vector<float> pts = {0.0f, 10.0f, 4.0f};
+    CHECK(ff::cardinalSpline(pts, 0.4f, 0.0f) == 0.0f && ff::cardinalSpline(pts, 0.4f, 1.0f) == 4.0f);
+    CHECK(std::fabs(ff::cardinalSpline(pts, 0.4f, 0.5f) - 10.0f) < 1e-5f);
+    // a 33 x 33 filler at (100, 100) with a map above it (sharing row y = 100) and one to the east
+    const int W = 33, H = 33;
+    std::vector<float> h(size_t(W) * H, 5.0f);
+    ff::Neighbour north; north.name = "N"; north.x0 = 100; north.y0 = 100 - 32; north.cellsX = 33; north.cellsY = 33;
+    north.heights.resize(33 * 33);
+    for (int y = 0; y < 33; ++y) for (int x = 0; x < 33; ++x) north.heights[size_t(y) * 33 + x] = 20.0f + x * 0.5f;
+    ff::Neighbour east; east.name = "E"; east.x0 = 132; east.y0 = 100; east.cellsX = 17; east.cellsY = 33;
+    east.heights.assign(17 * 33, 12.0f);
+    ff::Params prm; prm.peakHeight = 40.0f;
+    std::vector<float> a = h;
+    ff::Report rep;
+    CHECK(ff::fit(a, 100, 100, W, H, {north, east}, prm, &rep));
+    CHECK(rep.north.size() == 1 && rep.east.size() == 1 && rep.south.empty() && rep.west.empty());
+    bool seam = true;
+    for (int x = 1; x < W - 1; ++x) seam = seam && a[size_t(x)] == 20.0f + x * 0.5f;              // top row = its bottom row (corners: the side written last wins, as in vanilla)
+    for (int y = 1; y < H; ++y) seam = seam && a[size_t(y) * W + (W - 1)] == 12.0f;                // right column = its left column
+    CHECK(seam);
+    const float mid = a[size_t(H / 2) * W + W / 2];
+    CHECK(mid > 25.0f);                                                                          // the ridge rises above the edges
+    std::vector<float> b = h;
+    CHECK(ff::fit(b, 100, 100, W, H, {north, east}, prm) && a == b);                             // deterministic (fixed seed)
+    std::vector<float> c = h;
+    CHECK(!ff::fit(c, 100, 100, W, H, {}, prm) && c == h);                                        // nothing touches: untouched
+}
+
 void testWorldMerge() {
     namespace wm = forge::worldmerge;
     auto mapOf = [](const std::string& n, int x, uint64_t uid) {
@@ -1700,6 +1737,7 @@ int main() {
     testGtg(dir);
     testMeshCompose();
     testWorldMerge();
+    testFillerFit();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";
