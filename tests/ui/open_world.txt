@@ -1,0 +1,17 @@
+# File > Open world: a Lionhead dev world joins the map list, grouped by its region, and a map of it
+# opens with its own .lev/.tng. Needs lake-n-shack.wld + Lake_and_Shack/landsea/sea .lev/.tng copied from
+# the Anniversary dev tree (Data/Levels) into build/devworld/data/Levels (not in check_all: not shipped).
+wait_maps
+wait_ready
+open_world build/devworld/data/Levels/lake-n-shack.wld
+frames 5
+select Lake_and_Shack
+wait_loaded
+frames 5
+assert_state selected world:lake-n-shack/1
+assert_state preview_loaded 1
+assert_log Opened world
+mouse_move 20 20
+frames 3
+screenshot build/ui/open_world.png
+quit

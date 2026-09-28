@@ -199,6 +199,10 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "open_world") {   // open_world <path.wld>: File > Open world without the dialog
+        if (!app.openWorld(rest)) fail("open_world failed: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "track_preview") {   // track_preview <eye track #> <look track #> <seconds>: the Tracks card's Play preview
         int e = 0, l = 1; float sec = 10; std::istringstream(rest) >> e >> l >> sec;
         if (!app.startTrackPreview(e, l, sec)) fail("track_preview refused: " + rest); else note("ok   " + line);

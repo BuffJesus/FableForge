@@ -17,13 +17,13 @@ the panel wiring builds but nobody has looked at it on screen.
 | # | Item (review point -> vanilla evidence) | State |
 |---|---|---|
 | 1 | Scale gizmo too sensitive | **Done** `f440eaa`. It was a compounding bug: the cumulative ImGuizmo ratio was applied per frame. |
-| 2 | Redundant top bar -> File / View / Help menu bar | **Done** `fdf48d8`. Screenshot seen. Button alignment fixed in `1a254d9` (UI unseen). |
+| 2 | Redundant top bar -> File / View / Help menu bar | **Done** `fdf48d8`. Screenshot seen. Button alignment fixed in `1a254d9` (screenshot seen 2026-09-28). |
 | 3 | Collapsible left / right panels | **Done** `fdf48d8`: chevron strips, View menu, Ctrl+[ / Ctrl+], persisted. Screenshots seen. |
-| 4 | Ground texture at the lowest mip | **Done** `1a254d9`: 4..16 texels per cell per map, GPU mips, anisotropic (UI unseen). |
+| 4 | Ground texture at the lowest mip | **Done** `1a254d9`: 4..16 texels per cell per map, GPU mips, anisotropic (screenshot seen 2026-09-28). |
 | 5 | Replace theme (pen) / Flood Replace (click) / theme eyedropper (Ctrl+click) | **Done** `0f2c3f3` (vanilla `EditReplaceEngineThemeUndoable`, `EditFloodReplaceEngineThemeUndoable`, `PaintInputPickupTheme`). Screenshot seen 2026-09-28. |
 | 6 | "Replace All" | **Done** `0f2c3f3`. Not in vanilla, which floods only the connected patch. |
 | 7 | Heightmap path maker | **Done** `0f2c3f3`: Draw path, drag start -> end (vanilla `EditDrawPathPenUndoable`). Screenshot seen 2026-09-28. |
-| 8 | Load other .wld files, not just FinalAlbion | **Done (stage 1)** `6c455b0`: File > Open world, maps grouped by region; the map's own .lev/.tng are read and saved. Later: STB bake for other worlds; world moves / regions for them. UI unseen. |
+| 8 | Load other .wld files, not just FinalAlbion | **Done (stage 1)** `6c455b0`: File > Open world, maps grouped by region; the map's own .lev/.tng are read and saved. Later: STB bake for other worlds; world moves / regions for them. Screenshot seen 2026-09-28 with a Lionhead dev world (lake-n-shack.wld: Lake_and_Shack opens with terrain, water, objects; `tests/ui/open_world.txt`). |
 | 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | **Grouping done** `ec002b4`: tree by ENGINE_THEME_GROUP (screenshot seen 2026-09-28). Local detail is open; it is not proven editor-side in vanilla. |
 | 10 | Per-class property tabs (CTC editing) | **Done** `595dda5` + `6526402`: property grid per CTC block, vanilla captions/def pickers/enums/ranges from the recovered table (`docs/re_reference/vanilla_property_fields.tsv`), kind-checked edits (screenshot seen 2026-09-28). Open: list fields (CreatureFamilies), Light colour as a colour picker, CameraTrack name<->UID, adding a component a def lacks. |
 | 11 | Actors from def entity groups by category, not Forge presets | **Done** `80aa11d`: type -> THING_GROUP -> def tree (3,972 defs / 93 groups vs retail), Actors tab leads with creatures by group, `forge def-groups`. Screenshot seen 2026-09-28. Presets card kept (user's call). Markers / villages / switches are not placeable yet. |
