@@ -57,6 +57,7 @@ ATLAS_ENABLE_GEN = %(enable_gen)s -- region name: call SetCreatureGeneratorsEnab
 ATLAS_ACTIVATE_QUESTS = %(activate_quests)s -- quest names to ActivateMultipleQuestsWithoutLoadingResources before the walk, or nil
 ATLAS_FOLLOW_DEF = "%(follow_def)s"
 ATLAS_FOLLOW_SECONDS = %(follow_seconds)d
+ATLAS_MARKER = %(marker)s   -- a PLAYER_GUI marker graphic to put on the hero (MiniMapAddMarker), or nil
 
 function AtlasProbe(questObject)
     local Q = questObject
@@ -68,7 +69,9 @@ function AtlasProbe(questObject)
         local ok, h = pcall(function() return Q:GetHero() end)
         if ok and h ~= nil then
             local mok, mname = pcall(function() return h:GetCurrentMapName() end)
-            if mok and mname == ATLAS_START_MAP then hero = h; break end
+            if mok and mname ~= nil and mname ~= "" and (mname == ATLAS_START_MAP or ATLAS_START_MAP == "*") then
+                Q:Log("ATLAS_PROBE|start|" .. tostring(mname)); hero = h; break
+            end
             if i %% 10 == 0 then Q:Log("ATLAS_PROBE|waiting|map=" .. tostring(mname)) end
         end
     end
@@ -207,6 +210,17 @@ function AtlasProbe(questObject)
             end
         end
     end
+    if ATLAS_MARKER then
+        -- mark the hero on the HUD minimap: the marker is drawn by the same
+        -- CMiniMapDisplay::GetDrawPosition as the engine's own hero marker, which
+        -- the child prologue does not show
+        local hk, h = pcall(function() return Q:GetHero() end)
+        local mk, merr = pcall(function() Q:MiniMapAddMarker(h, ATLAS_MARKER) end)
+        Q:Log("ATLAS_PROBE|marker|" .. tostring(hk and mk) .. "|" .. tostring(merr))
+        local pk, hp = pcall(function() return h:GetPos() end)
+        if pk and hp then Q:Log(string.format("ATLAS_PROBE|markerpos|%%.3f|%%.3f|%%.3f", hp.x or 0, hp.y or 0, hp.z or 0)) end
+        for _ = 1, 90 do if not Q:NewScriptFrame() then break end end   -- a few seconds for the HUD to pick it up
+    end
     Q:Log("ATLAS_PROBE|done")
 end
 
@@ -235,6 +249,88 @@ def screen_diff(a: Path, b: Path) -> float:
         return float(ImageStat.Stat(ImageChops.difference(ia, ib)).mean[0])
     except Exception:
         return 0.0
+
+
+# Reference frames of the frontend screens (captured from earlier runs, kept under build/ -- they are
+# retail art, so they are not committed). With them the harness waits for the screen it needs instead
+# of sleeping a fixed time: the stock logo movies (a Steam verify puts them back) and the title's idle
+# attract movie made every fixed wait wrong one way or the other.
+REFS = ROOT / "build" / "ingame" / "refs"
+
+
+def thumb_diff(ref: Path, shot: Path) -> float:
+    """Mean absolute difference of 64x48 grayscale thumbnails (the title's light rays move)."""
+    from PIL import Image, ImageChops, ImageStat
+    def th(p: Path):
+        return Image.open(p).convert("L").resize((64, 48), Image.BILINEAR)
+    return float(ImageStat.Stat(ImageChops.difference(th(ref), th(shot))).mean[0])
+
+
+def wait_for_screen(ref_name: str, shots: Path, tag: str, timeout: float, limit: float) -> bool:
+    """Capture every ~2 s until the frame looks like REFS/<ref_name>.png (thumb_diff < limit)."""
+    ref = REFS / f"{ref_name}.png"
+    deadline = time.time() + timeout
+    shot = shots / f"{tag}.png"
+    best = 999.0
+    while time.time() < deadline:
+        ps("-Action", "capture", "-Output", str(shot))
+        try:
+            d = thumb_diff(ref, shot)
+        except Exception:
+            d = 999.0
+        best = min(best, d)
+        if d < limit:
+            print(f"  {ref_name} screen up (diff {d:.1f})", flush=True)
+            return True
+        time.sleep(2)
+    print(f"  {ref_name} screen never came up (best diff {best:.1f})", flush=True)
+    return False
+
+
+def have_refs() -> bool:
+    return (REFS / "title.png").exists() and (REFS / "main_menu.png").exists()
+
+
+INTERRUPTED = ROOT / "build" / "ingame" / ".interrupted"
+
+
+def record_for_restore(files: list[Path], probe: Path) -> None:
+    """Before the run touches anything: keep each file's bytes (or 'absent') so a later run can undo a
+    killed one."""
+    shutil.rmtree(INTERRUPTED, ignore_errors=True)
+    INTERRUPTED.mkdir(parents=True)
+    manifest = {"probe": str(probe), "files": []}
+    for i, f in enumerate(files):
+        entry = {"path": str(f), "absent": not f.exists()}
+        if f.exists():
+            (INTERRUPTED / f"{i}.bin").write_bytes(f.read_bytes())
+            entry["blob"] = f"{i}.bin"
+        manifest["files"].append(entry)
+    (INTERRUPTED / "manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
+
+
+def restore_interrupted() -> bool:
+    """Undo a run that was killed before its cleanup (probe hook, swapped saves, probe file)."""
+    m = INTERRUPTED / "manifest.json"
+    if not m.exists():
+        return False
+    manifest = json.loads(m.read_text(encoding="utf-8"))
+    for e in manifest["files"]:
+        f = Path(e["path"])
+        try:
+            if e["absent"]:
+                if f.exists(): f.unlink()
+            else:
+                f.write_bytes((INTERRUPTED / e["blob"]).read_bytes())
+        except OSError as err:
+            print(f"  could not restore {f}: {err}", flush=True)
+    try:
+        Path(manifest["probe"]).unlink()
+    except OSError:
+        pass
+    shutil.rmtree(INTERRUPTED, ignore_errors=True)
+    print("  restored the files of an interrupted earlier run", flush=True)
+    return True
 
 
 def click_until_change(x: int, y: int, before: Path, shots: Path, tag: str, wait: float = 4.0, attempts: int = 3) -> None:
@@ -319,6 +415,9 @@ def main() -> int:
     ap.add_argument("--keep-game", action="store_true")
     ap.add_argument("--report", default=str(ROOT / "build" / "ingame" / "report.json"))
     ap.add_argument("--timeout", type=int, default=300)
+    ap.add_argument("--minimap-marker", default="", help="PLAYER_GUI marker graphic (e.g. HUD_ORB_RED_SMALL) the probe puts on the hero before the final shot: shows where the HUD minimap draws him")
+    ap.add_argument("--title-wait", type=float, default=14, help="seconds from launch to the title screen: 14 with the stand-in logo movies; the stock movies (after a Steam verify) need about 60")
+    ap.add_argument("--intro-wait", type=float, default=45, help="new game: seconds for the intro movie + first load before the skips")
     ap.add_argument("--teleport", action="store_true", help="stand the hero on the centre point before the final screenshot")
     ap.add_argument("--new-game", action="store_true", help="start a fresh game (profile '0aa' is recreated) instead of continuing the '0atlas' save; needed to see .tng changes, saves cache region entities")
     ap.add_argument("--save-from", default="", help="continue from another profile's AutoSave (e.g. Cornelio = an adult hero in GreatwoodTeleport): copied into --save-dir for the run, put back afterwards")
@@ -380,11 +479,13 @@ def main() -> int:
     world_pts = [(mx + x, my + y) for x, y in pts]
 
     # ---- install the probe
+    restore_interrupted()                      # a previous run killed mid-way left its hook / saves behind
     master_backup = master.read_bytes()
     log_backup = log.read_bytes() if log.exists() else b""
     thing_names = [t for t in a.things.split(",") if t]
     follow_pt = tuple(float(v) for v in a.follow.split(",")) if a.follow else None
     probe.write_text(PROBE_LUA % {"map": a.map, "start_map": a.start_map or a.map, "transition_slot": map_slot if a.transition else 0, "points": ", ".join("{%g, %g}" % p for p in world_pts),
+                                  "marker": ("\"%s\"" % a.minimap_marker) if a.minimap_marker else "nil",
                                   "teleport": ("{%g, %g}" % (mx + cx, my + cy)) if a.teleport else "nil",
                                   "things": ", ".join('"%s"' % t for t in thing_names),
                                   "creatures": a.creatures,
@@ -403,7 +504,10 @@ def main() -> int:
             f"    end)\n"
             f"    return _atlasMain(quest)\n"
             f"end\n")
-    master.write_text(master_backup.decode("utf-8", "replace") + hook, encoding="utf-8")
+    swap_targets = [saves_root / a.save_dir / n for n in ("AutoSave", "AutoSave.qs", "AutoSave.qs.hs")] if (a.save_from and not a.new_game) else []
+    record_for_restore([master, *swap_targets], probe)
+    eol = "\r\n" if b"\r\n" in master_backup else "\n"
+    master.write_bytes(master_backup + hook.replace("\n", eol).encode("utf-8"))
     if log.exists():
         log.write_text("", encoding="utf-8")
 
@@ -436,20 +540,30 @@ def main() -> int:
             catcher = subprocess.Popen([sys.executable, "-u", str(HERE / "crash_catcher.py"), "--seconds", str(a.timeout + 120), "--out", str(shots / "crash.json")],
                                        stdout=open(shots / "crash_catcher.log", "w"), stderr=subprocess.STDOUT)
             time.sleep(3)
-        time.sleep(14)                                   # title screen
-        ps("-Action", "capture", "-Output", str(shots / "01_title.png"))
-        ps("-Action", "click", "-X", "512", "-Y", "400")  # "Press Left Mouse Button"
-        time.sleep(4)
+        watch = have_refs()
+        if watch:
+            # wait for the title screen itself (logo movies first; the stock ones are long)
+            if not wait_for_screen("title", shots, "01_title", timeout=240, limit=20):
+                result["notes"].append("title screen never came up"); raise RuntimeError("no title screen")
+        else:
+            time.sleep(a.title_wait)                     # logo movies, then the title screen
+            ps("-Action", "capture", "-Output", str(shots / "01_title.png"))
+        click_until_change(512, 400, shots / "01_title.png", shots, "title")   # "Press Left Mouse Button"
+        time.sleep(2)
         if a.new_game:
             ps("-Action", "click", "-X", "512", "-Y", "209")  # New Profile
             time.sleep(3)
             ps("-Action", "key", "-Keys", "END BACK BACK BACK BACK BACK BACK BACK BACK BACK BACK 0 A A")
             time.sleep(1)
             ps("-Action", "click", "-X", "784", "-Y", "697")  # Apply
-            time.sleep(4)
-            ps("-Action", "capture", "-Output", str(shots / "02_menu.png"))
-            ps("-Action", "click", "-X", "512", "-Y", "337")  # '0aa - New Game'
-            time.sleep(45)                                   # intro movie + first load
+            time.sleep(2)
+            if watch and not wait_for_screen("main_menu", shots, "02_menu", timeout=40, limit=15):
+                result["notes"].append("main menu ('0aa - New Game') never came up"); raise RuntimeError("no main menu")
+            if not watch:
+                time.sleep(2)
+                ps("-Action", "capture", "-Output", str(shots / "02_menu.png"))
+            click_until_change(512, 337, shots / "02_menu.png", shots, "newgame")  # '0aa - New Game'
+            time.sleep(a.intro_wait)                         # intro movie + first load
             for _ in range(4):
                 ps("-Action", "key", "-Keys", "ESC")         # skip the opening scenes
                 time.sleep(10)
@@ -584,6 +698,7 @@ def main() -> int:
             probe.unlink()
         except OSError:
             pass
+        shutil.rmtree(INTERRUPTED, ignore_errors=True)   # cleaned up normally: nothing left to restore
         # keep the run's FSE log next to the report, restore the previous one
         try:
             if log.exists():
