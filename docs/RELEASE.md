@@ -22,7 +22,7 @@ the two in-game items are the human part.
 4. README screenshots: `build\FableForge.exe --auto tests\ui\readme_shots.txt --size 1600x900`
    rewrites the three `docs/screenshot_*.png` from the current build (nothing is written to
    the install; the save root is `build/readme_install`). Look at them.
-5. Version: `CMakeLists.txt` `project(... VERSION x.y.z)` and `README.md`; the zip name and
+5. Version: `CMakeLists.txt` `project(... VERSION x.y.z)` and `README.md`; the zip name and Clear `FORGE_VERSION_SUFFIX` ("-dev") in CMakeLists.txt for the release build, and set it back after tagging.
    the GUI's title come from it.
 6. `python tools/package.py` (runs the suite again unless `--no-check`) ->
    `dist/FableForge-<version>-win64.zip`: `FableForge.exe`, `forge.exe`, `forge-tools.exe`

@@ -597,6 +597,7 @@ private:
     bool keyStroke_ = false;           // a -/= stroke (vanilla height keys) is running
     void fillPen(editor::TerrainBrush& b) const;
     void drawPenControls(float cardInner);
+    void drawViewportEdges();
     bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor

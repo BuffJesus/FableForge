@@ -1530,10 +1530,13 @@ void App::drawMenuBar() {
     // the menu bar's cursor already sits inside the frame padding: centre the small
     // font on the regular-size menu labels
     ImGui::SetCursorPosY(rowY + (menuLineH - ImGui::GetTextLineHeight()) * 0.5f);
-    const ImVec2 sp = ImGui::GetCursorScreenPos();
     const ImU32 dot = installValid_ ? (ctx_.ready() ? theme::col(theme::Success) : theme::col(theme::Warn)) : theme::col(theme::Error);
-    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(sp.x - S(10), sp.y + ImGui::GetTextLineHeight() * 0.5f), S(4.0f), dot);
     ImGui::TextColored(theme::vec(redirected ? theme::Warn : theme::Muted), "%s", status.c_str());
+    {
+        // the dot on the text's own line: menu-bar text sits a frame padding below the cursor
+        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(a.x - S(10), (a.y + b.y) * 0.5f), S(4.0f), dot);
+    }
     if (ImGui::IsItemHovered()) {
         const InstallHealth h = installHealth();
         ImGui::SetTooltip("%s  (%s)\ntextures.big %s   ForgeFSE %s   saves %s%s%s\nclick for the setup check", installValid_ ? installPath_.c_str() : "no install", installSource_.c_str(),
@@ -1544,12 +1547,15 @@ void App::drawMenuBar() {
     ImGui::PopFont();
     ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetWindowPos().y + (barH - btnH) * 0.5f));
     ImGui::SetCursorPosX(barW - btnW - helpW - gap * 2);
+    // the menu bar's tall frame padding would push a fixed-height button's label down: none here
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
     if (theme::ghostButton("?", ImVec2(helpW, btnH))) helpOpen_ = !helpOpen_;
     auto_.registerWidget("btn_help");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Keyboard and mouse cheat-sheet  (? or F1)");
     ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetWindowPos().y + (barH - btnH) * 0.5f));
     ImGui::SetCursorPosX(barW - btnW - gap);
     if (theme::ghostButton("Install...", ImVec2(btnW, btnH))) changeInstall();
+    ImGui::PopStyleVar();
     auto_.registerWidget("btn_change_install");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick the Fable: The Lost Chapters folder");
     ImGui::EndMenuBar();
@@ -1592,15 +1598,17 @@ void App::drawPanelStrip(bool left) {
     auto_.registerWidget(left ? "btn_toggle_explorer" : "btn_toggle_actions");
     const bool hov = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    // a child clips half its window padding off each side: draw over the whole strip, edges included
+    dl->PushClipRect(p, ImVec2(p.x + w, p.y + h), false);
     if (hov) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::col(theme::Bg2));
-    const float edge = left ? p.x + w - 1 : p.x;
-    dl->AddLine(ImVec2(edge, p.y), ImVec2(edge, p.y + h), theme::col(theme::Border));
+    // the divider line is the viewport's (drawViewportEdges): it is drawn last, so nothing covers it
     // the chevron points the way the panel will move
     const bool pointLeft = left == shown;
     const float cx = p.x + w * 0.5f, cy = p.y + h * 0.5f, a = S(3.5f);
     const ImU32 c = theme::col(hov ? theme::Text : theme::Faint);
     if (pointLeft) dl->AddTriangleFilled(ImVec2(cx - a, cy), ImVec2(cx + a, cy - a * 1.6f), ImVec2(cx + a, cy + a * 1.6f), c);
     else dl->AddTriangleFilled(ImVec2(cx + a, cy), ImVec2(cx - a, cy - a * 1.6f), ImVec2(cx - a, cy + a * 1.6f), c);
+    dl->PopClipRect();
     if (hov) ImGui::SetTooltip("%s", shown ? (left ? "Hide the map list  (Ctrl+[)" : "Hide the tool panel  (Ctrl+])")
                                            : (left ? "Show the map list  (Ctrl+[)" : "Show the tool panel  (Ctrl+])"));
     ImGui::EndChild();
@@ -1611,7 +1619,7 @@ void App::drawExplorer(float width) {
     ImGui::BeginChild("##explorer", ImVec2(width, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor();
     const ImVec2 p0 = ImGui::GetWindowPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x + width - 1, p0.y), ImVec2(p0.x + width - 1, p0.y + ImGui::GetWindowHeight()), theme::col(theme::Border));
+    (void)p0;   // the divider is the strip's (drawPanelStrip)
 
     using theme::S;
     ImGui::SetCursorPos(ImVec2(S(16), S(14)));
@@ -1783,6 +1791,19 @@ void App::frameMap() {
     camera_.lookAt(w * 0.5f, (previewScene_.minHeight + previewScene_.maxHeight) * 0.5f, -h * 0.5f, 0.8f, 0.62f, span * 0.95f);
 }
 
+// The two panel dividers: one 1 px line on each side edge of the viewport (the strips' viewport side),
+// drawn by the viewport itself because it is drawn after the strips and would cover theirs.
+void App::drawViewportEdges() {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetWindowPos(), sz = ImGui::GetWindowSize();
+    // filled 1 px columns, not AddLine: an anti-aliased line smears over two pixels
+    const float x0 = std::round(p.x), x1 = std::round(p.x + sz.x) - 1.0f;
+    dl->PushClipRect(p, ImVec2(p.x + sz.x, p.y + sz.y), false);
+    dl->AddRectFilled(ImVec2(x0, p.y), ImVec2(x0 + 1.0f, p.y + sz.y), theme::col(theme::Border));
+    dl->AddRectFilled(ImVec2(x1, p.y), ImVec2(x1 + 1.0f, p.y + sz.y), theme::col(theme::Border));
+    dl->PopClipRect();
+}
+
 void App::drawViewport(float width) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##viewport", ImVec2(width, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -1793,6 +1814,7 @@ void App::drawViewport(float width) {
 
     if (worldMode_ && world3D_) {
         drawWorld3D(origin, size);
+        drawViewportEdges();
         ImGui::EndChild();
         return;
     }
@@ -1804,6 +1826,7 @@ void App::drawViewport(float width) {
         drawWorldCanvas(origin, size);
         auto_.registerWidget("viewport");
         drawToasts(origin, size);
+        drawViewportEdges();
         ImGui::EndChild();
         return;
     }
@@ -1962,7 +1985,8 @@ void App::drawViewport(float width) {
             hintAt(ImVec2(origin.x + S(16), origin.y + S(72) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)));
         ImGui::PopFont();
     }
-    ImGui::EndChild();
+    drawViewportEdges();
+        ImGui::EndChild();
 }
 
 void App::drawActions(float width) {
@@ -1971,7 +1995,7 @@ void App::drawActions(float width) {
     ImGui::BeginChild("##actions", ImVec2(width, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor();
     const ImVec2 p0 = ImGui::GetWindowPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(p0.x, p0.y), ImVec2(p0.x, p0.y + ImGui::GetWindowHeight()), theme::col(theme::Border));
+    (void)p0;   // the divider is the strip's (drawPanelStrip)
     const float pad = S(16), inner = width - 2 * pad;
     // Footer: primary Export + batch/open-folder rows. Always visible, never scrolls away.
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
