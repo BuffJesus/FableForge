@@ -125,7 +125,7 @@ size_t countSubtree(const RetailSection& sec, const SectionIndex& ix, size_t pos
 std::vector<uint8_t> emitSection(const RetailSection& sec, int rootsX, int rootsY, uint32_t blockEnd) {
     const SectionIndex ix = indexSection(sec, rootsX, rootsY);
     Writer w;
-    w.u32(blockEnd); w.u32(sec.version); w.f32(sec.width); w.f32(sec.height);
+    w.u32(blockEnd); w.u32(8); w.f32(sec.width); w.f32(sec.height);   // always the v8 layout (SaveToFile writes 8)
     w.u32(sec.regionCount);
     w.u32(uint32_t(sec.positions.size() / 12));
     w.bytes(sec.positions);
@@ -174,7 +174,10 @@ RetailNav parseNavigation(const lev::File& file) {
         sec.name = entry.name;
         c.u32("block end");
         sec.version = c.u32("block version");
-        if (sec.version != 8) throw std::runtime_error("nav: unsupported block version " + std::to_string(sec.version));
+        // CNavQuadTree::LoadFromFile (FableWin 0x0328a760): < 5 is refused; above 5 a node starts with
+        // its switchable byte, above 6 a leaf carries its preference byte (default 0x40). v7 = v8 bytes;
+        // six dev-tree levels are v7, ten v6 (DarkwoodVillage, HobbeCave ...); retail is all v8
+        if (sec.version < 5 || sec.version > 8) throw std::runtime_error("nav: unsupported block version " + std::to_string(sec.version));
         sec.width = c.f32("width"); sec.height = c.f32("height");
         if (std::lround(sec.width) != w || std::lround(sec.height) != h)
             throw std::runtime_error("nav: block dimensions differ from the LEV");
@@ -192,7 +195,7 @@ RetailNav parseNavigation(const lev::File& file) {
         size_t rootsSeen = 0; uint8_t layer = 0;
         for (int32_t i = 0; i < total; ++i) {
             RetailNode n;
-            n.switchable = c.u8("switchable") != 0;
+            n.switchable = sec.version > 5 ? c.u8("switchable") != 0 : false;
             n.root = c.u8("root") != 0;
             n.blocked = c.u8("blocked") != 0;
             if (!n.switchable && n.blocked) {
@@ -210,7 +213,7 @@ RetailNav parseNavigation(const lev::File& file) {
                     for (int32_t& ch : n.children) ch = c.i32("child");
                 } else {
                     n.region = c.i32("region");
-                    n.preference = c.u8("preference");
+                    n.preference = sec.version > 6 ? c.u8("preference") : uint8_t(0x40);
                     const int32_t nn = c.i32("neighbour count");
                     if (nn < 0 || nn > 4096) throw std::runtime_error("nav: implausible neighbour count");
                     n.neighbours.resize(size_t(nn));
