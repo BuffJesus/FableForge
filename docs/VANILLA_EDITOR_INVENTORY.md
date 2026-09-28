@@ -458,11 +458,28 @@ generator.
   panels then lay out on top of each other (the editor UI is written for virtual,
   resolution-independent coordinates). The flag is a byte on the display manager set only
   after a deferred request (+0x255 request, +0x258 frame countdown, then +0x254 = 1).
-- Synthesized input (SetCursorPos + SendInput clicks, keys) does not reach the editor: the
-  `Coord` readout never changes and no toolbar mode switches, while the process runs a full
-  core. Keys worked on the dev front end, so the editor reads the mouse through another
-  path. Next: try real mouse input, and a resolution / windowed setting that makes the
-  virtual coordinates resolution-independent before entering the editor.
+- Input: the editor follows the ordinary OS cursor in window coordinates (an earlier
+  driver walked relative moves from the screen origin and landed outside the window).
+  Panels can be dragged by their title bars, which undoes the overlap. Arrow keys and
+  letters are mode hotkeys.
+- Toolbar (tooltips): Edit world map, Height mode, Engine themes, Thing mode, ScriptBrush
+  mode, ThingTrack mode, Select region for copy and paste, Fractal mode (asks "Are you
+  sure?"), Create backup file, Survey mode, Save all. Menus File / View / Options and a
+  "Player Auto" combo appear beside it.
+- Height mode toolbox: Size, Speed, Spray can, Smooth, Smear (Spikyness allowed, Smear
+  smoothness %), Land / Water tabs, Paint Height, Change Height, Draw Paths, Noise.
+- ThingTrack (Edit Tracks) panel: Placement / Linking / Main Track Selection / Secondary
+  Track Selection modes, track names + lengths, Preview Track with Preview Time Seconds.
+- Thing list panel: Only ScriptNamed Objects, Auto Update, Sort by distance, Area Range, GO.
+- World map: the map grid only shows well zoomed out (wheel); maps are yellow boxes.
+  "Select Map" (World Map Placement) loads a .lev through a file dialog and places it (a
+  level already in the world is refused: "You cannot load the same level in twice"); the
+  dev tree's Data/Levels also holds test levels (Blank.lev, creature_* hubs, Tavern Game
+  Test). Double-clicking a map opens its card: Locked for editing, Cut Map, Delete Map,
+  Resize Map, Sea, Load when player near, script name, and **Fit Neighbours** with Ht
+  (0.0), Stp (1.75), Tens (0.4), LoNs (1.5), HiNs (1.5) -- a parameterised seam fit
+  (height / step / tension / low and high noise) that FableForge's feather-only stitch
+  lacks.
 - Quest cards: no editor panel. Cards are OBJECT defs specialising
   `OBJECT_QUEST_CARD_TEMPLATE` with a `<CQuestCardDef>` block (QuestName, QuestSummary,
   RegionName, IsCoreQuest, CanPlayerCancel, GoldReward, RenownReward, RewardObjects[],
