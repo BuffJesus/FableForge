@@ -6,8 +6,8 @@ select Arena
 wait_loaded
 edit 1
 frames 2
-edit_tab 0
-frames 1
+assets_tab 1
+frames 2
 assert_widget btn_mesh_import
 assert_widget input_mesh_model
 mesh_import build/mesh_root/cube.glb FORGE_CUBE_UI build/mesh_root/wood.png
@@ -15,6 +15,8 @@ assert_state mesh_import_busy 1
 wait_mesh_import
 frames 2
 assert_log OBJECT_FORGE_CUBE_UI ready
+edit 1
+edit_tab 0
 wait_ready
 frames 2
 place OBJECT_FORGE_CUBE_UI ForgeCubeUi

@@ -609,18 +609,15 @@ bool App::openDropped(const std::string& path) {
     const std::string ext = lower(fs::path(path).extension().string());
     if (ext == ".wld") return openWorld(path);
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga") {
-        if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("drop: open a map with terrain first, then drop the image again to make a ground texture from it", 1); return false; }
         std::snprintf(customPng_, sizeof customPng_, "%s", fs::absolute(path).string().c_str());
         if (!customName_[0]) {
             std::string nm = "GROUND_" + fs::path(path).stem().string();
             for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
             std::snprintf(customName_, sizeof customName_, "%.*s", int(sizeof customName_ - 1), nm.c_str());
         }
-        setEditMode(true);
-        setEditTab(1);
-        terrainMode_ = 6;
-        customThemeOpen_ = true;
-        pushLog("drop: " + fs::path(path).filename().string() + " is ready as a custom ground texture; name it and press Create theme", 0);
+        setTexturesMode(true);
+        assetsTab_ = 2;
+        pushLog("drop: " + fs::path(path).filename().string() + " is ready as a new ground theme (Assets > Ground themes); name it and press Create", 0);
         return true;
     }
     return openLooseLev(path);
@@ -1889,7 +1886,7 @@ void App::drawActions(float width) {
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
         int tab = modsMode_ ? 4 : texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
-        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Textures", "Mods"}, inner)) {
+        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Assets", "Mods"}, inner)) {
             if (tab == 4) setModsMode(true);
             else if (tab == 3) { setModsMode(false); setTexturesMode(true); }
             else if (tab == 2) { setModsMode(false); setTexturesMode(false); setWorldMode(true); }

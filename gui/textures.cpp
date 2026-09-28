@@ -102,7 +102,15 @@ std::vector<uint32_t> App::selectedThingTextures() const {
 }
 
 void App::drawTexturesPanel(float pad, float inner, float cardInner) {
-    if (!installValid_) { ImGui::SetCursorPosX(pad); theme::hint("Browsing textures needs a Fable install."); return; }
+    if (!installValid_) { ImGui::SetCursorPosX(pad); theme::hint("The asset tools need a Fable install."); return; }
+    // Assets: textures.big, your own models, your own ground themes -- everything that writes the
+    // game's shared banks, apart from the map editor (a modder's review: keep imports out of it)
+    ImGui::SetCursorPosX(pad);
+    theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes"}, inner);
+    auto_.registerWidget("seg_assets_tab");
+    ImGui::Dummy(ImVec2(0, theme::S(8)));
+    if (assetsTab_ == 1) { drawModelImportCard(pad, inner, cardInner); return; }
+    if (assetsTab_ == 2) { drawGroundThemeCard(pad, inner, cardInner); return; }
     if (!texturesLoaded_) refreshTextures();
 
     // ---- the selected object's textures

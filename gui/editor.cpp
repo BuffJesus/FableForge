@@ -745,9 +745,81 @@ void App::scaleSelected(float factor) {
     commitFrame(f);
 }
 
+// ---- Assets > Models: a model into graphics.big + an OBJECT def (meshimport)
+void App::drawModelImportCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    pollMeshImport();
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##importmodel", inner);
+    theme::label("Import model");
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_);
+    auto_.registerWidget("input_mesh_model");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshname", "Name (becomes OBJECT_<NAME>)", meshName_, sizeof meshName_);
+    auto_.registerWidget("input_mesh_name");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##meshtex", "Diffuse texture PNG (optional)", meshTexturePng_, sizeof meshTexturePng_);
+    auto_.registerWidget("input_mesh_texture");
+    ImGui::PopStyleVar();
+    const bool meshBusy = meshImportFuture_.valid();
+    const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
+    if (theme::ghostButton(meshBusy ? "Importing..." : "Import into the game", ImVec2(cardInner, S(28))) && meshCan) {
+        std::string nm = meshName_;
+        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+        importMesh(meshModelPath_, nm, meshTexturePng_);
+    }
+    auto_.registerWidget("btn_mesh_import");
+    ImGui::PushFont(fontSmall_);
+    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. A collision hull is written from the model's own triangles (EgoCore's 3DMF physics entry). It then shows under Add an object. Not yet seen in-game.");
+    ImGui::PopFont();
+    theme::endCard();
+}
+
+// ---- Assets > Ground themes: a PNG into textures.big + a new ENGINE_THEME (a copy of a donor)
+void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##groundtheme", inner);
+    theme::label("New ground theme from a PNG");
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##custompng", "Path to a square power-of-two PNG (512x512 like retail)", customPng_, sizeof customPng_);
+    auto_.registerWidget("input_custom_png");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##customname", "Theme name, e.g. GROUND_MY_MOSS", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);
+    auto_.registerWidget("input_custom_name");
+    ImGui::PopStyleVar();
+    // the donor: the theme being painted when a map is open, else one picked here
+    const forge::lev::File* lev = documentLoaded() ? doc_.level() : nullptr;
+    if (customDonor_.empty() && lev && paintTheme_ >= 0 && size_t(paintTheme_) < lev->groundThemes().size()) customDonor_ = lev->groundThemes()[size_t(paintTheme_)].name;
+    if (customDonor_.empty()) customDonor_ = "GROUND_GRASS";
+    theme::label("Copies the settings of");
+    ImGui::SetNextItemWidth(cardInner);
+    if (ImGui::BeginCombo("##donor", customDonor_.c_str())) {
+        if (const auto* lib = ctx_.themeLibrary())
+            for (const auto& th : lib->themes())
+                if (th.decoded && ImGui::Selectable(th.name.c_str(), th.name == customDonor_)) customDonor_ = th.name;
+        ImGui::EndCombo();
+    }
+    auto_.registerWidget("combo_custom_donor");
+    ImGui::PushFont(fontSmall_);
+    theme::hint(("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + customDonor_ + " with your texture) to game.bin; nothing retail is replaced. One-time backups. With a map open it joins that map's palette, ready to paint; otherwise add it from Terrain > Paint > Ground.").c_str());
+    ImGui::PopFont();
+    const bool can = customPng_[0] && customName_[0] && !ctxFuture_.valid();
+    if (theme::primaryButton(ctxFuture_.valid() ? "Textures reloading..." : "Create ground theme", ImVec2(cardInner, S(32)), can)) {
+        std::string nm = customName_;
+        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+        createCustomTheme(customPng_, nm, customDonor_);
+    }
+    auto_.registerWidget("btn_custom_theme_create");
+    theme::endCard();
+}
+
 bool App::createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng) {
-    if (!documentLoaded() || !doc_.hasTerrain()) { pushLog("editor: no terrain loaded", 1); return false; }
     if (ctxFuture_.valid()) { pushLog("editor: textures are still loading, try again in a moment", 1); return false; }
+    if (!installValid_) { pushLog("editor: a custom theme needs a Fable install", 1); return false; }
     editor::CustomThemeRequest req;
     req.png = png; req.name = name; req.donor = donor.empty() ? "GROUND_GRASS" : donor;
     if (!cliffPng.empty()) req.cliffPng = cliffPng;
@@ -755,10 +827,14 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
     pushLog("custom theme " + name + ": importing " + png + " into textures.big and appending the ENGINE_THEME...", 0);
     if (!editor::createCustomTheme(saveRoot(), req, out, err)) { pushLog("editor: custom theme failed: " + err, 2); return false; }
     for (const auto& n : out.notes) pushLog("custom theme: " + n, 0);
-    const int slot = doc_.addGroundTheme(name, out.defIndex);
-    if (slot < 0) { pushLog("editor: the palette has no free slot for " + name, 1); return false; }
-    paintTheme_ = slot;
-    pushLog("ground theme " + name + " in palette slot " + std::to_string(slot) + " (def " + std::to_string(out.defIndex) + ", texture " + std::to_string(out.baseTexture) + "); reloading textures", 3);
+    if (documentLoaded() && doc_.hasTerrain()) {
+        const int slot = doc_.addGroundTheme(name, out.defIndex);
+        if (slot < 0) { pushLog("editor: the palette has no free slot for " + name, 1); return false; }
+        paintTheme_ = slot;
+        pushLog("ground theme " + name + " in palette slot " + std::to_string(slot) + " (def " + std::to_string(out.defIndex) + ", texture " + std::to_string(out.baseTexture) + "); reloading textures", 3);
+    } else {
+        pushLog("ground theme " + name + " created (def " + std::to_string(out.defIndex) + ", texture " + std::to_string(out.baseTexture) + "); open a map and add it from Terrain > Paint > Ground", 3);
+    }
     // the theme library and texture cache must see the new entries before the
     // preview bake and the deploy (deploy is refused while they reload); they
     // live wherever the save root points (a scratch tree in tests)
@@ -2173,31 +2249,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PushFont(fontSmall_);
             theme::hint("Paints the theme into the LEV's three blend slots; the preview re-bakes from the LEV after each stroke. Saving rebuilds the map's layer meshes so the game draws the new material. A theme added from the game takes a free palette slot and is written with the next terrain save.");
             ImGui::PopFont();
-            // your own texture as a ground theme
-            if (theme::ghostButton(customThemeOpen_ ? "Hide custom texture" : "Custom texture from a PNG...", ImVec2(cardInner, S(26)))) customThemeOpen_ = !customThemeOpen_;
-            auto_.registerWidget("btn_custom_theme_toggle");
-            if (customThemeOpen_) {
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-                ImGui::SetNextItemWidth(cardInner);
-                ImGui::InputTextWithHint("##custompng", "Path to a square power-of-two PNG (512x512 like retail)", customPng_, sizeof customPng_);
-                auto_.registerWidget("input_custom_png");
-                ImGui::SetNextItemWidth(cardInner);
-                ImGui::InputTextWithHint("##customname", "Theme name, e.g. GROUND_MY_MOSS", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);
-                auto_.registerWidget("input_custom_name");
-                ImGui::PopStyleVar();
-                ImGui::PushFont(fontSmall_);
-                std::string donor = "GROUND_GRASS";
-                if (lev && paintTheme_ >= 0 && size_t(paintTheme_) < lev->groundThemes().size() && !lev->groundThemes()[size_t(paintTheme_)].name.empty()) donor = lev->groundThemes()[size_t(paintTheme_)].name;
-                theme::hint(("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + donor + ", the selected theme, with your texture) to game.bin; nothing retail is replaced. One-time backups.").c_str());
-                ImGui::PopFont();
-                const bool can = customPng_[0] && customName_[0] && !ctxFuture_.valid();
-                if (theme::ghostButton(ctxFuture_.valid() ? "Textures reloading..." : "Create theme and select it", ImVec2(cardInner, S(28))) && can) {
-                    std::string nm = customName_;
-                    for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
-                    createCustomTheme(customPng_, nm, donor);
-                }
-                auto_.registerWidget("btn_custom_theme_create");
-            }
+            // your own texture: the Assets tab makes a new ENGINE_THEME from a PNG
+            if (theme::ghostButton("Your own ground texture...  (Assets tab)", ImVec2(cardInner, S(26)))) { setTexturesMode(true); assetsTab_ = 2; }
+            auto_.registerWidget("btn_goto_ground_theme");
         }
         char val[48];
         std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
@@ -2519,34 +2573,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
-    // ---- import model
-    pollMeshImport();
+    // model import lives in the Assets tab (it writes the game's banks, not this map)
     ImGui::SetCursorPosX(pad);
-    theme::beginCard("##importmodel", inner);
-    theme::label("Import model");
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_);
-    auto_.registerWidget("input_mesh_model");
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##meshname", "Name (becomes OBJECT_<NAME>)", meshName_, sizeof meshName_);
-    auto_.registerWidget("input_mesh_name");
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##meshtex", "Diffuse texture PNG (optional)", meshTexturePng_, sizeof meshTexturePng_);
-    auto_.registerWidget("input_mesh_texture");
-    ImGui::PopStyleVar();
-    const bool meshBusy = meshImportFuture_.valid();
-    const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
-    if (theme::ghostButton(meshBusy ? "Importing..." : "Import into the game", ImVec2(cardInner, S(28))) && meshCan) {
-        std::string nm = meshName_;
-        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
-        importMesh(meshModelPath_, nm, meshTexturePng_);
-    }
-    auto_.registerWidget("btn_mesh_import");
-    ImGui::PushFont(fontSmall_);
-    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. A collision hull is written from the model's own triangles (EgoCore's 3DMF physics entry). It then shows under Add an object. Not yet seen in-game.");
-    ImGui::PopFont();
-    theme::endCard();
+    if (theme::ghostButton("Import your own model...  (Assets tab)", ImVec2(inner, S(26)))) { setTexturesMode(true); assetsTab_ = 1; }
+    auto_.registerWidget("btn_goto_model_import");
     ImGui::Dummy(ImVec2(0, S(8)));
     }
 

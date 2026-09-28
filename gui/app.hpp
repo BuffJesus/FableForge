@@ -233,7 +233,6 @@ public:
     bool meshImportBusy() const { return meshImportFuture_.valid(); }
     void pollMeshImport();
 private:
-    bool customThemeOpen_ = false;
     void duplicateSelected();
     void deleteSelected();
     void editUndo();
@@ -384,6 +383,15 @@ private:
     bool sectionsDirty_ = true;
     void drawSectionsCard(float pad, float inner, float cardInner);
     void drawPropertyGrid(float cardInner);
+    // Assets tab (was Textures): 0 textures, 1 models, 2 ground themes -- the tools that
+    // write the game's shared banks, kept out of the map editor
+    int assetsTab_ = 0;
+    std::string customDonor_;
+    void drawModelImportCard(float pad, float inner, float cardInner);
+    void drawGroundThemeCard(float pad, float inner, float cardInner);
+public:
+    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 2); }
+private:
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);

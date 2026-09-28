@@ -221,6 +221,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "edit") { app.setEditMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
     else if (cmd == "textures_tab") { app.setTexturesMode(rest == "1"); note("ok   " + line); ++pc_; }
+    else if (cmd == "assets_tab") { app.setTexturesMode(true); app.setAssetsTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 textures, 1 models, 2 ground themes
     else if (cmd == "texture_select") { if (!app.selectTexture(rest)) fail("texture_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "texture_export") { if (!app.exportSelectedTexture(rest)) fail("texture_export failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "texture_replace") { if (!app.replaceSelectedTexture(rest)) fail("texture_replace failed: " + rest); else note("ok   " + line); ++pc_; }

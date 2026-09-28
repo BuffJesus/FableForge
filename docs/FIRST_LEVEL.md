@@ -70,8 +70,8 @@ Objects standing on ground you raise can follow it (*Re-seat objects*).
 ![Sculpting a hill](walkthrough/w06_sculpt.jpg)
 
 *Paint ground* paints any ground theme of the game (grass, cobbles, sand, snow --
-add one from the game's library, or make a *Custom texture from a PNG*, or just
-drop a PNG onto the window). Each theme shows its swatch.
+add one from the game's library, or make your own on the *Assets* tab's *Ground
+themes* page, or just drop a PNG onto the window). Each theme shows its swatch.
 
 ![Painting cobbles](walkthrough/w07_paint.jpg)
 

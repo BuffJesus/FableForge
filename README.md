@@ -190,7 +190,7 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   ground; *Re-seat objects on the new ground* moves placed things with it.
 * **Paint ground**: brush any ground theme of the map's palette, add any
   `ENGINE_THEME` the game has to the palette, or turn your own PNG into a theme
-  (*Custom texture from a PNG...*: appended to `textures.big` + a new `ENGINE_THEME`
+  (*Assets* tab, *Ground themes*: appended to `textures.big` + a new `ENGINE_THEME`
   in `game.bin`, nothing retail replaced). Saving rebuilds the map's layer meshes so
   the game draws the new material.
 
@@ -213,7 +213,7 @@ things use retail field order and the per-file UID namespace.
 
 ## Custom models
 
-*Import model* (Edit tab, Objects) or `forge mesh-import <model.glb|.gltf|.obj> <NAME>
+*Models* (Assets tab) or `forge mesh-import <model.glb|.gltf|.obj> <NAME>
 [--texture png]` turns a static model into a placeable `OBJECT_<NAME>`: the mesh is
 appended to `graphics.big` with a collision hull (the hero walks into it, not through it),
 its texture to `textures.big`, and a definition to `game.bin` copied from a donor object.

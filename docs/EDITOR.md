@@ -402,7 +402,7 @@ reload the things layer from the in-memory `.tng` text.
 
 ## Custom models (Import model)
 
-The Objects sub-tab's *Import model* card takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
+The *Assets* tab's *Models* page (the Objects tab links to it) takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
 1 metre; glTF node transforms are applied, OBJ `usemtl` groups become primitives), a NAME
 and an optional diffuse PNG, and makes a new object out of it: `MESH_<NAME>` is composed
 in the compiled-mesh grammar (`forge::meshcompose`, the in-game-proven `compose_mesh`
@@ -573,9 +573,12 @@ containers get one-time `.forge-orig` backups and are replaced with staged
 temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
-## Textures tab
+## Assets tab
 
-The fourth panel tab browses `data/graphics/pc/textures.big` (every bank, search by
+The fourth panel tab holds the tools that write the game's shared banks, kept apart from
+the map editor: *Textures* (below), *Models* (the model import above) and *Ground themes*
+(a PNG into `textures.big` + a new `ENGINE_THEME` copied from a donor theme; with a map
+open it joins that map's palette ready to paint). *Textures* browses `data/graphics/pc/textures.big` (every bank, search by
 name or id), previews an entry, exports it as PNG, replaces it from any image (the slot
 keeps its allocated size and pixel format, mips are rebuilt, the entry is validated
 against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
