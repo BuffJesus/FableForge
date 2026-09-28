@@ -936,6 +936,7 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
         case 10: return M::Environment;
         case 11: return M::Sound;
         case 12: return M::CameraPass;
+        case 14: case 15: return M::Theme;   // not brushes: handled before any stroke starts
         case 13: return M::CameraBlock;
         default: return M::Theme;
     }
@@ -992,6 +993,27 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
+    if (terrainMode_ == 14) {
+        if (press) { clipDrag_ = true; clipStart_[0] = brushFable_[0]; clipStart_[1] = brushFable_[1]; }
+        else if (clipDrag_ && !lmb) {
+            clipDrag_ = false;
+            if (brushHit_) {
+                terrainClip_ = doc_.copyTerrain(int(std::lround(clipStart_[0])), int(std::lround(clipStart_[1])), int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])));
+                clipTurns_ = 0;
+                pushLog("copied " + std::to_string(terrainClip_.w) + " x " + std::to_string(terrainClip_.h) + " vertices of ground; Paste region places it", 0);
+            }
+        }
+        return;
+    }
+    if (terrainMode_ == 15) {
+        if (ImGui::IsKeyPressed(ImGuiKey_R) && !io.KeyCtrl) clipTurns_ = (clipTurns_ + 1) % 4;
+        if (press) {
+            if (terrainClip_.empty()) { pushLog("paste: copy a region first (Copy region, drag on the ground)", 1); return; }
+            const size_t n = doc_.pasteTerrain(terrainClip_, int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])), clipTurns_, clipHeights_, clipThemes_, clipRelative_);
+            pushLog("paste: " + std::to_string(n) + " vertices (one undo step)", n ? 0 : 1);
+        }
+        return;
+    }
     if (terrainMode_ == 9) {
         if (press) { pathDrag_ = true; pathStart_[0] = brushFable_[0]; pathStart_[1] = brushFable_[1]; }
         else if (pathDrag_ && !lmb) {
@@ -1027,6 +1049,23 @@ void App::terrainStroke(float x, float y, float seconds) {
     doc_.endStroke();
 }
 
+// A map-local rectangle outlined on the current ground.
+void App::drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float xs[5] = {x0, x1, x1, x0, x0}, ys[5] = {y0, y0, y1, y1, y0};
+    ImVec2 pts[4 * 16 + 1];
+    int m = 0;
+    for (int e = 0; e < 4; ++e)
+        for (int i = 0; i < 16; ++i) {
+            const float t = float(i) / 16.0f;
+            const float fx = xs[e] + (xs[e + 1] - xs[e]) * t, fy = ys[e] + (ys[e + 1] - ys[e]) * t;
+            const float p[3] = {fx, doc_.terrainHeight(fx, fy).value_or(0.0f) + 0.1f, -fy};
+            float u, v;
+            if (renderer_.project(p, u, v)) pts[m++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
+        }
+    if (m > 2) dl->AddPolyline(pts, m, col, ImDrawFlags_Closed, theme::S(2.0f));
+}
+
 void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1046,6 +1085,13 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
                     : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    if (terrainMode_ == 14 && clipDrag_)
+        drawGroundRect(origin, size, clipStart_[0], clipStart_[1], brushFable_[0], brushFable_[1], IM_COL32(255, 255, 255, 220));
+    if (terrainMode_ == 15 && !terrainClip_.empty()) {
+        const float px = std::round(brushFable_[0]), py = std::round(brushFable_[1]);
+        const int ow = (clipTurns_ % 2) ? terrainClip_.h : terrainClip_.w, oh = (clipTurns_ % 2) ? terrainClip_.w : terrainClip_.h;
+        drawGroundRect(origin, size, px, py, px + float(ow - 1), py + float(oh - 1), IM_COL32(255, 210, 90, 230));
+    }
     if (terrainMode_ == 9 && pathDrag_) {
         // the path being dragged, draped on the current ground
         ImVec2 line[25];
@@ -1550,7 +1596,7 @@ void App::editorShortcuts() {
         if (ImGui::IsKeyPressed(ImGuiKey_Q)) gizmoOp_ = 0;
         if (ImGui::IsKeyPressed(ImGuiKey_W)) gizmoOp_ = 1;
         if (ImGui::IsKeyPressed(ImGuiKey_E)) gizmoOp_ = 2;
-        if (ImGui::IsKeyPressed(ImGuiKey_R)) gizmoOp_ = 3;
+        if (ImGui::IsKeyPressed(ImGuiKey_R) && !(gizmoOp_ == 4 && terrainMode_ == 15)) gizmoOp_ = 3;   // R turns the paste there
         if (ImGui::IsKeyPressed(ImGuiKey_T) && doc_.hasTerrain()) gizmoOp_ = 4;
         // the vanilla editor switches modes with the number keys
         if (!io.KeyCtrl) {
@@ -1748,6 +1794,24 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             int es = (terrainMode_ == 10 || terrainMode_ == 11) ? terrainMode_ - 10 : -1;
             if (theme::segmented("##tenv", es, {"Paint environment", "Paint sound"}, cardInner) && es >= 0) terrainMode_ = 10 + es;
             auto_.registerWidget("seg_terrain_envsound");
+        }
+        {
+            int cp = (terrainMode_ == 14 || terrainMode_ == 15) ? terrainMode_ - 14 : -1;
+            if (theme::segmented("##tclip", cp, {"Copy region", "Paste region"}, cardInner) && cp >= 0) terrainMode_ = 14 + cp;
+            auto_.registerWidget("seg_terrain_clip");
+            if (terrainMode_ == 14 || terrainMode_ == 15) {
+                if (terrainMode_ == 15) {
+                    ImGui::Checkbox("Heights##clh", &clipHeights_); ImGui::SameLine();
+                    ImGui::Checkbox("Themes##clt", &clipThemes_); ImGui::SameLine();
+                    ImGui::Checkbox("Relative##clr", &clipRelative_);
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the copied shape sits on the ground where you click.\nOff: the copied heights are placed as they were.");
+                }
+                ImGui::PushFont(fontSmall_);
+                if (!terrainClip_.empty()) ImGui::TextColored(theme::vec(theme::Muted), "clipboard: %d x %d vertices, turned %d deg", terrainClip_.w, terrainClip_.h, clipTurns_ * 90);
+                theme::hint(terrainMode_ == 14 ? "Drag a rectangle on the ground to copy its heights and ground themes (the vanilla Copy and paste dialog). The copy survives switching maps."
+                                               : "Click to paste with the copy's first corner there; R turns it 90 degrees. Themes are matched by name (a missing one takes a free palette slot). One undo step per paste.");
+                ImGui::PopFont();
+            }
         }
         {
             int cam = (terrainMode_ == 12 || terrainMode_ == 13) ? terrainMode_ - 12 : -1;

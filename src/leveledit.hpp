@@ -85,6 +85,18 @@ struct TerrainBrush {
     uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
 };
 
+// A copied block of ground (the vanilla Copy and paste dialog's "Copy heights /
+// Copy themes", FableWin CEditInputProcessCopyPaste::CopySelectedRegion 0x02953540):
+// w x h vertices, row-major, with each cell's theme blend carried by NAME so it
+// pastes into another map's palette.
+struct TerrainClip {
+    int w = 0, h = 0;
+    std::vector<float> heights;
+    std::vector<std::array<uint8_t, 3>> themeIndex, themeStrength;   // indices into `themes`
+    std::vector<forge::lev::GroundTheme> themes;                       // name + def index per clip slot
+    bool empty() const { return w <= 0 || h <= 0; }
+};
+
 struct ThingSummary {
     size_t index = 0;
     uint64_t uid = 0;
@@ -314,6 +326,14 @@ public:
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.
     size_t drawPath(float x0, float y0, float x1, float y1, float radius);
+    // Copy the vertices of [x0..x1] x [y0..y1] (map-local, inclusive, clamped).
+    TerrainClip copyTerrain(int x0, int y0, int x1, int y1) const;
+    // Paste with its first vertex at (x, y), rotated by quarterTurns x 90 degrees
+    // (vanilla RotateBrush steps). relative: heights keep their shape but sit on the
+    // ground under the paste origin (clip height - clip corner + ground there);
+    // otherwise absolute. Themes map by name into this palette (a missing one takes a
+    // free slot). One undo step; returns the vertices changed.
+    size_t pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative);
     // The vanilla Fractals dialog's "Apply fractal" (CEditMap::EditGenerateFractal):
     // every vertex SET to fractal(world position) * params.scale world units,
     // clamped to [0, 2048) like CHeightMap::SetSizeZAt. World = the map's WLD origin

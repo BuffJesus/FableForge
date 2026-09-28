@@ -432,6 +432,13 @@ private:
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
     char envSearch_[64] = {};
     forge::fractal::Params fractal_;     // the Fractals card (vanilla dialog defaults)
+    // 14 copy region (drag), 15 paste region (click; R rotates): vanilla Copy and paste
+    editor::TerrainClip terrainClip_;    // survives map changes: copy on one map, paste on another
+    int clipTurns_ = 0;
+    bool clipHeights_ = true, clipThemes_ = true, clipRelative_ = true;
+    bool clipDrag_ = false;
+    float clipStart_[2] = {0, 0};
+    void drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col);
     bool fractalOpen_ = false;
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};

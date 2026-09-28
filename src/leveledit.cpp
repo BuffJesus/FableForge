@@ -659,6 +659,93 @@ size_t Document::applyFractal(const forge::fractal::Params& params) {
     return edits.size();
 }
 
+TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1) const {
+    TerrainClip c;
+    if (!hasTerrain()) return c;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    if (x0 > x1) std::swap(x0, x1);
+    if (y0 > y1) std::swap(y0, y1);
+    x0 = std::clamp(x0, 0, cx - 1); x1 = std::clamp(x1, 0, cx - 1);
+    y0 = std::clamp(y0, 0, cy - 1); y1 = std::clamp(y1, 0, cy - 1);
+    c.w = x1 - x0 + 1; c.h = y1 - y0 + 1;
+    std::map<uint8_t, uint8_t> slotOf;   // map palette slot -> clip slot
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            const size_t i = size_t(y) * cx + x;
+            c.heights.push_back(terrain_->heights[i]);
+            std::array<uint8_t, 3> idx{};
+            for (int k = 0; k < 3; ++k) {
+                const uint8_t slot = terrain_->themeIndex[i][k];
+                auto hit = slotOf.find(slot);
+                if (hit == slotOf.end()) {
+                    hit = slotOf.emplace(slot, uint8_t(c.themes.size())).first;
+                    c.themes.push_back(slot < terrain_->palette.size() ? terrain_->palette[slot] : forge::lev::GroundTheme{});
+                }
+                idx[k] = hit->second;
+            }
+            c.themeIndex.push_back(idx);
+            c.themeStrength.push_back(terrain_->themeStrength[i]);
+        }
+    return c;
+}
+
+size_t Document::pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative) {
+    if (!hasTerrain() || stroke_ || clip.empty() || (!heights && !themes)) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    const int turns = ((quarterTurns % 4) + 4) % 4;
+    const int ow = (turns % 2) ? clip.h : clip.w, oh = (turns % 2) ? clip.w : clip.h;
+    auto next = std::make_unique<TerrainState>(*terrain_);
+    // clip slot -> this palette's slot (by name; a missing theme takes a free slot)
+    std::vector<int> slotFor(clip.themes.size(), -1);
+    if (themes)
+        for (size_t k = 0; k < clip.themes.size(); ++k) {
+            const auto& t = clip.themes[k];
+            for (size_t s = 0; s < next->palette.size() && slotFor[k] < 0; ++s)
+                if (!t.name.empty() && next->palette[s].name == t.name) slotFor[k] = int(s);
+            for (size_t s = 0; s < next->palette.size() && slotFor[k] < 0; ++s)
+                if (next->palette[s].name.empty() && !t.name.empty()) { next->palette[s] = t; slotFor[k] = int(s); }
+            if (slotFor[k] < 0) slotFor[k] = 0;
+        }
+    const float base = relative ? (sampleHeight(*terrain_, cx, cy, float(x), float(y)).value_or(0.0f) - clip.heights[0]) : 0.0f;
+    size_t changed = 0;
+    for (int oy = 0; oy < oh; ++oy)
+        for (int ox = 0; ox < ow; ++ox) {
+            // output (ox, oy) <- source vertex under the rotation
+            int sx = ox, sy = oy;
+            if (turns == 1) { sx = oy; sy = clip.h - 1 - ox; }
+            else if (turns == 2) { sx = clip.w - 1 - ox; sy = clip.h - 1 - oy; }
+            else if (turns == 3) { sx = clip.w - 1 - oy; sy = ox; }
+            const int tx = x + ox, ty = y + oy;
+            if (tx < 0 || ty < 0 || tx >= cx || ty >= cy) continue;
+            const size_t si = size_t(sy) * clip.w + sx, ti = size_t(ty) * cx + tx;
+            bool touched = false;
+            if (heights) {
+                const float v = std::clamp(clip.heights[si] + base, 0.0f, 2047.9999f);
+                if (next->heights[ti] != v) { next->heights[ti] = v; touched = true; }
+            }
+            if (themes) {
+                std::array<uint8_t, 3> idx{};
+                for (int k = 0; k < 3; ++k) idx[k] = uint8_t(slotFor[clip.themeIndex[si][k]]);
+                // two clip slots can land on one palette slot: merge like the paint brush does
+                const auto blend = forge::terrain::replaceThemeInBlend({idx, clip.themeStrength[si]}, 255, 255);
+                if (next->themeIndex[ti] != blend.indices || next->themeStrength[ti] != blend.strengths) {
+                    next->themeIndex[ti] = blend.indices; next->themeStrength[ti] = blend.strengths; touched = true;
+                }
+            }
+            changed += touched;
+        }
+    if (!changed) return 0;
+    const bool themeChange = themes;
+    pushUndo();
+    terrain_ = std::shared_ptr<const TerrainState>(next.release());
+    hf_.reset();
+    writeTerrainToLevel();
+    ++revision_;
+    ++terrainRev_;
+    if (themeChange) ++themeRev_;
+    return changed;
+}
+
 size_t Document::drawPath(float x0, float y0, float x1, float y1, float radius) {
     if (!hasTerrain() || stroke_ || !(radius > 0)) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();

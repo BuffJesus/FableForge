@@ -859,6 +859,47 @@ void testVanillaFields() {
     CHECK(!ed::vanillaField("CTCDoor", "NoSuchKey"));
 }
 
+// Copy and paste a block of ground (vanilla Copy and paste): heights + themes,
+// rotation, relative placement, themes carried by name, one undo step.
+void testTerrainClip(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const fs::path lev = writeSyntheticLev(dir / "clip.lev", 8, 8, [](int x, int y) { return float(x + 10 * y); });
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Clip", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(lev, err));
+    const int cx = doc.cellsX();
+    auto h = [&](int x, int y) { return doc.terrain().heights[size_t(y) * cx + x]; };
+    CHECK(doc.setVertexHeights({{1, 0, 50.0f}}));    // a bump, so a relative paste is not the ramp itself
+    const auto clip = doc.copyTerrain(0, 0, 2, 1);   // 3 x 2 vertices: 0 50 2 / 10 11 12
+    CHECK(clip.w == 3 && clip.h == 2 && clip.heights[4] == 11.0f && clip.heights[1] == 50.0f && !clip.themes.empty());
+    CHECK(clip.themes[0].name == "GROUND_GRASS_TEST");
+    CHECK(doc.pasteTerrain(clip, 5, 5, 0, true, false, false) > 0);
+    CHECK(h(5, 5) == 0.0f && h(7, 5) == 2.0f && h(6, 6) == 11.0f);            // absolute
+    CHECK(doc.undo() && h(5, 5) == 55.0f);
+    CHECK(doc.pasteTerrain(clip, 5, 5, 0, true, false, true) > 0);
+    CHECK(h(5, 5) == 55.0f && h(6, 5) == 105.0f && h(7, 5) == 57.0f && h(6, 6) == 66.0f);   // relative: shape on the ground at the origin
+    CHECK(doc.undo());
+    CHECK(doc.pasteTerrain(clip, 4, 4, 1, true, false, false) > 0);          // a quarter turn: 2 x 3
+    CHECK(h(4, 4) == 10.0f && h(5, 4) == 0.0f && h(4, 6) == 12.0f && h(5, 6) == 2.0f && h(5, 5) == 50.0f);
+    CHECK(doc.undo());
+    // themes by name into a map whose palette lacks it
+    const fs::path lev2 = writeSyntheticLev(dir / "clip2.lev", 8, 8, [](int, int) { return 0.0f; });
+    {
+        auto l2 = forge::lev::File::open(lev2);
+        l2.setGroundTheme(0, "GROUND_OTHER", 5); l2.setGroundTheme(1, "", 0);
+        for (int y = 0; y < l2.cellsY(); ++y) for (int x = 0; x < l2.cellsX(); ++x) l2.setThemeBlendAt(x, y, {0, 0, 0}, {255, 0, 0});
+        l2.save(lev2);
+    }
+    ed::Document other;
+    CHECK(other.openText("Clip2", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && other.loadLevel(lev2, err));
+    CHECK(other.pasteTerrain(clip, 0, 0, 0, false, true, false) > 0);
+    const int slot = other.paletteSlotOf("GROUND_GRASS_TEST");
+    CHECK(slot > 0);
+    bool hasGrass = false;
+    for (int k = 0; k < 3; ++k) hasGrass = hasGrass || (other.terrain().themeIndex[0][k] == slot && other.terrain().themeStrength[0][k] > 0);
+    CHECK(hasGrass && other.themesDirty());
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1436,6 +1477,7 @@ int main() {
     testFractal();
     testAddSoundTheme(dir);
     testVanillaFields();
+    testTerrainClip(dir);
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);
