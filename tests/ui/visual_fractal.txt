@@ -1,0 +1,16 @@
+# Fractal terrain tool window (vanilla Height toolbox fractal generator) for visual review.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_parity_install
+edit 1
+frames 3
+edit_tab 1
+frames 2
+fractal_open 1
+frames 6
+mouse_move 20 20
+frames 3
+screenshot build/ui/visual_fractal.png
+quit

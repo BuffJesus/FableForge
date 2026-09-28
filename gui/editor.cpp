@@ -3376,6 +3376,38 @@ terrainexport::Image reliefImage(const std::vector<float>& h, int cx, int cy, fl
         }
     return img;
 }
+
+// The vanilla fractal preview's colouring (CEditFractal::DrawFractal 0x029a76b0): the first
+// HeightColours band (dynamic initializer 0x03ff9550) at or above the fractal height (0..1), flat,
+// times 0.75 - atan2(dh, 0.01) for the rise to the next sample diagonally, 0.1 darker on the
+// 256-unit world checkerboard, limited to 0..1.
+terrainexport::Image fractalImage(const std::vector<float>& h, int cx, int cy, int worldX, int worldY, int longSide) {
+    static const struct { float upTo; uint8_t r, g, b; } bands[7] = {
+        {0.0001f, 0, 0, 0}, {0.05f, 0, 128, 255}, {0.2f, 0, 255, 255}, {0.4f, 255, 255, 0},
+        {0.6f, 0, 255, 0}, {0.8f, 255, 180, 180}, {1.0f, 255, 255, 255}};
+    const int iw = cx >= cy ? longSide : std::max(8, int(float(longSide) * float(cx) / float(cy)));
+    const int ih = cy >= cx ? longSide : std::max(8, int(float(longSide) * float(cy) / float(cx)));
+    terrainexport::Image img;
+    img.width = iw; img.height = ih;
+    img.rgba.resize(size_t(iw) * ih * 4);
+    auto at = [&](int x, int y) { return h[size_t(std::clamp(y, 0, cy - 1)) * cx + std::clamp(x, 0, cx - 1)]; };
+    const float sx = float(cx - 1) / float(std::max(iw - 1, 1)), sy = float(cy - 1) / float(std::max(ih - 1, 1));
+    for (int y = 0; y < ih; ++y)
+        for (int x = 0; x < iw; ++x) {
+            const int mx = int(float(x) * sx), my = int(float(y) * sy);
+            const float v = at(mx, my);
+            uint8_t c[3] = {1, 1, 1};   // above every band: the dialog's (1,1,1)
+            for (const auto& b : bands) if (v <= b.upTo) { c[0] = b.r; c[1] = b.g; c[2] = b.b; break; }
+            const float dh = (mx + 1 < cx && my + 1 < cy) ? at(mx + 1, my + 1) - v : -v;   // vanilla: 0 past the edge
+            float shade = 0.75f - float(std::atan2(double(dh), 0.01));
+            if ((((worldX + mx) >> 8) + ((worldY + my) >> 8)) & 1) shade -= 0.1f;
+            shade = std::clamp(shade, 0.0f, 1.0f);
+            uint8_t* px = &img.rgba[(size_t(y) * iw + x) * 4];
+            for (int i = 0; i < 3; ++i) px[i] = uint8_t(std::lround(float(c[i]) * shade));
+            px[3] = 255;
+        }
+    return img;
+}
 } // namespace
 
 void App::drawFractalWindow() {
@@ -3440,9 +3472,7 @@ void App::drawFractalWindow() {
             std::vector<float> h(size_t(cx) * cy);
             for (int y = 0; y < cy; ++y)
                 for (int x = 0; x < cx; ++x) h[size_t(y) * cx + x] = gen.heightAt(double(doc_.worldX() + x), double(doc_.worldY() + y));
-            float lo = 1e9f, hi = -1e9f;
-            for (const float v : h) { lo = std::min(lo, v); hi = std::max(hi, v); }
-            fractalPreview_ = renderer_.uiTexture("fractal", reliefImage(h, cx, cy, lo, hi, 160));
+            fractalPreview_ = renderer_.uiTexture("fractal", fractalImage(h, cx, cy, int(doc_.worldX()), int(doc_.worldY()), 160));
         }
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Accent), "This map with it");
@@ -3451,7 +3481,7 @@ void App::drawFractalWindow() {
             const float aspect = float(cx) / float(std::max(cy, 1));
             const ImVec2 side = aspect >= 1.0f ? ImVec2(rightW, rightW / aspect) : ImVec2(std::min(rightW, rightW * 1.3f * aspect), std::min(rightW * 1.3f, rightW / aspect));
             ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, side);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shaded relief of the fractal over this map: teal low, snow high.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The fractal over this map in the vanilla dialog's colours: black at 0, then blue, cyan, yellow, green, pink and white\nby height (steps of 0.2), shaded by slope, with its 256-unit checkerboard.");
         }
         ImGui::Dummy(ImVec2(0, S(6)));
         const std::string go = "Apply to " + doc_.mapName();
