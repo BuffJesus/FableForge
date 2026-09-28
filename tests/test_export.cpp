@@ -955,6 +955,30 @@ void testTracks() {
     CHECK(doc.undo() && doc.tracks().size() == 1);
 }
 
+// A spawner's CreatureFamilies[n] list: append after the last entry, remove with
+// the rest shifted down (no count field; contiguous from 0), one undo step each.
+void testListEntries() {
+    namespace ed = albion::editor;
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Marker;\r\nUID 1;\r\nDefinitionType \"MARKER_CREATURE_GENERATOR\";\r\nScriptName NULL;\r\n"
+        "StartCTCCreatureGenerator;\r\nCreatureFamilies[0] \"BEETLES_02\";\r\nCreatureFamilies[1] \"HOBBES_02_A\";\r\nGenerationRadius 9.0;\r\nEndCTCCreatureGenerator;\r\n"
+        "EndThing;\r\n\r\nNewThing Marker;\r\nUID 2;\r\nDefinitionType \"MARKER_CREATURE_GENERATOR\";\r\nScriptName NULL;\r\n"
+        "StartCTCCreatureGenerator;\r\nGenerationRadius 5.0;\r\nEndCTCCreatureGenerator;\r\nEndThing;\r\n\r\nXXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Lists", tng, err));
+    CHECK((doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies") == std::vector<std::string>{"\"BEETLES_02\"", "\"HOBBES_02_A\""}));
+    CHECK(doc.addListEntry(0, "CTCCreatureGenerator", "CreatureFamilies", "\"WASPS_01\""));
+    CHECK(doc.text().find("CreatureFamilies[1] \"HOBBES_02_A\";\r\nCreatureFamilies[2] \"WASPS_01\";\r\nGenerationRadius") != std::string::npos);
+    CHECK(doc.removeListEntry(0, "CTCCreatureGenerator", "CreatureFamilies", 0));
+    CHECK((doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies") == std::vector<std::string>{"\"HOBBES_02_A\"", "\"WASPS_01\""}));
+    CHECK(doc.text().find("CreatureFamilies[2]") == std::string::npos);
+    CHECK(!doc.removeListEntry(0, "CTCCreatureGenerator", "CreatureFamilies", 5));
+    CHECK(doc.addListEntry(1, "CTCCreatureGenerator", "CreatureFamilies", "\"BEETLES_02\""));   // the first entry leads the block
+    CHECK(doc.text().find("StartCTCCreatureGenerator;\r\nCreatureFamilies[0] \"BEETLES_02\";\r\nGenerationRadius 5.0;") != std::string::npos);
+    CHECK(doc.undo() && doc.undo() && doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies").size() == 3);
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1534,6 +1558,7 @@ int main() {
     testVanillaFields();
     testTerrainClip(dir);
     testTracks();
+    testListEntries();
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

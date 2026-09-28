@@ -81,6 +81,11 @@ public:
     // Same, inside the named CTC block. Throws if the block is absent.
     void setCtcProperty(size_t thingIndex, std::string_view ctcName,
                         std::string_view key, std::string_view value);
+    // Insert "key value;" into the named CTC block right after the line of
+    // `afterKey`; an empty afterKey puts it first in the block, an afterKey the
+    // block lacks puts it last. Throws if the block is absent.
+    void insertCtcPropertyAfter(size_t thingIndex, std::string_view ctcName, std::string_view afterKey,
+                                std::string_view key, std::string_view value);
     bool removeCtcProperty(size_t thingIndex, std::string_view ctcName,
                            std::string_view key);
 

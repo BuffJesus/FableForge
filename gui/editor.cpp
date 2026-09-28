@@ -403,10 +403,16 @@ void App::drawPropertyGrid(float cardInner) {
         } else if (isFamily && ctx_.ready()) {
             // a spawner's creature family slot: the CREATURE_GENERATION_FAMILY defs (vanilla DefIndexList)
             const std::string cur = r.value.size() >= 2 ? r.value.substr(1, r.value.size() - 2) : r.value;
+            ImGui::SetNextItemWidth(cardInner - keyW - S(28));
             if (ImGui::BeginCombo("##v", cur.c_str())) {
                 for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{"CREATURE_GENERATION_FAMILY"}))
                     if (ImGui::Selectable(name.c_str(), name == cur)) { next = "\"" + name + "\""; commit = true; }
                 ImGui::EndCombo();
+            }
+            ImGui::SameLine(0, S(4));
+            const int slot = std::atoi(r.key.c_str() + std::strlen("CreatureFamilies["));
+            if (theme::ghostButton("x##famx", ImVec2(S(24), S(22)))) {
+                if (doc_.removeListEntry(idx, r.ctc, "CreatureFamilies", slot)) { pushLog("spawner: family " + cur + " removed", 0); ImGui::PopID(); break; }
             }
         } else if (vkind == "def" && vf->defType[0] && ctx_.ready() && r.kind != K::Bool) {
             // a def picker; the value keeps the file's spelling (quoted or bare), NULL = none
@@ -454,6 +460,18 @@ void App::drawPropertyGrid(float cardInner) {
                 char msg[160]; std::snprintf(msg, sizeof msg, "property: %s must be %g .. %g (the vanilla dialog's range)", vf->label, vf->min, vf->max);
                 pushLog(msg, 1);
                 commit = false;
+            }
+        }
+        // a spawner group ends with "add a family" (the list has no count field; entries stay contiguous)
+        const bool lastOfGroup = i + 1 == rows.size() || rows[i + 1].ctc != r.ctc;
+        if (lastOfGroup && ctx_.ready() && (r.ctc == "CTCCreatureGenerator" || r.ctc == "CTCDCreatureGenerator")) {
+            ImGui::SetNextItemWidth(cardInner);
+            if (ImGui::BeginCombo("##addfam", "+ add a creature family")) {
+                for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{"CREATURE_GENERATION_FAMILY"}))
+                    if (ImGui::Selectable(name.c_str())) {
+                        if (doc_.addListEntry(idx, r.ctc, "CreatureFamilies", "\"" + name + "\"")) pushLog("spawner: family " + name + " added", 0);
+                    }
+                ImGui::EndCombo();
             }
         }
         if (commit && next != r.value) {

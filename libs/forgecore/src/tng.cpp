@@ -283,6 +283,18 @@ size_t File::setThingPropertyAll(size_t thingIndex, std::string_view key, std::s
     return lines.size();
 }
 
+void File::insertCtcPropertyAfter(size_t thingIndex, std::string_view ctcName, std::string_view afterKey,
+                                  std::string_view key, std::string_view value) {
+    const Thing& thing = thingAt(thingIndex);
+    const CtcBlock* block = thing.findCtc(ctcName);
+    if (block == nullptr) throw std::runtime_error("tng: thing " + std::to_string(thingIndex) + " has no block " + std::string(ctcName));
+    size_t at = block->endLine;
+    if (afterKey.empty()) at = block->startLine + 1;
+    else if (const Property* prop = findProperty(block->properties, afterKey)) at = prop->line + 1;
+    insertLine(at, std::string(key) + ' ' + std::string(value) + ';' + lineTerminator_);
+    reindex();
+}
+
 bool File::removeCtcProperty(size_t thingIndex, std::string_view ctcName,
                              std::string_view key) {
     const Thing& thing = thingAt(thingIndex);

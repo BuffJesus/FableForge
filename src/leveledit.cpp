@@ -1434,6 +1434,42 @@ bool Document::unlinkTrackNode(size_t node) {
     return true;
 }
 
+std::vector<std::string> Document::listEntries(size_t index, const std::string& ctc, const std::string& base) const {
+    std::vector<std::string> out;
+    if (index >= file_.things().size()) return out;
+    const auto* block = file_.things()[index].findCtc(ctc);
+    if (!block) return out;
+    for (int i = 0;; ++i) {
+        const std::string key = lower(base + "[" + std::to_string(i) + "]");
+        const auto hit = std::find_if(block->properties.begin(), block->properties.end(), [&](const forge::tng::Property& p) { return lower(p.key) == key; });
+        if (hit == block->properties.end()) break;
+        out.push_back(hit->value);
+    }
+    return out;
+}
+
+bool Document::addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value) {
+    if (index >= file_.things().size() || !file_.things()[index].findCtc(ctc) || value.empty() || value.find(';') != std::string::npos) return false;
+    const auto cur = listEntries(index, ctc, base);
+    pushUndo();
+    const std::string after = cur.empty() ? std::string() : base + "[" + std::to_string(cur.size() - 1) + "]";
+    // after the last entry; the first one leads the block, as retail writes it
+    file_.insertCtcPropertyAfter(index, ctc, after, base + "[" + std::to_string(cur.size()) + "]", value);
+    ++revision_;
+    return true;
+}
+
+bool Document::removeListEntry(size_t index, const std::string& ctc, const std::string& base, int i) {
+    const auto cur = listEntries(index, ctc, base);
+    if (i < 0 || size_t(i) >= cur.size()) return false;
+    pushUndo();
+    for (size_t k = size_t(i); k + 1 < cur.size(); ++k)
+        file_.setCtcProperty(index, ctc, base + "[" + std::to_string(k) + "]", cur[k + 1]);
+    file_.removeCtcProperty(index, ctc, base + "[" + std::to_string(cur.size() - 1) + "]");
+    ++revision_;
+    return true;
+}
+
 std::vector<Document::Link> Document::linksOf(size_t index) const {
     std::vector<Link> out;
     if (index >= file_.things().size()) return out;

@@ -184,6 +184,12 @@ public:
     // step. False when the value does not fit the field's kind or the field is absent.
     bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
     static PropertyRow::Kind kindOf(const std::string& value);
+    // Indexed list fields (CTCCreatureGenerator CreatureFamilies[n]; no count field,
+    // contiguous from 0): append after the last entry / remove entry i shifting the
+    // rest down. One undo step each; false when the block is absent / i is out of range.
+    bool addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value);
+    bool removeListEntry(size_t index, const std::string& ctc, const std::string& base, int i);
+    std::vector<std::string> listEntries(size_t index, const std::string& ctc, const std::string& base) const;
 
     // ---- tracks (the vanilla Tracks dialog, FableWin CThingTrackNode; static RE +
     // 319 dev-tree nodes): a track is a doubly-linked chain of TrackNode things
