@@ -496,9 +496,20 @@ private:
     bool fitHasResult_ = false;
     int fitScrollTo_ = 0;        // frames left to bring the opened card into view (the content height lags a frame)
     void startFitNeighbourLoad();
-    void drawFitCard(float pad, float inner, float cardInner);
+    void drawFitCard(float pad, float inner, float cardInner);   // the sidebar entry: a button that opens the window
+    void drawFitWindow();
+    void drawFractalWindow();
+    // Floating tool windows: the bigger, occasional tools (previews, many fields) open
+    // beside the view instead of stretching the sidebar. Non-modal (the view stays
+    // live), centred over the viewport the first time and left where the user drags it,
+    // a title + subtitle header with a close button, Esc closes the focused one.
+    bool beginToolWindow(const char* id, const char* title, const char* subtitle, bool* open, float width);
+    void endToolWindow();
+    void drawToolWindows();
+    float toolWindowInner_ = 0;   // the content width of the tool window being drawn
 public:
     void setFitOpen(bool on) { fitOpen_ = on; fitScrollTo_ = on ? 3 : 0; }
+    void setFractalOpen(bool on) { fractalOpen_ = on; }
     bool fitBusy() const { return fitFuture_.valid(); }
     size_t fitApply();   // fit the open map to its neighbours (automation / the button)
 private:

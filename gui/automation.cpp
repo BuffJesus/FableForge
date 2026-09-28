@@ -245,6 +245,7 @@ bool Automation::tick(App& app) {
         ++pc_;
     }
     else if (cmd == "fit_open") { app.setFitOpen(rest != "0"); note("ok   " + line); ++pc_; }
+    else if (cmd == "fractal_open") { app.setFractalOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "wait_fit") waitOn(!app.fitBusy(), "fit neighbours");
     else if (cmd == "fit_apply") { if (!app.fitApply()) fail("fit_apply changed nothing"); else note("ok   " + line); ++pc_; }
     else if (cmd == "mod_remove") { if (!app.modRemove(rest)) fail("mod_remove failed: " + rest); else note("ok   " + line); ++pc_; }

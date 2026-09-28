@@ -297,6 +297,58 @@ void App::drawHelpOverlay() {
     if (clickedOutside) helpOpen_ = false;
 }
 
+// ---------------------------------------------------------------- tool windows
+
+bool App::beginToolWindow(const char* id, const char* title, const char* subtitle, bool* open, float width) {
+    using theme::S;
+    if (!*open) return false;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.45f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0), ImVec2(width, vp->Size.y * 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), S(14)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    const bool visible = ImGui::Begin(id, open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                                                ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+    if (!visible) { ImGui::End(); return false; }
+    const float inner = ImGui::GetContentRegionAvail().x;
+    toolWindowInner_ = inner;
+    // header: title, subtitle, close
+    const ImVec2 top = ImGui::GetCursorPos();
+    ImGui::PushFont(fontBold_);
+    ImGui::TextUnformatted(title);
+    ImGui::PopFont();
+    if (subtitle && *subtitle) {
+        ImGui::PushFont(fontSmall_);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner - S(36));
+        ImGui::TextColored(theme::vec(theme::Muted), "%s", subtitle);
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+    }
+    const ImVec2 after = ImGui::GetCursorPos();
+    ImGui::SetCursorPos(ImVec2(top.x + inner - S(26), top.y));
+    if (theme::ghostButton("\xC3\x97##toolclose", ImVec2(S(26), S(26)))) *open = false;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Close (Esc)");
+    ImGui::SetCursorPos(after);
+    const ImVec2 a = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, a.y + S(4)), ImVec2(a.x + inner, a.y + S(4)), theme::col(theme::Border), 1.0f);
+    ImGui::Dummy(ImVec2(0, S(10)));
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
+    return true;
+}
+
+void App::endToolWindow() { ImGui::End(); }
+
+void App::drawToolWindows() {
+    if (!editMode_ || !documentLoaded()) return;
+    drawFitWindow();
+    drawFractalWindow();
+}
+
 void App::drawSetupPanel() {
     if (!setupOpen_) return;
     using theme::S;
@@ -1384,6 +1436,7 @@ void App::frame(float dt) {
     if (settings_.showActions) { ImGui::SameLine(0, 0); drawActions(right); }
     drawUnsavedPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
+    drawToolWindows();
     drawSetupPanel();
     drawHelpOverlay();
     drawTour();

@@ -2455,69 +2455,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         // ---- the vanilla Fractals dialog (CFractalDialog), ported generator
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##fractal", inner);
-        if (theme::ghostButton(fractalOpen_ ? "Fractal terrain  (hide)" : "Fractal terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
+        if (theme::ghostButton(fractalOpen_ ? "Fractal terrain  (open)" : "Fractal terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
         auto_.registerWidget("btn_fractal_toggle");
-        if (fractalOpen_) {
-            auto& f = fractal_;
-            ImGui::PushItemWidth(cardInner * 0.5f);
-            auto field = [&](const char* label, const char* id, double& v, double step, double lo, double hi, const char* fmt) {
-                ImGui::AlignTextToFramePadding();
-                ImGui::TextColored(theme::vec(theme::Muted), "%s", label);
-                ImGui::SameLine(cardInner * 0.5f);
-                ImGui::InputDouble(id, &v, step, step * 10.0, fmt);
-                v = std::clamp(v, lo, hi);
-            };
-            field("Lacunarity", "##flac", f.lacunarity, 0.1, 0.001, 100.0, "%.3f");
-            field("Fractal dimension", "##fdim", f.dimension, 0.01, 0.001, 10.0, "%.3f");
-            field("Octaves", "##foct", f.octaves, 1.0, 1.0, 100.0, "%.1f");
-            field("Map pos X", "##fmx", f.mapX, 250.0, -1e6, 1e6, "%.0f");
-            field("Map pos Y", "##fmy", f.mapY, 250.0, -1e6, 1e6, "%.0f");
-            field("World scaler", "##fws", f.worldScaler, 0.05, 0.001, 10.0, "%.3f");
-            field("Scale (height)", "##fsc", f.scale, 5.0, 0.001, 2048.0, "%.1f");
-            ImGui::Checkbox("Use falloff##ffo", &f.useFalloff);
-            if (f.useFalloff) {
-                field("Start falloff", "##fst", f.startFalloff, 100.0, 0.0, 10000.0, "%.0f");
-                field("End falloff", "##fen", f.endFalloff, 100.0, 0.0, 10000.0, "%.0f");
-                if (f.endFalloff <= f.startFalloff) f.endFalloff = f.startFalloff + 1.0;   // vanilla keeps start < end
-            }
-            ImGui::PopItemWidth();
-            // preview: the fractal over this map (world coordinates), 128 x 128, redrawn when a field changes
-            {
-                char key[256];
-                std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%g|%d|%g|%g|%d|%d", doc_.mapName().c_str(), f.lacunarity, f.dimension, f.octaves, f.mapX, f.mapY,
-                              f.worldScaler, int(f.useFalloff), f.startFalloff, f.endFalloff, doc_.worldX(), doc_.worldY());
-                if (fractalPreviewKey_ != key) {
-                    fractalPreviewKey_ = key;
-                    const forge::fractal::Generator gen(f);
-                    terrainexport::Image img;
-                    img.width = img.height = 128;
-                    img.rgba.resize(128 * 128 * 4);
-                    const float sx = float(doc_.cellsX() - 1) / 127.0f, sy = float(doc_.cellsY() - 1) / 127.0f;
-                    for (int y = 0; y < 128; ++y)
-                        for (int x = 0; x < 128; ++x) {
-                            const float h = gen.heightAt(double(doc_.worldX()) + x * sx, double(doc_.worldY()) + y * sy);
-                            const uint8_t g = uint8_t(std::clamp(h, 0.0f, 1.0f) * 255.0f);
-                            uint8_t* px = &img.rgba[size_t(y * 128 + x) * 4];
-                            px[0] = g; px[1] = g; px[2] = g; px[3] = 255;
-                        }
-                    fractalPreview_ = renderer_.uiTexture("fractal", img);
-                }
-                if (fractalPreview_) {
-                    const float side = std::min(cardInner, S(160));
-                    ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, ImVec2(side, side));
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The fractal over this map, dark = 0, white = Scale. Apply sets the ground to it.");
-                }
-            }
-            if (theme::ghostButton("Apply fractal to this map", ImVec2(cardInner, S(28)))) {
-                const size_t n = doc_.applyFractal(f);
-                pushLog("fractal: " + std::to_string(n) + " vertices set (one undo step)", n ? 0 : 1);
-            }
-            auto_.registerWidget("btn_fractal_apply");
-            if (theme::ghostButton("Vanilla defaults", ImVec2(cardInner, S(24)))) f = forge::fractal::Params{};
-            ImGui::PushFont(fontSmall_);
-            theme::hint("The vanilla editor's generator, ported from its code: a hybrid multifractal over Perlin noise sampled at WORLD positions, so neighbouring maps done one after another meet at their seams. It SETS every height to fractal x Scale world units (it does not add); retail ground spans about 0..70, the vanilla default Scale is 1000. Falloff fades to 0 away from the world centre (2048, 2048). One undo step.");
-            ImGui::PopFont();
-        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The vanilla editor's fractal generator: set this map's ground to a hybrid multifractal.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
         drawFitCard(pad, inner, cardInner);
@@ -3272,14 +3212,118 @@ terrainexport::Image reliefImage(const std::vector<float>& h, int cx, int cy, fl
 }
 } // namespace
 
+void App::drawFractalWindow() {
+    using theme::S;
+    if (!beginToolWindow("##fractalwin", "Fractal terrain", "Set this map's ground to the vanilla editor's fractal - sampled at world positions, so maps done one after another meet.", &fractalOpen_, S(620))) return;
+    const float inner = toolWindowInner_;
+    auto& f = fractal_;
+    const float gap = S(18);
+    const float leftW = std::floor(inner * 0.52f);
+    const float rightW = inner - leftW - gap;
+    const float x0 = ImGui::GetCursorPosX();
+
+    // left: the fields, friendly names (the vanilla ones in the tooltips)
+    ImGui::BeginGroup();
+    {
+        const float fieldW = std::floor(leftW * 0.5f);
+        auto field = [&](const char* label, const char* id, double& v, double step, double lo, double hi, const char* fmt, const char* tip) {
+            ImGui::SetCursorPosX(x0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(theme::vec(theme::Muted), "%s", label);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+            ImGui::SameLine(x0 + leftW - fieldW);
+            ImGui::SetNextItemWidth(fieldW);
+            ImGui::InputDouble(id, &v, step, step * 10.0, fmt);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+            v = std::clamp(v, lo, hi);
+        };
+        field("Height", "##fsc", f.scale, 5.0, 0.001, 2048.0, "%.1f",
+              "Scale: the ground is SET to fractal (0..1) x this, in world units.\nRetail ground spans about 0..70; the vanilla default is 1000.");
+        field("Feature size", "##fws", f.worldScaler, 0.05, 0.001, 10.0, "%.3f",
+              "World scaler: one noise unit spans 4096 x this world units. Bigger = broader hills.");
+        field("Layers of detail", "##foct", f.octaves, 1.0, 1.0, 100.0, "%.1f",
+              "Octaves: how many finer layers are stacked on the big shapes (fractions blend in).");
+        field("Detail spacing", "##flac", f.lacunarity, 0.1, 0.001, 100.0, "%.3f",
+              "Lacunarity: how much finer each layer is than the one before (2 = twice as fine).");
+        field("Smoothness", "##fdim", f.dimension, 0.01, 0.001, 10.0, "%.3f",
+              "Fractal dimension H: layer i weighs lacunarity^(-i x H). Higher = the fine layers count less = smoother.");
+        field("Pattern offset X", "##fmx", f.mapX, 250.0, -1e6, 1e6, "%.0f", "Map pos X: slides the pattern; the same offset on every map keeps them continuous.");
+        field("Pattern offset Y", "##fmy", f.mapY, 250.0, -1e6, 1e6, "%.0f", "Map pos Y: slides the pattern; the same offset on every map keeps them continuous.");
+        ImGui::SetCursorPosX(x0);
+        ImGui::Checkbox("Fade out away from the world centre##ffo", &f.useFalloff);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Use falloff: full height near (2048, 2048), a cosine fade between the two radii, flat beyond.");
+        if (f.useFalloff) {
+            field("Fade starts at", "##fst", f.startFalloff, 100.0, 0.0, 10000.0, "%.0f", "Start falloff: world units from the centre where the fade begins.");
+            field("Fade ends at", "##fen", f.endFalloff, 100.0, 0.0, 10000.0, "%.0f", "End falloff: world units from the centre where the ground reaches 0.");
+            if (f.endFalloff <= f.startFalloff) f.endFalloff = f.startFalloff + 1.0;   // vanilla keeps start < end
+        }
+    }
+    ImGui::EndGroup();
+
+    // right: the preview (relief, the fitted maps' colours), then the actions
+    ImGui::SameLine(x0 + leftW + gap);
+    ImGui::BeginGroup();
+    {
+        const int cx = doc_.cellsX(), cy = doc_.cellsY();
+        char key[256];
+        std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%g|%d|%g|%g|%d|%d|%g", doc_.mapName().c_str(), f.lacunarity, f.dimension, f.octaves, f.mapX, f.mapY,
+                      f.worldScaler, int(f.useFalloff), f.startFalloff, f.endFalloff, doc_.worldX(), doc_.worldY(), f.scale);
+        if (fractalPreviewKey_ != key) {
+            fractalPreviewKey_ = key;
+            const forge::fractal::Generator gen(f);
+            std::vector<float> h(size_t(cx) * cy);
+            for (int y = 0; y < cy; ++y)
+                for (int x = 0; x < cx; ++x) h[size_t(y) * cx + x] = gen.heightAt(double(doc_.worldX() + x), double(doc_.worldY() + y));
+            float lo = 1e9f, hi = -1e9f;
+            for (const float v : h) { lo = std::min(lo, v); hi = std::max(hi, v); }
+            fractalPreview_ = renderer_.uiTexture("fractal", reliefImage(h, cx, cy, lo, hi, 160));
+        }
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Accent), "This map with it");
+        ImGui::PopFont();
+        if (fractalPreview_) {
+            const float aspect = float(cx) / float(std::max(cy, 1));
+            const ImVec2 side = aspect >= 1.0f ? ImVec2(rightW, rightW / aspect) : ImVec2(std::min(rightW, rightW * 1.3f * aspect), std::min(rightW * 1.3f, rightW / aspect));
+            ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, side);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shaded relief of the fractal over this map: teal low, snow high.");
+        }
+        ImGui::Dummy(ImVec2(0, S(6)));
+        const std::string go = "Apply to " + doc_.mapName();
+        if (theme::primaryButton(go.c_str(), ImVec2(rightW, S(34)))) {
+            const size_t n = doc_.applyFractal(f);
+            pushLog("fractal: " + std::to_string(n) + " vertices set (one undo step)", n ? 0 : 1);
+        }
+        auto_.registerWidget("btn_fractal_apply");
+        if (theme::ghostButton("Vanilla defaults", ImVec2(rightW, S(24)))) f = forge::fractal::Params{};
+    }
+    ImGui::EndGroup();
+
+    ImGui::Dummy(ImVec2(0, S(6)));
+    ImGui::PushFont(fontSmall_);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
+    ImGui::TextColored(theme::vec(theme::Faint), "Ported from the vanilla editor's code (a hybrid multifractal over Perlin noise). It SETS every height, it does not add. One undo step (Ctrl+Z); Write terrain saves it.");
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    endToolWindow();
+}
+
 void App::drawFitCard(float pad, float inner, float cardInner) {
     using theme::S;
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##fitnb", inner);
-    if (theme::ghostButton(fitOpen_ ? "Fit to neighbours  (hide)" : "Fit to neighbours...", ImVec2(cardInner, S(26)))) setFitOpen(!fitOpen_);
+    if (theme::ghostButton(fitOpen_ ? "Fit to neighbours  (open)" : "Fit to neighbours...", ImVec2(cardInner, S(26)))) setFitOpen(!fitOpen_);
     auto_.registerWidget("btn_fit_toggle");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rebuild this map as a ridge that meets every map touching it at the seam.\nThe vanilla editor's Fit Neighbours, made for the filler maps between areas.");
-    if (!fitOpen_) { theme::endCard(); ImGui::Dummy(ImVec2(0, S(8))); return; }
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+}
+
+void App::drawFitWindow() {
+    using theme::S;
+    const std::string sub = "Rebuild " + doc_.mapName() + " as a ridge that meets every map around it - the vanilla editor's tool for filler maps.";
+    if (!beginToolWindow("##fitwin", "Fit to neighbours", sub.c_str(), &fitOpen_, S(640))) return;
+    const float cardInner = toolWindowInner_;
+    auto close = [&]() { endToolWindow(); };
 
     if (fitNeighboursFor_ != doc_.mapName() && !fitFuture_.valid()) startFitNeighbourLoad();
     if (fitFuture_.valid() && fitFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -3291,18 +3335,17 @@ void App::drawFitCard(float pad, float inner, float cardInner) {
     ImGui::PushFont(fontSmall_);
     if (fitFuture_.valid()) {
         ImGui::TextColored(theme::vec(theme::Muted), "Reading the maps around %s...", doc_.mapName().c_str());
-        ImGui::PopFont(); theme::endCard(); ImGui::Dummy(ImVec2(0, S(8)));
+        ImGui::PopFont(); close();
         return;
     }
     if (fitNeighbours_.empty()) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
         ImGui::TextColored(theme::vec(theme::Faint), "%s", fitNeighboursNote_.empty() ? ("Nothing touches " + doc_.mapName() + " on the world map, so there is no edge to meet.").c_str() : fitNeighboursNote_.c_str());
         ImGui::PopTextWrapPos();
-        ImGui::PopFont(); theme::endCard(); ImGui::Dummy(ImVec2(0, S(8)));
+        ImGui::PopFont(); close();
         return;
     }
     ImGui::PopFont();
-
     // the preview: re-fit on a copy whenever a field or the ground changes
     const auto* now = doc_.terrainHeights();
     const int cx = doc_.cellsX(), cy = doc_.cellsY();
@@ -3321,106 +3364,120 @@ void App::drawFitCard(float pad, float inner, float cardInner) {
         if (fitHasResult_) fitPreviewAfter_ = renderer_.uiTexture("fit_after", reliefImage(after, cx, cy, lo, hi, 128));
     }
 
-    // which sides meet a map: a square with its four edges lit, names beside it
+    // two columns: the ground (Now | Fitted) on the left, what shapes it on the right
+    const float gap = S(18);
+    const float leftW = std::floor(cardInner * 0.48f);
+    const float rightW = cardInner - leftW - gap;
+
+    const float colX = ImGui::GetCursorPosX();
+    ImGui::BeginGroup();
     {
-        const float glyph = S(54);
-        const ImVec2 o = ImGui::GetCursorScreenPos();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const float m = S(8);
-        const ImVec2 a(o.x + m, o.y + m), b(o.x + glyph - m, o.y + glyph - m);
-        dl->AddRectFilled(a, b, theme::col(theme::Bg3), S(3));
-        auto edge = [&](bool on, ImVec2 p, ImVec2 q) { dl->AddLine(p, q, on ? theme::col(theme::Accent) : theme::col(theme::Border), on ? S(3) : S(1)); };
-        edge(!fitReport_.north.empty(), a, ImVec2(b.x, a.y));
-        edge(!fitReport_.east.empty(), ImVec2(b.x, a.y), b);
-        edge(!fitReport_.south.empty(), ImVec2(a.x, b.y), b);
-        edge(!fitReport_.west.empty(), a, ImVec2(a.x, b.y));
-        ImGui::Dummy(ImVec2(glyph, glyph));
-        ImGui::SameLine(0, S(8));
-        ImGui::BeginGroup();
+        const float pgap = S(8);
+        const float box = (leftW - pgap) * 0.5f;
+        const float aspect = float(cx) / float(std::max(cy, 1));
+        // wide maps fill the column; tall ones may stand up to 1.7x taller
+        const ImVec2 side = aspect >= 1.0f ? ImVec2(box, box / aspect) : ImVec2(std::min(box, box * 1.7f * aspect), std::min(box * 1.7f, box / aspect));
+        auto preview = [&](const char* caption, bool accent, ID3D11ShaderResourceView* tex) {
+            ImGui::BeginGroup();
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(accent ? theme::Accent : theme::Muted), "%s", caption);
+            ImGui::PopFont();
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            if (tex) ImGui::Image((ImTextureID)(intptr_t)tex, side);
+            else ImGui::Dummy(side);
+            // the sides that meet a map, lit on the fitted relief
+            if (accent && tex) {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                const ImVec2 q(p.x + side.x, p.y + side.y);
+                const float t = S(3);
+                if (!fitReport_.north.empty()) dl->AddLine(ImVec2(p.x, p.y + t * 0.5f), ImVec2(q.x, p.y + t * 0.5f), theme::col(theme::Accent), t);
+                if (!fitReport_.south.empty()) dl->AddLine(ImVec2(p.x, q.y - t * 0.5f), ImVec2(q.x, q.y - t * 0.5f), theme::col(theme::Accent), t);
+                if (!fitReport_.west.empty()) dl->AddLine(ImVec2(p.x + t * 0.5f, p.y), ImVec2(p.x + t * 0.5f, q.y), theme::col(theme::Accent), t);
+                if (!fitReport_.east.empty()) dl->AddLine(ImVec2(q.x - t * 0.5f, p.y), ImVec2(q.x - t * 0.5f, q.y), theme::col(theme::Accent), t);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shaded relief, same colours as Now: teal low, snow high.\nThe lit edges meet the maps beside them exactly.");
+            }
+            ImGui::EndGroup();
+        };
+        preview("Now", false, fitPreviewNow_);
+        ImGui::SameLine(0, pgap);
+        preview("Fitted", true, fitHasResult_ ? fitPreviewAfter_ : nullptr);
+    }
+    ImGui::EndGroup();
+
+    ImGui::SameLine(colX + leftW + gap);
+    ImGui::BeginGroup();
+    {
+        // the four sides, in words
         ImGui::PushFont(fontSmall_);
-        auto side = [&](const char* dir, const std::vector<std::string>& names) {
+        auto sideRow = [&](const char* dir, const std::vector<std::string>& names) {
             std::string s;
             for (const auto& n : names) s += (s.empty() ? "" : ", ") + n;
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float r = S(3.5f);
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + r, p.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                        names.empty() ? theme::col(theme::Border) : theme::col(theme::Accent));
+            ImGui::SetCursorScreenPos(ImVec2(p.x + r * 2 + S(8), p.y));
             ImGui::TextColored(theme::vec(theme::Muted), "%s", dir);
-            ImGui::SameLine(S(44) + glyph);
-            ImGui::TextColored(theme::vec(names.empty() ? theme::Faint : theme::Text), "%s", names.empty() ? "open - shaped by the spline" : s.c_str());
+            ImGui::SameLine(S(58));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rightW - S(58));
+            ImGui::TextColored(theme::vec(names.empty() ? theme::Faint : theme::Text), "%s", names.empty() ? "open - the spline shapes it" : s.c_str());
+            ImGui::PopTextWrapPos();
         };
-        side("North", fitReport_.north);
-        side("East", fitReport_.east);
-        side("South", fitReport_.south);
-        side("West", fitReport_.west);
+        const float x0 = ImGui::GetCursorPosX();
+        auto row = [&](const char* d, const std::vector<std::string>& n) { ImGui::SetCursorPosX(x0); sideRow(d, n); };
+        row("North", fitReport_.north);
+        row("East", fitReport_.east);
+        row("South", fitReport_.south);
+        row("West", fitReport_.west);
         ImGui::PopFont();
-        ImGui::EndGroup();
+        ImGui::Dummy(ImVec2(0, S(8)));
+
+        auto slider = [&](const char* label, const char* id, float& v, float lo, float hi, const char* fmt, const char* tip) {
+            char val[32];
+            std::snprintf(val, sizeof val, fmt, v);
+            ImGui::SetCursorPosX(x0);
+            theme::labelValue(label, val, rightW);
+            ImGui::SetCursorPosX(x0);
+            ImGui::SetNextItemWidth(rightW);
+            ImGui::SliderFloat(id, &v, lo, hi, "");
+            auto_.registerWidget(id + 2);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+        };
+        slider("Ridge height", "##fit_peak", fitParams_.peakHeight, 0.0f, 120.0f, "%.1f",
+               "How far the ridge rises above the higher of the two edges it spans (world units).\n0 = a smooth slope from edge to edge.");
+        slider("Shoulders", "##fit_step", fitParams_.step, 0.0f, 3.0f, "%.2f",
+               "Where the slopes sit on the way up: each shoulder is edge + ridge height x this.\nAbove 1 the shoulders stand higher than the ridge line and the top flattens.");
+        ImGui::SetCursorPosX(x0);
+        ImGui::PushFont(fontSmall_);
+        const bool fine = ImGui::TreeNodeEx("Fine-tune##fitfine", fitFineTune_ ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+        ImGui::PopFont();
+        if (fine) {
+            fitFineTune_ = true;
+            slider("Curve tension", "##fit_tension", fitParams_.tension, 0.0f, 1.0f, "%.2f",
+                   "How the slopes bend between the points (cardinal spline). 0.5 is a classic smooth curve.");
+            slider("Ridge bumps", "##fit_lo", fitParams_.lowNoise, 0.0f, 12.0f, "%.1f",
+                   "Random whole-unit bumps on the ridge and its shoulders (0 .. value).\nBelow 1 adds none - the vanilla default 1.5 adds up to 1.");
+            slider("Surface roughness", "##fit_hi", fitParams_.highNoise, 0.0f, 12.0f, "%.1f",
+                   "Random whole-unit roughness on every inside vertex before the final smoothing pass.");
+            ImGui::TreePop();
+        } else fitFineTune_ = false;
+        ImGui::Dummy(ImVec2(0, S(6)));
+        const std::string go = "Fit " + doc_.mapName();
+        ImGui::SetCursorPosX(x0);
+        if (theme::primaryButton(go.c_str(), ImVec2(rightW, S(34)), fitHasResult_)) fitApply();
+        auto_.registerWidget("btn_fit_apply");
+        ImGui::SetCursorPosX(x0);
+        if (theme::ghostButton("Vanilla defaults", ImVec2(rightW, S(24)))) fitParams_ = forge::fillerfit::Params{};
     }
-    ImGui::Dummy(ImVec2(0, S(4)));
+    ImGui::EndGroup();
 
-    // now | fitted
-    if (fitPreviewNow_) {
-        const float gap = S(8);
-        const float box = std::min((cardInner - gap) * 0.5f, S(150));
-        const float aspect = float(cx) / float(std::max(cy, 1));
-        // wide maps fill the half width; tall ones may stand up to 1.6x taller
-        const ImVec2 side = aspect >= 1.0f ? ImVec2(box, box / aspect) : ImVec2(std::min(box, box * 1.6f * aspect), std::min(box * 1.6f, box / aspect));
-        ImGui::BeginGroup();
-        ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Muted), "Now");
-        ImGui::PopFont();
-        ImGui::Image((ImTextureID)(intptr_t)fitPreviewNow_, side);
-        ImGui::EndGroup();
-        ImGui::SameLine(0, gap);
-        ImGui::BeginGroup();
-        ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Accent), "Fitted");
-        ImGui::PopFont();
-        if (fitHasResult_ && fitPreviewAfter_) {
-            ImGui::Image((ImTextureID)(intptr_t)fitPreviewAfter_, side);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shaded relief, same colours as Now: teal low, snow high.\nThe lit edges meet the maps beside them exactly.");
-        } else ImGui::Dummy(side);
-        ImGui::EndGroup();
-    }
-    ImGui::Dummy(ImVec2(0, S(4)));
-
-    // the two fields that shape it; the rest behind Fine-tune
-    auto slider = [&](const char* label, const char* id, float& v, float lo, float hi, const char* fmt, const char* tip) {
-        char val[32];
-        std::snprintf(val, sizeof val, fmt, v);
-        theme::labelValue(label, val, cardInner);
-        ImGui::SetNextItemWidth(cardInner);
-        ImGui::SliderFloat(id, &v, lo, hi, "");
-        auto_.registerWidget(id + 2);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
-    };
-    slider("Ridge height", "##fit_peak", fitParams_.peakHeight, 0.0f, 120.0f, "%.1f",
-           "How far the ridge rises above the higher of the two edges it spans (world units).\n0 = a smooth slope from edge to edge.");
-    slider("Shoulders", "##fit_step", fitParams_.step, 0.0f, 3.0f, "%.2f",
-           "Where the slopes sit on the way up: each shoulder is edge + ridge height x this.\nAbove 1 the shoulders stand higher than the ridge line and the top flattens.");
+    ImGui::Dummy(ImVec2(0, S(6)));
     ImGui::PushFont(fontSmall_);
-    if (ImGui::TreeNodeEx("Fine-tune##fitfine", fitFineTune_ ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
-        fitFineTune_ = true;
-        ImGui::PopFont();
-        slider("Curve tension", "##fit_tension", fitParams_.tension, 0.0f, 1.0f, "%.2f",
-               "How the slopes bend between the points (cardinal spline). 0.5 is a classic smooth curve.");
-        slider("Ridge bumps", "##fit_lo", fitParams_.lowNoise, 0.0f, 12.0f, "%.1f",
-               "Random whole-unit bumps on the ridge and its shoulders (0 .. value).\nBelow 1 adds none - the vanilla default 1.5 adds up to 1.");
-        slider("Surface roughness", "##fit_hi", fitParams_.highNoise, 0.0f, 12.0f, "%.1f",
-               "Random whole-unit roughness on every inside vertex before the final smoothing pass.");
-        ImGui::PushFont(fontSmall_);
-        ImGui::TreePop();
-    } else fitFineTune_ = false;
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+    ImGui::TextColored(theme::vec(theme::Faint), "Rebuilds the whole map: the edges take the touching maps' heights, open stretches curve between them, and the inside rises to a ridge. Objects stay put (Re-seat them after). One undo step (Ctrl+Z); Write terrain saves it.");
+    ImGui::PopTextWrapPos();
     ImGui::PopFont();
-    ImGui::Dummy(ImVec2(0, S(4)));
-
-    const std::string go = "Fit " + doc_.mapName() + " to its neighbours";
-    if (theme::primaryButton(go.c_str(), ImVec2(cardInner, S(34)), fitHasResult_)) fitApply();
-    auto_.registerWidget("btn_fit_apply");
-    if (theme::ghostButton("Vanilla defaults", ImVec2(cardInner, S(24)))) fitParams_ = forge::fillerfit::Params{};
-    ImGui::PushFont(fontSmall_);
-    theme::hint("Rebuilds the whole map: the edges take the touching maps' heights, open stretches curve between them, and the inside rises to a ridge. Your objects stay where they are (re-seat them after). One undo step; Write terrain saves it.");
-    ImGui::PopFont();
-    theme::endCard();
-    ImGui::Dummy(ImVec2(0, S(8)));
-    // a card is its own child window: scroll the panel around it (after endCard)
-    if (fitScrollTo_ > 0) { ImGui::SetScrollHereY(1.0f); --fitScrollTo_; }
+    close();
 }
 
 } // namespace albion::gui
