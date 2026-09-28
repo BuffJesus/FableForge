@@ -117,6 +117,27 @@ Vec3 forwardFromYawDegrees(float degrees) {
     return forward;
 }
 
+float vanillaFloatRandom(float range, uint32_t& seed) {
+    seed = seed * 0x24a1u + 0x24dfu;
+    seed = (seed >> 13) | (seed << 19);   // GFROR13
+    const double span = static_cast<double>(range) * 65536.0;
+    if (span <= 0.0001) return 0.0f;
+    return static_cast<float>(std::fmod(static_cast<double>(seed), span) / 65536.0);
+}
+
+Vec3 forwardFromVanillaTurns(float turns) {
+    const double radians = static_cast<double>(turns) * 6.2831855;   // GFSin / GFCos
+    Vec3 forward;
+    forward.x = static_cast<float>(std::sin(radians) * kGroundUpZ);
+    forward.y = static_cast<float>(std::cos(radians) * kGroundUpZ);
+    forward.z = 0.0f;
+    return forward;
+}
+
+float constantPlacementHeight(float height, float groundZ) {
+    return height < groundZ ? groundZ : height;
+}
+
 float terrainHeightAt(const lev::File& level, float localX, float localY) {
     const int maxX = level.cellsX() - 1;
     const int maxY = level.cellsY() - 1;

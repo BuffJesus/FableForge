@@ -37,6 +37,8 @@ the panel wiring builds but nobody has looked at it on screen.
 | 19 | UI overhaul modelled on the vanilla editor's UI | Ongoing. Toolbar of modes, dialogs per mode, hotkeys 1-9. |
 | 21 | Tracks (vanilla Tracks dialog; not in the review) | **Done** `7040517`: place / link / flip / rename / unlink TrackNode chains, lines in the view (UI unseen). Script brushes: researched, parked (no retail use; inventory 10). |
 | 22 | Fit Neighbours (vanilla world-map popup; not in the review) | **Done**: `EditFitFillerMap` ported from its code (`forge/fillerfit`, unit-tested: RNG, spline, exact seams, determinism); Fit to neighbours card with side map + Now/Fitted preview (screenshots seen). Open: the pack/World-tab entry point, several fillers at once. |
+| 23 | Placement options (vanilla Things dialog; not in the review) | **Done**: random angle (`GFFloatRandom` off a seed), fixed angle, fixed height (absolute Z, never under the ground), ported from `PaintInputPlaceThingAt` (inventory 11b); Facing + Fixed height controls in Add an object, "Sample here" for the ground height. Unit-tested; `tests/ui/placement.txt` (screenshot seen). |
+| 24 | Seen live 2026-09-28, not ported yet | Water generators (lakes / ocean / rivers), Engine budget survey (things / tris / verts / texture memory), minimap-zone painting, villager-preferability brush, brush library (saved copy selections), quest filter day / night only, owner combo. Inventory 11b. |
 | 20 | Remove direct object import and new-texture import from the world editor | **User's call.** Aeon advises it (complexity; an EgoCore cross-workflow later). Not done. |
 
 ## Navigation and editor research (2026-09-27)
@@ -85,6 +87,7 @@ actions work (the old relative-walk ones miss the window); zoom far out to see t
 panels drag by their title bars; arrow keys and letters are mode hotkeys; ask before launching
 (it takes the screen) and never press Save all. Still to see live: getting into a level for
 Thing mode / CTC editing, ScriptBrush, Survey, Engine themes, the brush library.
+**Done 2026-09-28 (morning):** the vanilla editor driven hands-free (inventory 11b: the way into a level is the map card's "Locked for editing"; 3D works once its graphic-bank assert is skipped; things never render in the dev tree; every survey tab seen). Placement options ported (parity 23). Row 24 lists the rest seen live; the likely next picks are the **Engine budget survey** (per-area things / triangles / texture memory) and **minimap-zone painting**.
 **Documentation** (user, 2026-09-28): start a proper user guide before things get too complex -- task-first pages (make a level, paint, fit fillers, mod packs, load order), screenshots from the UI scripts, kept next to the features they describe.
 Parity rows 22 (Fit Neighbours) + the vanilla wins noted so far: track **preview playback**, the
 thing list's **filters** (script-named only, sort by distance, area range).

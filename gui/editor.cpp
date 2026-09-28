@@ -2,6 +2,7 @@
 // The App methods that make the viewer an editor live here; app.cpp keeps the
 // layout, explorer, export and automation.
 
+#include <chrono>
 #include "app.hpp"
 #include "vanilla_props.hpp"
 #include "modpack.hpp"
@@ -1188,6 +1189,38 @@ void App::drawDefPalette(const char* id, const std::vector<std::string>& types, 
     ImGui::EndChild();
 }
 
+// The vanilla Things dialog's placement options (Random placement angle / Place at constant
+// angle / Place at constant height), as one facing choice and one height switch.
+void App::drawPlacementOptions(float width) {
+    using theme::S;
+    ImGui::Dummy(ImVec2(0, S(4)));
+    theme::label("Facing");
+    theme::segmented("##place_facing", placeFacing_, {"Toward camera", "Random", "Fixed angle"}, width);
+    auto_.registerWidget("seg_place_facing");
+    if (placeFacing_ == 1) theme::hint("Each new thing gets its own turn, like the vanilla editor's random placement angle.");
+    if (placeFacing_ == 2) {
+        ImGui::SetNextItemWidth(width);
+        ImGui::SliderFloat("##place_angle", &placeAngleDeg_, 0.0f, 360.0f, "%.0f deg (0 = +Y, clockwise)");
+        auto_.registerWidget("slider_place_angle");
+    }
+    ImGui::Dummy(ImVec2(0, S(2)));
+    theme::toggle("Fixed height", &placeFixedHeight_);
+    auto_.registerWidget("toggle_place_height");
+    if (placeFixedHeight_) {
+        const float btnW = S(96);
+        ImGui::SetNextItemWidth(width - btnW - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::DragFloat("##place_height", &placeHeight_, 0.1f, -1000.0f, 5000.0f, "%.2f m");
+        ImGui::SameLine();
+        if (theme::ghostButton("Sample here", ImVec2(btnW, 0)) && documentLoaded()) {
+            float focus[3]; camera_.focus(focus);
+            if (const auto h = doc_.groundHeight(focus[0], -focus[2])) placeHeight_ = *h;
+        }
+        auto_.registerWidget("btn_place_sample_height");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Take the ground height where the camera looks.");
+        theme::hint("A world height. Where the ground is higher, the thing sits on the ground.");
+    }
+}
+
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     uint32_t modelId = 0;
@@ -1201,11 +1234,18 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
     p.scriptName = scriptName;
     p.position = {focus[0], -focus[2], focus[1]};
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
-    // face the camera
-    float d[3]; camera_.dir(d);
-    const float fx = -d[0], fy = d[2];
-    const float fl = std::sqrt(fx * fx + fy * fy);
-    if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
+    if (placeFixedHeight_) p.position.z = forge::thingplacer::constantPlacementHeight(placeHeight_, p.position.z);
+    if (placeFacing_ == 1) {
+        if (placeSeed_ == 0) placeSeed_ = uint32_t(std::chrono::steady_clock::now().time_since_epoch().count()) | 1u;
+        p.forward = forge::thingplacer::forwardFromVanillaTurns(forge::thingplacer::vanillaFloatRandom(1.0f, placeSeed_));
+    } else if (placeFacing_ == 2) {
+        p.forward = forge::thingplacer::forwardFromVanillaTurns(placeAngleDeg_ / 360.0f);
+    } else {   // face the camera
+        float d[3]; camera_.dir(d);
+        const float fx = -d[0], fy = d[2];
+        const float fl = std::sqrt(fx * fx + fy * fy);
+        if (fl > 1e-6f) p.forward = {fx / fl, fy / fl, 0.0f};
+    }
     try {
         const bool creature = def.rfind("CREATURE_", 0) == 0;
         const float pos[3] = {p.position.x, p.position.y, p.position.z};
@@ -2709,7 +2749,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     const std::string placeLabel = placeDef_.empty() ? "Place at view centre" : "Place " + placeDef_;
     if (theme::ghostButton(placeLabel.c_str(), ImVec2(cardInner, S(30))) && !placeDef_.empty()) placeDefinition(placeDef_);
     auto_.registerWidget("btn_place");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, dropped onto the terrain, facing the camera.");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, on the terrain (or at the fixed height below).");
+    drawPlacementOptions(cardInner);
     drawRuleNotice("creature", cardInner);
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));

@@ -1,0 +1,35 @@
+# Placement options (the vanilla Things dialog's random / constant angle and constant height).
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_placement_install
+edit 1
+frames 3
+edit_tab 0
+frames 3
+assert_widget seg_place_facing
+assert_widget toggle_place_height
+set place_facing 2
+set place_angle 90
+set place_height 60
+frames 3
+mouse_move 1250 460
+wheel -20
+frames 6
+assert_widget slider_place_angle
+assert_widget btn_place_sample_height
+mouse_move 700 400
+frames 3
+screenshot build/ui/placement_1_fixed.png
+place OBJECT_BARREL_BREAKABLE
+frames 3
+assert_log placed OBJECT_BARREL_BREAKABLE
+set place_facing 1
+set place_height off
+frames 3
+place OBJECT_BARREL_BREAKABLE
+place OBJECT_BARREL_BREAKABLE
+frames 3
+screenshot build/ui/placement_2_random.png
+quit

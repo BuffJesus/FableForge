@@ -216,6 +216,9 @@ bool Automation::tick(App& app) {
         else if (key == "outdir") { s.outDir = val; std::snprintf(app.outDirBuf_, sizeof app.outDirBuf_, "%s", val.c_str()); }
         else if (key == "saveroot") app.setSaveRoot(val);
         else if (key == "unsaved_prompt") app.promptInAuto_ = val == "1";
+        else if (key == "place_facing") app.placeFacing_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "place_angle") app.placeAngleDeg_ = float(std::atof(val.c_str()));
+        else if (key == "place_height") { app.placeFixedHeight_ = !val.empty() && val != "off"; if (app.placeFixedHeight_) app.placeHeight_ = float(std::atof(val.c_str())); }
         else fail("set: unknown key " + key);
         note("ok   " + line); ++pc_;
     }

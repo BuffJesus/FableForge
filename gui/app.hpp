@@ -238,6 +238,7 @@ private:
     void editUndo();
     void editRedo();
     void frameSelected();
+    void drawPlacementOptions(float width);
     bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
     bool saveDocument();                                // loose .tng under saveRoot()
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
@@ -373,6 +374,12 @@ private:
     // the vanilla editor's Things tree (thing type -> group -> def)
     std::vector<terrainexport::Context::GroupedDefinition> defList_;
     std::string placeDef_;           // the def the Place button puts down
+    // how new things face and sit (the vanilla Things dialog's placement options)
+    int placeFacing_ = 0;            // 0 toward the camera, 1 random (vanilla), 2 fixed angle
+    float placeAngleDeg_ = 0.0f;     // fixed angle, degrees clockwise from +Y (vanilla turns x 360)
+    bool placeFixedHeight_ = false;  // vanilla "Place at constant height": absolute Z, never under the ground
+    float placeHeight_ = 0.0f;
+    uint32_t placeSeed_ = 0;         // GFFloatRandom state for random angles (vanilla uses the world seed)
     // link pick mode: the next viewport click on a thing sets this link of the selection
     struct LinkPick { std::string ctc, field, label; bool active = false; } linkPick_;
     // quest sections: hidden ones (lower-case names) are not drawn or pickable

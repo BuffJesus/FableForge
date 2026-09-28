@@ -1472,6 +1472,22 @@ void testFillerFit() {
     CHECK(!ff::fit(c, 100, 100, W, H, {}, prm) && c == h);                                        // nothing touches: untouched
 }
 
+void testVanillaPlacement() {
+    namespace tp = forge::thingplacer;
+    // GFFloatRandom: the GFRandom step, then fmod(seed, range * 65536) / 65536
+    uint32_t seed = 0x346780u;
+    uint32_t want = 0x346780u * 0x24a1u + 0x24dfu; want = (want >> 13) | (want << 19);
+    const float r = tp::vanillaFloatRandom(1.0f, seed);
+    CHECK(seed == want && r == float(double(want % 65536u) / 65536.0) && r >= 0.0f && r < 1.0f);
+    CHECK(tp::vanillaFloatRandom(0.0f, seed) == 0.0f);
+    // angles are turns: 0 faces +Y, a quarter turn faces +X, both scaled to retail's 0.999994
+    const tp::Vec3 f0 = tp::forwardFromVanillaTurns(0.0f), fq = tp::forwardFromVanillaTurns(0.25f);
+    CHECK(std::fabs(f0.x) < 1e-6f && std::fabs(f0.y - tp::kGroundUpZ) < 1e-6f && f0.z == 0.0f);
+    CHECK(std::fabs(fq.x - tp::kGroundUpZ) < 1e-6f && std::fabs(fq.y) < 1e-5f);
+    // constant height never goes under the ground
+    CHECK(tp::constantPlacementHeight(10.0f, 4.0f) == 10.0f && tp::constantPlacementHeight(2.0f, 4.0f) == 4.0f);
+}
+
 void testWorldMerge() {
     namespace wm = forge::worldmerge;
     auto mapOf = [](const std::string& n, int x, uint64_t uid) {
@@ -1738,6 +1754,7 @@ int main() {
     testMeshCompose();
     testWorldMerge();
     testFillerFit();
+    testVanillaPlacement();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";

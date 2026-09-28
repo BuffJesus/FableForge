@@ -487,3 +487,90 @@ generator.
   mesh); the source is in the dev tree's `Data/Defs/objects.tpl` (~915) and
   `objects_gameplay.def`. The binary also carries dev test cards (TestQuestCard1-3 scripts),
   `GiveHeroQuestCardDirectly` and the card-screen layout keys (`QuestCardInfo*`).
+
+
+### 11b. Live run 2 (2026-09-28, driven autonomously)
+
+**Getting into a level.** The 2D world map draws every map as a flat box (yellow and magenta),
+and zooming in shows nothing more. A map loads only when you double-click it and tick
+**"Locked for editing"** on its card (`SetMapAsEditable`). The label reads backwards: ticking
+it *unlocks* the map. That loads the whole region (PicnicArea's two maps turned into
+dark-red relief at once, and the cursor readout gained a height). Nothing on screen says this
+is the way in.
+
+**Boot.** The def compile takes ~4 minutes, then two asserts come up and M skips both:
+`pending_object->desc.priority != THREADED_FILE_PRIORITY_BLOCKING`
+(lib_threaded_file.cpp 720, "highest priority objects cannot fail to allocate") and the known
+`edit_component.cpp 228` virtual-coords assert.
+
+**3D view.** View > 3D Engine hangs for ~20 s, then asserts
+`index < GraphicList.size() && GraphicList[index].IsValid()` (lib_graphic_data_bank.hpp 553,
+"Illegal index (0) in graphic bank"). Skipping it with M a few times gives a working 3D view
+with textured terrain. The community's "2D->3D switch crashes" is this assert, not a hard crash.
+3D camera: PgUp/PgDn rise and fall, Home/End tilt, the arrows move and turn. The driver has to
+send them as extended keys, because the numpad variants are mode hotkeys.
+**Things never rendered** in this dev tree, not even over PicnicArea with its 143 things, and
+both the Things def list and the Scene Browser stayed empty. The likely cause is the dev
+tree's graphics bank not matching its defs (the same assert). CTC editing therefore stays
+unseen live; the static RE in section 10 remains the reference.
+
+**Menus.** File: New World, Load World, Save World, Save All, Save As, Exit. View: 2D Relief /
+3D Engine, Show Creatures / Buildings / Objects / Holy Sites / Villages. Options: Show Grid,
+Snap To Grid, Edit Script Brushes. The toolbar's "Player Auto" combo (Player 0-3, Neutral, Auto)
+sets the owner that new things get.
+
+**Panels seen per mode:**
+- Height toolbox, **Water** tab: Lakes (height m), Ocean, Rivers (height m), Generate / Clear,
+  a Themes combo, Remove. (Land tab: section 11.)
+- Engine themes: ENGINE tab with a brush size, Smear / Paint / Replace / Flood Replace, and two
+  lines each for "Theme to Place" and "Theme to Replace" (defaults: `TG DO NOT USE 1` /
+  `INVALID THEME STANDIN`). ENVIRONMENT tab: Smear / Paint, and "Theme to Place" as a bare text
+  field with no picker. The status line reads "Unknown" in that mode.
+- Things (key 4): "Thing to Place", the def list, Find selected, **Random placement angle /
+  Place at constant angle (Angle) / Place at constant height (Height)**, and a search box with
+  Go / Next. Quests panel: a quest combo, "Quests to display" checkboxes (CS_OakVale,
+  CS_PlayCut, ChapterAnd...), **Day only / Night only**, Select all / Deselect all.
+  Thing Properties: empty until something is selected.
+- ScriptBrush (5): Script Name, Creation time, one unlabelled button. Status "Unknown".
+- Copy and paste (7): **Brush library** (a list plus Save brush). The view dims. Status "Unknown".
+- Surveys (9), tabbed:
+  - Passability: brush radius; Off / Passability / Camera passability / Villager
+    Preferability / Show navigability; Nav layer spinner. Show navigability paints navigable
+    ground flat, unshaded green, so the terrain shape disappears under it.
+  - Themes: sampling radius; Off / Theme density; a "Sampled themes" list.
+  - Engine: "Stats for selected areas/things" with Include local detail / buildings /
+    creatures / objects / others and Count all duplications. It reads out the number of
+    things, triangles, vertices, total texture memory and a detailed textures summary, with
+    "Save stats to file".
+  - Sounds: brush radius; Off / Show all sounds / Show selected sound / Paint selected sound;
+    a sound combo; Clear all.
+  - Reflection: a brush radius only.
+  - Minimap: brush radius; Off / Show all minimap zones / Show selected minimap zone / Paint
+    selected minimap zone; a zone spinner; Clear all. This is probably the "minimap generation
+    sketch" Aeon mentions.
+
+**Placement rules, recovered for the port** (`PaintInputPlaceThingAt` `0x02994490`):
+- Random angle = `GFFloatRandom(1.0, world seed)` (`0x018bac90`: the GFRandom step, then
+  fmod(seed, range x 65536) / 65536).
+- Constant angle = `GetAngleToPlaceThingsAt()`. Either value goes to
+  `CTCPhysicsBase` vtable +0x118 = `SetFacingAngleXY`.
+- Engine angles are **turns**: `GFSin` / `GFCos` multiply by 2 pi. `CRightHandedSet(C3DAngles(t,0,0))`
+  gives forward (sin 2 pi t, cos 2 pi t, 0), so 0 faces +Y. The dialog's default "1.0" is a
+  full turn.
+- Constant height: pos.z = H, then `GFLimitLower(z, GetGroundSizeZAt(pos))`. It is an
+  absolute world Z that never goes below the ground.
+- Ported as `forge::thingplacer::{vanillaFloatRandom, forwardFromVanillaTurns,
+  constantPlacementHeight}` plus the Facing / Fixed height controls in "Add an object".
+
+**What works well (worth porting):** one card per map (lock, cut, delete, resize, sea, load
+when near, script name, Fit Neighbours); the Water generators; theme Replace / Flood Replace;
+the Engine budget survey (things / triangles / vertices / texture memory for an area); painted
+minimap zones and sound themes; camera-passability and villager-preferability brushes;
+placement angle and height rules; a brush library of saved copy selections; the quest filter
+with day / night only; the owner combo.
+
+**What works badly:** panels spawn stacked on top of each other, and dragging one also pans
+the view; the unlock-to-load step is hidden behind a backwards label; mouse-wheel zoom centres
+on the view, not the cursor; three modes report "Unknown"; theme fields are raw text with
+nonsense defaults; the nav overlay hides the terrain shape; there are unlabelled buttons; the
+boot takes ~4 minutes and three asserts.

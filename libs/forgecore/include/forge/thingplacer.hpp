@@ -90,6 +90,21 @@ bool scriptNameIsFree(const tng::File& file, const std::string& scriptName);
 // Right-handed forward vector for a yaw in degrees (0 = +X, CCW toward +Y).
 Vec3 forwardFromYawDegrees(float degrees);
 
+// The vanilla editor's placement rules (FableWin
+// CEditControlCentre::PaintInputPlaceThingAt 0x02994490; Things dialog options
+// "Random placement angle", "Place at constant angle", "Place at constant height").
+//
+// GFFloatRandom 0x018bac90: the GFRandom LCG step, then fmod(seed, range * 65536) / 65536,
+// a value in [0, range). The editor draws the random angle with range 1.0 off the world seed.
+float vanillaFloatRandom(float range, uint32_t& seed);
+// Engine angles are in TURNS (GFSin/GFCos multiply by 2 pi). SetFacingAngleXY(t) builds
+// CRightHandedSet(C3DAngles(t, 0, 0)), whose forward is (sin 2 pi t, cos 2 pi t, 0):
+// 0 faces +Y and a quarter turn faces +X. Scaled by kGroundUpZ like every retail basis.
+Vec3 forwardFromVanillaTurns(float turns);
+// "Place at constant height": an absolute world Z, raised to the ground where the ground
+// is higher (GFLimitLower(z, GetGroundSizeZAt)).
+float constantPlacementHeight(float height, float groundZ);
+
 // Bilinear terrain height at a MAP-LOCAL XY, i.e. the value a ground-resting
 // thing stores in PositionZ. Throws when the XY is outside the cell grid.
 float terrainHeightAt(const lev::File& level, float localX, float localY);
