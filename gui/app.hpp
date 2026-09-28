@@ -588,6 +588,10 @@ private:
     float penSpikyness_ = 0.0f;
     float penMagnifier_ = 1.0f;
     bool penSpray_ = true;             // vanilla Spray can: repeat while held (off = once per click)
+    bool thingsScriptOnly_ = false;    // Objects list: vanilla Scene Browser "Only ScriptNamed Objects"
+    bool thingsNearest_ = false;       // Objects list: vanilla "Sort by distance" (from the camera)
+    int thingsFirst_ = -1;             // the Objects list's first row (automation state)
+    size_t thingsShown_ = 0;
     bool penApplied_ = false;          // this stroke has had its one application (spray off)
     bool keyStroke_ = false;           // a -/= stroke (vanilla height keys) is running
     void fillPen(editor::TerrainBrush& b) const;

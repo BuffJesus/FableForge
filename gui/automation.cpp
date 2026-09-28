@@ -188,6 +188,14 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
+    else if (cmd == "camera_above_selected") {   // camera_above_selected [distance]: look straight down at the selected thing
+        editor::Frame f;
+        float dist = 8;
+        if (!rest.empty()) dist = float(std::atof(rest.c_str()));
+        if (app.selectedThing_ < 0 || !app.doc_.frameOf(size_t(app.selectedThing_), f)) fail("camera_above_selected: nothing selected");
+        else { app.camera().lookAt(f.pos[0], f.pos[2], -f.pos[1], 0.0f, 1.55f, dist); note("ok   " + line); }
+        ++pc_;
+    }
     else if (cmd == "mode") {
         const std::string m = lower(rest);
         app.setMode(m == "wireframe" ? ViewMode::Wireframe : m == "walkable" ? ViewMode::Walkable : m == "height" ? ViewMode::Height : ViewMode::Textured);
@@ -222,6 +230,8 @@ bool Automation::tick(App& app) {
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
+        else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";
         else if (key == "pen_step") app.penStep_ = float(std::atof(val.c_str()));
         else if (key == "pen_target") { app.penTarget_ = float(std::atof(val.c_str())); app.penTargetFromStroke_ = false; }

@@ -2915,6 +2915,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         }
         auto_.registerWidget("combo_origin");
     }
+    // the vanilla Scene Browser's two switches (CSceneDialog): script-named things only, nearest first
+    ImGui::PushFont(fontSmall_);
+    ImGui::Checkbox("Script-named only##tso", &thingsScriptOnly_);
+    auto_.registerWidget("check_things_script_only");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only things with a ScriptName (the ones quests and cut-scenes refer to).");
+    ImGui::SameLine();
+    ImGui::Checkbox("Nearest first##tnf", &thingsNearest_);
+    auto_.registerWidget("check_things_nearest");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sort by distance from the camera. Double-click a row to fly to it.");
+    ImGui::PopFont();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##thinglist", ImVec2(cardInner, S(150)), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
@@ -2925,12 +2935,32 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         const auto s = doc_.summary(i);
         if (!s.hasFrame || s.type == "Marker" || s.type == "TrackNode") continue;
         if (thingSearch_[0] && !contains(s.definition, thingSearch_) && !contains(s.scriptName, thingSearch_)) continue;
+        if (thingsScriptOnly_ && s.scriptName.empty()) continue;
         if (!originFilter_.empty()) {
             const char* o = originOf(s.uid);
             if (originFilter_ == "retail" ? o != nullptr : (!o || originFilter_ != o)) continue;
         }
         rows.push_back(int(i));
     }
+    if (thingsNearest_) {
+        // camera in map-local Fable units (render x, -render z, as the brush maps them)
+        const float camX = camera_.posX, camY = -camera_.posZ;
+        std::vector<std::pair<float, int>> keyed;
+        keyed.reserve(rows.size());
+        for (const int i : rows) {
+            editor::Frame f;
+            float d = 1e30f;
+            if (doc_.frameOf(size_t(i), f)) {
+                const float wx = f.pos[0], wy = f.pos[1];
+                d = (wx - camX) * (wx - camX) + (wy - camY) * (wy - camY);
+            }
+            keyed.push_back({d, i});
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        for (size_t k = 0; k < keyed.size(); ++k) rows[k] = keyed[k].second;
+    }
+    thingsFirst_ = rows.empty() ? -1 : rows.front();
+    thingsShown_ = rows.size();
     ImGuiListClipper clipper;
     clipper.Begin(int(rows.size()));
     while (clipper.Step()) {

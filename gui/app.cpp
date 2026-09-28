@@ -1315,6 +1315,10 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("doc_dirty=" + std::string(documentLoaded() && doc_.dirty() ? "1" : "0"));
     v.push_back("doc_changes=" + std::to_string(documentLoaded() ? doc_.changes().size() : 0));
     v.push_back("selected_thing=" + std::to_string(selectedThing_));
+    v.push_back("things_first=" + std::to_string(thingsFirst_));
+    v.push_back("things_shown=" + std::to_string(thingsShown_));
+    if (thingsFirst_ >= 0 && documentLoaded() && size_t(thingsFirst_) < doc_.thingCount()) v.push_back("things_first_def=" + doc_.summary(size_t(thingsFirst_)).definition);
+    v.push_back(std::string("things_first_is_selected=") + (thingsFirst_ >= 0 && thingsFirst_ == selectedThing_ ? "1" : "0"));
     v.push_back("place_owner=" + std::string(placeOwner_ < 0 ? "auto" : placeOwner_ >= 4 ? "neutral" : std::to_string(placeOwner_)));
     v.push_back(std::string("section_day=") + (showDayOnly_ ? "1" : "0"));
     v.push_back(std::string("section_night=") + (showNightOnly_ ? "1" : "0"));
