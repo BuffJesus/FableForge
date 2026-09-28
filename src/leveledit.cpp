@@ -9,6 +9,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <stdexcept>
 
 #include "forge/navpatch.hpp"
@@ -179,6 +180,7 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
 }
 
 bool Document::loadLevel(const fs::path& levPath, std::string& error) {
+    soundListGrew_ = false;
     try { level_ = std::make_shared<forge::lev::File>(forge::lev::File::open(levPath)); }
     catch (const std::exception& e) { level_.reset(); error = std::string("level heights unavailable: ") + e.what(); return false; }
     if (level_) {
@@ -224,6 +226,9 @@ bool Document::openText(const std::string& mapName, std::string tngText, std::st
     mapName_ = mapName;
     original_ = file_.serialize();
     undo_.clear(); redo_.clear();
+    placementSection_ = "NULL";   // per document: a quest section chosen on another map must not carry over
+    trackTempCounter_ = 0;
+    soundListGrew_ = false;
     ++revision_;
     return true;
 }
@@ -325,7 +330,8 @@ std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3],
     pushUndo();
     try {
         for (const auto& item : fragment.items) {
-            const size_t idx = file_.insertThingBlockBefore(file_.things().size(), item.block);
+            const size_t idx = file_.sectionNames().empty() ? file_.insertThingBlockBefore(file_.things().size(), item.block)
+                                                            : file_.insertThingBlock(targetSection(), item.block);   // where new things go
             file_.setThingProperty(idx, "UID", std::to_string(forge::thingplacer::nextUid(file_)));
             if (file_.things()[idx].find("ScriptName")) file_.setThingProperty(idx, "ScriptName", "NULL");
             ++revision_;
@@ -505,6 +511,16 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
 void Document::endStroke() {
     if (!stroke_) return;
     stroke_ = false;
+    const auto& w = *working_;
+    const auto& t = *terrain_;
+    if (w.heights == t.heights && w.walkable == t.walkable && w.cameraPassable == t.cameraPassable && w.themeIndex == t.themeIndex &&
+        w.themeStrength == t.themeStrength && w.atmosIndex == t.atmosIndex && w.atmosStrength == t.atmosStrength && w.sound == t.sound) {
+        // nothing painted (an empty stroke, a no-op tool): drop the undo step beginStroke pushed
+        working_.reset();
+        hf_.reset();
+        if (!undo_.empty()) undo_.pop_back();
+        return;
+    }
     const bool themes = working_->themeIndex != terrain_->themeIndex || working_->themeStrength != terrain_->themeStrength;
     terrain_ = std::shared_ptr<const TerrainState>(working_.release());
     hf_.reset();
@@ -706,7 +722,12 @@ size_t Document::pasteTerrain(const TerrainClip& clip, int x, int y, int quarter
                 if (next->palette[s].name.empty() && !t.name.empty()) { next->palette[s] = t; slotFor[k] = int(s); }
             if (slotFor[k] < 0) slotFor[k] = 0;
         }
-    const float base = relative ? (sampleHeight(*terrain_, cx, cy, float(x), float(y)).value_or(0.0f) - clip.heights[0]) : 0.0f;
+    // relative: the vertex landing at the click (not source 0 once turned) sits on the ground there
+    size_t anchor = 0;
+    if (turns == 1) anchor = size_t(clip.h - 1) * clip.w;
+    else if (turns == 2) anchor = size_t(clip.h - 1) * clip.w + size_t(clip.w - 1);
+    else if (turns == 3) anchor = size_t(clip.w - 1);
+    const float base = relative ? (sampleHeight(*terrain_, cx, cy, float(x), float(y)).value_or(0.0f) - clip.heights[anchor]) : 0.0f;
     size_t changed = 0;
     for (int oy = 0; oy < oh; ++oy)
         for (int ox = 0; ox < ow; ++ox) {
@@ -923,6 +944,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
     std::string oldLoose, wadEntry;
     std::vector<uint8_t> oldWad;
     const auto oldSaved = savedTerrain_;
+    const bool oldSoundGrew = soundListGrew_;
     try {
         if (hadLoose) oldLoose = readFile(loose);
         if (fs::exists(wad)) {
@@ -961,6 +983,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         // the edit is unsaved again. navWalkable_ stays: the in-memory level
         // already carries the patched navigation the next save writes out
         savedTerrain_ = oldSaved;
+        soundListGrew_ = oldSoundGrew;
     } catch (const std::exception& e) { rollback = e.what(); }
     error += rollback.empty() ? " (the .lev was put back; nothing changed on disk)"
                               : " (and putting the .lev back failed: " + rollback + "; restore it from the .forge-orig backup)";
@@ -1249,8 +1272,15 @@ std::vector<Document::PropertyRow> Document::propertiesOf(size_t index) const {
     std::vector<PropertyRow> out;
     if (index >= file_.things().size()) return out;
     const auto& t = file_.things()[index];
-    for (const auto& p : t.properties)
-        if (!hiddenProperty("", p.key)) out.push_back({"", p.key, p.value, kindOf(p.value)});
+    const bool trackNode = lower(t.type) == "tracknode";
+    for (const auto& p : t.properties) {
+        if (hiddenProperty("", p.key)) continue;
+        if (trackNode && lower(p.key) == "scriptname") continue;   // renamed through the Tracks card (the whole chain)
+        // a key written twice (ScriptName on some things): one row, showing the copy the loader reads (the last)
+        auto dup = std::find_if(out.begin(), out.end(), [&](const PropertyRow& r) { return r.ctc.empty() && lower(r.key) == lower(p.key); });
+        if (dup != out.end()) { dup->value = p.value; dup->kind = kindOf(p.value); continue; }
+        out.push_back({"", p.key, p.value, kindOf(p.value)});
+    }
     for (const auto& b : t.ctcBlocks)
         for (const auto& p : b.properties)
             if (!hiddenProperty(b.name, p.key)) out.push_back({b.name, p.key, p.value, kindOf(p.value)});
@@ -1273,7 +1303,7 @@ bool Document::setPropertyValue(size_t index, const std::string& ctc, const std:
                     : k == row->kind;
     if (!fits) return false;
     pushUndo();
-    if (ctc.empty()) file_.setThingProperty(index, key, value);
+    if (ctc.empty()) { if (!file_.setThingPropertyAll(index, key, value)) file_.setThingProperty(index, key, value); }   // every copy of a doubled key
     else file_.setCtcProperty(index, ctc, key, value);
     ++revision_;
     return true;
@@ -1295,19 +1325,26 @@ void Document::setTrackField(size_t node, const std::string& key, const std::str
     if (!file_.setThingPropertyAll(node, key, value)) file_.setThingProperty(node, key, value);
 }
 
-std::vector<size_t> Document::trackChain(size_t node) const {
+std::vector<size_t> Document::trackChain(size_t node) const { return trackChain(node, nullptr); }
+
+std::vector<size_t> Document::trackChain(size_t node, const std::unordered_map<uint64_t, size_t>* uidIndex) const {
+    auto indexOf = [&](uint64_t uid) -> std::optional<size_t> {
+        if (!uidIndex) return indexOfUid(uid);
+        const auto hit = uidIndex->find(uid);
+        return hit == uidIndex->end() ? std::nullopt : std::optional<size_t>(hit->second);
+    };
     std::vector<size_t> back{node};
     std::set<size_t> seen{node};
     for (size_t cur = node;;) {   // walk to the head
         const uint64_t prev = trackLink(cur, 1);
-        const auto p = prev ? indexOfUid(prev) : std::nullopt;
+        const auto p = prev ? indexOf(prev) : std::nullopt;
         if (!p || seen.count(*p)) break;
         seen.insert(*p); back.push_back(*p); cur = *p;
     }
     std::vector<size_t> chain(back.rbegin(), back.rend());
     for (size_t cur = node;;) {   // and to the tail
         const uint64_t next = trackLink(cur, 2);
-        const auto n = next ? indexOfUid(next) : std::nullopt;
+        const auto n = next ? indexOf(next) : std::nullopt;
         if (!n || seen.count(*n)) break;
         seen.insert(*n); chain.push_back(*n); cur = *n;
     }
@@ -1328,10 +1365,12 @@ void Document::nameChain(const std::vector<size_t>& chain, const std::string& na
 std::vector<Document::Track> Document::tracks() const {
     std::vector<Track> out;
     std::set<size_t> done;
+    std::unordered_map<uint64_t, size_t> uidIndex;
+    for (size_t i = 0; i < file_.things().size(); ++i) uidIndex.emplace(uidOf(i), i);
     for (size_t i = 0; i < file_.things().size(); ++i) {
         if (!isTrackNode(i) || done.count(i)) continue;
         Track t;
-        t.nodes = trackChain(i);
+        t.nodes = trackChain(i, &uidIndex);
         for (const size_t n : t.nodes) done.insert(n);
         t.name = file_.things()[t.nodes.front()].scriptName();
         Frame a, b;
@@ -1355,9 +1394,14 @@ size_t Document::placeTrackNode(float x, float y, float z, const std::string& na
         "RHSetUpX 0.000000;\r\nRHSetUpY -1.000000;\r\nRHSetUpZ 0.000000;\r\nEndCTCPhysicsStandard;\r\n"
         "StartCTCEditor;\r\nEndCTCEditor;\r\nStartCTCVillageMember;\r\nVillageUID 0;\r\nEndCTCVillageMember;\r\n"
         "Health 0.0;\r\nLinkedToUID1 0;\r\nLinkedToUID2 0;\r\nStart TRUE;\r\nEnd TRUE;\r\nScriptName " + name + ";\r\nEndThing;\r\n";
-    const size_t n = file_.insertThingBlock(targetSection(), b);
-    ++revision_;
-    return n;
+    try {
+        const size_t n = file_.insertThingBlock(targetSection(), b);
+        ++revision_;
+        return n;
+    } catch (...) {
+        restore(undo_.back()); undo_.pop_back();
+        throw;
+    }
 }
 
 bool Document::linkTrackNodes(size_t a, size_t b, std::string& error) {
@@ -1519,9 +1563,13 @@ bool Document::setLink(size_t index, const std::string& ctc, const std::string& 
 }
 
 std::string Document::targetSection() const {
-    for (const auto& n : file_.sectionNames())
+    const auto names = file_.sectionNames();
+    for (const auto& n : names)
         if (lower(n) == lower(placementSection_)) return n;
-    return "NULL";
+    for (const auto& n : names)
+        if (lower(n) == "null") return n;
+    // no NULL section (a quest-only file): the first one, never a name the file lacks
+    return names.empty() ? std::string("NULL") : names.front();
 }
 
 size_t Document::intoPlacementSection(size_t index) {

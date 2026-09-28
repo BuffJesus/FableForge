@@ -391,6 +391,16 @@ private:
     void drawTracksCard(float pad, float inner, float cardInner);
     void drawTrackLines(const ImVec2& origin, const ImVec2& size);
     bool trackLinkPick_ = false;
+    int trackNodeAt(float px, float py) const;   // a drawn track node near a screen point, -1 = none
+    // per-revision caches (the cards redraw every frame; the document scans are O(things))
+    const std::vector<editor::Document::Track>& cachedTracks();
+    std::vector<editor::Document::Track> tracksCache_;
+    uint64_t tracksCacheRev_ = ~0ull;
+    std::vector<std::pair<std::string, std::string>> envDefs_, soundDefs_;   // ENVIRONMENT_THEME_DAY / SOUND_THEME, once per context
+    bool thingsStale() const;
+    uint64_t sectionsCardRev_ = ~0ull;
+    std::vector<std::string> sectionNamesCache_;
+    std::map<std::string, size_t> sectionCountsCache_;   // renderer instances lag the document (a reload is pending)
     char trackName_[64] = {};
     std::string thingLabel(size_t index) const;
     std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)

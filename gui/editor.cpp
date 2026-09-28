@@ -65,6 +65,8 @@ void App::openDocument() {
     if (!derr.empty()) pushLog("editor: " + derr, 1);
     docLoadedFor_ = selectedName_;
     syncedRevision_ = doc_.revision();
+    hiddenSections_.clear(); sectionsDirty_ = true; sectionsCardRev_ = ~0ull;
+    tracksCacheRev_ = ~0ull; linkPick_.active = false; trackLinkPick_ = false;
     loadThingOrigins();
 }
 
@@ -181,10 +183,13 @@ void App::startThingsReload() {
     const MapEntry* found = findEntry(selectedName_);
     if (!found) return;
     const MapEntry entry = *found;
-    const te::Context* ctx = &ctx_;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = std::make_shared<const te::Context>(ctx_);
+    const te::Context* ctx = ctxHold.get();
     const std::string root = installPath_;
     const std::string text = doc_.text();
-    foliageFuture_ = std::async(std::launch::async, [entry, ctx, root, text]() {
+    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, text]() {
         FoliageResult r; r.name = entry.key; r.thingsOnly = true;
         thingsexport::Options to;
         to.gameRoot = root;
@@ -297,10 +302,15 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##sections", inner);
     theme::label("Quest sections");
-    const auto names = doc_.sections();
-    const auto per = doc_.thingSections();
-    std::map<std::string, size_t> counts;
-    for (const auto& n : per) ++counts[lowerCopy(n)];
+    // the section list and per-section counts, rebuilt only when the document changes
+    if (sectionsCardRev_ != doc_.revision()) {
+        sectionsCardRev_ = doc_.revision();
+        sectionNamesCache_ = doc_.sections();
+        sectionCountsCache_.clear();
+        for (const auto& n : doc_.thingSections()) ++sectionCountsCache_[lowerCopy(n)];
+    }
+    const auto& names = sectionNamesCache_;
+    auto& counts = sectionCountsCache_;
     std::vector<std::string> shown = names;
     if (shown.empty()) shown.push_back("NULL");
     const std::string current = lowerCopy(doc_.placementSection());
@@ -490,7 +500,7 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
     if (!documentLoaded()) return;
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##tracks", inner);
-    const auto trs = doc_.tracks();
+    const auto& trs = cachedTracks();
     char head[64]; std::snprintf(head, sizeof head, "Tracks  (%zu)", trs.size());
     theme::label(head);
     ImGui::PushFont(fontSmall_);
@@ -538,6 +548,7 @@ void App::drawTracksCard(float pad, float inner, float cardInner) {
 }
 
 void App::drawTrackLines(const ImVec2& origin, const ImVec2& size) {
+    if (!documentLoaded()) return;
     if (!editMode_ || !documentLoaded()) return;
     const bool selIsNode = selectedThing_ >= 0 && doc_.isTrackNode(size_t(selectedThing_));
     if (editTab_ != 3 && !selIsNode) return;
@@ -551,7 +562,7 @@ void App::drawTrackLines(const ImVec2& origin, const ImVec2& size) {
         out = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
         return true;
     };
-    for (const auto& t : doc_.tracks()) {
+    for (const auto& t : cachedTracks()) {
         const bool mine = selIsNode && std::find(t.nodes.begin(), t.nodes.end(), size_t(selectedThing_)) != t.nodes.end();
         const ImU32 col = mine ? IM_COL32(255, 220, 90, 240) : IM_COL32(120, 200, 255, 170);
         ImVec2 prev;
@@ -594,6 +605,31 @@ void App::applySectionVisibility() {
     }
 }
 
+const std::vector<editor::Document::Track>& App::cachedTracks() {
+    if (tracksCacheRev_ != doc_.revision()) { tracksCache_ = doc_.tracks(); tracksCacheRev_ = doc_.revision(); }
+    return tracksCache_;
+}
+
+bool App::thingsStale() const {
+    return foliageFuture_.valid() || syncedRevision_ != doc_.revision();
+}
+
+int App::trackNodeAt(float px, float py) const {
+    int best = -1;
+    float bestD = theme::S(12.0f) * theme::S(12.0f);
+    for (const auto& t : tracksCache_)
+        for (const size_t n : t.nodes) {
+            editor::Frame f;
+            if (!doc_.frameOf(n, f)) continue;
+            const float p[3] = {f.pos[0], f.pos[2] + 0.3f, -f.pos[1]};
+            float u, v;
+            if (!renderer_.project(p, u, v)) continue;
+            const float dx = viewportOrigin_.x + u * viewportSize_.x - px, dy = viewportOrigin_.y + v * viewportSize_.y - py;
+            if (dx * dx + dy * dy < bestD) { bestD = dx * dx + dy * dy; best = int(n); }
+        }
+    return best;
+}
+
 std::string App::thingLabel(size_t index) const {
     const auto s = doc_.summary(index);
     return s.scriptName.empty() ? s.definition : s.scriptName + " (" + s.definition + ")";
@@ -633,7 +669,9 @@ int App::pickAt(float u, float v) {
     const int inst = renderer_.pick(o, d, t);
     if (trackLinkPick_) {
         trackLinkPick_ = false;
-        const int target = inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
+        // the drawn node dots (a track node may have no mesh to pick), else a mesh hit
+        const int dot = trackNodeAt(viewportOrigin_.x + u * viewportSize_.x, viewportOrigin_.y + v * viewportSize_.y);
+        const int target = dot >= 0 ? dot : (inst < 0 || thingsStale()) ? -1 : renderer_.instance(size_t(inst)).thing;
         if (target < 0 || selectedThing_ < 0) { pushLog("track: no node picked", 1); return -1; }
         std::string err;
         if (doc_.linkTrackNodes(size_t(selectedThing_), size_t(target), err)) { pushLog("track: linked", 0); selectThing(target); }
@@ -642,6 +680,7 @@ int App::pickAt(float u, float v) {
     }
     if (linkPick_.active) {
         // link pick: the clicked thing becomes the target; the selection stays
+        if (thingsStale()) { pushLog("link: the objects are reloading after an edit; click again in a moment", 1); return -1; }
         linkPick_.active = false;
         const int target = inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
         if (target < 0 || selectedThing_ < 0 || target == selectedThing_) { pushLog("link: no target picked", 1); return -1; }
@@ -751,7 +790,7 @@ void App::pollMeshImport() {
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
-    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
+    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear();
     meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
     startContextLoad(saveRoot());
 }
@@ -960,6 +999,7 @@ bool App::placeDefinition(const std::string& def, const std::string& scriptName)
 
 bool App::saveDocument() {
     if (!documentLoaded()) return false;
+    if (doc_.external() && saveRoot() != installPath_) { pushLog("save: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
     pushLog("saved " + doc_.loosePath().string(), 3);
@@ -976,6 +1016,7 @@ bool App::gameWriteBlocked(const char* what) {
 bool App::deployDocument() {
     if (!documentLoaded()) return false;
     if (gameWriteBlocked("deploy")) return false;
+    if (doc_.external() && saveRoot() != installPath_) { pushLog("deploy: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
     if (writesLoose()) pushLog("wrote " + doc_.loosePath().string() + " (loose-level install: the game reads this file)", 3);
@@ -997,11 +1038,14 @@ void App::startThemeRebake() {
     const MapEntry* found = findEntry(selectedName_);
     if (!found) return;
     const MapEntry entry = *found;
-    const te::Context* ctx = &ctx_;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = std::make_shared<const te::Context>(ctx_);
+    const te::Context* ctx = ctxHold.get();
     const float gain = settings_.gain;
     auto level = std::make_shared<forge::lev::File>(*doc_.level());   // snapshot: strokes may continue meanwhile
     const int texels = previewTexelsFor(level->cellsX(), level->cellsY());
-    previewFuture_ = std::async(std::launch::async, [entry, ctx, texels, gain, level]() {
+    previewFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, texels, gain, level]() {
         PreviewResult r; r.name = entry.key; r.textured = true;
         try {
             te::Options o;
@@ -1131,7 +1175,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         return;
     }
     if (terrainMode_ == 15) {
-        if (ImGui::IsKeyPressed(ImGuiKey_R) && !io.KeyCtrl) clipTurns_ = (clipTurns_ + 1) % 4;
+        if (ImGui::IsKeyPressed(ImGuiKey_R) && !io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive()) clipTurns_ = (clipTurns_ + 1) % 4;
         if (press) {
             if (terrainClip_.empty()) { pushLog("paste: copy a region first (Copy region, drag on the ground)", 1); return; }
             const size_t n = doc_.pasteTerrain(terrainClip_, int(std::lround(brushFable_[0])), int(std::lround(brushFable_[1])), clipTurns_, clipHeights_, clipThemes_, clipRelative_);
@@ -1148,6 +1192,8 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
+    if ((terrainMode_ == 10 || terrainMode_ == 11) && !doc_.hasGameMap()) return;   // an older .lev: no grid to paint
+    if (terrainMode_ == 7 && replaceFrom_ == paintTheme_) { if (press) pushLog("replace: the two themes are the same", 1); return; }
     if (terrainMode_ == 7 && replaceFrom_ < 0) {
         if (press) pushLog("replace: pick the theme to replace (Ctrl+Shift+click the ground or the list)", 1);
         return;
@@ -1695,15 +1741,17 @@ void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
     linkPoll(true);
     if (gameWriteBlocked("terrain")) return;
+    if (doc_.external() && saveRoot() != installPath_) { pushLog("terrain: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return; }
     if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
     editor::Document* doc = &doc_;
     const std::string root = saveRoot();
-    const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
+    const auto ctxHold = std::make_shared<const te::Context>(ctx_);   // the library lives in it; a reload must not free it
+    const forge::terraintex::ThemeLibrary* lib = ctxHold->themeLibrary();
     pushLog(std::string("terrain: writing .lev") + (writesLoose() ? "" : ", FinalAlbion.wad") + " and re-baking the FinalAlbion_RT.stb chunk...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
-    terrainDeployFuture_ = std::async(std::launch::async, [doc, root, lib, progress]() {
+    terrainDeployFuture_ = std::async(std::launch::async, [ctxHold, doc, root, lib, progress]() {
         TerrainDeployResult r;
         r.ok = doc->deployTerrain(root, r.notes, r.error, lib, progress);
         return r;
@@ -1986,7 +2034,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
                     ImGui::PopStyleColor();
                     ImGui::PushFont(fontSmall_);
-                    for (const auto& [name, type] : ctx_.definitions({"ENVIRONMENT_THEME_DAY"})) {
+                    if (envDefs_.empty()) envDefs_ = ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
+                    for (const auto& [name, type] : envDefs_) {
                         if (!contains(name, envSearch_)) continue;
                         if (ImGui::Selectable(name.c_str())) {
                             const auto idx = ctx_.definitionIndex(name);
@@ -2015,7 +2064,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::BeginChild("##soundlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
                     ImGui::PopStyleColor();
                     ImGui::PushFont(fontSmall_);
-                    for (const auto& [name, type] : ctx_.definitions({"SOUND_THEME"})) {
+                    if (soundDefs_.empty()) soundDefs_ = ctx_.definitions({"SOUND_THEME"});
+                    for (const auto& [name, type] : soundDefs_) {
                         if (!contains(name, envSearch_)) continue;
                         if (ImGui::Selectable(name.c_str())) {
                             std::string err;

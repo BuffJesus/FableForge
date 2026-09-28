@@ -601,8 +601,7 @@ bool App::openWorld(const std::string& wldPath) {
     if (added.empty()) { pushLog("open world: " + wld.filename().string() + " lists no level found beside it (" + std::to_string(missing) + " missing)", 2); return false; }
     maps_.insert(maps_.begin(), added.begin(), added.end());   // opened worlds first: visible without scrolling
     pushLog("Opened world " + wld.string() + ": " + std::to_string(added.size()) + " maps" + (missing ? ", " + std::to_string(missing) + " listed levels not found" : std::string()), missing ? 1 : 0);
-    selectedName_.clear();
-    selectMap(added.front().key);
+    selectMap(added.front().key);   // (not clearing selectedName_ first: that would skip the unsaved-edits prompt)
     return true;
 }
 
@@ -643,8 +642,7 @@ bool App::openLooseLev(const std::string& path) {
     if (it == maps_.end()) maps_.insert(maps_.begin(), m);   // loose files first: visible without scrolling
     groupOpen_["Loose files"] = true;
     pushLog("Opened " + m.loosePath, 0);
-    selectedName_.clear();
-    selectMap(m.key);
+    selectMap(m.key);   // (not clearing selectedName_ first: that would skip the unsaved-edits prompt)
     return true;
 }
 
@@ -688,11 +686,14 @@ void App::startFoliageLoad() {
     const MapEntry* found = findEntry(selectedName_);
     if (!found) return;
     const MapEntry entry = *found;
-    const te::Context* ctx = &ctx_;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = std::make_shared<const te::Context>(ctx_);
+    const te::Context* ctx = ctxHold.get();
     const std::string root = installPath_;
     const std::string tngText = documentLoaded() ? doc_.text() : std::string();
     if (documentLoaded()) syncedRevision_ = doc_.revision();
-    foliageFuture_ = std::async(std::launch::async, [entry, ctx, root, tngText]() {
+    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, tngText]() {
         FoliageResult r; r.name = entry.key;
         foliageexport::Options fo;
         fo.gameRoot = root;
@@ -717,6 +718,7 @@ const MapEntry* App::findEntry(const std::string& key) const {
 
 void App::startNeighbourLoad() {
     if (neighbourFuture_.valid() || selectedName_.empty() || !installValid_) return;
+    neighboursFor_ = selectedName_;   // one attempt per map: a map that cannot be placed must not retry every frame
     const MapEntry* cur = findEntry(selectedName_);
     if (!cur || !cur->worldFile.empty()) return;   // another world's maps: FinalAlbion.wld does not place them
     editor::WorldLayout layout;
@@ -734,11 +736,14 @@ void App::startNeighbourLoad() {
         const std::string lev = resolveLevPath(*e, err);
         if (!lev.empty()) jobs.push_back({lev, n->x - box->x, n->y - box->y, n->name});
     }
-    const te::Context* ctx = ctx_.ready() ? &ctx_ : nullptr;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = (ctx_.ready()) ? std::make_shared<const te::Context>(ctx_) : std::shared_ptr<const te::Context>();
+    const te::Context* ctx = ctxHold.get();
     const std::string name = selectedName_;
     const float gain = settings_.gain;
     const fs::path root = installPath_;
-    neighbourFuture_ = std::async(std::launch::async, [jobs, ctx, name, gain, root]() {
+    neighbourFuture_ = std::async(std::launch::async, [ctxHold, jobs, ctx, name, gain, root]() {
         NeighbourResult r; r.name = name;
         for (const auto& j : jobs) {
             try {
@@ -776,9 +781,12 @@ void App::startPreviewLoad() {
     const MapEntry entry = *found;
     const bool textured = ctx_.ready();
     reloadWhenContextReady_ = !textured;
-    const te::Context* ctx = textured ? &ctx_ : nullptr;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = (textured) ? std::make_shared<const te::Context>(ctx_) : std::shared_ptr<const te::Context>();
+    const te::Context* ctx = ctxHold.get();
     const float gain = settings_.gain;
-    previewFuture_ = std::async(std::launch::async, [this, entry, ctx, textured, gain]() {
+    previewFuture_ = std::async(std::launch::async, [ctxHold, this, entry, ctx, textured, gain]() {
         PreviewResult r; r.name = entry.key; r.textured = textured;
         std::string err;
         const std::string lev = resolveLevPath(entry, err);
@@ -837,13 +845,16 @@ void App::cancelBatch() {
 void App::startExportOf(const MapEntry& entry) {
     settings_.outDir = outDirBuf_;
     const ExportSettings s = settings_;
-    const te::Context* ctx = ctx_.ready() ? &ctx_ : nullptr;
+    // the worker holds its own reference: a context reload on the UI thread
+    // (ctx_ = *ctxPending_) must not free what it is reading
+    const auto ctxHold = (ctx_.ready()) ? std::make_shared<const te::Context>(ctx_) : std::shared_ptr<const te::Context>();
+    const te::Context* ctx = ctxHold.get();
     const std::string outPath = (fs::path(s.outDir) / (entry.name + (s.format == 0 ? ".glb" : ".obj"))).string();
     lastExportPath_ = outPath;
     lastExportOk_ = false;
     batchCurrent_ = entry.name;
     if (!batchActive()) { pushLog("Exporting " + entry.name + " ...", 0); saveSettings(); }
-    exportFuture_ = std::async(std::launch::async, [this, entry, s, ctx, outPath]() {
+    exportFuture_ = std::async(std::launch::async, [ctxHold, this, entry, s, ctx, outPath]() {
         ExportResult r; r.path = outPath;
         const auto t0 = std::chrono::steady_clock::now();
         std::string err;
@@ -957,6 +968,7 @@ void App::pollWorkers() {
         if (r.name == selectedName_ && r.thingsOnly) {
             thingInstances_ = r.things.instances.size();
             renderer_.uploadThings(r.things, te::UpAxis::Y);
+            sectionsDirty_ = true;   // fresh instances start visible
             bindInstances(r.things);
             for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
         } else if (r.name == selectedName_) {
@@ -971,6 +983,7 @@ void App::pollWorkers() {
             }
             if (!r.things.instances.empty()) {
                 renderer_.uploadThings(r.things, te::UpAxis::Y);
+            sectionsDirty_ = true;   // fresh instances start visible
                 bindInstances(r.things);
                 foliageStatus_ += ", " + std::to_string(r.things.instances.size()) + " objects";
             } else if (r.things.found) {

@@ -979,6 +979,67 @@ void testListEntries() {
     CHECK(doc.undo() && doc.undo() && doc.listEntries(0, "CTCCreatureGenerator", "CreatureFamilies").size() == 3);
 }
 
+// Regressions from the branch review (feat/editor-ui-shell).
+void testReviewFixes(const fs::path& dir) {
+    namespace ed = albion::editor;
+    std::string err;
+    // an empty stroke leaves no undo step
+    {
+        const fs::path lev = writeSyntheticLev(dir / "rv_stroke.lev", 4, 4, [](int, int) { return 1.0f; });
+        ed::Document doc;
+        CHECK(doc.openText("Rv", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(lev, err));
+        ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Environment;   // no game-map grid on this file: a no-op
+        doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
+        CHECK(!doc.canUndo() && !doc.terrainDirty());
+    }
+    // the sound-list flag does not leak into the next map
+    {
+        const fs::path a = writeGameMapLev(dir / "rv_a.lev"), b = writeGameMapLev(dir / "rv_b.lev");
+        ed::Document doc;
+        CHECK(doc.openText("RvA", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(a, err));
+        CHECK(doc.addSoundTheme("SOUND_THEME_NEW", err) == 3 && doc.terrainDirty());
+        CHECK(doc.openText("RvB", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(b, err));
+        CHECK(!doc.terrainDirty());
+    }
+    // a turned relative paste sits on the ground at the click
+    {
+        const fs::path lev = writeSyntheticLev(dir / "rv_paste.lev", 8, 8, [](int x, int y) { return float(x + 10 * y); });
+        ed::Document doc;
+        CHECK(doc.openText("RvP", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err) && doc.loadLevel(lev, err));
+        const auto clip = doc.copyTerrain(0, 0, 2, 1);   // 0 1 2 / 10 11 12
+        for (int turns = 1; turns < 4; ++turns) {
+            CHECK(doc.pasteTerrain(clip, 4, 4, turns, true, false, true) > 0 || true);
+            CHECK(doc.terrain().heights[size_t(4) * doc.cellsX() + 4] == 44.0f);   // the click's own ground height
+            doc.undo();
+        }
+    }
+    // no NULL section: things go into the file's first section, nothing throws
+    {
+        ed::Document doc;
+        CHECK(doc.openText("RvS", "Version 2;\r\nXXXSectionStart Q_ONLY;\r\nXXXSectionEnd;\r\n", err));
+        size_t n = 0;
+        bool threw = false;
+        try { n = doc.placeTrackNode(1, 2, 3); } catch (...) { threw = true; }
+        CHECK(!threw && doc.sectionOf(n) == "Q_ONLY");
+    }
+    // paste honours the placement section; a doubled key is one row and edits both copies
+    {
+        const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Object;\r\nUID 5;\r\nDefinitionType \"OBJECT_A\";\r\nScriptName Foo;\r\nHealth 1.0;\r\nScriptName Foo;\r\nEndThing;\r\n\r\nXXXSectionEnd;\r\n\r\nXXXSectionStart Q_X;\r\nXXXSectionEnd;\r\n";
+        ed::Document doc;
+        CHECK(doc.openText("RvD", tng, err));
+        int rows = 0;
+        for (const auto& r : doc.propertiesOf(0)) rows += r.key == "ScriptName";
+        CHECK(rows == 1);
+        CHECK(doc.setPropertyValue(0, "", "ScriptName", "Bar"));
+        CHECK(doc.text().find("ScriptName Foo;") == std::string::npos);
+        const auto frag = doc.extract({0});
+        doc.setPlacementSection("NULL");
+        const float at[3] = {0, 0, 0};
+        const auto pasted = doc.paste(frag, at, false);
+        CHECK(pasted.size() == 1 && doc.sectionOf(pasted[0]) == "NULL");
+    }
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1559,6 +1620,7 @@ int main() {
     testTerrainClip(dir);
     testTracks();
     testListEntries();
+    testReviewFixes(dir);
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

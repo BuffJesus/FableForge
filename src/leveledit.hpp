@@ -26,6 +26,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "forge/lev.hpp"
@@ -446,6 +447,7 @@ private:
     uint64_t trackLink(size_t node, int which) const;          // 1 = prev, 2 = next
     void setTrackField(size_t node, const std::string& key, const std::string& value);
     std::vector<size_t> trackChain(size_t node) const;         // head -> tail
+    std::vector<size_t> trackChain(size_t node, const std::unordered_map<uint64_t, size_t>* uidIndex) const;
     void fixTrackEnds(const std::vector<size_t>& chain);
     void nameChain(const std::vector<size_t>& chain, const std::string& name);
     bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
