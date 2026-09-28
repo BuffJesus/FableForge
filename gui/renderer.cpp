@@ -324,6 +324,8 @@ Renderer::~Renderer() {
     thumbs_.clear();
     for (auto& [id, srv] : swatches_) release(srv);
     swatches_.clear();
+    for (auto& [key, srv] : uiTextures_) release(srv);
+    uiTextures_.clear();
     release(preview_);
     releaseTarget();
     releaseMesh();
@@ -754,6 +756,13 @@ void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearL
 void Renderer::clearLayer(int layer) {
     for (auto& b : layers_[layer]) { release(b.vb); release(b.srv); }
     layers_[layer].clear();
+}
+
+ID3D11ShaderResourceView* Renderer::uiTexture(const std::string& key, const terrainexport::Image& img) {
+    auto& slot = uiTextures_[key];
+    release(slot);
+    slot = makeTexture(img);
+    return slot;
 }
 
 ID3D11ShaderResourceView* Renderer::previewTexture(const terrainexport::Image& img) {

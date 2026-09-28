@@ -445,6 +445,8 @@ private:
     float clipStart_[2] = {0, 0};
     void drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col);
     bool fractalOpen_ = false;
+    ID3D11ShaderResourceView* fractalPreview_ = nullptr;   // owned by the renderer (uiTexture "fractal")
+    std::string fractalPreviewKey_;                         // params + map it was drawn for
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};
     void paletteCombo(const char* id, int& slot, float width);

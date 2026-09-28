@@ -2193,6 +2193,33 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 if (f.endFalloff <= f.startFalloff) f.endFalloff = f.startFalloff + 1.0;   // vanilla keeps start < end
             }
             ImGui::PopItemWidth();
+            // preview: the fractal over this map (world coordinates), 128 x 128, redrawn when a field changes
+            {
+                char key[256];
+                std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%g|%d|%g|%g|%d|%d", doc_.mapName().c_str(), f.lacunarity, f.dimension, f.octaves, f.mapX, f.mapY,
+                              f.worldScaler, int(f.useFalloff), f.startFalloff, f.endFalloff, doc_.worldX(), doc_.worldY());
+                if (fractalPreviewKey_ != key) {
+                    fractalPreviewKey_ = key;
+                    const forge::fractal::Generator gen(f);
+                    terrainexport::Image img;
+                    img.width = img.height = 128;
+                    img.rgba.resize(128 * 128 * 4);
+                    const float sx = float(doc_.cellsX() - 1) / 127.0f, sy = float(doc_.cellsY() - 1) / 127.0f;
+                    for (int y = 0; y < 128; ++y)
+                        for (int x = 0; x < 128; ++x) {
+                            const float h = gen.heightAt(double(doc_.worldX()) + x * sx, double(doc_.worldY()) + y * sy);
+                            const uint8_t g = uint8_t(std::clamp(h, 0.0f, 1.0f) * 255.0f);
+                            uint8_t* px = &img.rgba[size_t(y * 128 + x) * 4];
+                            px[0] = g; px[1] = g; px[2] = g; px[3] = 255;
+                        }
+                    fractalPreview_ = renderer_.uiTexture("fractal", img);
+                }
+                if (fractalPreview_) {
+                    const float side = std::min(cardInner, S(160));
+                    ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, ImVec2(side, side));
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The fractal over this map, dark = 0, white = Scale. Apply sets the ground to it.");
+                }
+            }
             if (theme::ghostButton("Apply fractal to this map", ImVec2(cardInner, S(28)))) {
                 const size_t n = doc_.applyFractal(f);
                 pushLog("fractal: " + std::to_string(n) + " vertices set (one undo step)", n ? 0 : 1);

@@ -169,6 +169,8 @@ public:
     ID3D11ShaderResourceView* swatch(uint32_t id, const terrainexport::Image& img);
     // The Textures tab's preview: one full-size texture at a time (the previous is freed).
     ID3D11ShaderResourceView* previewTexture(const terrainexport::Image& img);
+    // A UI image kept under `key` (the previous one of that key is freed): the fractal preview.
+    ID3D11ShaderResourceView* uiTexture(const std::string& key, const terrainexport::Image& img);
     // A mesh thumbnail for the object palette: the mesh rendered once into its own small
     // target from a three-quarter view framing its bounds; cached by `key` and freed with
     // the renderer. Null when the mesh has no drawable part.
@@ -176,6 +178,7 @@ public:
                                         const std::vector<terrainexport::Image>& images, uint32_t size);
 private:
     std::map<uint32_t, ID3D11ShaderResourceView*> swatches_;
+    std::map<std::string, ID3D11ShaderResourceView*> uiTextures_;
     ID3D11ShaderResourceView* preview_ = nullptr;
     std::map<std::string, ID3D11ShaderResourceView*> thumbs_;
     void uploadMesh(const foliageexport::Mesh& m, const std::vector<terrainexport::Image>& images,
