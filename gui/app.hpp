@@ -388,6 +388,13 @@ private:
     int assetsTab_ = 0;
     std::string customDonor_;
     void drawModelImportCard(float pad, float inner, float cardInner);
+    // where an Assets import goes: a FableForge mod pack of the load order (a recipe the
+    // composer applies at deploy) or, "" = directly into the game's banks (the old way)
+    std::string packDest_;
+    bool packDestChosen_ = false;
+    char newPackName_[64] = {};
+    void drawPackDestination(float cardInner);
+    bool addToPackOrGame(bool model);
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:
     void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 2); }

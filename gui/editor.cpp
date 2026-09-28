@@ -4,6 +4,7 @@
 
 #include "app.hpp"
 #include "vanilla_props.hpp"
+#include "modpack.hpp"
 
 #include "meshimport.hpp"
 
@@ -799,6 +800,72 @@ void App::scaleSelected(float factor) {
     commitFrame(f);
 }
 
+// The destination of an Assets import: a FableForge pack (default: the first one in the
+// load order) or the game directly. A new pack goes under <root>/FableForgeMods/<Name>/.
+void App::drawPackDestination(float cardInner) {
+    using theme::S;
+    if (modOrder_.mods.empty()) refreshModOrder();
+    std::vector<std::pair<std::string, std::string>> packs;   // (label, folder)
+    for (const auto& m : modOrder_.mods)
+        if (m.kind == forge::modorder::Kind::Forge) {
+            fs::path src(m.source);
+            if (src.is_relative()) src = fs::path(saveRoot()) / src;
+            packs.push_back({m.name, src.string()});
+        }
+    if (!packDestChosen_) { packDest_ = packs.empty() ? std::string() : packs.front().second; packDestChosen_ = true; }
+    std::string cur = "Directly into the game (advanced)";
+    for (const auto& [l, f] : packs) if (f == packDest_) cur = "Mod pack: " + l;
+    theme::label("Goes into");
+    ImGui::SetNextItemWidth(cardInner);
+    if (ImGui::BeginCombo("##packdest", cur.c_str())) {
+        for (const auto& [l, f] : packs)
+            if (ImGui::Selectable(("Mod pack: " + l).c_str(), f == packDest_)) packDest_ = f;
+        if (ImGui::Selectable("Directly into the game (advanced)", packDest_.empty())) packDest_.clear();
+        ImGui::EndCombo();
+    }
+    auto_.registerWidget("combo_pack_dest");
+    ImGui::SetNextItemWidth(cardInner - S(96));
+    ImGui::InputTextWithHint("##newpack", "New pack name", newPackName_, sizeof newPackName_);
+    auto_.registerWidget("input_new_pack");
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("New pack", ImVec2(S(90), S(26))) && newPackName_[0]) {
+        std::string leaf = newPackName_;
+        for (auto& c : leaf) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')) c = '_';
+        const fs::path folder = fs::path(saveRoot()) / "FableForgeMods" / leaf;
+        std::string err;
+        if (!modpack::create(folder, newPackName_, err)) pushLog("pack: " + err, 2);
+        else if (modAdd(folder.string(), newPackName_)) { packDest_ = folder.string(); pushLog("pack " + std::string(newPackName_) + " created in " + folder.string() + " and added to the load order", 3); newPackName_[0] = 0; }
+    }
+    auto_.registerWidget("btn_new_pack");
+    ImGui::PushFont(fontSmall_);
+    theme::hint(packDest_.empty() ? "Directly: the game's banks are rewritten now (one-time backups). The import is not a mod -- it cannot be switched off, shared or ordered."
+                                  : "Into the pack: the files and a recipe go in the pack; Mods > Deploy builds it into the game with every other mod, so it can be switched off, shared and ordered.");
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, S(4)));
+}
+
+// Import into the chosen pack (a recipe) or directly (the in-place import). model: the Models page.
+bool App::addToPackOrGame(bool model) {
+    auto upper = [](std::string nm) { for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; } return nm; };
+    if (packDest_.empty()) {
+        if (model) return importMesh(meshModelPath_, upper(meshName_), meshTexturePng_);
+        return createCustomTheme(customPng_, upper(customName_), customDonor_);
+    }
+    std::string err;
+    bool ok;
+    if (model) {
+        modpack::ModelRecipe r; r.name = upper(meshName_); r.model = meshModelPath_; r.texture = meshTexturePng_;
+        ok = modpack::addModel(packDest_, r, err);
+        if (ok) { pushLog("pack: model " + r.name + " added (OBJECT_" + r.name + " after the next Mods > Deploy)", 3); meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0; }
+    } else {
+        modpack::GroundThemeRecipe r; r.name = upper(customName_); r.png = customPng_; r.donor = customDonor_;
+        ok = modpack::addGroundTheme(packDest_, r, err);
+        if (ok) { pushLog("pack: ground theme " + r.name + " added (paintable after the next Mods > Deploy)", 3); customPng_[0] = 0; customName_[0] = 0; }
+    }
+    if (!ok) pushLog("pack: " + err, 2);
+    return ok;
+}
+
 // ---- Assets > Models: a model into graphics.big + an OBJECT def (meshimport)
 void App::drawModelImportCard(float pad, float inner, float cardInner) {
     using theme::S;
@@ -819,14 +886,14 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
     ImGui::PopStyleVar();
     const bool meshBusy = meshImportFuture_.valid();
     const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
-    if (theme::ghostButton(meshBusy ? "Importing..." : "Import into the game", ImVec2(cardInner, S(28))) && meshCan) {
-        std::string nm = meshName_;
-        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
-        importMesh(meshModelPath_, nm, meshTexturePng_);
-    }
+    drawPackDestination(cardInner);
+    if (theme::primaryButton(meshBusy ? "Importing..." : packDest_.empty() ? "Import into the game" : "Add to the pack", ImVec2(cardInner, S(30)), meshCan))
+        addToPackOrGame(true);
     auto_.registerWidget("btn_mesh_import");
     ImGui::PushFont(fontSmall_);
-    theme::hint("The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh); nothing retail is replaced, one-time backups. A collision hull is written from the model's own triangles (EgoCore's 3DMF physics entry). It then shows under Add an object. Not yet seen in-game.");
+    theme::hint(packDest_.empty()
+        ? "The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh), with a collision hull from the model's own triangles; nothing retail is replaced, one-time backups. It then shows under Add an object."
+        : "At deploy the pack's recipe makes MESH_<NAME> (graphics.big), <NAME>_DIFFUSE (textures.big) and OBJECT_<NAME> (game.bin, a copy of the barrel's def) with a collision hull from the model's own triangles, taking the ids the other mods leave free. After Mods > Deploy it shows under Add an object.");
     ImGui::PopFont();
     theme::endCard();
 }
@@ -861,12 +928,10 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
     ImGui::PushFont(fontSmall_);
     theme::hint(("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + customDonor_ + " with your texture) to game.bin; nothing retail is replaced. One-time backups. With a map open it joins that map's palette, ready to paint; otherwise add it from Terrain > Paint > Ground.").c_str());
     ImGui::PopFont();
+    drawPackDestination(cardInner);
     const bool can = customPng_[0] && customName_[0] && !ctxFuture_.valid();
-    if (theme::primaryButton(ctxFuture_.valid() ? "Textures reloading..." : "Create ground theme", ImVec2(cardInner, S(32)), can)) {
-        std::string nm = customName_;
-        for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
-        createCustomTheme(customPng_, nm, customDonor_);
-    }
+    if (theme::primaryButton(ctxFuture_.valid() ? "Textures reloading..." : packDest_.empty() ? "Create ground theme" : "Add to the pack", ImVec2(cardInner, S(32)), can))
+        addToPackOrGame(false);
     auto_.registerWidget("btn_custom_theme_create");
     theme::endCard();
 }

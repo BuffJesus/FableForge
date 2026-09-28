@@ -1,0 +1,12 @@
+# Assets imports with a mod-pack destination (a pack in the scratch save root's load order).
+wait_maps
+wait_ready
+set saveroot build/ui_parity_install
+assets_tab 1
+frames 4
+assert_widget combo_pack_dest
+screenshot build/ui/parity3_1_models_pack.png
+assets_tab 2
+frames 3
+screenshot build/ui/parity3_2_themes_pack.png
+quit
