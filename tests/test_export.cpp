@@ -25,6 +25,7 @@
 #include "thingsexport.hpp"
 #include "navlines.hpp"
 #include "leveledit.hpp"
+#include "vanilla_props.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
 #include "forge/meshcompose.hpp"
@@ -844,6 +845,20 @@ void testAddSoundTheme(const fs::path& dir) {
     CHECK(u32(bytes, re.navSections().back().offset) == uint32_t(bytes.size()));            // the last section's end
 }
 
+// The recovered vanilla property table: labels that differ from the key, pickers, enums.
+void testVanillaFields() {
+    namespace ed = albion::editor;
+    const auto* door = ed::vanillaField("CTCDoor", "Open");
+    CHECK(door && std::string(door->label) == "Start open" && std::string(door->kind) == "bool");
+    const auto* brain = ed::vanillaField("", "overridingbrainname");
+    CHECK(brain && std::string(brain->kind) == "def" && std::string(brain->defType) == "BRAIN");
+    const auto* dt = ed::vanillaField("CTCHeroCentreDoorMarker", "DoorType2");
+    CHECK(dt && std::string(dt->kind) == "enum" && std::string(dt->enumPairs).find("GUILD_DOOR_TRAINING=1") != std::string::npos);
+    const auto* col = ed::vanillaField("CTCLight", "Colour");
+    CHECK(col && std::string(col->label).find("ColourGreen") != std::string::npos);
+    CHECK(!ed::vanillaField("CTCDoor", "NoSuchKey"));
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1412,6 +1427,7 @@ int main() {
     testEnvironmentAndSoundPaint(dir);
     testFractal();
     testAddSoundTheme(dir);
+    testVanillaFields();
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

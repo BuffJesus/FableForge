@@ -3,6 +3,7 @@
 // layout, explorer, export and automation.
 
 #include "app.hpp"
+#include "vanilla_props.hpp"
 
 #include "meshimport.hpp"
 
@@ -367,13 +368,49 @@ void App::drawPropertyGrid(float cardInner) {
         }
         if (!open) continue;
         ImGui::PushID(int(i));
+        // the vanilla dialog's caption and widget for this key, when recovered
+        const editor::VanillaField* vf = editor::vanillaField(r.ctc, r.key);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::vec(theme::Muted), "%s", r.key.c_str());
+        ImGui::TextColored(theme::vec(vf ? theme::Text : theme::Muted), "%s", vf ? vf->label : r.key.c_str());
+        if (ImGui::IsItemHovered()) {
+            if (vf) ImGui::SetTooltip("%s  (.tng key %s)\nvanilla tab: %s%s", vf->label, r.key.c_str(), vf->category, vf->hasRange ? "" : "");
+            else ImGui::SetTooltip(".tng key %s (no vanilla dialog entry recovered)", r.key.c_str());
+        }
         ImGui::SameLine(keyW);
         ImGui::SetNextItemWidth(cardInner - keyW);
         std::string next;
         bool commit = false;
-        if (r.kind == K::Bool) {
+        const std::string vkind = vf ? vf->kind : "";
+        if (vkind == "def" && vf->defType[0] && ctx_.ready() && r.kind != K::Bool) {
+            // a def picker; the value keeps the file's spelling (quoted or bare), NULL = none
+            const bool quoted = r.kind == K::String;
+            std::string cur = r.value;
+            if (quoted && cur.size() >= 2) cur = cur.substr(1, cur.size() - 2);
+            if (ImGui::BeginCombo("##v", cur.c_str())) {
+                if (!quoted && ImGui::Selectable("NULL", cur == "NULL")) { next = "NULL"; commit = true; }
+                for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{vf->defType}))
+                    if (ImGui::Selectable(name.c_str(), name == cur)) { next = quoted ? "\"" + name + "\"" : name; commit = true; }
+                ImGui::EndCombo();
+            }
+        } else if (vkind == "enum" && vf->enumPairs[0] && r.kind == K::Int) {
+            // NAME=value pairs from the dialog's option list
+            std::vector<std::pair<std::string, std::string>> opts;
+            std::string pairs = vf->enumPairs;
+            for (size_t a = 0; a < pairs.size();) {
+                size_t b = pairs.find(';', a); if (b == std::string::npos) b = pairs.size();
+                const std::string item = pairs.substr(a, b - a);
+                const size_t eq = item.find('=');
+                if (eq != std::string::npos) opts.push_back({item.substr(0, eq), item.substr(eq + 1)});
+                a = b + 1;
+            }
+            std::string curName = r.value;
+            for (const auto& [n, v] : opts) if (v == r.value) curName = n;
+            if (ImGui::BeginCombo("##v", curName.c_str())) {
+                for (const auto& [n, v] : opts)
+                    if (ImGui::Selectable(n.c_str(), v == r.value)) { next = v; commit = true; }
+                ImGui::EndCombo();
+            }
+        } else if (r.kind == K::Bool) {
             bool v = r.value == "TRUE";
             if (ImGui::Checkbox("##v", &v)) { next = v ? "TRUE" : "FALSE"; commit = true; }
         } else {
@@ -381,6 +418,16 @@ void App::drawPropertyGrid(float cardInner) {
             std::snprintf(buf, sizeof buf, "%s", r.value.c_str());
             ImGui::InputText("##v", buf, sizeof buf);
             if (ImGui::IsItemDeactivatedAfterEdit()) { next = buf; commit = true; }
+        }
+        // the vanilla dialog's range for numbers (its spin controls stop there)
+        if (commit && vf && vf->hasRange && (r.kind == K::Int || r.kind == K::Float)) {
+            char* end = nullptr;
+            const double v = std::strtod(next.c_str(), &end);
+            if (end && *end == 0 && (v < vf->min || v > vf->max)) {
+                char msg[160]; std::snprintf(msg, sizeof msg, "property: %s must be %g .. %g (the vanilla dialog's range)", vf->label, vf->min, vf->max);
+                pushLog(msg, 1);
+                commit = false;
+            }
         }
         if (commit && next != r.value) {
             if (doc_.setPropertyValue(idx, r.ctc, r.key, next)) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);

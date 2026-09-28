@@ -1,0 +1,126 @@
+ctc_block	tng_key	category	label	kind	def_type_or_enum	enum_values	evidence	confidence
+	ScriptName	General	Script Name	string			Get CThing 01cf3db7; Set 01cf4650; CThing::Save 01cf0e60 writes "ScriptName "	H
+	ScriptData	General	Script Data	string			Get 01cf3ea5; Set 01cf468d; CThing::Save 01cf0e60 "ScriptData " (quoted in tng)	H
+	ThingGamePersistent	General	Game Persistent	bool			Get 01cf3fa0; Set 01cf47fe; CThing::Save 01cf0e60 "ThingGamePersistent "	H
+CTCActionUseScriptedHook	Usable	Script	Usable	bool			Get CThing 01cf40a6/01cf41b1 (PeekTC<CTCActionUseScriptedHook>); Set 01cf485c adds/removes the CTCActionUseScriptedHook block; OnSerialise 0253d3c5 "Usable" (+0xc)	H
+	ObjectScale	General	ObjectScale	float		range=0.01..100;step=0.1	Get CThingPhysical 01f2024c (+0xe0); CThingPhysical::Save 01f1fe70 "ObjectScale "	H
+	CanComeBetweenCameraAndHero	General	CanComeBetweenCamAndHero	bool			Get 01f2031c; CThingPhysical::Save 01f1fe70 "CanComeBetweenCameraAndHero "; label!=key	H
+	OverridingBrainName	General	OverridingBrain	def	BRAIN	NULL=none	Get CThingAICreature 01d71937/01d71a61 CGuiVarTransferDefIndex("BRAIN") (+0x1f8); Set 01d71bf5 GetDefNameFromGlobalIndex; CThingAICreature::Save 01d70150 "OverridingBrainName " (bare def name or NULL)	H
+	TriggerRadius		TriggerRadius	float		range=1..50;step=1	Get CThingSwitch 027f9ea4 (+0x118; category is the empty string); Set 027fa2bc; CThingSwitch::Save 027f9780 "TriggerRadius "	H
+	TriggeredByThing		TriggeredBy	string		NULL=none	Get CThingSwitch 027f9f6d (+0x12c); Set 027fa2f7; CThingSwitch::Save 027f9780 "TriggeredByThing " (NULL default); label!=key	M
+	TimeToChangeEnvironmentDef		TimeToChangeEnvironmentDef	float		range=1..20;step=1	Get CThingSwitch 027fa050 (+0x124); Set 027fa331; CThingSwitch::Save 027f9780	H
+	EnvironmentDef		EnvironmentDef	string		NULL=none	Get CThingSwitch 027fa11c (+0x11c) plain CGuiVarTransferString, not a def picker; Set 027fa36c; CThingSwitch::Save 027f9780	H
+	TriggeredByThing	General	TriggeredBy	string		NULL=none	Get CThingPhysicalSwitch 0280191a (+0x11c); CThingPhysicalSwitch::Save 028011a0 "TriggeredByThing "; label!=key	M
+CTCDoor	Open	General	Start open	bool			Get 0257fcfd (+0x10); Set 0257fdd0; OnSerialise 0257ea06 "Open" (+0x10); label!=key	H
+CTCSearchableContainer	NumberOfTimesToSearch	Containers	Number of times to search	int		range=0..100;step=1	Get 025a7502 (+0x24); OnSerialise 025a7667 (+0x24)	H
+CTCDRegionExit	Radius	General	Exit Radius	float		range=0.01..22;step=0.5	Get 026350cd (+0x14); OnSerialise 02635644 (+0x14); label!=key	H
+CTCDRegionExit	MessageRadius	General	Message Radius	float		range=0..30;step=0.5	Get 026351b1 (+0x18); OnSerialise 02635658 (+0x18)	H
+CTCDRegionExit	ReversedOnMiniMap	General	Reversed On MiniMap	bool			Get 02635279 (+0x28); OnSerialise 0263566c (+0x28)	H
+CTCDRegionExit	HiddenOnMiniMap	General	Hidden On MiniMap	bool			Get 02635344 (+0x29); OnSerialise 02635680 (+0x29)	H
+CTCActionUseScriptedHook	ForceConfirmation	Script	Force Confirmation	bool			Get 0253e745; OnSerialise 0253d42c (+0xd)	H
+CTCActionUseScriptedHook	TeleportToRegionEntrance	Script	Teleport To Region Entrance	bool			Get 0253e831; OnSerialise 0253d440 (+0x10)	H
+CTCActionUseScriptedHook	ReversedOnMiniMap	Script	Reversed On MiniMap	bool			Get 0253e923; OnSerialise 0253d3d9 (+0x54)	H
+CTCActionUseScriptedHook	HiddenOnMiniMap	Script	Hidden On MiniMap	bool			Get 0253ea2a (+0x55); OnSerialise 0253d3ed (+0x55)	H
+CTCActionUseScriptedHook	CameraTrackUID	Script	Camera Track	string	thing ScriptName list (things passing CThingFilter_HasTC; "<no camera track>" = none)		Get 0253ed42 CGuiVarTransferStringList of script names; OnSerialise 0253d4ae "CameraTrackUID" (+0x30) stores the thing UID, not the name: the grid must map name<->UID	M
+CTCCreatureGenerator	TriggerOnActivate	CreatureGen	TriggerOnActivate	bool			Get 02515e35; OnSerialise 0251504c (+0x54)	H
+CTCCreatureGenerator	SelfTrigger	CreatureGen	SelfTrigger	bool			Get 02515f21; OnSerialise 02515024 (+0x4c)	H
+CTCCreatureGenerator	GenerationRadius	CreatureGen	GenerationRadius	int		range=1..20;step=1	Get 02516017 SLONG via __ftol2 (dialog int, tng float e.g. 10.0); OnSerialise 02514ffc float (+0x44)	H
+CTCCreatureGenerator	SelfTriggerRadius	CreatureGen	SelfTriggerRadius	int		range=1..40;step=1	Get 0251611f SLONG via __ftol2 (tng float); OnSerialise 02515010 float (+0x48)	H
+CTCCreatureGenerator	SelfTriggerResetInterval	CreatureGen	SelfTriggerResetInterval	int		range=0..1000;step=1	Get 0251623c; OnSerialise 02515038 (+0x50)	H
+CTCCreatureGenerator	NumTriggers	CreatureGen	NumTriggers	int		range=-1..100;step=1	Get 02516363; OnSerialise 025150a9 (+0x60)	H
+CTCCreatureGenerator	ActiveCreatureLimit	CreatureGen	ActiveCreatureLimit	int		range=-1..50;step=1	Get 0251648a; OnSerialise 0251506b (+0x58)	H
+CTCCreatureGenerator	TotalGenerationLimit	CreatureGen	TotalGenerationLimit	int		range=-1..1000;step=1	Get 025165b3; OnSerialise 0251508a (+0x5c)	H
+CTCCreatureGenerator	CreatureFamilies[n]	CreatureGen	CreatureFamilies	def	CREATURE_GENERATION_FAMILY (list)		Get 025167c4 CGuiVarTransferDefIndexList; OnSerialise 02514fe8 TransferVector (+0xc); tng CreatureFamilies[i] "NAME"	H
+CTCDCreatureGenerator	TriggerOnActivate	CreatureGen	TriggerOnActivate	bool			Get 02515e35; OnSerialise 0251504c (+0x54); driver variant: same keys in retail tng, property inheritance assumed	M
+CTCDCreatureGenerator	SelfTrigger	CreatureGen	SelfTrigger	bool			Get 02515f21; OnSerialise 02515024 (+0x4c); driver variant: same keys in retail tng, property inheritance assumed	M
+CTCDCreatureGenerator	GenerationRadius	CreatureGen	GenerationRadius	int		range=1..20;step=1	Get 02516017 SLONG via __ftol2 (dialog int, tng float e.g. 10.0); OnSerialise 02514ffc float (+0x44); driver variant: same keys in retail tng, property inheritance assumed	M
+CTCDCreatureGenerator	SelfTriggerRadius	CreatureGen	SelfTriggerRadius	int		range=1..40;step=1	Get 0251611f SLONG via __ftol2 (tng float); OnSerialise 02515010 float (+0x48); driver variant: same keys in retail tng, property inheritance assumed	M
+CTCDCreatureGenerator	SelfTriggerResetInterval	CreatureGen	SelfTriggerResetInterval	int		range=0..1000;step=1	Get 0251623c; OnSerialise 02515038 (+0x50); driver variant: same keys in retail tng, property inheritance assumed	M
+CTCDCreatureGenerator	CreatureFamilies[n]	CreatureGen	CreatureFamilies	def	CREATURE_GENERATION_FAMILY (list)		Get 025167c4 CGuiVarTransferDefIndexList; OnSerialise 02514fe8 TransferVector (+0xc); tng CreatureFamilies[i] "NAME"; driver variant: same keys in retail tng, property inheritance assumed	M
+CTCLight	Overridden	Light	Overridden	bool			Get 022291a5; OnSerialise 02228dd2; the other light keys are only written when Overridden is TRUE	H
+CTCLight	Colour	Light	ColourRed	int		range=0..255;step=1	Get 02229377 SLONG; OnSerialise 02228ecd "Colour" CRGBColour(r,g,b,a): this label edits the r component; alpha is not exposed	H
+CTCLight	Colour	Light	ColourGreen	int		range=0..255;step=1	Get 02229474 SLONG; OnSerialise 02228ecd "Colour" CRGBColour(r,g,b,a): this label edits the g component; alpha is not exposed	H
+CTCLight	Colour	Light	ColourBlue	int		range=0..255;step=1	Get 0222957d SLONG; OnSerialise 02228ecd "Colour" CRGBColour(r,g,b,a): this label edits the b component; alpha is not exposed	H
+CTCLight	InnerRadius	Light	InnerRadius	float		range=0..100;step=1	Get 022296b0; OnSerialise 02228ee9	H
+CTCLight	OuterRadius	Light	OuterRadius	float		range=0..100;step=1	Get 022297f1; OnSerialise 02228f05	H
+CTCLight	Flicker	Light	Flicker	float		range=0..1;step=0.1	Get 02229933; OnSerialise 02228f21	H
+CTCLight	Inverted	Light	Inverted	bool			Get 02229a5d; OnSerialise 02228f3d	H
+CTCSpotLight	Overridden	Light	Overridden	bool			Get 02582905; OnSerialise 02583e9d; the other light keys are only written when Overridden is TRUE	H
+CTCSpotLight	Colour	Light	ColourRed	int		range=0..255;step=1	Get 02582ad7 SLONG; OnSerialise 02583f9b "Colour" CRGBColour(r,g,b,a): this label edits the r component; alpha is not exposed	H
+CTCSpotLight	Colour	Light	ColourGreen	int		range=0..255;step=1	Get 02582bd4 SLONG; OnSerialise 02583f9b "Colour" CRGBColour(r,g,b,a): this label edits the g component; alpha is not exposed	H
+CTCSpotLight	Colour	Light	ColourBlue	int		range=0..255;step=1	Get 02582cde SLONG; OnSerialise 02583f9b "Colour" CRGBColour(r,g,b,a): this label edits the b component; alpha is not exposed	H
+CTCSpotLight	InnerRadius	Light	InnerRadius	float		range=0..1000;step=1	Get 02582e11; OnSerialise 02583fb7	H
+CTCSpotLight	OuterRadius	Light	OuterRadius	float		range=0..1000;step=1	Get 02582f52; OnSerialise 02583fd3	H
+CTCSpotLight	Flicker	Light	Flicker	float		range=-1..1;step=0.1	Get 02583097; OnSerialise 02584024	H
+CTCSpotLight	Angle	Light	Angle	float		range=-1..1;step=0.01	Get 025831dc; OnSerialise 02583fec	H
+CTCSpotLight	Width	Light	Width	float		range=0..100;step=1	Get 0258331d; OnSerialise 02584008	H
+CTCCameraPointFixedPoint	CutInto	CameraPoint	CutInto	bool			CTCCameraPointDefinitionBase Get 024f34d5; OnSerialise 024f3e53 (+0xc)	H
+CTCCameraPointFixedPoint	CutOutOf	CameraPoint	CutOutOf	bool			CTCCameraPointDefinitionBase Get 024f35c1; OnSerialise 024f3e67 (+0xd)	H
+CTCCameraPointFixedPoint	TestAngleBeforeActivation	CameraPoint	TestAngleBeforeActivation	bool			CTCCameraPointDefinitionBase Get 024f36ad; OnSerialise 024f3e7b (+0xe)	H
+CTCCameraPointFixedPoint	FOV	CameraPoint	FOV	float		range=5..90;step=1	CTCCameraPointDefinitionBase Get 024f37bc (+0x10); OnSerialise 024f3eda (+0x10)	H
+CTCCameraPointFixedPoint	SelfTerminate	CameraPoint	SelfTerminate	bool			CTCCameraPointDefinitionBase Get 024f38b9 (+0x14); OnSerialise 024f3e97 (+0x14)	H
+CTCCameraPointFixedPoint	HeroIsSubject	CameraPoint	HeroIsSubject	bool			CTCCameraPointDefinitionBase Get 024f39ce; OnSerialise 024f3eb3 (+0x15)	H
+CTCCameraPointGeneralCase	CutInto	CameraPoint	CutInto	bool			CTCCameraPointDefinitionBase Get 024f34d5; OnSerialise 024f3e53 (+0xc)	H
+CTCCameraPointGeneralCase	CutOutOf	CameraPoint	CutOutOf	bool			CTCCameraPointDefinitionBase Get 024f35c1; OnSerialise 024f3e67 (+0xd)	H
+CTCCameraPointGeneralCase	TestAngleBeforeActivation	CameraPoint	TestAngleBeforeActivation	bool			CTCCameraPointDefinitionBase Get 024f36ad; OnSerialise 024f3e7b (+0xe)	H
+CTCCameraPointGeneralCase	FOV	CameraPoint	FOV	float		range=5..90;step=1	CTCCameraPointDefinitionBase Get 024f37bc (+0x10); OnSerialise 024f3eda (+0x10)	H
+CTCCameraPointGeneralCase	SelfTerminate	CameraPoint	SelfTerminate	bool			CTCCameraPointDefinitionBase Get 024f38b9 (+0x14); OnSerialise 024f3e97 (+0x14)	H
+CTCCameraPointGeneralCase	HeroIsSubject	CameraPoint	HeroIsSubject	bool			CTCCameraPointDefinitionBase Get 024f39ce; OnSerialise 024f3eb3 (+0x15)	H
+CTCCameraPointScripted	CutInto	CameraPoint	CutInto	bool			CTCCameraPointDefinitionBase Get 024f34d5; OnSerialise 024f3e53 (+0xc)	H
+CTCCameraPointScripted	CutOutOf	CameraPoint	CutOutOf	bool			CTCCameraPointDefinitionBase Get 024f35c1; OnSerialise 024f3e67 (+0xd)	H
+CTCCameraPointScripted	TestAngleBeforeActivation	CameraPoint	TestAngleBeforeActivation	bool			CTCCameraPointDefinitionBase Get 024f36ad; OnSerialise 024f3e7b (+0xe)	H
+CTCCameraPointScripted	FOV	CameraPoint	FOV	float		range=5..90;step=1	CTCCameraPointDefinitionBase Get 024f37bc (+0x10); OnSerialise 024f3eda (+0x10)	H
+CTCCameraPointScripted	SelfTerminate	CameraPoint	SelfTerminate	bool			CTCCameraPointDefinitionBase Get 024f38b9 (+0x14); OnSerialise 024f3e97 (+0x14)	H
+CTCCameraPointScripted	HeroIsSubject	CameraPoint	HeroIsSubject	bool			CTCCameraPointDefinitionBase Get 024f39ce; OnSerialise 024f3eb3 (+0x15)	H
+CTCCameraPointScriptedSpline	CutInto	CameraPoint	CutInto	bool			CTCCameraPointDefinitionBase Get 024f34d5; OnSerialise 024f3e53 (+0xc)	H
+CTCCameraPointScriptedSpline	CutOutOf	CameraPoint	CutOutOf	bool			CTCCameraPointDefinitionBase Get 024f35c1; OnSerialise 024f3e67 (+0xd)	H
+CTCCameraPointScriptedSpline	TestAngleBeforeActivation	CameraPoint	TestAngleBeforeActivation	bool			CTCCameraPointDefinitionBase Get 024f36ad; OnSerialise 024f3e7b (+0xe)	H
+CTCCameraPointScriptedSpline	FOV	CameraPoint	FOV	float		range=5..90;step=1	CTCCameraPointDefinitionBase Get 024f37bc (+0x10); OnSerialise 024f3eda (+0x10)	H
+CTCCameraPointScriptedSpline	SelfTerminate	CameraPoint	SelfTerminate	bool			CTCCameraPointDefinitionBase Get 024f38b9 (+0x14); OnSerialise 024f3e97 (+0x14)	H
+CTCCameraPointScriptedSpline	HeroIsSubject	CameraPoint	HeroIsSubject	bool			CTCCameraPointDefinitionBase Get 024f39ce; OnSerialise 024f3eb3 (+0x15)	H
+CTCCameraPointTrack	CutInto	CameraPoint	CutInto	bool			CTCCameraPointDefinitionBase Get 024f34d5; OnSerialise 024f3e53 (+0xc)	H
+CTCCameraPointTrack	CutOutOf	CameraPoint	CutOutOf	bool			CTCCameraPointDefinitionBase Get 024f35c1; OnSerialise 024f3e67 (+0xd)	H
+CTCCameraPointTrack	TestAngleBeforeActivation	CameraPoint	TestAngleBeforeActivation	bool			CTCCameraPointDefinitionBase Get 024f36ad; OnSerialise 024f3e7b (+0xe)	H
+CTCCameraPointTrack	FOV	CameraPoint	FOV	float		range=5..90;step=1	CTCCameraPointDefinitionBase Get 024f37bc (+0x10); OnSerialise 024f3eda (+0x10)	H
+CTCCameraPointTrack	SelfTerminate	CameraPoint	SelfTerminate	bool			CTCCameraPointDefinitionBase Get 024f38b9 (+0x14); OnSerialise 024f3e97 (+0x14)	H
+CTCCameraPointTrack	HeroIsSubject	CameraPoint	HeroIsSubject	bool			CTCCameraPointDefinitionBase Get 024f39ce; OnSerialise 024f3eb3 (+0x15)	H
+CTCExplodingObject	Radius	Explosion	Radius	int		range=1..20;step=1	Get 025a541f SLONG via __ftol2 (tng float); OnSerialise 025a52fc float (+0x10)	H
+CTCExplodingObject	MaxDamage	Explosion	MaxDamage	float		range=1..20;step=1	Get 025a5527; OnSerialise 025a52e8 (+0xc)	H
+CTCExplodingObject	TriggeredOnCreatureProximity	Explosion	Triggered on creature proximity	bool			Get 025a5613; OnSerialise 025a532f (+0x1c)	H
+CTCExplodingObject	TriggerRadius	Explosion	Trigger radius	float		range=0.5..20;step=0.5	Get 025a5726; OnSerialise 025a5343 (+0x20)	H
+CTCExplodingObject	FireDamage	Explosion	Fire damage	int		range=0..1000;step=1	Get 025a582c; OnSerialise 025a531b (+0x14)	H
+CTCStockItem	ForSale	Shop item	For sale	bool			Get 0262d320 (+0xc); OnSerialise 0262d226 (+0xc)	H
+CTCStockItem	Stealable	Shop item	Stealable	bool			Get 0262d3e8 (+0xd); OnSerialise 0262d23a (+0xd)	H
+CTCStockItem	Price	Shop item	Price	int		range=0..1000000;step=1	Get 0262d4b8 (+0x10); OnSerialise 0262d24e (+0x10)	H
+CTCActivationReceptorCreatureGenerator	DeactivateAfterSetTime	Activation	Timed deactivation	bool			CTCActivationReceptorBase Get 02637e9d (+0x28); OnSerialise 02637dd6 (+0x28)	H
+CTCActivationReceptorCreatureGenerator	FramesAfterActivationToDeactivate	Activation	Frames until deactivation	int		range=0..ULONG max;step=1	CTCActivationReceptorBase Get 02637f6e ULONG (+0x2c); OnSerialise 02637dea (+0x2c)	H
+CTCActivationReceptorDoor	DeactivateAfterSetTime	Activation	Timed deactivation	bool			CTCActivationReceptorBase Get 02637e9d (+0x28); OnSerialise 02637dd6 (+0x28)	H
+CTCActivationReceptorDoor	FramesAfterActivationToDeactivate	Activation	Frames until deactivation	int		range=0..ULONG max;step=1	CTCActivationReceptorBase Get 02637f6e ULONG (+0x2c); OnSerialise 02637dea (+0x2c)	H
+CTCActivationReceptorChest	DeactivateAfterSetTime	Activation	Timed deactivation	bool			CTCActivationReceptorBase Get 02637e9d (+0x28); OnSerialise 02637dd6 (+0x28)	H
+CTCActivationReceptorChest	FramesAfterActivationToDeactivate	Activation	Frames until deactivation	int		range=0..ULONG max;step=1	CTCActivationReceptorBase Get 02637f6e ULONG (+0x2c); OnSerialise 02637dea (+0x2c)	H
+CTCActivationReceptorRelay	DeactivateAfterSetTime	Activation	Timed deactivation	bool			CTCActivationReceptorBase Get 02637e9d (+0x28); OnSerialise 02637dd6 (+0x28); not seen in retail tng	M
+CTCActivationReceptorRelay	FramesAfterActivationToDeactivate	Activation	Frames until deactivation	int		range=0..ULONG max;step=1	CTCActivationReceptorBase Get 02637f6e ULONG (+0x2c); OnSerialise 02637dea (+0x2c); not seen in retail tng	M
+CTCActivationReceptorCreatureGenerator	ActivateOnActivate	Activation	GeneratorSetActive	bool			Get 02639659 (+0x35); OnSerialise 02639917 (+0x35); label!=key	H
+CTCActivationReceptorCreatureGenerator	TriggerOnActivate	Activation	GeneratorTrigger	bool			Get 02639721 (+0x34); OnSerialise 0263992b (+0x34); label!=key	H
+CTCHeroStats	Morality	Appearance	Morality	int		range=-MoralityMax..MoralityMax;step=1	Get 01e67b5b (GetMorality/GetMoralityMax); OnSerialise 01e68153; no CTCHeroStats block in retail tng	M
+CTCHeroStats	Age	Appearance	Age	float		range=HeroStatsDef+0x70..HeroStatsDef+0x74	Get 01e67c54; OnSerialise 01e68181; no block in retail tng	M
+CTCHeroStats	SunTan	Appearance	SunTan	float		range=0..1;step=0.1	Get 01e67d2d; OnSerialise 01e68198; no block in retail tng	M
+CTCHeroStats	Fatness	Appearance	Fatness	float		range=0..1;step=0.1	Get 01e67e08; OnSerialise 01e681af; no block in retail tng	M
+CTCActionUseBed	UseableByHero	General	Bed usable by hero	bool			Get 025464dd (+0x20); OnSerialise 02543bc6 (+0x20)	H
+CTCActionUseBed	OwnedByHero	General	Bed owned by hero	bool			Get 025465a5 (+0x21); OnSerialise 02543bda (+0x21)	H
+CTCActionUseReadable	GameTextDefName	General	TextTag	string	text tag (TXT_*)		Get 02541031 (+0x18); OnSerialise 02540f66 "GameTextDefName" (+0x18); label!=key	H
+CTCInfoDisplay	TextTag	General	TextTag	string	text tag (TXT_*)		Get 027834cc (+0x10); OnSerialise 027833c0 (+0x10)	H
+CTCInfoDisplay	TextTagBack	General	TextTagBack	string	text tag (TXT_*)		Get 02783593 (+0x18); OnSerialise 027833c0 (+0x18)	H
+CTCInfoDisplay	Radius	General	Radius	float		range=0..20;step=1	Get 02783673 (+0x20); OnSerialise 027833fe (+0x20)	H
+CTCInfoDisplay	DisplayTime	General	DisplayTime	float		range=0..10000;step=1	Get 02783756 (+0x24); OnSerialise 02783412 (+0x24)	H
+CTCHeroCentreDoorMarker	DoorType2	General	Door type	enum	EHeroCentreDoorType	GUILD_DOOR_NULL=0;GUILD_DOOR_TRAINING=1;GUILD_DOOR_SAVE_AND_LOAD=2	Get 026483cb CGuiVarTransferSymbolVal (+0x10), map loaded from Data/Defs/thing_def.h by GetDoorTypeSymbolMap 02647d60; Set 0264862f; OnSerialise 02648707 "DoorType2" (+0x10); tng stores the integer; label!=key	H
+CTCHeroCentreDoorMarker	Radius	General	Radius	float		range=0.01..10;step=0.25	Get 026484ce (+0xc); Set 026485f0; OnSerialise 026486e4 (+0xc)	H
+CTCStealableItemLocation	RadiusToBeWithin	General	Radius items should be within	float		range=0.5..50;step=0.5	Get 026dae8d (+0xc); OnSerialise 026dada6 (+0xc)	H
+CTCStealableItemLocation	RadiusToTakeItemsBackTo	General	Radius to take items back to	float		range=0..50;step=0.5	Get 026daf71 (+0x10); OnSerialise 026dadba (+0x10)	H
+CTCAtmosPlayer	AtmosName	Sound	AtmosType	def	SOUND_THEME		Get 02797129 CGuiVarTransferDefIndex("SOUND_THEME") (+0x10); Set 02797237 SetAtmosDefIndex; OnSerialise 02796fe0 "AtmosName" = GetDefNameFromGlobalIndex(+0x10), tng quoted def name; label!=key	H
+CTCDParticleEmitter	ParticleTypeName	ParticleEmitter	ParticleID	enum	particle symbols (CParticleEmitterDatabase::GetParticleSymbols)	names come from the particle database (e.g. SUNBEAMS)	Get 01d68d36 CGuiVarTransferSymbolVal (+0x14); Set 01d68e40 SetParticleID; OnSerialise 01d64d7a "ParticleTypeName" = FindFirstSymbolWithVal(+0x14), tng quoted name; label!=key	H
+CTCRandomAppearanceMorph	Seed	General	RandomAppearanceSeed	int		range=0..0xFFFFFFFF;step=1 (ULONG; tng prints it signed)	Get 0252e5a2 ULONG (+0x18); OnSerialise 0252e4f6 "Seed" (+0x18); label!=key	H
+CTCBoastingArea	Radius	General	Radius	float		range=0.01..22;step=0.5	Get 026523cd (+0x10); OnSerialise 02652306 (+0x10)	H
+CTCGatherPointBuilding	MaxOccupation	General	MaxOccupation	int		range=0..20;step=1	CTCGatherPointBase Get 02667672 (+0x20); OnSerialise 026675a6 (+0x20); not seen in retail tng	M
+CTCGatherPointRadialArea	MaxOccupation	General	MaxOccupation	int		range=0..20;step=1	CTCGatherPointBase Get 02667672 (+0x20); OnSerialise 026675a6 (+0x20); not seen in retail tng	M
+CTCDiggingSpot	Hidden	General	Start Hidden	bool			Get 0278daad (+0xd); OnSerialise 0278d9fc "Hidden" (+0xd); label!=key	H
