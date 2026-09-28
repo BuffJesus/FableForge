@@ -1,6 +1,7 @@
 #include "backups.hpp"
 #include "overworld.hpp"
 
+#include <cmath>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -294,6 +295,22 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
         if (!props.displayName.empty()) { setLine("NewDisplayName", "NewDisplayName \"" + props.displayName + "\";", "RegionName"); br.displayName = props.displayName; notes.push_back(region + ": display name " + props.displayName); }
         if (!props.regionDef.empty()) { setLine("RegionDef", "RegionDef \"" + props.regionDef + "\";", "NewDisplayName"); br.regionDef = props.regionDef; notes.push_back(region + ": RegionDef " + props.regionDef); }
         if (props.onWorldMap >= 0) { setLine("AppearOnWorldMap", props.onWorldMap ? "AppearOnWorldMap;" : "", "RegionDef"); br.onWorldMap = uint8_t(props.onWorldMap); notes.push_back(region + (props.onWorldMap ? ": appears on the world map" : ": hidden from the world map")); }
+        if (props.setFraming) {
+            char sc[32], ox[32], oy[32];
+            std::snprintf(sc, sizeof sc, "MiniMapScale %.1f;", double(props.minimapScale));
+            std::snprintf(ox, sizeof ox, "MiniMapOffsetX %ld.0;", std::lround(props.minimapOffsetX));
+            std::snprintf(oy, sizeof oy, "MiniMapOffsetY %ld.0;", std::lround(props.minimapOffsetY));
+            setLine("MiniMapScale", sc, "MiniMapGraphic");
+            setLine("MiniMapOffsetX", ox, "MiniMapScale");
+            setLine("MiniMapOffsetY", oy, "MiniMapOffsetX");
+            std::memcpy(br.minimapScale, &props.minimapScale, 4);
+            br.mmOffX = int32_t(std::lround(props.minimapOffsetX));
+            br.mmOffY = int32_t(std::lround(props.minimapOffsetY));
+            char note[96];
+            std::snprintf(note, sizeof note, ": minimap framing scale %.1f, offset %ld, %ld (where the hero marker is drawn)",
+                          double(props.minimapScale), std::lround(props.minimapOffsetX), std::lround(props.minimapOffsetY));
+            notes.push_back(region + note);
+        }
         if (!props.minimapGraphic.empty()) { setLine("MiniMapGraphic", "MiniMapGraphic " + props.minimapGraphic + ";", props.onWorldMap > 0 || r->appearOnWorldMap ? "AppearOnWorldMap" : "RegionDef"); br.minimapGraphic = props.minimapGraphic; notes.push_back(region + ": minimap " + props.minimapGraphic); }
         std::string out;
         for (const auto& l : lines) out += l;

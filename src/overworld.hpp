@@ -101,6 +101,8 @@ struct RegionProps {
     std::string minimapGraphic;   // e.g. MINIMAP_GREATWOOD
     std::string displayName;      // TXT_... key or plain text
     int onWorldMap = -1;          // 0/1, -1 = keep
+    bool setFraming = false;      // write MiniMapScale / MiniMapOffsetX/Y (forge/minimapframe)
+    float minimapScale = 1.0f, minimapOffsetX = 0.0f, minimapOffsetY = 0.0f;
 };
 bool setRegionProperties(const std::filesystem::path& gameRoot, const std::string& region, const RegionProps& props,
                          std::vector<std::string>& notes, std::string& error);

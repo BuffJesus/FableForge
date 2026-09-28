@@ -445,6 +445,34 @@ generator.
   130 px. FableForge's current fade is close to it.
 - **Consequence.** No engine-exact bake can reproduce retail art. If wanted, FableForge could offer the
   generator's class map as a "debug-style" minimap.
+- **Re-verified 2026-09-28** (decompiled again): the class remap from `MinimapTheme` (+0x98), the per-class
+  lighting flag table, `IlluminateRegionMinimapTheme` = dot(ground face normal, the illumination direction at
+  +0x3c), lit classes scaled by 0.8 with alpha 0x80, buildings from their physics bounding boxes.
+
+**Minimap framing: where the art has to sit (2026-09-28).** The retail art is hand-painted, but it is
+painted in the engine's frame. `CTCInventoryMap::GetRelativePosOnMiniMap` `0x020931b0`, which places the
+hero marker, does the following:
+- takes the union box of the region's owned maps;
+- normalises the position to 0..1 on each axis;
+- scales the shorter axis by short / long, so the map keeps its aspect and sits against the left and
+  bottom edges;
+- gives pixel = `s·size·u + s·offX`, `s·size·(1 − v) + s·offY`, where `s` = `MiniMapScale` and `off` =
+  `MiniMapOffsetX/Y`, per region in the WLD (int32 in the BWD).
+
+Measured on the eight single-map regions by registering the LEV's path cells against the painted paths:
+- the engine frame with each region's own offsets fits the art: BanditCampPath1 IoU 0.43, against 0.00
+  without its `MiniMapOffsetY −83`;
+- BowerstoneSlums scores 0.24 with its offsets, against 0.13 without;
+- PicnicArea scores 0.30, level with a free search (0.32);
+- a centred frame scores 0.02;
+- FableForge's old bake stretched the box onto the square: 0.03 on PicnicArea.
+
+134 of the 145 retail regions keep scale 1.0. The fix: bake through the inverse transform
+(`forge/minimapframe`) and write the same framing to the region (centred: 128×64 gets offset Y −64).
+`forge minimap-bake <map> <out.png> [--region R]` renders it without touching the install. The retail
+alpha disc is byte-identical across all eight maps (opaque to r ≈ 111.5, 0 from r ≈ 128); our fade is within
+2.6 alpha levels on average. The colour gap stays: retail art is flat painted classes on parchment, and ours
+is the ground albedo.
 
 ## 11. Live run (2026-09-28, FableWin from the Anniversary dev tree)
 

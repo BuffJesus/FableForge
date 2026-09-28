@@ -1,3 +1,6 @@
+#include <cstdio>
+#include <cstring>
+#include <cmath>
 #include "forge/worldinstall.hpp"
 
 #include "forge/bwd.hpp"
@@ -205,6 +208,16 @@ Result installLevel(const Request& req) {
         wld.setRegionText(req.takeOverRegion, "NewDisplayName", victim->displayName);
         wld.setRegionText(req.takeOverRegion, "RegionDef", req.regionDef);
         wld.setRegionText(req.takeOverRegion, "MiniMapGraphic", req.minimapGraphic);
+        if (req.minimapFraming) {
+            const auto& f = *req.minimapFraming;
+            std::memcpy(victim->minimapScale, &f.scale, 4);
+            victim->mmOffX = static_cast<int32_t>(std::lround(f.offsetX));
+            victim->mmOffY = static_cast<int32_t>(std::lround(f.offsetY));
+            char buf[32];
+            std::snprintf(buf, sizeof buf, "%.1f", double(f.scale)); wld.setRegionText(req.takeOverRegion, "MiniMapScale", buf);
+            std::snprintf(buf, sizeof buf, "%ld.0", std::lround(f.offsetX)); wld.setRegionText(req.takeOverRegion, "MiniMapOffsetX", buf);
+            std::snprintf(buf, sizeof buf, "%ld.0", std::lround(f.offsetY)); wld.setRegionText(req.takeOverRegion, "MiniMapOffsetY", buf);
+        }
         wld.setRegionText(req.takeOverRegion, "RegionName", newName);   // last: the name is the key
         wld.addMapToRegion(newName, wldLevel, true);
         result.regionSlot = slot;

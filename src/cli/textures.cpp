@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "forge/minimapframe.hpp"
+#include "forge/wld.hpp"
 #include "forge/big.hpp"
 #include "forge/env.hpp"
 #include "forge/meshpreview.hpp"
@@ -89,6 +91,44 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());
         if (!ok) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         if (cmd == "texture-export") std::printf("wrote %s\n", pos[1].c_str());
+        return 0;
+    }
+    if (cmd == "minimap-bake") {   // minimap-bake <map> <out.png> [--region R | --framing s,ox,oy] [--install root]: the minimap a new region gets, as a PNG (nothing written to the install)
+        std::string installArg, regionArg, framingArg; std::vector<std::string> pos;
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
+            else if (args[i] == "--region" && i + 1 < args.size()) regionArg = args[++i];
+            else if (args[i] == "--framing" && i + 1 < args.size()) framingArg = args[++i];
+            else pos.push_back(args[i]);
+        }
+        if (pos.size() < 2) { std::fprintf(stderr, "usage: forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY] [--install <root>]\n"); return 2; }
+        const Install install = findInstall(installArg);
+        if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        fs::path tempLev;
+        const fs::path lev = resolveLevel(pos[0], install, tempLev);
+        std::ifstream in(lev, std::ios::binary);
+        const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::string name = fs::path(pos[0]).stem().string(), err;
+        te::Image img;
+        forge::minimapframe::Framing frame;
+        forge::minimapframe::Framing* given = nullptr;
+        if (!framingArg.empty()) {
+            if (std::sscanf(framingArg.c_str(), "%f,%f,%f", &frame.scale, &frame.offsetX, &frame.offsetY) != 3) { std::fprintf(stderr, "--framing wants scale,offX,offY\n"); return 2; }
+            given = &frame;
+        } else if (!regionArg.empty()) {
+            const auto world = forge::wld::File::parse(install.root / "data" / "Levels" / "FinalAlbion.wld");
+            const forge::wld::Region* r = world.findRegion(regionArg);
+            if (!r) { std::fprintf(stderr, "no region %s\n", regionArg.c_str()); return 2; }
+            frame.scale = r->minimapScale; frame.offsetX = r->miniMapOffsetX; frame.offsetY = r->miniMapOffsetY;
+            given = &frame;
+        }
+        forge::minimapframe::Framing used = frame;
+        if (!albion::editor::bakeMinimapImage(install.root, name, bytes, given, &used, img, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (!given) frame = used;
+        std::printf("framing: MiniMapScale %.2f, MiniMapOffsetX %.0f, MiniMapOffsetY %.0f%s\n", double(frame.scale), double(frame.offsetX), double(frame.offsetY), given ? "" : " (centred)");
+        const auto png = te::encodePng(img);
+        std::ofstream(pos[1], std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
+        std::printf("wrote %s (%ux%u)\n", pos[1].c_str(), img.width, img.height);
         return 0;
     }
     if (cmd == "theme-add") {   // theme-add <png> <NAME> [--donor <ENGINE_THEME>] [--cliff <png>] [--install <root>]: a ground theme from your own texture

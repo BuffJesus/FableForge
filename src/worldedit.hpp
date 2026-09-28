@@ -11,6 +11,8 @@
 #include <vector>
 
 namespace forge::terraintex { class ThemeLibrary; }
+namespace albion::terrainexport { struct Image; }
+namespace forge::minimapframe { struct Framing; }
 
 namespace albion::editor {
 
@@ -106,9 +108,20 @@ bool createBlankLevel(const std::filesystem::path& gameRoot, const BlankLevelReq
 // .forge-orig backups of textures.big and game.bin/names.bin. `entryName` may
 // name the entry (default MINIMAP_<NAME>); an existing entry of that name is
 // replaced.
+// The 256x256 RGBA image bakeMinimapTexture writes, without touching the install
+// (forge minimap-bake; comparisons against the retail MINIMAP_* art).
+// `framing`: where the map sits on the texture, the engine's minimap transform
+// (forge/minimapframe); nullptr = centred. `used` (optional) receives the one applied.
+// The region must carry the same MiniMapScale / MiniMapOffsetX/Y or the hero marker
+// drifts off the art.
+bool bakeMinimapImage(const std::filesystem::path& gameRoot, const std::string& levelName,
+                      const std::vector<uint8_t>& levBytes, const forge::minimapframe::Framing* framing,
+                      forge::minimapframe::Framing* used,
+                      albion::terrainexport::Image& image, std::string& error);
 bool bakeMinimapTexture(const std::filesystem::path& gameRoot, const std::string& levelName,
                         const std::vector<uint8_t>& levBytes, const forge::terraintex::ThemeLibrary* library,
-                        std::string& entryName, std::vector<std::string>& notes, std::string& error);
+                        std::string& entryName, forge::minimapframe::Framing& framing,
+                        std::vector<std::string>& notes, std::string& error);
 
 // Retail resolves a region's MiniMapGraphic name through the PLAYER_GUI def's
 // MiniMapGraphics map (name -> GBANK_MAIN_PC id; CTCInventoryBase::

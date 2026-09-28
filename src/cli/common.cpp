@@ -71,6 +71,7 @@ int usage() {
         "      (a custom static object: MESH_<NAME> appended to graphics.big, its diffuse to textures.big, a collision hull from its own triangles, an OBJECT_<NAME> def copied from the donor; Y-up model space)\n"
         "  forge textures [filter] [--bank <bank>]              (list textures.big entries: id, size, format, bank)\n"
         "  forge texture-export <name> <out.png>   |   texture-replace <name> <image>   |   texture-add <name> <image> [--bank B] [--format dxt1|dxt3|argb8888]\n"
+        "  forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY]   (the minimap a new region gets, as a PNG; framed like the engine's hero marker; writes nothing)\n"
         "  forge entrance <map> [x y [z]]                    (show / set the map's region entrance in FinalAlbion.gtg; z defaults to the ground)\n"
         "  forge backups   |   forge restore [--forget]      (every .forge-orig / .forge-created (and the older .atlas-*, .forgebak, .ovrbak) under the install; restore puts the retail files back)\n"
         "  forge compact-stb [--dry-run]                     (rewrite FinalAlbion_RT.stb without the dead payloads deploys leave behind; every payload verified byte-identical)\n"

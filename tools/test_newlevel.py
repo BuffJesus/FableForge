@@ -89,6 +89,26 @@ def main() -> int:
         gtg = f.read()
     if gtg.count(b"AtlasCliOwnHSP") != 1 or b"\r\n" not in gtg or gtg.count(b"\n") != gtg.count(b"\r\n"):
         print("gtg: duplicate HSP or broken line endings"); ok = False
+    # an own region on a non-square map WITH its minimap: the bake follows the engine's minimap
+    # transform (forge/minimapframe) and the region gets the matching MiniMapScale / offsets,
+    # centred (128x64 -> offset Y -64), or the hero marker would sit off the art
+    os.makedirs(os.path.join(scratch, "data", "graphics", "pc"), exist_ok=True)
+    shutil.copyfile(os.path.join(a.root, "data", "graphics", "pc", "textures.big"), os.path.join(scratch, "data", "graphics", "pc", "textures.big"))
+    r = subprocess.run([cli, "blank-level", "AtlasCliWide", "--install", scratch, "--size", "128x64", "--own-region", "--display", "FableForge Wide"], capture_output=True, text=True)
+    if r.returncode != 0 or "minimap" not in r.stdout:
+        print("CLI own-region blank-level with minimap failed:", r.stderr, r.stdout[-600:]); ok = False
+    else:
+        with open(os.path.join(scratch, "data", "Levels", "FinalAlbion.wld"), encoding="latin-1") as f:
+            wld = f.read()
+        at = wld.find('RegionName "AtlasCliWide";')
+        block = wld[at:wld.find("EndRegion;", at)] if at >= 0 else ""
+        want = ("MiniMapGraphic MINIMAP_ATLASCLIWIDE;", "MiniMapScale 1.0;", "MiniMapOffsetX 0.0;", "MiniMapOffsetY -64.0;")
+        missing = [w for w in want if w not in block]
+        if missing:
+            print("own-region minimap framing not written to the WLD region:", missing, block[:400]); ok = False
+        r = subprocess.run([cli, "minimap-bake", "AtlasCliWide", os.path.join(scratch, "wide.png"), "--region", "AtlasCliWide", "--install", scratch], capture_output=True, text=True)
+        if r.returncode != 0 or "MiniMapOffsetY -64" not in r.stdout:
+            print("minimap-bake with the region's framing failed:", r.stderr, r.stdout); ok = False
     # a retail-sized one (128x224, the template is picked automatically) and a non-power-of-two one
     for name, size, patches in (("AtlasCliBig", "128x224", "112 patches"), ("AtlasCliOdd", "96x96", "36 patches")):
         r = subprocess.run([cli, "blank-level", name, "--install", scratch, "--size", size, "--height", "20"], capture_output=True, text=True)

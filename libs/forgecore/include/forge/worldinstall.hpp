@@ -18,6 +18,8 @@
 // origin first (`stbbake::bakeHeightfield` with worldX/worldY = the new origin);
 // pass the result as `chunkBytes`.
 
+#include "forge/minimapframe.hpp"
+#include <optional>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -39,6 +41,9 @@ struct Request {
     std::string takeOverRegion;
     std::string mergeMapsInto;
     std::string minimapGraphic;         // texture name (GBANK_MAIN_PC MINIMAP_*) for a taken-over or dedicated region
+    // Where the map sits on that texture (MiniMapScale / MiniMapOffsetX/Y, forge/minimapframe):
+    // written with the graphic so the hero marker lands on the baked art; unset = keep the slot's own.
+    std::optional<forge::minimapframe::Framing> minimapFraming;
     std::string regionName;             // dedicated / taken-over region (default: newLevelName)
     std::string regionDisplayName;      // dedicated / taken-over region
     std::string regionDef;              // dedicated / taken-over region

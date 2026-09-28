@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
@@ -1525,6 +1526,28 @@ void testBudgetSurvey() {
     CHECK(bg::formatBytes(512) == "512 B" && bg::formatBytes(2048) == "2 KB" && bg::formatBytes(3u << 20) == "3.0 MB");
 }
 
+void testMinimapFraming() {
+    namespace mf = forge::minimapframe;
+    float px = 0, py = 0, x = 0, y = 0;
+    // PicnicArea (128 x 96, scale 1, no offsets): uniform 2 px/cell, left-aligned, bottom-aligned
+    mf::Framing f;
+    mf::toPixel(f, 128, 96, 256, 0, 96, px, py);  CHECK(px == 0.0f && py == 64.0f);    // north-west corner
+    mf::toPixel(f, 128, 96, 256, 128, 0, px, py); CHECK(px == 256.0f && py == 256.0f); // south-east corner
+    // offsets are texture pixels times the scale (BanditCampPath1: 256 x 64, offY -83)
+    mf::Framing b; b.offsetY = -83.0f;
+    mf::toPixel(b, 256, 64, 256, 0, 64, px, py); CHECK(px == 0.0f && py == 192.0f - 83.0f);
+    // the inverse lands on the same cell, and says when a pixel is off the map
+    CHECK(mf::fromPixel(b, 256, 64, 256, 100.0f, 150.0f, x, y));
+    mf::toPixel(b, 256, 64, 256, x, y, px, py); CHECK(std::fabs(px - 100.0f) < 1e-3f && std::fabs(py - 150.0f) < 1e-3f);
+    CHECK(!mf::fromPixel(f, 128, 96, 256, 10.0f, 20.0f, x, y));                       // above PicnicArea's top edge
+    // centred: the map's middle at the texture's middle, whole-pixel offsets (the BWD keeps int32)
+    const mf::Framing c = mf::centred(128, 96);
+    CHECK(c.scale == 1.0f && c.offsetX == 0.0f && c.offsetY == -32.0f);
+    mf::toPixel(c, 128, 96, 256, 64, 48, px, py); CHECK(px == 128.0f && py == 128.0f);
+    const mf::Framing t = mf::centred(64, 128);
+    CHECK(t.offsetX == 64.0f && t.offsetY == 0.0f);
+}
+
 void testWorldMerge() {
     namespace wm = forge::worldmerge;
     auto mapOf = [](const std::string& n, int x, uint64_t uid) {
@@ -1793,6 +1816,7 @@ int main() {
     testFillerFit();
     testVanillaPlacement();
     testBudgetSurvey();
+    testMinimapFraming();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";

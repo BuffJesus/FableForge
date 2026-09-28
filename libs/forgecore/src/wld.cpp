@@ -419,7 +419,9 @@ void File::setRegionText(std::string_view regionName, std::string_view key, std:
     if (target == regions_.size())
         throw std::runtime_error("wld: unknown region " + std::string(regionName));
     Region& region = regions_[target];
-    const bool quoted = !(tf::equalsIgnoreCase(key, "MiniMapGraphic"));   // the graphic is a bare token in retail
+    // the graphic is a bare token in retail, and so are the minimap scale / offsets (numbers)
+    const bool quoted = !(tf::equalsIgnoreCase(key, "MiniMapGraphic") || tf::equalsIgnoreCase(key, "MiniMapScale") ||
+                          tf::equalsIgnoreCase(key, "MiniMapOffsetX") || tf::equalsIgnoreCase(key, "MiniMapOffsetY"));
     std::string eol = "\r\n";
     int activeRegion = -1;
     size_t nameLine = rawLines_.size();

@@ -663,9 +663,14 @@ region + minimap" toggle / `--own-region [<filler>] [--merge-into <filler>]
    in place in the BWD and the WLD (`wld::File::setRegionText`), and it owns
    only the new map. The BWD is mirrored to the two other copies the engine
    reads (`FinalAlbion.bwd` at the root and under `data/Levels/FinalAlbion`).
-2. the minimap is baked from the level (top-down albedo, north up, the
-   region box stretched onto the square like retail's, a hillshade and the
-   retail circular vignette) into a 256x256 DXT3 entry of `textures.big`. It
+2. the minimap is baked from the level (top-down albedo, north up, a
+   hillshade and the retail circular vignette) into a 256x256 DXT3 entry of
+   `textures.big`. The map is placed with the engine's own minimap transform
+   (`CTCInventoryMap::GetRelativePosOnMiniMap`, `forge/minimapframe`): it keeps
+   its aspect ratio, and the region gets `MiniMapScale 1.0` plus the
+   `MiniMapOffsetX/Y` that centre it, so the hero marker lands on the art.
+   (Until 2026-09-28 the box was stretched onto the square, which put the
+   marker off the art on every non-square map.) It
    **replaces an unreferenced retail `MINIMAP_*` slot** (retail ships a few
    that no region uses, e.g. `MINIMAP_PRISONCOURTYARD2`): an entry *appended*
    past the retail ids crashed the game at start-up (the engine indexes

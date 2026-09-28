@@ -11,6 +11,7 @@
 #include <set>
 #include <stdexcept>
 
+#include "forge/minimapframe.hpp"
 #include "forge/big.hpp"
 #include "forge/bwd.hpp"
 #include "forge/lev.hpp"
@@ -62,7 +63,7 @@ std::vector<uint8_t> levelBytes(const forge::levelstore::Layout& levels, const s
 bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
                     forge::worldinstall::Request& ir, std::string& error);
 bool finishDedicatedRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& minimap,
-                           std::vector<std::string>& notes, std::string& error);
+                           const std::optional<forge::minimapframe::Framing>& framing, std::vector<std::string>& notes, std::string& error);
 } // namespace
 
 bool donorInfo(const fs::path& gameRoot, const std::string& donor, DonorInfo& out, std::string& error) {
@@ -130,8 +131,10 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
             stage("baking the minimap into textures.big");
-            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, out.notes, error)) return false;
+            forge::minimapframe::Framing frame;
+            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, frame, out.notes, error)) return false;
             ir.minimapGraphic = entry;
+            ir.minimapFraming = frame;
         }
 
         if (req.rebakeChunk) {
@@ -178,7 +181,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
         stage("registering the region");
-        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
+        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, ir.minimapFraming, out.notes, error)) return false;
         if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
@@ -225,10 +228,11 @@ namespace {
 // minimap graphic; set it (WLD + the three BWD copies) and say what the region
 // needs from the player.
 bool finishDedicatedRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& minimap,
-                           std::vector<std::string>& notes, std::string& error) {
+                           const std::optional<forge::minimapframe::Framing>& framing, std::vector<std::string>& notes, std::string& error) {
     if (!own.wanted || !own.dedicated) return true;
     if (!minimap.empty()) {
         RegionProps props; props.minimapGraphic = minimap;
+        if (framing) { props.setFraming = true; props.minimapScale = framing->scale; props.minimapOffsetX = framing->offsetX; props.minimapOffsetY = framing->offsetY; }
         if (!setRegionProperties(gameRoot, levelName, props, notes, error)) return false;
     }
     notes.push_back("region " + levelName + " is a new slot: saves cache the region table, so start a new game (or make a save after this) to see it named and drawn");
@@ -261,11 +265,10 @@ bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::s
 }
 } // namespace
 
-bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, const std::vector<uint8_t>& levBytes,
-                        const forge::terraintex::ThemeLibrary* library, std::string& entryName,
-                        std::vector<std::string>& notes, std::string& error) {
+bool bakeMinimapImage(const fs::path& gameRoot, const std::string& levelName, const std::vector<uint8_t>& levBytes,
+                      const forge::minimapframe::Framing* framing, forge::minimapframe::Framing* used,
+                      albion::terrainexport::Image& img, std::string& error) {
     try {
-        (void)library;
         const fs::path tmp = fs::temp_directory_path() / "FableForge" / "minimap";
         fs::create_directories(tmp);
         const fs::path levTmp = tmp / (levelName + ".lev");
@@ -279,7 +282,6 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
         o.textures = textured; o.texelsPerCell = 4; o.gain = 2.0f; o.engineLayers = false; o.gameRoot = gameRoot;
         const auto scene = albion::terrainexport::buildScene(lev, o, textured ? &ctx : nullptr);
         const int size = 256;
-        albion::terrainexport::Image img;
         img.width = img.height = uint32_t(size);
         img.rgba.assign(size_t(size) * size * 4, 0);
         const int cx = lev.cellsX(), cy = lev.cellsY();
@@ -287,15 +289,23 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
             const int x0 = std::clamp(int(fx), 0, cx - 1), y0 = std::clamp(int(fy), 0, cy - 1);
             return lev.heightAt(x0, y0);
         };
+        // The engine places the hero with CTCInventoryMap::GetRelativePosOnMiniMap
+        // (forge/minimapframe): the map keeps its aspect and sits where the region's
+        // MiniMapScale / MiniMapOffsetX/Y put it. Sample through the inverse of that
+        // transform so the art lies under the marker. Default: centred in the disc.
+        const float W = float(lev.width()), H = float(lev.height());
+        const forge::minimapframe::Framing frame = framing ? *framing : forge::minimapframe::centred(W, H, float(size));
+        if (used) *used = frame;
+        std::vector<char> onMap(size_t(size) * size, 0);
+        double sum[3] = {0, 0, 0}; size_t count = 0;
         for (int py = 0; py < size; ++py)
             for (int px = 0; px < size; ++px) {
-                // texture row 0 is the map's north edge (max Y); the box is stretched onto the square like retail
-                const float u = (px + 0.5f) / size, v = 1.0f - (py + 0.5f) / size;
-                const float mx = u * lev.width(), my = v * lev.height();
+                float mx = 0, my = 0;
+                if (!forge::minimapframe::fromPixel(frame, W, H, float(size), px + 0.5f, py + 0.5f, mx, my)) continue;
                 float r = 120, g = 130, b = 80;
                 if (scene.hasAlbedo && scene.albedo.width && scene.albedo.height) {
-                    const uint32_t ax = std::min(uint32_t(u * scene.albedo.width), scene.albedo.width - 1);
-                    const uint32_t ay = std::min(uint32_t(v * scene.albedo.height), scene.albedo.height - 1);
+                    const uint32_t ax = std::min(uint32_t(mx / W * scene.albedo.width), scene.albedo.width - 1);
+                    const uint32_t ay = std::min(uint32_t(my / H * scene.albedo.height), scene.albedo.height - 1);
                     const uint8_t* p = &scene.albedo.rgba[(size_t(ay) * scene.albedo.width + ax) * 4];
                     r = p[0]; g = p[1]; b = p[2];
                 }
@@ -304,16 +314,38 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
                 const float hx = heightAt(mx + d, my) - heightAt(mx - d, my);
                 const float hy = heightAt(mx, my + d) - heightAt(mx, my - d);
                 const float shade = std::clamp(1.0f + 0.06f * (-hx + hy), 0.55f, 1.35f);
-                // the retail vignette: an opaque disc that fades out at the corners
-                const float dx = u - 0.5f, dy = v - 0.5f;
-                const float rad = std::sqrt(dx * dx + dy * dy);
-                const float alpha = std::clamp((0.5f - rad) / 0.06f, 0.0f, 1.0f);
                 uint8_t* q = &img.rgba[(size_t(py) * size + px) * 4];
                 q[0] = uint8_t(std::clamp(r * shade, 0.0f, 255.0f));
                 q[1] = uint8_t(std::clamp(g * shade, 0.0f, 255.0f));
                 q[2] = uint8_t(std::clamp(b * shade, 0.0f, 255.0f));
-                q[3] = uint8_t(alpha * 255.0f);
+                onMap[size_t(py) * size + px] = 1;
+                sum[0] += q[0]; sum[1] += q[1]; sum[2] += q[2]; ++count;
             }
+        // off the map (the band a non-square map leaves): the map's mean colour, not stretched ground
+        const uint8_t fill[3] = {uint8_t(count ? sum[0] / double(count) : 120), uint8_t(count ? sum[1] / double(count) : 130),
+                                 uint8_t(count ? sum[2] / double(count) : 80)};
+        for (int py = 0; py < size; ++py)
+            for (int px = 0; px < size; ++px) {
+                uint8_t* q = &img.rgba[(size_t(py) * size + px) * 4];
+                if (!onMap[size_t(py) * size + px]) { q[0] = fill[0]; q[1] = fill[1]; q[2] = fill[2]; }
+                // the retail vignette: an opaque disc that fades out towards the edge
+                const float dx = (px + 0.5f) / size - 0.5f, dy = (py + 0.5f) / size - 0.5f;
+                const float rad = std::sqrt(dx * dx + dy * dy);
+                q[3] = uint8_t(std::clamp((0.5f - rad) / 0.06f, 0.0f, 1.0f) * 255.0f);
+            }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, const std::vector<uint8_t>& levBytes,
+                        const forge::terraintex::ThemeLibrary* library, std::string& entryName,
+                        forge::minimapframe::Framing& framing, std::vector<std::string>& notes, std::string& error) {
+    try {
+        (void)library;
+        albion::terrainexport::Image img;
+        if (!bakeMinimapImage(gameRoot, levelName, levBytes, nullptr, &framing, img, error)) return false;
+        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "minimap";
+        fs::create_directories(tmp);
         const fs::path png = tmp / (levelName + "_minimap.png");
         {
             const auto bytes = albion::terrainexport::encodePng(img);
@@ -580,8 +612,10 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         ir.levBytes = readFile(levTmp);
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
-            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, &library, entry, out.notes, error)) return false;
+            forge::minimapframe::Framing frame;
+            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, &library, entry, frame, out.notes, error)) return false;
             ir.minimapGraphic = entry;
+            ir.minimapFraming = frame;
         }
         const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
         ir.tngBytes.assign(tng.begin(), tng.end());
@@ -597,7 +631,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
-        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, out.notes, error)) return false;
+        if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, ir.minimapFraming, out.notes, error)) return false;
         if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
