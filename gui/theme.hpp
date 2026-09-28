@@ -2,6 +2,7 @@
 // Dark theme with violet accents + the few custom widgets the app uses.
 
 #include <initializer_list>
+#include <vector>
 #include "imgui.h"
 
 namespace albion::gui::theme {
@@ -33,6 +34,7 @@ bool dangerButton(const char* label, const ImVec2& size);
 bool chip(const char* label, bool active);
 bool toggle(const char* label, bool* value);
 bool segmented(const char* id, int& value, std::initializer_list<const char*> options, float width);
+bool segmented(const char* id, int& value, const std::vector<const char*>& options, float width);
 void label(const char* text);
 void beginCard(const char* id, float width);
 void endCard();

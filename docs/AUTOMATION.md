@@ -101,7 +101,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 `seg_panel`, and in Edit mode `seg_gizmo`, `toggle_snap`, `drag_px|py|pz|yaw|scale`,
 `btn_ground`, `btn_focus`, `btn_duplicate`, `btn_delete`, `input_thingsearch`,
 `input_defsearch`, `btn_place`, `btn_undo`, `btn_redo`, `btn_save`, `btn_deploy`,
-`btn_deploy_confirm`, `btn_revert`, `seg_terrain_mode`, `seg_terrain_walk`, `slider_radius`,
+`btn_deploy_confirm`, `btn_revert`, `seg_terrain_category`, `seg_terrain_mode`, `slider_radius`,
 `slider_strength`, `btn_terrain_deploy`, `btn_terrain_deploy_confirm`, `btn_unsaved_save`,
 `btn_unsaved_discard`, `btn_unsaved_cancel`, and in the Mods tab `input_mod_path`, `input_mod_name`,
 `btn_mod_add`, `btn_mods_conflicts`, `btn_mods_deploy`, `btn_mods_undeploy`.

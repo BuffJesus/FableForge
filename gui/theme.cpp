@@ -1,5 +1,7 @@
 #include "theme.hpp"
 
+#include <vector>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -171,6 +173,10 @@ bool toggle(const char* label, bool* value) {
 }
 
 bool segmented(const char* id, int& value, std::initializer_list<const char*> options, float width) {
+    return segmented(id, value, std::vector<const char*>(options), width);
+}
+
+bool segmented(const char* id, int& value, const std::vector<const char*>& options, float width) {
     ImGui::PushID(id);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const int n = int(options.size());

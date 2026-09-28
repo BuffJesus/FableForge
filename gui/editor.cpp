@@ -1780,25 +1780,37 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     if (editTab_ == 1 && doc_.hasTerrain()) {
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##terrain", inner);
-        theme::label("Terrain brush");
-        int shape = terrainMode_ < 4 ? terrainMode_ : -1;
-        if (theme::segmented("##tmode", shape, {"Raise", "Lower", "Flatten", "Smooth"}, cardInner) && shape >= 0) terrainMode_ = shape;
-        auto_.registerWidget("seg_terrain_mode");
-        int walk = (terrainMode_ >= 4 && terrainMode_ <= 6) ? terrainMode_ - 4 : -1;
-        if (theme::segmented("##twalk", walk, {"Paint walkable", "Paint blocked", "Paint ground"}, cardInner) && walk >= 0) terrainMode_ = 4 + walk;
-        auto_.registerWidget("seg_terrain_walk");
-        int tool = (terrainMode_ >= 7 && terrainMode_ <= 9) ? terrainMode_ - 7 : -1;
-        if (theme::segmented("##ttool", tool, {"Replace theme", "Flood replace", "Draw path"}, cardInner) && tool >= 0) terrainMode_ = 7 + tool;
-        auto_.registerWidget("seg_terrain_tool");
-        if (doc_.hasGameMap()) {
-            int es = (terrainMode_ == 10 || terrainMode_ == 11) ? terrainMode_ - 10 : -1;
-            if (theme::segmented("##tenv", es, {"Paint environment", "Paint sound"}, cardInner) && es >= 0) terrainMode_ = 10 + es;
-            auto_.registerWidget("seg_terrain_envsound");
+        theme::label("Terrain tool");
+        {
+            // tools grouped like the vanilla Height / Themes / Survey / Copy-and-paste dialogs:
+            // a category, then its tools (each tool keeps its terrainMode_ id)
+            struct Tool { int mode; const char* label; };
+            static const std::vector<Tool> sculpt = {{0, "Raise"}, {1, "Lower"}, {2, "Flatten"}, {3, "Smooth"}, {9, "Path"}};
+            static const std::vector<Tool> paint = {{6, "Ground"}, {7, "Replace"}, {8, "Flood"}, {10, "Environ."}, {11, "Sound"}};
+            static const std::vector<Tool> pass = {{4, "Walkable"}, {5, "Blocked"}, {12, "Camera ok"}, {13, "Camera no"}};
+            static const std::vector<Tool> region = {{14, "Copy"}, {15, "Paste"}};
+            const std::vector<Tool>* groups[4] = {&sculpt, &paint, &pass, &region};
+            int cat = 0;
+            for (int g = 0; g < 4; ++g)
+                for (const auto& t : *groups[g]) if (t.mode == terrainMode_) cat = g;
+            if (theme::segmented("##tcat", cat, {"Sculpt", "Paint", "Passability", "Region"}, cardInner) && cat >= 0) {
+                bool inside = false;
+                for (const auto& t : *groups[cat]) inside = inside || t.mode == terrainMode_;
+                if (!inside) terrainMode_ = (*groups[cat])[0].mode;
+            }
+            auto_.registerWidget("seg_terrain_category");
+            std::vector<const char*> labels;
+            std::vector<int> modes;
+            for (const auto& t : *groups[cat]) {
+                if ((t.mode == 10 || t.mode == 11) && !doc_.hasGameMap()) continue;   // older .lev: no game-map grid
+                labels.push_back(t.label); modes.push_back(t.mode);
+            }
+            int pick = -1;
+            for (size_t i = 0; i < modes.size(); ++i) if (modes[i] == terrainMode_) pick = int(i);
+            if (theme::segmented("##tmode", pick, labels, cardInner) && pick >= 0) terrainMode_ = modes[size_t(pick)];
+            auto_.registerWidget("seg_terrain_mode");
         }
         {
-            int cp = (terrainMode_ == 14 || terrainMode_ == 15) ? terrainMode_ - 14 : -1;
-            if (theme::segmented("##tclip", cp, {"Copy region", "Paste region"}, cardInner) && cp >= 0) terrainMode_ = 14 + cp;
-            auto_.registerWidget("seg_terrain_clip");
             if (terrainMode_ == 14 || terrainMode_ == 15) {
                 if (terrainMode_ == 15) {
                     ImGui::Checkbox("Heights##clh", &clipHeights_); ImGui::SameLine();
@@ -1814,9 +1826,6 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
         }
         {
-            int cam = (terrainMode_ == 12 || terrainMode_ == 13) ? terrainMode_ - 12 : -1;
-            if (theme::segmented("##tcam", cam, {"Camera passable", "Camera blocked"}, cardInner) && cam >= 0) terrainMode_ = 12 + cam;
-            auto_.registerWidget("seg_terrain_camera");
             if (terrainMode_ == 12 || terrainMode_ == 13) {
                 ImGui::PushFont(fontSmall_);
                 theme::hint("Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");

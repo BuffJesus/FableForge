@@ -20,7 +20,7 @@ edit_tab 1
 frames 3
 terrain_mode 7
 frames 3
-assert_widget seg_terrain_tool
+assert_widget seg_terrain_category
 assert_widget combo_replace_from
 assert_widget btn_replace_all
 screenshot build/ui/parity_3_replace.png
