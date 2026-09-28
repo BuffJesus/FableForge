@@ -46,4 +46,8 @@ screenshot build/ui/parity_6_actors.png
 help 1
 frames 3
 screenshot build/ui/parity_7_help.png
+help 0
+click chip_neighbours
+frames 240
+screenshot build/ui/parity_8_neighbours.png
 quit

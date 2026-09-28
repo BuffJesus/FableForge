@@ -739,6 +739,13 @@ private:
     bool previewThings_ = true;
     size_t thingInstances_ = 0;
     std::future<FoliageResult> foliageFuture_;
+    // the maps touching the open one, low-res and textured at their WLD offsets (layer 2):
+    // a first step to the vanilla editor's whole-world view
+    struct NeighbourResult { std::string name; foliageexport::Scene scene; int maps = 0; std::string note; };
+    bool showNeighbours_ = false;
+    std::string neighboursFor_;
+    std::future<NeighbourResult> neighbourFuture_;
+    void startNeighbourLoad();
     std::string foliageLoadedFor_;
     std::string foliagePendingName_;
     bool previewFoliage_ = true;

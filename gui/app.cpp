@@ -660,6 +660,7 @@ void App::selectMap(const std::string& nameOrKey) {
     scrollToSelected_ = true;
     groupOpen_[it->group] = true;
     renderer_.clearLayer(0);
+    renderer_.clearLayer(2);
     renderer_.clearThings();
     foliageLoadedFor_.clear();
     foliageInstances_ = 0;
@@ -712,6 +713,59 @@ void App::startFoliageLoad() {
 const MapEntry* App::findEntry(const std::string& key) const {
     auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == key; });
     return it == maps_.end() ? nullptr : &*it;
+}
+
+void App::startNeighbourLoad() {
+    if (neighbourFuture_.valid() || selectedName_.empty() || !installValid_) return;
+    const MapEntry* cur = findEntry(selectedName_);
+    if (!cur || !cur->worldFile.empty()) return;   // another world's maps: FinalAlbion.wld does not place them
+    editor::WorldLayout layout;
+    std::string err;
+    if (!editor::loadWorldLayout(installPath_, layout, err)) { pushLog("neighbours: " + err, 1); return; }
+    const editor::WorldMapBox* box = layout.find(cur->name);
+    if (!box) { pushLog("neighbours: " + cur->name + " is not placed in FinalAlbion.wld", 1); return; }
+    // .lev paths on this thread (the WAD read uses app state), the bakes on the worker
+    struct Job { std::string lev; int dx, dy; std::string name; };
+    std::vector<Job> jobs;
+    for (const auto* n : layout.touching(*box, box->x, box->y)) {
+        if (n->name == box->name) continue;
+        const MapEntry* e = findEntry(n->name);
+        if (!e) continue;
+        const std::string lev = resolveLevPath(*e, err);
+        if (!lev.empty()) jobs.push_back({lev, n->x - box->x, n->y - box->y, n->name});
+    }
+    const te::Context* ctx = ctx_.ready() ? &ctx_ : nullptr;
+    const std::string name = selectedName_;
+    const float gain = settings_.gain;
+    const fs::path root = installPath_;
+    neighbourFuture_ = std::async(std::launch::async, [jobs, ctx, name, gain, root]() {
+        NeighbourResult r; r.name = name;
+        for (const auto& j : jobs) {
+            try {
+                const auto file = forge::lev::File::open(j.lev);
+                te::Options o;
+                o.textures = ctx != nullptr; o.texelsPerCell = 2; o.gain = gain; o.up = te::UpAxis::Z;
+                o.water = false;
+                if (ctx) { o.gameRoot = root; o.mapName = j.name; }
+                const auto sc = te::buildScene(file, o, ctx);
+                foliageexport::Mesh m;
+                m.name = j.name;
+                m.geometry.vertices.reserve(sc.vertices.size());
+                for (const auto& v : sc.vertices) m.geometry.vertices.push_back({v.px, v.py, v.pz, v.nx, v.ny, v.nz, v.u, v.v});
+                foliageexport::SubMesh part;
+                part.indices = sc.indices;
+                if (sc.hasAlbedo) { part.image = int(r.scene.images.size()); r.scene.images.push_back(sc.albedo); }
+                m.parts.push_back(std::move(part));
+                foliageexport::Instance inst;
+                inst.mesh = int(r.scene.meshes.size());
+                inst.x = float(j.dx); inst.y = float(j.dy); inst.z = 0; inst.scale = 1;
+                r.scene.meshes.push_back(std::move(m));
+                r.scene.instances.push_back(inst);
+                ++r.maps;
+            } catch (const std::exception& e) { r.note = j.name + ": " + e.what(); }
+        }
+        return r;
+    });
 }
 
 void App::startPreviewLoad() {
@@ -889,6 +943,15 @@ void App::pollWorkers() {
             startPreviewLoad();   // context arrived while we were baking untextured
         }
     }
+    if (neighbourFuture_.valid() && neighbourFuture_.wait_for(0ms) == std::future_status::ready) {
+        NeighbourResult r = neighbourFuture_.get();
+        if (r.name == selectedName_ && showNeighbours_) {
+            renderer_.uploadLayer(2, r.scene, te::UpAxis::Y);
+            neighboursFor_ = r.name;
+            pushLog("neighbours: " + std::to_string(r.maps) + " maps around " + r.name + (r.note.empty() ? "" : " (" + r.note + ")"), 0);
+        } else if (showNeighbours_ && neighboursFor_ != selectedName_) startNeighbourLoad();
+    }
+    if (showNeighbours_ && !neighbourFuture_.valid() && neighboursFor_ != selectedName_ && previewLoaded()) startNeighbourLoad();
     if (foliageFuture_.valid() && foliageFuture_.wait_for(0ms) == std::future_status::ready) {
         FoliageResult r = foliageFuture_.get();
         if (r.name == selectedName_ && r.thingsOnly) {
@@ -1718,7 +1781,7 @@ void App::drawViewport(float width) {
         auto chipW = [&](const char* t) { return ImGui::CalcTextSize(t).x + S(24); };
         float modesW = 0; for (int i = 0; i < 4; ++i) modesW += chipW(kModeNames[i]) + gap;
         modesW += chipW("Frame  (F)") + S(8);
-        const char* layerNames[4] = {"Foliage", "Objects", "Water", "Grid"};
+        const char* layerNames[5] = {"Foliage", "Objects", "Water", "Grid", "Neighbours"};
         float layersW = 0; for (const char* n : layerNames) layersW += chipW(n) + gap;
         const bool twoRows = modesW + layersW + ImGui::CalcTextSize("Show:").x + S(40) > size.x;
         const float yModes = origin.y + size.y - rowH - S(10);
@@ -1756,6 +1819,14 @@ void App::drawViewport(float width) {
         if (theme::chip("Grid", renderer_.showGrid)) renderer_.showGrid = !renderer_.showGrid;
         auto_.registerWidget("chip_grid");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The LEV cell grid (1 unit), heavier every 8 cells (one terrain patch).");
+        ImGui::SameLine(0, gap);
+        if (theme::chip(neighbourFuture_.valid() ? "Neighbours..." : "Neighbours", showNeighbours_)) {
+            showNeighbours_ = !showNeighbours_;
+            if (!showNeighbours_) { renderer_.clearLayer(2); neighboursFor_.clear(); }
+            else startNeighbourLoad();
+        }
+        auto_.registerWidget("chip_neighbours");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The maps that touch this one, placed where FinalAlbion.wld puts them\n(low-res ground, no objects) -- see across the seams.");
         const char* hint = "RMB look + WASD fly   LMB dolly/turn   MMB pan   Alt+LMB orbit   Wheel zoom   F frame";
         const ImVec2 hs = ImGui::CalcTextSize(hint);
         const float hintRight = lx - ImGui::CalcTextSize("Show:").x - S(8) - S(28);   // clear of the "Show:" caption
