@@ -70,4 +70,14 @@ StbReport applyStaticMaps(const std::filesystem::path& folder, const std::filesy
 bool writeStaticMapChunk(const std::filesystem::path& stb, const std::string& mapName,
                          const std::vector<uint8_t>& chunk, const std::vector<uint8_t>& record, std::string& error);
 
+// A shadow install's differences from the base, written into a pack as the layers the
+// composer applies: FinalAlbion.wld / .bwd (merged per record), every level file the
+// shadow's WAD or loose folder has new or changed (data/Levels/FinalAlbion/), and every
+// static map whose chunk is new or changed (stb/<map>.chunk + .record). The editor runs a
+// world edit (new level, map move, region edit) against a shadow copy of the containers
+// and captures it this way; `forge-tools mods capture` is the same step.
+struct CaptureReport { std::vector<std::string> files, maps, errors; };
+CaptureReport capture(const std::filesystem::path& shadowRoot, const std::filesystem::path& baseRoot,
+                      const std::filesystem::path& pack);
+
 } // namespace albion::modpack

@@ -102,6 +102,13 @@ void replaceStaticMap(const std::filesystem::path& srcPath,
                       const std::vector<uint8_t>& payload,
                       const std::vector<uint8_t>& commonRecord);
 
+// A static-map common record baked against one STB, made valid for `map` in another:
+// its five absolute logical pointers are rebased to the live slot and the live bank
+// index (from `liveRecord`) kept -- what replaceStaticMaps does per map, for an
+// in-place write.
+std::vector<uint8_t> rebaseCommonRecord(const std::vector<uint8_t>& record, const StaticMap& map,
+                                        const std::vector<uint8_t>& liveRecord);
+
 // Atomic same-size replacement for several existing static maps. The bank is
 // read and written once; payload offsets, entry ids, and TOC bytes stay fixed.
 void replaceStaticMaps(const std::filesystem::path& srcPath,

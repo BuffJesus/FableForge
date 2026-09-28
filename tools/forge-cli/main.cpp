@@ -22,6 +22,7 @@
 #include "modpack.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
+#include "forge/worldmerge.hpp"
 #include "forge/bankcatalog.hpp"
 #include "forge/catalog.hpp"
 #include "forge/cutscene_script.hpp"
@@ -264,6 +265,7 @@ int usage() {
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
+        "  forge mods capture <shadow-root> <base-root> <pack>   a shadow install's world / level / static-map differences into a FableForge pack\n"
         "  forge script refs <game-root> [level-filter] [--json]\n"
         "  forge script cutscenes <game-root> [filter] [--json]\n"
         "  forge script cutscene <game-root> <name-or-index> [--json]\n"
@@ -8704,6 +8706,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // --- Whole-file layers: everything else a game-root tree ships (LEV, WLD, BWD, STB, INI,
     // banks, textures ...) that no record merge covers. Load order resolves them: the last
     // source that carries a path wins; a path several sources carry is reported.
+    struct WorldCarrier { std::string label; fs::path wld, bwd; };
+    std::vector<WorldCarrier> worldCarriers;   // mods shipping FinalAlbion.wld / .bwd, in load order (merged per record below)
     {
         struct Carrier { std::string label; fs::path src; std::string rel; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
@@ -8729,6 +8733,13 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 // the GB packs park the retail WAD as `_FinalAlbion.wad` so their loose levels load; the
                 // parked copy is not content (the loose levels are repacked into the real WAD below)
                 if (lower == "data/levels/_finalalbion.wad") { parkedWad.insert(srcLabel(si)); continue; }   // the engine never reads that name
+                if (lower == "data/levels/finalalbion.wld" || lower == "data/levels/finalalbion.bwd") {   // merged per map / region below
+                    fs::path basePath = fs::path(baseRoot) / rel;
+                    if (filesIdentical(de.path(), basePath)) { ++unchanged; continue; }
+                    if (worldCarriers.empty() || worldCarriers.back().label != srcLabel(si)) worldCarriers.push_back({srcLabel(si), {}, {}});
+                    (lext == ".wld" ? worldCarriers.back().wld : worldCarriers.back().bwd) = de.path();
+                    continue;
+                }
                 // a file identical to the install's is not a layer (a pack ships its whole tree)
                 fs::path basePath = fs::path(baseRoot) / rel;
                 if (!fs::exists(basePath, ec)) basePath = fs::path(baseRoot) / fs::path(rel).parent_path() / de.path().filename();
@@ -8800,6 +8811,64 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (!jsonOutput) {
             std::printf("pack %s: %zu recipe(s) applied%s\n", srcLabel(pi).c_str(), prep.added.size(), prep.errors.empty() ? "" : (", " + std::to_string(prep.errors.size()) + " failed").c_str());
             for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
+        }
+    }
+
+    // --- World: FinalAlbion.bwd / .wld merged per map and region (forge/worldmerge.hpp) --
+    // every mod's added levels, moves and region edits land instead of the last whole file.
+    // A mod shipping only a .wld has its .bwd compiled from it (dims from the built STB).
+    if (!worldCarriers.empty()) {
+        const fs::path lv = fs::path("data") / "Levels";
+        const fs::path baseBwdP = fs::path(baseRoot) / lv / "FinalAlbion.bwd", baseWldP = fs::path(baseRoot) / lv / "FinalAlbion.wld";
+        try {
+            const auto baseBwd = forge::bwd::File::parse(baseBwdP);
+            std::vector<forge::worldmerge::Layer> layers;
+            std::map<std::string, std::pair<int, int>> dimMap;
+            bool dimsRead = false;
+            auto dims = [&](const std::string& levelName, int& w, int& h) {
+                if (!dimsRead) {
+                    dimsRead = true;
+                    fs::path stbP = fs::path(outDir) / lv / "FinalAlbion_RT.stb";
+                    if (!fs::exists(stbP)) stbP = fs::path(baseRoot) / lv / "FinalAlbion_RT.stb";
+                    const auto stb = forge::stb::Archive::open(stbP);
+                    for (const auto& sm : stb.staticMaps()) {
+                        const auto rec = stb.readStaticMapRecord(sm);
+                        if (rec.size() >= forge::stbinfo::kInfoBlockSize) {
+                            const auto ib = forge::stbinfo::readInfoBlock(rec.data());
+                            dimMap[lowered(sm.levelName)] = {ib.mapWidth, ib.mapHeight};
+                        }
+                    }
+                }
+                auto it = dimMap.find(lowered(levelName));
+                if (it == dimMap.end()) return false;
+                w = it->second.first; h = it->second.second;
+                return true;
+            };
+            for (const auto& c : worldCarriers) {
+                try {
+                    if (!c.bwd.empty()) layers.push_back({c.label, forge::bwd::File::parse(c.bwd)});
+                    else layers.push_back({c.label, forge::bwd::compileFromWld(forge::wld::File::parse(c.wld), dims)});
+                } catch (const std::exception& e) {
+                    std::fprintf(stderr, "world %s: %s (its world files are skipped)\n", c.label.c_str(), e.what());
+                }
+            }
+            forge::worldmerge::Report wrep;
+            const auto merged = forge::worldmerge::merge(baseBwd, layers, wrep);
+            fs::create_directories(fs::path(outDir) / lv);
+            merged.write(fs::path(outDir) / lv / "FinalAlbion.bwd");
+            if (fs::exists(baseWldP)) {
+                const auto text = forge::worldmerge::mirror(forge::wld::File::parse(baseWldP), baseBwd, merged, wrep).serialize();
+                writeAllBytes((fs::path(outDir) / lv / "FinalAlbion.wld").string(), std::vector<uint8_t>(text.begin(), text.end()));
+            }
+            if (jsonOutput) rep["world"] = {{"mods", worldCarriers.size()}, {"added", wrep.added}, {"changed", wrep.changed}, {"conflicts", wrep.conflicts}, {"notes", wrep.notes}};
+            else {
+                std::printf("world: %zu mod(s) merged per record -- %zu added, %zu changed, %zu contested\n", layers.size(), wrep.added.size(), wrep.changed.size(), wrep.conflicts.size());
+                for (const auto& a : wrep.added) std::printf("  + %s\n", a.c_str());
+                for (const auto& c : wrep.conflicts) std::printf("  contested: %s\n", c.c_str());
+                for (const auto& n : wrep.notes) std::printf("  note: %s\n", n.c_str());
+            }
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "world merge failed: %s\n", e.what());
         }
     }
 
@@ -12006,6 +12075,13 @@ int main(int argc, char** argv) {
                 if (args[i] != "--json") modRoots.push_back(args[i]);
             }
             return modsAnalyze(args[2], modRoots, asJson);
+        }
+        if (args.size() >= 5 && args[0] == "mods" && args[1] == "capture") {
+            const auto r = albion::modpack::capture(args[2], args[3], args[4]);
+            for (const auto& f : r.files) std::printf("file %s\n", f.c_str());
+            for (const auto& m : r.maps) std::printf("static map %s\n", m.c_str());
+            for (const auto& e : r.errors) std::fprintf(stderr, "capture: %s\n", e.c_str());
+            return r.errors.empty() ? 0 : 1;
         }
         if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build" || args[1] == "conflicts" || args[1] == "deploy" || args[1] == "undeploy")) {
             namespace mo = forge::modorder;

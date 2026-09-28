@@ -645,6 +645,23 @@ void replaceStaticMaps(const fs::path& srcPath, const fs::path& outPath,
     if (!output) throw std::runtime_error("stb: failed writing " + outPath.string());
 }
 
+std::vector<uint8_t> rebaseCommonRecord(const std::vector<uint8_t>& commonRecord, const StaticMap& map,
+                                        const std::vector<uint8_t>& liveRecord) {
+    if (commonRecord.size() < 0x75 || liveRecord.size() < 8)
+        throw std::runtime_error("stb: common record too short to rebase");
+    auto record = commonRecord;
+    const uint32_t oldBase = u32At(record, 0x20, "record landscape ptr") - 0x5C;
+    const int64_t delta = int64_t(map.relativeOffset) - int64_t(oldBase);
+    for (size_t at : {size_t(0x20), size_t(0x24), size_t(0x58), size_t(0x5C), size_t(0x71)}) {
+        const int64_t value = int64_t(u32At(record, at, "record pointer")) + delta;
+        if (value < 0 || value > 0xFFFFFFFFll)
+            throw std::runtime_error("stb: common record rebase overflow");
+        patchU32(record, at, uint32_t(value));
+    }
+    patchU32(record, 4, u32At(liveRecord, 4, "existing bank index"));
+    return record;
+}
+
 void replaceStaticMapsRelayout(const fs::path& srcPath, const fs::path& outPath,
                                const std::vector<StaticMapAppend>& replacements) {
     if (replacements.empty())

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "forge/worldmerge.hpp"
 #include "forge/lev.hpp"
 #include "forge/terrain.hpp"
 #include "forge/fractal.hpp"
@@ -1434,6 +1435,47 @@ static void testStbCompaction(const fs::path& dir) {
 
 // composeStatic writes what meshpreview reads back: positions exact, winding preserved, normals
 // within the 11/11/10 quantisation, UVs at the +8 bias the decoder leaves in, the Info blob's layout
+void testWorldMerge() {
+    namespace wm = forge::worldmerge;
+    auto mapOf = [](const std::string& n, int x, uint64_t uid) {
+        forge::bwd::MapInfo m; m.levelName = "Data\Levels\FinalAlbion\\" + n + ".lev"; m.scriptName = n;
+        m.left = x; m.right = x + 64; m.top = 0; m.bottom = 64; m.mapUid = uid; return m;
+    };
+    forge::bwd::File base;
+    base.maps() = {mapOf("A", 0, 1), mapOf("B", 64, 2), mapOf("C", 128, 3)};
+    forge::bwd::Region r1; r1.name = "R1"; r1.displayName = "one"; r1.contains = {1, 2}; r1.sees = {1, 2, 3};
+    forge::bwd::Region r2; r2.name = "R2"; r2.displayName = "two"; r2.contains = {3}; r2.sees = {2, 3};
+    base.regions() = {r1, r2};
+    // X: renames R1, appends D (uid 9) owned by R2
+    forge::bwd::File x = base;
+    x.regions()[0].displayName = "from X";
+    x.maps().push_back(mapOf("D", 512, 9));
+    x.regions()[1].contains.push_back(4); x.regions()[1].sees.push_back(4);
+    // Y: renames R1 too, moves B, R2 stops seeing B, appends E with the same uid 9 plus a region owning it
+    forge::bwd::File y = base;
+    y.regions()[0].displayName = "from Y";
+    y.maps()[1].left = 1024; y.maps()[1].right = 1088;
+    y.regions()[1].sees = {3};
+    y.maps().push_back(mapOf("E", 2048, 9));
+    forge::bwd::Region r3; r3.name = "R3"; r3.contains = {4}; r3.sees = {4, 3};
+    y.regions().push_back(r3);
+    wm::Report rep;
+    const auto m = wm::merge(base, {{"X", x}, {"Y", y}}, rep);
+    CHECK(m.maps().size() == 5 && m.regions().size() == 3);
+    CHECK(m.regions()[0].displayName == "from Y");                                    // the later wins ...
+    CHECK(rep.conflicts.size() == 1 && rep.conflicts[0].find("X -> Y") != std::string::npos);   // ... and is reported
+    CHECK(m.maps()[1].left == 1024 && m.maps()[1].right == 1088);
+    CHECK(m.maps()[3].scriptName == "D" && m.maps()[4].scriptName == "E");
+    CHECK(m.maps()[3].mapUid == 9 && m.maps()[4].mapUid == 10);                      // E's taken uid re-issued
+    CHECK((m.regions()[1].contains == std::vector<int32_t>{3, 4}));
+    CHECK((m.regions()[1].sees == std::vector<int32_t>{3, 4}));                      // X's add + Y's remove both apply
+    CHECK((m.regions()[2].contains == std::vector<int32_t>{5}));                     // Y's slot 4 is slot 5 merged
+    CHECK((m.regions()[2].sees == std::vector<int32_t>{5, 3}));
+    // one layer rebuilds itself exactly
+    wm::Report one;
+    CHECK(wm::merge(base, {{"X", x}}, one).serialize() == x.serialize() && one.conflicts.empty());
+}
+
 void testMeshCompose() {
     using namespace forge::meshcompose;
     Primitive p;
@@ -1657,6 +1699,7 @@ int main() {
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();
+    testWorldMerge();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";
