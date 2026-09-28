@@ -546,8 +546,12 @@ sets the owner that new things get.
     a sound combo; Clear all.
   - Reflection: a brush radius only.
   - Minimap: brush radius; Off / Show all minimap zones / Show selected minimap zone / Paint
-    selected minimap zone; a zone spinner; Clear all. This is probably the "minimap generation
-    sketch" Aeon mentions.
+    selected minimap zone; a zone spinner; Clear all. **Inactive:** the pen and fill loops run,
+    but `CEditMap::EditSetMinimapZone` and `CMap::Set/Get/IsMinimapZoneAt` are empty in FableWin
+    and in retail (egor `0x679510/520/530`, 16 bytes apart). No zone is stored or read, so there is
+    nothing to port (DEBUG_EDITOR_FEATURE_AUDIT agrees). The real minimap generator is
+    `CRegionMinimap::BuildRegionMinimapTGA` `0x021886b0` / `CreateRegionMinimapTGAFile` `0x02188b80`
+    and `CMinimapData::BuildMinimapTGA` `0x0218cb20` / `CreateMinimapTGAFile` `0x0218cae0`.
 
 **Placement rules, recovered for the port** (`PaintInputPlaceThingAt` `0x02994490`):
 - Random angle = `GFFloatRandom(1.0, world seed)` (`0x018bac90`: the GFRandom step, then
@@ -575,7 +579,7 @@ renderer's whole-area stats and subtracts the excluded kinds. Ported as `forge/b
 **What works well (worth porting):** one card per map (lock, cut, delete, resize, sea, load
 when near, script name, Fit Neighbours); the Water generators; theme Replace / Flood Replace;
 the Engine budget survey (things / triangles / vertices / texture memory for an area); painted
-minimap zones and sound themes; camera-passability and villager-preferability brushes;
+sound themes; camera-passability and villager-preferability brushes;
 placement angle and height rules; a brush library of saved copy selections; the quest filter
 with day / night only; the owner combo.
 
