@@ -802,8 +802,7 @@ void App::scaleSelected(float factor) {
 
 // The destination of an Assets import: a FableForge pack (default: the first one in the
 // load order) or the game directly. A new pack goes under <root>/FableForgeMods/<Name>/.
-void App::drawPackDestination(float cardInner) {
-    using theme::S;
+std::vector<std::pair<std::string, std::string>> App::packChoices() {
     if (modOrder_.mods.empty()) refreshModOrder();
     std::vector<std::pair<std::string, std::string>> packs;   // (label, folder)
     for (const auto& m : modOrder_.mods)
@@ -813,6 +812,36 @@ void App::drawPackDestination(float cardInner) {
             packs.push_back({m.name, src.string()});
         }
     if (!packDestChosen_) { packDest_ = packs.empty() ? std::string() : packs.front().second; packDestChosen_ = true; }
+    return packs;
+}
+
+std::string App::packLabel(const std::string& folder) {
+    for (const auto& [l, f] : packChoices()) if (f == folder) return l;
+    return fs::path(folder).filename().string();
+}
+
+void App::drawPackPicker(float width) {
+    const auto packs = packChoices();
+    const std::string cur = packDest_.empty() ? std::string("the game directly") : "mod pack " + packLabel(packDest_);
+    ImGui::PushFont(fontSmall_);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::vec(theme::Muted), "Writes go into");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(width - ImGui::GetCursorPosX() + ImGui::GetStyle().WindowPadding.x);
+    if (ImGui::BeginCombo("##packpick", cur.c_str())) {
+        for (const auto& [l, f] : packs)
+            if (ImGui::Selectable(("mod pack " + l).c_str(), f == packDest_)) packDest_ = f;
+        if (ImGui::Selectable("the game directly", packDest_.empty())) packDest_.clear();
+        ImGui::EndCombo();
+    }
+    auto_.registerWidget("combo_pack_pick");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A mod pack: the map's objects / terrain go into the pack; Mods > Deploy builds them into the game with every\nother mod (switchable, shareable, ordered). The game directly: FableForge's classic writes (one-time backups).\nMake a pack on the Assets tab (Models / Ground themes: New pack).");
+    ImGui::PopFont();
+}
+
+void App::drawPackDestination(float cardInner) {
+    using theme::S;
+    const auto packs = packChoices();
     std::string cur = "Directly into the game (advanced)";
     for (const auto& [l, f] : packs) if (f == packDest_) cur = "Mod pack: " + l;
     theme::label("Goes into");
@@ -1211,7 +1240,13 @@ bool App::gameWriteBlocked(const char* what) {
 
 bool App::deployDocument() {
     if (!documentLoaded()) return false;
-    if (gameWriteBlocked("deploy")) return false;
+    if (!packDest_.empty()) {
+        std::string err;
+        if (!doc_.saveToPack(packDest_, err)) { pushLog("pack: " + err, 2); return false; }
+        pushLog("wrote " + doc_.mapName() + ".tng into pack " + packLabel(packDest_) + " (Mods > Deploy puts it in the game)", 3);
+        return true;
+    }
+    if (packDest_.empty() && gameWriteBlocked("deploy")) return false;
     if (doc_.external() && saveRoot() != installPath_) { pushLog("deploy: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
@@ -1937,7 +1972,7 @@ void App::startNewLevel() {
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
     linkPoll(true);
-    if (gameWriteBlocked("terrain")) return;
+    if (packDest_.empty() && gameWriteBlocked("terrain")) return;
     if (doc_.external() && saveRoot() != installPath_) { pushLog("terrain: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return; }
     if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
@@ -1948,9 +1983,11 @@ void App::startTerrainDeploy() {
     pushLog(std::string("terrain: writing .lev") + (writesLoose() ? "" : ", FinalAlbion.wad") + " and re-baking the FinalAlbion_RT.stb chunk...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
-    terrainDeployFuture_ = std::async(std::launch::async, [ctxHold, doc, root, lib, progress]() {
+    const std::string pack = packDest_;   // "" = the game directly
+    terrainDeployFuture_ = std::async(std::launch::async, [ctxHold, doc, root, lib, progress, pack]() {
         TerrainDeployResult r;
-        r.ok = doc->deployTerrain(root, r.notes, r.error, lib, progress);
+        r.ok = pack.empty() ? doc->deployTerrain(root, r.notes, r.error, lib, progress)
+                            : doc->deployTerrainToPack(root, pack, r.notes, r.error, lib, progress);
         return r;
     });
 }
@@ -2789,6 +2826,9 @@ void App::drawEditFooter(float pad, float inner) {
         return;
     }
     const bool dirty = doc_.dirty();
+    ImGui::SetCursorPosX(pad);
+    drawPackPicker(inner);
+    const bool toPack = !packDest_.empty();
     if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
         // objects standing on sculpted ground follow it (their offset kept); one undo step
         ImGui::SetCursorPosX(pad);
@@ -2800,6 +2840,11 @@ void App::drawEditFooter(float pad, float inner) {
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
             theme::primaryButton(jobLabel("Saving terrain").c_str(), ImVec2(inner, S(36)), false);
+        } else if (toPack) {
+            // into a pack nothing in the game changes: no confirmation
+            if (theme::primaryButton(("Write terrain into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(36)))) startTerrainDeploy();
+            auto_.registerWidget("btn_terrain_deploy");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The .lev and this map's re-baked static-map chunk go into the pack (data/Levels/FinalAlbion + stb/);\nMods > Deploy writes them into the game with the other mods. Nothing in the game changes now.");
         } else if (!confirmTerrainDeploy_) {
             if (theme::primaryButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");
@@ -2817,7 +2862,11 @@ void App::drawEditFooter(float pad, float inner) {
     // loose .tng is the editor's working copy, so it is a "draft" (0.15 #4).
     ImGui::SetCursorPosX(pad);
     const float half = (inner - S(6)) * 0.5f;
-    if (!confirmDeploy_) {
+    if (toPack) {
+        if (theme::primaryButton(("Write into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) deployDocument();
+        auto_.registerWidget("btn_deploy");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes %s.tng into the pack (data/Levels/FinalAlbion); Mods > Deploy merges it thing by thing\nwith the other mods and writes it into the game. Nothing in the game changes now.", doc_.mapName().c_str());
+    } else if (!confirmDeploy_) {
         if (theme::primaryButton(writesLoose() ? "Write into the game (loose .tng)" : "Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) {

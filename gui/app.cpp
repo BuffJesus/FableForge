@@ -1880,7 +1880,7 @@ void App::drawActions(float width) {
     const bool showOpen = lastExportOk_ && !exportFuture_.valid() && !batchActive();
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
-    const float footerHeight = modsMode_ ? S(72) : texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
+    const float footerHeight = modsMode_ ? S(72) : texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16) : editMode_ ? S(42 + 8 + 32 + 16 + 30) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
     // The settings stack takes what it needs (measured last frame); the activity log
     // takes the rest, never less than a few lines. On a short window the settings
     // scroll instead of pushing the export button off screen.

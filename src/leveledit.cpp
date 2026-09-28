@@ -886,13 +886,15 @@ bool backupOnce(const fs::path& p, std::string& error) { return albion::backups:
 
 bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
-    const fs::path path = external() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+    const fs::path path = external() && packOut_.empty() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     try {
         fs::create_directories(path.parent_path());
-        if (!backupOnce(path, error)) return false;
-        // a loose file that did not exist before gets a marker so tooling can
-        // tell it apart from the user's own loose levels
-        if (!fs::exists(path)) albion::backups::markCreated(path);
+        if (packOut_.empty()) {   // inside a pack: no backups, no markers
+            if (!backupOnce(path, error)) return false;
+            // a loose file that did not exist before gets a marker so tooling can
+            // tell it apart from the user's own loose levels
+            if (!fs::exists(path)) albion::backups::markCreated(path);
+        }
         level_->save(path);
         savedTerrain_ = terrain_;
         soundListGrew_ = false;
@@ -1002,15 +1004,16 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
     try {
         // 1. loose .lev (also the bytes for the WAD)
         stage("writing the .lev (navigation patch)");
-        if (!saveTerrainLoose(gameRoot, error, &notes)) return false;
-        const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+        const fs::path levRoot = packOut_.empty() ? gameRoot : packOut_;
+        if (!saveTerrainLoose(levRoot, error, &notes)) return false;
+        const fs::path loose = levRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
         const std::string levBytes = readFile(loose);
         notes.push_back("wrote " + loose.string());
 
         // 2. FinalAlbion.wad entry (patched in place when the size is unchanged,
         //    relocated to the end of the payload after a navigation patch)
         const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
-        if (fs::exists(wad)) {
+        if (packOut_.empty() && fs::exists(wad)) {   // a pack's .lev is repacked by the composer
             const auto archive = forge::wad::Archive::open(wad);
             std::string entryName;
             const std::string want = lower(mapName_) + ".lev";
@@ -1128,7 +1131,7 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
         auto info = forge::stbinfo::readInfoBlock(record.data());
         forge::stbbake::setRetailCameraHeightBounds(info, minH, maxH);
         const auto encoded = forge::stbinfo::writeInfoBlock(info);
-        if (!backupOnce(stb, error)) return false;
+        if (packOut_.empty() && !backupOnce(stb, error)) return false;
         std::vector<uint8_t> outChunk = baked.chunk, outRecord = record;
         std::copy(encoded.begin(), encoded.end(), outRecord.begin());
         // patches whose new heights outgrew their fixed slot: written here, where
@@ -1167,6 +1170,20 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                 foliageRode = true;
                 notes.push_back("foliage re-seated on the new ground (" + std::to_string(rr.groupFrames) + " cache groups, bounds grown by " + std::to_string(slack) + ")");
             }
+        }
+        if (!packOut_.empty()) {
+            // the pack keeps the map's chunk + record; the composer writes them into the STB it builds
+            const fs::path dir = packOut_ / "stb";
+            fs::create_directories(dir);
+            auto put = [&](const fs::path& f, const std::vector<uint8_t>& b) {
+                std::ofstream o(f, std::ios::binary | std::ios::trunc);
+                o.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+                if (!o) throw std::runtime_error("cannot write " + f.string());
+            };
+            put(dir / (mapName_ + ".chunk"), outChunk);
+            put(dir / (mapName_ + ".record"), outRecord);
+            notes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes into the pack (stb/" + mapName_ + ".chunk + .record)");
+            return true;
         }
         if (outChunk.size() == chunk.size()) {
             std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
@@ -2071,6 +2088,29 @@ bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
         original_ = text; dirtyRev_ = ~0ull;
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool Document::saveToPack(const fs::path& pack, std::string& error) {
+    if (external()) { error = "a map of another world cannot go into a FinalAlbion pack"; return false; }
+    const fs::path path = pack / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
+    try {
+        fs::create_directories(path.parent_path());
+        const std::string text = file_.serialize();
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) { error = "cannot write " + path.string(); return false; }
+        f.write(text.data(), std::streamsize(text.size()));
+        original_ = text; dirtyRev_ = ~0ull;
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool Document::deployTerrainToPack(const fs::path& gameRoot, const fs::path& pack, std::vector<std::string>& notes, std::string& error,
+                                   const forge::terraintex::ThemeLibrary* library, const std::function<void(const std::string&)>& progress) {
+    if (external()) { error = "a map of another world cannot go into a FinalAlbion pack"; return false; }
+    packOut_ = pack;
+    const bool ok = deployTerrainSteps(gameRoot, notes, error, library, progress);
+    packOut_.clear();
+    return ok;
 }
 
 bool Document::deployWad(const fs::path& gameRoot, std::string& error) {

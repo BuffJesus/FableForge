@@ -416,6 +416,17 @@ public:
     bool saveTerrainLoose(const std::filesystem::path& gameRoot, std::string& error,
                           std::vector<std::string>* notes = nullptr);
 
+    // ---- into a FableForge mod pack instead of the game (the composer applies it at
+    // deploy): the objects as <pack>/data/Levels/FinalAlbion/<map>.tng (merged per thing
+    // by UID with the other mods); the terrain as that folder's <map>.lev plus the map's
+    // re-baked static-map chunk and record in <pack>/stb/<map>.chunk / .record (baked from
+    // gameRoot's FinalAlbion_RT.stb). No backups or markers are written inside a pack.
+    bool saveToPack(const std::filesystem::path& pack, std::string& error);
+    bool deployTerrainToPack(const std::filesystem::path& gameRoot, const std::filesystem::path& pack,
+                             std::vector<std::string>& notes, std::string& error,
+                             const forge::terraintex::ThemeLibrary* library = nullptr,
+                             const std::function<void(const std::string&)>& progress = {});
+
 private:
     // deployTerrain's three steps; deployTerrain puts the .lev (loose file and
     // WAD entry) back when a later step fails, so the level never disagrees
@@ -459,6 +470,7 @@ private:
     void fixTrackEnds(const std::vector<size_t>& chain);
     void nameChain(const std::vector<size_t>& chain, const std::string& name);
     bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
+    std::filesystem::path packOut_;   // set while deployTerrainToPack runs: write into the pack, not the game
     std::string targetSection() const;   // placementSection_ when it exists, else NULL
     size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)
     std::shared_ptr<forge::lev::File> level_;

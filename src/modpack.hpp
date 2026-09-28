@@ -14,6 +14,7 @@
 //   }
 // Paths are relative to the pack folder; the source files live under assets/.
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -57,5 +58,16 @@ struct ApplyReport {
     std::vector<std::string> errors;
 };
 ApplyReport apply(const std::filesystem::path& folder, const std::filesystem::path& baseRoot, const std::filesystem::path& outRoot);
+
+// The static-map layer: every <pack>/stb/<map>.chunk (+ .record) the editor baked replaces
+// that map's chunk + record in outRoot's FinalAlbion_RT.stb (copied from baseRoot first
+// when no earlier layer wrote one) -- in place when the size is unchanged, else re-laid.
+// Two packs baking different maps both land; the same map: the later one wins (the
+// caller reports `maps` per pack to find those).
+struct StbReport { std::vector<std::string> maps, errors; };
+StbReport applyStaticMaps(const std::filesystem::path& folder, const std::filesystem::path& baseRoot, const std::filesystem::path& outRoot);
+// One map's chunk + record into an STB file (the shared writer).
+bool writeStaticMapChunk(const std::filesystem::path& stb, const std::string& mapName,
+                         const std::vector<uint8_t>& chunk, const std::vector<uint8_t>& record, std::string& error);
 
 } // namespace albion::modpack

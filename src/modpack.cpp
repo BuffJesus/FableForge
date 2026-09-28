@@ -1,8 +1,11 @@
 #include "modpack.hpp"
 
 #include <fstream>
+#include <iterator>
+#include <cstring>
 #include <stdexcept>
 
+#include "forge/stb.hpp"
 #include "meshimport.hpp"
 #include "nlohmann/json.hpp"
 #include "worldedit.hpp"
@@ -131,6 +134,66 @@ ApplyReport apply(const fs::path& folder, const fs::path& baseRoot, const fs::pa
         if (!meshimport::importModel(baseRoot, outRoot, req, out, err)) { rep.errors.push_back(m.name + ": " + err); continue; }
         rep.added.push_back(out.objectName + " (mesh " + std::to_string(out.meshId) + ", def " + std::to_string(out.defIndex) + ")");
         for (const auto& n : out.notes) rep.notes.push_back(n);
+    }
+    return rep;
+}
+
+bool writeStaticMapChunk(const fs::path& stb, const std::string& mapName, const std::vector<uint8_t>& chunk,
+                         const std::vector<uint8_t>& record, std::string& error) {
+    try {
+        auto lower = [](std::string v) { for (auto& c : v) c = char(std::tolower(static_cast<unsigned char>(c))); return v; };
+        const auto archive = forge::stb::Archive::open(stb);
+        const forge::stb::StaticMap* map = nullptr;
+        const std::string want = lower(mapName) + ".lev";
+        for (const auto& m : archive.staticMaps())
+            if (lower(fs::path(m.levelName).filename().string()) == want) { map = &m; break; }
+        if (!map) { error = mapName + " has no static map in " + stb.filename().string(); return false; }
+        const auto oldRecord = archive.readStaticMapRecord(*map);
+        if (oldRecord.size() < 8 || record.size() != oldRecord.size()) { error = mapName + ": the record size differs from the STB's"; return false; }
+        uint32_t bankIndex = 0; std::memcpy(&bankIndex, oldRecord.data() + 4, 4);
+        const forge::stb::Entry* entry = nullptr;
+        for (const auto& e : archive.entries()) if (e.id == bankIndex) { entry = &e; break; }
+        if (!entry) { error = mapName + ": static-map bank entry not found"; return false; }
+        if (chunk.size() == entry->size) {
+            std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
+            if (!io) { error = "cannot open " + stb.string(); return false; }
+            io.seekp(std::streamoff(entry->offset));
+            io.write(reinterpret_cast<const char*>(chunk.data()), std::streamsize(chunk.size()));
+            io.seekp(std::streamoff(map->absoluteOffset));
+            io.write(reinterpret_cast<const char*>(record.data()), std::streamsize(record.size()));
+            if (!io) { error = "write to " + stb.string() + " failed"; return false; }
+        } else {
+            std::vector<forge::stb::StaticMapAppend> batch;
+            batch.push_back({map->levelName, entry->name, chunk, record});
+            const fs::path tmp = stb.string() + ".forge-tmp";
+            forge::stb::replaceStaticMapsRelayout(stb, tmp, batch);
+            fs::rename(tmp, stb);
+        }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+StbReport applyStaticMaps(const fs::path& folder, const fs::path& baseRoot, const fs::path& outRoot) {
+    StbReport rep;
+    std::error_code ec;
+    const fs::path dir = folder / "stb";
+    if (!fs::is_directory(dir, ec)) return rep;
+    const fs::path rel = fs::path("data") / "Levels" / "FinalAlbion_RT.stb";
+    const fs::path outStb = outRoot / rel;
+    for (const auto& de : fs::directory_iterator(dir, ec)) {
+        if (!de.is_regular_file(ec) || de.path().extension() != ".chunk") continue;
+        const std::string map = de.path().stem().string();
+        const fs::path recPath = dir / (map + ".record");
+        if (!fs::exists(recPath, ec)) { rep.errors.push_back(map + ": " + recPath.filename().string() + " is missing"); continue; }
+        auto slurp = [](const fs::path& p) { std::ifstream f(p, std::ios::binary); return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), {}); };
+        if (!fs::exists(outStb, ec)) {   // the first layer to touch the STB starts from the base one
+            fs::create_directories(outStb.parent_path(), ec);
+            fs::copy_file(baseRoot / rel, outStb, fs::copy_options::overwrite_existing, ec);
+            if (ec) { rep.errors.push_back("cannot copy the base FinalAlbion_RT.stb: " + ec.message()); return rep; }
+        }
+        std::string err;
+        if (writeStaticMapChunk(outStb, map, slurp(de.path()), slurp(recPath), err)) rep.maps.push_back(map);
+        else rep.errors.push_back(err);
     }
     return rep;
 }

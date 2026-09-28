@@ -394,6 +394,12 @@ private:
     bool packDestChosen_ = false;
     char newPackName_[64] = {};
     void drawPackDestination(float cardInner);
+    std::vector<std::pair<std::string, std::string>> packChoices();   // (label, folder) of the FableForge packs in the order
+    std::string packLabel(const std::string& folder);
+    void drawPackPicker(float width);   // the compact "Writes go into" combo (edit footer)
+public:
+    void setPackDest(const std::string& folder) { packDest_ = folder; packDestChosen_ = true; }
+private:
     bool addToPackOrGame(bool model);
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:

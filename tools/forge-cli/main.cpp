@@ -8721,7 +8721,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
-                if (albion::modpack::isPack(s) && (lower == "forge_pack.json" || lower.rfind("assets/", 0) == 0)) continue;   // recipes: below
+                if (albion::modpack::isPack(s) && (lower == "forge_pack.json" || lower.rfind("assets/", 0) == 0 || lower.rfind("stb/", 0) == 0)) continue;   // recipes / static maps: below
                 if (lower.rfind("data/compileddefs/", 0) == 0) continue;            // defs are record-merged, never taken whole
                 if (lower.rfind("data/lang/", 0) == 0 && lower.size() >= 8 && lower.compare(lower.size() - 8, 8, "text.big") == 0) continue;   // merged above
                 if (lower == "userst.ini" || lower == "usersettings.ini") { settingsSkipped.insert(srcLabel(si)); continue; }   // the player's own settings stay theirs
@@ -8832,14 +8832,30 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     // FableForge packs: their recipes (model / ground-theme imports) re-run against the tree
     // built so far, in load order -- appended ids come from the banks being built
+    std::map<std::string, std::string> stbOwner;   // map -> the pack whose chunk is in
+    std::vector<std::string> stbContested;         // a map two packs re-baked: the later one won
     for (const size_t pi : forgePacks) {
         const auto prep = albion::modpack::apply(sources[pi], baseRoot, outDir);
         for (const auto& e : prep.errors) std::fprintf(stderr, "pack %s: %s\n", srcLabel(pi).c_str(), e.c_str());
+        // the pack's terrain edits: re-baked static-map chunks into the STB being built
+        const auto srep = albion::modpack::applyStaticMaps(sources[pi], baseRoot, outDir);
+        for (const auto& e : srep.errors) std::fprintf(stderr, "pack %s: static map: %s\n", srcLabel(pi).c_str(), e.c_str());
+        for (const auto& m : srep.maps) {
+            if (stbOwner.count(m)) stbContested.push_back(m + ": " + stbOwner[m] + " -> " + srcLabel(pi));
+            stbOwner[m] = srcLabel(pi);
+        }
+        if (jsonOutput && (!srep.maps.empty() || !srep.errors.empty())) rep["forge_stb"].push_back({{"mod", srcLabel(pi)}, {"maps", srep.maps}, {"errors", srep.errors}});
+        if (!jsonOutput && !srep.maps.empty()) std::printf("pack %s: %zu static-map chunk(s) into FinalAlbion_RT.stb\n", srcLabel(pi).c_str(), srep.maps.size());
         if (jsonOutput) rep["forge"].push_back({{"mod", srcLabel(pi)}, {"added", prep.added}, {"errors", prep.errors}});
         if (!jsonOutput) {
             std::printf("pack %s: %zu recipe(s) applied%s\n", srcLabel(pi).c_str(), prep.added.size(), prep.errors.empty() ? "" : (", " + std::to_string(prep.errors.size()) + " failed").c_str());
             for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
         }
+    }
+
+    if (!stbContested.empty()) {
+        if (jsonOutput) rep["forge_stb_contested"] = stbContested;
+        else for (const auto& c : stbContested) std::printf("static map contested (the later pack wins): %s\n", c.c_str());
     }
 
     if (doStage) {
