@@ -42,11 +42,13 @@ namespace forge::lev {
 // def index through this table -- see CMap::AddThemeDefIndexToPalette /
 // CMap::GetThemePaletteIndexFromThemeDefIndex in the FableWin symbols.
 //
-// Because the index is global, adding or removing any def in game.bin shifts it.
-// A LEV authored against a different game.bin therefore points at the wrong def
-// and degrades quietly (wrong passability seeding, minimap colour, camera-Z)
-// rather than failing loudly. Proven on retail data: Greatwood_1.lev stores
-// GROUND_GRASS_NO_LOCAL_DETAIL -> 1917, which is exactly that def's entry index.
+// Because the index is global, adding or removing any def in game.bin shifts it,
+// and most shipped LEVs carry indices from an older game.bin: 377 of the 398 in
+// the stock WAD have stale slots (shifts of +3, +8, +205...; Greatwood_1 is one
+// of the few current ones, GROUND_GRASS_NO_LOCAL_DETAIL -> 1917). The engine does
+// not use the stored index: CMap::LoadFromFile (FableWin 0x022327b0) looks every
+// used slot's NAME up (GetDefGlobalIndexFromName), keeps it when it is an
+// ENGINE_THEME and leaves the slot unused otherwise. Resolve by name first.
 struct GroundTheme {
     std::string name; // e.g. GROUND_GRASS_NO_LOCAL_DETAIL
     uint32_t value = 0;
