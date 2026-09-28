@@ -573,6 +573,16 @@ const Image* Context::texture(uint32_t id, std::string& warning) const {
     return impl_->cache.get(id, [&](const std::string& m) { warning = m; });
 }
 
+bool Context::textureInfo(uint32_t id, std::string& name, forge::terraintex::TextureInfo& info) const {
+    if (!ready() || id == 0) return false;
+    std::lock_guard<std::mutex> lock(impl_->cache.mutex);
+    const auto e = impl_->cache.byId.find(id);
+    if (e == impl_->cache.byId.end()) return false;
+    name = e->second->name;
+    std::string err;
+    return forge::terraintex::parseTextureInfo(e->second->subHeader.data(), e->second->subHeader.size(), info, err);
+}
+
 bool Context::loadDefs(const fs::path& gameRoot, std::string& error) {
     auto impl = std::make_shared<Impl>();
     try {

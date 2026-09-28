@@ -562,6 +562,16 @@ sets the owner that new things get.
 - Ported as `forge::thingplacer::{vanillaFloatRandom, forwardFromVanillaTurns,
   constantPlacementHeight}` plus the Facing / Fixed height controls in "Add an object".
 
+**Budget survey, recovered for the port** (`GetEngineSurveyPrimitiveStats` `0x02050cb0`,
+`GetEngineSurveyPrimitiveThingStats` `0x0204fde0`, input `OnEngineSurveyLMB*` `0x0204f4c0..`):
+LMB drags a box (`AddAreaToEngineSurvey`; the things in it join), a click on a thing adds it,
+and Shift keeps the earlier picks. Include flags: local detail 0x10, buildings 1, creatures 2,
+objects 4, others 8. Per thing with a graphic appearance: +1 thing, +1 for its definition,
+its primitives' stats go into maps keyed by primitive (so a shared mesh counts once) unless
+"Count all duplications", which sums per instance. With local detail on, it takes the
+renderer's whole-area stats and subtracts the excluded kinds. Ported as `forge/budget`
+(from bank data instead of the live renderer) and the Budget survey window.
+
 **What works well (worth porting):** one card per map (lock, cut, delete, resize, sea, load
 when near, script name, Fit Neighbours); the Water generators; theme Replace / Flood Replace;
 the Engine budget survey (things / triangles / vertices / texture memory for an area); painted

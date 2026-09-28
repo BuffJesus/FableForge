@@ -347,6 +347,7 @@ void App::drawToolWindows() {
     if (!editMode_ || !documentLoaded()) return;
     drawFitWindow();
     drawFractalWindow();
+    drawBudgetWindow();
 }
 
 void App::drawSetupPanel() {
@@ -1022,6 +1023,13 @@ void App::pollWorkers() {
             for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
         } else if (r.name == selectedName_) {
             foliageLoadedFor_ = r.name;
+            localDetail_.clear();
+            for (const auto& inst : r.scene.instances) {
+                if (inst.mesh < 0 || size_t(inst.mesh) >= r.scene.meshes.size()) continue;
+                const auto& m = r.scene.meshes[size_t(inst.mesh)];
+                localDetail_.push_back({inst.x, inst.y, m.meshId, m.name});
+            }
+            budgetDirty_ = budgetOpen_;
             foliageInstances_ = r.scene.instances.size();
             thingInstances_ = r.things.instances.size();
             if (r.scene.found && !r.scene.instances.empty()) {

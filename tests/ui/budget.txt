@@ -1,0 +1,44 @@
+# Budget survey (the vanilla Surveys > Engine tab): things, triangles, vertices,
+# texture memory for the whole map / the selection / around the view.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+frames 3
+edit_tab 3
+frames 3
+assert_widget btn_budget_toggle
+budget_open 1
+frames 4
+assert_widget seg_budget_scope
+assert_widget budget_totals
+budget_run 50
+mouse_move 20 20
+frames 3
+screenshot build/ui/budget_1_map.png
+set outdir build/ui_budget_out
+click btn_budget_save
+frames 4
+assert_file_contains build/ui_budget_out/StartOakValeWest_budget.txt Number of things: 19344
+set budget_copies 1
+budget_run 50
+set budget_view 1
+frames 3
+screenshot build/ui/budget_2_models.png
+set budget_include 0x10
+budget_run 1
+set budget_view 2
+frames 3
+screenshot build/ui/budget_3_plants_textures.png
+set budget_include 0x1F
+set budget_copies 0
+select_thing 0
+set budget_scope 1
+budget_run 0
+set budget_scope 2
+budget_run 0
+frames 3
+screenshot build/ui/budget_4_around.png
+quit

@@ -20,6 +20,7 @@
 
 #include <array>
 
+#include "forge/budget.hpp"
 #include "forge/levelstore.hpp"
 #include "forge/modorder.hpp"
 #include "imgui.h"
@@ -517,10 +518,28 @@ private:
 public:
     void setFitOpen(bool on) { fitOpen_ = on; fitScrollTo_ = on ? 3 : 0; }
     void setFractalOpen(bool on) { fractalOpen_ = on; }
+    void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; }
+    void runBudgetSurvey();   // the budget survey window's numbers for the current options
+    const forge::budget::Report& budgetReport() const { return budgetReport_; }
     bool fitBusy() const { return fitFuture_.valid(); }
     size_t fitApply();   // fit the open map to its neighbours (automation / the button)
 private:
     bool fractalOpen_ = false;
+    // ---- budget survey (vanilla Surveys > Engine, inventory 11b): what an area costs the renderer
+    struct LocalDetailItem { float x = 0, y = 0; uint32_t mesh = 0; std::string name; };
+    std::vector<LocalDetailItem> localDetail_;   // the open map's baked plants, kept from the foliage load
+    bool budgetOpen_ = false;
+    bool budgetDirty_ = false;       // options changed: re-run next frame
+    int budgetScope_ = 0;            // 0 whole map, 1 the selection, 2 around the view centre
+    float budgetRadius_ = 20.0f;
+    unsigned budgetInclude_ = forge::budget::kAll;
+    bool budgetAllDuplicates_ = false;
+    int budgetView_ = 0;             // breakdown: 0 definitions, 1 meshes, 2 textures
+    bool budgetHasReport_ = false;
+    forge::budget::Report budgetReport_;
+    std::string budgetSaved_;        // where the last report was written
+    void drawBudgetWindow();
+    void drawBudgetCard(float pad, float inner, float cardInner);
     ID3D11ShaderResourceView* fractalPreview_ = nullptr;   // owned by the renderer (uiTexture "fractal")
     std::string fractalPreviewKey_;                         // params + map it was drawn for
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_

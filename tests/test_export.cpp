@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
 #include "forge/lev.hpp"
@@ -1488,6 +1489,42 @@ void testVanillaPlacement() {
     CHECK(tp::constantPlacementHeight(10.0f, 4.0f) == 10.0f && tp::constantPlacementHeight(2.0f, 4.0f) == 4.0f);
 }
 
+void testBudgetSurvey() {
+    namespace bg = forge::budget;
+    // texture memory: the power-of-two surface, every mip, DXT blocks stay compressed
+    forge::terraintex::TextureInfo ti;
+    ti.allocWidth = 20; ti.allocHeight = 20; ti.pixelFormat = forge::terraintex::kFormatDXT1; ti.mipLevels = 3;
+    CHECK(bg::textureMemory(ti) == 512u + 128u + 32u);   // 32x32, 16x16, 8x8 at 8 bytes per 4x4 block
+    ti.pixelFormat = forge::terraintex::kFormatARGB; ti.allocWidth = 4; ti.allocHeight = 2; ti.mipLevels = 0;
+    CHECK(bg::textureMemory(ti) == 32u);
+    CHECK(bg::kindOfThingType("Building") == bg::kBuildings && bg::kindOfThingType("AICreature") == bg::kCreatures &&
+          bg::kindOfThingType("Object") == bg::kObjects && bg::kindOfThingType("Marker") == bg::kOthers);
+    // three barrels (one mesh, two textures), one house sharing a texture, a marker without a graphic
+    const std::vector<bg::Item> items = {{"OBJECT_BARREL", bg::kObjects, 7}, {"OBJECT_BARREL", bg::kObjects, 7},
+                                         {"OBJECT_BARREL", bg::kObjects, 7}, {"BUILDING_HOUSE", bg::kBuildings, 9},
+                                         {"MARKER", bg::kOthers, 0}};
+    auto mesh = [](uint32_t id) {
+        bg::MeshCost m; m.ok = true;
+        if (id == 7) { m.name = "MESH_BARREL"; m.triangles = 100; m.vertices = 60; m.textures = {1, 2}; }
+        else { m.name = "MESH_HOUSE"; m.triangles = 1000; m.vertices = 700; m.textures = {2, 3}; }
+        return m;
+    };
+    auto tex = [](uint32_t id) { bg::TextureCost t; t.ok = id != 3; t.name = "T" + std::to_string(id); t.bytes = id * 1000u; return t; };
+    bg::Report r = bg::survey(items, mesh, tex, {});
+    CHECK(r.things == 4 && r.skippedNoGraphic == 1);
+    CHECK(r.triangles == 1100 && r.vertices == 760);                    // each mesh once
+    CHECK(r.textureBytes == 3000 && r.problems.size() == 1);            // textures 1 + 2 once; 3 missing
+    CHECK(r.definitions.size() == 2 && r.definitions[0].name == "OBJECT_BARREL" && r.definitions[0].count == 3);
+    bg::Options all; all.countAllDuplications = true;
+    r = bg::survey(items, mesh, tex, all);
+    CHECK(r.triangles == 1300 && r.vertices == 880 && r.textureBytes == 3000);   // instances summed, textures still once
+    bg::Options noBuildings; noBuildings.include = bg::kAll & ~bg::kBuildings;
+    r = bg::survey(items, mesh, tex, noBuildings);
+    CHECK(r.things == 3 && r.triangles == 100 && r.textureBytes == 3000 && r.problems.empty());
+    CHECK(bg::toText(r, "test", noBuildings).find("Number of things: 3") != std::string::npos);
+    CHECK(bg::formatBytes(512) == "512 B" && bg::formatBytes(2048) == "2 KB" && bg::formatBytes(3u << 20) == "3.0 MB");
+}
+
 void testWorldMerge() {
     namespace wm = forge::worldmerge;
     auto mapOf = [](const std::string& n, int x, uint64_t uid) {
@@ -1755,6 +1792,7 @@ int main() {
     testWorldMerge();
     testFillerFit();
     testVanillaPlacement();
+    testBudgetSurvey();
     testStbCompaction(dir / "stb_compact");
     if (g_failures) { std::cerr << g_failures << " failure(s)\n"; return 1; }
     std::cout << "fableforge_tests: all passed\n";

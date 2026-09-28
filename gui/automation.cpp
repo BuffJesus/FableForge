@@ -216,6 +216,10 @@ bool Automation::tick(App& app) {
         else if (key == "outdir") { s.outDir = val; std::snprintf(app.outDirBuf_, sizeof app.outDirBuf_, "%s", val.c_str()); }
         else if (key == "saveroot") app.setSaveRoot(val);
         else if (key == "unsaved_prompt") app.promptInAuto_ = val == "1";
+        else if (key == "budget_scope") { app.budgetScope_ = std::clamp(std::atoi(val.c_str()), 0, 2); app.budgetDirty_ = true; }
+        else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
+        else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
+        else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
         else if (key == "place_facing") app.placeFacing_ = std::clamp(std::atoi(val.c_str()), 0, 2);
         else if (key == "place_angle") app.placeAngleDeg_ = float(std::atof(val.c_str()));
         else if (key == "place_height") { app.placeFixedHeight_ = !val.empty() && val != "off"; if (app.placeFixedHeight_) app.placeHeight_ = float(std::atof(val.c_str())); }
@@ -249,6 +253,19 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "fit_open") { app.setFitOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "fractal_open") { app.setFractalOpen(rest != "0"); note("ok   " + line); ++pc_; }
+    else if (cmd == "budget_open") { app.setBudgetOpen(rest != "0"); note("ok   " + line); ++pc_; }
+    else if (cmd == "budget_run") {   // budget_run [min things]: survey with the window's options, log the totals
+        app.runBudgetSurvey();
+        const auto& r = app.budgetReport();
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "budget: %llu things, %llu triangles, %llu vertices, %llu texture bytes, %zu problems",
+                      (unsigned long long)r.things, (unsigned long long)r.triangles, (unsigned long long)r.vertices,
+                      (unsigned long long)r.textureBytes, r.problems.size());
+        const unsigned long long want = rest.empty() ? 0ull : std::strtoull(rest.c_str(), nullptr, 10);
+        if (r.things < want || (r.things > 0 && (r.triangles == 0 || r.textureBytes == 0))) fail(std::string(buf));
+        else note("ok   " + line + "  -> " + buf);
+        ++pc_;
+    }
     else if (cmd == "wait_fit") waitOn(!app.fitBusy(), "fit neighbours");
     else if (cmd == "fit_apply") { if (!app.fitApply()) fail("fit_apply changed nothing"); else note("ok   " + line); ++pc_; }
     else if (cmd == "mod_remove") { if (!app.modRemove(rest)) fail("mod_remove failed: " + rest); else note("ok   " + line); ++pc_; }

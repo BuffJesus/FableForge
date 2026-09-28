@@ -2778,6 +2778,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     if (editTab_ == 3) {
         drawCheckCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
+        drawBudgetCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawTracksCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawNewLevelCard(pad, inner, cardInner);
@@ -3519,6 +3521,246 @@ void App::drawFitWindow() {
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     close();
+}
+
+// ------------------------------------------------------------ budget survey
+// The vanilla Surveys > Engine tab (inventory 11b; forge/budget.hpp has its rules):
+// things, triangles, vertices and texture memory for an area. Vanilla surveys a
+// dragged box or clicked things; here the area is the whole map, the selection, or a
+// radius around where the camera looks.
+
+void App::drawBudgetCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##budgetcard", inner);
+    if (theme::ghostButton(budgetOpen_ ? "Budget survey  (open)" : "Budget survey...", ImVec2(cardInner, S(26)))) setBudgetOpen(!budgetOpen_);
+    auto_.registerWidget("btn_budget_toggle");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("What this map (or part of it) costs to draw: things, triangles, vertices, texture memory.");
+    theme::endCard();
+}
+
+void App::runBudgetSurvey() {
+    namespace bg = forge::budget;
+    budgetDirty_ = false;
+    if (!documentLoaded()) return;
+    float focus[3]; camera_.focus(focus);
+    const float cx = focus[0], cy = -focus[2];
+    std::set<int> sel;
+    if (selectedThing_ >= 0) sel.insert(selectedThing_);
+    for (int i : renderer_.alsoSelected) sel.insert(i);
+    const float r2 = budgetRadius_ * budgetRadius_;
+    auto inScope = [&](float x, float y, int thing) {
+        if (budgetScope_ == 1) return thing >= 0 && sel.count(thing) > 0;
+        if (budgetScope_ == 2) return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2;
+        return true;
+    };
+    std::vector<bg::Item> items;
+    for (size_t i = 0; i < doc_.thingCount(); ++i) {
+        editor::Frame f;
+        if (!doc_.frameOf(i, f) || !inScope(f.pos[0], f.pos[1], int(i))) continue;
+        const auto summary = doc_.summary(i);
+        bg::Item item;
+        item.name = summary.definition;
+        item.kind = bg::kindOfThingType(summary.type);
+        uint32_t id = 0;
+        if (ctx_.graphicModelId(summary.definition, id) == 1) item.mesh = id;
+        items.push_back(item);
+    }
+    if (budgetScope_ != 1)
+        for (const auto& d : localDetail_)
+            if (inScope(d.x, d.y, -1)) items.push_back({d.name, bg::kLocalDetail, d.mesh});
+    auto mesh = [](uint32_t id) {
+        bg::MeshCost m;
+        m.name = foliageexport::meshName(id);
+        std::string err;
+        const auto* g = foliageexport::cachedMesh(id, err);
+        if (!g) return m;
+        m.ok = true;
+        // what the renderer draws: the collision hull on texture-less materials is not
+        // drawn (the rule the preview uses, foliageexport)
+        bool anyTextured = false;
+        for (const auto& mt : g->materials) if (mt.diffuseTexture > 0 || mt.textureFlags != 0) { anyTextured = true; break; }
+        std::vector<char> used(g->vertices.size(), 0);
+        for (const auto& t : g->triangles) {
+            if (anyTextured && t.material >= 0 && size_t(t.material) < g->materials.size()) {
+                const auto& mt = g->materials[size_t(t.material)];
+                if (mt.diffuseTexture <= 0 && mt.textureFlags == 0 && mt.bumpTexture <= 0 && mt.reflectionTexture <= 0) continue;
+            }
+            ++m.triangles;
+            for (uint32_t v : {t.a, t.b, t.c}) if (v < used.size() && !used[v]) { used[v] = 1; ++m.vertices; }
+        }
+        for (const auto& mt : g->materials)
+            for (int32_t t : {mt.diffuseTexture, mt.bumpTexture, mt.reflectionTexture, mt.alphaMapTexture})
+                if (t > 0) m.textures.push_back(uint32_t(t));
+        return m;
+    };
+    auto texture = [this](uint32_t id) {
+        bg::TextureCost t;
+        forge::terraintex::TextureInfo info;
+        if (!ctx_.textureInfo(id, t.name, info)) return t;
+        t.ok = true;
+        t.bytes = bg::textureMemory(info);
+        t.width = info.allocWidth;
+        t.height = info.allocHeight;
+        t.format = forge::terraintex::pixelFormatName(info.pixelFormat);
+        return t;
+    };
+    bg::Options o;
+    o.include = budgetInclude_;
+    o.countAllDuplications = budgetAllDuplicates_;
+    budgetReport_ = bg::survey(items, mesh, texture, o);
+    budgetHasReport_ = true;
+    budgetSaved_.clear();
+}
+
+void App::drawBudgetWindow() {
+    using theme::S;
+    namespace bg = forge::budget;
+    if (!beginToolWindow("##budgetwin", "Budget survey",
+                         "What this area costs to draw: things, triangles, vertices and texture memory. The vanilla editor's Surveys > Engine tab.",
+                         &budgetOpen_, S(560))) return;
+    const float inner = toolWindowInner_;
+    bool changed = false;
+
+    theme::label("Area");
+    changed |= theme::segmented("##budget_scope", budgetScope_, {"Whole map", "Selected", "Around the view"}, inner);
+    auto_.registerWidget("seg_budget_scope");
+    if (budgetScope_ == 1 && selectedThing_ < 0) theme::hint("Select things in the view (Ctrl+click adds more).");
+    if (budgetScope_ == 2) {
+        ImGui::SetNextItemWidth(inner - S(96));
+        changed |= ImGui::SliderFloat("##budget_radius", &budgetRadius_, 2.0f, 200.0f, "%.0f units");
+        ImGui::SameLine();
+        if (theme::ghostButton("Update", ImVec2(S(88), 0))) changed = true;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Survey again around where the camera now looks.");
+        theme::hint("Everything within this distance of where the camera looks.");
+    }
+
+    ImGui::Dummy(ImVec2(0, S(4)));
+    theme::label("Count");
+    struct Chip { const char* label; unsigned bit; const char* tip; };
+    const Chip chips[] = {{"Buildings", bg::kBuildings, "Buildings"},
+                          {"Creatures", bg::kCreatures, "Creatures and villagers"},
+                          {"Objects", bg::kObjects, "Objects (props, doors, chests...)"},
+                          {"Other things", bg::kOthers, "Markers, holy sites, villages and the rest"},
+                          {"Plants", bg::kLocalDetail, "Trees, bushes and grass baked into the map (vanilla: 'local detail')"}};
+    for (size_t i = 0; i < sizeof chips / sizeof chips[0]; ++i) {
+        if (i) ImGui::SameLine(0, S(6));
+        if (theme::chip(chips[i].label, (budgetInclude_ & chips[i].bit) != 0)) { budgetInclude_ ^= chips[i].bit; changed = true; }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", chips[i].tip);
+    }
+    auto_.registerWidget("chips_budget_include");
+    changed |= theme::toggle("Count every copy", &budgetAllDuplicates_);
+    auto_.registerWidget("toggle_budget_copies");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: a model used many times counts once (it is loaded once).\nOn: every copy counts (what gets drawn). Vanilla: 'Count all duplications'.");
+
+    if (changed || budgetDirty_ || !budgetHasReport_) runBudgetSurvey();
+    const bg::Report& r = budgetReport_;
+
+    // the four numbers
+    ImGui::Dummy(ImVec2(0, S(8)));
+    const float gap = S(8);
+    const float tileW = std::floor((inner - gap * 3) / 4);
+    auto tile = [&](const char* label, const std::string& value) {
+        const ImVec2 a = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(a, ImVec2(a.x + tileW, a.y + S(58)), theme::col(theme::Bg2), S(8));
+        ImGui::PushFont(fontSmall_);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(a.x + S(10), a.y + S(8)), theme::col(theme::Muted), label);
+        ImGui::PopFont();
+        ImGui::PushFont(fontBold_);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(a.x + S(10), a.y + S(28)), theme::col(theme::Text), value.c_str());
+        ImGui::PopFont();
+        ImGui::Dummy(ImVec2(tileW, S(58)));
+    };
+    auto grouped = [](uint64_t v) {
+        const std::string d = std::to_string(v);
+        std::string out;
+        for (size_t i = 0; i < d.size(); ++i) { if (i && (d.size() - i) % 3 == 0) out += ','; out += d[i]; }
+        return out;
+    };
+    tile("Things", grouped(r.things));
+    ImGui::SameLine(0, gap);
+    tile("Triangles", grouped(r.triangles));
+    ImGui::SameLine(0, gap);
+    tile("Vertices", grouped(r.vertices));
+    ImGui::SameLine(0, gap);
+    tile("Texture memory", bg::formatBytes(r.textureBytes));
+    auto_.registerWidget("budget_totals");
+
+    // the breakdown, heaviest first
+    ImGui::Dummy(ImVec2(0, S(8)));
+    theme::segmented("##budget_view", budgetView_, {"By definition", "By model", "By texture"}, inner);
+    auto_.registerWidget("seg_budget_view");
+    const std::vector<bg::Line>& lines = budgetView_ == 0 ? r.definitions : budgetView_ == 1 ? r.meshes : r.textures;
+    auto valueOf = [&](const bg::Line& l) { return budgetView_ == 0 ? l.count : budgetView_ == 1 ? l.triangles : l.bytes; };
+    uint64_t top = 1;
+    for (const auto& l : lines) top = std::max<uint64_t>(top, valueOf(l));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+    ImGui::BeginChild("##budget_lines", ImVec2(inner, S(220)), false);
+    ImGui::PushFont(fontSmall_);
+    const float rowH = ImGui::GetTextLineHeightWithSpacing() + S(2);
+    const float valueW = S(120);
+    ImGuiListClipper clip;
+    clip.Begin(int(lines.size()), rowH);
+    while (clip.Step())
+        for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
+            const bg::Line& l = lines[size_t(i)];
+            const ImVec2 a = ImGui::GetCursorScreenPos();
+            const float w = ImGui::GetContentRegionAvail().x;
+            const float bar = (w - valueW - S(8)) * float(double(valueOf(l)) / double(top));
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x, a.y + S(1)), ImVec2(a.x + bar, a.y + rowH - S(1)),
+                                                      (theme::col(theme::Accent) & 0x00FFFFFFu) | 0x38000000u, S(3));
+            // texture entries are named by their source path: show the file name
+            std::string name = l.name;
+            if (budgetView_ == 2) {
+                const size_t slash = name.find_last_of("\\/");
+                if (slash != std::string::npos) name = name.substr(slash + 1);
+                if (!name.empty() && name.back() == ']') name.pop_back();   // entries read "[...\NAME.TGA]"
+            }
+            ImGui::GetWindowDrawList()->PushClipRect(a, ImVec2(a.x + w - valueW - S(8), a.y + rowH), true);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(a.x + S(6), a.y + S(1)), theme::col(theme::Text), name.c_str());
+            ImGui::GetWindowDrawList()->PopClipRect();
+            if (name != l.name && ImGui::IsMouseHoveringRect(a, ImVec2(a.x + w, a.y + rowH))) ImGui::SetTooltip("%s", l.name.c_str());
+            const std::string value = budgetView_ == 0 ? grouped(l.count) + (l.count == 1 ? " thing" : " things")
+                                    : budgetView_ == 1 ? grouped(l.triangles) + " tris" + (l.count > 1 ? "  x" + std::to_string(l.count) : "")
+                                                       : bg::formatBytes(l.bytes);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(a.x + w - valueW, a.y + S(1)), theme::col(theme::Muted), value.c_str());
+            ImGui::Dummy(ImVec2(w, rowH));
+        }
+    if (lines.empty()) ImGui::TextColored(theme::vec(theme::Faint), "  Nothing in this area.");
+    ImGui::PopFont();
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    if (r.skippedNoGraphic || !r.problems.empty()) {
+        std::string note;
+        if (r.skippedNoGraphic) note += std::to_string(r.skippedNoGraphic) + " thing(s) have no model (markers, cameras...) and cost nothing to draw. ";
+        if (!r.problems.empty()) note += std::to_string(r.problems.size()) + " model(s) or texture(s) could not be read; the saved report lists them.";
+        theme::hint(note.c_str());
+    }
+
+    ImGui::Dummy(ImVec2(0, S(6)));
+    if (theme::ghostButton("Save report", ImVec2(S(140), S(28)))) {
+        std::error_code ec;
+        const fs::path dir = settings_.outDir;
+        fs::create_directories(dir, ec);
+        const char* scopeName[] = {"whole map", "selection", "around the view"};
+        const fs::path file = dir / (doc_.mapName() + "_budget.txt");
+        std::ofstream out(file, std::ios::binary);
+        bg::Options o;
+        o.include = budgetInclude_;
+        o.countAllDuplications = budgetAllDuplicates_;
+        out << bg::toText(r, doc_.mapName() + " (" + scopeName[std::clamp(budgetScope_, 0, 2)] + ")", o);
+        const bool ok = bool(out);
+        budgetSaved_ = ok ? file.string() : std::string();
+        pushLog(ok ? "budget report: " + file.string() : "budget report: cannot write " + file.string(), ok ? 3 : 2);
+    }
+    auto_.registerWidget("btn_budget_save");
+    if (!budgetSaved_.empty()) {
+        ImGui::SameLine();
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Muted), "Saved to %s", budgetSaved_.c_str());
+        ImGui::PopFont();
+    }
+    endToolWindow();
 }
 
 } // namespace albion::gui

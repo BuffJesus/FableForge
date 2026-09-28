@@ -38,7 +38,7 @@
 
 #include "forge/lev.hpp"
 
-namespace forge::terraintex { class ThemeLibrary; }
+namespace forge::terraintex { class ThemeLibrary; struct TextureInfo; }
 
 namespace albion::terrainexport {
 
@@ -187,6 +187,9 @@ public:
     // Decoded GBANK_MAIN_PC texture by id (cached; owned by the context). nullptr
     // with `warning` set when the id is unknown or undecodable.
     const Image* texture(uint32_t id, std::string& warning) const;
+    // A GBANK_MAIN_PC texture's entry name and Info header, without decoding it
+    // (the budget survey's texture memory). False when the id is unknown.
+    bool textureInfo(uint32_t id, std::string& name, forge::terraintex::TextureInfo& info) const;
     // game.bin lookup for placed things: the definition's Graphic model id
     // (MBANK_ALLMESHES). Result codes: 1 = found (modelId set, may be 0 = no
     // model), 0 = definition not in game.bin, -1 = def type not decodable.
