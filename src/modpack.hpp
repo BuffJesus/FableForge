@@ -36,7 +36,16 @@ struct Pack {
     std::string name;
     std::vector<ModelRecipe> models;
     std::vector<GroundThemeRecipe> groundThemes;
+    // masters: the names (load-order names or pack names) of the mods this one builds on --
+    // a level pack painting another pack's ground theme, a quest pack using a pack's level.
+    // They must be in the order, enabled, and load before it.
+    std::vector<std::string> masters;
 };
+
+// The problems with `pack`'s masters in an order given as (name, pack name, enabled) in
+// load order; `self` is the pack's own position. Empty = fine.
+struct OrderEntry { std::string name, packName; bool enabled = true; };
+std::vector<std::string> masterProblems(const Pack& pack, size_t self, const std::vector<OrderEntry>& order);
 
 bool isPack(const std::filesystem::path& folder);
 // Throws std::runtime_error on a malformed file.

@@ -8795,6 +8795,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // built so far, in load order -- appended ids come from the banks being built
     std::map<std::string, std::string> stbOwner;   // map -> the pack whose chunk is in
     std::vector<std::string> stbContested;         // a map two packs re-baked: the later one won
+    // masters: a pack's `requires` must be in this build and load before it
+    {
+        std::vector<albion::modpack::OrderEntry> order;
+        for (size_t i = 0; i < sources.size(); ++i) {
+            albion::modpack::OrderEntry e; e.name = srcLabel(i);
+            if (albion::modpack::isPack(sources[i])) try { e.packName = albion::modpack::load(sources[i]).name; } catch (const std::exception&) {}
+            order.push_back(e);
+        }
+        for (const size_t pi : forgePacks) {
+            albion::modpack::Pack pk;
+            try { pk = albion::modpack::load(sources[pi]); } catch (const std::exception&) { continue; }
+            for (const auto& prob : albion::modpack::masterProblems(pk, pi, order)) {
+                if (jsonOutput) rep["masters"].push_back({{"mod", srcLabel(pi)}, {"problem", prob}});
+                else std::printf("pack %s %s\n", srcLabel(pi).c_str(), prob.c_str());
+            }
+        }
+    }
     for (const size_t pi : forgePacks) {
         const auto prep = albion::modpack::apply(sources[pi], baseRoot, outDir);
         for (const auto& e : prep.errors) std::fprintf(stderr, "pack %s: %s\n", srcLabel(pi).c_str(), e.c_str());

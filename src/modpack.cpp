@@ -42,6 +42,7 @@ Pack load(const fs::path& folder) {
         r.name = t.value("name", ""); r.png = t.value("png", ""); r.cliffPng = t.value("cliffPng", ""); r.donor = t.value("donor", r.donor);
         p.groundThemes.push_back(std::move(r));
     }
+    for (const auto& r : j.value("requires", json::array())) if (r.is_string()) p.masters.push_back(r.get<std::string>());
     return p;
 }
 
@@ -55,6 +56,7 @@ void save(const fs::path& folder, const Pack& pack) {
     j["groundThemes"] = json::array();
     for (const auto& t : pack.groundThemes)
         j["groundThemes"].push_back({{"name", t.name}, {"png", t.png}, {"cliffPng", t.cliffPng}, {"donor", t.donor}});
+    if (!pack.masters.empty()) j["requires"] = pack.masters;
     fs::create_directories(folder);
     std::ofstream(folder / kFileName) << j.dump(2);
 }
@@ -90,6 +92,20 @@ bool validName(const std::string& n) {
     return true;
 }
 } // namespace
+
+std::vector<std::string> masterProblems(const Pack& pack, size_t self, const std::vector<OrderEntry>& order) {
+    std::vector<std::string> out;
+    auto lower = [](std::string v) { for (auto& c : v) c = char(std::tolower(static_cast<unsigned char>(c))); return v; };
+    for (const auto& want : pack.masters) {
+        size_t at = order.size();
+        for (size_t i = 0; i < order.size(); ++i)
+            if (i != self && (lower(order[i].name) == lower(want) || lower(order[i].packName) == lower(want))) { at = i; break; }
+        if (at == order.size()) out.push_back("needs " + want + ", which is not in the order");
+        else if (!order[at].enabled) out.push_back("needs " + want + ", which is disabled");
+        else if (at > self) out.push_back("needs " + want + " loaded before it");
+    }
+    return out;
+}
 
 bool addModel(const fs::path& folder, ModelRecipe recipe, std::string& error) {
     if (!isPack(folder)) { error = folder.string() + " is not a FableForge pack"; return false; }

@@ -19,6 +19,7 @@
 
 #include "backups.hpp"
 #include "forge/modorder.hpp"
+#include "modpack.hpp"
 #include "nlohmann/json.hpp"
 #include "theme.hpp"
 
@@ -58,6 +59,48 @@ void App::refreshModOrder() {
     modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
     try { modOrder_ = mo::load(saveRoot()); modOrderError_.clear(); }
     catch (const std::exception& e) { modOrderError_ = e.what(); modOrder_ = mo::Order(); }
+    // the FableForge packs' masters, checked against this order
+    modRows_.assign(modOrder_.mods.size(), {});
+    std::vector<modpack::OrderEntry> order;
+    std::vector<modpack::Pack> packs(modOrder_.mods.size());
+    for (size_t i = 0; i < modOrder_.mods.size(); ++i) {
+        const auto& m = modOrder_.mods[i];
+        modpack::OrderEntry oe; oe.name = m.name; oe.enabled = m.enabled;
+        if (m.kind == mo::Kind::Forge) {
+            fs::path src(m.source);
+            if (src.is_relative()) src = fs::path(saveRoot()) / src;
+            modRows_[i].packFolder = src.string();
+            try { packs[i] = modpack::load(src); oe.packName = packs[i].name; modRows_[i].packName = packs[i].name; modRows_[i].masters = packs[i].masters; }
+            catch (const std::exception& e) { modRows_[i].problems.push_back(e.what()); }
+        }
+        order.push_back(oe);
+    }
+    for (size_t i = 0; i < modOrder_.mods.size(); ++i)
+        if (modOrder_.mods[i].enabled && !modRows_[i].packFolder.empty())
+            for (auto& prob : modpack::masterProblems(packs[i], i, order)) modRows_[i].problems.push_back(std::move(prob));
+}
+
+bool App::modSetRequires(const std::string& mod, const std::string& master, bool on) {
+    size_t at = modOrder_.mods.size();
+    for (size_t i = 0; i < modOrder_.mods.size(); ++i)
+        if (modOrder_.mods[i].name == mod || std::to_string(i) == mod) { at = i; break; }
+    if (at == modOrder_.mods.size() || modRows_[at].packFolder.empty()) { pushLog("mods: " + mod + " is not a FableForge pack (only packs declare masters)", 2); return false; }
+    try {
+        auto pk = modpack::load(modRows_[at].packFolder);
+        std::erase(pk.masters, master);
+        if (on) pk.masters.push_back(master);
+        modpack::save(modRows_[at].packFolder, pk);
+    } catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
+    pushLog("mods: " + modOrder_.mods[at].name + (on ? " now requires " : " no longer requires ") + master, 0);
+    refreshModOrder();
+    return true;
+}
+
+std::string App::modProblems() const {
+    std::string s;
+    for (size_t i = 0; i < modRows_.size(); ++i)
+        for (const auto& p : modRows_[i].problems) s += (s.empty() ? "" : "; ") + modOrder_.mods[i].name + " " + p;
+    return s;
 }
 
 bool App::modAdd(const std::string& source, const std::string& name) {
@@ -234,11 +277,26 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::beginCard("##modorder", inner);
     theme::label("Load order");
     ImGui::PushFont(fontSmall_);
-    theme::hint("First loads first, the last word wins. Every mod is a layer: records of game.bin, things of a level, strings of text.big are merged; whole files (levels, banks) are taken from the last mod that ships them. Deploy rebuilds the install from this list onto the retail files.");
+    theme::hint("First loads first, the last word wins. Every mod is a layer: records of game.bin, things of a level, strings of text.big, maps and regions of the world are merged; whole files (banks) are taken from the last mod that ships them. Drag a name to reorder; right-click a FableForge pack for the mods it requires. Check conflicts adds wins / loses to every row. Deploy rebuilds the install from this list onto the retail files.");
     ImGui::PopFont();
     if (!modOrderError_.empty()) ImGui::TextColored(theme::vec(theme::Warn), "%s", modOrderError_.c_str());
     if (modOrder_.mods.empty()) ImGui::TextColored(theme::vec(theme::Faint), "no mods in the order yet");
-    int moveUp = -1, moveDown = -1, remove = -1;
+    int moveUp = -1, moveDown = -1, remove = -1, dragFrom = -1, dragTo = -1;
+    // the last conflict report per mod: rows it wins, rows it loses
+    std::map<std::string, std::pair<std::vector<std::string>, std::vector<std::string>>> wl;
+    if (modReportLoaded_)
+        for (const auto& c : modConflicts_) {
+            if (c.key.empty()) continue;
+            const auto pk = modPicks_.find(c.key);
+            const std::string win = pk != modPicks_.end() ? pk->second : c.winner;
+            for (const auto& m : c.mods) (m == win ? wl[m].first : wl[m].second).push_back(c.label);
+        }
+    auto listTip = [](const char* head, const std::vector<std::string>& v) {
+        std::string t = head;
+        for (size_t k = 0; k < v.size() && k < 12; ++k) t += "\n  " + v[k];
+        if (v.size() > 12) t += "\n  ... " + std::to_string(v.size() - 12) + " more";
+        return t;
+    };
     for (size_t i = 0; i < modOrder_.mods.size(); ++i) {
         auto& e = modOrder_.mods[i];
         ImGui::PushID(int(i));
@@ -258,13 +316,63 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         if (theme::dangerButton("\xC3\x97##rm", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()))) remove = int(i);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove from the order (the mod's own files stay where they are)");
         ImGui::SameLine(0, S(8));
-        ImGui::TextUnformatted(e.name.c_str());
+        // the name is the drag handle: drop it on another row to load it there
+        const ModRowInfo& info = i < modRows_.size() ? modRows_[i] : ModRowInfo{};
+        const float nameX = ImGui::GetCursorPosX();
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(e.enabled ? (info.problems.empty() ? theme::Text : theme::Warn) : theme::Faint));
+        ImGui::Selectable(e.name.c_str(), false, ImGuiSelectableFlags_None, ImVec2(ImGui::CalcTextSize(e.name.c_str()).x, 0));
+        ImGui::PopStyleColor();
+        auto_.registerWidget(("mod_row_" + std::to_string(i)).c_str());
+        if (ImGui::BeginDragDropSource()) {
+            const int from = int(i);
+            ImGui::SetDragDropPayload("FF_MOD_ROW", &from, sizeof from);
+            ImGui::Text("Load %s at...", e.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("FF_MOD_ROW")) { dragFrom = *static_cast<const int*>(pl->Data); dragTo = int(i); }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::IsItemHovered() && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+            std::string tip = std::string("Drag onto another row to load it there") + (info.packFolder.empty() ? "" : "; right-click for the mods it requires");
+            for (const auto& r : info.masters) tip += "\nrequires " + r;
+            for (const auto& pr : info.problems) tip += "\n! " + pr;
+            ImGui::SetTooltip("%s", tip.c_str());
+        }
+        if (!info.packFolder.empty() && ImGui::BeginPopupContextItem("##masters")) {
+            ImGui::TextColored(theme::vec(theme::Muted), "%s requires (loads after):", e.name.c_str());
+            for (size_t j = 0; j < modOrder_.mods.size(); ++j) {
+                if (j == i) continue;
+                const std::string& other = modOrder_.mods[j].name;
+                bool req = std::find(info.masters.begin(), info.masters.end(), other) != info.masters.end() ||
+                           (!modRows_[j].packName.empty() && std::find(info.masters.begin(), info.masters.end(), modRows_[j].packName) != info.masters.end());
+                if (ImGui::Checkbox(other.c_str(), &req)) modSetRequires(e.name, other, req);
+            }
+            ImGui::EndPopup();
+        }
         ImGui::SameLine();
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Muted), "%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
+        if (const auto it = wl.find(e.name); it != wl.end()) {
+            if (!it->second.first.empty()) {
+                ImGui::SameLine(0, S(8));
+                ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.first.size());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Wins over the other mods on:", it->second.first).c_str());
+            }
+            if (!it->second.second.empty()) {
+                ImGui::SameLine(0, S(6));
+                ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.second.size());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Overridden by a later mod (or a pick) on:", it->second.second).c_str());
+            }
+        }
+        for (const auto& pr : info.problems) {
+            ImGui::SetCursorPosX(nameX);
+            ImGui::TextColored(theme::vec(theme::Warn), "! %s", pr.c_str());
+        }
         ImGui::PopFont();
         ImGui::PopID();
     }
+    if (dragFrom >= 0 && dragTo >= 0 && dragFrom != dragTo) modMove(std::to_string(dragFrom), dragTo);
     if (moveUp >= 0) modMove(std::to_string(moveUp), moveUp - 1);
     if (moveDown >= 0) modMove(std::to_string(moveDown), moveDown + 1);
     if (remove >= 0) modRemove(std::to_string(remove));

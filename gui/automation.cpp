@@ -238,6 +238,12 @@ bool Automation::tick(App& app) {
         if (sp != std::string::npos) { path = rest.substr(0, sp); name = rest.substr(sp + 1); }
         if (!app.modAdd(path, name)) fail("mod_add failed: " + rest); else note("ok   " + line); ++pc_;
     }
+    else if (cmd == "mod_requires") { std::istringstream rs(rest); std::string m, master; int on = 1; rs >> m >> master >> on; if (!app.modSetRequires(m, master, on != 0)) fail("mod_requires failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "assert_mod_problems") {   // assert_mod_problems <substring> | -  (- = none)
+        const std::string got = app.modProblems();
+        if (rest == "-" ? !got.empty() : got.find(rest) == std::string::npos) fail("mod problems: \"" + got + "\" (wanted " + rest + ")"); else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "mod_remove") { if (!app.modRemove(rest)) fail("mod_remove failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "mod_move") { std::istringstream rs(rest); std::string n; int to = 0; rs >> n >> to; if (!app.modMove(n, to)) fail("mod_move failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "mod_enable") { std::istringstream rs(rest); std::string n; int on = 1; rs >> n >> on; if (!app.modEnable(n, on != 0)) fail("mod_enable failed: " + rest); else note("ok   " + line); ++pc_; }

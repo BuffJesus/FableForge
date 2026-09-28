@@ -602,10 +602,16 @@ public:
     void pollModsTool();
     void drawModsPanel(float pad, float inner, float cardInner);
     size_t modCount() const { return modOrder_.mods.size(); }
+    // masters: `mod` (name or index) requires / stops requiring `master` (forge_pack.json)
+    bool modSetRequires(const std::string& mod, const std::string& master, bool on);
+    std::string modProblems() const;   // every row's master problems, "; "-joined (automation)
 private:
     bool modsMode_ = false;
     forge::modorder::Order modOrder_;
     std::string modOrderError_;
+    // per order row: a FableForge pack's folder / name / masters and what is wrong with them
+    struct ModRowInfo { std::string packFolder, packName; std::vector<std::string> masters, problems; };
+    std::vector<ModRowInfo> modRows_;
     char modAddPath_[512] = {};
     char modAddName_[128] = {};
     struct ModsToolResult { std::vector<std::string> lines; int rc = 0; };
