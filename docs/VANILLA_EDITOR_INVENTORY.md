@@ -445,3 +445,28 @@ generator.
   130 px. FableForge's current fade is close to it.
 - **Consequence.** No engine-exact bake can reproduce retail art. If wanted, FableForge could offer the
   generator's class map as a "debug-style" minimap.
+
+## 11. Live run (2026-09-28, FableWin from the Anniversary dev tree)
+
+- Route that works: dev profile screen -> **A** [Debug Profile] -> **4** Editor. The world
+  loads (`OpenStaticMap`) and the editor opens in **Maps and Regions** mode on
+  `Data\Levels\FinalAlbion.wld`: panels *Initial quests*, *Center Object*, *Map Placement*
+  (Select Map, Area Range), *Map Visibility*; a toolbar of ten mode icons; the world grid
+  with the compass rose; status line `World:` / mode name / `Coord: x, y, z`.
+- On the way in it asserts `NOT GPDisplayManager->IsVirtualCoordsResolutionIndependant()`
+  (`edit_component.cpp` 228) at 1600x900; "always skip" gets past it, but the editor's
+  panels then lay out on top of each other (the editor UI is written for virtual,
+  resolution-independent coordinates). The flag is a byte on the display manager set only
+  after a deferred request (+0x255 request, +0x258 frame countdown, then +0x254 = 1).
+- Synthesized input (SetCursorPos + SendInput clicks, keys) does not reach the editor: the
+  `Coord` readout never changes and no toolbar mode switches, while the process runs a full
+  core. Keys worked on the dev front end, so the editor reads the mouse through another
+  path. Next: try real mouse input, and a resolution / windowed setting that makes the
+  virtual coordinates resolution-independent before entering the editor.
+- Quest cards: no editor panel. Cards are OBJECT defs specialising
+  `OBJECT_QUEST_CARD_TEMPLATE` with a `<CQuestCardDef>` block (QuestName, QuestSummary,
+  RegionName, IsCoreQuest, CanPlayerCancel, GoldReward, RenownReward, RewardObjects[],
+  NumBoasts, IsExclusive, IsVignette, InventoryCategory) plus `Graphic.BankIndex` (the card
+  mesh); the source is in the dev tree's `Data/Defs/objects.tpl` (~915) and
+  `objects_gameplay.def`. The binary also carries dev test cards (TestQuestCard1-3 scripts),
+  `GiveHeroQuestCardDirectly` and the card-screen layout keys (`QuestCardInfo*`).
