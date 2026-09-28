@@ -397,6 +397,13 @@ private:
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
     // tracks (Level tab): the card, the pick-a-node-to-link mode, the lines in the view
     void drawTracksCard(float pad, float inner, float cardInner);
+    // the invalid-thing check (vanilla V): cached per revision
+    std::vector<editor::Document::Issue> validateMap();
+    void drawCheckCard(float pad, float inner, float cardInner);
+    void showFirstInvalid();
+    std::vector<editor::Document::Issue> issuesCache_;
+    uint64_t issuesRev_ = ~0ull;
+    std::set<std::string> familyNames_;   // CREATURE_GENERATION_FAMILY defs, once per context
     void drawTrackLines(const ImVec2& origin, const ImVec2& size);
     bool trackLinkPick_ = false;
     int trackNodeAt(float px, float py) const;   // a drawn track node near a screen point, -1 = none

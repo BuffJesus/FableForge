@@ -1040,6 +1040,35 @@ void testReviewFixes(const fs::path& dir) {
     }
 }
 
+// The invalid-thing check: vanilla's offline rules + FableForge's link / track rules.
+void testValidate() {
+    namespace ed = albion::editor;
+    const std::string tng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing Marker;\r\nUID 1;\r\nDefinitionType \"MARKER_CREATURE_GENERATOR\";\r\nScriptName NULL;\r\nStartCTCCreatureGenerator;\r\nGenerationRadius 5.0;\r\nEndCTCCreatureGenerator;\r\nEndThing;\r\n\r\n"
+        "NewThing Marker;\r\nUID 2;\r\nDefinitionType \"MARKER_CREATURE_GENERATOR\";\r\nScriptName NULL;\r\nStartCTCCreatureGenerator;\r\nCreatureFamilies[0] \"NOT_A_FAMILY\";\r\nEndCTCCreatureGenerator;\r\n"
+        "StartCTCActivationReceptorCreatureGenerator;\r\nTriggerOnActivate TRUE;\r\nActivateOnActivate TRUE;\r\nEndCTCActivationReceptorCreatureGenerator;\r\nEndThing;\r\n\r\n"
+        "NewThing AICreature;\r\nUID 3;\r\nDefinitionType \"CREATURE_X\";\r\nScriptName NULL;\r\nStartCTCOwnedEntity;\r\nOwnerUID 999;\r\nEndCTCOwnedEntity;\r\nEndThing;\r\n\r\n"
+        "XXXSectionEnd;\r\n";
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("Val", tng, err));
+    const auto issues = doc.validate([](const std::string& n) { return n == "BEETLES_02"; });
+    auto has = [&](size_t thing, const char* rule) {
+        for (const auto& i : issues) if (i.thing == thing && i.rule == rule) return true;
+        return false;
+    };
+    CHECK(has(0, "CG-1") && has(1, "CG-2") && has(1, "AR-1") && has(2, "LINK"));
+    CHECK(!has(0, "AR-1") && issues.size() == 4);
+    // a fixed map validates clean; a track broken by hand is caught
+    ed::Document ok;
+    CHECK(ok.openText("Ok", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    const size_t a = ok.placeTrackNode(0, 0, 0), b = ok.placeTrackNode(5, 0, 0);
+    CHECK(ok.linkTrackNodes(a, b, err) && ok.validate().empty());
+    ok.setPropertyValue(a, "", "End", "TRUE");
+    CHECK(ok.validate().size() == 1 && ok.validate()[0].rule == "TRACK");
+}
+
 // Quest sections (vanilla Quests dialog): list, add (valid names, no duplicates),
 // place into the current section, move a thing between sections, undo.
 void testQuestSections() {
@@ -1621,6 +1650,7 @@ int main() {
     testTracks();
     testListEntries();
     testReviewFixes(dir);
+    testValidate();
     testThingProperties();
     testNavPatch(dir);
     testGtg(dir);

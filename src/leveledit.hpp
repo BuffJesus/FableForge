@@ -218,6 +218,14 @@ public:
     // own name becomes empty. One undo step.
     bool unlinkTrackNode(size_t node);
 
+    // ---- invalid things (the vanilla V key, FindInvalidThing 0x0203ff10 ->
+    // CThing::ValidateThing 0x01cf74e0 -> the five CTC Validate overrides; static RE).
+    // Vanilla rules (offline-checkable ones) plus FableForge's own (vanilla checks no
+    // links); `vanilla` says which. isFamily answers "is this a CREATURE_GENERATION_FAMILY
+    // def" (empty = skip that rule). Vanilla warns on save but never blocks it.
+    struct Issue { size_t thing = 0; std::string rule, message; bool vanilla = false; };
+    std::vector<Issue> validate(const std::function<bool(const std::string&)>& isFamily = {}) const;
+
     // ---- links between things: the vanilla editor's attach modes (FableWin
     // EAttachModeType, docs/VANILLA_EDITOR_INVENTORY.md 5.4) as the .tng stores
     // them -- a UID field on a component (or on the thing) naming another thing.

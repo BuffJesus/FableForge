@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -1512,6 +1513,55 @@ bool Document::removeListEntry(size_t index, const std::string& ctc, const std::
     file_.removeCtcProperty(index, ctc, base + "[" + std::to_string(cur.size() - 1) + "]");
     ++revision_;
     return true;
+}
+
+std::vector<Document::Issue> Document::validate(const std::function<bool(const std::string&)>& isFamily) const {
+    std::vector<Issue> out;
+    std::unordered_map<uint64_t, size_t> uidIndex;
+    for (size_t i = 0; i < file_.things().size(); ++i) uidIndex.emplace(uidOf(i), i);
+    auto unquote = [](std::string v) { if (v.size() >= 2 && v.front() == '"' && v.back() == '"') v = v.substr(1, v.size() - 2); return v; };
+    for (size_t i = 0; i < file_.things().size(); ++i) {
+        const auto& t = file_.things()[i];
+        // vanilla CTCCreatureGenerator::Validate 0x025151d7: families present and real
+        for (const char* gen : {"CTCCreatureGenerator", "CTCDCreatureGenerator"}) {
+            if (!t.findCtc(gen)) continue;
+            const auto fams = listEntries(i, gen, "CreatureFamilies");
+            if (fams.empty()) out.push_back({i, "CG-1", "no creature families specified - what am I supposed to generate?", true});
+            if (isFamily)
+                for (const auto& f : fams)
+                    if (!isFamily(unquote(f))) out.push_back({i, "CG-2", "creature family " + unquote(f) + " is not a CREATURE_GENERATION_FAMILY def", true});
+        }
+        // vanilla CTCActivationReceptorCreatureGenerator::Validate 0x02639950: exactly one flag
+        if (const auto* ar = t.findCtc("CTCActivationReceptorCreatureGenerator")) {
+            bool trig = true, act = false;   // the constructor's defaults
+            for (const auto& p : ar->properties) {
+                if (lower(p.key) == "triggeronactivate") trig = p.value == "TRUE";
+                if (lower(p.key) == "activateonactivate") act = p.value == "TRUE";
+            }
+            if (trig == act) out.push_back({i, "AR-1", "must set one and only one creature generator flag, not both or none!!!", true});
+        }
+        // vanilla CTCCameraPointBuilding::Validate 0x025c4950 (the offline half): an owner
+        if (t.definitionType() == "CAMERA_POINT_BUILDING" && !t.findCtc("CTCOwnedEntity"))
+            out.push_back({i, "CB-1", "CAMERA_POINT_BUILDING is not attached to a building!", true});
+        // FableForge: links that point at nothing on this map (vanilla does not check links)
+        for (const auto& l : linksOf(i)) {
+            if (!l.target || l.field == "EntranceConnectedToUID" || l.field == "CameraTrackUID") continue;   // cross-map / stale by design
+            if (!uidIndex.count(l.target)) out.push_back({i, "LINK", l.label + " points at uid " + std::to_string(l.target) + ", which is not on this map", false});
+        }
+    }
+    // FableForge: track chains keep the engine's invariants (symmetric links, ends marked)
+    for (const auto& tr : tracks())
+        for (size_t k = 0; k < tr.nodes.size(); ++k) {
+            const size_t n = tr.nodes[k];
+            const uint64_t prev = trackLink(n, 1), next = trackLink(n, 2);
+            const bool okPrev = k == 0 ? prev == 0 : prev == uidOf(tr.nodes[k - 1]);
+            const bool okNext = k + 1 == tr.nodes.size() ? next == 0 : next == uidOf(tr.nodes[k + 1]);
+            const auto start = file_.things()[n].find("Start"), end = file_.things()[n].find("End");
+            const bool okEnds = start && end && (*start == "TRUE") == (k == 0) && (*end == "TRUE") == (k + 1 == tr.nodes.size());
+            if (!okPrev || !okNext) out.push_back({n, "TRACK", "track " + tr.name + ": a link here does not point back (the engine asserts)", false});
+            else if (!okEnds) out.push_back({n, "TRACK", "track " + tr.name + ": Start/End do not mark the ends of the chain", false});
+        }
+    return out;
 }
 
 std::vector<Document::Link> Document::linksOf(size_t index) const {

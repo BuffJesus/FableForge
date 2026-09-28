@@ -493,6 +493,51 @@ void App::drawPropertyGrid(float cardInner) {
     ImGui::PopFont();
 }
 
+std::vector<editor::Document::Issue> App::validateMap() {
+    if (!documentLoaded()) return {};
+    if (issuesRev_ != doc_.revision()) {
+        if (familyNames_.empty() && ctx_.ready())
+            for (const auto& [n, t] : ctx_.definitions({"CREATURE_GENERATION_FAMILY"})) familyNames_.insert(n);
+        std::function<bool(const std::string&)> isFamily;
+        if (!familyNames_.empty()) isFamily = [this](const std::string& n) { return familyNames_.count(n) != 0; };
+        issuesCache_ = doc_.validate(isFamily);
+        issuesRev_ = doc_.revision();
+    }
+    return issuesCache_;
+}
+
+void App::showFirstInvalid() {
+    const auto issues = validateMap();
+    if (issues.empty()) { pushLog("There are no invalid things on this map", 3); return; }
+    selectThing(int(issues.front().thing));
+    frameSelected();
+    pushLog("This thing is invalid. Reason: " + issues.front().message + "  (" + std::to_string(issues.size()) + " issue(s); Level tab lists them)", 1);
+}
+
+// Vanilla's V key / SaveLevel warning: the five CTC Validate rules it has (offline
+// ones) plus FableForge's link and track checks. Warns; never blocks a save.
+void App::drawCheckCard(float pad, float inner, float cardInner) {
+    using theme::S;
+    if (!documentLoaded()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##check", inner);
+    const auto issues = validateMap();
+    char head[64]; std::snprintf(head, sizeof head, issues.empty() ? "Check the map  (clean)" : "Check the map  (%zu)", issues.size());
+    theme::label(head);
+    ImGui::PushFont(fontSmall_);
+    if (issues.empty()) ImGui::TextColored(theme::vec(theme::Faint), "No invalid things (vanilla rules + links + tracks).");
+    for (size_t i = 0; i < issues.size() && i < 40; ++i) {
+        const auto& is = issues[i];
+        char row[320]; std::snprintf(row, sizeof row, "%s %s: %s##iss%zu", is.vanilla ? "[vanilla]" : "[forge]", thingLabel(is.thing).c_str(), is.message.c_str(), i);
+        if (ImGui::Selectable(row, selectedThing_ == int(is.thing))) { selectThing(int(is.thing)); frameSelected(); }
+    }
+    ImGui::PopFont();
+    ImGui::PushFont(fontSmall_);
+    theme::hint("V jumps to the first one. [vanilla] = the rule the Lionhead editor warns about on save (spawners without / with unknown families, receptors with both or neither flag, building camera points without an owner); [forge] = links to things missing from this map and broken track chains, which vanilla does not check.");
+    ImGui::PopFont();
+    theme::endCard();
+}
+
 // The vanilla Tracks dialog: tracks are doubly-linked TrackNode chains sharing a
 // name (guard patrols, camera paths). Place / link / flip / rename / unlink.
 void App::drawTracksCard(float pad, float inner, float cardInner) {
@@ -866,7 +911,7 @@ void App::pollMeshImport() {
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
-    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear();
+    foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
     meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
     startContextLoad(saveRoot());
 }
@@ -1079,6 +1124,7 @@ bool App::saveDocument() {
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
     pushLog("saved " + doc_.loosePath().string(), 3);
+    if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first (saved anyway, as vanilla does).", 1);
     return true;
 }
 
@@ -1097,6 +1143,7 @@ bool App::deployDocument() {
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
     if (writesLoose()) pushLog("wrote " + doc_.loosePath().string() + " (loose-level install: the game reads this file)", 3);
     else pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
+    if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first.", 1);
     return true;
 }
 
@@ -1859,6 +1906,7 @@ void App::editorShortcuts() {
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedThing_ >= 0) deleteSelected();
+    if (ImGui::IsKeyPressed(ImGuiKey_V) && !io.KeyCtrl) showFirstInvalid();   // vanilla: find the invalid thing
     // vanilla saves with Ctrl+S / F6: here the draft (the loose .tng); writing into the game stays a confirmed button
     if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && doc_.dirty()) saveDocument();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
@@ -2610,6 +2658,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         drawLiveLinkCard(pad, inner, cardInner);
     }
     if (editTab_ == 3) {
+        drawCheckCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
         drawTracksCard(pad, inner, cardInner);
         ImGui::Dummy(ImVec2(0, S(8)));
         drawNewLevelCard(pad, inner, cardInner);
