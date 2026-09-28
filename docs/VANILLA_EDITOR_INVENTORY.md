@@ -424,3 +424,24 @@ ridged/hetero variants. "Apply fractal" sets heights to `fractal(world) * Scale`
 - **Evidence.** `CMap::LoadBrushesFromFile` 0x02236060 / `SaveBrushesToFile` 0x02236900,
   `CGameScriptInterface::ApplyScriptBrush` (FableWin 0x02aa7ed0, retail 0x0088F480).
 - **Status.** Parked: no retail use, a possible apply bug, and the height units are unverified.
+
+**Region minimaps.** The retail `MINIMAP_*` textures are hand-painted parchment art, not output of the engine's
+generator.
+- **The generator is debug-only.** It is `CRegionMinimap`, and it runs only when the `GenerateMiniMaps` bool
+  is set. It writes `<Region>.tga`.
+- **Output.**
+  - A 256² image over the union square of the region's maps, with the rows flipped.
+  - Each pixel gets a class from the strongest ENGINE_THEME's `MinimapTheme` (+0x98).
+  - The class maps to a 9-colour palette taken from `PLAYER_GUI_PC.MinimapThemeColours`:
+    none #000000, grass #2A8B41, earth #776F4E, wood #524202, snow #BEE5F7, cliff #E9DFC4,
+    water #40CAD6, foliage #045806, building #223123.
+  - For lit classes, the colour is lerped toward 0.8 × itself by the face normal · (1,1,1).
+  - Buildings: a vertical segment test against the physics mesh inside each building's bounding box gives
+    class 8.
+- **Evidence.** `PopulateRegionMinimap` 0x02186790, `BuildRegionMinimapTGA` 0x021886b0,
+  illumination 0x021878d0.
+- **Retail check.** None of the palette colours appears in seven exported retail minimaps; the median distance
+  is 33–48 RGB. All seven share one byte-identical alpha disc: opaque to a radius of about 109 px, 0 at about
+  130 px. FableForge's current fade is close to it.
+- **Consequence.** No engine-exact bake can reproduce retail art. If wanted, FableForge could offer the
+  generator's class map as a "debug-style" minimap.
