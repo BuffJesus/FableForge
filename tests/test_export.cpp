@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "forge/heightpen.hpp"
 #include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
@@ -784,6 +785,64 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
 
 // The vanilla fractal generator port against the static-RE reference
 // (seed-0 tables and heights computed by the recovered algorithm).
+// The vanilla Height Toolbox pens (forge/heightpen), against the properties read off FableWin.
+void testHeightPens() {
+    namespace hp = forge::heightpen;
+    using forge::terrain::Heightfield;
+    // the engine LCG and the Speed curve
+    uint32_t seed = 0;
+    CHECK(hp::lcgStep(seed) == 0x26F80001u);
+    CHECK(std::fabs(hp::speedToOpacity(0.5f) - 0.29289f) < 1e-4f && hp::speedToOpacity(1.0f) > 0.9999f && hp::speedToOpacity(0.0f) == 0.0f);
+    CHECK(hp::sizeToRadius(-2.0f) == 0.25f && hp::sizeToRadius(5.0f) == 32.0f);
+    // Change Height: a hard disc (d < r + 0.5) round the rounded centre, once per block per stroke
+    {
+        Heightfield f(8, 8, 5.0f);
+        std::vector<uint8_t> altered;
+        CHECK(hp::changeHeight(f, 3.2f, 3.4f, 1.0f, 2.0f, altered) == 9);   // r = 1: the 3x3 (diagonal 1.41 < 1.5)
+        CHECK(f.at(2, 2) == 7.0f && f.at(4, 4) == 7.0f && f.at(5, 3) == 5.0f);
+        CHECK(hp::changeHeight(f, 3.0f, 3.0f, 1.0f, 2.0f, altered) == 0);   // same stroke: already stepped
+        altered.clear();
+        CHECK(hp::changeHeight(f, 2.5f, 3.0f, 0.25f, 3000.0f, altered) == 1 && f.at(2, 3) == hp::kMaxHeight);   // 2.5 -> 2 (half to even), clamped
+    }
+    // Paint Height: toward the target by the opacity, never past it
+    {
+        Heightfield f(8, 8, 0.0f);
+        CHECK(hp::paintHeight(f, 4.0f, 4.0f, 0.25f, 10.0f, 0.5f) == 1 && f.at(4, 4) == 5.0f && f.at(4, 5) == 0.0f);
+        hp::paintHeight(f, 4.0f, 4.0f, 0.25f, 10.0f, 1.0f);
+        CHECK(f.at(4, 4) == 10.0f);
+        hp::paintHeight(f, 4.0f, 4.0f, 0.25f, 4.0f, 0.25f);
+        CHECK(f.at(4, 4) == 8.5f);
+    }
+    // Smear: a straight slope stays, a spike goes; spikyness 1 still takes a block outside its neighbours' range
+    {
+        Heightfield f(10, 10, 0.0f);
+        for (int y = 0; y < f.cellsY(); ++y) for (int x = 0; x < f.cellsX(); ++x) f.at(x, y) = float(x);
+        CHECK(hp::smear(f, 5.0f, 5.0f, 3.0f, 1.0f, 0.0f) == 0);
+        f.at(5, 5) = 20.0f;
+        CHECK(hp::smear(f, 5.0f, 5.0f, 1.0f, 1.0f, 1.0f) == 1 && std::fabs(f.at(5, 5) - 5.0f) < 1e-4f);
+        f.at(5, 5) = 20.0f;
+        CHECK(hp::smear(f, 5.0f, 5.0f, 1.0f, 0.5f, 0.0f) == 1 && std::fabs(f.at(5, 5) - 12.5f) < 1e-4f);
+    }
+    // Noise: nothing on ground at sea level (and the RNG untouched); an even number of jumps elsewhere
+    {
+        Heightfield flat(8, 8, 0.0f);
+        uint32_t s = 1234;
+        CHECK(hp::noise(flat, 4.0f, 4.0f, 2.0f, 10.0f, s) == 0 && s == 1234);
+        Heightfield f(16, 16, 5.0f);
+        Heightfield g(16, 16, 5.0f);
+        uint32_t s1 = 99, s2 = 99;
+        const size_t n1 = hp::noise(f, 8.0f, 8.0f, 3.0f, 10.0f, s1);
+        CHECK(n1 > 0 && hp::noise(g, 8.0f, 8.0f, 3.0f, 10.0f, s2) == n1 && s1 == s2);   // deterministic from the seed
+        float lo = 1e9f, hi = -1e9f;
+        for (int y = 0; y < f.cellsY(); ++y) for (int x = 0; x < f.cellsX(); ++x) {
+            CHECK(f.at(x, y) == g.at(x, y));
+            if (std::abs(x - 8) > 2 || std::abs(y - 8) > 2) CHECK(f.at(x, y) == 5.0f);   // the square |d| <= ceil(r) - 1
+            lo = std::min(lo, f.at(x, y)); hi = std::max(hi, f.at(x, y));
+        }
+        CHECK(hi - 5.0f <= 0.01f + 0.5f + 1e-4f && 5.0f - lo <= 0.01f + 0.5f + 1e-4f);   // amp < 0.01 + 0.05 x 10
+    }
+}
+
 void testFractal() {
     namespace fr = forge::fractal;
     const fr::Generator g;   // dialog defaults
@@ -1895,6 +1954,7 @@ int main() {
     testDayNightSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
+    testHeightPens();
     testFractal();
     testAddSoundTheme(dir);
     testVanillaFields();

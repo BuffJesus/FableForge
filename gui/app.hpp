@@ -100,7 +100,8 @@ private:
     double deadline_ = 0;   // wall-clock seconds for the current waiting command
     std::string pendingShot_;
     std::string clickTarget_;
-    std::string revealTarget_;   // reveal <widget>: scroll its window so the widget is on screen
+    std::string revealTarget_;
+    std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
     int dragPhase_ = 0;
@@ -577,6 +578,20 @@ private:
     void startThemeRebake();
     float brushRadius_ = 6.0f;
     float brushStrength_ = 4.0f;
+    // the vanilla Height Toolbox pens (forge/heightpen), see TerrainBrush
+    bool penExactStep_ = false;        // Raise / Lower: vanilla Change Height
+    float penStep_ = 1.0f;
+    bool penTargetFromStroke_ = true;  // Flatten: take the ground where the stroke starts
+    float penTarget_ = 0.0f;           // Flatten: vanilla Paint Height "m" box (Ctrl+click samples it)
+    float penSpeed_ = 0.5f;
+    float penSmoothness_ = 0.5f;       // vanilla starts 0 (a no-op pen); 50% is a usable default
+    float penSpikyness_ = 0.0f;
+    float penMagnifier_ = 1.0f;
+    bool penSpray_ = true;             // vanilla Spray can: repeat while held (off = once per click)
+    bool penApplied_ = false;          // this stroke has had its one application (spray off)
+    void fillPen(editor::TerrainBrush& b) const;
+    void drawPenControls(float cardInner);
+    bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
     uint64_t syncedTerrainRev_ = 0;

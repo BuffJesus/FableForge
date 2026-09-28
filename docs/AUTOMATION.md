@@ -60,6 +60,9 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `theme_search <text>` | fills the *Add a ground theme from the game* box (the list shows a swatch per theme) |
 | `drop <file>` | what a file dropped on the window does: `.lev` opens as a loose map, an image opens Assets > Ground themes with the path in the custom-texture input (state `textures_mode 1`; `textures_tab 0` returns to the map editor, `assets_tab <n>` picks the page) |
 | `set place_owner auto\|neutral\|0..3` | the owner combo (vanilla PLAYER_LIST_BOX) for the next placements; state `place_owner` |
+| `set pen_exact 0\|1`, `set pen_step <m>`, `set pen_target <m>`, `set pen_target_from_stroke 0\|1`, `set pen_speed <0..1>`, `set pen_smoothness <0..1>`, `set pen_spiky <0..1>`, `set pen_magnifier <1..50>`, `set pen_spray 0\|1` | the vanilla Height Toolbox pens (Raise/Lower exact step, Flatten target and speed, Smooth, Noise; Spray) |
+| `assert_height <x> <y> <expected> [tolerance]` | the ground height at a map-local point |
+| `snapshot_heights`, `assert_heights_changed 0\|1` | remember every terrain vertex, then assert that some (1) or none (0) changed since |
 | `reveal <widget>` | scroll the panel holding a registered widget so it is on screen (before a `screenshot`) |
 | `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
 | `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |

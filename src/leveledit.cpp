@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <stdexcept>
 
+#include "forge/heightpen.hpp"
 #include "forge/navpatch.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
@@ -440,6 +441,7 @@ void Document::beginStroke(const TerrainBrush& brush) {
     hf_ = std::make_unique<forge::terrain::Heightfield>(forge::terrain::Heightfield::fromLev(*level_));
     stroke_ = true;
     flattenTarget_ = terrainHeight(brush.x, brush.y).value_or(0.0f);
+    alteredByPen_.clear();   // vanilla ResetMapsAlteredByPenList on the press
 }
 
 void Document::applyBrush(const TerrainBrush& brush, float dt) {
@@ -525,6 +527,26 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
                 level_->setThemeBlendAt(x, y, next.indices, next.strengths);
             }
         ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::Flatten || brush.mode == Mode::Smooth || brush.mode == Mode::Noise ||
+        ((brush.mode == Mode::Raise || brush.mode == Mode::Lower) && brush.exactStep)) {
+        // the vanilla Height Toolbox pens, one application per call
+        const float target = brush.targetFromStroke ? flattenTarget_ : brush.target;
+        size_t n = 0;
+        switch (brush.mode) {
+            case Mode::Raise: n = forge::heightpen::changeHeight(*hf_, brush.x, brush.y, brush.radius, brush.step, alteredByPen_); break;
+            case Mode::Lower: n = forge::heightpen::changeHeight(*hf_, brush.x, brush.y, brush.radius, -brush.step, alteredByPen_); break;
+            case Mode::Flatten: n = forge::heightpen::paintHeight(*hf_, brush.x, brush.y, brush.radius, target, forge::heightpen::speedToOpacity(brush.speed)); break;
+            case Mode::Smooth: n = forge::heightpen::smear(*hf_, brush.x, brush.y, brush.radius, brush.smoothness, brush.spikyness); break;
+            case Mode::Noise: n = forge::heightpen::noise(*hf_, brush.x, brush.y, brush.radius, brush.magnifier, penSeed_); break;
+            default: break;
+        }
+        if (n) {
+            for (int y = 0; y < cy; ++y)
+                for (int x = 0; x < cx; ++x) working_->heights[size_t(y) * cx + x] = hf_->at(x, y);
+            ++terrainRev_;
+        }
         return;
     }
     forge::terrain::Brush b;

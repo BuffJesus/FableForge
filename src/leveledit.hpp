@@ -78,13 +78,24 @@ struct TerrainBrush {
     // Environment / Sound: the game-map grid (vanilla ENVIRONMENT tab / Survey >
     // Sounds): `themeIndex` is the atmos palette slot / the sound index (0 = none).
     // CameraPass / CameraBlock: the vanilla Survey > Passability camera brush (+16).
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock };
+    // Flatten / Smooth / Noise and Raise / Lower with exactStep are the vanilla Height Toolbox
+    // pens (forge/heightpen: Paint Height, Smear, Noise, Change Height): one application per
+    // call, no dt, no falloff. Raise / Lower without exactStep are FableForge's smooth brush.
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise };
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
     float strength = 1.0f;     // units/second (raise/lower), blend/second (flatten/smooth/theme)
     uint8_t themeIndex = 0;    // Theme / ReplaceTheme: LEV palette slot to paint
     uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
+    bool exactStep = false;    // Raise / Lower: vanilla Change Height, +-step once per block per stroke
+    float step = 1.0f;         // world units
+    bool targetFromStroke = true;   // Flatten: the ground where the stroke starts, else `target`
+    float target = 0.0f;       // Flatten: vanilla Paint Height's "m" box
+    float speed = 0.5f;        // Flatten: vanilla Speed (0..1; opacity = 1 - cos(pi/2 * speed))
+    float smoothness = 0.5f;   // Smooth: vanilla "Smear: Smoothness %" (0..1)
+    float spikyness = 0.0f;    // Smooth: vanilla "Smear: Spikyness Allowed" (0..1)
+    float magnifier = 1.0f;    // Noise: vanilla noise magnifier (1..50)
 };
 
 // A copied block of ground (the vanilla Copy and paste dialog's "Copy heights /
@@ -491,6 +502,8 @@ private:
     std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke
     bool stroke_ = false;
     float flattenTarget_ = 0;
+    std::vector<uint8_t> alteredByPen_;   // Change Height: blocks already stepped this stroke
+    uint32_t penSeed_ = 0x2C6B3A91u;      // Noise: the engine LCG state (vanilla: the world seed)
     uint64_t terrainRev_ = 0;
     uint64_t themeRev_ = 0;
     uint64_t revision_ = 0;

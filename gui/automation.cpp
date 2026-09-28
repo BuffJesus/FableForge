@@ -222,6 +222,15 @@ bool Automation::tick(App& app) {
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "pen_exact") app.penExactStep_ = val == "1";
+        else if (key == "pen_step") app.penStep_ = float(std::atof(val.c_str()));
+        else if (key == "pen_target") { app.penTarget_ = float(std::atof(val.c_str())); app.penTargetFromStroke_ = false; }
+        else if (key == "pen_target_from_stroke") app.penTargetFromStroke_ = val == "1";
+        else if (key == "pen_speed") app.penSpeed_ = float(std::atof(val.c_str()));
+        else if (key == "pen_smoothness") app.penSmoothness_ = float(std::atof(val.c_str()));
+        else if (key == "pen_spiky") app.penSpikyness_ = float(std::atof(val.c_str()));
+        else if (key == "pen_magnifier") app.penMagnifier_ = float(std::atof(val.c_str()));
+        else if (key == "pen_spray") app.penSpray_ = val == "1";
         else if (key == "place_owner") app.placeOwner_ = val == "auto" ? -1 : val == "neutral" ? 4 : std::clamp(std::atoi(val.c_str()), 0, 4);
         else if (key == "section_day") { app.showDayOnly_ = val == "1"; app.sectionsDirty_ = true; }
         else if (key == "section_night") { app.showNightOnly_ = val == "1"; app.sectionsDirty_ = true; }
@@ -439,6 +448,24 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); int theme = -1; float h = 20; int w = 0, hh = 0; rs >> theme >> h >> w >> hh;
         app.setNewLevelBlank(theme, h, w, hh); note("ok   " + line); ++pc_; }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
+    else if (cmd == "snapshot_heights") { heightSnap_ = app.doc_.hasTerrain() ? app.doc_.terrain().heights : std::vector<float>{}; note("ok   " + line); ++pc_; }
+    else if (cmd == "assert_heights_changed") {   // 1: some vertex differs from snapshot_heights, 0: none does
+        size_t diff = 0;
+        if (app.doc_.hasTerrain() && app.doc_.terrain().heights.size() == heightSnap_.size())
+            for (size_t i = 0; i < heightSnap_.size(); ++i) diff += app.doc_.terrain().heights[i] != heightSnap_[i];
+        const bool want = rest == "1";
+        if ((diff > 0) != want) fail("assert_heights_changed " + rest + " (" + std::to_string(diff) + " vertices differ)");
+        else note("ok   " + line + " (" + std::to_string(diff) + " vertices differ)");
+        ++pc_;
+    }
+    else if (cmd == "assert_height") {   // assert_height <x> <y> <expected> [tolerance]: the ground at a map-local point
+        float x = 0, y = 0, want = 0, tol = 1e-3f;
+        std::istringstream(rest) >> x >> y >> want >> tol;
+        const auto h = app.doc_.terrainHeight(x, y);
+        char got[48]; std::snprintf(got, sizeof got, "%.4f", h ? *h : -1.0f);
+        if (!h || std::fabs(*h - want) > tol) fail("assert_height " + rest + " (got " + got + ")"); else note("ok   " + line + " (" + got + ")");
+        ++pc_;
+    }
     else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }
     else if (cmd == "wait_terrain") waitOn(!app.terrainDeployBusy(), "terrain deploy");

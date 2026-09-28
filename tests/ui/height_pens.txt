@@ -1,0 +1,78 @@
+# The vanilla Height Toolbox pens (forge/heightpen): Flatten to a target, Raise by an exact
+# step (once per stroke), Smooth pulls a spike back, Noise jitters the plateau; each tool's options in frame.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_pens_install
+edit 1
+frames 3
+edit_tab 1
+frames 2
+# Flatten to 30 m at full speed: one application reaches it
+terrain_mode 2
+set pen_target 30
+set pen_speed 1
+brush 4 4
+frames 2
+assert_widget input_pen_target
+assert_widget slider_pen_speed
+terrain_stroke 64 110 0.1
+frames 2
+assert_height 64 110 30
+assert_height 66 110 30
+reveal slider_pen_speed
+frames 3
+screenshot build/ui/pens_flatten.png
+# Raise with an exact step: +2, and a second stroke +2 more
+terrain_mode 0
+set pen_exact 1
+set pen_step 2
+frames 2
+assert_widget input_pen_step
+terrain_stroke 64 110 0.1
+frames 1
+assert_height 64 110 32
+terrain_stroke 64 110 0.1
+frames 1
+assert_height 64 110 34
+reveal input_pen_step
+frames 3
+screenshot build/ui/pens_step.png
+# Smooth: a one-block spike (+4 by an exact step at radius 0.25) goes back to its neighbours' 34
+set pen_step 4
+brush 0.25 4
+terrain_stroke 64 110 0.1
+frames 1
+assert_height 64 110 38
+terrain_mode 3
+set pen_smoothness 1
+set pen_spiky 0
+brush 1 4
+frames 2
+assert_widget slider_pen_smoothness
+terrain_stroke 64 110 0.1
+frames 1
+assert_height 64 110 34
+reveal slider_pen_spikyness
+frames 3
+screenshot build/ui/pens_smooth.png
+# Noise at 10 on the plateau: some vertices move (by about 0.01 + 0.05 x 10 each), and undo puts them back
+terrain_mode 16
+set pen_magnifier 10
+brush 3 4
+frames 2
+assert_widget slider_pen_magnifier
+snapshot_heights
+terrain_stroke 64 110 0.1
+frames 1
+assert_heights_changed 1
+reveal slider_pen_magnifier
+frames 3
+mouse_move 20 20
+frames 2
+screenshot build/ui/pens_noise.png
+undo
+frames 2
+assert_heights_changed 0
+quit
