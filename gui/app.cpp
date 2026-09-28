@@ -1294,7 +1294,8 @@ void App::frame(float dt) {
     if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const TerrainDeployResult r = terrainDeployFuture_.get();
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
-        if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
+        if (r.ok && !r.pack.empty()) pushLog("terrain written into pack " + packLabel(r.pack) + " (Mods > Deploy puts it in the game)", 3);
+        else if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
     }
     if (worldFuture_.valid() && worldFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {

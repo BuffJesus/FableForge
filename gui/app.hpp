@@ -496,7 +496,7 @@ private:
     bool brushHit_ = false;
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
     uint64_t syncedTerrainRev_ = 0;
-    struct TerrainDeployResult { bool ok = false; std::string error; std::vector<std::string> notes; };
+    struct TerrainDeployResult { bool ok = false; std::string error, pack; std::vector<std::string> notes; };
     std::future<TerrainDeployResult> terrainDeployFuture_;
     // new level from the selected map (donor): inputs, the donor lookup and the install job
     char newLevelName_[64] = "";

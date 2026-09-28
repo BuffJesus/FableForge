@@ -53,6 +53,7 @@ def main():
     ok &= run("recipe packs (forge_pack.json models + themes composed at build, order swap, deploy/undeploy)", [sys.executable, "tools/test_recipe_packs.py"], capture_output=True)
     ok &= run("loose-level install (extracted levels, no FinalAlbion.wad)", [sys.executable, "tools/test_loose_install.py"], capture_output=True)
     ok &= run("tall terrain edit (grown patches re-laid, LOD patches re-sampled)", [sys.executable, "tools/test_tall_terrain.py"], capture_output=True)
+    ok &= run("level edits into a mod pack (.lev/.tng + static-map chunk; mods build lays them in; install untouched)", [sys.executable, "tools/test_pack_levels.py"], capture_output=True)
     ok &= run("docs name real commands", [sys.executable, "tools/check_docs_commands.py"], capture_output=True)
     print("ALL PASS" if ok else "SOME CHECKS FAILED")
     return 0 if ok else 1

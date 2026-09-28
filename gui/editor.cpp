@@ -1986,6 +1986,7 @@ void App::startTerrainDeploy() {
     const std::string pack = packDest_;   // "" = the game directly
     terrainDeployFuture_ = std::async(std::launch::async, [ctxHold, doc, root, lib, progress, pack]() {
         TerrainDeployResult r;
+        r.pack = pack;
         r.ok = pack.empty() ? doc->deployTerrain(root, r.notes, r.error, lib, progress)
                             : doc->deployTerrainToPack(root, pack, r.notes, r.error, lib, progress);
         return r;
