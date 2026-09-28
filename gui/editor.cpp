@@ -501,6 +501,17 @@ void App::drawPropertyGrid(float cardInner) {
                     if (ImGui::Selectable(n.c_str(), v == r.value)) { next = v; commit = true; }
                 ImGui::EndCombo();
             }
+        } else if (r.ctc.empty() && r.key == "Player" && r.kind == K::Int && isOwnerType(doc_.summary(idx).type)) {
+            // the owner, as the vanilla PLAYER_LIST_BOX names it (Auto is a placement-time choice, not a stored value)
+            static const char* names[] = {"Player 0", "Player 1", "Player 2", "Player 3", "Neutral"};
+            const int cur = std::atoi(r.value.c_str());
+            const std::string curName = cur >= 0 && cur <= 4 ? names[cur] : "Player " + r.value;
+            if (ImGui::BeginCombo("##v", curName.c_str())) {
+                for (int p = 0; p <= 4; ++p)
+                    if (ImGui::Selectable(names[p], p == cur)) { next = std::to_string(p); commit = true; }
+                ImGui::EndCombo();
+            }
+            auto_.registerWidget("combo_prop_player");
         } else if (r.kind == K::Bool) {
             bool v = r.value == "TRUE";
             if (ImGui::Checkbox("##v", &v)) { next = v ? "TRUE" : "FALSE"; commit = true; }
@@ -1286,16 +1297,21 @@ int App::ownerFor(const std::string& def) const {
     return 4;
 }
 
+// the thing types whose ConstructFromParams takes an owner (CThing clamps it, CThingAICreature may take DefaultOwner)
+bool App::isOwnerType(const std::string& type) {
+    static const std::set<std::string> owned{"AICreature", "Building", "Village", "Object", "HolySite", "PhysicalSwitch"};
+    return owned.count(type) != 0;
+}
+
 void App::applyOwnerToSelection() {
     if (!documentLoaded() || selectedThing_ < 0) return;
     const int v = placeOwner_ < 0 ? 4 : std::min(placeOwner_, 4);
     std::vector<size_t> all{size_t(selectedThing_)};
     for (const uint64_t u : extraUids_) if (const auto i = doc_.indexOfUid(u)) all.push_back(*i);
-    // only the types whose ConstructFromParams takes an owner; markers (-1), track nodes and the hero keep theirs
-    static const std::set<std::string> owned{"AICreature", "Building", "Village", "Object", "HolySite", "PhysicalSwitch"};
+    // markers (-1), track nodes and the hero keep theirs
     std::vector<size_t> targets;
     for (const size_t i : all) {
-        if (!owned.count(doc_.summary(i).type)) continue;
+        if (!isOwnerType(doc_.summary(i).type)) continue;
         for (const auto& r : doc_.propertiesOf(i))
             if (r.ctc.empty() && r.key == "Player") { if (r.value != std::to_string(v)) targets.push_back(i); break; }
     }

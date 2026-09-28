@@ -392,6 +392,7 @@ private:
     // shown quests. Vanilla starts them off (a whitelist dialog); FableForge shows everything by default.
     bool showDayOnly_ = true, showNightOnly_ = true;
     bool thingHiddenBySection(const std::vector<std::string>& perThingSection, size_t thing) const;
+    static bool isOwnerType(const std::string& thingType);
     float placeHeight_ = 0.0f;
     uint32_t placeSeed_ = 0;         // GFFloatRandom state for random angles (vanilla uses the world seed)
     // link pick mode: the next viewport click on a thing sets this link of the selection
