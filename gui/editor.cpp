@@ -11,6 +11,7 @@
 
 #include "nlohmann/json.hpp"
 #include "effects.hpp"
+#include "forge/heightpen.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -1522,6 +1523,22 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     fillPen(b);
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    // vanilla '-' / '=' (PaintInputPaintMapHeightAddition): lower / raise the ground under the cursor by the
+    // Speed opacity on every frame the key is held, one undo step per key press; any terrain tool
+    {
+        const bool keysFree = !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && !lmb;
+        const bool down = keysFree && (ImGui::IsKeyDown(ImGuiKey_Minus) || ImGui::IsKeyDown(ImGuiKey_Equal));
+        if (keyStroke_ && !down) { doc_.endStroke(); keyStroke_ = false; }
+        if (down && brushHit_ && (keyStroke_ || (!doc_.strokeActive() && viewportHovered_))) {
+            editor::TerrainBrush k = b;
+            k.mode = editor::TerrainBrush::Mode::HeightKey;
+            const float op = forge::heightpen::speedToOpacity(penSpeed_);
+            k.step = ImGui::IsKeyDown(ImGuiKey_Equal) ? op : -op;
+            if (!keyStroke_) { doc_.beginStroke(k); keyStroke_ = true; }
+            doc_.applyBrush(k, 0.0f);
+        }
+        if (keyStroke_) return;
+    }
     const bool press = lmb && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && brushHit_ && !io.KeyAlt;
     // Ctrl+click in the theme tools: the vanilla eyedropper (PaintInputPickupTheme) --
     // the cell's strongest theme becomes the one painted, Ctrl+Shift the one replaced
@@ -1646,7 +1663,7 @@ void App::drawPenControls(float cardInner) {
         row("Speed");
         ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "%.1f");
         auto_.registerWidget("slider_pen_speed");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise the ground under the cursor while held.");
     } else if (m == 3) {
         row("Smoothness");
         float pct = penSmoothness_ * 100.0f;

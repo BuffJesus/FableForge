@@ -589,6 +589,7 @@ private:
     float penMagnifier_ = 1.0f;
     bool penSpray_ = true;             // vanilla Spray can: repeat while held (off = once per click)
     bool penApplied_ = false;          // this stroke has had its one application (spray off)
+    bool keyStroke_ = false;           // a -/= stroke (vanilla height keys) is running
     void fillPen(editor::TerrainBrush& b) const;
     void drawPenControls(float cardInner);
     bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }

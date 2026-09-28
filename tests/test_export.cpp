@@ -804,6 +804,13 @@ void testHeightPens() {
         altered.clear();
         CHECK(hp::changeHeight(f, 2.5f, 3.0f, 0.25f, 3000.0f, altered) == 1 && f.at(2, 3) == hp::kMaxHeight);   // 2.5 -> 2 (half to even), clamped
     }
+    // the -/= keys: r = 1 is the plus of 5 blocks (corners at 1.41 are out), applied again on every call
+    {
+        Heightfield f(8, 8, 5.0f);
+        CHECK(hp::heightAddition(f, 4.0f, 4.0f, 1.0f, 0.5f) == 5);
+        CHECK(f.at(4, 4) == 5.5f && f.at(3, 4) == 5.5f && f.at(4, 5) == 5.5f && f.at(3, 3) == 5.0f);
+        CHECK(hp::heightAddition(f, 4.0f, 4.0f, 1.0f, -0.25f) == 5 && f.at(4, 4) == 5.25f);
+    }
     // Paint Height: toward the target by the opacity, never past it
     {
         Heightfield f(8, 8, 0.0f);

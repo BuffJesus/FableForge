@@ -68,6 +68,23 @@ size_t changeHeight(terrain::Heightfield& field, float x, float y, float radius,
     return changed;
 }
 
+size_t heightAddition(terrain::Heightfield& field, float x, float y, float radius, float amount) {
+    const int cx = nearest(x), cy = nearest(y);
+    const float span = 2.0f * radius + kDnz;
+    size_t changed = 0;
+    for (int j = 0; float(j) < span; ++j)
+        for (int i = 0; float(i) < span; ++i) {
+            const int bx = int(float(cx) - radius + float(i)), by = int(float(cy) - radius + float(j));   // ftol: toward zero
+            const float di = radius - float(i), dj = radius - float(j);
+            if (!(std::sqrt(dj * dj + di * di) < radius + kDnz)) continue;
+            if (!inside(field, bx, by)) continue;
+            float& h = field.at(bx, by);
+            const float next = limit(h + amount);
+            if (next != h) { h = next; ++changed; }
+        }
+    return changed;
+}
+
 size_t paintHeight(terrain::Heightfield& field, float x, float y, float radius, float target, float opacity) {
     const int cx = nearest(x), cy = nearest(y);
     const int x0 = int(std::floor(float(cx) - radius)), x1 = int(std::ceil(float(cx) + radius));

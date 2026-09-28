@@ -75,4 +75,18 @@ screenshot build/ui/pens_noise.png
 undo
 frames 2
 assert_heights_changed 0
+# the vanilla = / - keys: hold = over the ground to raise it under the cursor, one undo step per press
+terrain_mode 0
+set pen_speed 0.5
+mouse_move viewport
+frames 2
+snapshot_heights
+key_down Equal
+frames 6
+key_up Equal
+frames 2
+assert_heights_changed 1
+undo
+frames 2
+assert_heights_changed 0
 quit

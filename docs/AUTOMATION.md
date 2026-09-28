@@ -31,7 +31,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `open <path.lev>` | open a loose .lev (same path as drag-and-drop) |
 | `orbit <dyaw> <dpitch>` / `zoom <steps>` / `look <dyaw> <dpitch>` / `fly <fwd> <strafe> <rise> <secs>` | camera through its API |
 | `camera <x> <y> <z> <yaw> <pitch> <dist>` | look at a Fable map-local point |
-| `mouse_move <x> <y>` \| `mouse_move <widget>` (its centre) \| `mouse_move viewport`, `wheel <dy>`, `mouse_delta <dx> <dy>`, `mouse_down\|mouse_up left\|right\|middle`, `key_down\|key_up W\|A\|S\|D\|Q\|E\|F\|Shift\|Alt\|Ctrl\|Escape` | raw input through ImGui (tests the real control path) |
+| `mouse_move <x> <y>` \| `mouse_move <widget>` (its centre) \| `mouse_move viewport`, `wheel <dy>`, `mouse_delta <dx> <dy>`, `mouse_down\|mouse_up left\|right\|middle`, `key_down\|key_up W\|A\|S\|D\|Q\|E\|F\|Shift\|Alt\|Ctrl\|Escape\|Minus\|Equal` | raw input through ImGui (tests the real control path) |
 | `snapshot_camera` / `assert_camera_moved [min]` | camera position delta check |
 | `wait_foliage`, `set preview_foliage 0\|1`, `set foliage 0\|1` | foliage preview / export |
 | `mode textured\|wireframe\|walkable\|height` | view mode |

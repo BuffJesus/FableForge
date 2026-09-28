@@ -41,6 +41,11 @@ size_t smear(terrain::Heightfield& field, float x, float y, float radius, float 
 // the engine LCG state (vanilla: the world seed), advanced as vanilla advances it.
 size_t noise(terrain::Heightfield& field, float x, float y, float radius, float magnifier, uint32_t& seed);
 
+// The -/= keys (EditPlaceHeightAlterationUndoable 0x029796b0): every block of the pen's disc
+// (i, j in [0, 2r + 1e-4), block = trunc(centre - r + i), kept iff |(r - i, r - j)| < r + 1e-4)
+// moves by `amount` (+ for '=', - for '-') on each key-held event; no once-per-stroke mask.
+size_t heightAddition(terrain::Heightfield& field, float x, float y, float radius, float amount);
+
 // The engine's RNG (GFRandom 0x018cf370 / GFFloatRandom 0x018bac90).
 uint32_t lcgStep(uint32_t& seed);
 uint32_t random(uint32_t max, uint32_t& seed);

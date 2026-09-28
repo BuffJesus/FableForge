@@ -81,7 +81,7 @@ struct TerrainBrush {
     // Flatten / Smooth / Noise and Raise / Lower with exactStep are the vanilla Height Toolbox
     // pens (forge/heightpen: Paint Height, Smear, Noise, Change Height): one application per
     // call, no dt, no falloff. Raise / Lower without exactStep are FableForge's smooth brush.
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise };
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey };   // HeightKey: the -/= keys, `step` signed
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;

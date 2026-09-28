@@ -160,7 +160,7 @@ bool Automation::tick(App& app) {
         static const std::map<std::string, ImGuiKey> keys = {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
             {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
-            {"Ctrl", ImGuiKey_LeftCtrl}, {"Escape", ImGuiKey_Escape}};
+            {"Ctrl", ImGuiKey_LeftCtrl}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal}};
         auto it = keys.find(rest);
         if (it == keys.end()) fail("unknown key " + rest);
         else {

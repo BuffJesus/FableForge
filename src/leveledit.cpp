@@ -529,7 +529,7 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
-    if (brush.mode == Mode::Flatten || brush.mode == Mode::Smooth || brush.mode == Mode::Noise ||
+    if (brush.mode == Mode::Flatten || brush.mode == Mode::Smooth || brush.mode == Mode::Noise || brush.mode == Mode::HeightKey ||
         ((brush.mode == Mode::Raise || brush.mode == Mode::Lower) && brush.exactStep)) {
         // the vanilla Height Toolbox pens, one application per call
         const float target = brush.targetFromStroke ? flattenTarget_ : brush.target;
@@ -540,6 +540,7 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
             case Mode::Flatten: n = forge::heightpen::paintHeight(*hf_, brush.x, brush.y, brush.radius, target, forge::heightpen::speedToOpacity(brush.speed)); break;
             case Mode::Smooth: n = forge::heightpen::smear(*hf_, brush.x, brush.y, brush.radius, brush.smoothness, brush.spikyness); break;
             case Mode::Noise: n = forge::heightpen::noise(*hf_, brush.x, brush.y, brush.radius, brush.magnifier, penSeed_); break;
+            case Mode::HeightKey: n = forge::heightpen::heightAddition(*hf_, brush.x, brush.y, brush.radius, brush.step); break;
             default: break;
         }
         if (n) {
