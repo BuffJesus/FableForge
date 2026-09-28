@@ -51,9 +51,9 @@ daynight 1
 frames 2
 assert_state selected_section NULL%DayOnly
 assert_state selected_visible 1
-assert_widget combo_prop_player
 reveal seg_daynight
 frames 3
+assert_widget combo_prop_player
 screenshot build/ui/owner_daynight_switch.png
 assert_widget check_section_day
 set section_day 0

@@ -26,8 +26,6 @@ assert_state things_first_is_selected 0
 set things_script_only 0
 frames 3
 assert_state things_first_is_selected 1
-select_thing -1
-frames 2
 reveal check_things_nearest
 frames 3
 screenshot build/ui/scene_browser.png
