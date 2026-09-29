@@ -8,7 +8,7 @@ select StartOakValeWest
 wait_loaded
 frames 3
 clear_toasts
-mouse_move 5 5
+mouse_move 700 500
 frames 3
 screenshot build/ui/scale/@TAG@_01_export.png
 edit 1

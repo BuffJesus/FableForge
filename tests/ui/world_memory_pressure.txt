@@ -1,0 +1,49 @@
+# Synthetic telemetry only; does not allocate VRAM or change Windows budgets.
+wait_maps
+wait_ready
+world_memory_sample 8589934592 2147483648
+set world_auto_detail 0
+set world_detail_limit 1
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_camera 3515 815 5 0.8 0.62 200
+wait_world_detail
+assert_state world_detail_maps 1
+assert_state world_detail_loads 1
+world_camera 3515 815 2000 0.8 0.62 200
+frames 250
+assert_state world_detail_cached_maps 1
+world_memory_sample 1073741824 1073741824
+frames 2
+assert_state world_detail_cache_budget 0
+assert_state world_detail_cached_maps 0
+assert_state world_detail_cached_bytes 0
+assert_state world_memory_evictions 1
+assert_state world_water_batches 178
+world_camera 3515 815 5 0.8 0.62 200
+wait_world_detail
+assert_state world_detail_maps 1
+assert_state world_detail_loads 2
+assert_state world_detail_cache_hits 0
+assert_state world_water_batches 178
+world_memory_sample unavailable
+frames 2
+assert_state world_detail_cache_budget 0
+assert_state world_gpu_memory_valid 0
+assert_state world_detail_maps 1
+# Restore room without instantly growing back to the full allowance.
+world_memory_sample 8589934592 2147483648
+world_memory_sample 8589934592 2147483648
+world_memory_sample 8589934592 2147483648
+world_memory_sample 8589934592 2147483648
+world_memory_sample 8589934592 2147483648
+frames 2
+assert_state world_detail_cache_budget 16777216
+assert_state world_detail_maps 1
+assert_state world_detail_loads 2
+world_memory_sample auto
+frames 2
+assert_state world_gpu_memory_simulated 0
+dump_state
+quit

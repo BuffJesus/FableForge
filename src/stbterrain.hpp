@@ -69,7 +69,8 @@ struct ForegroundLayers {
     std::string note;
 };
 ForegroundLayers loadLayers(const std::filesystem::path& gameRoot, const std::string& mapName,
-                            int mapWidth, int mapHeight);
+                            int mapWidth, int mapHeight, BackgroundAlbedo* background = nullptr);
+// When requested, background is decoded from the same chunk/frames (only if foreground exists).
 
 // Builds the mask for a retail map. `found` false (and an all-present mask) when
 // the STB has no entry, so callers can always index `present`.

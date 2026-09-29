@@ -69,6 +69,14 @@ uint32_t u32At(const std::vector<uint8_t>& b, size_t o, const char* what) {
     uint32_t v = 0; std::memcpy(&v, b.data() + o, 4); return v;
 }
 
+std::vector<uint8_t> staticMapRecord(const std::vector<uint8_t>& data, const StaticMap& map) {
+    const size_t rel = map.relativeOffset;
+    if (rel > data.size() || data.size() - rel < 0x5C) throw std::runtime_error("stb: map record truncated");
+    const uint32_t end = u32At(data, rel + 0x58, "map HeaderEndPtr");
+    if (end <= rel || end > data.size()) throw std::runtime_error("stb: bad map HeaderEndPtr");
+    return std::vector<uint8_t>(data.begin() + rel, data.begin() + end);
+}
+
 void putU32(std::vector<uint8_t>& b, uint32_t v) {
     const size_t o = b.size(); b.resize(o + 4); std::memcpy(b.data() + o, &v, 4);
 }
@@ -203,12 +211,18 @@ std::vector<uint8_t> Archive::read(const Entry& entry) const {
 std::vector<uint8_t> Archive::readStaticMapRecord(const StaticMap& map) const {
     const Entry* common = findEntry("__STATIC_MAP_COMMON_HEADER__");
     if (!common) throw std::runtime_error("stb: common-header entry not found");
-    const std::vector<uint8_t> data = read(*common);
-    const size_t rel = map.relativeOffset;
-    if (rel + 0x5C > data.size()) throw std::runtime_error("stb: map record truncated");
-    const uint32_t end = u32At(data, rel + 0x58, "map HeaderEndPtr");
-    if (end <= rel || end > data.size()) throw std::runtime_error("stb: bad map HeaderEndPtr");
-    return std::vector<uint8_t>(data.begin() + rel, data.begin() + end);
+    return staticMapRecord(read(*common), map);
+}
+
+std::vector<std::vector<uint8_t>> Archive::readStaticMapRecords() const {
+    std::vector<std::vector<uint8_t>> records;
+    if (staticMaps_.empty()) return records;
+    const Entry* common = findEntry("__STATIC_MAP_COMMON_HEADER__");
+    if (!common) throw std::runtime_error("stb: common-header entry not found");
+    const auto data = read(*common);
+    records.reserve(staticMaps_.size());
+    for (const auto& map : staticMaps_) records.push_back(staticMapRecord(data, map));
+    return records;
 }
 
 size_t Archive::extract(const fs::path& outDir, const std::string& filter,

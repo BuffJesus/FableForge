@@ -1,5 +1,21 @@
 # Vendored code
 
+## Optional profiling dependency (fetched, not vendored)
+
+`FABLEFORGE_PROFILE=ON` fetches [Tracy](https://github.com/wolfpld/tracy),
+BSD-3-Clause, pinned to `05cceee0df3b8d7c6fa87e9638af311dbabc63cb`
+(v0.13.1). Normal builds do not fetch or link it. The source license remains in
+the CMake dependency checkout and is copied beside the profiling editor as
+`TRACY-LICENSE.txt`; retain it if distributing that binary. The separate Tracy
+viewer/capture tools are local development downloads, not shipping dependencies.
+See [profiling instructions](../docs/PROFILING.md).
+
+The profiling build generates a D3D11 header overlay via
+`cmake/TracyD3D11.cmake`. It retains the pinned upstream implementation and BSD
+license, but retries not-yet-ready timestamp queries on later frames instead
+of dropping the rest of the query batch. It never edits fetched/offline source
+trees. The exact source pattern is checked so an upstream update requires review.
+
 ## `../libs/forgecore/` — forgecore (MIT), canonical here since 0.16
 The FableForge core library (parsers AND writers: LEV/TNG/WAD/WLD/STB bake/nav/
 world workspace/defs/quests). It started as a vendored copy of the old FableForge

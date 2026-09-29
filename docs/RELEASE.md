@@ -3,9 +3,26 @@
 The steps for a tagged build, in order. Everything before the tag is checked by a script;
 the two in-game items are the human part.
 
+## Release candidates
+
+A candidate may be published as a GitHub **prerelease** after building, running the
+available offline/retail scratch checks, inspecting screenshots and smoke-testing
+the extracted package. Use an explicit suffix such as `-rc.1` in
+`FORGE_VERSION_SUFFIX`; packaging reads both version and suffix from CMake.
+Record failed/skipped checks and deferred in-game/other-machine validation in the
+candidate's notes. Do not mark it latest/final or claim the deferred checks passed.
+The final release still requires the checklist below. GitHub publication does not
+authorize posting to Discord; do that only when separately requested.
+
+For unattended local checks, set `FABLEFORGE_AUTOMATION_HIDDEN=1` in the test
+process environment. Scripted editor children remain hidden; ordinary launches
+are unaffected. Builds should use a bounded job count, e.g. `cmake --build build -j 2`.
+
+## Final release checklist
+
 1. Game closed (`Fable.exe` not running from the install: every writer and the suite's
    scratch tests refuse or flake while it is).
-2. `python tools/check_all.py` -- ALL PASS (17 checks; the synthetic-click suites
+2. `python tools/check_all.py` -- ALL PASS (CTest plus CLI, GUI and scratch-install checks; the synthetic-click suites
    `ui paths` / `ui foliage` occasionally miss a click under the full run: rerun that one
    alone before calling it a failure).
 3. In-game probes on the release build, from a **fresh** New Game where the item needs one

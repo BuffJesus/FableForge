@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -21,6 +22,7 @@
 #include "imgui_impl_win32.h"
 
 #include "app.hpp"
+#include "profile_gpu.hpp"
 #include "terrainexport.hpp"
 
 static ID3D11Device* g_device = nullptr;
@@ -164,8 +166,9 @@ static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    FORGE_THREAD("Editor main");
     std::string installOverride, autoScript;
-    int width = 1440, height = 900;
+    int width = 1440, height = 900, autoFrameMs = 4;
     {
         int argc = 0;
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -174,6 +177,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
             auto next = [&]() { return i + 1 < argc ? narrow(argv[++i]) : std::string(); };
             if (a == "--install") installOverride = next();
             else if (a == "--auto") autoScript = next();
+            else if (a == "--auto-frame-ms") autoFrameMs = std::clamp(std::atoi(next().c_str()), 4, 100);
             else if (a == "--size") { const std::string v = next(); std::sscanf(v.c_str(), "%dx%d", &width, &height); }
         }
         LocalFree(argv);
@@ -194,7 +198,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         MessageBoxW(nullptr, L"Direct3D 11 is not available on this machine.", L"FableForge", MB_OK);
         return 1;
     }
-    ShowWindow(hwnd, SW_SHOWDEFAULT);
+    // Release/scratch suites propagate this to child processes without focus theft.
+    const bool hiddenAutomation = !autoScript.empty() && std::getenv("FABLEFORGE_AUTOMATION_HIDDEN");
+    ShowWindow(hwnd, hiddenAutomation ? SW_HIDE : SW_SHOWDEFAULT);
     UpdateWindow(hwnd);
 
     IMGUI_CHECKVERSION();
@@ -204,6 +210,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     io.IniFilename = nullptr;
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_device, g_context);
+    FORGE_GPU_INIT(g_device, g_context);
 
     albion::gui::App app;
     g_app = &app;
@@ -220,6 +227,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     auto last = std::chrono::steady_clock::now();
     bool running = true;
     while (running) {
+        FORGE_ZONE("Frame");
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0U, 0U, PM_REMOVE)) {
             TranslateMessage(&msg);
@@ -243,33 +251,40 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         last = now;
 
         if (app.fontsDirty()) {   // window height or DPI moved the UI scale: rebuild the atlas
+            FORGE_ZONE("UI font atlas rebuild");
             app.rebuildFonts();
             ImGui_ImplDX11_InvalidateDeviceObjects();
             ImGui_ImplDX11_CreateDeviceObjects();
         }
-        ImGui_ImplDX11_NewFrame();
-        ImGui_ImplWin32_NewFrame();
+        { FORGE_ZONE("UI backend frame setup"); ImGui_ImplDX11_NewFrame(); ImGui_ImplWin32_NewFrame(); }
         if (automated) {   // scripted mouse wins over the backend's real-cursor fallback
             float vx, vy;
             if (app.automation().virtualMouse(vx, vy)) io.AddMousePosEvent(vx, vy);
         }
         ImGui::NewFrame();
-        app.frame(dt);
-        if (automated && !app.automation().tick(app)) running = false;
+        { FORGE_ZONE("Editor update and viewport"); app.frame(dt); }
+        if (automated) { FORGE_ZONE("Automation step"); if (!app.automation().tick(app)) running = false; }
         ImGui::Render();
 
         const float clear[4] = {0.059f, 0.055f, 0.078f, 1.0f};
         g_context->OMSetRenderTargets(1, &g_rtv, nullptr);
         g_context->ClearRenderTargetView(g_rtv, clear);
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        {
+            FORGE_ZONE("UI submit");
+            FORGE_GPU_ZONE("UI");
+            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        }
 
         std::string shot;
-        if (automated && app.automation().takeScreenshot(shot)) {
+        while (automated && app.automation().takeScreenshot(shot)) {
             if (!screenshot(shot)) app.automation().fail("screenshot failed: " + shot);
             else app.automation().note("shot " + shot);
         }
-        const HRESULT hr = g_swapChain->Present(automated ? 0 : 1, 0);
-        if (automated) Sleep(4);   // ~200 fps cap: keeps the script deterministic-ish without hogging a core
+        HRESULT hr;
+        { FORGE_ZONE("Present / display wait"); hr = g_swapChain->Present(automated ? 0 : 1, 0); }
+        FORGE_GPU_COLLECT();
+        if (automated) { FORGE_ZONE("Automation pacing"); Sleep(autoFrameMs); }
+        FORGE_FRAME();
         g_occluded = hr == DXGI_STATUS_OCCLUDED;
         if (app.wantsQuit()) running = false;
     }
@@ -284,6 +299,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     }
 
     ImGui_ImplDX11_Shutdown();
+    FORGE_GPU_DESTROY();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
     cleanupDevice();

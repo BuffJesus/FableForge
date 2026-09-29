@@ -1,4 +1,5 @@
 #include "backups.hpp"
+#include "profile.hpp"
 #include "overworld.hpp"
 
 #include <cmath>
@@ -120,6 +121,7 @@ std::vector<const WorldMapBox*> WorldLayout::touching(const WorldMapBox& box, in
 
 bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& error, const fs::path& stbPath,
                      const std::vector<std::pair<std::string, std::vector<uint8_t>>>& extraRecords) {
+    FORGE_ZONE("World layout load");
     try {
         out = WorldLayout{};
         const fs::path levels = gameRoot / "data" / "Levels";
@@ -129,8 +131,10 @@ bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& er
         const fs::path stbFile = stbPath.empty() ? levels / "FinalAlbion_RT.stb" : stbPath;
         if (fs::exists(stbFile)) {
             const auto stb = forge::stb::Archive::open(stbFile);
-            for (const auto& m : stb.staticMaps()) {
-                const auto record = stb.readStaticMapRecord(m);
+            const auto records = stb.readStaticMapRecords();
+            for (size_t i = 0; i < records.size(); ++i) {
+                const auto& m = stb.staticMaps()[i];
+                const auto& record = records[i];
                 if (record.size() < forge::stbinfo::kInfoBlockSize) continue;
                 const auto info = forge::stbinfo::readInfoBlock(record.data());
                 stbOrigins[lower(stemOf(m.levelName))] = {info.worldX, info.worldY};
@@ -148,6 +152,18 @@ bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& er
             for (const auto& n : r.seesMaps) info.sees.push_back(stemOf(n));
             out.regionInfo.push_back(std::move(info));
         }
+        // Preserve the first matching WLD placement/owner while avoiding a
+        // repeated scan, path extraction and lowercase conversion per map.
+        std::map<std::string, const forge::wld::Map*> placements;
+        for (const auto& m : wld.maps()) placements.emplace(lower(stemOf(m.levelName)), &m);
+        std::map<std::string, std::pair<std::string, int>> owners;
+        for (size_t ri = 0; ri < wld.regions().size(); ++ri) {
+            const auto& r = wld.regions()[ri];
+            for (const auto& n : r.containsMaps) {
+                auto [it, inserted] = owners.try_emplace(lower(stemOf(n)), r.regionName, int(ri) + 1);
+                if (!inserted && it->second.first.empty()) it->second = {r.regionName, int(ri) + 1};
+            }
+        }
         int slot = 0;
         for (const auto& m : bwd.maps()) {
             ++slot;
@@ -161,16 +177,14 @@ bool loadWorldLayout(const fs::path& gameRoot, WorldLayout& out, std::string& er
             b.x = m.left; b.y = m.top; b.w = m.right - m.left; b.h = m.bottom - m.top;
             b.isSea = m.isSea != 0; b.loadedOnProximity = m.loadedOnProximity != 0;
             const std::string key = lower(b.name);
-            for (const auto& wm : wld.maps())
-                if (lower(stemOf(wm.levelName)) == key) {
-                    b.levelName = wm.levelName;
-                    b.x = wm.mapX; b.y = wm.mapY;   // the text placement is the one the editor writes
-                    break;
-                }
+            if (const auto it = placements.find(key); it != placements.end()) {
+                b.levelName = it->second->levelName;
+                b.x = it->second->mapX; b.y = it->second->mapY;
+            }
             if (b.levelName.empty()) b.levelName = "FinalAlbion\\" + b.name + ".lev";
-            for (size_t ri = 0; ri < wld.regions().size() && b.region.empty(); ++ri)
-                for (const auto& n : wld.regions()[ri].containsMaps)
-                    if (lower(stemOf(n)) == key) { b.region = wld.regions()[ri].regionName; b.regionSlot = int(ri) + 1; break; }
+            if (const auto it = owners.find(key); it != owners.end()) {
+                b.region = it->second.first; b.regionSlot = it->second.second;
+            }
             if (auto it = stbOrigins.find(key); it != stbOrigins.end()) { b.inStb = true; b.stbX = it->second.first; b.stbY = it->second.second; }
             out.maps.push_back(std::move(b));
         }

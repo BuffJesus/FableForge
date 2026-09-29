@@ -191,6 +191,24 @@ bool toggle(const char* label, bool* value) {
     return clicked;
 }
 
+std::string fitText(const std::string& text, float room, bool dropShortcut) {
+    if (ImGui::CalcTextSize(text.c_str()).x <= room) return text;
+    std::string t = text;
+    const size_t cut = t.find("  ");
+    if (dropShortcut && cut != std::string::npos) {
+        t = t.substr(0, cut);
+        if (ImGui::CalcTextSize(t.c_str()).x <= room) return t;
+    }
+    if (ImGui::CalcTextSize("...").x > room) return {};
+    while (!t.empty() && ImGui::CalcTextSize((t + "...").c_str()).x > room) {
+        // Remove a whole UTF-8 code point, including names from custom worlds.
+        size_t end = t.size() - 1;
+        while (end > 0 && (static_cast<unsigned char>(t[end]) & 0xc0) == 0x80) --end;
+        t.resize(end);
+    }
+    return t + "...";
+}
+
 bool segmented(const char* id, int& value, std::initializer_list<const char*> options, float width) {
     return segmented(id, value, std::vector<const char*>(options), width);
 }
@@ -213,9 +231,13 @@ bool segmented(const char* id, int& value, const std::vector<const char*>& optio
         if (ImGui::IsItemClicked() && value != i) { value = i; changed = true; }
         if (value == i) dl->AddRectFilled(a, b, col(Accent), S(6.0f));
         else if (hovered) dl->AddRectFilled(a, b, col(Bg3), S(6.0f));
-        const ImVec2 ts = ImGui::CalcTextSize(opt);
+        // a label that does not fit its segment: drop the shortcut ("Select  Q" -> "Select"), then ellipsise;
+        // the whole label is the tooltip
+        const std::string shown = fitText(opt, segW - S(8), true);
+        if (hovered && shown != opt) ImGui::SetTooltip("%s", opt);
+        const ImVec2 ts = ImGui::CalcTextSize(shown.c_str());
         dl->AddText(ImVec2(a.x + (segW - ts.x) * 0.5f, a.y + (h - 2 * pad - ts.y) * 0.5f),
-                    value == i ? IM_COL32(255, 255, 255, 255) : col(Muted), opt);
+                    value == i ? IM_COL32(255, 255, 255, 255) : col(Muted), shown.c_str());
         ++i;
     }
     ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + h + S(4)));

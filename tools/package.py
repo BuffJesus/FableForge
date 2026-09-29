@@ -4,17 +4,27 @@ README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
   python tools/package.py [--version 0.1.0] [--no-check]
 """
-import argparse, os, shutil, subprocess, sys, zipfile
+import argparse, os, re, shutil, subprocess, sys, zipfile
+from pathlib import Path
 
 def main():
+    root = Path(__file__).resolve().parents[1]
+    os.chdir(root)
+    cmake = (root / "CMakeLists.txt").read_text()
+    version = re.search(r'project\(FableForge VERSION ([0-9.]+)', cmake).group(1)
+    version += re.search(r'set\(FORGE_VERSION_SUFFIX "([^"]*)"\)', cmake).group(1)
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", default="0.18.0")
+    ap.add_argument("--version", default=version)
     ap.add_argument("--no-check", action="store_true")
     a = ap.parse_args()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?', a.version):
+        ap.error("version must be a semantic version, optionally with a prerelease suffix")
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:
         print("checks failed; not packaging"); return 1
     name = f"FableForge-{a.version}-win64"
     stage = os.path.join("dist", name)
+    if Path(stage).resolve().parent != (root / "dist").resolve():
+        raise RuntimeError("Package staging directory escaped dist")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
     for f in ["FableForge.exe", "forge.exe", "forge-tools.exe"]:
@@ -47,6 +57,9 @@ def main():
     shutil.copytree("presets", os.path.join(stage, "presets"))
     shutil.copytree(os.path.join("docs", "re_reference"), os.path.join(stage, "docs", "re_reference"))   # forge-tools reads def_schema.json etc.
     shutil.copytree(os.path.join("docs", "modding"), os.path.join(stage, "docs", "modding"))   # the mod-pack / .fmp / load-order design the forge-tools mods family implements
+    shutil.copytree(os.path.join("docs", "releases"), os.path.join(stage, "docs", "releases"))
+    for screenshot in (root / "docs").glob("screenshot_*.png"):
+        shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
     zpath = os.path.join("dist", name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(stage):

@@ -1,9 +1,12 @@
+#include "profile_gpu.hpp"
 #include "renderer.hpp"
+#include "worldvisibility.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <d3dcompiler.h>
+#include <dxgi1_4.h>
 #include <map>
 #include <string>
 
@@ -26,6 +29,7 @@ cbuffer Object : register(b1) {
     float4 tint;                // a > 0: flat colour (selection outline)
 };
 Texture2D albedo : register(t0);
+Texture2D coarseAlbedo : register(t1);
 SamplerState samp : register(s0);
 
 struct VSIn  { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; };
@@ -33,6 +37,10 @@ struct VSOut { float4 pos : SV_Position; float3 wpos : TEXCOORD2; float3 nrm : N
 
 VSOut VS(VSIn i) {
     VSOut o;
+    // World ground reuses the otherwise unused walk attribute for overview height.
+    // Keep it opaque and move its surface, rather than cutting holes in two
+    // differently shaped meshes during a screen-space crossfade.
+    if (flags.w > 1.5) i.pos.y = lerp(i.walk, i.pos.y, flags.z);
     float4 wp = mul(float4(i.pos, 1.0), world);
     o.pos = mul(wp, viewProj);
     o.wpos = wp.xyz; o.nrm = mul(i.nrm, (float3x3)world); o.uv = i.uv; o.walk = i.walk;
@@ -52,6 +60,12 @@ float3 heightRamp(float t) {
 
 float4 PS(VSOut i) : SV_Target {
     if (tint.a > 0.0) return float4(tint.rgb, 1.0);
+    // Complementary screen-space coverage keeps the coarse ground under detail
+    // during its short transition. Water uses a continuous opacity fade below.
+    if (flags.x < 1.5 && flags.w < 1.5 && (flags.z < 1.0 || flags.w > 0.5)) {
+        float threshold = frac(52.9829189 * frac(dot(floor(i.pos.xy), float2(0.06711056, 0.00583715))));
+        if (flags.w > 0.5 ? threshold < flags.z : threshold >= flags.z) discard;
+    }
     float3 n = normalize(i.nrm);
     float ndl = saturate(dot(n, lightDir.xyz));
     float hemi = 0.55 + 0.45 * saturate(n.y);           // sky ambient
@@ -70,10 +84,14 @@ float4 PS(VSOut i) : SV_Target {
         float dist = distance(eye.xyz, i.wpos);
         float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
         float fade = i.walk < 0.5 ? 0.9 : saturate(i.uv.x);   // engine depth fade: transparent at the shore
-        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), fade * (0.7 + 0.25 * rim));
+        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), fade * (0.7 + 0.25 * rim) * flags.z);
     }
     if (flags.x > 0.5) {
         float4 tex = albedo.Sample(samp, i.uv);
+        // Ground geometry already morphs from the overview. Blend its material
+        // too, instead of replacing every texel on the publication frame.
+        if (flags.w > 2.5 && flags.z < 1.0)
+            tex = lerp(coarseAlbedo.Sample(samp, i.uv), tex, flags.z);
         if (flags.y > 0.5 && tex.a < 0.5) discard;
         // foliage: soften lighting so blades read as translucent-ish
         float3 col = tex.rgb * (0.45 + 0.65 * ndl + 0.2 * hemi);
@@ -251,7 +269,7 @@ void perspectiveRH(float fovY, float aspect, float zn, float zf, float out[16]) 
     std::memcpy(out, m, sizeof m);
 }
 
-struct GpuVertex { float px, py, pz, nx, ny, nz, u, v, walk; };
+using GpuVertex = Renderer::LayerVertex;
 
 } // namespace
 
@@ -334,6 +352,22 @@ Renderer::~Renderer() {
     release(white_);
     release(blend_); release(alphaBlend_); release(depth_); release(depthNoWrite_); release(depthOverlay_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
     release(cbuffer_); release(ocbuffer_); release(layout_); release(ps_); release(vs_);
+}
+
+Renderer::VideoMemoryInfo Renderer::queryVideoMemory() const {
+    FORGE_ZONE("GPU memory budget query");
+    VideoMemoryInfo result;
+    IDXGIDevice* dxgi = nullptr;
+    IDXGIAdapter* adapter = nullptr;
+    IDXGIAdapter3* adapter3 = nullptr;
+    if (device_ && SUCCEEDED(device_->QueryInterface(IID_PPV_ARGS(&dxgi))) &&
+        SUCCEEDED(dxgi->GetAdapter(&adapter)) && SUCCEEDED(adapter->QueryInterface(IID_PPV_ARGS(&adapter3)))) {
+        DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+        if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info)))
+            result = {true, info.Budget, info.CurrentUsage};
+    }
+    release(adapter3); release(adapter); release(dxgi);
+    return result;
 }
 
 bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
@@ -548,6 +582,7 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     lookAtRH(eye, at, view);
     perspectiveRH(cam.fovY, 1.0f, std::max(r * 0.05f, 0.01f), r * 10.0f, proj);
     FrameCB cb = {};
+    cb.flags[2] = 1.0f;
     mul4(view, proj, cb.viewProj);
     const float l[3] = {-0.45f, 0.8f, 0.35f};
     const float ll = std::sqrt(l[0] * l[0] + l[1] * l[1] + l[2] * l[2]);
@@ -754,7 +789,7 @@ void Renderer::releaseMesh() {
 void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearLayer(i); }
 
 void Renderer::clearLayer(int layer) {
-    for (auto& b : layers_[layer]) { release(b.vb); release(b.srv); }
+    for (auto& b : layers_[layer]) { release(b.vb); release(b.ib); release(b.srv); release(b.coarseSrv); }
     layers_[layer].clear();
 }
 
@@ -777,9 +812,9 @@ ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Ima
     ID3D11ShaderResourceView* srv = nullptr;
     if (img.width >= 64 && img.height >= 64 && !img.rgba.empty()) {
         // box-filter down to 64x64 (the picker draws it at 22..32 px)
-        terrainexport::Image small;
-        small.width = small.height = 64;
-        small.rgba.resize(64 * 64 * 4);
+        terrainexport::Image thumbnail;
+        thumbnail.width = thumbnail.height = 64;
+        thumbnail.rgba.resize(64 * 64 * 4);
         const uint32_t sx = img.width / 64, sy = img.height / 64;
         for (uint32_t y = 0; y < 64; ++y)
             for (uint32_t x = 0; x < 64; ++x) {
@@ -789,16 +824,17 @@ ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Ima
                         const uint8_t* p = &img.rgba[((y * sy + yy) * img.width + (x * sx + xx)) * 4];
                         for (int c = 0; c < 4; ++c) acc[c] += p[c];
                     }
-                uint8_t* o = &small.rgba[(y * 64 + x) * 4];
+                uint8_t* o = &thumbnail.rgba[(y * 64 + x) * 4];
                 for (int c = 0; c < 4; ++c) o[c] = uint8_t(acc[c] / (sx * sy));
             }
-        srv = makeTexture(small);
+        srv = makeTexture(thumbnail);
     } else srv = makeTexture(img);
     swatches_[id] = srv;   // a null entry remembers a texture that could not be made
     return srv;
 }
 
 ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img) {
+    FORGE_ZONE("D3D texture create");
     if (!img.width || !img.height) return nullptr;
     D3D11_TEXTURE2D_DESC td = {};
     td.Width = img.width; td.Height = img.height; td.MipLevels = 1; td.ArraySize = 1;
@@ -821,31 +857,50 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
 
 void Renderer::removeLayerTag(int layer, int tag) {
     auto& v = layers_[layer];
-    for (auto& b : v) if (b.tag == tag) { release(b.vb); release(b.srv); }
+    for (auto& b : v) if (b.tag == tag) { release(b.vb); release(b.ib); release(b.srv); release(b.coarseSrv); }
     v.erase(std::remove_if(v.begin(), v.end(), [&](const FoliageBatch& b) { return b.tag == tag; }), v.end());
 }
 
+size_t Renderer::layerTagBytes(int layer, int tag) const {
+    size_t bytes = 0;
+    for (const auto& batch : layers_[layer]) if (batch.tag == tag) bytes += batch.resourceBytes;
+    return bytes;
+}
+
 void Renderer::setLayerTagVisible(int layer, int tag, bool visible) {
-    for (auto& b : layers_[layer]) if (b.tag == tag) b.visible = visible;
+    for (auto& b : layers_[layer]) if (b.tag == tag && !(layer == kWorldLayer && b.water)) b.visible = visible;
+}
+
+void Renderer::setLayerTagFade(int layer, int tag, float coverage, bool inverse) {
+    for (auto& b : layers_[layer]) if (b.tag == tag && !(layer == kWorldLayer && b.water)) { b.coverage = std::clamp(coverage, 0.0f, 1.0f); b.inverseFade = inverse; }
 }
 
 bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag) {
-    if (scene.instances.empty()) return false;
-    auto& foliage_ = layers_[layer];
+    bool added = false;
+    for (const auto& batch : prepareLayer(scene, up)) added |= appendPreparedBatch(layer, batch, scene.images, tag);
+    return added;
+}
+
+std::vector<Renderer::PreparedBatch> Renderer::prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up) {
+    FORGE_ZONE("Indexed geometry prepare / bounds");
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
         if (up == terrainexport::UpAxis::Y) { ox = x; oy = z; oz = -y; } else { ox = x; oy = y; oz = z; }
     };
-    std::map<std::pair<int, bool>, std::vector<GpuVertex>> byImage;   // (image index, cutout) ; -1 = untextured
+    std::map<std::pair<int, bool>, PreparedBatch> byImage;   // (image index, cutout) ; -1 = untextured
     for (const auto& inst : scene.instances) {
-        if (inst.mesh < 0) continue;
+        if (inst.mesh < 0 || size_t(inst.mesh) >= scene.meshes.size()) continue;
         const auto& m = scene.meshes[size_t(inst.mesh)];
         float col[3][3]; foliageexport::instanceBasis(inst, col);
         for (const auto& part : m.parts) {
           auto& out = byImage[{part.image, part.hasAlpha}];
+          // Transform each referenced source vertex once per instance/material.
+          // Keep the original triangle order, seams, normals and UVs unchanged.
+          std::vector<uint32_t> remap(m.geometry.vertices.size(), UINT32_MAX);
           for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
             const uint32_t ids[3] = {part.indices[k], part.indices[k + 1], part.indices[k + 2]};
+            if (std::any_of(std::begin(ids), std::end(ids), [&](uint32_t id) { return id >= m.geometry.vertices.size(); })) continue;
             for (uint32_t id : ids) {
-                if (id >= m.geometry.vertices.size()) continue;
+                if (remap[id] != UINT32_MAX) { out.indices.push_back(remap[id]); continue; }
                 const auto& v = m.geometry.vertices[id];
                 GpuVertex g{};
                 toUp(inst.x + v.x * col[0][0] + v.y * col[1][0] + v.z * col[2][0],
@@ -855,27 +910,120 @@ bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrain
                      v.nx * col[0][1] + v.ny * col[1][1] + v.nz * col[2][1],
                      v.nx * col[0][2] + v.ny * col[1][2] + v.nz * col[2][2], g.nx, g.ny, g.nz);
                 g.u = v.u; g.v = v.v; g.walk = 1.0f;
-                out.push_back(g);
+                remap[id] = uint32_t(out.vertices.size());
+                out.indices.push_back(remap[id]);
+                out.vertices.push_back(g);
             }
           }
         }
     }
-    for (auto& [key, verts] : byImage) {
-        const int image = key.first;
-        if (verts.empty()) continue;
-        FoliageBatch b;
-        D3D11_BUFFER_DESC bd = {};
-        bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
-        bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        D3D11_SUBRESOURCE_DATA sd = {verts.data(), 0, 0};
-        if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) continue;
-        b.count = uint32_t(verts.size());
-        if (image >= 0 && size_t(image) < scene.images.size()) b.srv = makeTexture(scene.images[size_t(image)]);
-        b.alpha = key.second;
-        b.tag = tag;
-        foliage_.push_back(b);
+    std::vector<PreparedBatch> batches;
+    for (auto& [key, b] : byImage) {
+        if (b.vertices.empty()) continue;
+        b.image = key.first; b.alpha = key.second;
+        for (const auto& v : b.vertices) {
+            const float p[3] = {v.px, v.py, v.pz};
+            for (int i = 0; i < 3; ++i) { b.lo[i] = std::min(b.lo[i], p[i]); b.hi[i] = std::max(b.hi[i], p[i]); }
+        }
+        batches.push_back(std::move(b));
     }
-    return !foliage_.empty();
+    return batches;
+}
+
+Renderer::PreparedBatch Renderer::prepareWater(const terrainexport::WaterMesh& water) {
+    FORGE_ZONE("Water geometry prepare");
+    PreparedBatch batch;
+    batch.water = true;
+    auto& verts = batch.vertices;
+    verts.reserve(water.positions.size() / 3);
+    batch.indices.reserve(water.indices.size() + water.iceIndices.size());
+    std::vector<uint32_t> remap(water.positions.size() / 3, UINT32_MAX);
+    auto append = [&](const std::vector<uint32_t>& indices) {
+        if (indices.size() % 3) return false;
+        for (uint32_t id : indices) {
+            if (size_t(id) >= water.positions.size() / 3 || id >= water.fade.size() || id >= water.ice.size()) return false;
+            if (remap[id] == UINT32_MAX) {
+                remap[id] = uint32_t(verts.size());
+                const float* p = &water.positions[size_t(id) * 3];
+                verts.push_back({p[0], p[1], p[2], 0, 1, 0, water.fade[id], 0, water.ice[id] ? 0.0f : 1.0f});
+            }
+            batch.indices.push_back(remap[id]);
+        }
+        return true;
+    };
+    if (!append(water.indices) || !append(water.iceIndices)) { batch.vertices.clear(); batch.indices.clear(); return batch; }
+    for (const auto& v : verts) {
+        const float p[3] = {v.px, v.py, v.pz};
+        for (int i = 0; i < 3; ++i) { batch.lo[i] = std::min(batch.lo[i], p[i]); batch.hi[i] = std::max(batch.hi[i], p[i]); }
+    }
+    return batch;
+}
+
+bool Renderer::appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible) {
+    FORGE_ZONE("D3D batch upload");
+    const auto& verts = batch.vertices;
+    if (verts.empty() || verts.size() > UINT32_MAX / sizeof(GpuVertex) || batch.indices.size() > UINT32_MAX / sizeof(uint32_t)) return false;
+    FoliageBatch b;
+    b.terrainMorph = batch.terrainMorph;
+    D3D11_BUFFER_DESC bd = {};
+    bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    D3D11_SUBRESOURCE_DATA sd = {verts.data(), 0, 0};
+    if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) return false;
+    b.count = uint32_t(verts.size()); b.tag = tag; b.water = batch.water; b.alpha = batch.alpha; b.visible = visible;
+    if (!batch.indices.empty()) {
+        bd.ByteWidth = UINT(batch.indices.size() * sizeof(uint32_t));
+        bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        sd.pSysMem = batch.indices.data();
+        if (FAILED(device_->CreateBuffer(&bd, &sd, &b.ib))) { release(b.vb); return false; }
+        b.count = uint32_t(batch.indices.size());
+    }
+    if (batch.image >= 0 && size_t(batch.image) < images.size()) {
+        b.srv = makeTexture(images[size_t(batch.image)]);
+        if (!b.srv) { release(b.vb); release(b.ib); return false; }
+        const auto& image = images[size_t(batch.image)];
+        b.resourceBytes += size_t(image.width) * image.height * 4;
+    }
+    b.resourceBytes += verts.size() * sizeof(GpuVertex) + batch.indices.size() * sizeof(uint32_t);
+    std::copy(std::begin(batch.lo), std::end(batch.lo), b.lo);
+    std::copy(std::begin(batch.hi), std::end(batch.hi), b.hi);
+    if (b.terrainMorph) {
+        for (const auto& overview : layers_[kWorldLayer])
+            if (overview.tag == tag && !overview.water && overview.srv) {
+                b.coarseSrv = overview.srv; b.coarseSrv->AddRef(); break;
+            }
+    } else if (layer == kWorldLayer && !b.water && b.srv) {
+        // Overview uploads can arrive after the first detailed map.
+        for (auto& detail : layers_[kWorldDetailLayer])
+            if (detail.tag == tag && detail.terrainMorph && !detail.coarseSrv) {
+                detail.coarseSrv = b.srv; detail.coarseSrv->AddRef();
+            }
+    }
+    layers_[layer].push_back(b);
+    return true;
+}
+
+void Renderer::drawBatch(const FoliageBatch& batch) {
+    if (batch.ib) {
+        ctx_->IASetIndexBuffer(batch.ib, DXGI_FORMAT_R32_UINT, 0);
+        ctx_->DrawIndexed(batch.count, 0, 0);
+    } else ctx_->Draw(batch.count, 0);
+}
+
+bool Renderer::appendWorldWater(const terrainexport::WaterMesh& water, int tag, float worldX, float worldY) {
+    auto batch = prepareWater(water);
+    for (int i = 0; i < 3; ++i) { batch.lo[i] = 1e30f; batch.hi[i] = -1e30f; }
+    for (auto& v : batch.vertices) {
+        const float y = v.py;
+        v.px += worldX; v.py = v.pz; v.pz = -(y + worldY);
+        const float p[3] = {v.px, v.py, v.pz};
+        for (int i = 0; i < 3; ++i) { batch.lo[i] = std::min(batch.lo[i], p[i]); batch.hi[i] = std::max(batch.hi[i], p[i]); }
+    }
+    return appendPreparedBatch(kWorldLayer, batch, {}, tag);
+}
+
+size_t Renderer::worldWaterBatches() const {
+    return size_t(std::count_if(layers_[kWorldLayer].begin(), layers_[kWorldLayer].end(), [](const auto& b) { return b.water; }));
 }
 
 bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool frameCamera) {
@@ -981,7 +1129,9 @@ void Renderer::releaseTarget() {
 }
 
 ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, const Camera& camera,
-                                           ViewMode mode, float time) {
+                                           ViewMode mode, float time, float nearPlane) {
+    FORGE_ZONE("Viewport CPU submit");
+    FORGE_GPU_ZONE("Viewport");
     width = std::max(width, 8u); height = std::max(height, 8u);
     if (!ensureTarget(width, height)) return nullptr;
 
@@ -998,20 +1148,44 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     float at[3]; camera.focus(at);
     float view[16], proj[16];
     lookAtRH(eye, at, view);
-    const float zn = std::max(camera.distance * 0.01f, 0.05f), zf = camera.distance * 30.0f + 1000.0f;
+    const float zn = nearPlane > 0 ? nearPlane : std::max(camera.distance * 0.01f, 0.05f);
+    float zf = camera.distance * 30.0f + 1000.0f;
+    float fogDistance = camera.distance;
+    if (worldOnly) {
+        float lo[3] = {eye[0], eye[1], eye[2]}, hi[3] = {eye[0], eye[1], eye[2]};
+        for (int layer : {kWorldLayer, kWorldDetailLayer})
+            for (const auto& batch : layers_[layer])
+                for (int axis = 0; axis < 3; ++axis) {
+                    lo[axis] = std::min(lo[axis], batch.lo[axis]);
+                    hi[axis] = std::max(hi[axis], batch.hi[axis]);
+                }
+        zf = worldview::farPlane(eye, lo, hi);
+        // Orbit focus must not darken the same world pose after zooming close.
+        float spanSquared = 0;
+        for (int axis = 0; axis < 3; ++axis) spanSquared += (hi[axis] - lo[axis]) * (hi[axis] - lo[axis]);
+        fogDistance = std::max(1000.0f, std::sqrt(spanSquared) * 0.5f);
+    }
     perspectiveRH(camera.fovY, float(width) / float(height), zn, zf, proj);
     std::memcpy(lastView_, view, sizeof lastView_);
     std::memcpy(lastProj_, proj, sizeof lastProj_);
     lastCamera_ = camera;
     lastAspect_ = float(width) / float(height);
     FrameCB cb = {};
+    cb.flags[2] = 1.0f;
     mul4(view, proj, cb.viewProj);
+    worldDrawnBatches = worldCulledBatches = 0;
+    auto visibleBatch = [&](const FoliageBatch& batch) {
+        if (!worldOnly) return true;
+        if (worldCulling && !worldview::visible(cb.viewProj, batch.lo, batch.hi)) { ++worldCulledBatches; return false; }
+        ++worldDrawnBatches;
+        return true;
+    };
     // Sun: from the upper-left-front, slowly not moving (stable screenshots).
     float l[3] = {-0.45f, 0.8f, 0.35f};
     const float ll = std::sqrt(l[0] * l[0] + l[1] * l[1] + l[2] * l[2]);
     cb.lightDir[0] = l[0] / ll; cb.lightDir[1] = l[1] / ll; cb.lightDir[2] = l[2] / ll; cb.lightDir[3] = showGrid ? 1.0f : 0.0f;
     cb.params[0] = float(int(mode)); cb.params[1] = minH_; cb.params[2] = maxH_; cb.params[3] = time;
-    cb.eye[0] = eye[0]; cb.eye[1] = eye[1]; cb.eye[2] = eye[2]; cb.eye[3] = camera.distance;
+    cb.eye[0] = eye[0]; cb.eye[1] = eye[1]; cb.eye[2] = eye[2]; cb.eye[3] = fogDistance;
     D3D11_MAPPED_SUBRESOURCE map;
     if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) {
         std::memcpy(map.pData, &cb, sizeof cb);
@@ -1045,6 +1219,8 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     };
 
     if (mode != ViewMode::Wireframe || worldOnly) {
+        FORGE_ZONE("Terrain / world batches submit");
+        FORGE_GPU_ZONE("Terrain / world batches");
         bool any = false;
         for (int i = 0; i < kLayers; ++i) any = any || (layerOn(i) && !layers_[i].empty());
         if (any) {
@@ -1059,22 +1235,28 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
             for (int i = 0; i < kLayers; ++i) {
                 if (!layerOn(i)) continue;
                 for (const auto& b : layers_[i]) {
-                    if (!b.visible) continue;
-                    if (b.alpha != currentAlpha) {
+                    if (!b.visible || b.water) continue;
+                    if (!visibleBatch(b)) continue;
+                    const float transition = b.terrainMorph ? (worldMaterialBlend ? 3.0f : 2.0f) : float(b.inverseFade);
+                    if (b.alpha != currentAlpha || cb.flags[2] != b.coverage || cb.flags[3] != transition) {
                         currentAlpha = b.alpha;
                         cb.flags[0] = 1.0f; cb.flags[1] = currentAlpha ? 1.0f : 0.0f;
+                        cb.flags[2] = b.coverage; cb.flags[3] = transition;
                         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
                     }
-                    ID3D11ShaderResourceView* t = b.srv ? b.srv : white_;
-                    ctx_->PSSetShaderResources(0, 1, &t);
+                    ID3D11ShaderResourceView* textures[] = {b.srv ? b.srv : white_,
+                        b.coarseSrv ? b.coarseSrv : (b.srv ? b.srv : white_)};
+                    ctx_->PSSetShaderResources(0, 2, textures);
                     ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
-                    ctx_->Draw(b.count, 0);
+                    drawBatch(b);
                 }
             }
         }
     }
 
     if (!worldOnly && showThings && !instances_.empty() && mode != ViewMode::Wireframe) {
+        FORGE_ZONE("Editable objects submit");
+        FORGE_GPU_ZONE("Editable objects");
         cb.flags[0] = 1.0f; cb.flags[1] = 1.0f;
         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
         ctx_->RSSetState(solid_);
@@ -1116,21 +1298,40 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
         setObject(kIdentity, kNoTint);
     }
 
-    if (!worldOnly && showWater && waterIndexCount_ && mode != ViewMode::Wireframe) {
+    if (showWater && (worldOnly || waterIndexCount_) && mode != ViewMode::Wireframe) {
+        FORGE_ZONE("Water submit");
+        FORGE_GPU_ZONE("Water");
         cb.flags[0] = 2.0f; cb.flags[1] = 0.0f;
+        cb.flags[2] = 1.0f; cb.flags[3] = 0.0f;
         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
-        ctx_->IASetVertexBuffers(0, 1, &waterVb_, &stride, &offset);
-        ctx_->IASetIndexBuffer(waterIb_, DXGI_FORMAT_R32_UINT, 0);
         ctx_->RSSetState(solid_);
         ctx_->OMSetDepthStencilState(depthNoWrite_, 0);
         ctx_->OMSetBlendState(alphaBlend_, bf, 0xFFFFFFFF);
-        ctx_->DrawIndexed(waterIndexCount_, 0, 0);
+        if (worldOnly && showLayer[kWorldLayer]) {
+            // Transparent water follows all opaque terrain, plants and objects.
+            for (const auto& b : layers_[kWorldLayer]) {
+                if (!b.visible || !b.water) continue;
+                if (!visibleBatch(b)) continue;
+                if (cb.flags[2] != b.coverage) {
+                    cb.flags[2] = b.coverage;
+                    if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
+                }
+                ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
+                drawBatch(b);
+            }
+        } else if (!worldOnly) {
+            ctx_->IASetVertexBuffers(0, 1, &waterVb_, &stride, &offset);
+            ctx_->IASetIndexBuffer(waterIb_, DXGI_FORMAT_R32_UINT, 0);
+            ctx_->DrawIndexed(waterIndexCount_, 0, 0);
+        }
         ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
         ctx_->OMSetDepthStencilState(depth_, 0);
     }
 
-    ID3D11ShaderResourceView* nullSrv = nullptr;
-    ctx_->PSSetShaderResources(0, 1, &nullSrv);
+    ID3D11ShaderResourceView* nullSrv[2] = {};
+    FORGE_PLOT("World drawn batches", worldDrawnBatches);
+    FORGE_PLOT("World culled batches", worldCulledBatches);
+    ctx_->PSSetShaderResources(0, 2, nullSrv);
     ID3D11RenderTargetView* nullRtv = nullptr;
     ctx_->OMSetRenderTargets(1, &nullRtv, nullptr);
     return srv_;

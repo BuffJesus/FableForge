@@ -89,8 +89,10 @@ def main() -> int:
     r = run("mods", "build", scratch, out)
     import re as _re
     m = _re.search(r"(\d+) changes applied \((\d+) new records\)", r.stdout)
-    # UFP's ~17 records + Special Melee's 9 + F2's 95 additions; one fewer when the install's game.bin is the pristine bytes
-    if not m or int(m.group(2)) != 95 or not 110 <= int(m.group(1)) <= 112:
+    # The corpus must add 95 records and apply its existing-record edits. A
+    # customized base may need additional replacements; its changed-record total
+    # is not a fixed stock golden value. Content and rollback checks follow.
+    if not m or int(m.group(2)) != 95 or int(m.group(1)) < 110:
         print("build output unexpected:", r.stdout[-800:]); ok = False
     bak = os.path.join(defs, "game.bin.retail-bak")
     resaved = os.path.exists(bak) and open(bak, "rb").read() != open(os.path.join(defs, "game.bin"), "rb").read()

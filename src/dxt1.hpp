@@ -4,8 +4,10 @@
 // along its dominant axis, four-colour palette, no alpha) and the decoder.
 // Quality is what a horizon patch needs; nothing here is retail-exact.
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace albion::dxt1 {
@@ -64,7 +66,7 @@ inline std::vector<uint8_t> encode(const uint8_t* rgba, int width, int height) {
             }
             uint32_t indices = 0;
             for (int i = 0; i < 16; ++i) {
-                int best = 0; long bestD = 1L << 40;
+                int best = 0; long bestD = std::numeric_limits<long>::max();
                 for (int c = 0; c < (c0 == c1 ? 1 : 4); ++c) {
                     const long dr = px[i][0] - pal[c][0], dg = px[i][1] - pal[c][1], db = px[i][2] - pal[c][2];
                     const long d = dr * dr + dg * dg + db * db;

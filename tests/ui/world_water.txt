@@ -1,0 +1,39 @@
+# Read-only: persistent overview water uses WLD positions and survives detail changes.
+wait_maps
+wait_ready
+set world_auto_detail 0
+world_tab 1
+wait_world_tiles
+set world_3d 1
+wait_world_tiles
+world_camera 3515 815 5 0.8 0.62 200
+frames 10
+wait_world_detail
+assert_state world_detail_maps 6
+assert_state world_water_batches 178
+frames 10
+clear_toasts
+screenshot build/ui/world_water.png
+set preview_water 0
+frames 3
+screenshot build/ui/world_water_off.png
+set preview_water 1
+set world_detail 0
+frames 3
+assert_state world_detail_maps 0
+assert_state world_water_batches 178
+clear_toasts
+screenshot build/ui/world_water_overview.png
+click check_world_water
+frames 3
+assert_state preview_water 0
+click check_world_water
+frames 3
+assert_state preview_water 1
+set world_detail 1
+wait_world_detail
+assert_state world_water_batches 178
+set world_3d 0
+frames 3
+assert_state world_water_batches 0
+quit

@@ -3,6 +3,7 @@
 // dispatcher; the app-side helpers it calls live in app.cpp / editor.cpp / world.cpp /
 // textures.cpp.
 #include "app.hpp"
+#include "profile.hpp"
 
 #include "imgui_internal.h"
 
@@ -61,6 +62,7 @@ void Automation::registerWidget(const char* id) {
 }
 
 bool Automation::takeScreenshot(std::string& path) {
+    if (!captureShot_.empty()) { path = std::move(captureShot_); captureShot_.clear(); return true; }
     if (pendingShot_.empty()) return false;
     path = pendingShot_;
     pendingShot_.clear();
@@ -79,6 +81,16 @@ void Automation::note(const std::string& what) {
 
 bool Automation::tick(App& app) {
     if (!active_ || quit_) return !quit_;
+    // App::frame has already rendered: record its pose before this tick changes it.
+    if (!capturePrefix_.empty()) {
+        char suffix[32];
+        std::snprintf(suffix, sizeof suffix, "-%05d.png", captureFrame_++);
+        captureShot_ = capturePrefix_ + suffix;
+        note("capture " + captureShot_);
+        for (const auto& kv : app.stateDump())
+            if (kv.starts_with("world_")) note("     " + kv);
+        if (captureFrame_ >= 2000) { fail("capture exceeded 2000 frames"); capturePrefix_.clear(); }
+    }
     // Pending synthetic click: move, press, release over three frames.
     if (!clickTarget_.empty()) {
         auto it = widgets_.find(clickTarget_);
@@ -199,11 +211,96 @@ bool Automation::tick(App& app) {
         app.camera().lookAt(fx, fz, -fy, yaw, pitch, dist);
         note("ok   " + line); ++pc_;
     }
-    else if (cmd == "wait_world_detail") waitOn(!app.worldDetailShown_.empty() && !app.worldDetailFuture_.valid() && app.worldDetailWanting_ == 0, "world detail near the camera");
-    else if (cmd == "wait_world_tiles") waitOn(app.worldTileTotal_ > 0 && app.worldTileWorkers_.empty(), "the world map tiles");
+    else if (cmd == "wait_profiler") {
+#ifdef TRACY_ENABLE
+        waitOn(TracyIsConnected, "local Tracy capture connection");
+#else
+        fail("wait_profiler requires a FABLEFORGE_PROFILE=ON build"); ++pc_;
+#endif
+    }
+    else if (cmd == "profile_mark") { FORGE_MESSAGE(rest); note("ok   " + line); ++pc_; }
+    else if (cmd == "wait_world_detail") {
+        // High-altitude and empty-space views legitimately request zero maps.
+        // Refresh demand once before accepting an empty, settled working set.
+        if (!worldDetailWaitStarted_) { worldDetailWaitStarted_ = true; app.worldDetailNext_ = 0; return true; }
+        const auto before = pc_;
+        waitOn(!app.worldDetailFuture_.valid() && !app.worldDetailUpload_ && app.worldDetailWanting_ == 0 &&
+            std::all_of(app.worldDetailShown_.begin(), app.worldDetailShown_.end(), [](const auto& entry) { return entry.second.wanted && entry.second.fade == 1.0f; }), "world detail near the camera");
+        if (pc_ != before) worldDetailWaitStarted_ = false;
+    }
+    else if (cmd == "wait_world_tiles") waitOn(app.worldTileTotal_ > 0 && app.worldTileWorkers_.empty() &&
+        app.worldTileTex_.size() == app.worldTiles_.size() && (!app.world3D_ || app.worldLayerAt_.size() == app.worldTiles_.size()), "the world map tiles");
+    else if (cmd == "assert_world_ground") {   // <world x> <world y> <map name or ->
+        float x = 0, y = 0; std::string expected;
+        std::istringstream(rest) >> x >> y >> expected;
+        bool inside = false; std::string actual;
+        app.worldGroundAt(x, y, inside, &actual);
+        if (expected == "-") expected.clear();
+        if (actual != expected || inside != !expected.empty()) fail("world ground: expected " + expected + ", got " + actual);
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "world_camera") {   // world_camera <fableX> <fableY> <height> <yaw> <pitch> <distance>: the 3D world view's camera
         float fx = 0, fy = 0, fz = 0, yaw = 0.6f, pitch = 0.9f, dist = 800; std::istringstream(rest) >> fx >> fy >> fz >> yaw >> pitch >> dist;
         app.worldCamera_.lookAt(fx, fz, -fy, yaw, pitch, dist); app.worldCameraSet_ = true;
+        app.worldDetailNext_ = 0;
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_look") {
+        float yaw = 0, pitch = 0;
+        std::istringstream(rest) >> yaw >> pitch;
+        app.worldCamera_.look(yaw - app.worldCamera_.yaw, pitch - app.worldCamera_.pitch);
+        app.worldDetailNext_ = 0;
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_eye" || cmd == "world_pose") {
+        float x = 0, y = 0, height = 0;
+        std::istringstream pose(rest);
+        pose >> x >> y >> height;
+        app.worldCamera_.posX = x; app.worldCamera_.posY = height; app.worldCamera_.posZ = -y;
+        if (cmd == "world_eye") app.worldDetailNext_ = 0;
+        float yaw = 0, pitch = 0;
+        if (pose >> yaw >> pitch)
+            app.worldCamera_.look(yaw - app.worldCamera_.yaw, pitch - app.worldCamera_.pitch);
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_eye_ground") {
+        float x = 0, y = 0, clearance = 0;
+        std::istringstream pose(rest);
+        pose >> x >> y >> clearance;
+        bool inside = false;
+        const float ground = app.worldGroundAt(x, y, inside, nullptr);
+        if (!inside) fail("world_eye_ground: no terrain under route point");
+        app.worldCamera_.posX = x; app.worldCamera_.posY = ground + clearance; app.worldCamera_.posZ = -y;
+        float yaw = 0, pitch = 0;
+        if (pose >> yaw >> pitch)
+            app.worldCamera_.look(yaw - app.worldCamera_.yaw, pitch - app.worldCamera_.pitch);
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_memory_sample") {
+        if (rest == "auto") app.worldVideoMemoryOverride_.reset();
+        else if (rest == "unavailable") app.worldVideoMemoryOverride_ = Renderer::VideoMemoryInfo{};
+        else {
+            Renderer::VideoMemoryInfo sample;
+            std::istringstream input(rest);
+            std::string extra;
+            if (rest.find('-') != std::string::npos || !(input >> sample.budget >> sample.usage) || (input >> extra)) {
+                fail("world_memory_sample: expected budget and usage in bytes"); ++pc_; return true;
+            }
+            sample.valid = true;
+            app.worldVideoMemoryOverride_ = sample;
+        }
+        app.worldVideoMemoryNext_ = 0;
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_transition_hold") {
+        if (rest == "auto") app.worldDetailFadeOverride_.reset();
+        else app.worldDetailFadeOverride_ = std::clamp(float(std::atof(rest.c_str())), 0.0f, 1.0f);
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "world_transition") {
+        const float fraction = std::clamp(float(std::atof(rest.c_str())), 0.0f, 1.0f);
+        for (auto& [name, state] : app.worldDetailShown_) state.fade = fraction;
         note("ok   " + line); ++pc_;
     }
     else if (cmd == "world_open_3d") { app.openFromWorld3D(rest); note("ok   " + line); ++pc_; }   // the 3D view's double-click on a map
@@ -271,9 +368,14 @@ bool Automation::tick(App& app) {
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "activity") app.activityOpen_ = val == "1" ? 1 : 0;
         else if (key == "world_3d") app.setWorld3D(val == "1");
+        else if (key == "world_auto_detail") app.worldAutoDetail_ = val == "1";
+        else if (key == "world_culling") app.renderer_.worldCulling = val == "1";
+        else if (key == "world_material_blend") app.renderer_.worldMaterialBlend = val == "1";
         else if (key == "world_terrain") app.worldTerrain2D_ = val == "1";
         else if (key == "world_detail") { app.worldDetailOn_ = val == "1"; if (!app.worldDetailOn_) app.clearWorldDetail(); }
+        else if (key == "world_detail_limit") app.worldDetailMaps_ = std::clamp(std::atoi(val.c_str()), 1, 12);
         else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
         else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";
@@ -535,6 +637,8 @@ bool Automation::tick(App& app) {
     else if (cmd == "wait_batch") waitOn(!app.batchActive() && !app.exportBusy(), "batch export");
     else if (cmd == "drop") { if (!app.openDropped(rest)) fail("drop failed: " + rest); else note("ok   " + line); ++pc_; }   // what a file dropped on the window does
     else if (cmd == "open") { if (!app.openLooseLev(rest)) fail("open failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "capture_begin") { capturePrefix_ = rest; captureFrame_ = 0; note("ok   " + line); ++pc_; }
+    else if (cmd == "capture_end") { capturePrefix_.clear(); note("ok   " + line); ++pc_; }
     else if (cmd == "screenshot") { pendingShot_ = rest; note("ok   " + line); ++pc_; waitFrames_ = 1; }
     else if (cmd == "assert_file") {
         std::error_code ec;

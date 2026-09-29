@@ -37,10 +37,7 @@ jobs:
       # Fable install. The retail smoke, scratch-install suites and the in-game
       # harness run locally against a real install.
       - name: Unit tests
-        run: ./build/fableforge_tests.exe
-
-      - name: LZO1X vs minilzo
-        run: ./build/fableforge_lzo_tests.exe
+        run: ctest --test-dir build --output-on-failure
 
       - name: GUI without an install (D3D11 WARP)
         run: ./build/FableForge.exe --auto tests/ui/noinstall.txt --install "D:/definitely/not/fable"

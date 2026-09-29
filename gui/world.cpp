@@ -4,6 +4,7 @@
 // go: WLD MapX/MapY, BWD boxes (all three copies) and the STB chunks
 // translated to their new origins (src/overworld + src/stbrelocate).
 #include "app.hpp"
+#include "profile.hpp"
 #include "modpack.hpp"
 #include "stitch.hpp"
 
@@ -33,6 +34,7 @@ int snap32(float v) { return int(std::floor(v / 32.0f + 0.5f)) * 32; }
 } // namespace
 
 void App::setWorldMode(bool on) {
+    if (!on && worldMode_) clearWorldDetail(); // editing another view invalidates retained detail
     if (on && editMode_) setEditMode(false);
     if (on) texturesMode_ = false;
     worldMode_ = on;
@@ -45,6 +47,7 @@ void App::loadWorld() {
     std::string root = saveRoot();
     const std::string key = root + "|" + packDest_;
     if (worldLoaded_ && worldLoadedFrom_ == key) return;
+    clearWorldDetail(); // layout reloads can change tag order and source content
     std::string err;
     std::filesystem::path stb;                                          // the game's (the view shadow has none)
     std::vector<std::pair<std::string, std::vector<uint8_t>>> records;  // the pack's re-baked maps
@@ -232,6 +235,7 @@ void App::worldApply() {
 // ---------------------------------------------------------------- canvas
 
 void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
+    FORGE_ZONE("World 2D canvas");
     using theme::S;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), theme::col(theme::Bg0));
@@ -242,6 +246,12 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
         ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? "The world could not be read (see the log)." : "Point FableForge at a Fable install to see its world.");
         return;
     }
+    // Known boxes already carry their placement. Searching all map names again
+    // for each drawn/hover-tested box makes a settled overview quadratic.
+    auto placement = [&](const editor::WorldMapBox* box, int& x, int& y) {
+        x = box->x; y = box->y;
+        for (const auto& mv : worldPending_) if (mv.name == box->name) { x = mv.x; y = mv.y; }
+    };
     // fit on first use: the whole world box inside the canvas with a margin
     const float worldW = float(std::max(1, world_.maxX - world_.minX)), worldH = float(std::max(1, world_.maxY - world_.minY));
     if (worldZoom_ <= 0) {
@@ -314,7 +324,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     worldHover_.clear();
     if (hovered && !worldPanning_)
         for (const auto* b : order) {
-            int x, y; worldPlacement(b->name, x, y);
+            int x, y; placement(b, x, y);
             if (mouseW.x >= float(x) && mouseW.x < float(x + b->w) && mouseW.y >= float(y) && mouseW.y < float(y + b->h)) worldHover_ = b->name;
         }
 
@@ -344,12 +354,12 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
         if (!box || !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             // release: commit when the box moved and the spot is legal
             if (box && worldDragValid_) {
-                int x0, y0; worldPlacement(box->name, x0, y0);
+                int x0, y0; placement(box, x0, y0);
                 if (x0 != worldDragX_ || y0 != worldDragY_) worldMove(box->name, worldDragX_, worldDragY_);
             }
             worldDragging_ = false;
         } else {
-            int x0, y0; worldPlacement(box->name, x0, y0);
+            int x0, y0; placement(box, x0, y0);
             const ImVec2 d = ImVec2((io.MousePos.x - worldDragStart_.x) / worldZoom_, (io.MousePos.y - worldDragStart_.y) / worldZoom_);
             worldDragX_ = snap32(float(x0) + d.x); worldDragY_ = snap32(float(y0) + d.y);
             editor::WorldLayout current = world_;
@@ -364,14 +374,14 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     const bool showNames = worldZoom_ * 32 >= S(9);
     std::vector<std::string> neighbours;
     if (const auto* sel = world_.find(worldSelected_)) {
-        int sx, sy; worldPlacement(sel->name, sx, sy);
+        int sx, sy; placement(sel, sx, sy);
         if (worldDragging_) { sx = worldDragX_; sy = worldDragY_; }
         editor::WorldLayout current = world_;
         for (auto& b : current.maps) for (const auto& mv : worldPending_) if (mv.name == b.name) { b.x = mv.x; b.y = mv.y; }
         for (const auto* n : current.touching(*sel, sx, sy)) neighbours.push_back(n->name);
     }
     for (const auto* b : order) {
-        int x, y; worldPlacement(b->name, x, y);
+        int x, y; placement(b, x, y);
         const bool isSel = b->name == worldSelected_;
         if (isSel && worldDragging_) { x = worldDragX_; y = worldDragY_; }
         const ImVec2 p0 = toScreen(float(x), float(y)), p1 = toScreen(float(x + b->w), float(y + b->h));
@@ -404,7 +414,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
         }
         if (isSel && worldDragging_) {
             // the ghost of the original place
-            int ox, oy; worldPlacement(b->name, ox, oy);
+            int ox, oy; placement(b, ox, oy);
             const ImVec2 g0 = toScreen(float(ox), float(oy)), g1 = toScreen(float(ox + b->w), float(oy + b->h));
             dl->AddRect(g0, g1, theme::col(theme::Muted), 0, 0, 1.0f);
         }
@@ -412,7 +422,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     // hover tooltip
     if (!worldHover_.empty() && !worldDragging_ && !worldPanning_) {
         const auto* b = world_.find(worldHover_);
-        int x, y; worldPlacement(b->name, x, y);
+        int x, y; placement(b, x, y);
         ImGui::BeginTooltip();
         ImGui::TextUnformatted(b->name.c_str());
         ImGui::PushFont(fontSmall_);
@@ -453,6 +463,8 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
             ImGui::Checkbox("Show the ground on the map##wt2d", &worldTerrain2D_);
             auto_.registerWidget("check_world_terrain");
         } else {
+            ImGui::Checkbox("Water##wdw", &renderer_.showWater);
+            auto_.registerWidget("check_world_water");
             // full detail near the camera (the vanilla 3D view shows the loaded maps as the game does)
             if (ImGui::Checkbox("Full detail near the camera##wdet", &worldDetailOn_) && !worldDetailOn_) clearWorldDetail();
             auto_.registerWidget("check_world_detail");
@@ -462,9 +474,13 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
                 changed |= ImGui::Checkbox("Plants##wdf", &worldDetailFoliage_); ImGui::SameLine();
                 changed |= ImGui::Checkbox("Objects##wdt", &worldDetailThings_); ImGui::SameLine();
                 changed |= ImGui::Checkbox("Creatures##wdc", &worldDetailCreatures_);
+                ImGui::Checkbox("Automatic detail##wdauto", &worldAutoDetail_);
+                auto_.registerWidget("check_world_auto_detail");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adjusts the number of detailed maps to sustained frame time, up to the limit below. Turn off for a fixed budget.");
                 ImGui::SetNextItemWidth(cardInner);
                 ImGui::SliderInt("##wdmaps", &worldDetailMaps_, 1, 12, "up to %d maps");
                 auto_.registerWidget("slider_world_detail_maps");
+                if (worldAutoDetail_) ImGui::TextColored(theme::vec(theme::Muted), "Current budget: %d maps", worldDetailBudget_.maps);
                 if (worldDetailLoading_.size()) ImGui::TextColored(theme::vec(theme::Muted), "Loading %s...", worldDetailLoading_.c_str());
                 ImGui::PopFont();
                 if (changed) clearWorldDetail();

@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Latest continuation: [world view, UI validation and next asset/UX work](HANDOFF_WORLD_UI.md)
+(2026-09-28). Covers visible streamed water, world-picking speed, culling,
+automatic detail budgets and the user's design constraints.
+See also [performance research](WORLD_PERFORMANCE.md) and [CPU/GPU profiling](PROFILING.md)
+for measured bottlenecks, the optional Tracy build and remaining renderer work.
+
 ## Vanilla editor parity (Aeon's review, 2026-09-27)
 
 Aeon (Discord, 2026-09-27) reviewed the editor against the vanilla Lionhead

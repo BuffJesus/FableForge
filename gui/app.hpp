@@ -21,6 +21,9 @@
 #include <array>
 
 #include "worldtiles.hpp"
+#include "worldvisibility.hpp"
+#include "deferredrelease.hpp"
+#include "detailcache.hpp"
 #include "forge/budget.hpp"
 #include "forge/levelstore.hpp"
 #include "forge/modorder.hpp"
@@ -100,6 +103,10 @@ private:
     int waitFrames_ = 0;
     double deadline_ = 0;   // wall-clock seconds for the current waiting command
     std::string pendingShot_;
+    std::string capturePrefix_;
+    std::string captureShot_;
+    int captureFrame_ = 0;
+    bool worldDetailWaitStarted_ = false;
     std::string clickTarget_;
     std::string revealTarget_;
     std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
@@ -589,6 +596,7 @@ private:
     float penSpikyness_ = 0.0f;
     float penMagnifier_ = 1.0f;
     bool penSpray_ = true;             // vanilla Spray can: repeat while held (off = once per click)
+    int activityOpen_ = -1;   // -1 = follow available height until the user chooses folded (0) or open (1)
     bool thingsScriptOnly_ = false;    // Objects list: vanilla Scene Browser "Only ScriptNamed Objects"
     bool thingsNearest_ = false;       // Objects list: vanilla "Sort by distance" (from the camera)
     int thingsFirst_ = -1;             // the Objects list's first row (automation state)
@@ -824,19 +832,41 @@ private:
     bool worldPickTile(const float o[3], const float d[3], std::string& name, float hit[3]) const;
     // Detail around the camera in the 3D world view: the nearest maps get their full terrain, foliage,
     // things and creatures (streamed one map at a time, dropped when far), their low-res tile hidden.
-    struct WorldDetail { std::string name; foliageexport::Scene ground, foliage, things; };
+    struct WorldDetail {
+        std::string name;
+        std::vector<Renderer::PreparedBatch> batches;
+        std::vector<terrainexport::Image> images;
+        uint64_t generation = 0;
+    };
+    uint64_t worldDetailGeneration_ = 0;
     bool worldDetailOn_ = true;
     bool worldDetailFoliage_ = true, worldDetailThings_ = true, worldDetailCreatures_ = true;
     float worldDetailRadius_ = 250.0f;   // world units around the camera's ground point
     int worldDetailMaps_ = 6;            // at most this many maps in full detail
+    bool worldAutoDetail_ = true;
+    worldview::DetailBudget worldDetailBudget_;
     std::future<WorldDetail> worldDetailFuture_;
-    std::map<std::string, bool> worldDetailShown_;   // maps whose detail is in the layer
+    std::optional<WorldDetail> worldDetailUpload_;
+    DeferredRelease<WorldDetail> worldDetailRelease_;
+    bool worldDetailRetiring_ = false;
+    size_t worldDetailUploadAt_ = 0;
+    struct WorldDetailVisibility { float fade = 0; bool wanted = true; };
+    std::map<std::string, WorldDetailVisibility> worldDetailShown_;   // fully uploaded maps, including transitions
+    worldview::DetailCache worldDetailCache_;
+    worldview::CacheMemoryBudget worldCacheMemoryBudget_;
+    std::optional<float> worldDetailFadeOverride_; // automation: isolate transition endpoints
+    Renderer::VideoMemoryInfo worldVideoMemory_;
+    std::optional<Renderer::VideoMemoryInfo> worldVideoMemoryOverride_; // automation only
+    double worldVideoMemoryNext_ = 0;
+    size_t worldMemoryEvictions_ = 0;
+    size_t worldDetailCacheHits_ = 0, worldDetailLoads_ = 0;
     std::string worldDetailLoading_;
     size_t worldDetailWanting_ = 0;   // wanted maps not in the layer yet (automation waits on 0)
     double worldDetailNext_ = 0;
     int worldTag(const std::string& name) const;
     void updateWorldDetail();
     void clearWorldDetail();
+    bool releaseWorldDetail();
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)
     bool worldDragging_ = false;
     int worldDragX_ = 0, worldDragY_ = 0;    // the dragged box's candidate origin (snapped)

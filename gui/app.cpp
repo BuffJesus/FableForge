@@ -244,11 +244,13 @@ void App::drawHelpOverlay() {
     ImGui::PopStyleColor();
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(S(720), vp->Size.x - S(40)), 0));
+    // never taller than the window: a short screen scrolls the sheet instead of cutting it off
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(std::min(S(720), vp->Size.x - S(40)), vp->Size.y - S(40)));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(22), S(18)));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
     ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
-    ImGui::Begin("##help", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("##help", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::BringWindowToFocusFront(ImGui::GetCurrentWindow());
     ImGui::PushFont(fontBold_);
     ImGui::TextUnformatted("Keyboard and mouse");
@@ -263,7 +265,7 @@ void App::drawHelpOverlay() {
     const Group groups[] = {
         {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
         {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + click", "add to / remove from the selection"}, {"Ctrl + D", "duplicate"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
-        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "invert: lower, or paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
+        {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "swap raise / lower (including exact step); paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
         {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
     };
@@ -303,8 +305,8 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     using theme::S;
     if (!*open) return false;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.45f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0), ImVec2(width, vp->Size.y * 0.9f));
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0), ImVec2(width, vp->Size.y - S(60)));   // scrolls on a short screen
     ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
     ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
@@ -315,6 +317,14 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!visible) { ImGui::End(); return false; }
+    {
+        // keep the whole window on screen (a resize or a smaller window can push it past an edge)
+        const ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
+        ImVec2 fix = wp;
+        fix.x = std::clamp(fix.x, vp->Pos.x, std::max(vp->Pos.x, vp->Pos.x + vp->Size.x - ws.x));
+        fix.y = std::clamp(fix.y, vp->Pos.y, std::max(vp->Pos.y, vp->Pos.y + vp->Size.y - ws.y));
+        if (fix.x != wp.x || fix.y != wp.y) ImGui::SetWindowPos(fix);
+    }
     const float inner = ImGui::GetContentRegionAvail().x;
     toolWindowInner_ = inner;
     // header: title, subtitle, close
@@ -391,7 +401,7 @@ void App::drawSetupPanel() {
         ImGui::Dummy(ImVec2(0, S(10)));
         ImGui::PushFont(fontSmall_);
         ImGui::PushTextWrapPos(S(530));
-        ImGui::TextColored(theme::vec(theme::Faint), "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
+        theme::hintMore("Some changes only show in a new game; hover for the engine's rules.", "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
         // backups: everything FableForge has touched, and the way back
@@ -1280,6 +1290,31 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_tiles_busy=" + std::string(worldTileWorkers_.empty() ? "0" : "1"));
     v.push_back("world_hover=" + worldHover_);
     v.push_back("world_detail_maps=" + std::to_string(worldDetailShown_.size()));
+    v.push_back("world_eye_x=" + std::to_string(worldCamera_.posX));
+    v.push_back("world_eye_y=" + std::to_string(-worldCamera_.posZ));
+    v.push_back("world_eye_height=" + std::to_string(worldCamera_.posY));
+    bool worldInside = false;
+    const float worldBelow = worldGroundAt(worldCamera_.posX, -worldCamera_.posZ, worldInside, nullptr);
+    v.push_back("world_ground_clearance=" + std::to_string(worldCamera_.posY - worldBelow));
+    v.push_back("world_camera_yaw=" + std::to_string(worldCamera_.yaw));
+    v.push_back("world_camera_pitch=" + std::to_string(worldCamera_.pitch));
+    v.push_back("world_detail_cached_maps=" + std::to_string(worldDetailCache_.size()));
+    v.push_back("world_detail_cached_bytes=" + std::to_string(worldDetailCache_.bytes()));
+    v.push_back("world_detail_cache_budget=" + std::to_string(worldDetailCache_.budget()));
+    v.push_back("world_gpu_memory_valid=" + std::to_string(worldVideoMemory_.valid));
+    v.push_back("world_gpu_memory_budget=" + std::to_string(worldVideoMemory_.budget));
+    v.push_back("world_gpu_memory_usage=" + std::to_string(worldVideoMemory_.usage));
+    v.push_back("world_gpu_memory_simulated=" + std::to_string(worldVideoMemoryOverride_.has_value()));
+    v.push_back("world_memory_evictions=" + std::to_string(worldMemoryEvictions_));
+    v.push_back("world_detail_cache_hits=" + std::to_string(worldDetailCacheHits_));
+    v.push_back("world_detail_loads=" + std::to_string(worldDetailLoads_));
+    std::string detailNames;
+    for (const auto& [name, shown] : worldDetailShown_) { if (!detailNames.empty()) detailNames += ","; detailNames += name; }
+    v.push_back("world_detail_names=" + detailNames);
+    v.push_back("world_water_batches=" + std::to_string(renderer_.worldWaterBatches()));
+    v.push_back("world_drawn_batches=" + std::to_string(renderer_.worldDrawnBatches));
+    v.push_back("world_culled_batches=" + std::to_string(renderer_.worldCulledBatches));
+    v.push_back("world_detail_budget=" + std::to_string(worldAutoDetail_ ? worldDetailBudget_.maps : worldDetailMaps_));
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
@@ -1499,6 +1534,15 @@ void App::drawMenuBar() {
     if (ImGui::BeginMenu("View")) {
         if (ImGui::MenuItem("Map list", "Ctrl+[", settings_.showExplorer)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         if (ImGui::MenuItem("Tool panel", "Ctrl+]", settings_.showActions)) { settings_.showActions = !settings_.showActions; saveSettings(); }
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Text size")) {
+            // on top of the display DPI and the window size
+            for (const float z : {0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f}) {
+                char l[16]; std::snprintf(l, sizeof l, "%d %%", int(std::round(z * 100.0f)));
+                if (ImGui::MenuItem(l, nullptr, std::fabs(settings_.uiScale - z) < 0.01f)) { settings_.uiScale = z; saveSettings(); }
+            }
+            ImGui::EndMenu();
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
@@ -2003,20 +2047,7 @@ void App::drawActions(float width) {
     const MapEntry* footerEntry = findEntry(selectedName_);
     const bool showRegion = footerEntry && regions_.loaded && regions_.mapsOfRegion.count(footerEntry->group) && regionMapKeys(footerEntry->group).size() > 1 && !batchActive();
     const float footerHeight = modsMode_ ? S(72) : texturesMode_ ? S(60) : worldMode_ ? S(42 + 8 + 30 + 16 + 30) : editMode_ ? S(42 + 8 + 32 + 16 + 30) : S(42 + 8 + 32 + 16) + (showOpen ? S(40) : 0) + (showRegion ? S(40) : 0) + (batchActive() ? S(40) : 0);
-    // The settings stack takes what it needs (measured last frame); the activity log
-    // takes the rest, never less than a few lines. On a short window the settings
-    // scroll instead of pushing the export button off screen.
-    const float availH = ImGui::GetContentRegionAvail().y;
-    const float logMin = S(72), logHeader = S(30);
-    float settingsH = settingsContentH_ > 0 ? settingsContentH_ + S(8) : availH * 0.6f;
-    settingsH = std::min(settingsH, availH - footerHeight - logHeader - logMin);
-    settingsH = std::max(settingsH, S(120));
-    const float logHeight = std::max(logMin, availH - settingsH - footerHeight - logHeader);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
-    ImGui::BeginChild("##settings", ImVec2(width, settingsH), ImGuiChildFlags_None);
-    ImGui::PopStyleColor();
-    settingsScroll_ = ImGui::GetScrollY();
-
+    // The header never scrolls: the panel tabs and, in Edit, its sub-tabs (the cards below scroll).
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
         int tab = modsMode_ ? 4 : texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
@@ -2028,7 +2059,34 @@ void App::drawActions(float width) {
         }
         auto_.registerWidget("seg_panel");
     }
-    ImGui::Dummy(ImVec2(0, S(8)));
+    if (editMode_ && !modsMode_ && !texturesMode_ && !worldMode_ && documentLoaded()) {
+        // the tool and the Terrain tab follow each other
+        if (gizmoOp_ != lastGizmoOp_) {
+            if (gizmoOp_ == 4) editTab_ = 1;
+            else if (lastGizmoOp_ == 4 && editTab_ == 1) editTab_ = 0;
+            lastGizmoOp_ = gizmoOp_;
+        }
+        ImGui::Dummy(ImVec2(0, S(2)));
+        ImGui::SetCursorPosX(pad);
+        int tab = editTab_;
+        if (theme::segmented("##edittab", tab, {"Objects", "Terrain", "Actors", "Level"}, inner)) setEditTab(tab);
+        auto_.registerWidget("seg_edit_tab");
+    }
+    ImGui::Dummy(ImVec2(0, S(6)));
+    // The settings stack takes what it needs (measured last frame); the activity log
+    // takes the rest when open. On a short window it starts folded so the tools get the height.
+    const float availH = ImGui::GetContentRegionAvail().y;
+    const bool logOpen = activityOpen_ < 0 ? availH >= S(760) : activityOpen_ == 1;   // -1: by the height until toggled
+    const float logMin = logOpen ? S(72) : 0.0f, logHeader = S(30);
+    float settingsH = settingsContentH_ > 0 ? settingsContentH_ + S(8) : availH * 0.6f;
+    settingsH = std::min(settingsH, availH - footerHeight - logHeader - logMin);
+    settingsH = std::max(settingsH, S(120));
+    const float logHeight = std::max(logMin, availH - settingsH - footerHeight - logHeader);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg1));
+    ImGui::BeginChild("##settings", ImVec2(width, settingsH), ImGuiChildFlags_None);
+    ImGui::PopStyleColor();
+    settingsScroll_ = ImGui::GetScrollY();
+    ImGui::Dummy(ImVec2(0, S(4)));
 
     const float cardInner = inner - S(24);
     if (modsMode_) {
@@ -2153,20 +2211,6 @@ void App::drawActions(float width) {
     }
     theme::endCard();
 
-    ImGui::Dummy(ImVec2(0, S(8)));
-    ImGui::SetCursorPosX(pad);
-    theme::beginCard("##interface", inner);
-    theme::label("Interface");
-    {
-        char val[32];
-        std::snprintf(val, sizeof val, "%d %%", int(std::round(settings_.uiScale * 100.0f)));
-        theme::labelValue("Text size", val, cardInner);
-        ImGui::SetNextItemWidth(cardInner);
-        if (ImGui::SliderFloat("##uiscale", &settings_.uiScale, 0.8f, 1.5f, "")) settings_.uiScale = std::round(settings_.uiScale * 20.0f) / 20.0f;
-        auto_.registerWidget("slider_uiscale");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On top of the display DPI and the window size. Fonts rebuild when you let go.");
-    }
-    theme::endCard();
 
     ImGui::Dummy(ImVec2(0, S(6)));
     settingsContentH_ = ImGui::GetCursorPosY();
@@ -2239,11 +2283,29 @@ void App::drawActions(float width) {
     }
     }
 
-    // Activity log takes whatever height is left.
+    // Activity log takes whatever height is left; the header folds it (short windows start folded).
     ImGui::SetCursorPosX(pad);
-    ImGui::PushFont(fontBold_);
-    ImGui::TextColored(theme::vec(theme::Muted), "ACTIVITY");
-    ImGui::PopFont();
+    {
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::PushFont(fontBold_);
+        ImGui::TextColored(theme::vec(theme::Muted), logOpen ? "ACTIVITY  v" : "ACTIVITY  >");
+        ImGui::PopFont();
+        if (!logOpen && !log_.empty()) {
+            // folded: the newest line, cut to fit, in its level's colour
+            ImGui::SameLine(0, S(10));
+            ImGui::PushFont(fontSmall_);
+            const float room = inner - (ImGui::GetCursorScreenPos().x - at.x) - S(4);
+            const std::string last = theme::fitText(log_.back().second, room);
+            const int lvl = log_.back().first;
+            ImGui::TextColored(lvl == 1 ? theme::vec(theme::Warn) : lvl == 2 ? theme::vec(theme::Error) : lvl == 3 ? theme::vec(theme::Success) : theme::vec(theme::Faint), "%s", last.c_str());
+            ImGui::PopFont();
+        }
+        ImGui::SetCursorScreenPos(at);
+        if (ImGui::InvisibleButton("##activityhdr", ImVec2(inner, ImGui::GetTextLineHeightWithSpacing()))) activityOpen_ = logOpen ? 0 : 1;
+        auto_.registerWidget("btn_activity");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(logOpen ? "Fold the activity log" : "Show the activity log");
+    }
+    if (!logOpen) { ImGui::EndChild(); return; }
     ImGui::SetCursorPosX(pad);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(8.0f));

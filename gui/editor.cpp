@@ -371,11 +371,13 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
         const std::string target = doc_.placementSection().empty() ? std::string("NULL") : doc_.placementSection();
         const std::string mine = doc_.sectionOf(size_t(selectedThing_));
         if (lowerCopy(mine) != lowerCopy(target)) {
-            const std::string l = "Move selection to " + target + "  (from " + mine + ")";
+            const std::string full = "Move selection to " + target + "  (from " + mine + ")";
+            const std::string l = theme::fitText("Move selection to " + target, cardInner - S(20));
             if (theme::ghostButton(l.c_str(), ImVec2(cardInner, S(26)))) {
                 if (const auto n = doc_.moveToSection(size_t(selectedThing_), target)) { selectThing(int(*n)); sectionsDirty_ = true; }
             }
             auto_.registerWidget("btn_move_section");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", full.c_str());
         }
     }
     theme::endCard();
@@ -1094,7 +1096,8 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("combo_custom_donor");
     ImGui::PushFont(fontSmall_);
-    theme::hint(("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + customDonor_ + " with your texture) to game.bin; nothing retail is replaced. One-time backups. With a map open it joins that map's palette, ready to paint; otherwise add it from Terrain > Paint > Ground.").c_str());
+    theme::hintMore("A new ground theme from your picture; nothing retail is replaced.",
+                    ("The PNG is appended to textures.big and a new ENGINE_THEME (a copy of " + customDonor_ + " with your texture) to game.bin; nothing retail is replaced. One-time backups. With a map open it joins that map's palette, ready to paint; otherwise add it from Terrain > Paint > Ground.").c_str());
     ImGui::PopFont();
     drawPackDestination(cardInner);
     const bool can = customPng_[0] && customName_[0] && !ctxFuture_.valid();
@@ -1747,8 +1750,12 @@ void App::drawPenControls(float cardInner) {
             penTarget_ = std::clamp(penTarget_, 0.0f, 2048.0f);
             auto_.registerWidget("input_pen_target");
         }
-        row("Speed");
-        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "%.1f");
+        {
+            char v[16]; std::snprintf(v, sizeof v, "%.1f", penSpeed_);
+            theme::labelValue("Speed", v, cardInner);
+            ImGui::SetNextItemWidth(cardInner);
+        }
+        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
         auto_.registerWidget("slider_pen_speed");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise the ground under the cursor while held.");
     } else if (m == 3) {
@@ -2201,9 +2208,16 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##newlevelname", "Level name (letters, digits, _)", newLevelName_, sizeof newLevelName_);
     auto_.registerWidget("input_new_level_name");
-    const float half = (cardInner - S(6)) * 0.5f;
+    const float lblW = ImGui::CalcTextSize("X").x + S(6);
+    const float half = (cardInner - S(10) - 2 * lblW) * 0.5f;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::vec(theme::Muted), "X");
+    ImGui::SameLine(0, S(6));
     ImGui::SetNextItemWidth(half);
     ImGui::InputInt("##newlevelx", &newLevelX_, 32, 128);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("World origin X (32-unit grid).");
+    ImGui::SameLine(0, S(10));
+    ImGui::TextColored(theme::vec(theme::Muted), "Y");
     ImGui::SameLine(0, S(6));
     ImGui::SetNextItemWidth(half);
     ImGui::InputInt("##newlevely", &newLevelY_, 32, 128);
@@ -2518,19 +2532,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
-    // ---- sub-tabs: the tool and the Terrain tab follow each other
-    if (gizmoOp_ != lastGizmoOp_) {
-        if (gizmoOp_ == 4) editTab_ = 1;
-        else if (lastGizmoOp_ == 4 && editTab_ == 1) editTab_ = 0;
-        lastGizmoOp_ = gizmoOp_;
-    }
-    ImGui::SetCursorPosX(pad);
-    {
-        int tab = editTab_;
-        if (theme::segmented("##edittab", tab, {"Objects", "Terrain", "Actors", "Level"}, inner)) setEditTab(tab);
-        auto_.registerWidget("seg_edit_tab");
-    }
-    ImGui::Dummy(ImVec2(0, S(8)));
+    // (the Objects / Terrain / Actors / Level sub-tabs are in the panel's sticky header, drawActions)
 
     // ---- terrain brush
     if (editTab_ == 1 && !doc_.hasTerrain()) {
@@ -3700,7 +3702,10 @@ void App::drawFractalWindow() {
         ImGui::PopFont();
         if (fractalPreview_) {
             const float aspect = float(cx) / float(std::max(cy, 1));
-            const ImVec2 side = aspect >= 1.0f ? ImVec2(rightW, rightW / aspect) : ImVec2(std::min(rightW, rightW * 1.3f * aspect), std::min(rightW * 1.3f, rightW / aspect));
+            // Leave room for both actions and the footer even at large text sizes.
+            const float maxH = std::max(S(60), ImGui::GetMainViewport()->Size.y - S(60) - ImGui::GetCursorPosY() - S(130));
+            const float h = std::min({rightW / aspect, rightW * 1.3f, maxH});
+            const ImVec2 side(h * aspect, h);
             ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, side);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The fractal over this map in the vanilla dialog's colours: black at 0, then blue, cyan, yellow, green, pink and white\nby height (steps of 0.2), shaded by slope, with its 256-unit checkerboard.");
         }
@@ -3718,7 +3723,7 @@ void App::drawFractalWindow() {
     ImGui::Dummy(ImVec2(0, S(6)));
     ImGui::PushFont(fontSmall_);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
-    ImGui::TextColored(theme::vec(theme::Faint), "Ported from the vanilla editor's code (a hybrid multifractal over Perlin noise). It SETS every height, it does not add. One undo step (Ctrl+Z); Write terrain saves it.");
+    theme::hintMore("Replaces every height of the map; one undo step.", "Ported from the vanilla editor's code (a hybrid multifractal over Perlin noise). It SETS every height, it does not add. One undo step (Ctrl+Z); Write terrain saves it.");
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     endToolWindow();

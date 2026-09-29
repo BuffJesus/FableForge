@@ -28,12 +28,13 @@ def main():
         script = os.path.join(ROOT, "build", f"scale_tour_{tag}.txt")
         with open(script, "w", encoding="utf-8", newline="\n") as f:
             f.write(template.replace("@TAG@", tag).replace("@SCALE@", scale))
-        subprocess.run([gui, "--size", size, "--auto", script], cwd=ROOT, timeout=900)
-        log = open(script + ".log", encoding="utf-8", errors="replace").read()
-        result = "PASS" if "RESULT PASS" in log else "FAIL"
+        run = subprocess.run([gui, "--size", size, "--auto", script], cwd=ROOT, timeout=900)
+        log = open(script + ".log", encoding="utf-8", errors="replace").read() if os.path.exists(script + ".log") else ""
+        result = "PASS" if run.returncode == 0 and "RESULT PASS" in log else "FAIL"
         ok &= result == "PASS"
         print(f"{tag}: {result}")
         if result != "PASS":
+            print(f"    process exit: {run.returncode}")
             for line in log.splitlines():
                 if "FAIL" in line: print("   ", line.strip())
     return 0 if ok else 1

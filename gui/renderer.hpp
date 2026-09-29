@@ -5,6 +5,7 @@
 // 10.0 is enough (runs on WARP too), so it survives on very old machines.
 
 #include <cstdint>
+#include <algorithm>
 #include <d3d11.h>
 #include <string>
 #include <map>
@@ -50,6 +51,9 @@ public:
     Renderer& operator=(const Renderer&) = delete;
 
     bool init(ID3D11Device* device, ID3D11DeviceContext* context);
+    struct VideoMemoryInfo { bool valid = false; uint64_t budget = 0, usage = 0; };
+    VideoMemoryInfo queryVideoMemory() const;
+    bool worldMaterialBlend = true; // automation A/B diagnostic
     // Upload a scene (positions/normals/uv already in the scene's up-axis
     // space; the renderer expects Y-up). Frames the camera on the map.
     bool upload(const terrainexport::Scene& scene, Camera& camera, bool frameCamera = true);
@@ -63,14 +67,32 @@ public:
     bool uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
     // Adds the scene's batches to the layer without clearing it (the world view streams map tiles in).
     bool appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag = -1);
-    // Batches appended with a tag (the world view tags them per map) can be dropped or hidden together.
+    struct LayerVertex { float px, py, pz, nx, ny, nz, u, v, walk; };
+    struct PreparedBatch {
+        std::vector<LayerVertex> vertices;
+        std::vector<uint32_t> indices;
+        int image = -1;
+        bool alpha = false, water = false, terrainMorph = false;
+        float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+    };
+    // CPU only: safe on a streaming worker. GPU creation stays on the render thread.
+    static std::vector<PreparedBatch> prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    static PreparedBatch prepareWater(const terrainexport::WaterMesh& water);
+    bool appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible = true);
+    bool appendWorldWater(const terrainexport::WaterMesh& water, int tag, float worldX, float worldY);
+    size_t worldWaterBatches() const;
+    size_t layerTagBytes(int layer, int tag) const;
+    // Overview water stays visible during terrain detail transitions; dropping a tag removes both.
     void removeLayerTag(int layer, int tag);
     void setLayerTagVisible(int layer, int tag, bool visible);
+    void setLayerTagFade(int layer, int tag, float coverage, bool inverse = false);
     void clearLayer(int layer);
     bool hasLayer(int layer) const { return !layers_[layer].empty(); }
     bool showLayer[kLayers] = {true, true, true, true, true};
-    // The World tab's 3D view: draw only the world layer (no open map, things, water or overlays).
+    // The World tab's 3D view draws world tiles, persistent water and streamed detail.
     bool worldOnly = false;
+    bool worldCulling = true;
+    size_t worldDrawnBatches = 0, worldCulledBatches = 0;
     bool& showFoliage = showLayer[0];
     bool& showThings = showLayer[1];
     bool showWater = true;
@@ -126,7 +148,7 @@ public:
     // Renders into the offscreen target at the given size and returns its SRV
     // (valid until the next render call).
     ID3D11ShaderResourceView* render(uint32_t width, uint32_t height, const Camera& camera,
-                                     ViewMode mode, float time);
+                                    ViewMode mode, float time, float nearPlane = 0.0f);
 
     const char* error() const { return error_; }
 
@@ -155,8 +177,23 @@ private:
     ID3D11Buffer* waterIb_ = nullptr;
     uint32_t waterIndexCount_ = 0;
     ID3D11ShaderResourceView* albedo_ = nullptr;
-    struct FoliageBatch { ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr; bool alpha = false; int tag = -1; bool visible = true; };
+    struct FoliageBatch {
+        ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr;
+        ID3D11Buffer* ib = nullptr;
+        ID3D11ShaderResourceView* coarseSrv = nullptr; // retained shared overview albedo; no duplicate allocation
+        bool alpha = false; int tag = -1; bool visible = true; bool water = false;
+        size_t resourceBytes = 0; // VB/IB and RGBA mip-0 payload, excluding driver overhead
+        bool terrainMorph = false;
+        float coverage = 1.0f;
+        bool inverseFade = false;
+        float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+        void include(float x, float y, float z) {
+            const float p[3] = {x, y, z};
+            for (int i = 0; i < 3; ++i) { lo[i] = std::min(lo[i], p[i]); hi[i] = std::max(hi[i], p[i]); }
+        }
+    };
     std::vector<FoliageBatch> layers_[kLayers];
+    void drawBatch(const FoliageBatch& batch);
     struct GpuMesh {
         std::vector<FoliageBatch> parts;   // vertex buffers in mesh-local Fable axes (cm)
         std::vector<float> tris;           // CPU copy for picking: 9 floats per triangle

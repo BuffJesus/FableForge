@@ -17,6 +17,7 @@ wait_foliage
 frames 2
 gizmo 0
 frames 3
+clear_toasts
 screenshot docs/screenshot_oakvale.png
 # 2. Terrain tab: the sculpt brush over Greatwood's lake shore
 select Greatwood_1
@@ -31,6 +32,7 @@ camera 48 96 45 0.9 0.85 95
 frames 2
 terrain_stroke 48 96 1
 frames 3
+clear_toasts
 screenshot docs/screenshot_greatwood.png
 # 3. The Arena from the exporter side: textured preview, orbited
 edit 0
@@ -41,5 +43,6 @@ wait_foliage
 frames 2
 camera 32 38 91 2.4 0.92 58
 frames 3
+clear_toasts
 screenshot docs/screenshot_arena.png
 quit

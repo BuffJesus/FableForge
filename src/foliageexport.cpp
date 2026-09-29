@@ -1,3 +1,4 @@
+#include "profile.hpp"
 #include "foliageexport.hpp"
 
 #include <algorithm>
@@ -72,6 +73,7 @@ struct MeshCache {
     }
 
     const forge::meshpreview::Geometry* get(uint32_t id, std::string& err) {
+    FORGE_ZONE("Mesh cache lookup / decode");
         std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
         if (hit != decoded.end()) return &hit->second;
@@ -423,6 +425,7 @@ size_t Scene::triangleCount() const {
 }
 
 Scene load(const std::string& mapName, const Options& options, const te::Context& context) {
+    FORGE_ZONE("Foliage decode");
     Scene scene;
     scene.mapName = mapName;
     const auto clock0 = std::chrono::steady_clock::now();

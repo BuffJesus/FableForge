@@ -1,0 +1,58 @@
+# Read-only return trip: inactive GPU detail is reused without another decode/upload.
+wait_maps
+wait_ready
+world_memory_sample 8589934592 2147483648
+set world_auto_detail 0
+set world_detail_limit 1
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_camera 3515 815 5 0.8 0.62 200
+wait_world_tiles
+wait_world_detail
+assert_state world_detail_maps 1
+assert_state world_detail_loads 1
+world_look 2.4 0.01
+frames 150
+wait_world_detail
+assert_state world_detail_loads 1
+assert_state world_detail_cache_hits 0
+world_look -1.2 -0.1
+frames 150
+wait_world_detail
+assert_state world_detail_loads 1
+assert_state world_detail_cache_hits 0
+world_camera 3515 815 2000 0.8 0.62 200
+frames 250
+assert_state world_detail_maps 0
+assert_state world_detail_cached_maps 1
+dump_state
+world_camera 3515 815 5 0.8 0.62 200
+frames 5
+wait_world_detail
+assert_state world_detail_maps 1
+assert_state world_detail_cache_hits 1
+assert_state world_detail_loads 1
+assert_state world_detail_cached_maps 0
+assert_state world_detail_cached_bytes 0
+# Explicitly disabling detail invalidates all retained maps.
+world_camera 3515 815 2000 0.8 0.62 200
+frames 250
+assert_state world_detail_cached_maps 1
+set world_detail 0
+assert_state world_detail_cached_maps 0
+assert_state world_detail_cached_bytes 0
+world_camera 3515 815 5 0.8 0.62 200
+set world_detail 1
+wait_world_detail
+assert_state world_detail_loads 2
+assert_state world_detail_cache_hits 1
+world_camera 3515 815 2000 0.8 0.62 200
+frames 250
+assert_state world_detail_cached_maps 1
+world_tab 0
+assert_state world_detail_cached_bytes 0
+assert_state world_detail_maps 0
+set world_3d 0
+assert_state world_detail_cached_bytes 0
+quit

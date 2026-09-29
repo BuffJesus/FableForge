@@ -1,0 +1,43 @@
+# Read-only, screenshot-free world streaming across regions and altitudes.
+wait_profiler
+wait_maps
+wait_ready
+set world_auto_detail 0
+set world_detail 0
+world_tab 1
+wait_world_tiles
+set world_3d 1
+wait_world_tiles
+world_camera 3515 815 5 0.8 0.62 8000
+world_pose 3515 815 60 0.8 0.4
+profile_mark start_oakvale_load
+set world_detail 1
+wait_world_detail
+profile_mark start_oakvale_ready
+dump_state
+frames 15
+world_pose 2535 1950 120 1.2 0.5
+profile_mark oakvale_load
+wait_world_detail
+profile_mark oakvale_ready
+dump_state
+frames 15
+world_pose 2700 4400 7000 0.8 1.4
+profile_mark overview_climb
+frames 30
+wait_world_detail
+profile_mark overview_ready
+world_pose 3430 3550 80 0.8 0.4
+profile_mark guild_load
+wait_world_detail
+profile_mark guild_ready
+dump_state
+frames 15
+world_pose 3100 3250 450 1.4 0.8
+profile_mark greatwood_load
+wait_world_detail
+profile_mark greatwood_ready
+dump_state
+frames 15
+profile_mark route_end
+quit

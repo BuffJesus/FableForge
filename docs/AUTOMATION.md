@@ -68,6 +68,12 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `open_world <path.wld>` | File > Open world without the dialog (another world's maps join the list, grouped by region) |
 | `clear_toasts` | drop the corner notices (clean screenshots for the guide) |
 | `set world_3d 0\|1`, `set world_terrain 0\|1`, `wait_world_tiles`, `world_camera <x> <y> <height> <yaw> <pitch> <distance>`, `world_open_3d <map>` | the World tab's 2D map with ground tiles / the 3D fly-over of every map; state `world_3d`, `world_tiles`, `world_tiles_total`, `world_tiles_busy`, `world_hover` |
+| `assert_world_ground <x> <y> <map or ->` | Assert the world tile picked at a Fable-space point, including pending moves; `-` means no tile. |
+| `set world_detail 0\|1`, `wait_world_detail`, `set world_auto_detail 0\|1`, `set world_culling 0\|1` | Streaming, adaptive budget and diagnostic culling control. State: `world_detail_maps`, `world_water_batches` (resident overview water, independent of detail), `world_detail_budget`, `world_drawn_batches`, `world_culled_batches`. `set preview_water 0\|1` controls persistent world water; its checkbox remains available with detail off. |
+| `wait_profiler`, `profile_mark <name>` | Wait for a local Tracy recorder (requires a profiling build); label a route phase. See `tools/profile_world.py` and `docs/PROFILING.md`. |
+| `world_look <yaw> <pitch>`, `world_eye <x> <y> <height>` | Rotate in place or translate the eye directly without changing orbit focus distance. Angles are radians; eye coordinates use Fable axes. |
+| `world_transition <0..1>` | Set the current detail transition fraction for the next frames (then normal animation resumes); used for midpoint screenshots. |
+| `set world_detail_limit <1..12>` | Set the same map-count ceiling as the UI. Cache diagnostics: `world_detail_cached_maps`, `world_detail_cached_bytes`, `world_detail_cache_budget`, `world_detail_cache_hits`, `world_detail_loads`. Loads/hits are cumulative for the session. |
 | `reveal <widget>` | scroll the panel holding a registered widget so it is on screen (before a `screenshot`) |
 | `owner_apply` | vanilla O: the selection's Player becomes the owner combo's value (Auto = 4); state `selected_player` |
 | `daynight 0\|1\|2` | the selected creature: day and night / day only / night only (moves it to `<quest>%DayOnly` / `%NightOnly`); state `selected_section` |
@@ -107,6 +113,12 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 
 ## Registered widgets
 
+`wait_world_tiles` waits for worker completion and overview texture uploads;
+in 3D it also waits for overview geometry publication. `wait_world_detail` waits
+for demand, worker preparation, staged uploads and all resident fades to settle.
+Timing routes avoid screenshot readbacks. World capture and repeated streaming
+scripts hide their windows unless passed `--show`, but still render on the GPU.
+
 `btn_change_install`, `input_filter`, `group_<Group>`, `row_<key>`, `row_selected`,
 `viewport`, `chip_textured|wireframe|walkable|height|reset`, `seg_format`, `seg_up`,
 `toggle_textures`, `toggle_layers`, `toggle_walkable`, `slider_texels`, `slider_tile`,
@@ -129,6 +141,54 @@ heights with the LEV; see docs/EDITOR.md "Testing in the running game without a 
 `python tools/verify_engine_lzo.py` (in `check_all`) decodes our LZO frames with the
 engine's own assembly decoder under emulation.
 
+## Hidden world-flight diagnostics
+
+The default `--route world` traverses the full 3D world across several regions,
+with absolute heights from 50 to 7000, climbs, descents and turns. For example:
+`python tools/test_world_flight.py --route world --continuous --focus-distance 20 --sample-step 12 --output build/world-flight-global`.
+`--continuous` saves every live-route frame and matching world state, then ranks
+temporary coverage losses and large changes at unchanged camera poses. It retains
+only a three-frame image window during analysis. `--focus-distance 20` tests free
+flight after zooming close and adds an identical-pose reference at orbit distance
+8000. `--coarse-only` isolates terrain/water visibility from object streaming.
+Add `--assert-focus-coverage` to fail on more than 64 missing pixels in any paired
+focus-distance view (allows small silhouette shifts from floating-point camera
+matrices). Reports also count colour changes above 40/255 to expose focus-dependent
+haze; animated water means RGB equality is not required.
+
+`capture_begin <path-prefix>` / `capture_end` capture consecutive rendered frames
+without pausing command execution, up to a 2000-frame guard. An explicit screenshot
+inside that interval is also saved, so it cannot leave a hole in the sequence.
+`world_pose x y height [yaw pitch]` uses absolute coordinates without resetting
+orbit distance or forcing detail demand. `wait_world_detail` refreshes demand once
+on entry and accepts an empty settled working set at high altitude or over voids.
+Screenshot readbacks alter timing; these captures cannot establish frame rates.
+
+`python tools/test_world_flight.py --route start --output build/world-flight-start`
+flies a repeatable ground-relative route across Start Oakvale. Use `--route oakvale`
+for adult Oakvale, `--stress` for a one-map detail budget and repeated altitude
+transitions with a long orbit distance, and `--sample-step 2` for denser captures.
+Requires Pillow and NumPy. The child starts hidden at below-normal CPU priority,
+1280x800, with `--auto-frame-ms 33` pacing (other automation defaults to 4 ms;
+accepted range 4..100). It still uses the GPU. A 50 ms watchdog checks only the
+child's windows and terminates it if any is visible or foreground. Its JSON report
+records violations; it never sends OS input or changes game focus.
+
+Each run saves its exact script, timestamped state log, live/reference screenshots,
+contact sheet, GIF and JSON coverage report. Live frames are compared against both
+coarse and settled terrain at the same poses. Coarse and detailed settled passes
+are also repeated with culling disabled. A synthetic missing-patch positive control
+checks the detector. Suspect pixels are highlighted red. These are diagnostic
+candidates: silhouettes and map selection can differ, and screenshot sampling can
+miss brief flashes. This is not an FPS benchmark or an adaptive-budget test.
+
+`world_eye_ground x y clearance [yaw pitch]` positions the eye relative to overview
+terrain, optionally turning it, without forcing the detail-demand timer. It fails
+outside known terrain. Overview height is approximate; this does not imply
+collision clearance from full-detail terrain or buildings. `dump_state` includes
+eye position, ground clearance, yaw/pitch, active detail names, load/cache counts
+and streaming state. Automation does not persist settings or modify the install.
+
 ## Suites
 
 * `tests/ui/editor.txt` — Edit mode: select, move, rotate, scale, duplicate, undo back to
@@ -143,3 +203,28 @@ engine's own assembly decoder under emulation.
 * `tests/ui/noinstall.txt` — run with `--install <bogus>`: honest empty state, no crash.
 
 `python tools/check_all.py` runs the unit tests, the retail CLI smoke and all UI suites.
+
+## Fixed material transitions
+
+For fixed-pose material diagnostics, `world_transition_hold <0..1>` holds the
+rendered detail fraction without stopping residency bookkeeping;
+`world_transition_hold auto` resumes normal rendering. `set world_material_blend
+0|1` is an automation A/B switch (normal default 1). The hidden diagnostic
+`tools/test_world_material_transition.py --output <dir>` captures two world poses
+in eleven steps with water hidden. Generate the baseline with `--legacy-material`,
+then pass its directory via `--baseline` to check improved publication continuity
+and pixel-identical full-detail endpoints. Its fixed window size avoids Windows'
+variable default placement affecting the comparison. It is not an FPS test.
+
+## GPU memory pressure injection
+
+`world_memory_sample <budget_bytes> <usage_bytes>` supplies synthetic DXGI telemetry
+to the whole-world inactive-cache policy. `world_memory_sample unavailable` tests
+query failure; `world_memory_sample auto` restores real adapter queries. Each
+command requests a sample on the next editor frame. This allocates no VRAM and
+does not alter Windows budgets. Normal operation samples once per second.
+`world_gpu_memory_*`, `world_detail_cache_budget`, and `world_memory_evictions`
+in `dump_state` expose the result. `tests/ui/world_memory_pressure.txt` exercises
+eviction, active-map retention, unavailable telemetry, and gradual recovery.
+`tools/test_world_flight.py --memory-pressure` runs its visual flight comparisons
+with a persistently exhausted synthetic budget, including the broad world route.

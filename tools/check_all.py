@@ -30,8 +30,7 @@ def main():
     ok = True
     if not a.no_build:
         ok &= run("build", ["cmake", "--build", "build"], capture_output=True)
-    ok &= run("unit tests", [os.path.join("build", "fableforge_tests.exe")], capture_output=True)
-    ok &= run("lzo1x vs minilzo", [os.path.join("build", "fableforge_lzo_tests.exe")], capture_output=True)
+    ok &= run("CTest (core, rows, geometry, LZO)", ["ctest", "--test-dir", "build", "--output-on-failure"], capture_output=True)
     ok &= run("lzo1x vs the engine's asm decoder", [sys.executable, "tools/verify_engine_lzo.py"], capture_output=True)
     ok &= run(f"retail smoke ({a.count} maps)", [sys.executable, "tools/retail_smoke.py", "--count", str(a.count)], capture_output=True)
     ok &= run("ui smoke", [sys.executable, "tools/ui_smoke.py"], capture_output=True)

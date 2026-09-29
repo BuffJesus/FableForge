@@ -1,4 +1,6 @@
+#include "profile.hpp"
 #include "terrainexport.hpp"
+#include "rowexecutor.hpp"
 
 #include <algorithm>
 #include <array>
@@ -71,21 +73,16 @@ void sampleWrap(const Image& img, float u, float v, float out[4]) {
     }
 }
 
-// Run `fn(row)` for every row 0..rows-1 on hardware_concurrency threads (contiguous
-// bands). The albedo bakes below are pure per row: they only read the level / scene /
-// texture images and write their own texels.
+// Pure per-row bakes share a bounded pool across concurrently loading maps.
+RowExecutor& terrainRows() {
+    static RowExecutor pool(RowExecutor::defaultWorkers(std::thread::hardware_concurrency()));
+    return pool;
+}
+
 template <typename Fn>
 void parallelRows(uint32_t rows, Fn&& fn) {
-    const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
-    const unsigned threads = std::min<unsigned>(hw, std::max<uint32_t>(1, rows / 8));
-    if (threads <= 1) { for (uint32_t r = 0; r < rows; ++r) fn(r); return; }
-    std::vector<std::thread> pool;
-    for (unsigned t = 0; t < threads; ++t)
-        pool.emplace_back([&, t]() {
-            const uint32_t r0 = uint32_t(uint64_t(rows) * t / threads), r1 = uint32_t(uint64_t(rows) * (t + 1) / threads);
-            for (uint32_t r = r0; r < r1; ++r) fn(r);
-        });
-    for (auto& th : pool) th.join();
+    FORGE_ZONE("Terrain bake rows / join");
+    terrainRows().run(rows, std::forward<Fn>(fn));
 }
 
 Image rgbaImage(uint32_t w, uint32_t h, std::vector<uint8_t> rgba, std::string name) {
@@ -139,6 +136,7 @@ bool worldOrigin(const fs::path& gameRoot, const std::string& mapName, float& x,
 // ----------------------------------------------------------------- geometry
 
 Scene buildMesh(const forge::lev::File& level, const Options& options) {
+    FORGE_ZONE("Terrain grid mesh");
     Scene scene;
     scene.sourceName = level.source();
     scene.mapWidth = level.width();
@@ -426,6 +424,7 @@ struct TextureCache {
     }
 
     const Image* get(uint32_t id, const std::function<void(const std::string&)>& warn) {
+    FORGE_ZONE("Texture cache lookup / decode");
         if (id == 0) return nullptr;
         std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
@@ -670,6 +669,7 @@ bool Context::load(const fs::path& gameRoot, const fs::path& texturesBig, std::s
 // where it is less than 2 units deep the in-game shader fades it out, which is
 // what makes shores read as shores. The fade is exported as COLOR_0 alpha.
 void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int, size_t>& slotToLayer, const Options& options) {
+    FORGE_ZONE("Water build");
     const int cx = level.cellsX(), cy = level.cellsY();
     if (cx <= 1 || cy <= 1) return;
     std::vector<float> depth(size_t(cx) * cy, 0.0f);
@@ -749,6 +749,7 @@ void buildWater(const forge::lev::File& level, Scene& scene, const std::map<int,
 }
 
 Scene buildScene(const forge::lev::File& level, const Options& options, const Context* context) {
+    FORGE_ZONE("Terrain build / texture bake");
     Scene scene = buildMesh(level, options);
     if (!options.textures) return scene;
 
@@ -831,6 +832,82 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
         }
     }
 
+    // A partial STB bake does not define a colour outside its coverage. Reuse
+    // the existing LEV-theme sampler for those texels, as for maps with no STB.
+    const int themeColumns = level.cellsX();
+    auto imageFor = [&](uint32_t id) -> const Image* {
+        const auto found = imgs.find(id);
+        return found == imgs.end() ? nullptr : found->second;
+    };
+    auto sampleTheme = [&](float wx, float wy, uint8_t* out) {
+        const int cx = themeColumns;
+        const int ix = std::min(int(wx), scene.mapWidth - 1), iy = std::min(int(wy), scene.mapHeight - 1);
+        const float fx = wx - float(ix), fy = wy - float(iy);
+        const float tile = options.tileSize > 0 ? options.tileSize : 4.0f;
+        const float gain = options.gain > 0 ? options.gain : 1.0f;
+        struct Acc { int slot; float w; };
+        const Vertex* c[4] = {&scene.vertices[size_t(iy) * cx + ix],
+                              &scene.vertices[size_t(iy) * cx + ix + 1],
+                              &scene.vertices[size_t(iy + 1) * cx + ix],
+                              &scene.vertices[size_t(iy + 1) * cx + ix + 1]};
+        const float bw[4] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
+
+        // Slope from the cell's corner heights (Fable-space heights).
+        const float h00 = level.heightAt(ix, iy), h10 = level.heightAt(ix + 1, iy);
+        const float h01 = level.heightAt(ix, iy + 1), h11 = level.heightAt(ix + 1, iy + 1);
+        const float dzdx = ((h10 - h00) + (h11 - h01)) * 0.5f;
+        const float dzdy = ((h01 - h00) + (h11 - h10)) * 0.5f;
+        const float slope = std::sqrt(dzdx * dzdx + dzdy * dzdy);
+        const float cliff = smoothstep(options.cliffStartSlope, options.cliffFullSlope, slope);
+        const float z = h00 + (h10 - h00) * fx + (h01 - h00) * fy +
+                        (h00 - h10 - h01 + h11) * fx * fy;
+
+        std::array<Acc, 12> acc{};
+        int n = 0;
+        for (int k = 0; k < 4; ++k)
+            for (int s = 0; s < 3; ++s) {
+                const float w = bw[k] * float(c[k]->themeWeight[s]) / 255.0f;
+                if (w <= 0) continue;
+                const int slot = c[k]->themeIndex[s];
+                int j = 0;
+                for (; j < n; ++j) if (acc[j].slot == slot) { acc[j].w += w; break; }
+                if (j == n) acc[n++] = {slot, w};
+            }
+
+        float rgb[3] = {0, 0, 0}, total = 0;
+        for (int j = 0; j < n; ++j) {
+            const Image* base = nullptr; const Image* cl = nullptr;
+            auto it = slotToLayer.find(acc[j].slot);
+            if (it != slotToLayer.end()) {
+                const ThemeLayer& L = scene.themes[it->second];
+                base = L.baseTexture ? imageFor(L.baseTexture) : nullptr;
+                cl = L.cliffTexture ? imageFor(L.cliffTexture) : nullptr;
+            }
+            if (!base && !cl) { // unresolved: neutral grey so the map still reads
+                rgb[0] += 128 * acc[j].w; rgb[1] += 128 * acc[j].w; rgb[2] += 128 * acc[j].w;
+                total += acc[j].w;
+                continue;
+            }
+            float sb[4] = {128, 128, 128, 255}, sc[4] = {128, 128, 128, 255};
+            if (base) sampleWrap(*base, wx / tile, wy / tile, sb);
+            if (cl) {
+                // Project the cliff texture along the horizontal axis that runs
+                // across the slope, with height as the second coordinate.
+                const float along = std::fabs(dzdx) >= std::fabs(dzdy) ? wy : wx;
+                sampleWrap(*cl, along / tile, z / tile, sc);
+            } else std::memcpy(sc, sb, sizeof sc);
+            if (!base) std::memcpy(sb, sc, sizeof sb);
+            for (int i = 0; i < 3; ++i)
+                rgb[i] += (sb[i] * (1 - cliff) + sc[i] * cliff) * acc[j].w;
+            total += acc[j].w;
+        }
+        if (total > 0)
+            for (int i = 0; i < 3; ++i)
+                out[i] = uint8_t(std::clamp(rgb[i] / total * gain + 0.5f, 0.0f, 255.0f));
+        else out[0] = out[1] = out[2] = 128;
+        out[3] = 255;
+    };
+
     // 4a. The engine's own bake: STB foreground passes. Each 16x16 patch lists its
     // texture passes; a pass has a mapping direction (0 flat: u = x/8, v = y/8;
     // 1..4: u = -x, +x, +y, -y over 8, v = -z/8), a texture id and the vertices it
@@ -842,7 +919,8 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
     // normalised weighted sum, per texel, so the cliff projections land exactly
     // where the engine puts them.
     if (options.engineLayers && !options.mapName.empty()) {
-        const auto fl = stbterrain::loadLayers(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight);
+        stbterrain::BackgroundAlbedo bg;
+        const auto fl = stbterrain::loadLayers(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight, &bg);
         if (fl.found && !fl.layers.empty()) {
             const int tpc = std::max(options.texelsPerCell, 1);
             const int cx = level.cellsX(), cy = level.cellsY();
@@ -891,7 +969,6 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
             const float tile = options.tileSize > 0 ? options.tileSize : 8.0f;
             const float gain = options.gain > 0 ? options.gain : 1.0f;
             // Fallback colour where no pass covers a texel: the engine's background bake.
-            const auto bg = stbterrain::backgroundAlbedo(options.gameRoot, options.mapName, scene.mapWidth, scene.mapHeight);
             std::atomic<int> uncovered{0};
             parallelRows(H, [&](uint32_t py) {
                 const float wy = (float(py) + 0.5f) / float(tpc);
@@ -937,16 +1014,23 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
                     uint8_t* out = &scene.albedo.rgba[(size_t(py) * W + px) * 4];
                     if (total > 0.02f) {
                         for (int i = 0; i < 3; ++i) out[i] = uint8_t(std::clamp(rgb[i] / total * gain + 0.5f, 0.0f, 255.0f));
-                    } else if (bg.found && bg.image.width && bg.image.height) {
-                        const uint32_t bx = std::min(uint32_t(wx * bg.texelsPerCell), bg.image.width - 1), by = std::min(uint32_t(wy * bg.texelsPerCell), bg.image.height - 1);
-                        const uint8_t* src = &bg.image.rgba[(size_t(by) * bg.image.width + bx) * 4];
-                        for (int i = 0; i < 3; ++i) out[i] = uint8_t(std::clamp(src[i] * gain + 0.5f, 0.0f, 255.0f));
+                    } else {
+                        const uint8_t* src = nullptr;
+                        if (bg.found && bg.image.width && bg.image.height) {
+                            const uint32_t bx = std::min(uint32_t(wx * bg.texelsPerCell), bg.image.width - 1), by = std::min(uint32_t(wy * bg.texelsPerCell), bg.image.height - 1);
+                            src = &bg.image.rgba[(size_t(by) * bg.image.width + bx) * 4];
+                        }
+                        // Alpha marks coverage, not black terrain. An uncovered
+                        // background pixel must not become an opaque black patch.
+                        if (src && src[3]) {
+                            for (int i = 0; i < 3; ++i) out[i] = uint8_t(std::clamp(src[i] * gain + 0.5f, 0.0f, 255.0f));
+                        } else sampleTheme(wx, wy, out);
                         ++uncovered;
-                    } else { out[0] = out[1] = out[2] = 128; ++uncovered; }
+                    }
                     out[3] = 255;
                 }
             });
-            if (options.log && uncovered) options.log("  " + std::to_string(uncovered.load()) + " texels had no pass and took the background bake");
+            if (options.log && uncovered) options.log("  " + std::to_string(uncovered.load()) + " texels had no pass and used background coverage or the LEV theme");
             scene.hasAlbedo = true;
             scene.engineBake = true;
             scene.enginePasses = passCount;
@@ -957,85 +1041,15 @@ Scene buildScene(const forge::lev::File& level, const Options& options, const Co
 
     // 4b. Bake the albedo from the LEV theme blend (loose .lev / no STB).
     const int tpc = std::max(options.texelsPerCell, 1);
-    const int cx = level.cellsX();
     const uint32_t W = uint32_t(scene.mapWidth) * tpc, H = uint32_t(scene.mapHeight) * tpc;
     if (W == 0 || H == 0) return scene;
     if (options.log) options.log("baking " + std::to_string(W) + "x" + std::to_string(H) + " albedo");
     scene.albedo = rgbaImage(W, H, std::vector<uint8_t>(size_t(W) * H * 4, 255), "albedo");
-    const float tile = options.tileSize > 0 ? options.tileSize : 4.0f;
-    const float gain = options.gain > 0 ? options.gain : 1.0f;
-
-    struct Acc { int slot; float w; };
     parallelRows(H, [&](uint32_t py) {
         const float wy = (float(py) + 0.5f) / float(tpc);
-        const int iy = std::min(int(wy), scene.mapHeight - 1);
-        const float fy = wy - float(iy);
         for (uint32_t px = 0; px < W; ++px) {
             const float wx = (float(px) + 0.5f) / float(tpc);
-            const int ix = std::min(int(wx), scene.mapWidth - 1);
-            const float fx = wx - float(ix);
-
-            const Vertex* c[4] = {&scene.vertices[size_t(iy) * cx + ix],
-                                  &scene.vertices[size_t(iy) * cx + ix + 1],
-                                  &scene.vertices[size_t(iy + 1) * cx + ix],
-                                  &scene.vertices[size_t(iy + 1) * cx + ix + 1]};
-            const float bw[4] = {(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy};
-
-            // Slope from the cell's corner heights (Fable-space heights).
-            const float h00 = level.heightAt(ix, iy), h10 = level.heightAt(ix + 1, iy);
-            const float h01 = level.heightAt(ix, iy + 1), h11 = level.heightAt(ix + 1, iy + 1);
-            const float dzdx = ((h10 - h00) + (h11 - h01)) * 0.5f;
-            const float dzdy = ((h01 - h00) + (h11 - h10)) * 0.5f;
-            const float slope = std::sqrt(dzdx * dzdx + dzdy * dzdy);
-            const float cliff = smoothstep(options.cliffStartSlope, options.cliffFullSlope, slope);
-            const float z = h00 + (h10 - h00) * fx + (h01 - h00) * fy +
-                            (h00 - h10 - h01 + h11) * fx * fy;
-
-            std::array<Acc, 12> acc{};
-            int n = 0;
-            for (int k = 0; k < 4; ++k)
-                for (int s = 0; s < 3; ++s) {
-                    const float w = bw[k] * float(c[k]->themeWeight[s]) / 255.0f;
-                    if (w <= 0) continue;
-                    const int slot = c[k]->themeIndex[s];
-                    int j = 0;
-                    for (; j < n; ++j) if (acc[j].slot == slot) { acc[j].w += w; break; }
-                    if (j == n) acc[n++] = {slot, w};
-                }
-
-            float rgb[3] = {0, 0, 0}, total = 0;
-            for (int j = 0; j < n; ++j) {
-                const Image* base = nullptr; const Image* cl = nullptr;
-                auto it = slotToLayer.find(acc[j].slot);
-                if (it != slotToLayer.end()) {
-                    const ThemeLayer& L = scene.themes[it->second];
-                    base = L.baseTexture ? imgs[L.baseTexture] : nullptr;
-                    cl = L.cliffTexture ? imgs[L.cliffTexture] : nullptr;
-                }
-                if (!base && !cl) { // unresolved: neutral grey so the map still reads
-                    rgb[0] += 128 * acc[j].w; rgb[1] += 128 * acc[j].w; rgb[2] += 128 * acc[j].w;
-                    total += acc[j].w;
-                    continue;
-                }
-                float sb[4] = {128, 128, 128, 255}, sc[4] = {128, 128, 128, 255};
-                if (base) sampleWrap(*base, wx / tile, wy / tile, sb);
-                if (cl) {
-                    // Project the cliff texture along the horizontal axis that runs
-                    // across the slope, with height as the second coordinate.
-                    const float along = std::fabs(dzdx) >= std::fabs(dzdy) ? wy : wx;
-                    sampleWrap(*cl, along / tile, z / tile, sc);
-                } else std::memcpy(sc, sb, sizeof sc);
-                if (!base) std::memcpy(sb, sc, sizeof sb);
-                for (int i = 0; i < 3; ++i)
-                    rgb[i] += (sb[i] * (1 - cliff) + sc[i] * cliff) * acc[j].w;
-                total += acc[j].w;
-            }
-            uint8_t* out = &scene.albedo.rgba[(size_t(py) * W + px) * 4];
-            if (total > 0)
-                for (int i = 0; i < 3; ++i)
-                    out[i] = uint8_t(std::clamp(rgb[i] / total * gain + 0.5f, 0.0f, 255.0f));
-            else out[0] = out[1] = out[2] = 128;
-            out[3] = 255;
+            sampleTheme(wx, wy, &scene.albedo.rgba[(size_t(py) * W + px) * 4]);
         }
     });
     scene.hasAlbedo = true;

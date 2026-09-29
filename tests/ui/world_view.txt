@@ -2,6 +2,7 @@
 # the 2D World map, the 3D fly-over, and a double-click taking a map into the editor with the camera kept.
 wait_maps
 wait_ready
+set world_auto_detail 0
 world_tab 1
 frames 5
 wait_world_tiles
@@ -9,19 +10,28 @@ frames 3
 assert_state world_tiles_busy 0
 assert_state world_loaded 1
 assert_state world_tiles 400
+assert_world_ground -100 -100 -
+assert_world_ground 3088 2896 TeleporterGreatwood
+world_move TeleporterGreatwood 2048 8064
+assert_world_ground 2064 8080 TeleporterGreatwood
+world_revert
+assert_world_ground 2064 8080 -
+assert_world_ground 3088 2896 TeleporterGreatwood
 clear_toasts
 mouse_move 20 20
 frames 3
 screenshot build/ui/world_2d_tiles.png
 set world_3d 1
+wait_world_tiles
 frames 10
 assert_state world_3d 1
 clear_toasts
 screenshot build/ui/world_3d_overview.png
-# low over Oakvale, looking across it
+# low over Greatwood, looking across it (historical screenshot filename)
 world_camera 3400 3500 40 2.4 0.35 500
 frames 10
 wait_world_detail
+assert_state world_detail_maps 6
 frames 20
 clear_toasts
 screenshot build/ui/world_3d_oakvale.png

@@ -4113,8 +4113,11 @@ std::vector<FramedBlock> walkFramedBlocks(const std::vector<uint8_t>& chunk) {
     // Grow-only, uninitialised scratch: thousands of garbage offsets pass the
     // gates below with a huge uncompLen, and a zero-filling resize per attempt
     // cost 23 GB of memset on one retail chunk (0.9 s of a 1.0 s foliage load).
-    static thread_local std::unique_ptr<uint8_t[]> scratch;
-    static thread_local size_t scratchCap = 0;
+    // Own it for this scan, not in thread-local storage: streamed map workers
+    // exposed heap corruption during MinGW thread-exit TLS destruction. Retain
+    // the uninitialised grow-only allocation without a cross-call TLS lifetime.
+    std::unique_ptr<uint8_t[]> scratch;
+    size_t scratchCap = 0;
     const size_t n = chunk.size();
     for (size_t off = 0; off + 8 < n;) {
         uint32_t uncompLen = getU32(chunk.data() + off);

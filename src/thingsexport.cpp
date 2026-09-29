@@ -1,3 +1,4 @@
+#include "profile.hpp"
 #include "thingsexport.hpp"
 
 #include <algorithm>
@@ -99,6 +100,7 @@ void childTransform(const float d[12], const fe::Instance& parent,
 }
 
 fe::Scene load(const std::string& mapName, const Options& options, const te::Context& context, Stats* statsOut) {
+    FORGE_ZONE("Placed objects decode");
     fe::Scene scene;
     scene.mapName = mapName;
     scene.rootName = "Things";

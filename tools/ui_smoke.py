@@ -52,7 +52,9 @@ def main():
     a = ap.parse_args()
     os.makedirs(os.path.join("build", "ui"), exist_ok=True)
     for f in os.listdir(os.path.join("build", "ui")):
-        os.remove(os.path.join("build", "ui", f))
+        path = os.path.join("build", "ui", f)
+        if os.path.isfile(path):
+            os.remove(path)  # Keep other suites' nested evidence directories.
 
     t0 = time.time()
     r = subprocess.run([a.exe, "--auto", a.script], timeout=600)

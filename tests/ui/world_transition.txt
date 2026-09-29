@@ -1,0 +1,26 @@
+# Read-only: inspect ground during its opaque height transition, then descend
+# from a long-distance overview without changing the orbit focus distance.
+wait_maps
+wait_ready
+set world_auto_detail 0
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_camera 3515 815 5 0.8 0.62 200
+wait_world_tiles
+wait_world_detail
+clear_toasts
+mouse_move 20 20
+world_transition 0
+screenshot build/ui/world_transition_start.png
+world_transition 0.5
+screenshot build/ui/world_transition_middle.png
+wait_world_detail
+screenshot build/ui/world_transition_end.png
+set world_detail 0
+world_camera 3515 815 5 0.8 0.62 8000
+world_eye 3515 815 35
+world_look 0.8 0.3
+frames 5
+screenshot build/ui/world_flight_near_clip.png
+quit

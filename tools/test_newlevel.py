@@ -123,7 +123,7 @@ def main() -> int:
     with open(script, "w") as f:
         f.write("\n".join([
             "wait_maps", "wait_ready", f"select {a.donor}", "wait_loaded",
-            "edit 1", "frames 2", "assert_widget btn_new_level",
+            "edit 1", "edit_tab 3", "reveal btn_new_level", "frames 2", "assert_widget btn_new_level",
             "screenshot build/ui/n1_new_level_card.png",
             "new_level AtlasGuiCopy 16 0 Greatwood",   # off the 32-unit grid -> refused, logged
             "wait_new_level", "frames 2",
@@ -132,7 +132,7 @@ def main() -> int:
         ]) + "\n")
     r = subprocess.run([gui, "--auto", script, "--install", scratch], capture_output=True, text=True)
     log = open(script + ".log", encoding="utf-8", errors="replace").read() if os.path.exists(script + ".log") else ""
-    if "new level failed" not in log or "grid" not in log:
+    if r.returncode != 0 or "RESULT PASS" not in log or "new level failed" not in log or "grid" not in log:
         print("GUI: the off-grid origin should have been refused with a log line"); print(log[-1500:]); ok = False
     # now a valid one: let the card's suggestion pick the origin (name/x/y from the CLI's donor info)
     r2 = subprocess.run([cli, "new-level", a.donor, "AtlasProbe", "--install", scratch, "--no-rebake"], capture_output=True, text=True)

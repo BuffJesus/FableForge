@@ -1,3 +1,4 @@
+#include "profile.hpp"
 #include "stbterrain.hpp"
 
 #include <algorithm>
@@ -73,6 +74,11 @@ bool parseForeground(const std::vector<uint8_t>& b, std::vector<Layer>& out) {
 }
 
 template <typename Fn>
+void forEachFrame(const std::vector<forge::stbbake::FramedBlock>& frames, Fn&& onFrame) {
+    for (const auto& b : frames) onFrame(b.data);
+}
+
+template <typename Fn>
 void forEachFrame(const std::vector<uint8_t>& d, Fn&& onFrame) {
     // A chunk's LZO frames are packed back-to-back at byte granularity: retail
     // OakValeWest_v2 holds 895, and 530 of them start off the 4-byte lattice the
@@ -109,18 +115,18 @@ bool findChunk(const fs::path& gameRoot, const std::string& mapName, std::vector
 
 } // namespace
 
-BackgroundAlbedo backgroundAlbedo(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+static BackgroundAlbedo parseBackground(const std::vector<forge::stbbake::FramedBlock>& frames,
+                                       int worldX, int worldY, int mapWidth, int mapHeight) {
+    FORGE_ZONE("STB background decode");
     BackgroundAlbedo out;
-    std::vector<uint8_t> chunk;
-    int worldX = 0, worldY = 0;
-    if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, out.note) || mapWidth <= 0 || mapHeight <= 0) return out;
+    if (mapWidth <= 0 || mapHeight <= 0) return out;
     const int tpc = out.texelsPerCell;
     out.image.width = uint32_t(mapWidth * tpc);
     out.image.height = uint32_t(mapHeight * tpc);
     out.image.rgba.assign(size_t(out.image.width) * out.image.height * 4, 0);
     out.image.name = "background";
     std::vector<uint8_t> covered(size_t(mapWidth) * mapHeight, 0);
-    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+    forEachFrame(frames, [&](const std::vector<uint8_t>& b) {
         // CLandscapeBackgroundPatch: 17-byte header, 19-byte inline texture header, DXT1 mip 0.
         if (b.size() < 17 + 19) return;
         auto r16 = [&](size_t o) { return uint16_t(b[o] | (b[o + 1] << 8)); };
@@ -161,13 +167,25 @@ BackgroundAlbedo backgroundAlbedo(const fs::path& gameRoot, const std::string& m
     return out;
 }
 
-ForegroundLayers loadLayers(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+BackgroundAlbedo backgroundAlbedo(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight) {
+    FORGE_ZONE("STB background read");
+    BackgroundAlbedo out;
+    std::vector<uint8_t> chunk;
+    int worldX = 0, worldY = 0;
+    if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, out.note) || mapWidth <= 0 || mapHeight <= 0) return out;
+    return parseBackground(forge::stbbake::walkFramedBlocks(chunk), worldX, worldY, mapWidth, mapHeight);
+}
+
+ForegroundLayers loadLayers(const fs::path& gameRoot, const std::string& mapName, int mapWidth, int mapHeight, BackgroundAlbedo* background) {
+    FORGE_ZONE("STB terrain layers read");
+    if (background) *background = {};
     ForegroundLayers out;
     std::vector<uint8_t> chunk;
     int worldX = 0, worldY = 0;
     if (!findChunk(gameRoot, mapName, chunk, worldX, worldY, out.note)) return out;
+    const auto frames = forge::stbbake::walkFramedBlocks(chunk);
     int frameIndex = 0;
-    forEachFrame(chunk, [&](const std::vector<uint8_t>& b) {
+    forEachFrame(frames, [&](const std::vector<uint8_t>& b) {
         ++frameIndex;
         // Same grammar as parseForeground, keeping everything.
         size_t p = 0;
@@ -217,6 +235,7 @@ ForegroundLayers loadLayers(const fs::path& gameRoot, const std::string& mapName
     });
     out.found = out.frames > 0;
     if (!out.found) out.note = "no foreground frames matched";
+    if (background && out.found && !out.layers.empty()) *background = parseBackground(frames, worldX, worldY, mapWidth, mapHeight);
     return out;
 }
 

@@ -1,5 +1,11 @@
 # FableForge
 
+**Current preview: [0.18.0-rc.1](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.1)** — whole-world flight, persistent water, smoother
+terrain transitions, adaptive detail/cache budgets, and expanded editing tools.
+See the [release notes](docs/releases/0.18.0-rc.1.md) for changes and validation limits.
+The latest final release remains 0.17.1 while fresh-game and separate-machine
+release checks are completed.
+
 *Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
 library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
 
@@ -17,8 +23,8 @@ write the result back into the game. Three small Windows executables, no depende
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
-![Oakvale in Edit mode: a placed barrel selected, gizmo up](docs/screenshot_oakvale.png)
-![Greatwood: the terrain brush over the autumn canopy](docs/screenshot_greatwood.png)
+![Oakvale in Edit mode](docs/screenshot_oakvale.png)
+![Greatwood and the terrain tools](docs/screenshot_greatwood.png)
 ![The Arena from the Export side](docs/screenshot_arena.png)
 
 ```

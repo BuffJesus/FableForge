@@ -16,6 +16,9 @@
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
 #include "worldtiles.hpp"
+#include "worldvisibility.hpp"
+#include "detailcache.hpp"
+#include "dxt1.hpp"
 #include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
 #include "forge/fillerfit.hpp"
@@ -52,6 +55,102 @@ int g_failures = 0;
             ++g_failures;                                                              \
         }                                                                              \
     } while (0)
+
+void testDistantTexturePalette() {
+    uint8_t pixels[64] = {};
+    for (int i = 0; i < 16; ++i) {
+        pixels[4*i] = pixels[4*i+1] = pixels[4*i+2] = uint8_t((i % 4) * 85);
+        pixels[4*i+3] = 255;
+    }
+    const auto encoded = albion::dxt1::encode(pixels, 4, 4);
+    CHECK(encoded.size() == 8);
+    const auto decoded = albion::dxt1::decode(encoded.data(), 4, 4);
+    CHECK(decoded.size() == sizeof pixels);
+    CHECK(std::equal(decoded.begin(), decoded.end(), pixels));
+}
+
+void testWorldVisibility() {
+    using namespace albion::worldview;
+    CHECK(nearPlane(5) == .1f && nearPlane(-5) == .1f);
+    CHECK(nearPlane(1000) == 2 && nearPlane(50000) == 20);
+    const float worldLo[3] = {0, 0, -8000}, worldHi[3] = {5200, 500, -640};
+    for (const auto& eye : {std::array<float, 3>{2700, 7000, -4400}, std::array<float, 3>{-9000, 20, 15000}}) {
+        const float far = farPlane(eye.data(), worldLo, worldHi);
+        for (int corner = 0; corner < 8; ++corner) {
+            float squared = 0;
+            for (int axis = 0; axis < 3; ++axis) {
+                const float d = ((corner & (1 << axis)) ? worldHi[axis] : worldLo[axis]) - eye[axis];
+                squared += d * d;
+            }
+            CHECK(far > std::sqrt(squared));
+        }
+    }
+    float m[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    const float lo[3] = {-0.5f,-0.5f,0.2f}, hi[3] = {0.5f,0.5f,0.8f};
+    CHECK(visible(m, lo, hi));
+    // Translate the same box outside each of the six clip planes.
+    for (int axis = 0; axis < 3; ++axis) {
+        for (float shift : {-2.0f, 2.0f}) {
+            m[12 + axis] = shift;
+            CHECK(!visible(m, lo, hi));
+        }
+        m[12 + axis] = 0;
+    }
+    const float crossingLo[3] = {-2,-2,-1}, crossingHi[3] = {2,2,2};
+    CHECK(visible(m, crossingLo, crossingHi));  // camera/clip volume inside a large map
+    m[12] = 1.5f;
+    CHECK(visible(m, lo, hi));                 // touching the boundary must not pop out
+    DetailBudget budget;
+    for (int i = 0; i < 65; ++i) budget.observe(1.0f / 30, 6, true);
+    CHECK(budget.maps == 5);
+    for (int i = 0; i < 310; ++i) budget.observe(1.0f / 60, 6, true);
+    CHECK(budget.maps == 6);
+    for (int i = 0; i < 200; ++i) budget.observe(0.1f, 6, false);
+    CHECK(budget.maps == 6);                   // loading or an unfocused window
+    budget.observe(2, 6, true);
+    CHECK(budget.maps == 6);                   // a single long stall
+    budget.observe(0.01f, 2, false);
+    CHECK(budget.maps == 2);                   // a lower user ceiling takes effect immediately
+    DetailCache cache(100, 2);
+    CHECK(cache.retain("a", 40).empty() && cache.retain("b", 40).empty());
+    CHECK(cache.bytes() == 80 && cache.size() == 2);
+    CHECK(cache.take("a") && cache.bytes() == 40 && !cache.take("missing"));
+    CHECK(cache.retain("a", 40).empty());       // returning map becomes most recently retired
+    CHECK(cache.retain("c", 50) == std::vector<std::string>{"b"});
+    CHECK(cache.bytes() == 90 && !cache.take("b"));
+    CHECK(cache.retain("huge", size_t(-1)) == std::vector<std::string>{"huge"});
+    CHECK(cache.bytes() == 90);                // oversized candidates do not flush useful residents
+    CHECK(cache.retain("c", 30).empty() && cache.bytes() == 70); // no duplicate accounting
+    CHECK(cache.retain("d", 1) == std::vector<std::string>{"a"}); // entry cap, below byte cap
+    cache.clear();
+    CHECK(cache.bytes() == 0 && cache.size() == 0 && !cache.take("c"));
+    DetailCache disabled(0);
+    CHECK(disabled.retain("a", 1) == std::vector<std::string>{"a"} && disabled.bytes() == 0);
+    DetailCache shrinking(100);
+    shrinking.retain("old", 40); shrinking.retain("new", 30);
+    CHECK(shrinking.setBudget(70).empty());
+    CHECK(shrinking.setBudget(30) == std::vector<std::string>{"old"});
+    CHECK(shrinking.setBudget(0) == std::vector<std::string>{"new"});
+    CHECK(shrinking.setBudget(100).empty() && shrinking.bytes() == 0);
+    constexpr uint64_t MB = CacheMemoryBudget::MiB;
+    CacheMemoryBudget memory;
+    CHECK(memory.observe(true, 8192 * MB, 2048 * MB, 0) == 128 * MB);
+    CHECK(memory.observe(true, 1024 * MB, 512 * MB, 0) == 64 * MB);
+    CHECK(memory.observe(true, 1024 * MB, 1024 * MB, 0) == 0);
+    for (int i = 0; i < 10; ++i) CHECK(memory.observe(false, 8192 * MB, 0, 0) == 0);
+    for (int i = 0; i < 4; ++i) CHECK(memory.observe(true, 8192 * MB, 0, 0) == 0);
+    CHECK(memory.observe(true, 8192 * MB, 0, 0) == 16 * MB);
+    memory.observe(true, 8192 * MB, 0, 0);
+    CHECK(memory.observe(true, 0, 0, 0) == 0);
+    for (int i = 0; i < 4; ++i) CHECK(memory.observe(true, 8192 * MB, 0, 0) == 0);
+    CHECK(memory.observe(true, 8192 * MB, 0, 0) == 16 * MB);
+    CacheMemoryBudget accounting;
+    CHECK(accounting.observe(true, 2048 * MB, 1800 * MB, 0) < 128 * MB);
+    CacheMemoryBudget cached;
+    CHECK(cached.observe(true, 2048 * MB, 1800 * MB, 128 * MB) == 128 * MB);
+    CHECK(cached.observe(true, UINT64_MAX, 0, UINT64_MAX) == 128 * MB);
+    CHECK(cached.observe(true, 1, UINT64_MAX, 0) == 0);
+}
 
 template <typename T> void put(std::vector<uint8_t>& v, T x) {
     const auto* p = reinterpret_cast<const uint8_t*>(&x);
@@ -791,6 +890,13 @@ void testWorldTiles(const fs::path& dir) {
     namespace wt = albion::worldtiles;
     CHECK(wt::strideFor(129, 225) == 6 && wt::strideFor(33, 33) == 1);
     CHECK(wt::sampleIndex(0, 22, 129, 6) == 0 && wt::sampleIndex(20, 22, 129, 6) == 120 && wt::sampleIndex(21, 22, 129, 6) == 128);
+    wt::Tile saddle;
+    saddle.cellsX = saddle.cellsY = saddle.gw = saddle.gh = 2;
+    saddle.heights = {0, 0, 0, 10};
+    CHECK(wt::meshHeightAt(saddle, .5f, .5f) == 0); // on a-c-b / b-c-d diagonal, not bilinear height 2.5
+    CHECK(wt::meshHeightAt(saddle, .75f, .75f) == 5);
+    CHECK(wt::meshHeightAt(saddle, 1, 1) == 10);
+    CHECK(wt::meshHeightAt(saddle, -5, -5) == 0);
     wt::Tile t;
     t.cellsX = 5; t.cellsY = 5; t.stride = 2; t.gw = 3; t.gh = 3;
     t.heights = {0, 2, 4, 0, 2, 4, 10, 12, 14};   // rows y = 0, 2, 4
@@ -798,11 +904,57 @@ void testWorldTiles(const fs::path& dir) {
     CHECK(std::fabs(wt::heightAt(t, 4.0f, 4.0f) - 14.0f) < 1e-4f);
     CHECK(std::fabs(wt::heightAt(t, 0.0f, 3.0f) - 5.0f) < 1e-4f);
     t.name = "Probe"; t.ground.width = 1; t.ground.height = 1; t.ground.rgba = {1, 2, 3, 255};
+    te::WaterMesh source;
+    for (int y = 0; y < 9; ++y) for (int x = 0; x < 9; ++x) {
+        source.positions.insert(source.positions.end(), {float(x), float(y), 3.0f});
+        source.fade.push_back(x == 0 ? 0.0f : 1.0f);
+        source.ice.push_back(x >= 7);
+    }
+    for (uint32_t y = 0; y < 8; ++y) for (uint32_t x = 0; x < 8; ++x) {
+        if (x == 2 && y == 2) continue; // an actual hole, never bridged
+        const uint32_t a = y * 9 + x, b = a + 1, c = a + 9, d = c + 1;
+        auto& indices = x >= 7 ? source.iceIndices : source.indices;
+        indices.insert(indices.end(), {a, c, b, b, c, d});
+    }
+    source.positions[(4 * 9 + 4) * 3 + 2] = 3.5f; // keep a non-flat patch
+    t.water = wt::compactWater(source, 9, 9);
+    CHECK(t.water.positions.size() < source.positions.size());
+    CHECK(t.water.indices.size() + t.water.iceIndices.size() < source.indices.size() + source.iceIndices.size());
+    // Compare coverage and interpolated height, fade and ice on both triangles of every cell.
+    auto sample = [](const te::WaterMesh& water, const std::vector<uint32_t>& indices, float x, float y) {
+        std::vector<float> hit;
+        for (size_t i = 0; i < indices.size(); i += 3) {
+            const auto a = indices[i], b = indices[i + 1], c = indices[i + 2];
+            const auto* p = &water.positions[a * 3]; const auto* q = &water.positions[b * 3]; const auto* r = &water.positions[c * 3];
+            const float det = (q[1] - r[1]) * (p[0] - r[0]) + (r[0] - q[0]) * (p[1] - r[1]);
+            const float u = ((q[1] - r[1]) * (x - r[0]) + (r[0] - q[0]) * (y - r[1])) / det;
+            const float v = ((r[1] - p[1]) * (x - r[0]) + (p[0] - r[0]) * (y - r[1])) / det;
+            const float w = 1 - u - v;
+            if (u < -1e-6f || v < -1e-6f || w < -1e-6f) continue;
+            hit = {u * p[2] + v * q[2] + w * r[2], u * water.fade[a] + v * water.fade[b] + w * water.fade[c],
+                   u * water.ice[a] + v * water.ice[b] + w * water.ice[c]};
+            break;
+        }
+        return hit;
+    };
+    for (int y = 0; y < 8; ++y) for (int x = 0; x < 8; ++x) for (float offset : {.2f, .7f}) for (bool ice : {false, true}) {
+        const auto before = sample(source, ice ? source.iceIndices : source.indices, x + offset, y + offset + .05f);
+        const auto after = sample(t.water, ice ? t.water.iceIndices : t.water.indices, x + offset, y + offset + .05f);
+        CHECK(before.size() == after.size());
+        for (size_t i = 0; i < before.size(); ++i) CHECK(std::fabs(before[i] - after[i]) < 1e-5f);
+    }
+    auto malformed = source;
+    malformed.indices[0] = 99999;
+    CHECK(wt::compactWater(malformed, 9, 9).indices == malformed.indices);
     const fs::path f = dir / "probe.tile";
     CHECK(wt::saveTile(f, "src|1|2|t", t));
     wt::Tile back;
     CHECK(wt::loadTile(f, "src|1|2|t", back) && back.heights == t.heights && back.ground.rgba == t.ground.rgba && back.gw == 3);
+    CHECK(back.water.positions == t.water.positions && back.water.fade == t.water.fade && back.water.ice == t.water.ice &&
+          back.water.indices == t.water.indices && back.water.iceIndices == t.water.iceIndices);
     CHECK(!wt::loadTile(f, "src|1|3|t", back));   // the level changed: rebuild
+    fs::resize_file(f, fs::file_size(f) - 1);
+    CHECK(!wt::loadTile(f, "src|1|2|t", back)); // truncated water payload
     albion::foliageexport::Scene sc;
     wt::appendMesh(t, sc, 100.0f, 200.0f);
     CHECK(sc.meshes.size() == 1 && sc.meshes[0].geometry.vertices.size() == 9 && sc.meshes[0].parts[0].indices.size() == 24 && sc.instances[0].x == 100.0f);
@@ -1590,7 +1742,9 @@ static void testStbCompaction(const fs::path& dir) {
     const std::string level = "Data/Levels/FinalAlbion/T.lev";
     common.insert(common.end(), level.begin(), level.end()); common.push_back(0);
     put32(common, uint32_t(common.size() + 4));   // the record follows its own directory row
+    const size_t recordAt = common.size();
     common.resize(common.size() + 0x80, 0x11);
+    for (int i = 0; i < 4; ++i) common[recordAt + 0x58 + i] = uint8_t(uint32_t(common.size()) >> (8 * i));
 
     std::vector<uint8_t> bank;
     put32(bank, 0x42424242u); put32(bank, 0); put32(bank, 0); put32(bank, 1);
@@ -1628,6 +1782,22 @@ static void testStbCompaction(const fs::path& dir) {
     }
     CHECK(b.read(*b.findEntry("Data/Levels/FinalAlbion/T.lev")) == chunkA2);
     CHECK(b.staticMaps().size() == 1 && b.staticMaps()[0].levelName == level);
+    const auto records = b.readStaticMapRecords();
+    CHECK(records.size() == 1 && records[0] == b.readStaticMapRecord(b.staticMaps()[0]));
+    CHECK(records[0] == std::vector<uint8_t>(common.begin() + recordAt, common.end()));
+    // Both APIs reject the same bad end pointers; the bulk path must not turn
+    // invalid headers into silently accepted slices.
+    for (uint32_t invalidEnd : {0u, uint32_t(common.size() + 1)}) {
+        auto bad = bank;
+        for (int i = 0; i < 4; ++i) bad[payloads[1].offset + recordAt + 0x58 + i] = uint8_t(invalidEnd >> (8 * i));
+        const fs::path invalid = dir / "bad_record.stb";
+        std::ofstream(invalid, std::ios::binary).write(reinterpret_cast<const char*>(bad.data()), std::streamsize(bad.size()));
+        const auto archive = forge::stb::Archive::open(invalid);
+        bool singleRejected = false, bulkRejected = false;
+        try { archive.readStaticMapRecord(archive.staticMaps()[0]); } catch (const std::exception&) { singleRejected = true; }
+        try { archive.readStaticMapRecords(); } catch (const std::exception&) { bulkRejected = true; }
+        CHECK(singleRejected && bulkRejected);
+    }
     CHECK(forge::stb::compactMeasure(compact1).deadBytes() == 0);
     forge::stb::compactBank(compact1, compact2);
     std::ifstream f1(compact1, std::ios::binary), f2(compact2, std::ios::binary);
@@ -1996,6 +2166,8 @@ int main() {
     testThemeToolsAndPaths(dir);
     testExternalWorld(dir);
     testWorldTiles(dir);
+    testWorldVisibility();
+    testDistantTexturePalette();
     testThingLinks();
     testQuestSections();
     testDayNightSections();

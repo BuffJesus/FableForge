@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 // Dark theme with violet accents + the few custom widgets the app uses.
 
 #include <initializer_list>
@@ -23,6 +24,8 @@ inline float S(float px) { return px * scale(); }
 void applyTheme();
 // Faint helper text that wraps inside the current content width.
 void hint(const char* text);
+// `text` cut to `room` pixels: first without a trailing "  <shortcut>" (when asked), then with "...".
+std::string fitText(const std::string& text, float room, bool dropShortcut = false);
 // A one-line hint with the details behind a small (i) on hover: keeps panels short.
 void hintMore(const char* text, const char* details);
 // Muted label with a right-aligned value on the same line (used above sliders).

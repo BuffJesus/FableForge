@@ -77,10 +77,11 @@ def main() -> int:
     sl = os.path.join(scratch, "data", "Levels")
     wld, bwd = os.path.join(sl, "FinalAlbion.wld"), os.path.join(sl, "FinalAlbion.bwd")
     orig = {c: open(os.path.join(sl, c), "rb").read() for c in ("FinalAlbion.wld", "FinalAlbion.bwd")}
+    expected_maps = len(re.findall(rb'\bLevelName\s+"', orig["FinalAlbion.wld"]))
     ok = True
 
     r = subprocess.run([cli, "world", "--install", scratch], capture_output=True, text=True)
-    if r.returncode != 0 or "399 maps" not in r.stdout:
+    if r.returncode != 0 or expected_maps == 0 or f"{expected_maps} maps" not in r.stdout:
         print("world listing failed:", r.stderr, r.stdout[:200]); ok = False
     if "baked at" in r.stdout:
         print("retail layout reports baked origins that disagree with the placement"); ok = False
@@ -209,8 +210,15 @@ def main() -> int:
     # the GUI's World tab on the same scratch tree (queued moves, refusal, apply, undo)
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):
-        r = subprocess.run([gui, "--auto", "tests/ui/world.txt"], capture_output=True, text=True, cwd=ROOT)
-        log = os.path.join(ROOT, "tests", "ui", "world.txt.log")
+        # The fixture may include user-added maps. Check its WLD count, not a
+        # hard-coded stock count; all move/restore assertions remain unchanged.
+        script = os.path.join(ROOT, "build", "ui_overworld_fixture.txt")
+        with open(os.path.join(ROOT, "tests", "ui", "world.txt"), encoding="utf-8") as f:
+            template = f.read()
+        with open(script, "w", encoding="utf-8") as f:
+            f.write(template.replace("assert_state world_maps 399", f"assert_state world_maps {expected_maps}"))
+        r = subprocess.run([gui, "--auto", script], capture_output=True, text=True, cwd=ROOT)
+        log = script + ".log"
         if r.returncode != 0:
             print("GUI world script failed:")
             if os.path.exists(log):

@@ -41,6 +41,8 @@ public:
     const Entry* findEntry(const std::string& name) const;
     std::vector<uint8_t> read(const Entry& entry) const;
     std::vector<uint8_t> readStaticMapRecord(const StaticMap& map) const;
+    // In staticMaps() order, with one common-header read for the whole bank.
+    std::vector<std::vector<uint8_t>> readStaticMapRecords() const;
     size_t extract(const std::filesystem::path& outDir,
                    const std::string& filter = {},
                    const std::function<void(const Entry&)>& onFile = {}) const;

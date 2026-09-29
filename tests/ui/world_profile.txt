@@ -1,0 +1,41 @@
+# Read-only profiling route. Run with tools/profile_world.py and a profile build.
+# No screenshots: GPU readback would contaminate the timings.
+wait_profiler
+wait_maps
+wait_ready
+set world_auto_detail 0
+profile_mark overview_start
+world_tab 1
+wait_world_tiles
+set world_3d 1
+profile_mark oakvale_stream_start
+world_camera 3515 815 5 0.8 0.62 200
+frames 10
+wait_world_detail
+profile_mark oakvale_settled_start
+frames 300
+profile_mark coastal_flight_start
+world_camera 3520 815 5 0.8 0.5 80
+frames 60
+world_camera 3540 840 5 0.9 0.5 80
+frames 60
+world_camera 3560 865 5 1.0 0.5 80
+frames 60
+world_camera 3580 890 5 1.1 0.5 80
+frames 60
+world_camera 3600 915 5 1.2 0.5 80
+frames 60
+world_camera 3580 890 5 1.1 0.5 80
+frames 60
+world_camera 3560 865 5 1.0 0.5 80
+frames 60
+world_camera 3540 840 5 0.9 0.5 80
+frames 60
+profile_mark region_jump_start
+world_camera 3400 3500 40 2.4 0.35 500
+frames 10
+wait_world_detail
+profile_mark greatwood_settled_start
+frames 300
+profile_mark route_end
+quit

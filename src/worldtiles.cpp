@@ -1,16 +1,18 @@
 #include "worldtiles.hpp"
+#include "profile.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <limits>
 
 #include "forge/lev.hpp"
 
 namespace albion::worldtiles {
 
 namespace {
-constexpr uint32_t kMagic = 0x31545746;   // "FWT1"
+constexpr uint32_t kMagic = 0x32545746;   // "FWT2", includes persistent water
 
 // a height tint when no textures are at hand: low teal -> moss -> sand -> snow
 terrainexport::Image tintImage(const Tile& t) {
@@ -60,6 +62,81 @@ int sampleIndex(int i, int count, int cells, int stride) {
     return i == count - 1 ? cells - 1 : std::min(i * stride, cells - 1);
 }
 
+terrainexport::WaterMesh compactWater(const terrainexport::WaterMesh& src, int cx, int cy) {
+    FORGE_ZONE("Overview water compact");
+    if (src.empty()) return src;
+    const size_t n = src.positions.size() / 3;
+    if (cx < 2 || cy < 2 || cx > 4096 || cy > 4096 || src.positions.size() % 3 ||
+        src.fade.size() != n || src.ice.size() != n) return src;
+    terrainexport::WaterMesh out;
+    out.wetVertices = src.wetVertices;
+    constexpr uint32_t absent = std::numeric_limits<uint32_t>::max();
+    std::vector<uint32_t> remap(n, absent);
+    auto vertex = [&](uint32_t v) {
+        if (remap[v] == absent) {
+            remap[v] = uint32_t(out.fade.size());
+            out.positions.insert(out.positions.end(), src.positions.begin() + v * 3, src.positions.begin() + v * 3 + 3);
+            out.fade.push_back(src.fade[v]); out.ice.push_back(src.ice[v]);
+        }
+        return remap[v];
+    };
+    auto stream = [&](const std::vector<uint32_t>& indices, std::vector<uint32_t>& dst) {
+        if (indices.empty()) return true;
+        if (indices.size() % 6) return false;
+        const int width = cx - 1, height = cy - 1;
+        std::vector<uint32_t> cells(size_t(width) * height, absent);
+        std::vector<uint8_t> flat(indices.size() / 6, 0);
+        auto same = [&](uint32_t a, uint32_t b) {
+            return src.positions[a * 3 + 2] == src.positions[b * 3 + 2] &&
+                src.fade[a] == src.fade[b] && src.ice[a] == src.ice[b];
+        };
+        for (size_t q = 0; q < indices.size() / 6; ++q) {
+            const auto* p = indices.data() + q * 6;
+            for (int j = 0; j < 6; ++j) if (p[j] >= n) return false;
+            const auto a = p[0], b = p[2], c = p[1], d = p[5];
+            if (p[3] != b || p[4] != c) return false;
+            const float x = src.positions[a * 3], y = src.positions[a * 3 + 1];
+            if (!std::isfinite(x) || !std::isfinite(y) || x < 0 || y < 0 || x >= width || y >= height ||
+                x != std::floor(x) || y != std::floor(y)) return false;
+            auto at = [&](uint32_t v, float px, float py) { return src.positions[v * 3] == px && src.positions[v * 3 + 1] == py; };
+            if (!at(b, x + 1, y) || !at(c, x, y + 1) || !at(d, x + 1, y + 1)) return false;
+            auto& cell = cells[size_t(y) * width + size_t(x)];
+            if (cell != absent) return false;
+            cell = uint32_t(q);
+            flat[q] = same(a, b) && same(a, c) && same(a, d);
+        }
+        for (int y = 0; y < height; ++y) for (int x = 0; x < width; ++x) {
+            const auto q = cells[size_t(y) * width + x];
+            if (q == absent) continue;
+            const auto* p = indices.data() + q * 6;
+            int w = 1, h = 1;
+            auto matches = [&](int px, int py) {
+                const auto other = cells[size_t(py) * width + px];
+                return other != absent && flat[other] && same(p[0], indices[size_t(other) * 6]);
+            };
+            if (flat[q]) {
+                while (w < 32 && x + w < width && matches(x + w, y)) ++w;
+                while (h < 32 && y + h < height) {
+                    bool full = true;
+                    for (int dx = 0; dx < w; ++dx) if (!matches(x + dx, y + h)) { full = false; break; }
+                    if (!full) break;
+                    ++h;
+                }
+            }
+            const auto right = cells[size_t(y) * width + x + w - 1];
+            const auto bottom = cells[size_t(y + h - 1) * width + x];
+            const auto corner = cells[size_t(y + h - 1) * width + x + w - 1];
+            const auto a = vertex(p[0]), b = vertex(indices[size_t(right) * 6 + 2]);
+            const auto c = vertex(indices[size_t(bottom) * 6 + 1]), d = vertex(indices[size_t(corner) * 6 + 5]);
+            dst.insert(dst.end(), {a, c, b, b, c, d});
+            for (int dy = 0; dy < h; ++dy) for (int dx = 0; dx < w; ++dx) cells[size_t(y + dy) * width + x + dx] = absent;
+        }
+        return true;
+    };
+    if (!stream(src.indices, out.indices) || !stream(src.iceIndices, out.iceIndices)) return src;
+    return out;
+}
+
 Tile buildTile(const forge::lev::File& level, const std::string& name, const terrainexport::Context* context,
                const std::filesystem::path& gameRoot, float gain, int maxTexels) {
     Tile t;
@@ -80,17 +157,21 @@ Tile buildTile(const forge::lev::File& level, const std::string& name, const ter
     if (context && context->ready()) {
         terrainexport::Options o;
         o.textures = true; o.texelsPerCell = 1; o.gain = gain; o.up = terrainexport::UpAxis::Z;
-        o.water = false; o.gameRoot = gameRoot; o.mapName = name;
+        o.water = true; o.gameRoot = gameRoot; o.mapName = name;
         try {
             const auto sc = terrainexport::buildScene(level, o, context);
             if (sc.hasAlbedo && sc.albedo.width && sc.albedo.height) t.ground = shrink(sc.albedo, maxTexels);
+            t.water = compactWater(sc.water, t.cellsX, t.cellsY);
+            auto bytes = [](const terrainexport::WaterMesh& w) { return w.positions.size() * 4 + w.fade.size() * 4 + w.ice.size() + (w.indices.size() + w.iceIndices.size()) * 4; };
+            FORGE_PLOT("Overview original water bytes", bytes(sc.water));
+            FORGE_PLOT("Overview compact water bytes", bytes(t.water));
         } catch (...) {}
     }
     if (t.ground.rgba.empty()) t.ground = tintImage(t);
     return t;
 }
 
-float heightAt(const Tile& t, float x, float y) {
+static float sampleHeight(const Tile& t, float x, float y, bool triangles) {
     if (t.heights.empty()) return 0.0f;
     // grid index space: sample i sits at map x = sampleIndex(i); the last column may be closer
     auto toGrid = [&](float v, int count, int cells) {
@@ -105,10 +186,17 @@ float heightAt(const Tile& t, float x, float y) {
     const auto [j, fy] = toGrid(y, t.gh, t.cellsY);
     const int i1 = std::min(i + 1, t.gw - 1), j1 = std::min(j + 1, t.gh - 1);
     auto H = [&](int a, int b) { return t.heights[size_t(b) * t.gw + a]; };
+    if (triangles) {
+        if (fx + fy <= 1) return H(i, j) + (H(i1, j) - H(i, j)) * fx + (H(i, j1) - H(i, j)) * fy;
+        return H(i1, j1) + (H(i, j1) - H(i1, j1)) * (1 - fx) + (H(i1, j) - H(i1, j1)) * (1 - fy);
+    }
     const float top = H(i, j) + (H(i1, j) - H(i, j)) * fx;
     const float bot = H(i, j1) + (H(i1, j1) - H(i, j1)) * fx;
     return top + (bot - top) * fy;
 }
+
+float heightAt(const Tile& t, float x, float y) { return sampleHeight(t, x, y, false); }
+float meshHeightAt(const Tile& t, float x, float y) { return sampleHeight(t, x, y, true); }
 
 void appendMesh(const Tile& t, foliageexport::Scene& scene, float worldX, float worldY) {
     if (t.gw < 2 || t.gh < 2) return;
@@ -147,6 +235,14 @@ void appendMesh(const Tile& t, foliageexport::Scene& scene, float worldX, float 
 }
 
 bool saveTile(const std::filesystem::path& file, const std::string& key, const Tile& t) {
+    if (key.size() > 4096 || t.name.size() > 1024 || t.gw <= 0 || t.gh <= 0 || t.gw > 4096 || t.gh > 4096 ||
+        t.heights.size() != size_t(t.gw) * t.gh || t.ground.width > 4096 || t.ground.height > 4096 ||
+        t.ground.rgba.size() != size_t(t.ground.width) * t.ground.height * 4 ||
+        t.water.positions.size() != t.water.fade.size() * 3 || t.water.ice.size() != t.water.fade.size() ||
+        t.water.fade.size() > 4096u * 4096u || t.water.indices.size() > 6u * 4096u * 4096u ||
+        t.water.iceIndices.size() > 6u * 4096u * 4096u || t.water.indices.size() % 3 || t.water.iceIndices.size() % 3) return false;
+    for (auto i : t.water.indices) if (i >= t.water.fade.size()) return false;
+    for (auto i : t.water.iceIndices) if (i >= t.water.fade.size()) return false;
     std::error_code ec;
     std::filesystem::create_directories(file.parent_path(), ec);
     std::ofstream out(file, std::ios::binary);
@@ -160,10 +256,18 @@ bool saveTile(const std::filesystem::path& file, const std::string& key, const T
     out.write(reinterpret_cast<const char*>(t.heights.data()), std::streamsize(t.heights.size() * 4));
     u32(t.ground.width); u32(t.ground.height);
     out.write(reinterpret_cast<const char*>(t.ground.rgba.data()), std::streamsize(t.ground.rgba.size()));
+    u32(uint32_t(t.water.fade.size())); u32(uint32_t(t.water.indices.size())); u32(uint32_t(t.water.iceIndices.size()));
+    u32(uint32_t(t.water.wetVertices));
+    out.write(reinterpret_cast<const char*>(t.water.positions.data()), std::streamsize(t.water.positions.size() * 4));
+    out.write(reinterpret_cast<const char*>(t.water.fade.data()), std::streamsize(t.water.fade.size() * 4));
+    out.write(reinterpret_cast<const char*>(t.water.ice.data()), std::streamsize(t.water.ice.size()));
+    out.write(reinterpret_cast<const char*>(t.water.indices.data()), std::streamsize(t.water.indices.size() * 4));
+    out.write(reinterpret_cast<const char*>(t.water.iceIndices.data()), std::streamsize(t.water.iceIndices.size() * 4));
     return bool(out);
 }
 
-bool loadTile(const std::filesystem::path& file, const std::string& key, Tile& t) {
+bool loadTile(const std::filesystem::path& file, const std::string& key, Tile& destination) {
+    Tile t; // A rejected cache must not leave a partly decoded tile with the caller.
     std::ifstream in(file, std::ios::binary);
     if (!in) return false;
     auto u32 = [&]() { uint32_t v = 0; in.read(reinterpret_cast<char*>(&v), 4); return v; };
@@ -178,14 +282,35 @@ bool loadTile(const std::filesystem::path& file, const std::string& key, Tile& t
     t.name.assign(nl, '\0'); in.read(t.name.data(), nl);
     t.cellsX = int(u32()); t.cellsY = int(u32()); t.stride = int(u32()); t.gw = int(u32()); t.gh = int(u32());
     t.minH = f32(); t.maxH = f32();
-    if (t.gw <= 0 || t.gh <= 0 || t.gw > 4096 || t.gh > 4096) return false;
+    if (t.cellsX <= 0 || t.cellsY <= 0 || t.cellsX > 4096 || t.cellsY > 4096 || t.stride <= 0 ||
+        t.gw <= 0 || t.gh <= 0 || t.gw > 4096 || t.gh > 4096) return false;
     t.heights.resize(size_t(t.gw) * t.gh);
     in.read(reinterpret_cast<char*>(t.heights.data()), std::streamsize(t.heights.size() * 4));
     t.ground.width = u32(); t.ground.height = u32();
     if (t.ground.width > 4096 || t.ground.height > 4096) return false;
     t.ground.rgba.resize(size_t(t.ground.width) * t.ground.height * 4);
     in.read(reinterpret_cast<char*>(t.ground.rgba.data()), std::streamsize(t.ground.rgba.size()));
-    return bool(in);
+    const uint32_t vertices = u32(), liquid = u32(), ice = u32();
+    t.water.wetVertices = int(u32());
+    if (!in || vertices > 4096u * 4096u || liquid > 6u * 4096u * 4096u || ice > 6u * 4096u * 4096u || liquid % 3 || ice % 3) return false;
+    const auto dataAt = in.tellg();
+    in.seekg(0, std::ios::end);
+    if (uint64_t(in.tellg() - dataAt) != uint64_t(vertices) * 17 + uint64_t(liquid + ice) * 4) return false;
+    in.seekg(dataAt);
+    t.water.positions.resize(size_t(vertices) * 3); t.water.fade.resize(vertices); t.water.ice.resize(vertices);
+    t.water.indices.resize(liquid); t.water.iceIndices.resize(ice);
+    in.read(reinterpret_cast<char*>(t.water.positions.data()), std::streamsize(vertices) * 12);
+    in.read(reinterpret_cast<char*>(t.water.fade.data()), std::streamsize(vertices) * 4);
+    in.read(reinterpret_cast<char*>(t.water.ice.data()), vertices);
+    in.read(reinterpret_cast<char*>(t.water.indices.data()), std::streamsize(liquid) * 4);
+    in.read(reinterpret_cast<char*>(t.water.iceIndices.data()), std::streamsize(ice) * 4);
+    for (auto index : t.water.indices) if (index >= vertices) return false;
+    for (auto index : t.water.iceIndices) if (index >= vertices) return false;
+    for (float value : t.water.positions) if (!std::isfinite(value)) return false;
+    for (float value : t.water.fade) if (!std::isfinite(value) || value < 0 || value > 1) return false;
+    if (!in) return false;
+    destination = std::move(t);
+    return true;
 }
 
 } // namespace albion::worldtiles
