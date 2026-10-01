@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "forge/big.hpp"
@@ -142,8 +144,22 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         if (args.size() < 2) { std::fprintf(stderr, "usage: forge entrance <map> [x y [z]] [--install <root>]\n"); return 2; }
         std::string installArg; std::vector<float> xyz;
         for (size_t i = 2; i < args.size(); ++i) {
-            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else xyz.push_back(float(std::atof(args[i].c_str())));
+            if (args[i] == "--install") {
+                if (i + 1 == args.size()) { std::fprintf(stderr, "--install needs a path\n"); return 2; }
+                installArg = args[++i];
+            } else {
+                std::string_view value = args[i];
+                if (value.size() > 1 && value.front() == '+' && value[1] != '-') value.remove_prefix(1);
+                float coordinate = 0;
+                const auto parsed = std::from_chars(value.data(), value.data() + value.size(), coordinate);
+                if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || !std::isfinite(coordinate)) {
+                    std::fprintf(stderr, "bad entrance coordinate %s (expected a finite number)\n", args[i].c_str()); return 2;
+                }
+                xyz.push_back(coordinate);
+            }
+        }
+        if (!xyz.empty() && xyz.size() != 2 && xyz.size() != 3) {
+            std::fprintf(stderr, "entrance expects x y and optional z, or no coordinates to show the entrance\n"); return 2;
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }

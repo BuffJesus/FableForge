@@ -854,7 +854,9 @@ are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
 `REGION_ENTRANCE_POINT` the map screen and quest teleports drop the hero on,
 and a `HOLY_SITE_PLAYER_START` named `<Map>HSP`. A level installed with its own
 region gets both at its centre; the Level tab's *Region entrance* card (and
-`forge entrance <map> [x y [z]]`) shows and moves them. Retail entrances
+`forge entrance <map> [x y [z]]`) shows and moves them. The CLI requires complete
+finite coordinate values: no coordinates reads, two or three writes; malformed
+values or extra/missing coordinates are refused. Retail entrances
 are left alone when adding a new pair. An existing player-start with the
 `<Map>HSP` name and `HOLY_SITE_PLAYER_START` definition is moved with its adjacent
 preceding entrance. Only physics fields change; custom properties, components

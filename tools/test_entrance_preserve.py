@@ -32,12 +32,20 @@ def main():
         with path.open('rb') as stream:
             return hashlib.file_digest(stream, 'sha256').hexdigest()
     original = {name: digest(root / name) for name in files}
-    def run(label, *command):
+    def run(label, *command, expected=0):
         result = subprocess.run([str(args.exe.resolve()), *command, '--install', str(root)],
             cwd=repo, capture_output=True, text=True, timeout=60)
         (work / (label + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.returncode == expected, f'exit {result.returncode}, expected {expected}\n' + result.stdout + result.stderr
         return result.stdout
+    invalid = [('oops', '2', '3'), ('1oops', '2', '3'), ('1',), ('1', '2', '3', '4'),
+        ('nan', '2', '3'), ('inf', '2', '3'), ('1e999', '2', '3'), ('--unknown', '2', '3'),
+        ('', '2', '3'), (' 1', '2', '3'), ('1 ', '2', '3'), ('+-1', '2', '3'),
+        ('1e-999', '2', '3'), ('0x1p2', '2', '3')]
+    for index, coordinates in enumerate(invalid):
+        run(f'invalid_{index}', 'entrance', 'TeleporterGreatwood', *coordinates, expected=2)
+        assert original == {name: digest(root / name) for name in files}
+        assert {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()} == set(files)
     run('create', 'entrance', 'TeleporterGreatwood', '1', '2', '3')
     gtg = root / 'data/Levels/FinalAlbion.gtg'
     authored = gtg.read_bytes()
@@ -58,7 +66,7 @@ def main():
     gtg.write_bytes(customized)
     run('move', 'entrance', 'TeleporterGreatwood', '4', '5', '6')
     assert gtg.read_bytes() == expected, 'entrance move changed unrelated GTG bytes'
-    run('idempotent', 'entrance', 'TeleporterGreatwood', '4', '5', '6')
+    run('idempotent', 'entrance', 'TeleporterGreatwood', '+4.0', '5e0', '6.000')
     assert gtg.read_bytes() == expected
     run('restore', 'restore', '--forget')
     assert original == {name: digest(root / name) for name in files}

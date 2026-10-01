@@ -918,6 +918,22 @@ at `build/cli-write-guard-6w0c4hdo`. The real game process is never stopped.
 This is command preflight, not synchronization against a game launched during a
 long operation. Explicit-path forge-tools container commands were not changed.
 
+## 2026-10-01 continuation: reject malformed entrance CLI coordinates
+
+`build/entrance-preserve-vihzqumy/invalid_0.log` records `oops 2 3` being silently
+converted into an entrance at `(0,2,3)`. The entrance CLI now parses each entire
+coordinate with locale-independent from_chars, requires finite in-range floats,
+and accepts exactly two/three coordinates for a write or none for a read. Missing
+--install values report usage errors. Explicit plus signs and decimal exponents
+remain accepted; malformed double signs, suffixes and extra/missing coordinates
+are refused with exit 2 before install lookup or writes.
+
+`tools/test_entrance_preserve.py` now checks 14 invalid argument sets against exact
+bank hashes and inventory before its successful create/customize/move/idempotent
+update/Restore path. Final normal `build/entrance-preserve-gdmnu978` and ASan CLI
+`build/entrance-preserve-56724y6j` pass. This change is limited to entrance argument
+parsing; other CLI numeric options retain their existing parsers.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
