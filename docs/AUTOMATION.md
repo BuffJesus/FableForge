@@ -36,7 +36,9 @@ It also verifies the `+N owned` hint as the selection changes, through
 `tests/ui/mods.txt` in a unique `build/mods-corpus-*` workspace. It records every
 CLI command and verifies the complete scratch-file inventory after undeploy.
 `tools/test_mods_masters.py --keep` uses `build/mods-masters-*` for dependency,
-reorder and enable controls. Both capture hidden GUI output and screenshots;
+reorder and enable controls.
+`tools/test_mod_master_labels.py` checks long literal names and both checkbox
+and label clicks (`mod_requires_<row>_<master>`, `mod_requires_label_<row>_<master>`). Both capture hidden GUI output and screenshots;
 shared `build/ui` screenshots and checked-in scripts are not overwritten.
 
 The GUI can drive itself from a plain-text script. It is how the UI is tested:

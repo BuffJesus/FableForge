@@ -578,17 +578,36 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             for (const auto& pr : info.problems) tip += "\n! " + pr;
             ImGui::SetTooltip("%s", tip.c_str());
         }
-        if (!info.packFolder.empty() && ImGui::BeginPopupContextItem("##masters")) {
-            ImGui::TextColored(theme::vec(theme::Muted), "%s requires (loads after):", e.name.c_str());
-            for (size_t j = 0; j < modOrder_.mods.size(); ++j) {
-                if (j == i) continue;
-                const std::string& other = modOrder_.mods[j].name;
-                bool req = std::find(info.masters.begin(), info.masters.end(), other) != info.masters.end() ||
-                           (!modRows_[j].packName.empty() && std::find(info.masters.begin(), info.masters.end(), modRows_[j].packName) != info.masters.end());
-                if (ImGui::Checkbox(other.c_str(), &req)) { requireMod = e.name; requireMaster = other; requireValue = req; }
-                auto_.registerWidget(("mod_requires_" + std::to_string(i) + "_" + std::to_string(j)).c_str());
+        if (!info.packFolder.empty()) {
+            const ImVec2 available = ImGui::GetMainViewport()->Size;
+            const float popupWidth = std::min(S(420), available.x - S(32));
+            ImGui::SetNextWindowSize(ImVec2(popupWidth, 0));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(popupWidth, 0), ImVec2(popupWidth, available.y - S(32)));
+            if (ImGui::BeginPopupContextItem("##masters")) {
+                ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Muted));
+                ImGui::TextWrapped("%s requires (loads after):", e.name.c_str());
+                ImGui::PopStyleColor();
+                for (size_t j = 0; j < modOrder_.mods.size(); ++j) {
+                    if (j == i) continue;
+                    const std::string& other = modOrder_.mods[j].name;
+                    bool req = std::find(info.masters.begin(), info.masters.end(), other) != info.masters.end() ||
+                               (!modRows_[j].packName.empty() && std::find(info.masters.begin(), info.masters.end(), modRows_[j].packName) != info.masters.end());
+                    ImGui::PushID(int(j));
+                    ImGui::BeginGroup();
+                    bool changed = ImGui::Checkbox("##requires", &req);
+                    auto_.registerWidget(("mod_requires_" + std::to_string(i) + "_" + std::to_string(j)).c_str());
+                    ImGui::SameLine();
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+                    ImGui::TextUnformatted(other.c_str());
+                    auto_.registerWidget(("mod_requires_label_" + std::to_string(i) + "_" + std::to_string(j)).c_str());
+                    if (ImGui::IsItemClicked()) { req = !req; changed = true; }
+                    ImGui::PopTextWrapPos();
+                    ImGui::EndGroup();
+                    if (changed) { requireMod = e.name; requireMaster = other; requireValue = req; }
+                    ImGui::PopID();
+                }
+                ImGui::EndPopup();
             }
-            ImGui::EndPopup();
         }
         bool en = e.enabled;
         if (ImGui::Checkbox("##en", &en)) { enableIndex = int(i); enableValue = en; }

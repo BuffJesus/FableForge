@@ -1780,6 +1780,23 @@ The earlier broken-doc evidence is `build/package-smoke-t6tzc4s0` and
 normal/ASan, core and corpus gates; the extracted archive was then tested directly.
 No release was published. A separate-machine/VM and live-game pass remain open.
 
+## 2026-10-01 continuation: bounded, literal dependency labels
+
+`build/mod-master-labels-2se7x78k/popup.png` showed a long dependency-popup
+heading clipped off-screen and a checkbox label truncated at an embedded ##.
+The popup now has a viewport-bounded width/height, a wrapped heading and complete
+wrapped labels beside stable checkbox IDs. Both checkbox and label clicks toggle
+the requirement; the checkbox keeps keyboard interaction.
+
+`tools/test_mod_master_labels.py` passes at 800x600/1.5
+(`build/mod-master-labels-curf7m6t`) and 1280x720/1.0
+(`build/mod-master-labels-9x7ekobs`). It verifies label add, reorder warning,
+checkbox removal, label re-add and exact persisted requirement. The compact
+capture at `build/mod-master-labels-4bm7xm41/popup.png` was visually checked:
+full heading/name, including ##, fit on-screen. The original dependency/drag
+workflow still passes at 800x600/1.5 (`build/mods-masters-wg7en7d9`). GUI build
+passes; unchanged core/CLI gates are reused.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
