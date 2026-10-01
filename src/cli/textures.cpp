@@ -127,8 +127,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         if (!albion::editor::bakeMinimapImage(install.root, name, bytes, given, &used, img, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         if (!given) frame = used;
         std::printf("framing: MiniMapScale %.2f, MiniMapOffsetX %.0f, MiniMapOffsetY %.0f%s\n", double(frame.scale), double(frame.offsetX), double(frame.offsetY), given ? "" : " (centred)");
-        const auto png = te::encodePng(img);
-        std::ofstream(pos[1], std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
+        if (!te::writePng(img, pos[1], err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         std::printf("wrote %s (%ux%u)\n", pos[1].c_str(), img.width, img.height);
         return 0;
     }

@@ -213,13 +213,7 @@ bool decodeSpriteTexture(const fs::path& texturesBig, const std::string& entryNa
 bool exportPng(const fs::path& texturesBig, const std::string& entryName, const fs::path& png, std::string& error) {
     terrainexport::Image img;
     if (!decodeTexture(texturesBig, entryName, img, error)) return false;
-    const auto bytes = terrainexport::encodePng(img);
-    std::error_code ec;
-    fs::create_directories(png.parent_path(), ec);
-    std::ofstream out(png, std::ios::binary | std::ios::trunc);
-    if (!out) { error = "cannot write " + png.string(); return false; }
-    out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-    return bool(out);
+    return terrainexport::writePng(img, png, error);
 }
 
 bool replaceTexture(const fs::path& gameRoot, const std::string& entryName, const fs::path& image,

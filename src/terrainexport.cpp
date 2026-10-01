@@ -1,5 +1,6 @@
 #include "profile.hpp"
 #include "terrainexport.hpp"
+#include "pendingbanks.hpp"
 #include "rowexecutor.hpp"
 
 #include <algorithm>
@@ -376,6 +377,25 @@ std::vector<uint8_t> encodePngUncached(const Image& image) {
     return out;
 }
 } // namespace
+
+bool writePng(const Image& image, const fs::path& destination, std::string& error) {
+    try {
+        const auto bytes = encodePng(image);
+        if (bytes.empty()) { error = "PNG encoder returned no image data"; return false; }
+        const auto target = fs::absolute(destination).lexically_normal();
+        detail::PendingBanks pending(target.parent_path(), ".forge-image-export-");
+        const auto prepared = pending.prepare(target.filename());
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(prepared, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        out.close();
+        return pending.install(false, error);
+    } catch (const std::exception& e) {
+        error = "cannot export PNG to " + destination.string() + ": " + e.what();
+        return false;
+    }
+}
 
 std::vector<uint8_t> encodePng(const Image& image) {
     const uint64_t key = imageHash(image);

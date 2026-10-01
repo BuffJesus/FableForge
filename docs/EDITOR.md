@@ -849,6 +849,9 @@ and validated in an owned workspace before backup/replacement. Invalid images
 leave bank bytes and recovery metadata unchanged; unrelated temporary files are
 preserved, and locked replacement leaves the previous bank intact. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
+Texture and minimap PNG exports prepare and close the new image before replacing
+an existing output; locked or invalid destinations report failure and preserve
+the previous file. Standalone exports do not create install backups.
 
 ## Mods tab
 

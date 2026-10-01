@@ -1292,6 +1292,29 @@ pass (23.13s), with editor/CLI/tools builds successful. Remaining stale cap and
 retail-texture-slot workaround paragraphs in EDITOR.md are reconciled with its
 2026-09-17 findings; PLAN.md labels its old cap investigation as superseded.
 
+## 2026-10-01 continuation: checked standalone PNG publication
+
+`build/image-exports-86s5wk4_/minimap-bake_locked.log` reproduced minimap-bake
+printing "wrote" and returning success when its destination was locked against
+writes. A shared terrainexport::writePng helper now encodes to an owned candidate,
+checks write and close, and uses PendingBanks to publish the complete file.
+Texture export (including the GUI action) and minimap-bake use it. A failed
+replacement keeps the previous destination; the shared rollback-failure path
+retains recovery files and reports their location. No PNG encoding or minimap
+pixel algorithm changed, and no backup is added for a standalone export.
+
+`tools/test_image_exports.py` checks locked output, directory targets and a
+regular file occupying the parent path for both commands. It requires no false
+success message, preservation of prior output and unrelated siblings, successful
+retry and deterministic overwrite. Successful PNGs are checked independently
+for chunk CRCs, IEND, dimensions and complete zlib row data. Copied source
+banks must remain byte-identical and owned staging must be cleaned.
+
+Normal `build/image-exports-2soa519w` and ASan CLI
+`build/image-exports-kcypwqpo` pass. Editor/CLI/tools builds and all 35 rebuilt
+normal suites pass (20.50s). The GUI uses the same texture-export function;
+its file picker was not exercised in this pass.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

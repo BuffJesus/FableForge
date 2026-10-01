@@ -164,6 +164,9 @@ RegionIndex loadRegionIndex(const std::filesystem::path& gameRoot);
 // PNG encoding (used by the GLB builder and the OBJ/layer writers). Cached per
 // process by image content; prewarmPng encodes a set in parallel first.
 std::vector<uint8_t> encodePng(const Image& image);
+// Encode and close an owned candidate before replacing a standalone PNG.
+// Reported replacement failures preserve the previous destination.
+bool writePng(const Image& image, const std::filesystem::path& destination, std::string& error);
 void prewarmPng(const std::vector<const Image*>& images);
 
 // Geometry only (positions/normals/UVs/walkable/theme slots), no textures.
