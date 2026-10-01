@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: compact Effects workspace
+
+The compact capture at `build/asset-workspaces-lzbsz58e/800x600-effect.png`
+showed Frame current, playback speed and background/grid controls clipped to the
+right, with the preview below the fold. Effects now puts its image directly under
+the selected name, with height adapted to the viewport. Transport and timing
+controls wrap at the available width. Background uses a colour swatch/picker
+instead of always-visible numeric fields. Counts and decode details follow the
+preview controls and wrap. Rendering, simulation and framing algorithms are
+unchanged.
+
+`tools/test_effect_workspace.py` passes at `build/effect-workspace-vhu9ekk9` for
+1440x900 and 800x600 / 1.5. It uses owned captures for deterministic transport,
+complete control widths, grid toggle/reset, selected-tick framing and effect to
+texture/model links. Grid toggles change 17065/3220 preview pixels and restore
+exactly. Current framing increases visible pixels 1539 to 1842 and 414 to 679.
+Pixel checks now read actual registered preview rectangles, replacing obsolete
+fixed crops and fixed window dimensions; the framing gain threshold is 15% over
+the complete preview rather than 30% over a partial historical crop. The compact
+screenshot was inspected with the effect visible above controls. `check_all.py`
+uses the owned workspace check. The renderer/simulation were not changed.
+
 ## 2026-10-01 continuation: model import window and asset preview space
 
 At 800x600 / 1.5, the old Import model toggle revealed a form below the visible

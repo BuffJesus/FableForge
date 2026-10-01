@@ -80,11 +80,8 @@ def main():
                                                 "--install", install_root], capture_output=True)
         effects = os.path.join(install_root, "data", "Misc", "pc", "effects.big")
         if os.path.isfile(effects):
-            ok &= run("ui FX transport", [gui, "--auto", "tests/ui/effect_transport.txt"])
-            ok &= run("ui FX grid", [gui, "--auto", "tests/ui/effect_grid.txt"])
-            ok &= run("FX grid pixels", [sys.executable, "tools/test_effect_grid_pixels.py"])
-            ok &= run("ui FX current framing", [gui, "--auto", "tests/ui/effect_frame_current.txt"])
-            ok &= run("FX current framing pixels", [sys.executable, "tools/test_effect_frame_current_pixels.py"])
+            ok &= run("FX normal/compact controls, transport, grid/framing pixels and asset links",
+                      [sys.executable, "tools/test_effect_workspace.py", "--install", install_root], capture_output=True)
     ok &= run("ui paths", [gui, "--auto", "tests/ui/paths.txt"])
     ok &= run("ui controls", [gui, "--auto", "tests/ui/controls.txt"])
     ok &= run("ui wheel", [gui, "--auto", "tests/ui/wheel.txt"])

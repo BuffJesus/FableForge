@@ -189,11 +189,6 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     if (!texturesLoaded_) refreshTextures();
     const auto& effect=effectBrowserSelection_;
     ImGui::TextWrapped("%s",effect.displayName.empty()?effect.name.c_str():effect.displayName.c_str());
-    ImGui::TextWrapped("%s  |  id %u  |  %d systems",effect.name.c_str(),effect.id,effect.systems);
-    ImGui::Text("%zu sprite systems  |  %zu mesh systems  |  %zu lights",effect.sprites.size(),effect.meshes.size(),effect.lights.size());
-    if (effect.parsedFully) theme::hint("All components were decoded. Supported sprites, meshes and light volumes play below; other components remain inspectable.");
-    else ImGui::TextWrapped("Partial decode: an unsupported or incomplete component stopped parsing. Some systems or values may be missing.");
-    auto_.registerWidget("effect_decode_status");
     if (!effectRendererReady_) effectRendererReady_=effectRenderer_.init(device_,context_);
     if (effectRendererReady_ && !effectTexturesReady_) {
         effectTexturesReady_=true;
@@ -247,19 +242,52 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         }
         frameEffectPreview();
     }
+    const ImVec2 previewSize(std::max(1.f,ImGui::GetContentRegionAvail().x),std::clamp(size.y * .40f, S(130), S(270)));
+    effectLightVolumesDrawn_=0;
+    if (effectRendererReady_) {
+        auto* image=effectRenderer_.render(int(previewSize.x),int(previewSize.y),effectCamera_,
+            effectSimulation_.sprites(),effectSimulation_.meshes(),effectBackground_,effectShowGrid_);
+        if (image) {
+            const ImVec2 imageOrigin=ImGui::GetCursorScreenPos();
+            ImGui::Image((ImTextureID)(intptr_t)image,previewSize);
+            if (effectShowLightVolumes_) effectLightVolumesDrawn_=drawEffectLightVolumes(*ImGui::GetWindowDrawList(),effectCamera_,imageOrigin,previewSize,effectSimulation_.lights());
+            ImGui::SetCursorScreenPos(imageOrigin);
+            ImGui::InvisibleButton("##effectpreviewinput",previewSize);
+            ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
+            auto_.registerWidget("effect_preview_image");
+            if (ImGui::IsItemHovered()) {
+                const auto& io=ImGui::GetIO();
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) effectCamera_.orbit(-io.MouseDelta.x*.008f,-io.MouseDelta.y*.008f);
+                if (io.MouseWheel!=0) {
+                    float focus[3]; effectCamera_.focus(focus);
+                    effectCamera_.lookAt(focus[0],focus[1],focus[2],effectCamera_.yaw,effectCamera_.pitch,
+                        std::clamp(effectCamera_.distance*std::exp(-io.MouseWheel*.15f),.1f,1000.f));
+                }
+            }
+        }
+    }
+    const auto nextControl = [&](float width) {
+        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        if (ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + width <= right)
+            ImGui::SameLine();
+    };
+    const auto buttonWidth = [&](const char* text) {
+        return ImGui::CalcTextSize(text).x + ImGui::GetStyle().FramePadding.x * 2;
+    };
     if (ImGui::Button(effectPlaying_?"Pause":"Play")) effectPlaying_=!effectPlaying_;
-    auto_.registerWidget("btn_effect_play"); ImGui::SameLine();
+    auto_.registerWidget("btn_effect_play"); nextControl(buttonWidth("Restart"));
     if (ImGui::Button("Restart")) {effectSimulation_.reset(effect);effectLoopCount_=0;}
-    auto_.registerWidget("btn_effect_restart"); ImGui::SameLine();
+    auto_.registerWidget("btn_effect_restart"); nextControl(buttonWidth("Step"));
     if (ImGui::Button("Step")) { effectPlaying_=false; effectSimulation_.step(); }
-    auto_.registerWidget("btn_effect_step"); ImGui::SameLine();
+    auto_.registerWidget("btn_effect_step"); nextControl(buttonWidth("Frame effect"));
     if (ImGui::Button("Frame effect")) frameEffectPreview();
     auto_.registerWidget("btn_effect_frame");
-    ImGui::SameLine();
+    nextControl(buttonWidth("Frame current"));
     if (ImGui::Button("Frame current")) frameEffectPreview(true);
     auto_.registerWidget("btn_effect_frame_current");
     ImGui::Checkbox("Loop##effect",&effectLoop_);
-    auto_.registerWidget("check_effect_loop");ImGui::SameLine();
+    auto_.registerWidget("check_effect_loop");
+    nextControl(S(80) + ImGui::CalcTextSize("Duration").x + ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(S(80));
     const bool durationChanged=ImGui::DragFloat("Duration##effect",&effectDuration_,
                                                 .1f,.5f,300.f,"%.1f s");
@@ -268,7 +296,8 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         effectPlaying_=false;
         effectSimulation_.seek(effect,effectDuration_);
     }
-    auto_.registerWidget("drag_effect_duration");ImGui::SameLine();
+    auto_.registerWidget("drag_effect_duration");
+    nextControl(S(80) + ImGui::CalcTextSize("Speed").x + ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(S(80));
     const char* speeds[]={"0.25x","0.5x","1x","2x"};
     ImGui::Combo("Speed##effect",&effectSpeedIndex_,speeds,4);
@@ -298,13 +327,12 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     if (!effect.lights.empty()) {
         ImGui::Checkbox("Light volumes",&effectShowLightVolumes_);
         auto_.registerWidget("check_effect_light_volumes");
-        ImGui::SameLine(); ImGui::Text("%zu active lights",effectSimulation_.lights().size());
+        ImGui::TextWrapped("%zu active lights",effectSimulation_.lights().size());
     }
-    ImGui::SetNextItemWidth(theme::S(220));
-    ImGui::ColorEdit3("Background",effectBackground_,ImGuiColorEditFlags_NoAlpha);
+    ImGui::ColorEdit3("Background",effectBackground_,ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_NoInputs);
     auto_.registerWidget("effect_background_color");
     if (ImGui::IsItemDeactivatedAfterEdit()) saveSettings();
-    ImGui::SameLine();
+    nextControl(ImGui::GetFrameHeight() + ImGui::CalcTextSize("Grid").x + ImGui::GetStyle().ItemInnerSpacing.x);
     if(ImGui::Checkbox("Grid##effect",&effectShowGrid_)) saveSettings();
     auto_.registerWidget("check_effect_grid");
     const struct { const char* label; const char* widget; float value[3]; } presets[] = {
@@ -321,33 +349,14 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         auto_.registerWidget(preset.widget);
         if (i+1<3) ImGui::SameLine();
     }
-    ImGui::Text("%.2f / %.1f s | %zu particles | %zu previewed systems",
+    ImGui::TextWrapped("%.2f / %.1f s | %zu particles | %zu previewed systems",
         effectSimulation_.time(),effectDuration_,effectSimulation_.particleCount(),
         effectSimulation_.supportedSystems());
-    const ImVec2 previewSize(std::max(1.f,ImGui::GetContentRegionAvail().x),S(270));
-    effectLightVolumesDrawn_=0;
-    if (effectRendererReady_) {
-        auto* image=effectRenderer_.render(int(previewSize.x),int(previewSize.y),effectCamera_,
-            effectSimulation_.sprites(),effectSimulation_.meshes(),effectBackground_,effectShowGrid_);
-        if (image) {
-            const ImVec2 imageOrigin=ImGui::GetCursorScreenPos();
-            ImGui::Image((ImTextureID)(intptr_t)image,previewSize);
-            if (effectShowLightVolumes_) effectLightVolumesDrawn_=drawEffectLightVolumes(*ImGui::GetWindowDrawList(),effectCamera_,imageOrigin,previewSize,effectSimulation_.lights());
-            ImGui::SetCursorScreenPos(imageOrigin);
-            ImGui::InvisibleButton("##effectpreviewinput",previewSize);
-            ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
-            auto_.registerWidget("effect_preview_image");
-            if (ImGui::IsItemHovered()) {
-                const auto& io=ImGui::GetIO();
-                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) effectCamera_.orbit(-io.MouseDelta.x*.008f,-io.MouseDelta.y*.008f);
-                if (io.MouseWheel!=0) {
-                    float focus[3]; effectCamera_.focus(focus);
-                    effectCamera_.lookAt(focus[0],focus[1],focus[2],effectCamera_.yaw,effectCamera_.pitch,
-                        std::clamp(effectCamera_.distance*std::exp(-io.MouseWheel*.15f),.1f,1000.f));
-                }
-            }
-        }
-    }
+    ImGui::TextWrapped("%s  |  id %u  |  %d systems",effect.name.c_str(),effect.id,effect.systems);
+    ImGui::TextWrapped("%zu sprite systems  |  %zu mesh systems  |  %zu lights",effect.sprites.size(),effect.meshes.size(),effect.lights.size());
+    if (effect.parsedFully) theme::hint("All components were decoded. Supported sprites, meshes and light volumes play above; other components remain inspectable.");
+    else ImGui::TextWrapped("Partial decode: an unsupported or incomplete component stopped parsing. Some systems or values may be missing.");
+    auto_.registerWidget("effect_decode_status");
     if (!effectRenderer_.error().empty()) ImGui::TextWrapped("Preview: %s",effectRenderer_.error().c_str());
     theme::hint("Drag to orbit; wheel to zoom. Unsupported behaviors remain approximate.");
     if (!effect.lights.empty()) theme::hint("Light volumes show animated colour and radius. They do not illuminate scene geometry.");

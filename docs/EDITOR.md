@@ -1022,6 +1022,8 @@ investigations (texture append resolution, region cap, villagers).
    live link to the running game through ForgeFSE -- see `docs/PLAN.md`.
 
 The **Assets > Effects** preview has Play/Pause, Restart and Step controls.
+The image appears first; controls wrap on narrow windows, with component details
+below them. Click the Background colour swatch to open its colour picker.
 Step advances one 30 Hz tick and pauses playback. Drag the image to orbit and use
 the wheel to zoom. Use Background to pick any RGB colour, or choose Dark, Grey
 or Light to make subtle effects visible. Forge remembers this preview choice.

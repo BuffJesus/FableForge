@@ -9,13 +9,16 @@ effect_preview_restart
 frames 3
 assert_widget check_effect_grid
 assert_state effect_preview_grid 0
+dump_widget effect_preview_image
 screenshot build/ui/effect_grid_off.png
 click check_effect_grid
 frames 2
 assert_state effect_preview_grid 1
+dump_widget effect_preview_image
 screenshot build/ui/effect_grid_on.png
 click check_effect_grid
 frames 2
 assert_state effect_preview_grid 0
+dump_widget effect_preview_image
 screenshot build/ui/effect_grid_reset.png
 quit

@@ -11,8 +11,10 @@ frames 3
 click btn_effect_frame
 frames 2
 assert_widget btn_effect_frame_current
+dump_widget effect_preview_image
 screenshot build/ui/effect_frame_all.png
 click btn_effect_frame_current
 frames 3
+dump_widget effect_preview_image
 screenshot build/ui/effect_frame_current.png
 quit
