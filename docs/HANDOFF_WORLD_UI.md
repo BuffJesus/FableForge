@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned CLI level resolution
+
+Two concurrent `forge info TeleporterGreatwood` calls reproduced a truncated
+header error from their shared extracted LEV (`build/cli-level-workspace-qn4ixe38`).
+CLI level resolution now returns a path backed by a caller-owned optional
+workspace, with checked extraction writes. Export/info, chunk diagnostics,
+minimap and template-theme callers keep ownership through their reads; the old
+single-file export deletion guard is removed. Loose and explicit paths remain
+direct reads.
+
+Normal and ASan tests pass at `build/cli-level-workspace-w8cdtx3o` and
+`build/cli-level-workspace-915qi5t7`: concurrent info outputs agree, old shared
+markers survive, a missing-template-theme early return cleans up, and loose/
+explicit-file info matches WAD info. The fixture's initial early-return attempts
+lacked WLD/BWD donor metadata and were corrected before claiming that coverage.
+Full build and all 29 core suites pass (20.55 seconds). No source bank changes.
+This does not cover other fixed paths such as navlines
+or editor preview extraction.
+
 ## 2026-10-01 continuation: owned seam-stitch extraction
 
 A dry-run seam check overwrote both shared stitch LEVs in

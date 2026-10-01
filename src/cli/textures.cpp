@@ -104,7 +104,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         if (pos.size() < 2) { std::fprintf(stderr, "usage: forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY] [--install <root>]\n"); return 2; }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
-        fs::path tempLev;
+        LevelWorkspace tempLev;
         const fs::path lev = resolveLevel(pos[0], install, tempLev);
         std::ifstream in(lev, std::ios::binary);
         const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());

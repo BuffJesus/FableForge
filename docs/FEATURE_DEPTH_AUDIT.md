@@ -445,6 +445,15 @@ confirm a tight seam and Restore the exact original inventory/hashes. Markers
 survive and owned workspaces are cleaned. The stock test also passes under ASan.
 Writer builds pass; seam/feather algorithms are unchanged.
 
+## CLI level extraction ownership, 2026-10-01
+
+Concurrent info calls no longer share a temporary LEV. All resolveLevel callers
+retain workspace ownership; checked extraction and RAII cleanup cover success
+and early return. Normal/ASan tests compare concurrent WAD info and loose/direct
+file info, preserve the old shared marker and verify no owned workspace remains.
+Missing-theme validation exercises early-return cleanup without writing a level.
+Other fixed extraction paths remain separate work.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -53,7 +53,7 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
     if (cmd == "heights") {   // heights <map.lev> <x,y> [<x,y> ...]: bilinear LEV heights at map-local points (in-game harness oracle)
         if (args.size() < 3) { std::fprintf(stderr, "usage: forge heights <map.lev> <x,y> ...\n"); return 2; }
         try {
-            fs::path temp;
+            LevelWorkspace temp;
             const fs::path levPath = fs::exists(args[1]) ? fs::path(args[1]) : resolveLevel(args[1], findInstall(""), temp);
             const auto lev = forge::lev::File::open(levPath);
             for (size_t i = 2; i < args.size(); ++i) {
@@ -104,7 +104,7 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         try {
-            fs::path temp;
+            LevelWorkspace temp;
             const fs::path levPath = resolveLevel(args[1], install, temp);
             const auto lev = forge::lev::File::open(levPath);
             const auto albedo = albion::editor::bakeLodAlbedo(install.root, lev);
@@ -311,7 +311,7 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
                 auto chunk = archive.read(*entry);
                 albion::editor::RelocateReport rep; std::string err;
                 for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--bake") {   // --bake <lev|map>: bakeHeightfield first (identity), audit
-                    fs::path temp;
+                    LevelWorkspace temp;
                     const auto lev = forge::lev::File::open(resolveLevel(args[i + 1], install, temp));
                     forge::stbbake::HeightfieldBakeOptions opt; opt.requireCanonicalSize = false;
                     const auto baked = forge::stbbake::bakeHeightfield(chunk, lev, info.worldX, info.worldY, opt);

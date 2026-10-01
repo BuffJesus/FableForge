@@ -1,6 +1,7 @@
 // forge CLI: shared helpers and the per-family entry points. Each family returns the exit
 // code when `cmd` is one of its commands, nullopt otherwise (main tries them in order).
 #pragma once
+#include "temporarydirectory.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -21,8 +22,10 @@ struct Install {
 Install findInstall(const std::string& override);
 
 // Resolve the user's level argument to a .lev path on disk. WAD-resident maps are extracted
-// to a temp file (the LEV reader is path-based); `tempOut` names it so the caller can delete it.
-std::filesystem::path resolveLevel(const std::string& arg, const Install& install, std::filesystem::path& tempOut);
+// to an owned workspace (the LEV reader is path-based). Keep the workspace alive
+// until the returned path has been read. Direct/loose paths need no workspace.
+using LevelWorkspace = std::optional<detail::TemporaryDirectory>;
+std::filesystem::path resolveLevel(const std::string& arg, const Install& install, LevelWorkspace& scratch);
 
 using Args = std::vector<std::string>;
 std::optional<int> runLevels(const std::string& cmd, const Args& args);   // new levels and region entrances

@@ -135,7 +135,7 @@ Install findInstall(const std::string& override) {
 
 // Resolve the user's level argument to a .lev path on disk. WAD-resident maps
 // are extracted to a temp file (the LEV reader is path-based).
-fs::path resolveLevel(const std::string& arg, const Install& install, fs::path& tempOut) {
+fs::path resolveLevel(const std::string& arg, const Install& install, LevelWorkspace& scratch) {
     if (fs::exists(arg) && fs::is_regular_file(arg)) return arg;
     if (!install.valid) throw std::runtime_error("'" + arg + "' is not a file and no Fable install was found (use --install)");
     std::string name = arg;
@@ -146,11 +146,14 @@ fs::path resolveLevel(const std::string& arg, const Install& install, fs::path& 
     // not loose: the WAD entry (a loose-level install has no WAD to fall back to)
     const auto levels = forge::levelstore::detect(install.root);
     if (const auto bytes = forge::levelstore::readFile(levels, name + ".lev")) {
-        const fs::path dir = fs::temp_directory_path() / "FableForge";
-        fs::create_directories(dir);
-        tempOut = dir / (name + ".lev");
-        std::ofstream(tempOut, std::ios::binary).write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
-        return tempOut;
+        scratch.emplace("cli-level-");
+        const fs::path path = scratch->path() / fs::path(name + ".lev").filename();
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
+        out.close();
+        return path;
     }
     throw std::runtime_error("no map named '" + name + "' in " + levels.describe() + " (try: forge list)");
 }

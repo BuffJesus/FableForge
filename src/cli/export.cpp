@@ -221,9 +221,8 @@ int runExport(const std::string& cmd, const Args& args) {
         }
         if (target.empty()) return usage();
 
-        fs::path temp;
+        LevelWorkspace temp;
         const fs::path lev = resolveLevel(target, install, temp);
-        struct TempGuard { fs::path p; ~TempGuard() { if (!p.empty()) { std::error_code ec; fs::remove(p, ec); } } } guard{temp};
 
         if (cmd == "info") return cmdInfo(lev);
         if (cmd == "ground") {   // diagnostic: engine background albedo vs our bake -> writes PNGs, prints mean colours

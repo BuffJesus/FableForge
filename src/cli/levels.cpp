@@ -88,7 +88,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         if (!theme.empty()) {
             if (std::isdigit(static_cast<unsigned char>(theme[0]))) req.themeSlot = std::atoi(theme.c_str());
             else {
-                fs::path temp;
+                LevelWorkspace temp;
                 const auto tl = forge::lev::File::open(resolveLevel(req.templateLevel, install, temp));
                 for (size_t i = 0; i < tl.groundThemes().size(); ++i) if (tl.groundThemes()[i].name == theme) req.themeSlot = int(i);
                 if (req.themeSlot < 0) { std::fprintf(stderr, "theme %s is not in %s's palette\n", theme.c_str(), req.templateLevel.c_str()); return 2; }
