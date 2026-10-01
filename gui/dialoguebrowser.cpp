@@ -505,7 +505,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     auto_.registerWidget("combo_dialogue_pack");
     ImGui::BeginDisabled(!stagedCount || packDest_.empty() ||
                          !modpack::isPack(packDest_));
-    if(ImGui::Button("Add staged lines to pack##dialogue")) {
+    if(ImGui::Button("Add staged lines to pack##dialogue") && !fileWriteBlocked("lip sync pack")) {
         std::vector<forge::lipsync::ArchiveEdit> edits;
         for(const auto& [key,value]:dialogueStaged_)
             if(std::get<0>(key)==archivePath().string())

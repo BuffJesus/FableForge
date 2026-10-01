@@ -334,6 +334,15 @@ All source/extracted-file hashes remain unchanged and no active WAD is created
 in the extracted layout. A missing-source failure preserves the previous pack
 and keeps the draft dirty. This does not serialize competing write jobs.
 
+## Overlapping GUI file operations, 2026-10-01
+
+The editor now permits one file job at a time and refuses competing saves,
+pack edits, mod-order changes and save-folder changes with the active job named.
+Draft editing remains available. Terrain, new-level and actual mod-deployment
+probes verify refusal, retained draft edits, successful retry and unchanged or
+restored source-bank hashes. Separate processes/CLI writers remain outside this
+guard; it is not a filesystem lock.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

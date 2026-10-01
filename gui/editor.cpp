@@ -1698,7 +1698,7 @@ void App::drawPackDestination(float cardInner) {
     ImGui::InputTextWithHint("##newpack", "New pack name", newPackName_, sizeof newPackName_);
     auto_.registerWidget("input_new_pack");
     if (!stackPack) ImGui::SameLine(0, S(6));
-    if (theme::ghostButton("New pack", ImVec2(stackPack ? cardInner : packButtonWidth, S(26))) && newPackName_[0]) {
+    if (theme::ghostButton("New pack", ImVec2(stackPack ? cardInner : packButtonWidth, S(26))) && newPackName_[0] && !fileWriteBlocked("new pack")) {
         std::string leaf = newPackName_;
         for (auto& c : leaf) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')) c = '_';
         const fs::path folder = fs::path(saveRoot()) / "FableForgeMods" / leaf;
@@ -1718,6 +1718,7 @@ void App::drawPackDestination(float cardInner) {
 bool App::addToPackOrGame(bool model) {
     auto& lastError = model ? meshImportError_ : customThemeError_;
     lastError.clear();
+    if (fileWriteBlocked("asset import")) { lastError = "Wait for the current file operation to finish, then import again."; return false; }
     auto upper = [](std::string nm) { for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; } return nm; };
     if (packDest_.empty()) {
         if (model) return importMesh(meshModelPath_, upper(meshName_), meshTexturePng_);
@@ -1828,6 +1829,7 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
     auto fail = [&](const std::string& message, int level) {
         customThemeError_ = message; pushLog("editor: " + message, level); return false;
     };
+    if (fileWriteBlocked("custom theme")) return fail("wait for the current file operation to finish", 1);
     if (ctxFuture_.valid()) return fail("textures are still loading, try again in a moment", 1);
     if (!installValid_) return fail("a custom theme needs a Fable install", 1);
     if (documentLoaded() && doc_.hasTerrain() && doc_.paletteSlotOf(name) < 0) {
@@ -1864,6 +1866,7 @@ bool App::importMesh(const std::string& model, const std::string& name, const st
         meshImportError_ = message; pushLog("import model: " + message, 1); return false;
     };
     if (meshImportFuture_.valid()) return fail("still busy");
+    if (fileWriteBlocked("import model")) return fail("wait for the current file operation to finish");
     if (ctxFuture_.valid()) return fail("textures are still loading, try again in a moment");
     meshimport::ImportRequest req;
     req.model = model; req.name = name; req.texturePng = texturePng;
@@ -2482,6 +2485,7 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
 
 bool App::saveDocument() {
     if (!documentLoaded()) return false;
+    if (fileWriteBlocked("save")) return false;
     if (doc_.external() && saveRoot() != installPath_) { pushLog("save: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
@@ -2490,7 +2494,26 @@ bool App::saveDocument() {
     return true;
 }
 
+const char* App::activeFileJob() const {
+    if (terrainDeployFuture_.valid()) return "terrain write";
+    if (worldFuture_.valid()) return "world write";
+    if (newLevelFuture_.valid()) return "level creation";
+    if (compactFuture_.valid()) return "bank compaction";
+    if (meshImportFuture_.valid()) return "model import";
+    if (modsFuture_.valid()) return "mod processing";
+    return nullptr;
+}
+
+bool App::fileWriteBlocked(const char* what) {
+    if (const char* job = activeFileJob()) {
+        pushLog(std::string(what) + ": wait for " + job + " to finish, then try again", 1);
+        return true;
+    }
+    return false;
+}
+
 bool App::gameWriteBlocked(const char* what) {
+    if (fileWriteBlocked(what)) return true;
     linkPoll(true);
     if (link_.heartbeatAge >= 0 && link_.heartbeatAge < 5.0) { pushLog(std::string(what) + ": the game is running (live link heartbeat) -- rewriting its files underneath it crashes it; quit to the desktop first", 1); return true; }
     if (backups::gameRunningIn(saveRoot())) { pushLog(std::string(what) + ": Fable.exe is running from this install -- it holds the WAD/STB/textures/defs open and rewriting them crashes it; quit to the desktop first", 1); return true; }
@@ -2499,6 +2522,7 @@ bool App::gameWriteBlocked(const char* what) {
 
 bool App::deployDocument() {
     if (!documentLoaded()) return false;
+    if (fileWriteBlocked("deploy")) return false;
     if (!packDest_.empty()) {
         std::string err;
         if (!doc_.saveToPack(packDest_, err)) { pushLog("pack: " + err, 2); return false; }
@@ -3306,6 +3330,7 @@ void App::selectBlankSize(int w, int h) {
 
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
+    if (fileWriteBlocked("new level")) return;
     if (hasUnsavedEdits()) { pushLog("new level: save or discard the current edits before creating a level", 1); return; }
     if (packDest_.empty() && gameWriteBlocked("new level")) return;
     const std::string root = saveRoot();
@@ -3359,6 +3384,7 @@ void App::startNewLevel() {
 
 void App::startTerrainDeploy() {
     if (!documentLoaded() || !doc_.hasTerrain() || terrainDeployFuture_.valid()) return;
+    if (fileWriteBlocked("terrain")) return;
     linkPoll(true);
     if (packDest_.empty() && gameWriteBlocked("terrain")) return;
     if (doc_.external() && saveRoot() != installPath_) { pushLog("terrain: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return; }

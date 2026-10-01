@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: overlapping GUI file operations
+
+Several actions checked only their own future; a GUI probe confirmed that an
+object pack save was accepted while new-level capture was active. The timing
+probes did not demonstrate lost data, but both operations can replace/remove
+the same pack paths. The GUI now shares a busy check across terrain/world writes,
+level creation, compaction, model import and mod processing. Draft/object saves,
+asset/pack writes, mod-order/conflict changes and save-folder changes refuse
+until the active job is consumed, naming that job in the log. Editing the draft
+and browsing remain available. This serializes one GUI instance, not other
+processes or CLI writers.
+
+The expanded terrain script passes refusal of draft/object saves, compaction,
+mod deploy, imports, level creation and save-folder switching during a terrain
+write, then successfully saves a placed object afterward. The pending terrain
+still matches the reference byte-for-byte (`build/terrain-async-ebpyus7u`).
+`build/write_overlap_depth/guarded.txt.log` verifies object/terrain edits made
+during creation remain dirty, overlapping saves refuse, then both save to the
+pack after creation completes, without changing source banks.
+`mods_busy.txt.log` verifies refusals during a real mod deployment, successful
+order changes afterward and byte-exact original-bank restoration on undeploy.
+The install-switch regression passes. GUI build passes; core code is unchanged
+from the preceding full 27-suite and focused ASan gate.
+
 ## 2026-10-01 continuation: repeated terrain pack writes
 
 Writing two height strokes in separate pack saves reproduced differing chunk

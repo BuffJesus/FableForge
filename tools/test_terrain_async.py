@@ -94,6 +94,27 @@ select Greatwood_1
 assert_state terrain_deploy_busy 1''', '''assert_state selected Greatwood_1
 assert_state terrain_dirty 0''')
     assert switched == reference, 'map switch changed the deployed terrain snapshot'
+    guarded = run('write_busy', f'''assert_state file_job terrain_write
+save_level_refused
+deploy_level_refused
+compact_stb_refused
+mods_deploy_refused
+mesh_import_refused absent.obj BusyModel
+custom_theme_refused absent.png BusyTheme
+new_level BusyShouldNotExist 6400 6400 Greatwood
+assert_log new level: wait for terrain write
+set saveroot {work / 'other-root'}
+assert_log save folder: wait for terrain write
+assert_state pack_destination {(work / 'write_busy').as_posix()}
+assert_state file_job terrain_write''', '''assert_state file_job none
+place OBJECT_BARREL_BREAKABLE BusyDraft
+assert_state doc_dirty 1
+deploy_level
+assert_state doc_dirty 0''')
+    object_file = 'data/Levels/FinalAlbion/Greatwood_1.tng'
+    assert 'BusyDraft' in (work / 'write_busy' / object_file).read_text()
+    del guarded[object_file]
+    assert guarded == reference, 'refused writes changed the pending terrain output'
     repeat = run('repeat', '', '''assert_state terrain_dirty 0
 deploy_terrain
 wait_terrain

@@ -688,12 +688,13 @@ bool Automation::tick(App& app) {
     else if (cmd == "mod_move") { std::istringstream rs(rest); std::string n; int to = 0; rs >> n >> to; if (!app.modMove(n, to)) fail("mod_move failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "mod_enable") { std::istringstream rs(rest); std::string n; int on = 1; rs >> n >> on; if (!app.modEnable(n, on != 0)) fail("mod_enable failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "mods_deploy") { if (!app.runModsTool("deploy")) fail("mods_deploy refused"); else note("..   " + line); ++pc_; }
+    else if (cmd == "mods_deploy_refused") { if (app.runModsTool("deploy")) fail("mods_deploy unexpectedly started"); else note("ok   " + line); ++pc_; }
     else if (cmd == "mods_undeploy") { if (!app.runModsTool("undeploy")) fail("mods_undeploy refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "mods_conflicts") { if (!app.runModsTool("conflicts")) fail("mods_conflicts refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "wait_mods") { app.pollModsTool(); waitOn(!app.modsBusy(), "mods tool"); }
-    else if (cmd == "mesh_import") {   // mesh_import <model> <NAME> [png]
+    else if (cmd == "mesh_import" || cmd == "mesh_import_refused") {   // mesh_import <model> <NAME> [png]
         std::istringstream rs(rest); std::string model, nm, png; rs >> model >> nm >> png;
-        if (!app.importMesh(model, nm, png)) fail("mesh_import refused: " + rest); else note("..   " + line); ++pc_;
+        if (app.importMesh(model, nm, png) != (cmd == "mesh_import")) fail(cmd + " returned an unexpected result: " + rest); else note("ok   " + line); ++pc_;
     }
     else if (cmd == "wait_mesh_import") { app.pollMeshImport(); waitOn(!app.meshImportBusy(), "mesh import"); }
     else if (cmd == "mod_pick") {   // mod_pick <key|*> <winner|->  (the winner is the rest after the first space; "*" = the first conflict row)
@@ -1156,6 +1157,7 @@ bool Automation::tick(App& app) {
         if (!app.placeDefinition(def, sn)) fail("place failed: " + rest); else note("ok   " + line); ++pc_;
     }
     else if (cmd == "compact_stb") { if (!app.compactBank()) fail("compact_stb failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "compact_stb_refused") { if (app.compactBank()) fail("compact_stb unexpectedly started"); else note("ok   " + line); ++pc_; }
     else if (cmd == "wait_compact") waitOn(!app.compactBusy(), "compaction");
     else if (cmd == "restore_all") { if (!app.restoreAllBackups()) fail("restore failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
@@ -1190,7 +1192,9 @@ bool Automation::tick(App& app) {
         ++pc_;
     }
     else if (cmd == "save_level") { if (!app.saveDocument()) fail("save failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "save_level_refused") { if (app.saveDocument()) fail("save unexpectedly succeeded"); else note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "deploy_level_refused") { if (app.deployDocument()) fail("deploy unexpectedly succeeded"); else note("ok   " + line); ++pc_; }
     else if (cmd == "drag_gizmo") { std::istringstream(rest) >> dragDx_ >> dragDy_; dragPhase_ = 1; note("..   " + line); ++pc_; }
     else if (cmd == "terrain_mode") { app.setTerrainMode(std::atoi(rest.c_str())); app.setGizmoOp(4); note("ok   " + line); ++pc_; }
     else if (cmd == "paint_theme") { app.setPaintTheme(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }

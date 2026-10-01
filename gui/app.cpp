@@ -495,6 +495,7 @@ void App::drawSetupPanel() {
 
 bool App::compactBank() {
     if (!installValid_ || compactFuture_.valid()) return false;
+    if (fileWriteBlocked("compact")) return false;
     const std::string root = installPath_;
     pushLog("compacting the static-map bank (a ~570 MB rewrite; every payload is verified before the swap)", 0);
     compactFuture_ = std::async(std::launch::async, [root]() { return stbcompact::compact(root); });
@@ -1714,6 +1715,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
+    std::string fileJob = activeFileJob() ? activeFileJob() : "none";
+    std::replace(fileJob.begin(), fileJob.end(), ' ', '_');
+    v.push_back("file_job=" + fileJob);
     if (documentLoaded() && doc_.hasTerrain()) {
         char h[64];
         const auto& t = doc_.terrain();

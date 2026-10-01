@@ -764,6 +764,8 @@ public:
     // STB, textures.big and defs open; rewriting them underneath it crashes it). Logs
     // "<what>: the game is running ..." and returns true when the write must not happen.
     bool gameWriteBlocked(const char* what);
+    const char* activeFileJob() const;
+    bool fileWriteBlocked(const char* what);
     const livelink::Status& linkStatus() const { return link_; }
 private:
     std::vector<std::pair<std::string, std::string>> villageList_;

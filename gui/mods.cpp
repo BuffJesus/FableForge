@@ -57,6 +57,8 @@ void App::setModsMode(bool on) {
 
 void App::setSaveRoot(const std::string& root) {
     const fs::path previous = fs::path(saveRoot()).lexically_normal();
+    const fs::path next = fs::path(root.empty() ? installPath_ : root).lexically_normal();
+    if (previous != next && fileWriteBlocked("save folder")) return;
     saveRoot_ = root;
     if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
 }
@@ -99,6 +101,7 @@ void App::refreshModOrder() {
 }
 
 bool App::modSetRequires(const std::string& mod, const std::string& master, bool on) {
+    if (fileWriteBlocked("mod requirements")) return false;
     size_t at = modOrder_.mods.size();
     for (size_t i = 0; i < modOrder_.mods.size(); ++i)
         if (modOrder_.mods[i].name == mod || std::to_string(i) == mod) { at = i; break; }
@@ -122,6 +125,7 @@ std::string App::modProblems() const {
 }
 
 bool App::modAdd(const std::string& source, const std::string& name) {
+    if (fileWriteBlocked("add mod")) return false;
     try {
         auto order = mo::load(saveRoot());
         auto& e = mo::add(order, saveRoot(), source, name);
@@ -133,16 +137,19 @@ bool App::modAdd(const std::string& source, const std::string& name) {
 }
 
 bool App::modRemove(const std::string& nameOrIndex) {
+    if (fileWriteBlocked("remove mod")) return false;
     try { auto order = mo::load(saveRoot()); mo::remove(order, nameOrIndex); mo::save(saveRoot(), order); refreshModOrder(); pushLog("mods: removed " + nameOrIndex + " (deploy again to rebuild the install without it)", 0); return true; }
     catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
 }
 
 bool App::modMove(const std::string& nameOrIndex, int to) {
+    if (fileWriteBlocked("mod order")) return false;
     try { auto order = mo::load(saveRoot()); mo::move(order, nameOrIndex, to); mo::save(saveRoot(), order); refreshModOrder(); return true; }
     catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
 }
 
 bool App::modEnable(const std::string& nameOrIndex, bool on) {
+    if (fileWriteBlocked("mod enabled")) return false;
     try { auto order = mo::load(saveRoot()); mo::setEnabled(order, nameOrIndex, on); mo::save(saveRoot(), order); refreshModOrder(); return true; }
     catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
 }
@@ -150,6 +157,7 @@ bool App::modEnable(const std::string& nameOrIndex, bool on) {
 // mods deploy / undeploy / conflicts through forge-tools.exe, output captured line by line
 bool App::runModsTool(const std::string& verb) {
     if (modsFuture_.valid()) { pushLog("mods: still busy", 1); return false; }
+    if (fileWriteBlocked("mods")) return false;
     const fs::path tool = findForgeTools();
     if (tool.empty()) { pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false; }
     if (verb != "conflicts" && backups::gameRunningIn(saveRoot())) {
@@ -201,12 +209,14 @@ void App::saveModPicks() {
 }
 
 void App::setModPick(const std::string& key, const std::string& winner) {
+    if (fileWriteBlocked("mod conflict choice")) return;
     if (modPicks_.empty()) loadModPicks();
     if (winner == "-") modPicks_.erase(key); else modPicks_[key] = winner;
     saveModPicks();
 }
 
 bool App::modPick(const std::string& key, const std::string& winner) {
+    if (fileWriteBlocked("mod conflict choice")) return false;
     const ModConflict* row = nullptr;
     for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }

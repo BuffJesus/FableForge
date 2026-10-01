@@ -192,6 +192,9 @@ item and info display components; absent components are not added.
   in place with recomputed normals every frame of a stroke; the brush ring is
   projected onto the ground. One undo step per stroke, on the same stack as
   the object edits.
+* File operations run one at a time in the editor. Competing saves/imports,
+  mod-order edits and save-folder changes ask you to wait for the named job;
+  the draft remains editable while it runs.
 * **Deploy** (`Write terrain into the game`) writes the terrain as it was when
   clicked. You can keep editing while it runs; later strokes remain unsaved,
   and switching maps does not change the pending write. It writes in this order:

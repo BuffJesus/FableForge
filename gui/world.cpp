@@ -187,6 +187,7 @@ bool App::worldRedo() {
 
 void App::worldApply() {
     if (worldPendingCount() == 0 || worldFuture_.valid()) return;
+    if (fileWriteBlocked("world")) return;
     if (packDest_.empty() && gameWriteBlocked("world")) return;
     const std::string root = saveRoot();
     const std::string pack = packDest_;   // "" = the game directly

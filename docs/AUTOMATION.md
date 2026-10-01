@@ -147,6 +147,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `dump_log` | copy the activity log into the script log |
 | `set saveroot <dir>` | where `save_level` / `deploy_level` write (default: the install) |
 | `save_level` / `deploy_level` | write the loose .tng / replace the WAD entry under saveroot |
+| `save_level_refused`, `deploy_level_refused`, `compact_stb_refused`, `mods_deploy_refused`, `mesh_import_refused <model> <NAME> [png]` | expect the corresponding action to refuse; `file_job` reports `none`, `terrain_write`, `world_write`, `level_creation`, `bank_compaction`, `model_import` or `mod_processing` |
 | `screenshot <png>` | save the next presented frame |
 | `assert_file <path>` | file exists and is non-empty |
 | `assert_file_contains <path> <text...>` | the file exists and contains the text (the rest of the line, e.g. `ScriptName UiNamedBarrel;`) |
