@@ -1557,6 +1557,27 @@ triangles, 384x768 albedo). Hashes/inventory of all 326 pre-existing shared UI
 files remain unchanged. The normal GUI/tools rebuild also passes. No production
 behavior changed in this test-harness pass.
 
+## 2026-10-01 continuation: mod picks commit before the UI changes
+
+`build/mod-pick-recovery-wmnpwe4s/locked_add.txt.log` reproduced a locked picks
+file still reporting success and changing mods_picks from 0 to 1. Saving conflict
+choices now prepares and closes an owned candidate, or stages removal for an
+empty selection, through PendingBanks. The GUI adopts the candidate choices
+only after persistence succeeds. Errors retain the earlier displayed choice and
+file, and reach the Activity log. Back to retail also checks that result before
+reporting success. The existing running-game/write guard remains in place.
+
+`tools/test_mod_pick_recovery.py` creates two small conflicting packs in an owned
+scratch root. `build/mod-pick-recovery-axfkjif7` passes locked add, retry, locked
+last-pick removal and successful removal through four hidden GUI sessions.
+State assertions verify the old choice count stays unchanged on refusal; exact
+picks bytes and an unrelated .tmp file are preserved, and no owned staging
+workspace remains. The locked-add screenshot was visually checked: PackB remains
+the load-order winner, with a visible save error. This minimal scratch fixture
+does not contain graphics.big, so model-health checking is unavailable there;
+that warning is unrelated to the exercised file conflict. The GUI rebuild
+passes; preceding core/ASan gates remain applicable to unchanged core code.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

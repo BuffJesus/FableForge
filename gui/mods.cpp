@@ -19,6 +19,7 @@
 #endif
 
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "forge/modorder.hpp"
 #include "modpack.hpp"
 #include "nlohmann/json.hpp"
@@ -209,20 +210,35 @@ void App::loadModPicks() {
     }
 }
 
-void App::saveModPicks() {
-    const fs::path path = fs::path(saveRoot()) / "forge_mods_picks.txt";
-    std::error_code ec;
-    if (modPicks_.empty()) { fs::remove(path, ec); return; }
-    std::ofstream out(path, std::ios::binary);
-    out << "# FableForge: the winners picked on the Mods tab; forge-tools mods deploy reads this file\n";
-    for (const auto& [k, v] : modPicks_) out << k << '\t' << v << '\n';
+bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
+    try {
+        detail::PendingBanks pending(saveRoot(), ".forge-mod-picks-");
+        if (picks.empty()) pending.remove("forge_mods_picks.txt");
+        else {
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            out.open(pending.prepare("forge_mods_picks.txt"), std::ios::binary);
+            out << "# FableForge: the winners picked on the Mods tab; forge-tools mods deploy reads this file\n";
+            for (const auto& [k, v] : picks) out << k << '\t' << v << '\n';
+            out.close();
+        }
+        std::string error;
+        if (!pending.install(false, error)) throw std::runtime_error(error);
+        return true;
+    } catch (const std::exception& e) {
+        pushLog(std::string("mods: cannot save conflict choices: ") + e.what(), 2);
+        return false;
+    }
 }
 
-void App::setModPick(const std::string& key, const std::string& winner) {
-    if (fileWriteBlocked("mod conflict choice")) return;
+bool App::setModPick(const std::string& key, const std::string& winner) {
+    if (fileWriteBlocked("mod conflict choice")) return false;
     if (modPicks_.empty()) loadModPicks();
-    if (winner == "-") modPicks_.erase(key); else modPicks_[key] = winner;
-    saveModPicks();
+    auto picks = modPicks_;
+    if (winner == "-") picks.erase(key); else picks[key] = winner;
+    if (!saveModPicks(picks)) return false;
+    modPicks_ = std::move(picks);
+    return true;
 }
 
 bool App::modPick(const std::string& key, const std::string& winner) {
@@ -231,9 +247,7 @@ bool App::modPick(const std::string& key, const std::string& winner) {
     for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
     if (!row->pickable) { pushLog("mods: reorder packs to choose this lip sync winner", 1); return false; }
-    if (winner == "-") modPicks_.erase(row->key);
-    else modPicks_[row->key] = winner;
-    saveModPicks();
+    if (!setModPick(row->key, winner)) return false;
     pushLog("mods: " + row->label + " -> " + (winner == "-" ? "load order" : winner) + " (forge_mods_picks.txt; deploy applies it)", 0);
     return true;
 }

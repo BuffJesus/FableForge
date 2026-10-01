@@ -945,13 +945,13 @@ private:
     size_t modAssetUnparsed_ = 0;
     std::string modAssetStatus_, modAssetError_;
     void loadModPicks();
-    void saveModPicks();
+    bool saveModPicks(const std::map<std::string, std::string>& picks);
 public:
     size_t modConflictCount() const { return modConflicts_.size(); }
     // pick a winner for a conflict (by its key, or the first row when key is "*"); "-" = back to load order
     bool modPick(const std::string& key, const std::string& winner);
     // set or clear ("-") one pick directly (no report needed): the editor's "back to retail"
-    void setModPick(const std::string& key, const std::string& winner);
+    bool setModPick(const std::string& key, const std::string& winner);
 private:
     bool texturesMode_ = false;
     bool texturesLoaded_ = false;

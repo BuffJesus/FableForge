@@ -4040,8 +4040,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PopFont();
             ImGui::SameLine();
             if (theme::ghostButton("Back to retail", ImVec2(S(110), S(22)))) {
-                setModPick("tng:FinalAlbion/" + doc_.mapName() + ".tng|uid:" + std::to_string(s.uid), "vanilla");
-                pushLog("mods: " + s.definition + " picked back to retail (forge_mods_picks.txt; deploy again from the Mods tab)", 0);
+                if (setModPick("tng:FinalAlbion/" + doc_.mapName() + ".tng|uid:" + std::to_string(s.uid), "vanilla"))
+                    pushLog("mods: " + s.definition + " picked back to retail (forge_mods_picks.txt; deploy again from the Mods tab)", 0);
             }
             auto_.registerWidget("btn_thing_retail");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes a vanilla pick for this thing; the next Build and deploy on the Mods tab leaves it as retail has it.");
