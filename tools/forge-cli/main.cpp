@@ -4692,8 +4692,8 @@ int defsRoundtrip(const std::string& gameRoot, const std::string& bin) {
     namespace fs = std::filesystem;
     const auto original = openDefs(gameRoot, bin);
 
-    const fs::path outDir = fs::temp_directory_path() / "forge_defs_roundtrip";
-    fs::create_directories(outDir);
+    const albion::detail::TemporaryDirectory scratch("defs-roundtrip-");
+    const fs::path& outDir = scratch.path();
     const fs::path namesOut = outDir / "names.bin";
     const fs::path binOut = outDir / "roundtrip.bin";
     original.save(namesOut, binOut);
@@ -4716,7 +4716,6 @@ int defsRoundtrip(const std::string& gameRoot, const std::string& bin) {
             return 1;
         }
     }
-    fs::remove_all(outDir);
     std::printf("defs roundtrip OK: %zu entries semantically identical\n",
                 original.entries().size());
     return 0;

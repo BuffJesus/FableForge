@@ -1,5 +1,14 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: definitions roundtrip workspace
+
+Two concurrent definitions roundtrips collided writing names.bin in the shared
+diagnostic directory (`build/defs-workspace-mmzmwnbk`). The diagnostic now owns
+its output directory and cleans only that directory on every exit. Normal and
+ASan forge-tools builds pass the concurrent semantic roundtrip check, retain an
+old-directory marker and preserve source banks (`build/defs-workspace-fznpb5fw`,
+`build/defs-workspace-l8_e4p6g`). Serialization behavior is unchanged.
+
 ## 2026-10-01 continuation: owned new-level helper workspaces
 
 Own-region blank creation and the GUI palette probe overwrote all five shared

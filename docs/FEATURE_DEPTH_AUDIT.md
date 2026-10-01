@@ -481,6 +481,12 @@ loading, preserve old shared files and restore exact original inventories.
 Authored LEV/minimap PNG match baseline bytes. Full build and all 29 core suites
 pass. Creation and minimap algorithms are unchanged.
 
+## Definitions diagnostic workspace, 2026-10-01
+
+Concurrent defs roundtrips own separate output directories and no longer collide
+or remove unowned scratch data. Normal/ASan tests verify semantic roundtrip
+identity, original bank hashes and marker preservation. Writer format unchanged.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
