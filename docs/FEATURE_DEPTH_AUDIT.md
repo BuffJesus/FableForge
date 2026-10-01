@@ -826,6 +826,30 @@ unrelated log activity, NaN/infinity/malformed/partial records, clipped tails,
 full ack messages and locked logs. Normal writer builds, focused checks and
 clang-cl ASan checks pass. Live FSE execution and UI camera-follow were not run.
 
+## 2026-10-01 continuation: prepare loose LEV navigation before publishing
+
+`build/terrain-save-failure-before.log` reproduced a refused navigation patch that
+had already written edited cells and cleared the terrain dirty state. A synthetic
+32x32 LEV with a valid directory but unsupported navigation block version exercises
+this path for both an existing output and a new output.
+
+`Document::saveTerrainLoose` now serializes and patches navigation in an owned
+PendingBanks workspace. Only after preparation succeeds does it prepare recovery
+metadata and replace the target. The in-memory navigation baseline, saved terrain,
+sound-list state and success notes update after replacement. Invalid navigation
+leaves the original/absent target and metadata untouched, keeps the draft dirty,
+and supports exact Undo. LEV save now also checks stream close errors. Serialization
+and navigation algorithms are unchanged; unrelated LEV bytes retain their existing
+preservation contract.
+
+Normal 33-suite CTest passes (15.68s); core export/navigation and locked-things
+checks pass under clang-cl ASan (1.38s). All normal writer targets build. Repeated
+real copied-bank terrain/TNG deployment and two byte-exact Restores pass at
+`build/created-restore-ifa3d56z`, including created-file markers and clean inventory.
+The first post-fix run hit baseline leftovers in the new test's initially shared
+fixture; that fixture now owns a unique TemporaryDirectory and the rerun passes.
+No live game writes or in-game navigation claims.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

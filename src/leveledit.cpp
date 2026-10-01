@@ -1255,16 +1255,12 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const fs::path path = external() && packOut_.empty() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     try {
-        fs::create_directories(path.parent_path());
-        if (packOut_.empty()) {   // inside a pack: no backups, no markers
-            if (!backupOnce(path, error)) return false;
-            // a loose file that did not exist before gets a marker so tooling can
-            // tell it apart from the user's own loose levels
-            if (!fs::exists(path)) albion::backups::markCreated(path);
-        }
-        level_->save(path);
-        savedTerrain_ = terrain_;
-        soundListGrew_ = false;
+        albion::detail::PendingBanks pending(path.parent_path(), ".forge-lev-save-");
+        const auto prepared = pending.prepare(path.filename());
+        level_->save(prepared);
+        auto nextLevel = level_;
+        bool patchedNavigation = false;
+        std::vector<std::string> preparedNotes;
 
         // navigation: patch the retail quadtree for the cells whose walkable byte changed
         std::vector<std::pair<int, int>> changed;
@@ -1274,24 +1270,35 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
                 for (int x = 0; x < cx; ++x)
                     if (navWalkable_[size_t(y) * cx + x] != terrain_->walkable[size_t(y) * cx + x]) changed.push_back({x, y});
         if (!changed.empty() && !level_->navSections().empty()) {
-            const auto saved = forge::lev::File::open(path);
+            const auto saved = forge::lev::File::open(prepared);
             auto nav = forge::navmesh::parseNavigation(saved);
             const auto st = forge::navmesh::patchWalkability(nav, saved, changed);
             const auto bytes = forge::navmesh::emitNavigation(saved, nav);
-            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            std::ofstream out(prepared, std::ios::binary | std::ios::trunc);
             out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-            if (!out) throw std::runtime_error("cannot write " + path.string());
             out.close();
-            *level_ = forge::lev::File::open(path);   // the nav suffix is part of the bytes later saves copy
-            navWalkable_ = terrain_->walkable;
+            if (!out) throw std::runtime_error("cannot write " + prepared.string());
+            nextLevel = std::make_shared<forge::lev::File>(forge::lev::File::open(prepared));
+            patchedNavigation = true;
             if (notes) {
                 char line[256];
                 std::snprintf(line, sizeof line, "navigation: %zu cell(s) changed -> %zu leaves removed, %zu added, %zu split, %zu region(s) added, %zu merged (%zu section(s))",
                               changed.size(), st.leavesRemoved, st.leavesAdded, st.nodesSplit, st.regionsAdded, st.regionsMerged, nav.sections.size());
-                notes->push_back(line);
-                if (st.cellsSkipped) notes->push_back("navigation: " + std::to_string(st.cellsSkipped) + " opened cell(s) already had nav coverage");
+                preparedNotes.push_back(line);
+                if (st.cellsSkipped) preparedNotes.push_back("navigation: " + std::to_string(st.cellsSkipped) + " opened cell(s) already had nav coverage");
             }
         }
+        // Recovery metadata and document state follow successful serialization.
+        if (packOut_.empty()) {
+            if (!backupOnce(path, error)) return false;
+            if (!fs::exists(path)) albion::backups::markCreated(path);
+        }
+        if (!pending.install(false, error)) return false;
+        level_ = std::move(nextLevel);
+        if (patchedNavigation) navWalkable_ = terrain_->walkable;
+        savedTerrain_ = terrain_;
+        soundListGrew_ = false;
+        if (notes) notes->insert(notes->end(), preparedNotes.begin(), preparedNotes.end());
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

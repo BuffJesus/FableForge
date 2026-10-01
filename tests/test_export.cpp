@@ -27,6 +27,7 @@
 #include "forge/fillerfit.hpp"
 #include "forge/worldmerge.hpp"
 #include "forge/lev.hpp"
+#include "forge/temporarydirectory.hpp"
 #include "forge/terrain.hpp"
 #include "forge/fractal.hpp"
 #include "forge/stb.hpp"
@@ -2139,6 +2140,40 @@ void testNavPatch(const fs::path& dir) {
     CHECK(after.sections[0].nodes.size() + 0 >= recordsBefore - 1);   // one leaf lost, one gained (+ any split internals)
 }
 
+// A navigation refusal must not publish the cell edits or mark them saved.
+void testTerrainSaveFailure(const fs::path& dir) {
+    forge::TemporaryDirectory scratch(dir, "terrain-save-failure-");
+    const auto source = writeSyntheticLev(scratch.path() / "save-failure.lev", 32, 32, [](int, int) { return 1.0f; });
+    auto generated = forge::navmesh::generateTerrain(forge::lev::File::open(source));
+    { std::ofstream(source, std::ios::binary).write(reinterpret_cast<const char*>(generated.levBytes.data()), std::streamsize(generated.levBytes.size())); }
+    const auto valid = forge::lev::File::open(source);
+    const size_t versionAt = valid.navSections().at(0).offset + 4;
+    const uint32_t unsupportedVersion = 99;
+    std::memcpy(generated.levBytes.data() + versionAt, &unsupportedVersion, 4);
+    { std::ofstream(source, std::ios::binary).write(reinterpret_cast<const char*>(generated.levBytes.data()), std::streamsize(generated.levBytes.size())); }
+    const auto original = readAll(source);
+    for (bool existing : {false, true}) {
+        const auto root = scratch.path() / (existing ? "terrain-save-existing" : "terrain-save-new");
+        const auto output = root / "data/Levels/FinalAlbion/SaveFailure.lev";
+        if (existing) { fs::create_directories(output.parent_path()); fs::copy_file(source, output); }
+        albion::editor::Document doc;
+        std::string error;
+        CHECK(doc.openText("SaveFailure", "Version 2;\r\n", error) && doc.loadLevel(source, error));
+        albion::editor::TerrainBrush brush;
+        brush.mode = albion::editor::TerrainBrush::Mode::Blocked;
+        brush.radius = 0.4f; brush.x = 12.5f; brush.y = 12.5f; brush.strength = 1;
+        doc.beginStroke(brush); doc.applyBrush(brush, 0.1f); doc.endStroke();
+        CHECK(doc.terrainDirty());
+        std::vector<std::string> notes;
+        CHECK(!doc.saveTerrainLoose(root, error, &notes));
+        CHECK(error.find("unsupported block version") != std::string::npos);
+        CHECK(doc.terrainDirty() && notes.empty());
+        CHECK(existing ? readAll(output) == original : !fs::exists(output));
+        CHECK(!fs::exists(output.string() + ".forge-orig") && !fs::exists(output.string() + ".forge-created"));
+        CHECK(doc.undo() && !doc.terrainDirty());
+    }
+}
+
 // FinalAlbion.gtg: byte-exact round trip of a retail-shaped file, an entrance added to a
 // missing slot (inserted in slot order), moved in place on the second call, retail
 // sections untouched; the real retail file round-trips too when an install is at hand.
@@ -2804,6 +2839,7 @@ int main() {
     testValidate();
     testThingProperties();
     testNavPatch(dir);
+    testTerrainSaveFailure(dir);
     testGtg(dir);
     testMeshCompose();
     testMeshCacheLifetime(dir);

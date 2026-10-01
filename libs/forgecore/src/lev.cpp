@@ -325,6 +325,7 @@ void File::save(const fs::path& path) const {
     if (!stream) throw std::runtime_error("lev: cannot write " + path.string());
     stream.write(reinterpret_cast<const char*>(output.data()),
                  static_cast<std::streamsize>(output.size()));
+    stream.close();
     if (!stream) throw std::runtime_error("lev: failed writing " + path.string());
 }
 
