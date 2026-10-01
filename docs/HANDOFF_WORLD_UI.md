@@ -1,5 +1,14 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: explicit save-root destinations
+
+Changing the automation save root reproduced stale mod count, conflict picks and
+pack destination. `setSaveRoot` now refreshes these through the same reset as an
+accepted install switch. Reassigning the same normalized effective root preserves
+an explicit pack choice. The expanded two-install UI check passes both overrides
+and clearing the override, with every fixture file unchanged. It remains valid
+to choose a pack outside the current order explicitly.
+
 ## 2026-10-01 continuation: scene traversal
 
 glTF scene traversal now uses an explicit stack and rejects cycles/repeated nodes

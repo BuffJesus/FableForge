@@ -639,14 +639,7 @@ void App::scanInstall(const std::string& picked) {
     }
     maps_.clear();
     installPath_ = root;
-    if (switching) {
-        packDest_.clear(); packDestChosen_ = false;
-        modConflicts_.clear(); modReportSummary_.clear();
-        modsVerb_.clear();
-        thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
-        refreshModOrder();
-        loadModPicks();
-    }
+    if (switching) resetModDestination();
     backupList_.clear(); backupsScannedAt_ = -1; bankReportOk_ = false;
     effectsLoaded_ = effectBrowserLoaded_ = effectBrowserReady_ = false;
     effectNames_.clear(); effectPick_.clear();

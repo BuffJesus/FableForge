@@ -180,7 +180,9 @@ destination. The expanded install-switch test passes with different pack lists,
 an invalid intermediate root and a return switch; every fixture file remains
 byte-identical, with no added files. The second root's destination was inspected
 on screen. All three Setup restore cases still pass. Automation's explicit
-save-root override remains a separate path to audit.
+save-root override is now covered too: switching it refreshes the same state,
+clearing it returns to the install's packs, and a same-root assignment preserves
+an explicit destination. The expanded fixture remains byte-identical.
 
 ## 2026-10-01 model-import failure depth check
 

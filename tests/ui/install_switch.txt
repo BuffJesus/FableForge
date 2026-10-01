@@ -64,4 +64,18 @@ assert_state mods_picks 1
 assets_tab 2
 frames 3
 assert_state pack_destination @PACK_A@
+# Changing the write root must refresh the same destination-specific state.
+set saveroot @ROOT_B@
+assert_state mods_count 2
+assert_state mods_picks 2
+frames 3
+assert_state pack_destination @PACK_B@
+pack_dest @PACK_A@
+set saveroot @ROOT_B@
+assert_state pack_destination @PACK_A@
+set saveroot
+assert_state mods_count 1
+assert_state mods_picks 1
+frames 3
+assert_state pack_destination @PACK_A@
 quit

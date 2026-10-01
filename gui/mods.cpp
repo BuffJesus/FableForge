@@ -55,6 +55,21 @@ void App::setModsMode(bool on) {
     if (on) refreshModOrder();
 }
 
+void App::setSaveRoot(const std::string& root) {
+    const fs::path previous = fs::path(saveRoot()).lexically_normal();
+    saveRoot_ = root;
+    if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
+}
+
+void App::resetModDestination() {
+    packDest_.clear(); packDestChosen_ = false;
+    modConflicts_.clear(); modReportSummary_.clear();
+    modsVerb_.clear();
+    thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
+    refreshModOrder();
+    loadModPicks();
+}
+
 void App::refreshModOrder() {
     modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
     modNewMissingMeshes_.clear(); modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;

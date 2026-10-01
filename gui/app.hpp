@@ -290,7 +290,7 @@ private:
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
     void revertDocument();
     // Where saves go: the install by default; tests point it at a scratch tree.
-    void setSaveRoot(const std::string& root) { saveRoot_ = root; }
+    void setSaveRoot(const std::string& root);
     std::string saveRoot() const { return saveRoot_.empty() ? installPath_ : saveRoot_; }
 
 private:
@@ -905,6 +905,7 @@ public:
     std::string modProblems() const;   // every row's master problems, "; "-joined (automation)
 private:
     bool modsMode_ = false;
+    void resetModDestination();
     forge::modorder::Order modOrder_;
     std::string modOrderError_;
     // per order row: a FableForge pack's folder / name / masters and what is wrong with them
