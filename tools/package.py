@@ -2,10 +2,25 @@
 """Build a release zip: dist/FableForge-<version>-win64.zip with both exes,
 README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
-  python tools/package.py [--version 0.1.0] [--no-check]
+  python tools/package.py [--version 0.1.0] [--no-check] [--guide-only]
 """
 import argparse, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
+
+def package_guide(root, version):
+    guide_dir = root / "docs/walkthrough/aeon-controller"
+    guide_zip = root / "dist/FableForge-Aeon-Controller-Guide.zip"
+    with zipfile.ZipFile(guide_zip, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(guide_dir / "index.html", "AEON_CONTROLLER.html")
+        for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+            archive.write(guide_dir / shot, shot)
+        archive.writestr("README.txt",
+            "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
+            "Download FableForge separately from:\n"
+            f"https://github.com/BuffJesus/FableForge/releases/tag/v{version}\n\n"
+            "This ZIP contains only the illustrated guide, not the application or mods.\n")
+    print(f"wrote {guide_zip.name} ({guide_zip.stat().st_size/1e6:.2f} MB; guide only)")
+
 
 def main():
     root = Path(__file__).resolve().parents[1]
@@ -16,9 +31,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default=version)
     ap.add_argument("--no-check", action="store_true")
+    ap.add_argument("--guide-only", action="store_true", help="Package only the illustrated Aeon/controller guide")
     a = ap.parse_args()
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?', a.version):
         ap.error("version must be a semantic version, optionally with a prerelease suffix")
+    if a.guide_only:
+        (root / "dist").mkdir(exist_ok=True)
+        package_guide(root, a.version)
+        return 0
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:
         print("checks failed; not packaging"); return 1
     name = f"FableForge-{a.version}-win64"
@@ -87,6 +107,7 @@ def main():
                 z.write(p, os.path.join(name, os.path.relpath(p, stage)))
     print(f"wrote {zpath} ({os.path.getsize(zpath)/1e6:.1f} MB)")
     for f in sorted(os.listdir(stage)): print(f"  {f:28s} {os.path.getsize(os.path.join(stage, f))/1e6:6.2f} MB")
+    package_guide(Path(__file__).resolve().parents[1], a.version)
     return 0
 
 if __name__ == "__main__":

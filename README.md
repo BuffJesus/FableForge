@@ -1,8 +1,8 @@
 # FableForge
 
-**Current preview: [0.18.0-rc.2](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.2)** — a deeper editor workflow pass, improved world view,
-asset browsers for models, effects and dialogue, and safer mod and terrain writes.
-See the [release notes](docs/releases/0.18.0-rc.2.md) for changes and validation limits.
+**Current preview: [0.18.0-rc.3](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.3)** — a redesigned Dialogue workspace, native Browse controls,
+an illustrated Aeon/controller guide, and safer mod and terrain writes.
+See the [release notes](docs/releases/0.18.0-rc.3.md) for changes and validation limits.
 The latest final release remains 0.17.1 while fresh-game and separate-machine
 release checks are completed.
 
@@ -45,7 +45,7 @@ and brushes, effects, dialogue, mods, setup and budget survey. The
 
 ## Start in the editor
 
-1. Unzip the [current preview](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.2)
+1. Unzip the [current preview](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.3)
    and run `FableForge.exe`. Choose the folder containing `Fable.exe` if it is
    not found automatically.
 2. Pick a map on the left, or open **World** to find it on the 2D map or in the
