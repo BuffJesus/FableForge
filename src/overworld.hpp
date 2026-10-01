@@ -12,6 +12,7 @@
 // CEditWorldMap; the engine's own rule for what counts as a neighbour is
 // "owned or seen by one of my regions AND touching", kept here.
 
+#include "forge/worldinstall.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -69,7 +70,7 @@ struct MapMove { std::string name; int x = 0, y = 0; };
 // The engine's world placement grid: CWorld::Init builds CWorldMap over the
 // box (0,0)-(8192,8192) in 32-unit cells; a map placed past it indexes outside
 // the grid (retail's maps end at 5216 x 8160).
-constexpr int kWorldExtent = 8192;
+constexpr int kWorldExtent = forge::worldinstall::kWorldExtent;
 
 // The rules a move must pass (also what the canvas shows while dragging):
 // 32-aligned, inside the u16 patch grid, no overlap with any box that is not

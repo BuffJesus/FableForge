@@ -53,24 +53,43 @@ std::vector<Box> mapBoxes(const bwd::File& bwd) {
 
 } // namespace
 
+void validatePlacement(int x, int y, int64_t width, int64_t height) {
+    if (width <= 0 || height <= 0 || width > kWorldExtent || height > kWorldExtent)
+        throw std::runtime_error("worldinstall: map dimensions must fit the world grid (1..8192)");
+    if (x % 32 || y % 32)
+        throw std::runtime_error("worldinstall: origin must be on the 32-unit terrain grid");
+    if (x < 0 || y < 0 || int64_t(x) + width > kWorldExtent || int64_t(y) + height > kWorldExtent)
+        throw std::runtime_error("worldinstall: map box is outside the engine's world grid (0..8192)");
+}
+
 Origin suggestOrigin(const fs::path& gameRoot, const std::string& donorLevelName) {
     const fs::path levelsDir = gameRoot / "data" / "Levels";
     const auto bwd = bwd::File::parse(levelsDir / "FinalAlbion.bwd");
     const bwd::MapInfo* donor = bwd.findMap(donorLevelName);
     if (!donor) throw std::runtime_error("worldinstall: donor '" + donorLevelName + "' is not in FinalAlbion.bwd");
-    const int w = donor->right - donor->left, h = donor->bottom - donor->top;
+    const int64_t wideW = int64_t(donor->right) - donor->left, wideH = int64_t(donor->bottom) - donor->top;
+    validatePlacement(0, 0, wideW, wideH);
+    const int w = int(wideW), h = int(wideH);
     const auto boxes = mapBoxes(bwd);
     int maxRight = 0, maxBottom = 0;
     for (const auto& b : boxes) { maxRight = std::max(maxRight, b.right); maxBottom = std::max(maxBottom, b.bottom); }
-    // scan the donor's row band first (rightwards, one map-width gap), then rows below
     auto free = [&](int x, int y) {
         for (const auto& b : boxes) if (overlaps(b, x, y, x + w, y + h)) return false;
         return true;
     };
-    for (int y = donor->top; y <= maxBottom + h; y += 32)
-        for (int x = donor->left; x <= maxRight + 2 * w; x += 32)
-            if (x > donor->left + w && free(x, y)) return {x, y};
-    return {((maxRight + 63) / 32) * 32, donor->top};
+    // Preserve the preferred rightward row-band search, bounded by the engine grid.
+    const int64_t firstX = std::max<int64_t>(0, ((int64_t(donor->left) + w) / 32 + 1) * 32);
+    const int64_t firstY = std::max<int64_t>(0, ((int64_t(donor->top) + 31) / 32) * 32);
+    const int64_t lastX = std::min<int64_t>(kWorldExtent - w, int64_t(maxRight) + 2 * w);
+    const int64_t lastY = std::min<int64_t>(kWorldExtent - h, int64_t(maxBottom) + h);
+    for (int64_t y = firstY; y <= lastY; y += 32)
+        for (int64_t x = firstX; x <= lastX; x += 32)
+            if (free(int(x), int(y))) return {int(x), int(y)};
+    // A donor at the right/bottom edge may still have room elsewhere in the grid.
+    for (int y = 0; y <= kWorldExtent - h; y += 32)
+        for (int x = 0; x <= kWorldExtent - w; x += 32)
+            if (free(x, y)) return {x, y};
+    throw std::runtime_error("worldinstall: no free 32-aligned placement inside the world grid");
 }
 
 Result installLevel(const Request& req) {
@@ -124,7 +143,7 @@ Result installLevel(const Request& req) {
         if (!chunkEntry) throw std::runtime_error("worldinstall: donor chunk entry missing from the STB");
         if (req.chunkBytes.empty()) donorChunk = stb.read(*chunkEntry);
     }
-    if (donorW <= 0 || donorH <= 0) throw std::runtime_error("worldinstall: donor has no map size");
+    validatePlacement(req.worldX, req.worldY, donorW, donorH);
     const int right = req.worldX + donorW, bottom = req.worldY + donorH;
     result.left = req.worldX; result.top = req.worldY; result.right = right; result.bottom = bottom;
 

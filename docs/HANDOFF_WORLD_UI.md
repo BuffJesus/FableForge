@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: bounded new-level placement
+
+`build/worldinstall-bounds-before.log` reproduced suggestOrigin putting a donor
+at the right edge beyond the world grid. The blank-level case in
+`build/newlevel-placement-t2vxa_mp` reproduced an unaligned request changing
+minimap banks before final installation refused it. A shared core placement
+check now enforces positive dimensions, 32-unit origin alignment and the existing
+8192-unit engine boundary. Both editor creation routes call it before minimap
+writes; installLevel validates its actual common-record dimensions before world
+mutation. The editor's extent constant now aliases the core constant. The origin
+helper bounds its preferred scan, searches the remaining grid if needed, and
+reports a full grid instead of returning an invalid fallback.
+
+This reuses the established CWorld::Init / SetMapPlacement evidence documented
+in EDITOR.md (0x4a6e30 / 0x4fc9c0 and the prior y=9024 transition failure); no new
+engine limit or terrain algorithm is inferred. The new worldinstall unit suite
+checks edge placement, invalid/extreme dimensions, alignment, full-grid refusal
+and donor-width overflow. It passes normally and under ASan; all 35 rebuilt normal
+suites pass (26.15s).
+
+`tools/test_newlevel_placement.py` verifies eight donor/blank placement refusals
+leave all copied banks and inventory unchanged. Normal
+`build/newlevel-placement-a9ki2yiv` and ASan CLI `build/newlevel-placement-bam2l__u`
+pass. Both fixtures also successfully create EdgePlacementProbe at (8128,8128)
+with far corner (8192,8192), then Restore exactly (`edge_report.json`). Editor,
+CLI and tools builds pass. This is placement preflight, not a transaction covering
+all creation stages; later failures can still need Restore. No live-game boundary
+transition was attempted.
+
 ## 2026-10-01 continuation: strict world visibility flags
 
 `build/world-flag-inputs-gn_c43if/invalid_0.json` reproduced `region-props

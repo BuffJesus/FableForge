@@ -125,6 +125,11 @@ bool defaultEntrance(const fs::path& gameRoot, int slot, const std::string& leve
 bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, NewLevelResult& out, std::string& error) {
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
+        const auto donorWorld = forge::bwd::File::parse(levels / "FinalAlbion.bwd");
+        const auto* donorBox = donorWorld.findMap(req.donor);
+        if (!donorBox) { error = "unknown donor " + req.donor; return false; }
+        forge::worldinstall::validatePlacement(req.worldX, req.worldY,
+            int64_t(donorBox->right) - donorBox->left, int64_t(donorBox->bottom) - donorBox->top);
         const fs::path stbPath = levels / "FinalAlbion_RT.stb";
         forge::worldinstall::Request ir;
         ir.gameRoot = gameRoot;
@@ -571,6 +576,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
         if (req.width < 16 || req.height < 16 || req.width % 16 || req.height % 16) { error = "level sides must be multiples of 16"; return false; }
+        forge::worldinstall::validatePlacement(req.worldX, req.worldY, req.width, req.height);
         std::string templateLevel = req.templateLevel;
         if (templateLevel.empty()) {
             // a retail LEV of exactly this size supplies the header/palette skeleton

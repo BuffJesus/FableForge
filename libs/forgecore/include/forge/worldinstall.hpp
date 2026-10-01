@@ -28,6 +28,11 @@
 
 namespace forge::worldinstall {
 
+// CWorld::Init constructs the fixed world grid over (0,0)-(8192,8192).
+inline constexpr int kWorldExtent = 8192;
+// Throws before any file work for invalid dimensions, alignment or world bounds.
+void validatePlacement(int x, int y, int64_t width, int64_t height);
+
 struct Request {
     std::filesystem::path gameRoot;     // the install (data/Levels/... underneath)
     std::string donorLevelName;         // e.g. "StartOakValeWest"
@@ -78,8 +83,8 @@ struct Result {
 Result installLevel(const Request& request);
 
 // Free 32-aligned origin for a donor-sized box: the first slot scanning right
-// of every existing map on the donor's row band, then further rows. Never
-// overlaps an existing map box.
+// of the donor on its row band, then further rows. Falls back to the remaining
+// grid, never overlaps an existing map box, and throws when no legal slot exists.
 struct Origin { int x = 0, y = 0; };
 Origin suggestOrigin(const std::filesystem::path& gameRoot, const std::string& donorLevelName);
 

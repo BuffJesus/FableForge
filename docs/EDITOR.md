@@ -538,7 +538,9 @@ the engine's placement grid is a hard (0,0)-(8192,8192): `CWorld::Init` 0x4a6e30
 constructs `CWorldMap` over that box and `SetMapPlacement` 0x4fc9c0 writes map slots
 into a 32-unit cell grid with no bounds check (a map at y=9024 crashed the next
 region transition), so moves must keep the box inside 8192 -- the canvas draws the
-grid edge and `checkMove` refuses anything past it.
+grid edge and `checkMove` refuses anything past it. New-level creation checks
+that same boundary and origin alignment before baking a minimap or writing world
+files. Suggested origins stay inside the grid; a full grid produces an error.
 
 ## Implementation map
 
