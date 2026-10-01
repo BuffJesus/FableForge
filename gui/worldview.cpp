@@ -79,11 +79,8 @@ void App::startWorldTiles() {
     const unsigned threads = std::clamp(std::thread::hardware_concurrency() / 2u, 1u, 6u);
     worldTileStarted_ = std::chrono::steady_clock::now();
     for (unsigned w = 0; w < threads; ++w) {
-        worldTileWorkers_.push_back(std::async(std::launch::async, [this, names, next, ctxHold, layout, root, cache, gain, dependencies, cancel, w]() {
+        worldTileWorkers_.push_back(std::async(std::launch::async, [this, names, next, ctxHold, layout, root, cache, gain, dependencies, cancel]() {
             FORGE_THREAD("World overview worker");
-            const fs::path tmpDir = fs::temp_directory_path() / "FableForge" / "worldtiles";
-            std::error_code ec;
-            fs::create_directories(tmpDir, ec);
             for (;;) {
                 if (cancel->load()) return;
                 const size_t i = next->fetch_add(1);
@@ -99,11 +96,15 @@ void App::startWorldTiles() {
                     try {
                         const auto bytes = forge::levelstore::readFile(*layout, name + ".lev");
                         if (!bytes) continue;   // a WLD map the levels do not carry
-                        const fs::path lev = tmpDir / (name + "_" + std::to_string(w) + ".lev");
-                        std::ofstream(lev, std::ios::binary).write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
+                        albion::detail::TemporaryDirectory scratch("world-tile-");
+                        const fs::path lev = scratch.path() / fs::path(name + ".lev").filename();
+                        std::ofstream out;
+                        out.exceptions(std::ios::failbit | std::ios::badbit);
+                        out.open(lev, std::ios::binary);
+                        out.write(reinterpret_cast<const char*>(bytes->data()), std::streamsize(bytes->size()));
+                        out.close();
                         const auto file = forge::lev::File::open(lev);
                         tile = worldtiles::buildTile(file, name, ctxHold.get(), root, gain);
-                        fs::remove(lev, ec);
                         worldtiles::saveTile(cached, key, tile);
                         ok = true;
                     } catch (const std::exception&) { ok = false; }
@@ -529,7 +530,8 @@ void App::updateWorldDetail() {
         const MapEntry* e = findEntry(name);
         if (!e) continue;
         std::string err;
-        const std::string lev = resolveLevPath(*e, err);
+        LevWorkspace scratch;
+        const std::string lev = resolveLevPath(*e, scratch, err);
         if (lev.empty()) { failWorldDetail(name, err.empty() ? "level path unavailable" : err); continue; }
         int x, y; worldPlacement(name, x, y);
         const auto ctxHold = std::make_shared<const te::Context>(ctx_);
@@ -546,7 +548,7 @@ void App::updateWorldDetail() {
         worldDetailWork_ = work;
         worldDetailLoading_ = name;
         ++worldDetailLoads_;
-        worldDetailFuture_ = std::async(std::launch::async, [ctxHold, root, gain, lev, name, x, y, creatures, things, plants, generation, cutoutMips, cutoutCache, reuseCutoutMips, failPrepare, work, overview = std::move(overview)]() {
+        worldDetailFuture_ = std::async(std::launch::async, [ctxHold, scratch, root, gain, lev, name, x, y, creatures, things, plants, generation, cutoutMips, cutoutCache, reuseCutoutMips, failPrepare, work, overview = std::move(overview)]() {
             FORGE_THREAD("World detail worker");
             FORGE_ZONE("World detail prepare");
             FORGE_ZONE_TEXT(name);

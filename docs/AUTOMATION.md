@@ -54,6 +54,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `wait_maps` | until the map list is read (from FinalAlbion.wad, or the loose `data/Levels/FinalAlbion/*.lev` of an install without one; state `levels_loose`) |
 | `wait_ready` | until the map list is read **and** the texture context finished (ok or failed) |
 | `wait_loaded` | until the selected map's preview is on the GPU |
+| `wait_neighbours` | until neighbour previews are enabled and the selected map's neighbour job has finished |
 | `wait_export` | until the running export finished |
 | `wait_batch` | until a batch export finished |
 | `frames <n>` | render n frames |

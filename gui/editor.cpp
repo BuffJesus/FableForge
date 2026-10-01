@@ -64,7 +64,8 @@ void App::openDocument() {
     const MapEntry* e = findEntry(selectedName_);
     if (!e || !installValid_) return;
     std::string err;
-    const std::string lev = resolveLevPath(*e, err);
+    LevWorkspace scratch;
+    const std::string lev = resolveLevPath(*e, scratch, err);
     std::string derr;
     const editor::Document::ExternalWorld ext{e->worldFile, e->tngPath};
     if (!doc_.open(installPath_, e->name, lev, derr, e->worldFile.empty() ? nullptr : &ext)) {
@@ -4810,14 +4811,15 @@ void App::startFitNeighbourLoad() {
     const editor::WorldMapBox* box = layout.find(doc_.mapName());
     if (!box) { fitNeighboursNote_ = doc_.mapName() + " is not placed on the world map"; return; }
     // .lev paths here (the WAD read uses app state), the parses on the worker
-    struct Job { std::string lev, name; int x, y; };
+    struct Job { std::string lev, name; int x, y; LevWorkspace scratch; };
     std::vector<Job> jobs;
     for (const auto* n : layout.touching(*box, box->x, box->y)) {
         if (n->name == box->name) continue;
         const MapEntry* e = findEntry(n->name);
         if (!e) continue;
-        const std::string lev = resolveLevPath(*e, err);
-        if (!lev.empty()) jobs.push_back({lev, n->name, n->x, n->y});
+        LevWorkspace scratch;
+        const std::string lev = resolveLevPath(*e, scratch, err);
+        if (!lev.empty()) jobs.push_back({lev, n->name, n->x, n->y, std::move(scratch)});
     }
     fitFuture_ = std::async(std::launch::async, [jobs]() {
         std::pair<std::vector<forge::fillerfit::Neighbour>, std::string> r;

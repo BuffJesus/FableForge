@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned GUI level and tile extraction
+
+Preview/document/fit/export loading overwrote shared LEVs in
+`build/gui-level-workspace-58r5xe19`. All resolveLevPath callers now retain a
+shared workspace through their reads; neighbour/fit jobs and World-detail
+futures carry ownership across the thread boundary. World overview workers
+separately overwrote/deleted shared tile LEVs (`build/gui-level-workspace-mhbfevt9`);
+each tile now owns a checked extraction workspace too.
+
+`tools/test_gui_level_workspace.py --world` passes stock
+(`build/gui-level-workspace-yd__eo9d`), loose (`build/gui-level-workspace-p0hwg086`)
+and ASan stock (`build/gui-level-workspace-vytndxj_`). It checks fit/undo/redo,
+four neighbour previews using the new `wait_neighbours`, GLB export, all 400
+fresh overview tiles, one detailed terrain map, cleanup and source hashes.
+Old-path markers survive; loose mode keeps the WAD renamed. The GLB is
+byte-identical before/after (582060 bytes), and all 400 tile payloads match with
+only per-install source-revision keys excluded (`tile_comparison.json`).
+Fit and World screenshots were inspected: expected textured ground, shoreline
+and water are present. The trimmed fixture excludes graphics.big; objects and
+plants are not claimed. Normal and ASan GUI builds pass. No terrain/rendering
+algorithm changes or live-game writes.
+
 ## 2026-10-01 continuation: navigation diagnostic extraction
 
 `nav-lines` reproduced overwriting the shared navlines LEV

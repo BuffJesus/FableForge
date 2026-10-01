@@ -39,6 +39,7 @@
 #include "leveledit.hpp"
 #include "livelink.hpp"
 #include "backups.hpp"
+#include "temporarydirectory.hpp"
 #include "stbcompact.hpp"
 #include "renderer.hpp"
 #include "worldscenery.hpp"
@@ -307,7 +308,8 @@ private:
     // side by side at `width`. Returns 1 for yes, -1 for cancel, 0 while undecided.
     // `widget` names the yes button for the automation ("btn_x_confirm").
     int confirmRow(const char* question, const char* yes, float width, float height, const char* widget);
-    std::string resolveLevPath(const MapEntry& e, std::string& err);
+    using LevWorkspace = std::shared_ptr<albion::detail::TemporaryDirectory>;
+    std::string resolveLevPath(const MapEntry& e, LevWorkspace& scratch, std::string& err);
     void startExportOf(const MapEntry& entry);
     const MapEntry* findEntry(const std::string& key) const;
     void loadSettings(std::string& savedInstall);

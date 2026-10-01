@@ -155,6 +155,8 @@ bool Automation::tick(App& app) {
     if (cmd == "wait_ready") waitOn(app.mapsReady() && !app.contextBusy(), "install + textures");
     else if (cmd == "wait_maps") waitOn(app.mapsReady(), "map list");
     else if (cmd == "wait_loaded") waitOn(app.previewLoaded() && !app.previewBusy(), "preview");
+    else if (cmd == "wait_neighbours") waitOn(app.showNeighbours_ && !app.neighbourFuture_.valid() &&
+        app.neighboursFor_ == app.selectedName_, "neighbour previews");
     else if (cmd == "wait_export") waitOn(!app.exportBusy(), "export");
     else if (cmd == "wait_foliage") waitOn(app.foliageLoaded() && !app.foliageBusy(), "foliage");
     else if (cmd == "frames") { waitFrames_ = std::max(1, std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }

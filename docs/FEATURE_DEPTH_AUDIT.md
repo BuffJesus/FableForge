@@ -462,6 +462,16 @@ WAD and loose layouts, and nav-lines output matches the prior implementation.
 This map has no placed hull lines. Only file ownership changed; navigation
 parity remains experimental.
 
+## GUI extraction ownership, 2026-10-01
+
+GUI level loads and World overview tiles retain their own extraction folders,
+including neighbour/fit/detail work transferred between threads. Stock, loose
+and ASan GUI tests preserve old-path markers and source hashes across fit undo/
+redo, four neighbour previews, export, 400 overview tiles and detailed ground.
+The export and tile payloads match before/after (tile source keys excluded).
+Screenshots show expected fit terrain and World shoreline/water. The fixture
+omits graphics.big; placed-object rendering is not covered by these probes.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

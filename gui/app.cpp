@@ -716,7 +716,7 @@ void App::startContextLoad(const std::string& fromRoot) {
     });
 }
 
-std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
+std::string App::resolveLevPath(const MapEntry& e, LevWorkspace& scratch, std::string& err) {
     if (!e.loosePath.empty()) return e.loosePath;
     try {
         const fs::path wadPath = fs::path(installPath_) / "data" / "Levels" / "FinalAlbion.wad";
@@ -725,11 +725,14 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
         for (const auto& en : wad.entries()) {
             if (lower(fs::path(en.name).filename().string()) != want) continue;
             const auto bytes = wad.read(en);
-            const fs::path dir = fs::temp_directory_path() / "FableForge";
-            fs::create_directories(dir);
-            const fs::path out = dir / (e.name + ".lev");
-            std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-            return out.string();
+            scratch = std::make_shared<albion::detail::TemporaryDirectory>("gui-level-");
+            const fs::path path = scratch->path() / fs::path(e.name + ".lev").filename();
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            out.open(path, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            out.close();
+            return path.string();
         }
         err = "map not found in " + levels_.describe();
     } catch (const std::exception& ex) {
@@ -922,14 +925,15 @@ void App::startNeighbourLoad() {
     const editor::WorldMapBox* box = layout.find(cur->name);
     if (!box) { pushLog("neighbours: " + cur->name + " is not placed in FinalAlbion.wld", 1); return; }
     // .lev paths on this thread (the WAD read uses app state), the bakes on the worker
-    struct Job { std::string lev; int dx, dy; std::string name; };
+    struct Job { std::string lev; int dx, dy; std::string name; LevWorkspace scratch; };
     std::vector<Job> jobs;
     for (const auto* n : layout.touching(*box, box->x, box->y)) {
         if (n->name == box->name) continue;
         const MapEntry* e = findEntry(n->name);
         if (!e) continue;
-        const std::string lev = resolveLevPath(*e, err);
-        if (!lev.empty()) jobs.push_back({lev, n->x - box->x, n->y - box->y, n->name});
+        LevWorkspace scratch;
+        const std::string lev = resolveLevPath(*e, scratch, err);
+        if (!lev.empty()) jobs.push_back({lev, n->x - box->x, n->y - box->y, n->name, std::move(scratch)});
     }
     // the worker holds its own reference: a context reload on the UI thread
     // (ctx_ = *ctxPending_) must not free what it is reading
@@ -985,7 +989,8 @@ void App::startPreviewLoad() {
     previewFuture_ = std::async(std::launch::async, [ctxHold, this, entry, ctx, textured, gain]() {
         PreviewResult r; r.name = entry.key; r.textured = textured;
         std::string err;
-        const std::string lev = resolveLevPath(entry, err);
+        LevWorkspace scratch;
+        const std::string lev = resolveLevPath(entry, scratch, err);
         if (lev.empty()) { r.error = err; return r; }
         try {
             const auto file = forge::lev::File::open(lev);
@@ -1056,7 +1061,8 @@ void App::startExportOf(const MapEntry& entry) {
         ExportResult r; r.path = outPath;
         const auto t0 = std::chrono::steady_clock::now();
         std::string err;
-        const std::string lev = resolveLevPath(entry, err);
+        LevWorkspace scratch;
+        const std::string lev = resolveLevPath(entry, scratch, err);
         if (lev.empty()) { r.log.push_back("error: " + err); return r; }
         try {
             fs::create_directories(fs::path(outPath).parent_path());
