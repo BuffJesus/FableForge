@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: roll back failed WAD/loose TNG deployment
+
+A locked loose TNG was silently left stale after the WAD changed, while the GUI
+reported success and cleared its draft (`build/tng-deploy-failures-gaywh3ra`,
+including `baseline_report.json`). Object deployment now uses the existing
+PendingBanks helper: prepare the WAD and checked loose text, complete backup
+preflight, then install both. A failed target replacement rolls back earlier
+replacements; dirty state is cleared only after the pair succeeds. Scratch
+outputs use the helper's owned directory instead of a shared WAD temp filename.
+
+Normal (`build/tng-deploy-failures-b662b0o7`) and ASan GUI/CLI
+(`build/tng-deploy-failures-zq85g8th`) pass early locked-WAD and late locked-TNG
+failures with exact prior target hashes, dirty-draft retention, workspace cleanup,
+successful retry with matching WAD/loose payloads and exact Restore. The repeated
+terrain/TNG creation-marker workflow still passes two exact Restores
+(`build/created-restore-wyy666el`). Full build and all 32 suites pass (17.77 seconds).
+As with other PendingBanks users, a failed rollback retains its recovery directory
+and reports its path; this is not a power-loss transaction.
+
 ## 2026-10-01 continuation: guard active loose TNG draft saves
 
 On an extracted install, Save draft wrote the active TNG and cleared its dirty

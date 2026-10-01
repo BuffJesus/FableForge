@@ -200,6 +200,9 @@ item and info display components; absent components are not added.
   replaces the archive entry through `forge::wad::repack`
   (same-size payloads are patched in place, larger ones appended; every byte
   the reader does not interpret is preserved). One-time `.forge-orig` backups.
+  When a loose TNG also exists, both outputs are prepared before replacement;
+  a failed replacement rolls earlier files back and leaves the document dirty.
+  If rollback itself fails, the error identifies the retained recovery folder.
   The game loads levels from the WAD, so deploy is what makes edits visible
   in-game; saved games cache region entities, so start a new game or enter the
   region fresh to see them. `Save draft` keeps the loose

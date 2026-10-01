@@ -1,6 +1,7 @@
 #include "nlohmann/json.hpp"
 #include <fstream>
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "leveledit.hpp"
 #include "temporarydirectory.hpp"
 #include "vanilla_props.hpp"
@@ -3183,8 +3184,6 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
     // another world's .tng beside its .lev is likewise the file the game reads
     if (external() || forge::levelstore::detect(gameRoot).looseOnly()) return saveLoose(gameRoot, error);
     const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
-    const fs::path backup = albion::backups::originalOf(wad);
-    const fs::path temp = wad.string() + ".forge-tmp";
     try {
         if (!fs::exists(wad)) { error = "no " + wad.string(); return false; }
         const auto archive = forge::wad::Archive::open(wad);
@@ -3193,24 +3192,25 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
         for (const auto& e : archive.entries())
             if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
         if (entryName.empty()) { error = mapName_ + ".tng is not in FinalAlbion.wad"; return false; }
-        if (!fs::exists(backup)) fs::copy_file(wad, backup);
         const std::string text = file_.serialize();
         std::map<std::string, std::vector<uint8_t>> rep;
         rep[entryName] = std::vector<uint8_t>(text.begin(), text.end());
-        forge::wad::repack(wad, rep, temp);
-        fs::rename(temp, wad);
+        detail::PendingBanks pending(gameRoot, ".forge-tng-deploy-");
+        forge::wad::repack(wad, rep, pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wad"));
         // a loose copy (the user's, or ours) would otherwise go stale and shadow the WAD on read
-        const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
-        if (fs::exists(loose)) {
-            if (!backupOnce(loose, error)) return false;
-            std::ofstream f(loose, std::ios::binary | std::ios::trunc);
+        const fs::path loose = fs::path("data") / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
+        if (fs::exists(gameRoot / loose)) {
+            const auto prepared = pending.prepare(loose);
+            std::ofstream f(prepared, std::ios::binary);
             f.write(text.data(), std::streamsize(text.size()));
+            f.close();
+            if (!f) throw std::runtime_error("cannot prepare loose TNG: " + prepared.string());
         }
+        if (!pending.install(true, error)) return false;
         original_ = text; dirtyRev_ = ~0ull;
         return true;
     } catch (const std::exception& e) {
         error = e.what();
-        std::error_code ec; fs::remove(temp, ec);
         return false;
     }
 }
