@@ -774,7 +774,7 @@ or a save made after installation to display correctly. The New level card
 also offers existing-region ownership and filler takeover. There is no
 141-region loading cap (see the 2026-09-17 findings below). Core name, placement
 and overlap validation runs before minimap writes and repeats during installation;
-editor creation's
+donor terrain translation also finishes before minimap writes. Editor creation's
 containers get one-time `.forge-orig` backups. The core installer prepares
 WLD, BWD and its existing mirrors, WAD (or new loose LEV/TNG files), and STB
 in an owned directory, then rolls back earlier replacements if a later file

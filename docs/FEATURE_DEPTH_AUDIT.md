@@ -1397,6 +1397,21 @@ returns all copied files and inventory exactly (`report.json`). The final
 name/ID comparison was also checked against the retained outputs. No production
 code changed in this pass; the preceding 35-suite gate remains applicable.
 
+## 2026-10-01 continuation: prepare donor chunks before minimap writes
+
+`build/donor-prepare-rx7gp3se/failure_report.json` reproduced failed donor
+translation changing textures.big and game.bin and leaving three backup files.
+Copy creation now completes the existing terrain translation before baking its
+minimap. No translation or minimap encoding algorithm changed.
+
+`tools/test_donor_preparation.py` substitutes a truncated terrain chunk in an
+owned STB, verifies refusal leaves every file and hash unchanged, restores the
+valid donor, creates its own-region copy with a minimap, then checks exact
+Restore. Normal `build/donor-prepare-npa47atr` and AddressSanitizer
+`build/donor-prepare-4b49343g` pass. The rebuilt normal 35-suite gate passes in
+28.26 seconds. Later creation stages remain separate operations; this is an
+earlier preparation boundary, not a transaction across all creation stages.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

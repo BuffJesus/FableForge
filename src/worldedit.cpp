@@ -147,15 +147,6 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         const auto layout = forge::levelstore::detect(gameRoot);
         ir.levBytes = levelBytes(layout, req.donor, ".lev");
         ir.tngBytes = levelBytes(layout, req.donor, ".tng");
-        if (req.ownRegion.wanted && req.ownRegion.minimap) {
-            std::string entry;
-            stage("baking the minimap into textures.big");
-            forge::minimapframe::Framing frame;
-            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, frame, out.notes, error)) return false;
-            ir.minimapGraphic = entry;
-            ir.minimapFraming = frame;
-        }
-
         if (req.rebakeChunk) {
             stage("translating the terrain chunk");
             // re-bake the donor's terrain chunk for the new origin: same LEV, no
@@ -187,6 +178,15 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
             ir.commonRecord = std::move(rec);
             out.notes.push_back("terrain chunk translated from (" + std::to_string(info.worldX) + "," + std::to_string(info.worldY) + ") to (" + std::to_string(req.worldX) + "," + std::to_string(req.worldY) + "): " +
                                 std::to_string(rr.foregroundFrames) + " foreground, " + std::to_string(rr.patchFrames) + " patches, " + std::to_string(rr.groupFrames) + " foliage groups, " + std::to_string(ir.chunkBytes.size()) + " bytes");
+        }
+
+        if (req.ownRegion.wanted && req.ownRegion.minimap) {
+            std::string entry;
+            stage("baking the minimap into textures.big");
+            forge::minimapframe::Framing frame;
+            if (!bakeMinimapTexture(gameRoot, req.name, ir.levBytes, nullptr, entry, frame, out.notes, error)) return false;
+            ir.minimapGraphic = entry;
+            ir.minimapFraming = frame;
         }
 
         for (const char* f : {"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"})
