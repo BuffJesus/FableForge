@@ -1690,6 +1690,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
+    v.push_back("mods_first_winner=" + (modConflicts_.empty() ? std::string() : modConflictWinner(modConflicts_.front())));
     v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));
     v.push_back("mesh_import_busy=" + std::string(meshImportFuture_.valid() ? "1" : "0"));

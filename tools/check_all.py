@@ -57,6 +57,8 @@ def main():
             ok &= run("retail head phoneme skin poses", [os.path.join("build", "fableforge_headpose_tests.exe"), graphics])
         ok &= run("retail dialogue frame edits, scratch export and pack recipe",
                   [sys.executable, "tools/test_dialogue_edit.py", "--install", install_root], capture_output=True)
+        ok &= run("mod conflict winner reset and scratch deploy",
+                  [sys.executable, "tools/test_mod_winner_refresh.py", "--root", install_root], capture_output=True)
     else:
         print("[SKIP] retail lipsync byte roundtrip (English dialogue.big unavailable)")
     ok &= run("lzo1x vs the engine's asm decoder", [sys.executable, "tools/verify_engine_lzo.py"], capture_output=True)

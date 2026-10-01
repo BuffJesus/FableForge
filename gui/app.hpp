@@ -939,7 +939,8 @@ private:
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:
     struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
-                         std::string winner; bool overridden = false, pickable = true; };
+                         std::string winner; bool overridden = false, pickable = true, fieldMerged = false; };
+    std::string modConflictWinner(const ModConflict& conflict) const;
 private:
     std::vector<ModConflict> modConflicts_;
     std::map<std::string, std::string> modPicks_;

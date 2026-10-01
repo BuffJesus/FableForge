@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: conflict winner refresh and Dialogue delivery
+
+Clearing a saved Mods winner now immediately displays the last contributor in
+load order and updates win/loss badges. Previously it fell back to the stale
+winner embedded in the last conflict report. Field-merged records keep their
+merge label; lip sync conflicts still use their non-pickable report winner.
+The dropdown also snapshots its picked state instead of retaining a map iterator
+across saving a new picks map.
+
+`tools/test_mod_winner_refresh.py` passes in the owned scratch install
+`build/mod-winner-refresh-levegluf`: a saved PackA choice is cleared through the
+actual dropdown, immediately shows PackB, handles vanilla/new picks and resets,
+agrees with a fresh report, and deploys PackB's exact file bytes. The cleared
+screenshot also verifies the badges visually. No live install writes.
+
+Dialogue delivery is `dist/FableForge-0.18.0-dev.perodis.20261001.4-win64.zip`
+(29.3 MB), built at 1856799 before this winner-display fix. Extracted-package
+checks pass at `build/package-smoke-84tge2kl`: 69 local documentation links,
+four guide images, defs lookup, eight retail map exports, GUI pixels and literal
+mod paths from an unrelated working directory. It includes Dialogue, Browse and
+the DLL/loader explanation; open AEON_CONTROLLER.html beside FableForge.exe.
+
 ## 2026-10-01 continuation: Dialogue workspace and expanded previews
 
 Dialogue now opens with a visible line dropdown, immediate browsing and search

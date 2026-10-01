@@ -341,6 +341,16 @@ bool App::modPick(const std::string& key, const std::string& winner) {
     return true;
 }
 
+std::string App::modConflictWinner(const ModConflict& conflict) const {
+    if (!conflict.pickable) return conflict.winner;
+    const auto pick = modPicks_.find(conflict.key);
+    if (pick != modPicks_.end()) return pick->second;
+    // The report's winner may include a choice that has since been cleared.
+    // Contributors are reported in load order; field merges retain their label.
+    if (!conflict.fieldMerged && !conflict.mods.empty()) return conflict.mods.back();
+    return conflict.winner;
+}
+
 // the conflict report: every row a thing several enabled mods want differently, with the winner the
 // load order (or a pick) gives it
 static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
@@ -348,7 +358,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
     auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
     if (rep.contains("defs"))
         for (const auto& c : rep["defs"].value("conflicts", json::array()))
-            rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+            rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
     if (rep.contains("tng"))
         for (const auto& l : rep["tng"].value("levels", json::array()))
             for (const auto& c : l.value("conflicts", json::array())) {
@@ -538,8 +548,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (modReportLoaded_)
         for (const auto& c : modConflicts_) {
             if (c.key.empty()) continue;
-            const auto pk = c.pickable ? modPicks_.find(c.key) : modPicks_.end();
-            const std::string win = pk != modPicks_.end() ? pk->second : c.winner;
+            const std::string win = modConflictWinner(c);
             for (const auto& m : c.mods) (m == win ? wl[m].first : wl[m].second).push_back(c.label);
         }
     auto listTip = [](const char* head, const std::vector<std::string>& v) {
@@ -716,13 +725,14 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 continue;
             }
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
-            const auto pk = modPicks_.find(c.key);
-            const std::string current = pk != modPicks_.end() ? pk->second : c.winner;
-            const std::string shown = (pk != modPicks_.end() ? "* " : "") + current;
+            const bool picked = modPicks_.contains(c.key);
+            const std::string current = modConflictWinner(c);
+            const std::string shown = (picked ? "* " : "") + current;
             ImGui::SetNextItemWidth(comboW);
             if (ImGui::BeginCombo("##winner", shown.c_str())) {
-                if (ImGui::Selectable("load order", pk == modPicks_.end())) modPick(c.key, "-");
-                for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && pk != modPicks_.end())) modPick(c.key, m);
+                if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
+                auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
+                for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
                 if (ImGui::Selectable("vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
                 ImGui::EndCombo();
             }
