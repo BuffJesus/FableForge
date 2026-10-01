@@ -432,5 +432,7 @@ Undeploy validates every original backup before restoring any target. A missing
 `.forgebak` for an original is an error and leaves files unchanged. Backups and
 the manifest remain until all restores succeed, so a locked file can be released
 and undeploy retried without losing originals restored earlier. Newly added
-files are removed. This retry guarantee covers restore; failed stage/apply and
-competing processes remain separate concerns.
+files are removed. Stage prepares all original backups and checks the recovery manifest before
+changing targets. If a target copy fails, use undeploy to restore that attempt
+before retrying. An unowned backup is refused rather than reused. This does not
+provide power-loss durability or coordination between competing processes.

@@ -22,7 +22,9 @@ struct Result {
 
 // Copy every file under modDir (mirroring the game tree, e.g.
 // modDir/Data/Levels/FinalAlbion/Foo.tng) into gameRoot. Refuses to run if a
-// manifest already exists (unstage first). Returns what was done.
+// manifest or an unowned backup already exists. All originals and the checked
+// recovery manifest are written before changing targets. A failed target copy
+// retains recovery data: run revert() before retrying. Returns what was done.
 Result apply(const std::filesystem::path& gameRoot,
              const std::filesystem::path& modDir);
 

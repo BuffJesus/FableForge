@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <algorithm>
+#include <cctype>
+#include <cwctype>
 #include <set>
 #include <stdexcept>
 
@@ -18,6 +20,25 @@ constexpr const char* kBackupSuffix = ".forgebak";
 
 std::string relativeString(const fs::path& base, const fs::path& path) {
     return fs::relative(path, base).generic_string();
+}
+
+bool recoveryPath(const std::string& relative) {
+    for (const auto& component : fs::path(relative)) {
+        std::string part = component.string();
+        std::transform(part.begin(), part.end(), part.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (part == kManifestName || part.ends_with(kBackupSuffix)) return true;
+    }
+    return false;
+}
+
+fs::path targetKey(const fs::path& path) {
+    auto key = fs::weakly_canonical(path);
+#ifdef _WIN32
+    auto text = key.native();
+    std::transform(text.begin(), text.end(), text.begin(), [](wchar_t c) { return wchar_t(std::towlower(c)); });
+    key = text;
+#endif
+    return key;
 }
 
 fs::path checkedTarget(const fs::path& root, const std::string& relative) {
@@ -50,36 +71,66 @@ Result apply(const fs::path& gameRoot, const fs::path& modDir) {
             "stage: a mod is already staged (manifest exists); run unstage first");
     }
 
-    Result result;
+    struct Entry { std::string relative; fs::path source, target, backup; bool hadOriginal; };
+    std::vector<Entry> plan;
+    std::set<fs::path> targets;
     json entries = json::array();
-
+    // Resolve and validate the entire plan before creating recovery data.
     for (const auto& item : fs::recursive_directory_iterator(modDir)) {
         if (!item.is_regular_file()) continue;
-        const std::string relative = relativeString(modDir, item.path());
-        const fs::path target = gameRoot / relative;
+        Entry entry;
+        entry.relative = relativeString(modDir, item.path());
+        entry.source = item.path();
+        entry.target = checkedTarget(gameRoot, entry.relative);
+        entry.backup = checkedTarget(gameRoot, entry.relative + kBackupSuffix);
+        entry.hadOriginal = fs::exists(entry.target);
+        if (targetKey(entry.target) == targetKey(manifest) ||
+            recoveryPath(entry.relative) ||
+            !targets.insert(targetKey(entry.target)).second)
+            throw std::runtime_error("stage: conflicting manifest path: " + entry.relative);
+        if (entry.hadOriginal && !fs::is_regular_file(entry.target))
+            throw std::runtime_error("stage: target is not a file: " + entry.target.string());
+        if (fs::exists(entry.backup))
+            throw std::runtime_error("stage: unowned backup exists: " + entry.backup.string() + "; files were left unchanged");
+        entries.push_back({{"path", entry.relative}, {"had_original", entry.hadOriginal}});
+        plan.push_back(std::move(entry));
+    }
+    if (plan.empty()) throw std::runtime_error("stage: no files found under " + modDir.string());
 
-        const bool hadOriginal = fs::exists(target);
-        if (hadOriginal) {
-            const fs::path backup = target.string() + kBackupSuffix;
-            if (!fs::exists(backup)) {
-                fs::copy_file(target, backup);
-            }
-            result.backedUp.push_back(relative);
-        } else {
-            fs::create_directories(target.parent_path());
+    Result result;
+    std::vector<fs::path> createdBackups;
+    bool manifestStarted = false, recoveryReady = false;
+    try {
+        // All originals and a checked manifest must exist before any target is
+        // overwritten. Even a failure on the first target is now recoverable.
+        for (const auto& entry : plan) if (entry.hadOriginal) {
+            createdBackups.push_back(entry.backup);
+            fs::copy_file(entry.target, entry.backup);
+            result.backedUp.push_back(entry.relative);
         }
-        fs::copy_file(item.path(), target, fs::copy_options::overwrite_existing);
-        result.staged.push_back(relative);
-
-        entries.push_back({{"path", relative}, {"had_original", hadOriginal}});
+        {
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            manifestStarted = true;
+            out.open(manifest, std::ios::binary);
+            out << json{{"files", entries}}.dump(2);
+            out.close();
+        }
+        recoveryReady = true;
+        for (const auto& entry : plan) {
+            fs::create_directories(entry.target.parent_path());
+            fs::copy_file(entry.source, entry.target, fs::copy_options::overwrite_existing);
+            result.staged.push_back(entry.relative);
+        }
+    } catch (const std::exception& e) {
+        if (recoveryReady)
+            throw std::runtime_error(std::string("stage: ") + e.what() + "; recovery manifest retained; run unstage or mods undeploy before retrying");
+        // No target has changed yet. Remove only recovery files this call made.
+        std::error_code ignored;
+        if (manifestStarted) fs::remove(manifest, ignored);
+        for (const auto& backup : createdBackups) fs::remove(backup, ignored);
+        throw;
     }
-
-    if (result.staged.empty()) {
-        throw std::runtime_error("stage: no files found under " + modDir.string());
-    }
-
-    std::ofstream out(manifest, std::ios::binary);
-    out << json{{"files", entries}}.dump(2);
     return result;
 }
 
@@ -104,8 +155,8 @@ Result revert(const fs::path& gameRoot) {
         entry.target = checkedTarget(gameRoot, entry.relative);
         entry.backup = checkedTarget(gameRoot, entry.relative + kBackupSuffix);
         entry.hadOriginal = item.at("had_original").get<bool>();
-        if (fs::weakly_canonical(entry.target) == fs::weakly_canonical(manifest) || entry.relative.ends_with(kBackupSuffix) ||
-            !targets.insert(fs::weakly_canonical(entry.target)).second)
+        if (targetKey(entry.target) == targetKey(manifest) || recoveryPath(entry.relative) ||
+            !targets.insert(targetKey(entry.target)).second)
             throw std::runtime_error("unstage: conflicting manifest path: " + entry.relative);
         if (entry.hadOriginal && !fs::is_regular_file(entry.backup))
             throw std::runtime_error("unstage: missing original backup: " + entry.backup.string() + "; files were left unchanged");

@@ -343,7 +343,10 @@ void App::pollModsTool() {
     pushLog("mods " + modsVerb_ + (r.rc == 0 ? ": done" : ": FAILED (rc " + std::to_string(r.rc) + ")"), r.rc == 0 ? 0 : 2);
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") backupsScannedAt_ = 0;   // the Setup card re-scans
     refreshModOrder();
-    if (r.rc == 0 && (modsVerb_ == "deploy" || modsVerb_ == "undeploy")) {
+    if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") {
+        // A failed redeploy may already have reverted the previous stage.
+        // Refresh what is actually on disk while preserving the failure report.
+        if (r.rc != 0) pushLog("mods: refreshing after a failed write; inspect the error before retrying", 1);
         modsRefreshPending_ = true;
         if (worldTileCancel_) worldTileCancel_->store(true);
         clearWorldDetail();

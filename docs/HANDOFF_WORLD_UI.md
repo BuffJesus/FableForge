@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: failed staging and redeploy refresh
+
+A locked target reproduced stage/apply changing earlier files without publishing
+a recovery manifest. Apply now preflights targets and unowned backups, copies
+all originals, and checks manifest write/close before changing any target. A
+backup-read failure leaves targets unchanged and removes recovery files created
+by that attempt; a later target-copy failure retains the complete plan for
+unstage/undeploy. This is recoverability after reported failure, not power-loss
+durability or atomic replacement of the whole install.
+
+Normal and ASan stage tests pass failed-copy recovery, unreadable-original
+refusal/cleanup, stale-backup refusal and successful replace/add/undeploy round
+trips. A malformed binary patch reproduced the separate GUI bug: redeploy
+restored all original banks and failed, while Maps still listed the removed map
+and kept its preview. Completion now refreshes after failed writes too, preserving
+the failure report. The permanent refresh script passes this case plus the three
+successful cycles at `build/mod-refresh-_6r2i3pm`; source banks and the pack keep
+their expected hashes. Case aliases of recovery filenames also reproduced a
+backup overwrite; preflight now rejects them and duplicate Windows targets.
+Focused normal/ASan tests cover these aliases. The complete build and all 28
+CTest suites pass (21.89 seconds).
+
+The first two failure-fixture attempts did not fail: requires is advisory, and
+raw definition banks in a Forge pack do not take the tree merge path. Their
+successful stages were undeployed and the scratch root checked against source
+hashes before the actual binary-patch failure probe. No live files were changed.
+
 ## 2026-10-01 continuation: mod refresh and retryable undeploy
 
 A valid new-level pack exposed stale map/preview state after mod jobs completed

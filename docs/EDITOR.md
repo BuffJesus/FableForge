@@ -775,7 +775,8 @@ reverts the previous deploy, builds the whole order onto the retail files and st
 (originals kept as `.forgebak`); *Undeploy* puts the retail files back. All three run the
 shipped `forge-tools.exe` as a process and stream its output into the Activity log.
 Deploy and undeploy wait for preview/World readers before replacing banks.
-Assets and maps refresh after completion even when another tab is open. Unsaved
+Assets and maps refresh after completion, including failures, even when another
+tab is open. A failed redeploy may already have undone the previous deployment. Unsaved
 map edits and undo remain intact; a clean map removed by undeploy clears its
 preview. Pending world edits remain; reload the world after saving or discarding
 them to see the new layout.

@@ -355,6 +355,16 @@ Stage/apply failure atomicity, cross-process writes and pending-world-edit
 refresh remain open. Earlier new-level busy evidence covers failed creation;
 the new refresh script explicitly checks successful creation before deployment.
 
+## Staging failure recovery, 2026-10-01
+
+Stage/apply publishes checked recovery data before changing target files. Tests
+cover a locked target followed by complete undeploy, unreadable-original cleanup,
+stale-backup refusal, recovery filename aliases and duplicate Windows targets.
+A failed redeploy from a malformed patch also refreshes the GUI back to the
+restored map list and clears the removed preview; all source-bank hashes match.
+The successful clean/World/draft cycles still pass. These are reported-failure
+recovery checks, not power-loss durability or cross-process serialization.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -105,6 +105,31 @@ assert_state preview_has_mesh 0
 mod_remove 0''')
         assert original == {rel: digest(root / rel) for rel in files}, 'undeploy changed original banks'
         assert packed == {p.relative_to(pack): digest(p) for p in pack.rglob('*') if p.is_file()}, 'deployment changed the pack'
+    broken = work / 'game.bin.patch'
+    broken.write_bytes(b'not a valid binary patch')
+    run('failed_redeploy', f'''mod_add {pack} RefreshProbe
+mods_deploy
+mods_tab 0
+wait_file_job
+wait_ready
+assert_log mods deploy: done
+assert_state maps {count + 1}
+select RefreshProbe
+wait_loaded
+assert_state preview_has_mesh 1
+mod_add {broken} BrokenPatch
+mods_deploy
+wait_file_job
+wait_ready
+assert_log mods deploy: FAILED
+assert_log refreshing after a failed write
+assert_state maps {count}
+assert_state doc_loaded 0
+assert_state preview_has_mesh 0
+mod_remove 1
+mod_remove 0''')
+    assert original == {rel: digest(root / rel) for rel in files}, 'failed redeploy changed original banks'
+    assert packed == {p.relative_to(pack): digest(p) for p in pack.rglob('*') if p.is_file()}, 'failed redeploy changed the pack'
     print('same-window refresh and byte-exact undeploy: PASS; evidence retained at', work)
 
 

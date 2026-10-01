@@ -49,6 +49,59 @@ int main() {
         failed = false;
         try { forge::stage::revert(root); } catch (const std::exception&) { failed = true; }
         check(failed && fs::exists(forge::stage::manifestPath(root)), "escaping manifest path was accepted");
+        fs::remove(forge::stage::manifestPath(root));
+        const auto mod = root / "input";
+        fs::create_directory(mod);
+        put(mod / "a", "replacement a"); put(mod / "b", "replacement b");
+#ifdef _WIN32
+        locked = CreateFileW((root / "b").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        check(locked != INVALID_HANDLE_VALUE, "could not lock staging target");
+        failed = false;
+        try { forge::stage::apply(root, mod); } catch (const std::exception&) { failed = true; }
+        CloseHandle(locked);
+        check(failed, "locked staging target was accepted");
+        check(fs::exists(forge::stage::manifestPath(root)), "failed stage left no recovery manifest");
+        forge::stage::revert(root);
+        check(get(root / "a") == "original a" && get(root / "b") == "original b", "failed-stage recovery changed originals");
+#endif
+#ifdef _WIN32
+        locked = CreateFileW((root / "b").c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        check(locked != INVALID_HANDLE_VALUE, "could not lock original against backup reads");
+        failed = false;
+        try { forge::stage::apply(root, mod); } catch (const std::exception&) { failed = true; }
+        CloseHandle(locked);
+        check(failed, "unreadable original was accepted");
+        check(get(root / "a") == "original a" && get(root / "b") == "original b", "backup failure changed targets");
+        check(!fs::exists(forge::stage::manifestPath(root)) && !fs::exists(root / "a.forgebak") && !fs::exists(root / "b.forgebak"), "backup failure leaked recovery state");
+#endif
+        put(root / "b.forgebak", "stale backup");
+        failed = false;
+        try { forge::stage::apply(root, mod); } catch (const std::exception&) { failed = true; }
+        check(failed, "stage reused an unowned backup");
+        check(get(root / "a") == "original a" && get(root / "b") == "original b", "stale-backup preflight changed targets");
+        check(get(root / "b.forgebak") == "stale backup", "stage changed an unowned backup");
+        fs::remove(root / "b.forgebak");
+        put(mod / "new", "new stage file");
+        check(forge::stage::apply(root, mod).staged.size() == 3, "successful stage missed files");
+        check(get(root / "a") == "replacement a" && get(root / "b") == "replacement b", "stage omitted replacement bytes");
+        forge::stage::revert(root);
+        check(get(root / "a") == "original a" && get(root / "b") == "original b" && !fs::exists(root / "new"), "stage round trip changed originals");
+        for (const auto* reserved : {"a.FORGEBak", "FORGE_STAGE_MANIFEST.JSON"}) {
+            put(mod / reserved, "must not overwrite recovery data");
+            failed = false;
+            try { forge::stage::apply(root, mod); } catch (const std::exception&) { failed = true; }
+            check(failed, "case alias of recovery file was accepted");
+            check(get(root / "a") == "original a" && get(root / "b") == "original b", "reserved-path preflight changed originals");
+            check(!fs::exists(forge::stage::manifestPath(root)), "reserved-path preflight created a manifest");
+            fs::remove(mod / reserved);
+        }
+#ifdef _WIN32
+        put(root / "a.forgebak", "original a");
+        put(forge::stage::manifestPath(root), R"({"files":[{"path":"a","had_original":true},{"path":"A","had_original":true}]})");
+        failed = false;
+        try { forge::stage::revert(root); } catch (const std::exception&) { failed = true; }
+        check(failed && get(root / "a") == "original a" && fs::exists(root / "a.forgebak"), "restore accepted duplicate Windows target aliases");
+#endif
         fs::remove_all(root);
         std::cout << "stage restore checks passed\n";
         return 0;
