@@ -1124,6 +1124,20 @@ Normal and ASan editor/CLI builds pass. These are offline/hidden-editor checks;
 no new live-game terrain or navigation validation was performed. Multi-map seam
 stitching remains a sequence of separate terrain deployments.
 
+## 2026-10-01 continuation: strict world visibility flags
+
+`build/world-flag-inputs-gn_c43if/invalid_0.json` reproduced `region-props
+--worldmap oops` hiding Greatwood and returning success. Region properties and
+world-sees now require the documented literal 0 or 1. Region-property parsing
+also refuses an option without a value, even after valid earlier edits, before
+any install lookup/write.
+
+`tools/test_world_flag_inputs.py` checks 23 malformed flag/incomplete-option
+cases against exact copied-bank/inventory hashes, then both valid flag values
+and exact Restore. Normal `build/world-flag-inputs-w0ifnvir` and ASan CLI
+`build/world-flag-inputs-wlfyj6n1` pass. This change is confined to CLI argument
+validation; the preceding 34-suite core gate remains applicable.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

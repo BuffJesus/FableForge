@@ -53,12 +53,16 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
     if (cmd == "region-props") {   // region-props <region> [--def REGION_X] [--minimap MINIMAP_X] [--display NAME] [--worldmap 0|1] [--install root]
         if (args.size() < 3) { std::fprintf(stderr, "usage: forge region-props <region> [--def <REGION_DEF>] [--minimap <MINIMAP_GRAPHIC>] [--display <name>] [--worldmap 0|1] [--install <root>]\n"); return 2; }
         std::string installArg; albion::editor::RegionProps props;
-        for (size_t i = 2; i + 1 < args.size(); i += 2) {
+        for (size_t i = 2; i < args.size(); i += 2) {
+            if (i + 1 == args.size()) { std::fprintf(stderr, "option %s needs a value\n", args[i].c_str()); return 2; }
             if (args[i] == "--install") installArg = args[i + 1];
             else if (args[i] == "--def") props.regionDef = args[i + 1];
             else if (args[i] == "--minimap") props.minimapGraphic = args[i + 1];
             else if (args[i] == "--display") props.displayName = args[i + 1];
-            else if (args[i] == "--worldmap") props.onWorldMap = std::atoi(args[i + 1].c_str());
+            else if (args[i] == "--worldmap") {
+                if (args[i + 1] != "0" && args[i + 1] != "1") { std::fprintf(stderr, "--worldmap expects 0 or 1\n"); return 2; }
+                props.onWorldMap = args[i + 1] == "1" ? 1 : 0;
+            }
             else { std::fprintf(stderr, "unknown option %s\n", args[i].c_str()); return 2; }
         }
         const Install install = findInstall(installArg);
@@ -117,7 +121,10 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
                 moves.push_back(move); i += 2;
             }
             else if (cmd == "world-owner" && i + 1 < args.size()) { owners.push_back({args[i], args[i + 1]}); i += 1; }
-            else if (cmd == "world-sees" && i + 2 < args.size()) { sees.push_back({args[i], args[i + 1], args[i + 2] != "0"}); i += 2; }
+            else if (cmd == "world-sees" && i + 2 < args.size()) {
+                if (args[i + 2] != "0" && args[i + 2] != "1") { std::fprintf(stderr, "world-sees expects 0 or 1\n"); return 2; }
+                sees.push_back({args[i], args[i + 1], args[i + 2] == "1"}); i += 2;
+            }
             else { std::fprintf(stderr, "usage: forge world [--regions] | world-move <map> <x> <y> [...] | world-owner <map> <region> | world-sees <region> <map> <0|1>  [--install <root>]\n"); return 2; }
         }
         if (cmd == "world-owner" || cmd == "world-sees") {
