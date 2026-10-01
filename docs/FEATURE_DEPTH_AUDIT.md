@@ -1940,6 +1940,33 @@ this is earlier validation and refusal of partial output, not transactional
 replacement of the entire previous deployment. Explicit build folders may retain
 incomplete output for diagnosis. No live install writes.
 
+## 2026-10-01 release handoff: rc.3 and Discord-sized walkthrough
+
+Prepared `v0.18.0-rc.3` at 711eeec from this lane, with the user's explicit GitHub
+release authorization. The full Windows ZIP is 29,320,644 bytes; the standalone
+`FableForge-Aeon-Controller-Guide.zip` is 452,511 bytes, below the requested 20 MB
+Discord limit. The guide-only ZIP contains AEON_CONTROLLER.html, four images and
+a README linking the application release. No application or third-party mod files
+are included in the small attachment. `tools/package.py --guide-only` reproduces
+it; full packaging produces both ZIPs.
+
+The rc.3 build passed all 35 core suites (27.59 seconds). Extracted-package
+checks passed at `build/package-smoke-vl5q9ii0` (69 documentation links, guide
+images, defs, eight retail exports, GUI pixels and literal mod paths). The guide
+was separately extracted and browser-checked at `build/guide-package-dlzuzmyv`
+with all four images loaded. Subsequent wording explicitly separates the guide
+attachment from the application download. ZIP CRC and local-link checks pass.
+A final valid recipe-pack build/order/deploy/byte-exact undeploy regression passes
+at `build/release-recipes-q1fiunzf` after the recipe-failure guard.
+
+Both uploaded ZIPs were downloaded again and matched local SHA-256 checksums at
+`build/release-download-1udn9vbj`. The GitHub tag CI run is 36938872938;
+it passed build, core tests, no-install GUI and packaging. Published the prerelease
+at https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.3.
+The latest final release remains 0.17.1.
+The user will send the Discord message and small ZIP; no Discord message was sent.
+The copyable message is retained at `dist/Perodis-message.txt`.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
