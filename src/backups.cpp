@@ -274,7 +274,15 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     for (const auto& e : before) {
         const auto key = targetKey(e.file);
         if (e.kind == Kind::Created) created[key] = e.backup;
-        else if (e.kind == Kind::Original || e.kind == Kind::Overlay) originals[key] = e.backup;
+        else if (e.kind == Kind::Original || e.kind == Kind::Overlay) {
+            const auto [it, inserted] = originals.emplace(key, e.backup);
+            if (!inserted && !sameBytes(it->second, e.backup)) {
+                error = "conflicting restore originals (different or unreadable): " + it->second.string() +
+                    " and " + e.backup.string() + "; preserve both and select the intended baseline before retrying";
+                notes.push_back("failed: " + error);
+                return 0;
+            }
+        }
     }
     for (const auto& [file, marker] : created) {
         const auto original = originals.find(file);

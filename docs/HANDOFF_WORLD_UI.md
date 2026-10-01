@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: require multiple originals to agree
+
+Restore consumed a live stage plus differing modern/legacy originals and reported
+success (`build/restore-originals-dpgglctc`). Its preflight now compares every
+ordinary/legacy/overlay original for the same target. Different or unreadable
+copies stop Restore before any stage or target change; identical copies remain
+accepted and `--forget` clears both after recovery. Diagnostics name the records
+that need an explicit baseline decision.
+
+All three convention pairs pass with differing and identical contents, including
+full-state preservation, stage retention and resolved retries: normal
+`build/restore-originals-b7d7z5t0`, ASan `build/restore-originals-8843yfds`.
+Existing creation conflicts, stage ownership/preflight and lock/retry/forget
+scripts pass normally (`restore-conflicts-0ztti2_g`, `restore-stage-plan-y6nxlgzj`,
+`restore-failures-0zmg4k99`) and under ASan (`restore-conflicts-rhgik8o0`,
+`restore-stage-plan-pnt5tghg`, `restore-failures-tzhywks5`), all under `build/`.
+All three normal writer targets and ASan CLI build.
+
 ## 2026-10-01 continuation: validate original-backup path types
 
 A directory at `.forge-orig` was treated as an existing original, allowing a new

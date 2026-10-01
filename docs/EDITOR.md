@@ -61,6 +61,10 @@ is ambiguous. Restore reports both records and stops before changing any files
 or consuming a stage, including when the target is missing. Preserve those
 records and resolve the intended baseline before retrying. A stage that records
 a file as newly created conflicts with an original/overlay backup in the same way.
+Multiple modern, legacy or overlay originals for one target must be readable and
+byte-identical. Otherwise Restore names the conflicting records and stops before
+any change; keep them until the intended baseline has been selected. Identical
+duplicates are accepted and both are removed by `--forget`.
 If staged recovery fails, Restore stops before applying or forgetting ordinary
 backups; correct the reported problem and retry.
 
