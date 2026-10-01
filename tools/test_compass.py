@@ -29,12 +29,12 @@ def main():
                  f'set uiscale {scale}', 'frames 3', 'mouse_move input_filter', 'clear_toasts']
         shots = []
 
-        def capture(name, heading):
+        def capture(name, heading, group=None):
             path = dest/(name+'.png')
             lines.extend(['frames 3', 'assert_widget viewport_compass',
                           'dump_widget viewport', 'dump_widget viewport_compass',
                           f'screenshot {path.as_posix()}'])
-            shots.append((path, heading))
+            shots.append((path, heading, group or name.split('_')[0]))
 
         for name, yaw, direction in headings:
             for pose, pitch in [('down', .6), ('level', 0), ('up', -.6),
@@ -48,6 +48,17 @@ def main():
             for _ in range(20):
                 lines.append(f'orbit {2*math.pi} 0')
             capture(name+'_turns', direction)
+        lines.extend(['set world_auto_detail 0', 'world_tab 1', 'set world_3d 1',
+                      'wait_world_tiles', 'clear_toasts'])
+        for name, yaw, direction in headings:
+            for pose, pitch in [('down', .6), ('level', 0), ('up', -.6)]:
+                lines.append(f'world_camera 3088 2896 0 {yaw} {pitch} 100')
+                capture(name+'_world_'+pose, direction, 'world_'+name)
+        # TeleporterGreatwood contains this world focus. Opening it converts eye
+        # coordinates to map-local space while preserving orientation.
+        lines.extend([f'world_camera 3088 2896 0 {math.pi/4} .6 100',
+                      'world_open_3d TeleporterGreatwood', 'wait_loaded', 'clear_toasts'])
+        capture('northwest_from_world', headings[-1][2])
         lines.extend(['quit', ''])
         script = dest/'tour.txt'
         script.write_text('\n'.join(lines), encoding='utf-8')
@@ -66,7 +77,7 @@ def main():
         viewports, compasses = rectangles('viewport'), rectangles('viewport_compass')
         assert len(viewports) == len(compasses) == len(shots)
         masks = {}
-        for (path, expected), viewport, rect in zip(shots, viewports, compasses):
+        for (path, expected, heading), viewport, rect in zip(shots, viewports, compasses):
             assert viewport[0] <= rect[0] < rect[2] <= viewport[2], (path, viewport, rect)
             assert viewport[1] <= rect[1] < rect[3] <= viewport[3], (path, viewport, rect)
             box = tuple(round(value) for value in rect)
@@ -86,14 +97,13 @@ def main():
             length = math.hypot(dx, dy)
             assert length > 1 and (dx*expected[0]+dy*expected[1])/length > .96, \
                 f'{path.name}: wrong needle direction {(dx, dy)}'
-            heading = path.stem.split('_')[0]
             if heading in masks:
                 reference = masks[heading]
                 overlap = (reference & accent).sum() / (reference | accent).sum()
                 assert overlap > .9, f'{path.name}: pitch/travel/zoom changed the needle ({overlap:.3f})'
             else:
                 masks[heading] = accent
-        print(size, '40 compass poses: correct directions, stable needle and contained bounds PASS', flush=True)
+        print(size, len(shots), 'compass poses: stable direction, bounds and world-to-map handoff PASS', flush=True)
 
 
 if __name__ == '__main__':

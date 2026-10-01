@@ -1376,15 +1376,24 @@ void App::drawViewportOverlays(const ImVec2& origin, const ImVec2& size) {
         dl->AddRectFilled(p0, ImVec2(p0.x + ts.x + S(16), p0.y + ts.y + S(10)), theme::col(theme::Bg1) | 0xD0000000, S(6));
         dl->AddText(ImVec2(p0.x + S(8), p0.y + S(5)), theme::col(theme::Muted), buf);
     }
+    drawCompass(origin, size, camera_.yaw, rowH + S(10) + viewportControlsLift());
+    ImGui::PopFont();
+}
+
+void App::drawCompass(const ImVec2& origin, const ImVec2& size, float yaw, float bottomInset) {
+    using theme::S;
+    if(size.x < S(96) || size.y < S(96) + bottomInset) return;
+    ImGui::PushFont(fontSmall_);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     // Heading compass: Fable north is +y (render -z), and camera yaw 0 faces it.
     // A projected ground vector collapses at the horizon and flips when looking
     // up; subtracting distant projected points also loses precision. Heading is
     // independent of pitch, eye position, focus distance and projection.
     {
-        const float dx = std::sin(camera_.yaw), dy = -std::cos(camera_.yaw);
+        const float dx = std::sin(yaw), dy = -std::cos(yaw);
         const float r = S(16), extent = S(34);
         const ImVec2 c(origin.x + size.x - S(14) - extent,
-                       yChips - viewportControlsLift() - S(12) - extent);
+                       origin.y + size.y - bottomInset - S(12) - extent);
         auto_.registerRect("viewport_compass", ImVec4(c.x-extent,c.y-extent,c.x+extent,c.y+extent));
         dl->AddCircleFilled(c, r + S(4), theme::col(theme::Bg1) | 0xD0000000, 32);
         dl->AddCircle(c, r + S(4), theme::col(theme::Border), 32, 1.0f);

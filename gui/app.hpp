@@ -1152,6 +1152,7 @@ private:
     bool cursorHit_ = false;
     float cursorFable_[3] = {0, 0, 0};   // x, y (Fable), height
     void drawViewportOverlays(const ImVec2& origin, const ImVec2& size);
+    void drawCompass(const ImVec2& origin, const ImVec2& size, float yaw, float bottomInset);
     float viewportControlsLift() const;
     // Toasts (0.15b #2): every warning / error / success log line also surfaces in the
     // viewport's top-right corner for a few seconds, so a job's result is seen without

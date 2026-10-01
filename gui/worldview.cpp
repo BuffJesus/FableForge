@@ -822,6 +822,7 @@ void App::drawWorld3D(const ImVec2& origin, const ImVec2& size) {
     dl->AddText(ImVec2(origin.x + S(12), origin.y + S(10)), theme::col(theme::Muted), t);
     ImGui::PopFont();
     drawWorldLabel(origin, size);
+    drawCompass(origin, size, worldCamera_.yaw, 0);
     drawToasts(origin, size);
 }
 

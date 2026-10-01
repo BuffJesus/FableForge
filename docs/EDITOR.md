@@ -99,9 +99,11 @@ compaction (dead sections inside a chunk after a re-layout) is still open.
 
 ## Map compass
 
-The compass shows north relative to your horizontal camera heading. Looking up
+The map viewport and **Fly over (3D)** compass show north relative to your
+horizontal camera heading. Looking up
 or down, moving, orbiting and zooming preserve that heading; the needle rotates
-when you turn. It stays above the viewport controls in compact layouts.
+when you turn. It stays above the viewport controls in compact layouts. Opening
+a map from world flight retains the heading when its camera view is preserved.
 
 ## The Edit panel
 

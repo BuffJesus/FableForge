@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: compass shared with world flight
+
+The 3D World view now uses the same heading compass as the map viewport, with
+its own camera yaw. The shared drawing helper keeps the complete label inside
+the viewport; map controls reserve their footer space, while world flight uses
+the free lower corner. Camera navigation and projection are unchanged.
+
+The expanded `tools/test_compass.py` passes at `build/compass-uu1oa7h_`:
+56 captures per window size (1440x900 and 800x600 / 1.5), 112 total. In addition
+to the map pitch/travel/zoom/rotation cases, it checks cardinal and diagonal world
+headings at downward/level/upward pitch and transfers a focus inside
+TeleporterGreatwood into map-local editing without changing the needle. These
+pixel checks validate the compass, not terrain rendering at every test pose.
+The compass changes remain local after the published rc.3 release.
+
 ## 2026-10-01 continuation: stable heading compass
 
 The user reported wrong directions and loss of orientation while moving the
