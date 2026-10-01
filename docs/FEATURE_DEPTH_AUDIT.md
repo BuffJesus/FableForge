@@ -429,6 +429,14 @@ backups. Windows lock fixtures pass with normal and ASan CLI builds; the real
 unchanged WAD backup from the World move probe is removed with all seven bank
 hashes preserved. Full build and core gate pass. No new GUI or in-game probe.
 
+## Terrain neighbour scratch ownership, 2026-10-01
+
+Greatwood_1 bakes no longer overwrite the shared neighbour extraction folder.
+Nine GUI cases each on stock and loose layouts preserve old-path markers, clean
+owned workspaces and preserve source banks. The three-file reference pack is
+byte-identical before/after the ownership change; loose tests retain the renamed
+WAD layout. Writer builds pass. No native bake algorithm or in-game claim changed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

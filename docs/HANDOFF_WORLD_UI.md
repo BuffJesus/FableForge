@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned terrain neighbour extraction
+
+A stock Greatwood_1 terrain save overwrote 11 unrelated LEVs under the shared
+`FableForge/neighbours` folder (`build/terrain-async-zaq5m_x4`). Neighbour loads
+now own a separate temporary directory for the bake; loaded LEVs retain their
+in-memory data after extraction cleanup. Terrain algorithms are unchanged.
+
+All nine background terrain cases pass on stock and extracted/renamed-WAD
+layouts (`build/terrain-async-du8hg1k_`, `build/terrain-async-7l3vfo5n`). Every
+old-path marker survives, owned directories are cleaned, source hashes remain
+unchanged, and no active WAD appears in the loose install. The stock reference
+pack's three files are byte-identical before/after this change (see
+`baseline_comparison.json` in the stock result). All three writer binaries
+build. Other extraction helpers still have fixed paths; no live-game writes.
+
 ## 2026-10-01 continuation: Restore comparison and cleanup
 
 Rebase follow-up: a locked editor baseline reproduced losing the stage manifest

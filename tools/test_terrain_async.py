@@ -8,6 +8,7 @@ Repeated pack writes must retain the full height and theme changes.
 import argparse
 import hashlib
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,6 +31,7 @@ def main():
         raise SystemExit('terrain async test requires stock world banks and definitions')
     work = Path(tempfile.mkdtemp(prefix='terrain-async-', dir=repo / 'build')).resolve()
     assert work.parent == (repo / 'build').resolve()
+    print('evidence retained at', work, flush=True)
     root = work / 'install'
     for name in files:
         dest = root / name
@@ -49,7 +51,16 @@ def main():
         with path.open('rb') as stream:
             return hashlib.file_digest(stream, 'sha256').hexdigest()
     original = {name: digest(root / name) for name in files}
-    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1')
+    temp = work / 'temp'
+    shared = temp / 'FableForge/neighbours'
+    shared.mkdir(parents=True)
+    markers = {}
+    for level in re.findall(r'LevelName "([^"]+)";', (root / 'data/Levels/FinalAlbion.wld').read_text()):
+        leaf = level.replace('\\', '/').split('/')[-1]
+        marker = shared / leaf
+        marker.write_bytes(b'unrelated neighbour extraction marker')
+        markers[marker] = marker.read_bytes()
+    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', TEMP=str(temp), TMP=str(temp))
     def run(name, during, after, before=''):
         pack = work / name
         script = work / (name + '.txt')
@@ -77,6 +88,8 @@ quit
                                 capture_output=True, text=True, timeout=180)
         log = Path(str(script) + '.log').read_text()
         assert result.returncode == 0 and 'RESULT PASS' in log, log + result.stderr
+        assert all(path.read_bytes() == data for path, data in markers.items()), 'terrain bake overwrote an unowned neighbour extraction'
+        assert not list((temp / 'FableForge').glob('terrain-neighbours-*')), 'terrain bake leaked an owned neighbour workspace'
         print(name + ': PASS', flush=True)
         return {p.relative_to(pack).as_posix(): digest(p) for p in pack.rglob('*') if p.is_file()}
     reference = run('reference', '', 'assert_state terrain_dirty 0')

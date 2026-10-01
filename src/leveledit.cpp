@@ -1500,8 +1500,8 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                 for (const auto& n : region.seesMaps) candidates.insert(lower(n));
             }
             candidates.erase(mine);
-            const fs::path tmp = fs::temp_directory_path() / "FableForge" / "neighbours";
-            fs::create_directories(tmp);
+            detail::TemporaryDirectory neighbourScratch("terrain-neighbours-");
+            const fs::path& tmp = neighbourScratch.path();
             std::unique_ptr<forge::wad::Archive> wadArchive;
             for (const auto& name : candidates) {
                 const forge::wld::Map* nm = nullptr;
