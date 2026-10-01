@@ -81,8 +81,11 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
         const int wx = horizontal ? x0 + i : x0, wy = horizontal ? y0 : y0 + i;
         report.maxStep = std::max(report.maxStep, std::fabs(heightAt(ta, docA.cellsX(), wx - a->x, wy - a->y) - heightAt(tb, docB.cellsX(), wx - b->x, wy - b->y)));
     }
-    const int feather = options.feather >= 0 ? options.feather : std::clamp(int(std::ceil(report.maxStep)), 4, 32);
+    const int feather = options.feather >= 0 ? options.feather : int(std::clamp(std::ceil(report.maxStep), 4.0f, 32.0f));
     report.feather = feather;
+    // Beyond both grids no vertex can be edited; retain the requested falloff.
+    const int depth = horizontal ? std::max(docA.cellsY(), docB.cellsY()) : std::max(docA.cellsX(), docB.cellsX());
+    const int lastCell = std::min(feather, depth - 1);
     // inward direction for each map: +1 when the seam is the map's low edge (x=0 / y=0), -1 when its high edge
     const int dirA = horizontal ? (y0 == a->y ? 1 : -1) : (x0 == a->x ? 1 : -1);
     const int dirB = horizontal ? (y0 == b->y ? 1 : -1) : (x0 == b->x ? 1 : -1);
@@ -92,8 +95,8 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
         const float ha = heightAt(ta, docA.cellsX(), ax, ay), hb = heightAt(tb, docB.cellsX(), bx, by);
         const float target = 0.5f * (ha + hb);
         // feather: the correction fades linearly over `feather` cells into each map
-        for (int k = 0; k <= feather; ++k) {
-            const float wgt = feather ? 1.0f - float(k) / float(feather + 1) : 1.0f;
+        for (int k = 0; k <= lastCell; ++k) {
+            const float wgt = feather ? 1.0f - float(k) / float(int64_t(feather) + 1) : 1.0f;
             if (k > 0 && wgt <= 0) break;
             const int axk = horizontal ? ax : ax + dirA * k, ayk = horizontal ? ay + dirA * k : ay;
             const int bxk = horizontal ? bx : bx + dirB * k, byk = horizontal ? by + dirB * k : by;

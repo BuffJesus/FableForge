@@ -31,7 +31,7 @@ def main():
         shutil.copyfile(args.root / name, destination)
     if args.loose:
         wad = root / 'data/Levels/FinalAlbion.wad'
-        subprocess.run([str(repo / 'build/forge-tools.exe'), 'wad', 'extract', str(wad), str(root)],
+        subprocess.run([str(args.exe.resolve().with_name('forge-tools.exe')), 'wad', 'extract', str(wad), str(root)],
                        check=True, capture_output=True, timeout=180)
         renamed = wad.with_name('_FinalAlbion.wad')
         assert wad.resolve().is_relative_to(work) and renamed.resolve().is_relative_to(work)
@@ -60,7 +60,21 @@ def main():
         assert all((shared / (name + '.lev')).read_bytes() == b'unrelated stitch marker' for name in maps), 'stitch overwrote an unowned extraction'
         assert not list((temp / 'FableForge').glob('stitch-lev-*')), 'stitch leaked an owned extraction'
     run('move', 'world-move', maps[0], '2048', '8064', maps[1], '2112', '8064')
+    moved = hashes()
+    invalid = [['--feather', value] for value in
+               ('oops', '4tail', '1.5', '', '+-1', '2147483648', '-2147483649')]
+    invalid += [['--feather'], ['--typo'], ['--install'], ['--install', '']]
+    for index, options in enumerate(invalid):
+        result = subprocess.run([str(args.exe.resolve()), 'world-stitch', *maps,
+            '--install', str(root), *options, '--dry-run'], cwd=repo, env=env,
+            capture_output=True, text=True, timeout=60)
+        (work / f'invalid_{index}.log').write_text(result.stdout + result.stderr, encoding='utf-8')
+        assert result.returncode == 2, (options, result.returncode, result.stdout, result.stderr)
+        assert hashes() == moved, options
     run('dry_run', 'world-stitch', *maps, '--dry-run')
+    for value in ('auto', '-1', '-2147483648', '+4', '0', '2147483647'):
+        run('valid_' + value, 'world-stitch', *maps, '--feather', value, '--dry-run')
+        assert hashes() == moved, value
     workspace_intact()
     assert '1 stitched' in run('stitch', 'world-stitch', *maps)
     workspace_intact()

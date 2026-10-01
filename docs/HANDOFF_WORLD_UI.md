@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: strict and bounded stitch feather inputs
+
+`build/stitch-workspace-zjwn5uwt/invalid_0.log` reproduced `--feather oops`
+being accepted as zero. world-stitch now requires complete signed 32-bit decimal
+integers or auto, and rejects unknown, empty and incomplete options. Negative
+integers retain automatic selection. The feather loop stops beyond both map
+grids, retaining the requested falloff; its denominator uses wide addition.
+Automatic selection clamps before converting to int. The seam averaging and
+ordinary falloff remain unchanged.
+
+The extended `tools/test_stitch_workspace.py` passes eleven invalid cases and
+six valid boundaries (including both signed limits) without dry-run writes.
+It then deploys a seam, verifies matching edge heights, preserves unrelated
+scratch files and Restores the exact original inventory. Stock normal
+`build/stitch-workspace-jb_r807m` and extracted ASan
+`build/stitch-workspace-1h7aua5a` pass. Six normal seam samples match the retained
+pre-change `stitch-workspace-fvp941k4` report exactly. All 35 rebuilt normal
+suites pass in 28.34 seconds. This is offline validation; multi-map stitch
+deployment still consists of separate map writes.
+
 ## 2026-10-01 continuation: prepare donor chunks before minimap writes
 
 `build/donor-prepare-rx7gp3se/failure_report.json` reproduced failed donor

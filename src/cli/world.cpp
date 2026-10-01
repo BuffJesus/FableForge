@@ -76,10 +76,28 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
     if (cmd == "world-stitch") {   // world-stitch <map> [<map2>] [--feather n] [--dry-run] [--install root]
         std::string installArg; std::vector<std::string> maps; albion::editor::StitchOptions so;
         for (size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else if (args[i] == "--feather" && i + 1 < args.size()) { ++i; so.feather = args[i] == "auto" ? -1 : std::atoi(args[i].c_str()); }
-            else if (args[i] == "--dry-run") so.deploy = false;
-            else maps.push_back(args[i]);
+            const auto& option = args[i];
+            if (option == "--install" || option == "--feather") {
+                if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].starts_with("--")) {
+                    std::fprintf(stderr, "%s needs a value\n", option.c_str()); return 2;
+                }
+                const auto& value = args[++i];
+                if (option == "--install") installArg = value;
+                else if (value == "auto") so.feather = -1;
+                else {
+                    std::string_view number(value);
+                    if (number.size() > 1 && number.front() == '+' && number[1] != '-') number.remove_prefix(1);
+                    const auto parsed = std::from_chars(number.data(), number.data() + number.size(), so.feather);
+                    if (parsed.ec != std::errc{} || parsed.ptr != number.data() + number.size()) {
+                        std::fprintf(stderr, "--feather expects auto or a complete decimal integer in the signed 32-bit range\n"); return 2;
+                    }
+                }
+            }
+            else if (option == "--dry-run") so.deploy = false;
+            else if (option.empty() || option.starts_with("--")) {
+                std::fprintf(stderr, "unknown world-stitch argument %s\n", option.c_str()); return 2;
+            }
+            else maps.push_back(option);
         }
         if (maps.empty() || maps.size() > 2) { std::fprintf(stderr, "usage: forge world-stitch <map> [<map2>] [--feather <cells>] [--dry-run] [--install <root>]\n"); return 2; }
         const Install install = findInstall(installArg);

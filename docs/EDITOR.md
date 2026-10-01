@@ -473,7 +473,11 @@ correction into both maps and re-bakes both terrain chunks (`Document::
 setVertexHeights` + `deployTerrain`, one-time backups, loose `.lev` + WAD).
 Feather is *auto* (one cell per unit of the largest step, 4..32, so the ramp
 stays under ~45 degrees) or a fixed cell count. CLI: `world-move ... --stitch`,
-`world-stitch <map> [<map2>] [--feather n|auto] [--dry-run]`. What retail does:
+`world-stitch <map> [<map2>] [--feather n|auto] [--dry-run]`.
+Feather requires a complete signed 32-bit decimal integer or `auto`; negative
+values retain automatic selection. Unknown or incomplete options are refused.
+Large positive values keep their requested falloff, with work bounded to the
+actual map grids. What retail does:
 adjacent maps share their edge vertices exactly (Greatwood_2 x=96 == Greatwood_1
 x=0 to the float) *except at corners where a third map meets* (steps of 2-4 units
 there, hidden by the map's own geometry), so a moved map's fresh seam is the only
