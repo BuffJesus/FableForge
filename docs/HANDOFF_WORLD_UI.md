@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: publish ground diagnostic PNGs together
+
+`build/ground-exports-qysgbxcd/locked_first.log` reproduced ground returning
+success and announcing all three PNGs despite a locked first output. The CLI
+now encodes and closes all three files in an owned .forge-ground-export-*
+workspace before publishing through PendingBanks. A later replacement failure
+rolls back earlier ones; success is printed only after the complete group lands.
+The existing output names, current-directory destination and image encoding stay
+unchanged. These standalone exports do not create install backups.
+
+`tools/test_ground_exports.py` passes first/last output locks, a directory at
+the last destination, retry, deterministic overwrite, unrelated temporary-file
+preservation and exact source hashes/inventory: normal
+`build/ground-exports-w7zqmxz1`, ASan `build/ground-exports-8wf_h4py`.
+The retail background check now owns a unique output directory;
+`build/world-background-nea4plro` passes with all 192512 uncovered pixels
+matching the LEV fallback and zero false black pixels. This CLI-only change
+reuses the preceding full 35-suite gate; both CLI builds pass.
+
 ## 2026-10-01 continuation: strict and bounded stitch feather inputs
 
 `build/stitch-workspace-zjwn5uwt/invalid_0.log` reproduced `--feather oops`

@@ -857,7 +857,9 @@ Texture commands reject unknown or incomplete options and extra arguments.
 `--bank` applies to listing and adding; `--format` applies only to adding.
 Texture and minimap PNG exports prepare and close the new image before replacing
 an existing output; locked or invalid destinations report failure and preserve
-the previous file. Standalone exports do not create install backups.
+the previous file. The `ground` diagnostic publishes its three PNGs as a group,
+restoring earlier outputs if a later replacement fails. Standalone exports do
+not create install backups.
 `minimap-bake --framing scale,offX,offY` requires finite values and a positive
 scale; choose either explicit framing or `--region`, not both.
 

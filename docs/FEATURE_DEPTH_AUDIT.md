@@ -1432,6 +1432,25 @@ pre-change `stitch-workspace-fvp941k4` report exactly. All 35 rebuilt normal
 suites pass in 28.34 seconds. This is offline validation; multi-map stitch
 deployment still consists of separate map writes.
 
+## 2026-10-01 continuation: publish ground diagnostic PNGs together
+
+`build/ground-exports-qysgbxcd/locked_first.log` reproduced ground returning
+success and announcing all three PNGs despite a locked first output. The CLI
+now encodes and closes all three files in an owned .forge-ground-export-*
+workspace before publishing through PendingBanks. A later replacement failure
+rolls back earlier ones; success is printed only after the complete group lands.
+The existing output names, current-directory destination and image encoding stay
+unchanged. These standalone exports do not create install backups.
+
+`tools/test_ground_exports.py` passes first/last output locks, a directory at
+the last destination, retry, deterministic overwrite, unrelated temporary-file
+preservation and exact source hashes/inventory: normal
+`build/ground-exports-w7zqmxz1`, ASan `build/ground-exports-8wf_h4py`.
+The retail background check now owns a unique output directory;
+`build/world-background-nea4plro` passes with all 192512 uncovered pixels
+matching the LEV fallback and zero false black pixels. This CLI-only change
+reuses the preceding full 35-suite gate; both CLI builds pass.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

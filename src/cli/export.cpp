@@ -36,6 +36,7 @@
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
@@ -254,8 +255,22 @@ int runExport(const std::string& cmd, const Args& args) {
             std::printf("  engine-pass bake (gain %.2f): mean %.1f %.1f %.1f  MAE vs background %.1f  (%d passes)\n", gain, b[0], b[1], b[2], mae(scene.albedo), scene.enginePasses);
             std::printf("  LEV-theme bake:               mean %.1f %.1f %.1f  MAE vs background %.1f\n", c[0], c[1], c[2], mae(sceneLev.albedo));
             const std::string stem = out.empty() ? lev.stem().string() : fs::path(out).stem().string();
-            auto save = [&](const te::Image& im, const std::string& name) { const auto png = te::encodePng(im); std::ofstream(name, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size())); std::printf("wrote %s\n", name.c_str()); };
-            save(bg.image, stem + "_engine_bg.png"); save(scene.albedo, stem + "_our_bake.png"); save(sceneLev.albedo, stem + "_lev_bake.png");
+            albion::detail::PendingBanks pending(fs::current_path(), ".forge-ground-export-");
+            const std::array<std::pair<const te::Image*, std::string>, 3> images{{
+                {&bg.image, stem + "_engine_bg.png"},
+                {&scene.albedo, stem + "_our_bake.png"},
+                {&sceneLev.albedo, stem + "_lev_bake.png"}}};
+            for (const auto& [image, name] : images) {
+                const auto png = te::encodePng(*image);
+                if (png.empty()) throw std::runtime_error("cannot encode PNG " + name);
+                std::ofstream stream;
+                stream.exceptions(std::ios::failbit | std::ios::badbit);
+                stream.open(pending.prepare(name), std::ios::binary);
+                stream.write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
+                stream.close();
+            }
+            if (!pending.install(false, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+            for (const auto& [image, name] : images) std::printf("wrote %s\n", name.c_str());
             return 0;
         }
         if (cmd == "layers") {   // diagnostic: the engine's per-patch texture passes (direction, texture, vertex bytes)

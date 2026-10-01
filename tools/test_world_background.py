@@ -1,11 +1,12 @@
 """Read-only retail regression: missing STB background coverage uses LEV colour.
 
 Requires Pillow and the installed OakVale_Sea_02 fixture. Diagnostic PNGs are
-written under build/world-background-check, never into the game install.
+written into an owned build/world-background-* directory, never into the game install.
 """
 import argparse
 from pathlib import Path
 import subprocess
+import tempfile
 
 from PIL import Image
 
@@ -17,8 +18,9 @@ def main():
     parser.add_argument("--exe", type=Path, default=ROOT / "build/forge.exe")
     parser.add_argument("--install", type=Path)
     args = parser.parse_args()
-    output = ROOT / "build/world-background-check"
-    output.mkdir(parents=True, exist_ok=True)
+    output = Path(tempfile.mkdtemp(prefix="world-background-", dir=ROOT / "build")).resolve()
+    assert output.parent == (ROOT / "build").resolve()
+    print("evidence retained at", output, flush=True)
     name = "OakVale_Sea_02"
     command = [str(args.exe.resolve()), "ground", name]
     if args.install:
