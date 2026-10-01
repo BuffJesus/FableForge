@@ -1028,6 +1028,22 @@ Normal `build/minimap-cli-inputs-qvbyzcty` and ASan CLI
 `build/minimap-cli-inputs-we8i1kob` pass. This validates argument syntax and range,
 not whether an arbitrary supplied ID names a suitable minimap texture.
 
+## 2026-10-01 continuation: region-property bank rollback
+
+`build/region-recovery-ez_o4rb2/failure_report.json` reproduced a locked final BWD
+mirror leaving the WLD, primary BWD and root mirror changed. Region-property edits
+now prepare and read back the WLD and each existing BWD copy in one PendingBanks
+workspace, then back up all originals and install with rollback. Missing mirrors
+remain absent. Notes appear only after commit; the shared writer checks close
+errors, and the selected-install game guard runs before work and before commit.
+The existing field-edit and binary serialization algorithms are unchanged.
+
+`tools/test_region_recovery.py` verifies last-mirror refusal, all original hashes,
+retry, unrelated WLD bytes, matching BWD copies, optional mirrors and exact Restore.
+Normal `build/region-recovery-nbwtfrfc` and ASan CLI
+`build/region-recovery-jil6pt_n` pass. All 34 rebuilt normal suites pass (20.09s),
+and editor/CLI builds pass. No in-game region transition was exercised.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

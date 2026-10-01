@@ -1,4 +1,5 @@
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "temporarydirectory.hpp"
 #include "profile.hpp"
 #include "overworld.hpp"
@@ -53,6 +54,7 @@ void writeFile(const fs::path& p, const void* data, size_t size) {
     std::ofstream out(p, std::ios::binary);
     if (!out) throw std::runtime_error("cannot write " + p.string());
     out.write(static_cast<const char*>(data), std::streamsize(size));
+    out.close();
     if (!out) throw std::runtime_error("write to " + p.string() + " failed");
 }
 
@@ -268,6 +270,8 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
 bool setRegionProperties(const fs::path& gameRoot, const std::string& region, const RegionProps& props,
                          std::vector<std::string>& notes, std::string& error) {
     try {
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+        std::vector<std::string> preparedNotes;
         const fs::path levels = gameRoot / "data" / "Levels";
         const fs::path wldPath = levels / "FinalAlbion.wld", bwdPath = levels / "FinalAlbion.bwd";
         const fs::path mirrors[] = {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"};
@@ -276,8 +280,6 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
         if (!r) { error = "unknown region " + region; return false; }
         auto bwd = forge::bwd::File::parse(bwdPath);
         if (r->index < 1 || size_t(r->index) > bwd.regions().size()) { error = region + ": BWD has no region slot " + std::to_string(r->index); return false; }
-        for (const fs::path& f : {wldPath, bwdPath}) if (!backupOnce(f, error)) return false;
-        for (const fs::path& m : mirrors) if (fs::exists(m) && !backupOnce(m, error)) return false;
         // WLD: replace/insert the lines inside this region's block (retail order:
         // RegionName, NewDisplayName, RegionDef, [AppearOnWorldMap;], [MiniMapGraphic X;], MiniMapScale ...)
         const auto raw = readFile(wldPath); std::string text(raw.begin(), raw.end());
@@ -307,9 +309,9 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
             ++blockEnd;
         };
         auto& br = bwd.regions()[size_t(r->index - 1)];
-        if (!props.displayName.empty()) { setLine("NewDisplayName", "NewDisplayName \"" + props.displayName + "\";", "RegionName"); br.displayName = props.displayName; notes.push_back(region + ": display name " + props.displayName); }
-        if (!props.regionDef.empty()) { setLine("RegionDef", "RegionDef \"" + props.regionDef + "\";", "NewDisplayName"); br.regionDef = props.regionDef; notes.push_back(region + ": RegionDef " + props.regionDef); }
-        if (props.onWorldMap >= 0) { setLine("AppearOnWorldMap", props.onWorldMap ? "AppearOnWorldMap;" : "", "RegionDef"); br.onWorldMap = uint8_t(props.onWorldMap); notes.push_back(region + (props.onWorldMap ? ": appears on the world map" : ": hidden from the world map")); }
+        if (!props.displayName.empty()) { setLine("NewDisplayName", "NewDisplayName \"" + props.displayName + "\";", "RegionName"); br.displayName = props.displayName; preparedNotes.push_back(region + ": display name " + props.displayName); }
+        if (!props.regionDef.empty()) { setLine("RegionDef", "RegionDef \"" + props.regionDef + "\";", "NewDisplayName"); br.regionDef = props.regionDef; preparedNotes.push_back(region + ": RegionDef " + props.regionDef); }
+        if (props.onWorldMap >= 0) { setLine("AppearOnWorldMap", props.onWorldMap ? "AppearOnWorldMap;" : "", "RegionDef"); br.onWorldMap = uint8_t(props.onWorldMap); preparedNotes.push_back(region + (props.onWorldMap ? ": appears on the world map" : ": hidden from the world map")); }
         if (props.setFraming) {
             char sc[32], ox[32], oy[32];
             std::snprintf(sc, sizeof sc, "MiniMapScale %.1f;", double(props.minimapScale));
@@ -324,15 +326,31 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
             char note[96];
             std::snprintf(note, sizeof note, ": minimap framing scale %.1f, offset %ld, %ld (where the hero marker is drawn)",
                           double(props.minimapScale), std::lround(props.minimapOffsetX), std::lround(props.minimapOffsetY));
-            notes.push_back(region + note);
+            preparedNotes.push_back(region + note);
         }
-        if (!props.minimapGraphic.empty()) { setLine("MiniMapGraphic", "MiniMapGraphic " + props.minimapGraphic + ";", props.onWorldMap > 0 || r->appearOnWorldMap ? "AppearOnWorldMap" : "RegionDef"); br.minimapGraphic = props.minimapGraphic; notes.push_back(region + ": minimap " + props.minimapGraphic); }
+        if (!props.minimapGraphic.empty()) { setLine("MiniMapGraphic", "MiniMapGraphic " + props.minimapGraphic + ";", props.onWorldMap > 0 || r->appearOnWorldMap ? "AppearOnWorldMap" : "RegionDef"); br.minimapGraphic = props.minimapGraphic; preparedNotes.push_back(region + ": minimap " + props.minimapGraphic); }
         std::string out;
         for (const auto& l : lines) out += l;
-        writeFile(wldPath, out.data(), out.size());
-        bwd.write(bwdPath);
-        for (const auto& m : mirrors) if (fs::exists(m)) bwd.write(m);
-        notes.push_back("FinalAlbion.wld + FinalAlbion.bwd (3 copies) updated");
+        detail::PendingBanks pending(gameRoot, ".forge-region-props-");
+        const auto wldOut = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wld");
+        writeFile(wldOut, out.data(), out.size());
+        const auto verifiedWld = forge::wld::File::parse(wldOut);
+        if (verifiedWld.serialize() != out || !verifiedWld.findRegion(region))
+            throw std::runtime_error("prepared region WLD failed read-back verification");
+        const auto binary = bwd.serialize();
+        const auto prepareBwd = [&](const fs::path& relative) {
+            const auto prepared = pending.prepare(relative);
+            writeFile(prepared, binary.data(), binary.size());
+            if (forge::bwd::File::parse(prepared).serialize() != binary)
+                throw std::runtime_error("prepared region BWD failed read-back verification");
+        };
+        prepareBwd(fs::path("data") / "Levels" / "FinalAlbion.bwd");
+        size_t copies = 1;
+        for (const auto& m : mirrors) if (fs::exists(m)) { prepareBwd(m.lexically_relative(gameRoot)); ++copies; }
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable started during region edit; quit to the desktop first"; return false; }
+        if (!pending.install(true, error)) return false;
+        preparedNotes.push_back("FinalAlbion.wld + FinalAlbion.bwd (" + std::to_string(copies) + " copies) updated");
+        notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

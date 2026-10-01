@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: region-property bank rollback
+
+`build/region-recovery-ez_o4rb2/failure_report.json` reproduced a locked final BWD
+mirror leaving the WLD, primary BWD and root mirror changed. Region-property edits
+now prepare and read back the WLD and each existing BWD copy in one PendingBanks
+workspace, then back up all originals and install with rollback. Missing mirrors
+remain absent. Notes appear only after commit; the shared writer checks close
+errors, and the selected-install game guard runs before work and before commit.
+The existing field-edit and binary serialization algorithms are unchanged.
+
+`tools/test_region_recovery.py` verifies last-mirror refusal, all original hashes,
+retry, unrelated WLD bytes, matching BWD copies, optional mirrors and exact Restore.
+Normal `build/region-recovery-nbwtfrfc` and ASan CLI
+`build/region-recovery-jil6pt_n` pass. All 34 rebuilt normal suites pass (20.09s),
+and editor/CLI builds pass. No in-game region transition was exercised.
+
 ## 2026-10-01 continuation: strict minimap registration arguments
 
 `build/minimap-cli-inputs-r8tfr13j/invalid_0.json` reproduced `minimap-register`
