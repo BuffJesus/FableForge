@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: pack edits preserve existing assets
+
+A small file-only fixture reproduced a failed second `model.obj` add overwriting
+the first model before discovering a missing texture. Recipe adds now load the
+manifest first, stage each input under its recipe/role directory, then commit
+the assets and manifest together using the shared replacement/rollback helper.
+Manifest saves check stream completion and report replacement failures; create
+and recipe-add entry points return errors instead of letting parse/write errors
+escape the GUI. Existing flat asset references remain supported.
+
+`fableforge_modpack_tests` passes missing model/theme inputs, matching filenames
+across models and base/cliff images, an existing pack, a malformed manifest,
+a manifest-path directory, a Windows rename lock after changed asset bytes have
+been installed, and successful recipe replacement. Failed operations preserve
+all prior pack files. Lip-sync pack tests, compact actual Mods interactions and
+mixed legacy/nested-path recipe builds in both orders also pass, including
+byte-exact undeployment. This remains reported-failure recovery, not crash atomicity.
+
+The expanded sanitizer run isolated a toolchain issue: a standalone nested
+exception probe crashes with clang-cl 22.1.8 / MSVC 14.51 and default ASan
+instrumentation, matching [LLVM #215376](https://github.com/llvm/llvm-project/issues/215376).
+The probe passes with `/clang:-fsanitize-address-use-after-return=never`. That
+flag is now in the local `build-clang-asan` C/C++ flags; other ASan checks remain
+enabled. The runtime DLL directory still needs to be on PATH. No shipping build
+flags or application exception handling were changed for this toolchain issue.
+Both the expanded pack test and all 356 model-input checks pass with that local
+configuration. Actual compact-UI model/theme adds also pass; manifest paths are
+distinct and every stored asset matches its source bytes.
+
 ## 2026-10-01 continuation: mod rows and interaction lifetime
 
 An actual New pack click at 800x600 / 1.5 scale created the expected manifest,

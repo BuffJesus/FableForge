@@ -2,6 +2,21 @@
 
 # Mod packs, load order, and conflict resolution
 
+## Recipe asset storage and failed edits
+
+New model and ground-theme recipes keep their input files under
+`assets/models/<NAME>/<role>/` and `assets/themes/<NAME>/<role>/`. For example,
+a model and its texture use separate `model` and `texture` folders; a theme's
+images use `base` and `cliff`. Files with the same basename can therefore belong
+to different recipes or roles without replacing one another. Existing flat
+`assets/` paths remain supported, and replacing a recipe preserves other recipes.
+
+Recipe adds stage their asset copies and manifest before replacing files. Missing
+inputs and reported commit failures preserve the previous pack files; if rollback
+itself fails, the error names retained recovery files. Manifest saves report write
+failures. This recovery does not cover process termination or power loss. Adding
+a recipe still requires Mods > Deploy before it affects game banks.
+
 ## Lip sync recipes in Forge packs
 
 Assets > Dialogue can save staged frame edits to a selected Forge pack. The

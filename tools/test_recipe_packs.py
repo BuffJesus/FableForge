@@ -47,17 +47,19 @@ def main() -> int:
     banks.append("data/graphics/graphics.big")
     before = {rel: sha(os.path.join(scratch, rel)) for rel in banks}
 
-    # two packs, written the way the editor writes them (recipes + assets/)
+    # A retains legacy flat asset paths; B uses the editor's per-recipe layout.
     packs = os.path.join(ROOT, "build", "recipe_packs"); shutil.rmtree(packs, ignore_errors=True)
     pa, pb = os.path.join(packs, "PackA"), os.path.join(packs, "PackB")
     for p in (pa, pb): os.makedirs(os.path.join(p, "assets"))
     write_obj(os.path.join(pa, "assets", "cube.obj")); write_png(os.path.join(pa, "assets", "wood.png"))
-    write_obj(os.path.join(pb, "assets", "cube.obj"))
+    model_b = "assets/models/CUBE_B/model/cube.obj"
+    os.makedirs(os.path.dirname(os.path.join(pb, model_b)))
+    write_obj(os.path.join(pb, model_b))
     json.dump({"version": 1, "name": "Pack A",
                "models": [{"name": "CUBE_A", "model": "assets/cube.obj", "texture": "assets/wood.png", "donor": "OBJECT_BARREL_UNBREAKABLE", "collision": True}],
                "groundThemes": [{"name": "GROUND_RECIPE_A", "png": "assets/wood.png", "cliffPng": "", "donor": "GROUND_GRASS"}]},
               open(os.path.join(pa, "forge_pack.json"), "w"), indent=2)
-    json.dump({"version": 1, "name": "Pack B", "models": [{"name": "CUBE_B", "model": "assets/cube.obj", "texture": "", "donor": "OBJECT_BARREL_UNBREAKABLE", "collision": True}]},
+    json.dump({"version": 1, "name": "Pack B", "models": [{"name": "CUBE_B", "model": model_b, "texture": "", "donor": "OBJECT_BARREL_UNBREAKABLE", "collision": True}]},
               open(os.path.join(pb, "forge_pack.json"), "w"), indent=2)
     ok = True
 

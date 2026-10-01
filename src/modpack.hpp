@@ -60,12 +60,17 @@ std::vector<std::string> masterProblems(const Pack& pack, size_t self, const std
 bool isPack(const std::filesystem::path& folder);
 // Throws std::runtime_error on a malformed file.
 Pack load(const std::filesystem::path& folder);
+// Staged manifest replacement; throws on write/commit failure, preserving the
+// previous manifest on a reported failure (recovery path reported if rollback fails).
 void save(const std::filesystem::path& folder, const Pack& pack);
 
 // A new pack folder (forge_pack.json + assets/); false when it exists already.
 bool create(const std::filesystem::path& folder, const std::string& name, std::string& error);
-// Copy the source files into assets/ and append the recipe. A name the pack already
-// has is replaced. The caller adds the folder to the load order.
+// Stage source files under assets/<kind>/<recipe>/<role>/ and append the recipe.
+// A recipe name the pack already has is replaced; other recipes keep their files.
+// Source paths are filesystem paths; saved paths are relative to the pack.
+// Reported failures roll back prior asset/manifest replacements. The caller adds
+// the folder to the load order. Legacy flat asset paths remain readable.
 bool addModel(const std::filesystem::path& folder, ModelRecipe recipe, std::string& error);
 bool addGroundTheme(const std::filesystem::path& folder, GroundThemeRecipe recipe, std::string& error);
 // Stage one language's edited records as manifest recipes. Later packs overlay

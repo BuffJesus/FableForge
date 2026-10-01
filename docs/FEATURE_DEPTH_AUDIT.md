@@ -236,6 +236,16 @@ Actual popup, checkbox, arrow and drag interactions pass at normal and compact
 sizes with saved order/dependencies checked. Deployment behavior retains the
 separate recipe-pack evidence above.
 
+## 2026-10-01 pack asset failure depth
+
+A failed same-basename model add previously overwrote another recipe's file.
+Recipe/role directories now isolate assets, and staged asset/manifest commits
+preserve prior files on missing inputs or late write failures. The new pack test
+covers malformed manifests, collisions, rollback and replacement; normal and
+ASan runs pass. Mixed old/new asset paths build/deploy/undeploy correctly, and
+actual UI adds preserve source bytes. The local ASan build disables its broken
+stack-use-after-return instrumentation per LLVM #215376; see HANDOFF_WORLD_UI.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

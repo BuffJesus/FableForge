@@ -13,6 +13,7 @@
 #include "forge/stb.hpp"
 #include "forge/wad.hpp"
 #include "meshimport.hpp"
+#include "pendingbanks.hpp"
 #include "nlohmann/json.hpp"
 #include "worldedit.hpp"
 
@@ -75,7 +76,7 @@ Pack load(const fs::path& folder) {
     return p;
 }
 
-void save(const fs::path& folder, const Pack& pack) {
+static void writeManifest(const fs::path& path, const Pack& pack) {
     json j;
     j["version"] = pack.version;
     j["name"] = pack.name;
@@ -101,33 +102,45 @@ void save(const fs::path& folder, const Pack& pack) {
             {"dictionary",std::move(dictionary)},{"frames",std::move(frames)}});
     }
     if (!pack.masters.empty()) j["requires"] = pack.masters;
-    fs::create_directories(folder);
-    std::ofstream(folder / kFileName) << j.dump(2);
+    std::ofstream out(path, std::ios::binary);
+    out << j.dump(2);
+    out.close();
+    if (!out) throw std::runtime_error("cannot write pack manifest: " + path.string());
+}
+
+void save(const fs::path& folder, const Pack& pack) {
+    detail::PendingBanks pending(folder, ".forge-pack-edit-");
+    writeManifest(pending.prepare(kFileName), pack);
+    std::string error;
+    if (!pending.install(false, error)) throw std::runtime_error(error);
 }
 
 bool create(const fs::path& folder, const std::string& name, std::string& error) {
-    std::error_code ec;
-    if (isPack(folder)) { error = folder.string() + " is already a pack"; return false; }
-    fs::create_directories(folder / "assets", ec);
-    if (ec) { error = "cannot create " + folder.string() + ": " + ec.message(); return false; }
-    Pack p;
-    p.name = name.empty() ? folder.filename().string() : name;
-    save(folder, p);
-    return true;
+    try {
+        std::error_code ec;
+        if (isPack(folder)) { error = folder.string() + " is already a pack"; return false; }
+        fs::create_directories(folder / "assets", ec);
+        if (ec) { error = "cannot create " + folder.string() + ": " + ec.message(); return false; }
+        Pack p;
+        p.name = name.empty() ? folder.filename().string() : name;
+        save(folder, p);
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 namespace {
-// copy a source file into assets/ (an existing copy of the same name is replaced); "" stays ""
-bool intoAssets(const fs::path& folder, std::string& path, std::string& error) {
+// Each recipe and input role owns its files. Basename collisions must not alter
+// another recipe (or turn a theme's base and cliff into the same image).
+bool intoAssets(detail::PendingBanks& pending, const fs::path& relativeRoot, std::string& path, std::string& error) {
     if (path.empty()) return true;
     std::error_code ec;
     const fs::path src(path);
     if (!fs::is_regular_file(src, ec)) { error = "no such file: " + path; return false; }
-    const fs::path dst = folder / "assets" / src.filename();
-    fs::create_directories(dst.parent_path(), ec);
-    if (!fs::equivalent(src, dst, ec)) fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+    const fs::path relative = relativeRoot / src.filename();
+    const fs::path dst = pending.prepare(relative);
+    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
     if (ec) { error = "cannot copy " + path + ": " + ec.message(); return false; }
-    path = (fs::path("assets") / src.filename()).generic_string();
+    path = relative.generic_string();
     return true;
 }
 bool validName(const std::string& n) {
@@ -163,25 +176,37 @@ std::vector<std::string> masterProblems(const Pack& pack, size_t self, const std
 }
 
 bool addModel(const fs::path& folder, ModelRecipe recipe, std::string& error) {
-    if (!isPack(folder)) { error = folder.string() + " is not a FableForge pack"; return false; }
-    if (!validName(recipe.name)) { error = "model name must be A-Z, 0-9 and _"; return false; }
-    if (!intoAssets(folder, recipe.model, error) || !intoAssets(folder, recipe.texture, error)) return false;
-    Pack p = load(folder);
-    std::erase_if(p.models, [&](const ModelRecipe& m) { return m.name == recipe.name; });
-    p.models.push_back(std::move(recipe));
-    save(folder, p);
-    return true;
+    try {
+        if (!isPack(folder)) { error = folder.string() + " is not a FableForge pack"; return false; }
+        if (!validName(recipe.name)) { error = "model name must be A-Z, 0-9 and _"; return false; }
+        if (recipe.model.empty()) { error = "model path is missing"; return false; }
+        Pack p = load(folder);
+        detail::PendingBanks pending(folder, ".forge-pack-edit-");
+        const fs::path assets = fs::path("assets") / "models" / recipe.name;
+        if (!intoAssets(pending, assets / "model", recipe.model, error) ||
+            !intoAssets(pending, assets / "texture", recipe.texture, error)) return false;
+        std::erase_if(p.models, [&](const ModelRecipe& m) { return m.name == recipe.name; });
+        p.models.push_back(std::move(recipe));
+        writeManifest(pending.prepare(kFileName), p);
+        return pending.install(false, error);
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 bool addGroundTheme(const fs::path& folder, GroundThemeRecipe recipe, std::string& error) {
-    if (!isPack(folder)) { error = folder.string() + " is not a FableForge pack"; return false; }
-    if (!validName(recipe.name)) { error = "theme name must be A-Z, 0-9 and _"; return false; }
-    if (!intoAssets(folder, recipe.png, error) || !intoAssets(folder, recipe.cliffPng, error)) return false;
-    Pack p = load(folder);
-    std::erase_if(p.groundThemes, [&](const GroundThemeRecipe& t) { return t.name == recipe.name; });
-    p.groundThemes.push_back(std::move(recipe));
-    save(folder, p);
-    return true;
+    try {
+        if (!isPack(folder)) { error = folder.string() + " is not a FableForge pack"; return false; }
+        if (!validName(recipe.name)) { error = "theme name must be A-Z, 0-9 and _"; return false; }
+        if (recipe.png.empty()) { error = "ground texture path is missing"; return false; }
+        Pack p = load(folder);
+        detail::PendingBanks pending(folder, ".forge-pack-edit-");
+        const fs::path assets = fs::path("assets") / "themes" / recipe.name;
+        if (!intoAssets(pending, assets / "base", recipe.png, error) ||
+            !intoAssets(pending, assets / "cliff", recipe.cliffPng, error)) return false;
+        std::erase_if(p.groundThemes, [&](const GroundThemeRecipe& t) { return t.name == recipe.name; });
+        p.groundThemes.push_back(std::move(recipe));
+        writeManifest(pending.prepare(kFileName), p);
+        return pending.install(false, error);
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 bool addLipSync(const fs::path& folder,const std::string& language,
