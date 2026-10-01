@@ -1379,6 +1379,24 @@ The full own-region blank workflow passes in
 entrance generation, hidden GUI palette loading and exact Restore. This
 exercises empty minimap preflight followed by the populated minimap token.
 
+## 2026-10-01 continuation: full texture-tab round trip and Restore
+
+`tools/test_textures.py` now owns a unique scratch install, script, PNG outputs
+and screenshot, passes the source root explicitly to the GUI, requires its
+RESULT PASS marker, and verifies exact Restore of every copied bank. It no
+longer deletes a shared fixed scratch tree. Export by name and ID must be
+byte-identical, and replacement still checks decoded pixel drift.
+
+`build/textures-ui-ib1ah798` passes the hidden GUI browse, selected-object texture,
+PNG export, slot replacement and DXT3 append workflow. The retained screenshot
+`ui/t1_textures.png` was visually checked: the new 512x256 ATLAS_UI_TEX is selected
+with the barrel texture preview and scratch write destination visible. The
+appended ID is 6292; export by label and ID matches exactly. Mean absolute RGB
+replacement difference is 0.020551, below the established 2.0 threshold. Restore
+returns all copied files and inventory exactly (`report.json`). The final
+name/ID comparison was also checked against the retained outputs. No production
+code changed in this pass; the preceding 35-suite gate remains applicable.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
