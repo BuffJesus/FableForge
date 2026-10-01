@@ -1818,6 +1818,13 @@ The scratch fixture includes retail graphics/textures so its base asset audit
 is available. Package tests now require the guide and all four linked images.
 No live-game or Retroid validation, no live install writes, no push.
 
+Shareable package: `dist/FableForge-0.18.0-dev.perodis.20261001.2-win64.zip`
+(29.2 MB), with explicit no-FreeRoam guidance. Extracted-package checks passed
+at `build/package-smoke-sqngvhcl`: all 67 documentation links, four guide images,
+definitions, retail exports, GUI pixels and literal-path mod deployment.
+This supersedes the first Perodis ZIP, whose guide only named WAD extraction.
+
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
