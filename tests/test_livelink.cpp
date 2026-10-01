@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <limits>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -101,7 +102,42 @@ int main() {
         }
         check(albion::livelink::remove(root, error) && read(host) == original && !fs::exists(command), "remove retry failed");
 #endif
-        std::cout << "Live-link hook checks passed\n";
+        const auto cmd = root / "FSE/AtlasLink/cmd.lua";
+        const std::string longDefinition = "CREATURE_" + std::string(600, 'D');
+        const std::string longName = "Script_" + std::string(600, 'N');
+        check(albion::livelink::sendSpawn(root, longDefinition, 12.5f, -7.25f, longName, error) != 0, "long spawn send failed");
+        check(read(cmd).find(longDefinition) != std::string::npos && read(cmd).find(longName) != std::string::npos,
+              "spawn command silently truncated string fields");
+        const std::string longMap = "Map_" + std::string(600, 'M');
+        check(albion::livelink::sendTeleport(root, 4, longMap, 12.5f, -7.25f, error) != 0 && read(cmd).find(longMap) != std::string::npos,
+              "teleport command truncated map");
+        write(cmd.string() + ".tmp", "unrelated temporary file");
+        check(albion::livelink::sendPing(root, error) != 0 && read(cmd.string() + ".tmp") == "unrelated temporary file",
+              "send consumed an unowned temporary file");
+        const auto beforeInvalid = read(cmd);
+        check(albion::livelink::sendReload(root, 4, std::numeric_limits<float>::infinity(), 0, error) == 0 && read(cmd) == beforeInvalid,
+              "non-finite reload changed command");
+        check(albion::livelink::sendTeleport(root, 4, "Map", 0, std::numeric_limits<float>::quiet_NaN(), error) == 0 && read(cmd) == beforeInvalid,
+              "non-finite teleport changed command");
+        check(albion::livelink::sendSpawn(root, "CREATURE", -std::numeric_limits<float>::infinity(), 0, "Probe", error) == 0 && read(cmd) == beforeInvalid,
+              "non-finite spawn changed command");
+        const std::string special = std::string("quote\"slash\\line\nreturn\rtab\t") + '\0' + "7";
+        check(albion::livelink::sendSpawn(root, special, 12.5f, -7.25f, special, error) != 0, "escaped spawn failed");
+        const auto escaped = read(cmd);
+        const std::string literal = R"("quote\"slash\\line\010return\013tab\009\0007")";
+        check(escaped.find("def = " + literal) != std::string::npos && escaped.find("name = " + literal) != std::string::npos,
+              "Lua string escapes did not preserve input bytes");
+        check(escaped.find("x = 12.500, y = -7.250") != std::string::npos, "coordinate formatting changed");
+#ifdef _WIN32
+        {
+            Lock lock(cmd, FILE_SHARE_READ);
+            check(albion::livelink::sendPing(root, error) == 0 && read(cmd) == escaped, "failed send changed pending command");
+        }
+#endif
+        check(albion::livelink::sendPing(root, error) != 0 && read(cmd).find("cmd = \"ping\"") != std::string::npos, "send retry failed");
+        for (const auto& entry : fs::directory_iterator(root))
+            check(entry.path().filename().string().find(".forge-link-") != 0, "owned live-link workspace leaked");
+        std::cout << "Live-link hook and command checks passed\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

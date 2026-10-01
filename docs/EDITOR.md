@@ -640,6 +640,10 @@ starts an `AtlasLink` quest thread that polls `FSE/AtlasLink/cmd.lua` with
 is a Lua chunk returning a table -- runs it through the quest API and answers in
 the FSE log (`ATLAS_LINK|ready`, `ATLAS_LINK|ack|id|ok|msg`, a
 `ATLAS_LINK|hero|beat|map|x|y|z` heartbeat every second) that FableForge tails.
+Command strings are written in full with Lua escaping; non-finite coordinates
+are refused. Writes preserve the previous command on replacement failure and
+use an owned temporary workspace. The command file holds the latest request;
+it is not a queue.
 Commands: **Go here in game** (the camera focus -> `EntityTeleportToPosition`
 when the hero is already in this map, `GoToMapSlotRetailTransition(slot, x, y)`
 otherwise), **Spawn selected creature** (`CreateCreature` at the selected

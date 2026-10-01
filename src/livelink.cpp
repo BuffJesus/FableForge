@@ -3,8 +3,10 @@
 #include "pendingbanks.hpp"
 
 #include <chrono>
-#include <cstdio>
+#include <cmath>
 #include <fstream>
+#include <iomanip>
+#include <locale>
 #include <sstream>
 
 namespace fs = std::filesystem;
@@ -160,21 +162,42 @@ uint64_t nextId() {
 }
 
 uint64_t send(const fs::path& root, const std::string& body, std::string& error) {
-    std::error_code ec;
-    fs::create_directories(linkDir(root), ec);
-    const uint64_t id = nextId();
-    const std::string chunk = "return {id = " + std::to_string(id) + ", " + body + "}\n";
-    const fs::path tmp = cmdPath(root).string() + ".tmp";
-    if (!writeAll(tmp, chunk, error)) return 0;
-    fs::rename(tmp, cmdPath(root), ec);
-    if (ec) { error = "cannot replace " + cmdPath(root).string() + ": " + ec.message(); return 0; }
-    return id;
+    try {
+        const uint64_t id = nextId();
+        const std::string chunk = "return {id = " + std::to_string(id) + ", " + body + "}\n";
+        detail::PendingBanks pending(root, ".forge-link-command-");
+        if (!writeAll(pending.prepare("FSE/AtlasLink/cmd.lua"), chunk, error)) return 0;
+        return pending.install(false, error) ? id : 0;
+    } catch (const std::exception& e) { error = e.what(); return 0; }
 }
 
 std::string luaString(const std::string& s) {
     std::string out = "\"";
-    for (char c : s) { if (c == '"' || c == '\\') out += '\\'; out += c; }
+    for (unsigned char c : s) {
+        if (c < 32 || c == 127) {
+            // Three digits keep a following decimal digit out of this escape (Lua 5.0).
+            out += '\\';
+            out += char('0' + c / 100);
+            out += char('0' + (c / 10) % 10);
+            out += char('0' + c % 10);
+        } else {
+            if (c == '"' || c == '\\') out += '\\';
+            out += char(c);
+        }
+    }
     return out + "\"";
+}
+
+bool coordinates(float x, float y, std::string& result, std::string& error) {
+    if (!std::isfinite(x) || !std::isfinite(y)) {
+        error = "live-link coordinates must be finite";
+        return false;
+    }
+    std::ostringstream out;
+    out.imbue(std::locale::classic());
+    out << std::fixed << std::setprecision(3) << ", x = " << x << ", y = " << y;
+    result = out.str();
+    return true;
 }
 
 } // namespace
@@ -220,24 +243,24 @@ bool remove(const fs::path& root, std::string& error, const std::string& host) {
 }
 
 uint64_t sendTeleport(const fs::path& root, int mapSlot, const std::string& mapName, float x, float y, std::string& error) {
-    char buf[256];
-    std::snprintf(buf, sizeof buf, "cmd = \"teleport\", slot = %d, map = %s, x = %.3f, y = %.3f", mapSlot, luaString(mapName).c_str(), x, y);
-    return send(root, buf, error);
+    std::string position;
+    if (!coordinates(x, y, position, error)) return 0;
+    return send(root, "cmd = \"teleport\", slot = " + std::to_string(mapSlot) + ", map = " + luaString(mapName) + position, error);
 }
 
 uint64_t sendSpawn(const fs::path& root, const std::string& definition, float x, float y, const std::string& scriptName, std::string& error) {
-    char buf[512];
-    std::snprintf(buf, sizeof buf, "cmd = \"spawn\", def = %s, x = %.3f, y = %.3f, name = %s", luaString(definition).c_str(), x, y,
-                  luaString(scriptName.empty() ? "AtlasSpawn" : scriptName).c_str());
-    return send(root, buf, error);
+    std::string position;
+    if (!coordinates(x, y, position, error)) return 0;
+    return send(root, "cmd = \"spawn\", def = " + luaString(definition) + position + ", name = " +
+                luaString(scriptName.empty() ? "AtlasSpawn" : scriptName), error);
 }
 
 uint64_t sendPing(const fs::path& root, std::string& error) { return send(root, "cmd = \"ping\"", error); }
 
 uint64_t sendReload(const fs::path& root, int mapSlot, float x, float y, std::string& error) {
-    char buf[160];
-    std::snprintf(buf, sizeof buf, "cmd = \"reload\", slot = %d, x = %.3f, y = %.3f", mapSlot, x, y);
-    return send(root, buf, error);
+    std::string position;
+    if (!coordinates(x, y, position, error)) return 0;
+    return send(root, "cmd = \"reload\", slot = " + std::to_string(mapSlot) + position, error);
 }
 
 Status poll(const fs::path& root) {

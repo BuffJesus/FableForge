@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: complete live-link commands and owned writes
+
+`build/livelink-command-before.log` reproduced a successful send with truncated
+definition/script names. Teleport/spawn/reload now build full strings, keep the
+existing three-decimal coordinate format with a fixed decimal locale, and refuse
+NaN/infinite coordinates before touching the pending command. Lua strings escape
+control bytes with three decimal digits, including embedded NUL followed by a
+digit; quotes/backslashes retain their existing escaping. Syntax follows the
+[Lua 5.0 lexical contract](https://www.lua.org/manual/5.0/manual.html#2.1).
+
+Commands use an owned PendingBanks workspace rather than overwriting the shared
+`cmd.lua.tmp`. Locked command replacement reports failure and preserves the old
+command; a retry succeeds and owned workspaces are cleaned. The unowned temporary
+file is untouched. The protocol is still a single latest-command slot, not a queue.
+
+Expanded `fableforge_livelink_tests` passes normally and under clang-cl ASan:
+long spawn/map strings, exact control-byte escapes, finite-coordinate refusals,
+locked replacement/retry, unrelated temporary-file preservation and cleanup,
+plus all earlier hook cases. Normal editor/CLI targets build. These are offline
+file/protocol checks; game-side execution was not exercised.
+
 ## 2026-10-01 continuation: preserve user script around live-link hooks
 
 Offline regression `build/livelink-before.log` reproduced removal truncating all
