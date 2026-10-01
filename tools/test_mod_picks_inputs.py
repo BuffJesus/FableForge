@@ -134,6 +134,22 @@ def main():
         manifest.write_text(json.dumps(malformed_pack), encoding='utf-8')
         refused(recipe['name'].lower(), picks)
         manifest.write_bytes(valid_manifest)
+    chunks = packs['B']/'stb'
+    chunks.mkdir()
+    chunk = chunks/'missing-record.chunk'
+    record = chunks/'missing-record.record'
+    chunk.write_bytes(b'invalid chunk')
+    refused('missing_static_record', picks)
+    record.write_bytes(b'invalid record')
+    for locked_file in (chunk, record):
+        handle = kernel.CreateFileW(str(locked_file), 0x80000000, 0, None, 3, 0x80, None)
+        assert handle != wintypes.HANDLE(-1).value
+        try:
+            refused('locked_static_' + locked_file.suffix[1:], picks)
+        finally:
+            kernel.CloseHandle(handle)
+    chunk.unlink()
+    record.unlink()
     handle = kernel.CreateFileW(str(manifest), 0x80000000, 0, None, 3, 0x80, None)
     assert handle != wintypes.HANDLE(-1).value
     try:
@@ -162,13 +178,13 @@ def main():
         assert 'stage' not in report
         assert snapshot() == original
     manifest.write_bytes(valid_manifest)
-    chunks = packs['B']/'stb'
-    chunks.mkdir()
-    (chunks/'missing-record.chunk').write_bytes(b'invalid chunk')
+    (chunks/'invalid.chunk').write_bytes(b'invalid chunk')
+    (chunks/'invalid.record').write_bytes(b'invalid record')
     report = json.loads(run('invalid_static_map', 'deploy', ['--json'], 1))
     assert report['recipe_failures'] == 1 and report['forge_stb'][0]['errors']
     assert snapshot() == original
-    (chunks/'missing-record.chunk').unlink()
+    (chunks/'invalid.chunk').unlink()
+    (chunks/'invalid.record').unlink()
     # The shared reader also serves the direct definition and quest merge commands.
     quest_out = work / 'merged.qst'
     quest_out.write_bytes(b'previous quest output')

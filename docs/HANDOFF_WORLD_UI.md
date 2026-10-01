@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: terrain recipe input preflight
+
+A missing terrain `.record` companion previously failed after the old deployment
+had been reverted (`build/mod-picks-inputs-vwisfoms`, published rc.3 binary).
+Recipe preflight now checks every top-level `stb/*.chunk` and its companion for
+regular-file availability and readability before touching deployed or build files.
+Absent optional `stb` folders remain valid. The extended failure regression passes
+at `build/mod-picks-inputs-lso7tcqm`: missing records and Windows locks on either
+file preserve the previous installation and output sentinel, with valid retry and
+undeploy still passing. The Windows regression is included in `check_all.py`.
+A valid terrain/theme/object pack also passes at
+`build/pack-levels-preflight-vjrpamy5`, checking the rebuilt STB chunk, WAD level,
+placed object, resolved theme palette and untouched scratch source files.
+Later content/decode failures still refuse staging but may leave the previous
+installation at its restored baseline; this is not transactional replacement.
+
 ## 2026-10-01 continuation: compass shared with world flight
 
 The 3D World view now uses the same heading compass as the map viewport, with

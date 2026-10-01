@@ -8195,6 +8195,14 @@ void preflightModRecipes(const std::vector<std::string>& sources) {
                 requireAsset(theme.png);
                 if (!theme.cliffPng.empty()) requireAsset(theme.cliffPng);
             }
+            const fs::path staticDir = fs::path(source) / "stb";
+            if (fs::is_directory(staticDir)) {
+                for (const auto& entry : fs::directory_iterator(staticDir)) {
+                    if (!entry.is_regular_file() || entry.path().extension() != ".chunk") continue;
+                    requireAsset((fs::path("stb") / entry.path().filename()).string());
+                    requireAsset((fs::path("stb") / (entry.path().stem().string() + ".record")).string());
+                }
+            }
         } catch (const std::exception& error) {
             throw std::runtime_error("pack " + source + ": " + error.what());
         }
