@@ -278,6 +278,8 @@ Project Seasons. Mods merge record by record (a `game.bin` field, a thing by UID
 *Build and deploy* rebuilds the whole order onto the retail files; *Undeploy* puts them
 back. Things a mod placed are badged in the editor with the mod's name. Shell:
 `forge-tools mods list/add/remove/move/enable/disable/build/deploy/undeploy/conflicts`.
+These commands reject unknown or incomplete options before editing the order or
+reverting a stage. Reorder indices must be complete signed decimal integers.
 
 ## Building
 

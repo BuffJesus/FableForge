@@ -1614,6 +1614,22 @@ order with visible save errors. All copied metadata bytes and the unrelated
 .tmp file survive refused edits. Normal writer builds and all 35 suites pass
 (19.08 seconds). No game banks or live runtime were changed.
 
+## 2026-10-01 continuation: validate mod commands before mutation
+
+`build/mod-cli-inputs-j0np6i7b` reproduced `mods undeploy --typo`
+silently reverting a deployed stage. The load-order command family now validates
+all arguments before metadata edits or stage reversal. Unknown/extra options,
+missing values and partial/overflowing decimal indices fail with usage status 2.
+Supported JSON output works regardless of option order.
+
+`tools/test_mod_cli_inputs.py` passes 37 refused inputs with exact deployed-root
+hash inventories, plus valid list/build/conflicts, undeploy, add, move and remove:
+normal `build/mod-cli-inputs-ondb9tz_`, ASan `build/mod-cli-inputs-8po7e9a1`.
+Concurrent independent conflicts/deploy/undeploy and malformed-patch cleanup pass
+at `build/mod-workspaces-oxvui_r0`. Both CLI builds pass. This parser-only change
+reuses the preceding 35-suite core gate. Deploy still reverts its old stage before
+building; this change does not make the complete deployment transactional.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

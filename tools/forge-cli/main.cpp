@@ -12170,7 +12170,53 @@ int main(int argc, char** argv) {
         if (args.size() >= 3 && args[0] == "mods" && (args[1] == "list" || args[1] == "add" || args[1] == "remove" || args[1] == "move" || args[1] == "enable" || args[1] == "disable" || args[1] == "build" || args[1] == "conflicts" || args[1] == "deploy" || args[1] == "undeploy")) {
             namespace mo = forge::modorder;
             const std::string root = args[2];
-            const bool asJson = args.back() == "--json";
+            const std::string& verb = args[1];
+            bool asJson = false, doStage = false;
+            std::string name, note, fieldSchema;
+            std::optional<std::string> picksOverride;
+            int at = -1, destination = 0;
+            const auto integer = [](std::string_view value, int& out) {
+                if (value.size() > 1 && value.front() == '+' && value[1] != '-') value.remove_prefix(1);
+                const auto parsed = std::from_chars(value.data(), value.data() + value.size(), out);
+                return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size();
+            };
+            if (root.empty() || root.starts_with("--")) { std::fprintf(stderr, "mods %s needs a game-root path\n", verb.c_str()); return 2; }
+            size_t firstOption = 3;
+            if (verb == "add" || verb == "build" || verb == "remove" || verb == "enable" || verb == "disable" || verb == "move") {
+                if (args.size() < 4 || args[3].empty() || args[3].starts_with("--")) {
+                    std::fprintf(stderr, "mods %s needs its source, output or mod argument\n", verb.c_str()); return 2;
+                }
+                firstOption = 4;
+            }
+            if (verb == "move") {
+                if (args.size() < 5 || !integer(args[4], destination)) {
+                    std::fprintf(stderr, "mods move destination must be a complete decimal integer in the signed 32-bit range\n"); return 2;
+                }
+                firstOption = 5;
+            }
+            // Complete argument validation before reading metadata or reverting a stage.
+            for (size_t i = firstOption; i < args.size(); ++i) {
+                const auto& option = args[i];
+                if (option == "--json" && (verb == "list" || verb == "build" || verb == "conflicts" || verb == "deploy")) asJson = true;
+                else if (option == "--stage" && verb == "build") doStage = true;
+                else if ((verb == "add" && (option == "--name" || option == "--note" || option == "--at")) ||
+                         (verb == "build" && option == "--fields") ||
+                         ((verb == "build" || verb == "conflicts" || verb == "deploy") && option == "--picks")) {
+                    if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].starts_with("--")) {
+                        std::fprintf(stderr, "mods %s: %s needs a value\n", verb.c_str(), option.c_str()); return 2;
+                    }
+                    const auto& value = args[++i];
+                    if (option == "--name") name = value;
+                    else if (option == "--note") note = value;
+                    else if (option == "--fields") fieldSchema = value;
+                    else if (option == "--picks") picksOverride = value;
+                    else if (!integer(value, at)) {
+                        std::fprintf(stderr, "mods add --at must be a complete decimal integer in the signed 32-bit range\n"); return 2;
+                    }
+                } else {
+                    std::fprintf(stderr, "mods %s: unexpected argument %s\n", verb.c_str(), option.c_str()); return 2;
+                }
+            }
             try {
                 if (args[1] == "list") {
                     const auto order = mo::load(root);
@@ -12189,12 +12235,6 @@ int main(int argc, char** argv) {
                 }
                 if (args[1] == "add") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods add <game-root> <source> [--name N] [--at i] [--note text]\n"); return 2; }
-                    std::string name, note; int at = -1;
-                    for (size_t i = 4; i < args.size(); ++i) {
-                        if (args[i] == "--name" && i + 1 < args.size()) name = args[++i];
-                        else if (args[i] == "--at" && i + 1 < args.size()) at = std::stoi(args[++i]);
-                        else if (args[i] == "--note" && i + 1 < args.size()) note = args[++i];
-                    }
                     auto order = mo::load(root);
                     auto& e = mo::add(order, root, args[3], name, at);
                     e.note = note;
@@ -12213,7 +12253,7 @@ int main(int argc, char** argv) {
                 if (args[1] == "move") {
                     if (args.size() < 5) { std::fprintf(stderr, "mods move <game-root> <name|index> <to>\n"); return 2; }
                     auto order = mo::load(root);
-                    mo::move(order, args[3], std::stoi(args[4]));
+                    mo::move(order, args[3], destination);
                     mo::save(root, order);
                     for (size_t i = 0; i < order.mods.size(); ++i) std::printf("  %2zu %s\n", i, order.mods[i].name.c_str());
                     return 0;
@@ -12232,8 +12272,7 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
-                    std::string picksPath = modsPicksDefault(root);
-                    for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
+                    const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const albion::detail::TemporaryDirectory workspace("mods-deploy-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
@@ -12244,8 +12283,7 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
-                    std::string picksPath = modsPicksDefault(root);
-                    for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
+                    const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
@@ -12254,12 +12292,7 @@ int main(int argc, char** argv) {
                 }
                 if (args[1] == "build") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods build <game-root> <out-dir> [--fields schema.json] [--stage] [--json]\n"); return 2; }
-                    bool doStage = false; std::string fieldSchema, picksPath = modsPicksDefault(root);
-                    for (size_t i = 4; i < args.size(); ++i) {
-                        if (args[i] == "--stage") doStage = true;
-                        else if (args[i] == "--fields" && i + 1 < args.size()) fieldSchema = args[++i];
-                        else if (args[i] == "--picks" && i + 1 < args.size()) picksPath = args[++i];
-                    }
+                    const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
