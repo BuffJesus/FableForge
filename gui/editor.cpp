@@ -3364,7 +3364,7 @@ void App::startTerrainDeploy() {
     if (doc_.external() && saveRoot() != installPath_) { pushLog("terrain: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return; }
     if (ctxFuture_.valid()) { pushLog("terrain: textures and themes are still loading (a custom theme was just added); deploy again in a moment", 1); return; }
     if (doc_.strokeActive()) doc_.endStroke();
-    editor::Document* doc = &doc_;
+    const auto doc = std::make_shared<editor::Document>(doc_.terrainWriteSnapshot());
     const std::string root = saveRoot();
     const auto ctxHold = std::make_shared<const te::Context>(ctx_);   // the library lives in it; a reload must not free it
     const forge::terraintex::ThemeLibrary* lib = ctxHold->themeLibrary();
@@ -3376,6 +3376,7 @@ void App::startTerrainDeploy() {
     terrainDeployFuture_ = std::async(std::launch::async, [ctxHold, doc, root, lib, progress, pack]() {
         TerrainDeployResult r;
         r.pack = pack;
+        r.written = doc;
         r.ok = pack.empty() ? doc->deployTerrain(root, r.notes, r.error, lib, progress)
                             : doc->deployTerrainToPack(root, pack, r.notes, r.error, lib, progress);
         return r;

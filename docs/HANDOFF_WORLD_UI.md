@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: terrain writes while editing
+
+A Greatwood_1 scratch probe reproduced an inconsistent pack: sculpt, start a
+terrain write, then sculpt again while it runs. The LEV matched a single-stroke
+reference, but the chunk and record differed. The worker shared the mutable
+active Document and read the later stroke during baking.
+
+Terrain writes now own an independent LEV and immutable terrain states. On
+successful completion the main thread advances the saved baseline; later edits
+and undo remain intact. A document session token rejects completion after a
+map is reopened. The current LEV/navigation baseline stays together so later
+navigation patches can be reapplied without overwriting current edits.
+
+The focused core checks pass snapshot independence, later-edit undo/redo and
+reopened-document refusal. `tools/test_terrain_async.py` passes the reference,
+later stroke and switch-away/reopen cases: all three pack files are byte-identical
+to the reference and all six scratch source banks retain their hashes. Evidence
+is retained at `build/terrain-async-37dka_zc`. The normal full build and all 27
+CTest suites pass (17.70 seconds); the focused ASan checks pass too.
+This isolates document memory;
+separate operations committing to the same files still need a write-busy audit.
+
+## 2026-10-01 continuation: new-level pack deployment
+
+The full pack path passes on the stock-layout scratch install: create
+ForgeDeployDepth from TeleporterGreatwood into a pack, deploy, list/read layers,
+open the deployed map in the GUI, then undeploy. The capture contains WLD/BWD,
+LEV/TNG and a static-map chunk/record. Deployment changes the expected four
+world banks; undeploy restores all eight original bank hashes. The pack remains
+byte-identical. `build/pack_deploy_depth/report.json` records the checks and
+`deployed_level.png` shows textured terrain and water. The fixture omits
+graphics.big, so this is not object/foliage or in-game verification.
+
 ## 2026-10-01 continuation: reverting captured overrides
 
 The CLI reproduced a stale layer: capturing changed world bytes, then capturing

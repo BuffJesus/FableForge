@@ -526,6 +526,12 @@ public:
     bool deployTerrain(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                        const forge::terraintex::ThemeLibrary* library = nullptr,
                        const std::function<void(const std::string&)>& progress = {});
+    // End any stroke first. This owns its mutable LEV and contains only terrain
+    // write inputs, so a worker never reads or changes the active document.
+    Document terrainWriteSnapshot() const;
+    // Main thread, after a successful snapshot write. Later edits and undo stay
+    // intact; a reopened/replaced document does not accept the old completion.
+    bool acceptTerrainWrite(const Document& written);
     // Writes the loose .lev. Cells whose walkable byte changed since the
     // navigation was last consistent get the retail CNavQuadTree patched in
     // place (only those cells; door nodes, stacked layers and the rest of the
@@ -600,6 +606,7 @@ private:
     std::string targetSection() const;   // placementSection_ when it exists, else NULL
     size_t intoPlacementSection(size_t index);   // moves a just-placed thing (no undo step of its own)
     std::shared_ptr<forge::lev::File> level_;
+    std::shared_ptr<const uint8_t> terrainSession_ = std::make_shared<const uint8_t>(0);
     std::vector<uint8_t> navWalkable_;   // walkable bytes the level's navigation tree agrees with
 };
 

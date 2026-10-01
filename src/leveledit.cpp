@@ -243,6 +243,7 @@ bool Document::open(const fs::path& gameRoot, const std::string& mapName, const 
 }
 
 bool Document::loadLevel(const fs::path& levPath, std::string& error) {
+    terrainSession_ = std::make_shared<const uint8_t>(0);
     soundListGrew_ = false;
     try { level_ = std::make_shared<forge::lev::File>(forge::lev::File::open(levPath)); }
     catch (const std::exception& e) { level_.reset(); error = std::string("level heights unavailable: ") + e.what(); return false; }
@@ -286,6 +287,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
 bool Document::openText(const std::string& mapName, std::string tngText, std::string& error) {
     try { file_ = forge::tng::File::parseText(std::move(tngText), mapName + ".tng"); }
     catch (const std::exception& e) { error = std::string("cannot parse .tng: ") + e.what(); return false; }
+    terrainSession_ = std::make_shared<const uint8_t>(0);
     mapName_ = mapName;
     worldX_=worldY_=worldSlot_=0; // open() resolves the new world's origin afterward
     original_ = file_.serialize();
@@ -1290,6 +1292,31 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
         }
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+Document Document::terrainWriteSnapshot() const {
+    if (stroke_) throw std::logic_error("finish the terrain stroke before taking a write snapshot");
+    Document out;
+    out.mapName_ = mapName_;
+    out.externalWld_ = externalWld_;
+    out.externalLev_ = externalLev_;
+    out.terrain_ = terrain_;
+    out.savedTerrain_ = savedTerrain_;
+    out.level_ = level_ ? std::make_shared<forge::lev::File>(*level_) : nullptr;
+    out.navWalkable_ = navWalkable_;
+    out.soundListGrew_ = soundListGrew_;
+    out.terrainSession_ = terrainSession_;
+    return out;
+}
+
+bool Document::acceptTerrainWrite(const Document& written) {
+    if (terrainSession_ != written.terrainSession_ || !level_ || !written.level_) return false;
+    savedTerrain_ = written.savedTerrain_;
+    soundListGrew_ = level_->soundThemes() != written.level_->soundThemes();
+    // Keep the current LEV and its navWalkable_ together. If the worker patched
+    // navigation, the next write can apply that patch again to this older nav
+    // baseline. Replacing the LEV here would discard later edits/sound names.
+    return true;
 }
 
 bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,

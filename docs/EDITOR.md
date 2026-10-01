@@ -192,7 +192,9 @@ item and info display components; absent components are not added.
   in place with recomputed normals every frame of a stroke; the brush ring is
   projected onto the ground. One undo step per stroke, on the same stack as
   the object edits.
-* **Deploy** (`Write terrain into the game`), in this order:
+* **Deploy** (`Write terrain into the game`) writes the terrain as it was when
+  clicked. You can keep editing while it runs; later strokes remain unsaved,
+  and switching maps does not change the pending write. It writes in this order:
   1. loose `data/Levels/FinalAlbion/<map>.lev` (`lev::File::save`, only the
      cell bytes change);
   2. the `.lev` entry in `FinalAlbion.wad` (`wad::repack`, same size so it is

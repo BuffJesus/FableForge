@@ -53,6 +53,26 @@ int main(){
   CHECK(d.undo()&&d.text()==original&&!d.canUndo());CHECK(d.redo()&&d.text()==changed);
   CHECK(d.setHeight(1,14)&&d.frameOf(1,b)&&b.pos[2]==14);CHECK(d.undo()&&d.text()==changed);
   CHECK(d.undo()&&d.text()==original);rev=d.revision();CHECK(d.setHeight(0,20)&&d.revision()==rev&&d.canRedo());
+  // Background writes own their LEV, and completion advances only the saved
+  // baseline. A later stroke and its undo must remain in the active document.
+  CHECK(d.setVertexHeights({{2,3,12}}));
+  auto written=d.terrainWriteSnapshot();
+  CHECK(d.setVertexHeights({{2,3,16}}));
+  CHECK(written.groundHeight(2,3)==12 && d.groundHeight(2,3)==16);
+  CHECK(written.saveTerrainLoose(scratch/"output",error));
+  CHECK(d.terrainDirty() && d.acceptTerrainWrite(written) && d.terrainDirty());
+  CHECK(d.savedTerrain()->heights[3*d.cellsX()+2]==12);
+  CHECK(d.undo() && !d.terrainDirty() && d.groundHeight(2,3)==12);
+  CHECK(d.undo() && d.terrainDirty() && d.groundHeight(2,3)==4);
+  CHECK(d.redo() && !d.terrainDirty());
+  auto repeat=d.terrainWriteSnapshot();
+  CHECK(repeat.saveTerrainLoose(scratch/"repeat",error));
+  CHECK(d.acceptTerrainWrite(repeat) && !d.terrainDirty());
+  CHECK(d.loadLevel(scratch/"slope.lev",error));
+  CHECK(!d.acceptTerrainWrite(written) && !d.terrainDirty());
+  auto oldSession=d.terrainWriteSnapshot();
+  CHECK(d.openText("Height",original,error));
+  CHECK(!d.acceptTerrainWrite(oldSession));
   fs::remove_all(scratch);std::cout<<checks<<" set-height checks passed\n";return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<" (scratch retained: "<<scratch<<")\n";return 1;}
 }

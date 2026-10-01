@@ -308,6 +308,22 @@ rollback and unrelated recipes; the real-bank world-pack test covers removal of
 a world file plus both static-map files. Missing shadow content remains unchanged
 in the destination; capture is not a general deletion manifest.
 
+## Terrain background-write depth, 2026-10-01
+
+A second stroke during a terrain write reproduced mismatched LEV and baked
+chunk/record output. The worker now owns a terrain snapshot, and successful
+completion updates only the saved baseline of the same document session.
+`tools/test_terrain_async.py` verifies exact output equality against a
+single-stroke reference while editing and while switching away/reopening.
+Later-edit undo/redo and source-bank hashes pass. Focused normal/ASan core
+checks cover snapshot independence and stale completion refusal.
+
+The new-level pack path also passes creation, deploy, GUI open and undeploy:
+all eight original bank hashes return and the pack is unchanged. The retained
+map screenshot shows terrain/water; the reduced fixture lacks graphics.big.
+Neither check supplies new in-game evidence. Concurrent writers targeting
+the same pack/bank remain a separate audit item.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

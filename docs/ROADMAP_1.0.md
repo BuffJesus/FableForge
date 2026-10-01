@@ -2,8 +2,10 @@
 
 2026-10-01 workflow depth: new-level creation preserves edits made while the job
 runs, compact origins remain readable, and Restore clears removed-map previews.
-Scratch creation/restore, extracted layouts and world-pack composition pass;
-see HANDOFF_WORLD_UI for the evidence and remaining game/deployment checks.
+Scratch creation/restore, extracted layouts, world-pack composition and new-level
+pack deploy/open/byte-exact undeploy pass. Terrain workers use isolated snapshots;
+later strokes and map switches preserve consistent output and draft edits.
+See HANDOFF_WORLD_UI for the evidence and remaining in-game checks.
 
 2026-10-01 input/failure depth: OBJ/GLB container, accessor, scene and index checks pass 384
 synthetic cases in normal and AddressSanitizer builds. Custom theme imports now

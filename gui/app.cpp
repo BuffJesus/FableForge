@@ -1713,6 +1713,7 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
+    v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
     if (documentLoaded() && doc_.hasTerrain()) {
         char h[64];
         const auto& t = doc_.terrain();
@@ -1742,6 +1743,7 @@ void App::frame(float dt) {
     updateWorldScenery();
     if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const TerrainDeployResult r = terrainDeployFuture_.get();
+        if (r.ok && r.written) doc_.acceptTerrainWrite(*r.written);
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
         if (r.ok && !r.pack.empty()) pushLog("terrain written into pack " + packLabel(r.pack) + " (Mods > Deploy puts it in the game)", 3);
         else if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
