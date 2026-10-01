@@ -30,6 +30,7 @@ enum class Kind { Original, Created, Staged, Overlay };
 // The one-time original of `file`: <file>.forge-orig, or the legacy <file>.atlas-orig when that
 // is what the install already has (so a file never gets two).
 std::filesystem::path originalOf(const std::filesystem::path& file);
+// Throws when an existing modern or legacy original path is not a regular file.
 bool hasOriginal(const std::filesystem::path& file);
 // Copy `file` to its original once; a no-op when an original or creation marker
 // exists, or the file does not. Later edits must not turn a created file into an original.

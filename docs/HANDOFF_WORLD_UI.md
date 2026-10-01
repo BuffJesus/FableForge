@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: validate original-backup path types
+
+A directory at `.forge-orig` was treated as an existing original, allowing a new
+untracked loose TNG to be saved (`build/creation-marker-a7ijwtxp`). Original
+lookup now validates both modern and legacy paths as regular files and reports
+filesystem errors. Creation-marker preparation validates originals even if a
+marker already exists.
+
+Expanded normal (`build/creation-marker-tffaeycq`) and ASan GUI/CLI
+(`build/creation-marker-6qmvlxrz`) checks pass for modern/legacy creation-marker
+and original-backup directories, both new and existing target refusal, dirty
+draft preservation, unchanged directory occupants, successful retry, existing
+valid original retention and exact Restore/inventory. All three normal writer
+targets and ASan CLI/GUI build. Regular backup contents are not inferred from
+filename alone; differing backup conventions are being checked separately.
+
 ## 2026-10-01 continuation: roll back failed WAD/loose TNG deployment
 
 A locked loose TNG was silently left stale after the WAD changed, while the GUI

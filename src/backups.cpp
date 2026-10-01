@@ -135,8 +135,15 @@ fs::path originalOf(const fs::path& file) {
 }
 
 bool hasOriginal(const fs::path& file) {
-    std::error_code ec;
-    return fs::exists(originalOf(file), ec);
+    bool found = false;
+    for (const char* suffix : {kOrigSuffix, kLegacyOrigSuffix}) {
+        const fs::path original = file.string() + suffix;
+        if (!fs::exists(original)) continue;
+        if (!fs::is_regular_file(original))
+            throw std::runtime_error("original backup is not a file: " + original.string());
+        found = true;
+    }
+    return found;
 }
 
 bool backupOnce(const fs::path& file, std::string& error) {
@@ -149,7 +156,8 @@ bool backupOnce(const fs::path& file, std::string& error) {
 }
 
 void markCreated(const fs::path& file) {
-    if (hasCreationMarker(file) || hasOriginal(file)) return;
+    const bool created = hasCreationMarker(file), original = hasOriginal(file);
+    if (created || original) return;
     const fs::path marker = file.string() + kCreatedSuffix;
     std::ofstream out(marker, std::ios::binary);
     out << "created by FableForge\n";

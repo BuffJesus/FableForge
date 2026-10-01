@@ -37,12 +37,12 @@ def main():
     def gui(label, save, dirty):
         script = work / (label + '.txt')
         script.write_text('wait_maps\nwait_ready\nselect TeleporterGreatwood\nwait_loaded\nedit 1\n'
-            'place OBJECT_BARREL_BREAKABLE MarkerProbe\n' + save + '\nassert_state doc_dirty ' + str(dirty) + '\ndump_log\nquit\n')
+            'place OBJECT_BARREL_BREAKABLE MarkerProbe_' + label.replace('-', '_') + '\n' + save + '\nassert_state doc_dirty ' + str(dirty) + '\ndump_log\nquit\n')
         result = subprocess.run([str(args.gui.resolve()), '--install', str(root), '--auto', str(script)],
             cwd=repo, env=env, capture_output=True, text=True, timeout=120)
         log = Path(str(script) + '.log').read_text()
         assert result.returncode == 0 and 'RESULT PASS' in log, log + result.stderr
-    for suffix in ('.forge-created', '.atlas-created'):
+    for suffix in ('.forge-created', '.atlas-created', '.forge-orig', '.atlas-orig'):
         marker = Path(str(target) + suffix)
         marker.mkdir(parents=True)
         sentinel = marker / 'preserve.txt'
@@ -55,6 +55,17 @@ def main():
     gui('retry', 'save_level', 0)
     assert target.is_file() and 'MarkerProbe' in target.read_text()
     assert Path(str(target) + '.forge-created').is_file()
+    for suffix in ('.forge-orig', '.atlas-orig'):
+        invalid = Path(str(target) + suffix)
+        invalid.mkdir()
+        sentinel = invalid / 'preserve.txt'
+        sentinel.write_bytes(b'not an original backup')
+        before = target.read_bytes()
+        gui('existing_target-' + suffix[1:], 'save_level_refused', 1)
+        assert target.read_bytes() == before and sentinel.read_bytes() == b'not an original backup'
+        sentinel.unlink()
+        invalid.rmdir()
+
     result = subprocess.run([str(args.exe.resolve()), 'restore', '--install', str(root), '--forget'],
         cwd=repo, env=env, capture_output=True, text=True, timeout=60)
     (work / 'restore.log').write_text(result.stdout + result.stderr)
