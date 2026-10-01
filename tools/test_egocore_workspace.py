@@ -91,6 +91,18 @@ def main():
     (work / 'missing_text.log').write_text(missing_text.stdout + missing_text.stderr)
     assert missing_text.returncode != 0 and 'no text Data/Defs tree' in missing_text.stderr
     assert not (work / 'missing_text_output').exists()
+    malformed_mod = work / 'malformed/FableControllerSupport'
+    shutil.copytree(mod, malformed_mod)
+    broken_def = malformed_mod / 'Data/Defs/player_gui.def'
+    text = broken_def.read_text(encoding='utf-8')
+    assert '#end_definition' in text
+    broken_def.write_text(text.rsplit('#end_definition', 1)[0], encoding='utf-8')
+    malformed = subprocess.run([str(args.exe.resolve()), 'mods', 'merge', str(roots[0]),
+        str(work / 'malformed_output'), str(malformed_mod)], cwd=repo, env=env,
+        capture_output=True, text=True, timeout=240)
+    (work / 'malformed.log').write_text(malformed.stdout + malformed.stderr)
+    assert malformed.returncode != 0 and 'unterminated definition' in malformed.stderr, 'malformed text override was accepted: ' + malformed.stdout + malformed.stderr
+    assert not (work / 'malformed_output').exists()
     # A DLL-only mod without any Data/Defs remains valid.
     dll_mod = work / 'DllOnly'
     dll_mod.mkdir()

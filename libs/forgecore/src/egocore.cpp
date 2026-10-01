@@ -45,11 +45,17 @@ void writeText(const fs::path& p, const std::string& s) {
     if (!out) throw std::runtime_error("write failed for " + p.string());
 }
 
-// Comments (// and /* */) blanked so a "#definition" inside one is not a block start.
-std::string maskComments(const std::string& s) {
+// Blank comments and quoted strings while keeping offsets/newlines, so their
+// directive-looking text cannot open or close a definition block.
+std::string maskCommentsAndStrings(const std::string& s) {
     std::string out = s;
     for (size_t i = 0; i + 1 < out.size();) {
-        if (out[i] == '/' && out[i + 1] == '/') {
+        if (out[i] == '"') {
+            out[i++] = ' ';
+            // defc string tokens end at the next quote (backslashes are literal).
+            while (i < out.size() && out[i] != '"') { if (out[i] != '\n') out[i] = ' '; ++i; }
+            if (i < out.size()) out[i++] = ' ';
+        } else if (out[i] == '/' && out[i + 1] == '/') {
             while (i < out.size() && out[i] != '\n') out[i++] = ' ';
         } else if (out[i] == '/' && out[i + 1] == '*') {
             out[i] = out[i + 1] = ' '; i += 2;
@@ -69,13 +75,17 @@ std::vector<Block> blocks(const std::string& masked) {
         const size_t s = masked.find("#definition", cursor);
         if (s == std::string::npos) break;
         const size_t e = masked.find("#end_definition", s);
-        if (e == std::string::npos) break;
+        const size_t next = masked.find("#definition", s + 11);
+        if (e == std::string::npos || (next != std::string::npos && next < e))
+            throw std::runtime_error("unterminated definition at byte " + std::to_string(s) + ": missing #end_definition");
         Block b; b.start = s; b.end = e + 15;
         const size_t eol = masked.find('\n', s);
         std::string header = masked.substr(s, eol == std::string::npos ? std::string::npos : eol - s);
         header.erase(std::remove(header.begin(), header.end(), '\r'), header.end());
         std::istringstream ss(header);
         std::string kw; ss >> kw >> b.type >> b.name;
+        if (b.type.empty() || b.name.empty())
+            throw std::runtime_error("incomplete definition header at byte " + std::to_string(s) + ": expected type and name");
         out.push_back(b);
         cursor = b.end;
     }
@@ -115,10 +125,10 @@ void copyTree(const fs::path& from, const fs::path& to, const std::vector<std::s
 
 std::string mergeDefText(const std::string& target, const std::string& mod, Report& report, std::vector<std::string>* addedBlocks) {
     std::string out = target;
-    const std::string maskedMod = maskComments(mod);
+    const std::string maskedMod = maskCommentsAndStrings(mod);
     for (const Block& mb : blocks(maskedMod)) {
         const std::string modBlock = mod.substr(mb.start, mb.end - mb.start);
-        const std::string maskedOut = maskComments(out);
+        const std::string maskedOut = maskCommentsAndStrings(out);
         bool replaced = false;
         for (const Block& tb : blocks(maskedOut)) {
             if (tb.type == mb.type && tb.name == mb.name) {
@@ -179,7 +189,7 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
     copyTree(text, treeBase);
     std::set<std::string> addedNames;   // the definitions the mod adds (by name): the only "new records"
     auto noteAdded = [&](const std::string& blockText) {
-        for (const Block& b : blocks(maskComments(blockText))) addedNames.insert(b.name);
+        for (const Block& b : blocks(maskCommentsAndStrings(blockText))) addedNames.insert(b.name);
     };
     for (const auto& de : fs::recursive_directory_iterator(modDefs)) {
         if (!de.is_regular_file()) continue;
@@ -189,7 +199,8 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
         if (ext == ".def" && fs::exists(target, ec)) {
             std::vector<std::string> added;
             const std::string modText = readText(de.path());
-            writeText(target, mergeDefText(readText(target), modText, report, &added));
+            try { writeText(target, mergeDefText(readText(target), modText, report, &added)); }
+            catch (const std::exception& e) { throw std::runtime_error(de.path().string() + ": " + e.what()); }
             if (!added.empty()) {
                 std::string baseText = readText(targetBase);
                 for (const auto& b : added) { baseText += "\n\n" + b; noteAdded(b); }

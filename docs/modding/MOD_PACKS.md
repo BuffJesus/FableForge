@@ -12,6 +12,11 @@ Mods without Data/Defs can still supply a DLL-only layer. Redeploy continues to
 revert the earlier stage before building; failure can therefore leave the install
 at its baseline with the previous mod removed.
 
+Incomplete or nested text definition blocks fail normalization with the source
+path in the error. Directive-looking text inside comments and quoted values
+does not affect block boundaries. Valid replacements and templates retain their
+existing merge behavior.
+
 EgoCore file copies, resource/header reads and output writes report I/O failures.
 An unreadable existing source bank also fails the build. A failed explicit build
 may retain files emitted before the error; deploy does not stage that incomplete

@@ -636,6 +636,30 @@ hashes (`v143znqa/baseline_comparison.json`). No native resource layout changed.
 A failed build may leave already-written files in an explicit build output;
 this is error reporting and deploy prevention, not transactional output rollback.
 
+## 2026-10-01 continuation: reject malformed text overrides before compilation
+
+Removing the final closer from a Controller Support definition still produced a
+successful partial build (`build/egocore-workspace-jla6w9fv`): the merge omitted
+that override before defc saw it. Block extraction now rejects missing closers,
+a new definition before the prior closer and missing type/name headers. Errors
+from normalization identify the source file. Comments and quoted strings are
+masked without changing byte offsets so their directive text cannot split blocks.
+
+Evidence: EgoCore `Mods/ModManagerBackend.h:316` supplied the original merge
+pattern; the local fable-defs compiler's `defs/src/text/mod.rs` treats a new
+block before its closer as an error, and `lexer.rs:468` ends raw quoted strings
+at the next quote (backslashes are literal). The block merger remains a limited
+extractor, not a replacement for the full compiler grammar.
+
+The new definition test covers invalid overrides/baselines, replacement/template
+addition, comments, quoted directive text and exact untouched prefix/suffix
+preservation. Normal and ASan tests pass. Full build and all 32 suites pass
+(19.26 seconds). Real concurrent compiles and the malformed-mod refusal pass
+normally (`build/egocore-workspace-51bydlfr`) and under the ASan host
+(`build/egocore-workspace-0i789iru`); malformed input emits no build output.
+Successful game.bin/names.bin hashes match the prior implementation
+(`51bydlfr/baseline_comparison.json`).
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
