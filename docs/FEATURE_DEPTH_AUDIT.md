@@ -1200,6 +1200,47 @@ checked, but an actual rollback failure was not injected. No power-loss or
 concurrent-writer guarantee is claimed. The standalone legacy forge-tools
 installer still has its duplicated writer and is the next follow-up.
 
+## 2026-10-01 continuation: one level installer for the legacy CLI
+
+`build/legacy-worldinstall-7tr_cais` reproduced partial WLD/BWD/WAD replacement
+and deletion of unrelated `.tmp` / `.tmp2` files after a locked-STB failure in
+`forge-tools world install-level`. Its duplicated writer is replaced by a
+Request adapter over forgecore worldinstall. Existing command options retain
+their meaning, including dedicated-region creation and default `.bak` backups.
+The command now inherits bounded placement, overlap/name checks, existing BWD
+mirror updates, owned staging and rollback, and extracted-level routing.
+Coordinates require complete decimal integers. Explicit optional inputs must
+be readable, nonempty regular files; empty inputs cannot silently select donor
+bytes in the core API.
+
+The old core 141-region-cap notes and their editor suppression are removed.
+The dedicated-region note now describes save caching, reusing the existing
+2026-09-17 EDITOR.md/ENGINE_RULES.md findings (CWorldMap binary loader and the
+successful fresh-game region-146 AtlasIsle probe). No region-allocation or
+filler-selection algorithm changed, and no new runtime probe was performed.
+
+The new `tools/test_legacy_worldinstall.py` checks a late file-lock failure,
+malformed coordinates, missing/empty custom inputs, custom TNG preservation,
+mirror equality, successful retry and exact manual `.bak` recovery in packed
+and loose layouts. `test_pack_world.py` now owns a unique scratch directory;
+it no longer deletes a fixed directory that another test run may own.
+
+Packed ASan `build/legacy-worldinstall-xhs_2oc9` and normal loose
+`build/legacy-worldinstall-6hmxizq4` pass, including byte-exact custom TNG
+preservation and six/five baseline backups respectively. Both retry logs carry
+the corrected save-cache note. Normal editor/CLI/tools and ASan tools builds
+pass; all 35 rebuilt normal suites pass (22.21s).
+
+The full own-region blank workflow also passes in
+`build/newlevel-workspace-2ptwk4ao`: creation, entrance, minimap bake, hidden GUI
+palette check, unowned-file preservation and exact Restore.
+
+`build/pack-world-mh87u_5p` passes the full world-pack test: A/B/AB/BA
+composition, byte-identical expected BWD output, new WAD/STB entries, hidden
+GUI world move and new-level export, source preservation, and reverted-override
+cleanup. Its GUI script reports PASS; the retained `pack_world_view.png` was
+visually checked for the selected (2048,8064) map and PackG destination.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

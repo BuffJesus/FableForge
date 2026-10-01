@@ -10,7 +10,8 @@ only; needs the Fable install (skips cleanly without one).
 
   python tools/test_pack_world.py [--root <fable-root>] [--keep]
 """
-import argparse, json, os, shutil, subprocess, sys
+import argparse, json, os, shutil, subprocess, sys, tempfile
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_INSTALL = r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters"
@@ -30,8 +31,9 @@ def main() -> int:
         return 0
     tools = os.path.join(ROOT, "build", "forge-tools.exe")
     forge = os.path.join(ROOT, "build", "forge.exe")
-    work = os.path.join(ROOT, "build", "pack_world")
-    shutil.rmtree(work, ignore_errors=True)
+    work = tempfile.mkdtemp(prefix="pack-world-", dir=os.path.join(ROOT, "build"))
+    assert Path(work).resolve().parent == (Path(ROOT) / "build").resolve()
+    print("evidence at", work, flush=True)
     ok = True
 
     def install(name):
@@ -169,7 +171,9 @@ def main() -> int:
     with open(marker, "rb") as f:
         if f.read() != b"unrelated asset": print("capture changed unrelated assets"); ok = False
 
-    if not a.keep: shutil.rmtree(work, ignore_errors=True)
+    if not a.keep:
+        assert Path(work).resolve().parent == (Path(ROOT) / "build").resolve()
+        shutil.rmtree(work)
     print("pack world test", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

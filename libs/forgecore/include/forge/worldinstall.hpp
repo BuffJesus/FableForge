@@ -8,10 +8,9 @@
 // files instead) and STB (the
 // terrain chunk appended with an origin-patched common record).
 //
-// Region ownership: the engine's region vector is capped at the vanilla 141
-// entries (live probe, 2026-08), so a DEDICATED region past that is never
-// reachable -- a new level should normally be attached to an existing host
-// region (`hostRegion`), which is what the editor defaults to.
+// Region ownership: saves cache the region table. Newly added dedicated regions
+// need a new game or a save made after installation to display correctly.
+// hostRegion attaches to an existing region instead.
 //
 // Geometry: the STB chunk is what the game draws. Reusing the donor's chunk at
 // the new origin renders mismatched/white unless it was re-baked for that
@@ -39,7 +38,7 @@ struct Request {
     std::string newLevelName;           // bare stem; must be unused everywhere
     int worldX = 0, worldY = 0;         // origin, 32-aligned
     std::string hostRegion;             // existing region that owns the map; "" = dedicated new region
-    // Own region under the cap: take over an existing (filler) region slot in
+    // Own region for existing saves: take over an existing (filler) region slot in
     // place -- its maps move to `mergeMapsInto`'s contains list (their sees
     // references elsewhere are untouched), it is renamed to `regionName` /
     // `regionDisplayName`, gets `regionDef` and `minimapGraphic`, and owns only

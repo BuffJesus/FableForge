@@ -191,7 +191,6 @@ Result installLevel(const Request& req) {
             throw std::runtime_error("worldinstall: a region named '" + newName + "' already exists");
         int slot = 0;
         for (size_t i = 0; i < bwd.regions().size(); ++i) if (&bwd.regions()[i] == victim) slot = int(i + 1);
-        if (slot > 141) result.notes.push_back("region slot " + std::to_string(slot) + " is past the engine's 141-region cap; the map may be unreachable");
         // the victim's maps move to the sink (ownership only; sees lists elsewhere stay)
         std::vector<std::string> moved;
         for (int32_t m : victim->contains) {
@@ -250,7 +249,6 @@ Result installLevel(const Request& req) {
         if (!host || !wr) throw std::runtime_error("worldinstall: host region '" + req.hostRegion + "' not found in the BWD/WLD");
         int hostSlot = 0;
         for (size_t i = 0; i < bwd.regions().size(); ++i) if (&bwd.regions()[i] == host) hostSlot = int(i + 1);
-        if (hostSlot > 141) result.notes.push_back("host region slot " + std::to_string(hostSlot) + " is past the engine's 141-region cap; the map may be unreachable");
         bwd::MapInfo m;
         m.levelName = newLev; m.scriptName = req.newLevelName;
         m.used = 1; m.loadedOnProximity = req.loadedOnProximity ? 1 : 0; m.isSea = req.isSea ? 1 : 0;
@@ -289,7 +287,7 @@ Result installLevel(const Request& req) {
         wr.containsMaps = {wldLevel}; wr.seesMaps = {wldLevel};
         wld.addRegion(wr);
         result.notes.push_back("map slot " + std::to_string(slots.mapSlot) + ", dedicated region slot " + std::to_string(slots.regionSlot));
-        if (slots.regionSlot > 141) result.notes.push_back("region slot " + std::to_string(slots.regionSlot) + " is past the engine's 141-region cap: the level will not be reachable; attach it to a host region instead");
+        result.notes.push_back("new dedicated regions need a new game or a save made after installation to display correctly");
     }
 
     // ---- prepare all replacements inside an exclusively owned directory.

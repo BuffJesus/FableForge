@@ -1,6 +1,7 @@
 // forge — command-line front end for the FableForge modding core.
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +27,7 @@
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
 #include "forge/worldmerge.hpp"
+#include "forge/worldinstall.hpp"
 #include "forge/bankcatalog.hpp"
 #include "forge/catalog.hpp"
 #include "forge/cutscene_script.hpp"
@@ -3505,18 +3507,30 @@ int worldInstallLevel(const std::vector<std::string>& args) {
     }
     const fs::path root = args[0];
     const std::string name = args[1];
-    const int x = std::atoi(args[2].c_str());
-    const int y = std::atoi(args[3].c_str());
+    const auto coordinate = [](std::string_view text, int& value) {
+        if (!text.empty() && text.front() == '+') {
+            text.remove_prefix(1);
+            if (!text.empty() && text.front() == '-') return false;
+        }
+        if (text.empty() || text.front() == '+') return false;
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+        return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size();
+    };
+    int x=0, y=0;
+    if (!coordinate(args[2], x) || !coordinate(args[3], y)) {
+        std::fprintf(stderr, "world install-level: x and y must be complete decimal integers\n");
+        return 1;
+    }
     std::string donor, levFile, tngFile, chunkFile, regionName, displayName, regionDef;
     bool backup = true, proximity = false, isSea = false;
     for (size_t i = 4; i < args.size(); ++i) {
-        if (args[i] == "--from-donor" && i + 1 < args.size()) donor = args[++i];
-        else if (args[i] == "--lev" && i + 1 < args.size()) levFile = args[++i];
-        else if (args[i] == "--tng" && i + 1 < args.size()) tngFile = args[++i];
-        else if (args[i] == "--chunk" && i + 1 < args.size()) chunkFile = args[++i];
-        else if (args[i] == "--region" && i + 1 < args.size()) regionName = args[++i];
-        else if (args[i] == "--display" && i + 1 < args.size()) displayName = args[++i];
-        else if (args[i] == "--def" && i + 1 < args.size()) regionDef = args[++i];
+        if (args[i] == "--from-donor" && i + 1 < args.size() && !args[i + 1].empty()) donor = args[++i];
+        else if (args[i] == "--lev" && i + 1 < args.size() && !args[i + 1].empty()) levFile = args[++i];
+        else if (args[i] == "--tng" && i + 1 < args.size() && !args[i + 1].empty()) tngFile = args[++i];
+        else if (args[i] == "--chunk" && i + 1 < args.size() && !args[i + 1].empty()) chunkFile = args[++i];
+        else if (args[i] == "--region" && i + 1 < args.size() && !args[i + 1].empty()) regionName = args[++i];
+        else if (args[i] == "--display" && i + 1 < args.size() && !args[i + 1].empty()) displayName = args[++i];
+        else if (args[i] == "--def" && i + 1 < args.size() && !args[i + 1].empty()) regionDef = args[++i];
         else if (args[i] == "--proximity") proximity = true;
         else if (args[i] == "--sea") isSea = true;
         else if (args[i] == "--no-backup") backup = false;
@@ -3526,236 +3540,40 @@ int worldInstallLevel(const std::vector<std::string>& args) {
         std::fprintf(stderr, "world install-level: --from-donor is required\n");
         return 1;
     }
-    // Retail FinalAlbion map origins are all aligned to the 32-world-unit
-    // terrain-cell grid.  Relocating a donor by a fractional grid offset leaves
-    // its foreground patches off-grid: the container bounds still agree, but
-    // decoded topology no longer rebuilds exactly (the 3328,2296 ForgeTest64
-    // probe fell from 105/105 to 25/105 layers).  Reject this before touching
-    // any of the four world containers.
-    if (x % 32 != 0 || y % 32 != 0) {
-        const auto nearestGrid = [](int value) {
-            const int rem = value % 32;
-            if (rem == 0) return value;
-            const int lower = value - (rem < 0 ? rem + 32 : rem);
-            return (value - lower < 16) ? lower : lower + 32;
+    try {
+        forge::worldinstall::Request request;
+        request.gameRoot=root; request.newLevelName=name; request.donorLevelName=donor;
+        request.worldX=x; request.worldY=y;
+        request.regionName=regionName; request.regionDisplayName=displayName; request.regionDef=regionDef;
+        request.loadedOnProximity=proximity; request.isSea=isSea;
+        if (!backup) request.backupSuffix.clear();
+        // Empty means "clone donor" in the core API. An explicit empty input
+        // must be refused, rather than silently changing the requested payload.
+        const auto input = [](const std::string& path) {
+            if (!fs::is_regular_file(path)) throw std::runtime_error("input file not found or not a regular file: " + path);
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream) throw std::runtime_error("cannot open input " + path);
+            std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(stream)), {});
+            if (stream.bad() || bytes.empty()) throw std::runtime_error("input is empty or unreadable: " + path);
+            return bytes;
         };
-        std::fprintf(stderr,
-                     "world install-level: origin (%d,%d) is off the retail "
-                     "32-unit terrain grid; nearest aligned origin is (%d,%d). "
-                     "No files changed.\n",
-                     x, y, nearestGrid(x), nearestGrid(y));
-        return 1;
-    }
-
-    const fs::path levelsDir = root / "data" / "Levels";
-    const fs::path bwdPath = levelsDir / "FinalAlbion.bwd";
-    const fs::path wldPath = levelsDir / "FinalAlbion.wld";
-    const fs::path wadPath = levelsDir / "FinalAlbion.wad";
-    const fs::path stbPath = levelsDir / "FinalAlbion_RT.stb";
-    for (const auto& p : {bwdPath, wldPath, wadPath, stbPath}) {
-        if (!fs::exists(p)) {
-            std::fprintf(stderr, "world install-level: %s not found\n",
-                         p.string().c_str());
-            return 1;
-        }
-    }
-    // Validate ALL optional input files up front, before mutating any container.
-    // (This command writes WLD/BWD/WAD then STB; a missing input discovered
-    // mid-run would otherwise leave the install partially written.)
-    for (const auto& in : {levFile, tngFile, chunkFile}) {
-        if (!in.empty() && !fs::exists(in)) {
-            std::fprintf(stderr, "world install-level: input file not found: %s\n",
-                         in.c_str());
-            return 1;
-        }
-    }
-
-    const std::string donorLev = "Data\\Levels\\FinalAlbion\\" + donor + ".lev";
-    const std::string donorTng = "Data\\Levels\\FinalAlbion\\" + donor + ".tng";
-    const std::string newLev = "Data\\Levels\\FinalAlbion\\" + name + ".lev";
-    const std::string newTng = "Data\\Levels\\FinalAlbion\\" + name + ".tng";
-
-    // Donor dimensions + terrain from the STB (the .wld carries no map size).
-    int donorW = 0, donorH = 0;
-    std::vector<uint8_t> donorChunk, commonRecord;
-    try {
-        const auto stb = forge::stb::Archive::open(stbPath);
-        const forge::stb::StaticMap* sm = nullptr;
-        for (const auto& m : stb.staticMaps())
-            if (lowered(m.levelName) == lowered(donorLev)) { sm = &m; break; }
-        if (!sm) {
-            std::fprintf(stderr, "world install-level: donor '%s' not a static map\n",
-                         donor.c_str());
-            return 1;
-        }
-        commonRecord = stb.readStaticMapRecord(*sm);
-        if (commonRecord.size() < forge::stbinfo::kInfoBlockSize) {
-            std::fprintf(stderr, "world install-level: donor common record too small\n");
-            return 1;
-        }
-        const auto ib = forge::stbinfo::readInfoBlock(commonRecord.data());
-        donorW = ib.mapWidth;
-        donorH = ib.mapHeight;
-        const forge::stb::Entry* chunkEntry = stb.findEntry(donorLev);
-        if (!chunkEntry) {
-            std::fprintf(stderr, "world install-level: donor chunk entry missing\n");
-            return 1;
-        }
-        donorChunk = stb.read(*chunkEntry);
+        if (!levFile.empty()) request.levBytes=input(levFile);
+        if (!tngFile.empty()) request.tngBytes=input(tngFile);
+        if (!chunkFile.empty()) request.chunkBytes=input(chunkFile);
+        const auto result=forge::worldinstall::installLevel(request);
+        std::printf("installed level '%s' into all containers at %s\n", name.c_str(),
+                    (root / "data" / "Levels").string().c_str());
+        std::printf("  map slot %d / region slot %d, box (%d,%d)-(%d,%d)\n",
+                    result.mapSlot, result.regionSlot, result.left, result.top, result.right, result.bottom);
+        for (const auto& note : result.notes) std::printf("  %s\n", note.c_str());
+        if (!result.chunkRetargeted)
+            std::puts("  WARNING: donor chunk geometry needs re-baking at the new origin before playing; pass --chunk.");
+        std::printf("NEXT: `forge validate %s` (bounds+count cross-checks).\n", root.string().c_str());
+        return 0;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "world install-level: STB read failed: %s\n", e.what());
+        std::fprintf(stderr, "world install-level: %s\n", e.what());
         return 1;
     }
-    const int right = x + donorW, bottom = y + donorH;
-
-    // --- Staged, atomic write ------------------------------------------------
-    // Build every container into a `.tmp` beside the original (same volume, so the
-    // final rename is atomic), reading only from the untouched originals. Commit
-    // (backup + rename) happens ONLY after all four temps are written, so any
-    // failure mid-build leaves the install exactly as it was.
-    const fs::path bwdTmp = bwdPath.string() + ".tmp";
-    const fs::path wldTmp = wldPath.string() + ".tmp";
-    const fs::path wadTmp = wadPath.string() + ".tmp";
-    const fs::path wadTmp2 = wadPath.string() + ".tmp2";
-    const fs::path stbTmp = stbPath.string() + ".tmp";
-    const std::vector<fs::path> temps = {bwdTmp, wldTmp, wadTmp, wadTmp2, stbTmp};
-    auto cleanup = [&]() {
-        std::error_code ec;
-        for (const auto& t : temps) fs::remove(t, ec);
-    };
-
-    forge::bwd::AssignedSlots slots;
-    fs::path wadFinal;
-    const bool chunkRetargeted = !chunkFile.empty();
-    try {
-        // 1) BWD + WLD -> temps.
-        forge::bwd::NewLevel spec;
-        spec.levelName = name;
-        spec.left = x; spec.top = y; spec.right = right; spec.bottom = bottom;
-        spec.loadedOnProximity = proximity;
-        spec.isSea = isSea;
-        spec.regionName = regionName;
-        spec.regionDisplayName = displayName;
-        spec.regionDef = regionDef;
-        forge::bwd::File bwd = forge::bwd::File::parse(bwdPath);
-        slots = bwd.addLevel(spec);
-        const uint64_t uid = bwd.maps()[slots.mapSlot - 1].mapUid;
-        bwd.write(bwdTmp);
-
-        forge::wld::File wld = forge::wld::File::parse(wldPath);
-        forge::wld::Map wm;
-        wm.index = slots.mapSlot;
-        wm.mapX = x; wm.mapY = y;
-        wm.levelName = "FinalAlbion\\" + name + ".lev";
-        wm.levelScriptName = name;
-        wm.mapUid = static_cast<uint32_t>(uid);
-        wm.isSea = isSea; wm.loadedOnPlayerProximity = proximity;
-        wld.addMap(wm);
-        forge::wld::Region wr;
-        wr.index = slots.regionSlot;
-        wr.regionName = regionName.empty() ? name : regionName;
-        wr.displayName = displayName.empty() ? wr.regionName : displayName;
-        wr.regionDef = regionDef;
-        wr.containsMaps = {wm.levelName};
-        wr.seesMaps = {wm.levelName};
-        wld.addRegion(wr);
-        {
-            const std::string text = wld.serialize();
-            std::ofstream out(wldTmp, std::ios::binary);
-            if (!out) throw std::runtime_error("cannot write " + wldTmp.string());
-            out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            if (!out) throw std::runtime_error("write failed for " + wldTmp.string());
-        }
-
-        // 2) WAD: clone donor LEV/TNG -> wadTmp, then optional custom-byte repack.
-        std::vector<forge::wad::CloneEntry> clones = {{donorLev, newLev},
-                                                      {donorTng, newTng}};
-        forge::wad::appendClonedEntries(wadPath, clones, wadTmp);
-        std::map<std::string, std::vector<uint8_t>> repl;
-        if (!levFile.empty()) repl[newLev] = readAllBytes(levFile);
-        if (!tngFile.empty()) repl[newTng] = readAllBytes(tngFile);
-        if (!repl.empty()) {
-            forge::wad::repack(wadTmp, repl, wadTmp2);
-            wadFinal = wadTmp2;
-        } else {
-            wadFinal = wadTmp;
-        }
-
-        // 3) STB: append chunk + origin-patched common record -> stbTmp.
-        std::vector<uint8_t> chunk =
-            chunkRetargeted ? readAllBytes(chunkFile) : donorChunk;
-        auto ib = forge::stbinfo::readInfoBlock(commonRecord.data());
-        ib.worldX = x;
-        ib.worldY = y;
-        ib.cameraMapBounds[0] = static_cast<float>(x);       // minX
-        ib.cameraMapBounds[1] = static_cast<float>(y);       // minY
-        ib.cameraMapBounds[3] = static_cast<float>(right);   // maxX
-        ib.cameraMapBounds[4] = static_cast<float>(bottom);  // maxY
-        const auto patched = forge::stbinfo::writeInfoBlock(ib);
-        std::vector<uint8_t> record = commonRecord;
-        std::copy(patched.begin(), patched.end(), record.begin());
-        forge::stb::appendStaticMap(stbPath, stbTmp, newLev, newLev, chunk, record);
-    } catch (const std::exception& e) {
-        cleanup();
-        std::fprintf(stderr,
-                     "world install-level: staging failed — install UNTOUCHED: %s\n",
-                     e.what());
-        return 1;
-    }
-
-    // --- Commit: every temp built OK. Back up originals, then atomic-rename. ---
-    try {
-        if (backup) {
-            for (const auto& p : {bwdPath, wldPath, wadPath, stbPath}) {
-                const fs::path bak = p.string() + ".bak";
-                std::error_code ec;
-                if (!fs::exists(bak)) fs::copy_file(p, bak, ec);
-            }
-        }
-        auto commit = [](const fs::path& tmp, const fs::path& orig) {
-            std::error_code ec;
-            fs::rename(tmp, orig, ec);
-            if (ec) { // fallback for platforms where rename won't overwrite
-                fs::remove(orig, ec);
-                fs::rename(tmp, orig, ec);
-                if (ec)
-                    throw std::runtime_error("commit rename failed for " +
-                                             orig.string() + ": " + ec.message());
-            }
-        };
-        commit(bwdTmp, bwdPath);
-        commit(wldTmp, wldPath);
-        commit(wadFinal, wadPath);
-        commit(stbTmp, stbPath);
-        cleanup(); // drop the unused WAD temp (only one of wadTmp/wadTmp2 is used)
-    } catch (const std::exception& e) {
-        cleanup();
-        std::fprintf(stderr,
-                     "world install-level: COMMIT failed after staging: %s\n"
-                     "  Restore from the .bak files if the install looks partial.\n",
-                     e.what());
-        return 1;
-    }
-
-    std::printf("installed level '%s' into all containers at %s\n", name.c_str(),
-                levelsDir.string().c_str());
-    std::printf("  map slot %d / region slot %d, box (%d,%d)-(%d,%d)\n",
-                slots.mapSlot, slots.regionSlot, x, y, right, bottom);
-    std::printf("  WLD+BWD registered; WAD cloned %s/%s%s; STB record appended\n",
-                (name + ".lev").c_str(), (name + ".tng").c_str(),
-                (levFile.empty() && tngFile.empty()) ? " (donor bytes)"
-                                                     : " (custom bytes)");
-    if (!chunkRetargeted)
-        std::printf("  WARNING: STB reuses the DONOR chunk geometry at the new "
-                    "origin — it will render mismatched/white unless retargeted. "
-                    "Bake first (forge stb bake-heightfield) and pass --chunk.\n");
-    std::printf("NEXT: `forge validate %s` (bounds+count cross-checks).\n",
-                root.string().c_str());
-    if (slots.regionSlot > 141)
-        std::printf("NOTE: region %d is past the vanilla count (141); verify it "
-                    "resolves at runtime before relying on the dedicated region.\n",
-                    slots.regionSlot);
-    return 0;
 }
 
 // forge world attach-map <root> <levelName> --region <hostRegion> [--no-sees] [--no-backup]

@@ -769,18 +769,24 @@ the library form of `forge world install-level`, upstreamed to FableForge):
 3. the map is registered in `FinalAlbion.bwd` and `.wld` and added to the host
    region's `contains`/`sees` lists.
 
-Ownership matters: the engine's region vector is capped at the vanilla 141
-entries (live probe, 2026-08), so a dedicated region past that is never
-reachable. The card therefore always attaches to an existing region; the CLI's
-`--dedicated` keeps the old behaviour and warns. Refusals (duplicate name,
-off-grid origin, overlapping box) happen before any file is touched; the four
+Saves cache the region table: a newly added dedicated region needs a new game
+or a save made after installation to display correctly. The New level card
+also offers existing-region ownership and filler takeover. There is no
+141-region loading cap (see the 2026-09-17 findings below). Core name, placement
+and overlap validation runs before target replacement; editor creation's
 containers get one-time `.forge-orig` backups. The core installer prepares
 WLD, BWD and its existing mirrors, WAD (or new loose LEV/TNG files), and STB
 in an owned directory, then rolls back earlier replacements if a later file
 cannot be installed. A failed rollback reports the retained recovery directory.
 Minimap preparation and later region/entrance edits remain separate creation
-stages, so failures outside this group can still require Restore. `tools/test_newlevel.py` (in `check_all`) runs the
-CLI and the card against a scratch copy of the install.
+stages, so failures outside this group can still require Restore.
+`tools/test_newlevel.py` (in `check_all`) runs the CLI and the card against a
+scratch copy of the install.
+
+The legacy `forge-tools world install-level` command now uses this same core
+installer, including loose-level routing, existing BWD mirrors and placement
+checks. It keeps its default `.bak` backup policy (`--no-backup` disables it);
+these backups require manual recovery and are not editor Restore inputs.
 
 ## Assets tab
 

@@ -196,7 +196,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
-        for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
+        for (const auto& n : r.notes) out.notes.push_back(n);
         stage("registering the region");
         if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, ir.minimapFraming, out.notes, error)) return false;
         if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
@@ -687,7 +687,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         const auto r = forge::worldinstall::installLevel(ir);
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
-        for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
+        for (const auto& n : r.notes) out.notes.push_back(n);
         if (!finishDedicatedRegion(gameRoot, req.ownRegion, req.name, ir.minimapGraphic, ir.minimapFraming, out.notes, error)) return false;
         if (req.ownRegion.wanted && !defaultEntrance(gameRoot, r.mapSlot, req.name, ir.levBytes, out.notes, error)) return false;
         return true;
