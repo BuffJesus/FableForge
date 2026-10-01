@@ -1073,6 +1073,25 @@ The fixture adapts the 400-map source count and disables optional seam stitching
 Stitching remains a separate subsequent operation, and no live-game transition
 was performed. This rollback handles reported file errors, not power loss.
 
+## 2026-10-01 continuation: world coordinate parsing and overflow bounds
+
+`build/world-cli-inputs-twex1g9p/invalid_0.json` reproduced `2176tail` moving
+OrchardFarm as coordinate 2176. `build/world-bounds-before.log` reproduced an
+aligned near-INT_MAX X coordinate passing checkMove when its right edge overflowed.
+The CLI now consumes complete signed decimal integers before looking up an install.
+Move bounds and box contact/overlap additions use 64-bit arithmetic; zero/negative
+map dimensions are refused. The established 32-unit alignment and 8192-unit world
+extent are unchanged.
+
+The world-draft suite checks legal edge placement, extreme X/Y, negative origins
+and invalid dimensions. `tools/test_world_cli_inputs.py` checks 16 malformed
+inputs, three extreme bounds, plus/leading-zero decimal input, a valid placement
+and exact Restore. Normal `build/world-cli-inputs-904xe856` and ASan CLI
+`build/world-cli-inputs-uuyyvh5_` pass, as do the focused normal/ASan unit suite.
+All 34 rebuilt normal suites pass (24.88s); editor/CLI builds pass. The CLI test
+uses copied WLD/BWD without terrain banks; packed/loose movement and the World tab
+were exercised in the preceding transaction milestone.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -81,10 +81,10 @@ std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, const forge:
 
 bool boxesTouch(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
     // adjacent (sharing an edge or corner) or overlapping
-    return bx <= ax + aw && ax <= bx + bw && by <= ay + ah && ay <= by + bh;
+    return bx <= int64_t(ax) + aw && ax <= int64_t(bx) + bw && by <= int64_t(ay) + ah && ay <= int64_t(by) + bh;
 }
 bool boxesOverlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
-    return bx < ax + aw && ax < bx + bw && by < ay + ah && ay < by + bh;
+    return bx < int64_t(ax) + aw && ax < int64_t(bx) + bw && by < int64_t(ay) + ah && ay < int64_t(by) + bh;
 }
 
 } // namespace
@@ -243,12 +243,13 @@ std::string editSeesLine(const std::string& text, const forge::wld::File& wld, c
 bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, const MapMove& move, std::string& why) {
     const WorldMapBox* box = layout.find(move.name);
     if (!box) { why = move.name + " is not in the world"; return false; }
+    if (box->w <= 0 || box->h <= 0) { why = "map dimensions must be positive"; return false; }
     if (move.x % 32 || move.y % 32) { why = "origin must be 32-aligned"; return false; }
     // the engine's placement grid is (0,0)-(8192,8192): CWorld::Init 0x4a6e30
     // constructs CWorldMap with that box and SetMapPlacement 0x4fc9c0 writes
     // the slot into a 32-unit cell grid with no bounds check (a map at y=9024
     // crashed the region transition)
-    if (move.x < 0 || move.y < 0 || move.x + box->w > kWorldExtent || move.y + box->h > kWorldExtent) { why = "outside the engine's world grid (0..8192)"; return false; }
+    if (move.x < 0 || move.y < 0 || int64_t(move.x) + box->w > kWorldExtent || int64_t(move.y) + box->h > kWorldExtent) { why = "outside the engine's world grid (0..8192)"; return false; }
     std::set<int> movedSlots;
     for (const auto& mv : moves) if (const auto* b = layout.find(mv.name)) movedSlots.insert(b->slot);
     movedSlots.insert(box->slot);

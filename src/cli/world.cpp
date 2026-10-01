@@ -104,7 +104,18 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
             else if (cmd == "world-move" && args[i] == "--stitch") stitch = true;
             else if (cmd == "world" && args[i] == "--regions") regionsList = true;
-            else if (cmd == "world-move" && i + 2 < args.size()) { moves.push_back({args[i], std::atoi(args[i + 1].c_str()), std::atoi(args[i + 2].c_str())}); i += 2; }
+            else if (cmd == "world-move" && i + 2 < args.size()) {
+                const auto coordinate = [](std::string_view value, int& out) {
+                    if (value.size() > 1 && value.front() == '+' && value[1] != '-') value.remove_prefix(1);
+                    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), out);
+                    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size();
+                };
+                albion::editor::MapMove move{args[i]};
+                if (!coordinate(args[i + 1], move.x) || !coordinate(args[i + 2], move.y)) {
+                    std::fprintf(stderr, "world-move coordinates must be complete decimal integers in the signed 32-bit range\n"); return 2;
+                }
+                moves.push_back(move); i += 2;
+            }
             else if (cmd == "world-owner" && i + 1 < args.size()) { owners.push_back({args[i], args[i + 1]}); i += 1; }
             else if (cmd == "world-sees" && i + 2 < args.size()) { sees.push_back({args[i], args[i + 1], args[i + 2] != "0"}); i += 2; }
             else { std::fprintf(stderr, "usage: forge world [--regions] | world-move <map> <x> <y> [...] | world-owner <map> <region> | world-sees <region> <map> <0|1>  [--install <root>]\n"); return 2; }

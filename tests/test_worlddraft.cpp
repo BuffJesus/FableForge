@@ -1,5 +1,6 @@
 #include "worlddraft.hpp"
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 using namespace albion::editor;
 static void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
@@ -38,6 +39,21 @@ int main() {
         const auto orphaned=rebaseWorldDraft(before,missing,submitted,later);
         check(orphaned.moves.size()==2 && orphaned.owners.size()==1 && orphaned.sees.size()==1, "missing targets discarded pending edits");
         check(before.maps[0].x==32 && after.maps[0].x==96 && later.moves[0].x==160, "rebase modified its input state");
+        WorldLayout bounds;
+        WorldMapBox square; square.slot=1; square.name="Square"; square.w=64; square.h=64;
+        bounds.maps.push_back(square);
+        std::string why;
+        check(checkMove(bounds, {}, {"Square",8128,8128}, why), "valid move at world edge refused");
+        check(!checkMove(bounds, {}, {"Square",std::numeric_limits<int>::max()-31,0}, why), "overflowing X extent accepted");
+        check(!checkMove(bounds, {}, {"Square",0,std::numeric_limits<int>::max()-31}, why), "overflowing Y extent accepted");
+        check(!checkMove(bounds, {}, {"Square",8160,8128}, why), "map extending beyond world accepted");
+        check(!checkMove(bounds, {}, {"Square",std::numeric_limits<int>::min(),0}, why), "negative extreme origin accepted");
+        bounds.maps[0].w=0;
+        check(!checkMove(bounds, {}, {"Square",0,0}, why), "zero-width map accepted");
+        bounds.maps[0].w=-64;
+        check(!checkMove(bounds, {}, {"Square",0,0}, why), "negative-width map accepted");
+        bounds.maps[0].w=64; bounds.maps[0].h=0;
+        check(!checkMove(bounds, {}, {"Square",0,0}, why), "zero-height map accepted");
         std::cout << "World draft rebase checks passed\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
