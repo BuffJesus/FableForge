@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: new-level edits and restore
+
+The compact New level form previously left no space for X/Y values beside
+their step buttons. Origins now stack when necessary; shorter own-region labels
+fit, and the create action names the selected game/pack destination. New-slot
+eligibility no longer depends on spare filler regions (the core already treats
+dedicated slots separately); exhausted-filler UI input was not separately staged.
+
+Creation now refuses unsaved map edits. A reproduced asynchronous loss also
+showed edits made during creation being discarded when completion selected the
+new level. Completion now refreshes Maps but keeps the edited map and its undo
+history. `test_newlevel.py` covers both refusal and edits during the worker,
+alongside its copied/blank maps, sizes, entrances, minimap framing and GUI opens.
+The expanded scratch suite passes; no live-game check occurred.
+
+Actual 800x600 / 1.5-scale clicks created/opened `AtlasClicked` in a dedicated
+region, then Setup > Restore restored all eight bank/container original hashes.
+This exposed stale terrain left in the viewport after the selected created map
+was removed. Restore now clears terrain, cached scene/selection and world state
+before reloading any surviving selected map. `test_setup_restore_ui.py` passes
+three size/scale cases plus created-map removal, including `preview_has_mesh=0`.
+Its first added case incorrectly waited for foliage in a bankless fixture; that
+unavailable-content wait was removed, and the full script then passed.
+
+Inspected artifacts: `build/newlevel_coordinates_small.png`,
+`build/newlevel_region_small.png`, `build/newlevel_restored_small.png` and
+`build/ui/setup_restore_created_removed.png`. The actual-click scratch probe is
+`build/newlevel_click_restore.py`; hashes are in `build/newlevel_restore_hashes.json`.
+Remaining scope includes new-level pack deployment, loose-layout creation,
+world movement/seams and new in-game verification.
+
 ## 2026-10-01 continuation: readable import failures
 
 At 800x600 / 1.5 scale, a failed model pack add only exposed a truncated footer

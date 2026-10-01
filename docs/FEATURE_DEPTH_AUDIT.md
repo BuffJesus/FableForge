@@ -14,7 +14,7 @@ only after checking those paths against the current build.
 | Placed objects, ownership and links | Do placement, transforms, duplication, links and deletion stay correct through undo and game save? | Core ownership/locked tests and several retail UI scripts cover individual paths. Terrain-following now carries owned descendants with a grounded parent in the terrain edit's undo step. | Review object families on a real map, linked-copy edge cases, and saved game behavior. |
 | Ground sculpt, paint, copy and Fit/Generate | Does what the preview shows match the terrain and objects the game receives? | Fractal height range is explicit; Fit now reports affected vertices and largest height shift. Fit preview returns to zero changes after Apply, back to pending changes after Undo, and zero after Redo on Greatwood_Filler_04. Grounded things and foliage follow height edits. | Inspect remaining brush modes, Fit/Generate seams and game output on representative maps. |
 | Foliage and scenery | Do baked trees/grass remain seated and visible before and after terrain deployment? | 2,514 StartOakValeWest foliage instances were re-seated in the preview after a raised-ground stroke; undo restored zero offsets. Terrain-triggered foliage refresh avoids re-decoding placed things. | Compare near trees in the preview and game after deployment; test maps with missing/partial STB foliage. |
-| World view and new levels | Are map placement, seams, neighbour preview and level creation understandable and recoverable? | Existing world scripts and documents cover separate pieces; no new end-to-end audit yet. | Walk create, move, preview, save, restore and game discovery for a draft level. |
+| World view and new levels | Are map placement, seams, neighbour preview and level creation understandable and recoverable? | Scratch copied/blank creation, region entrances, minimap framing, compact actual creation and byte-exact restore pass. Existing edits and edits made during creation are preserved; restoring a removed map clears its preview. | Review pack/loose creation, world movement/seams and new game output. |
 | Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue's Load line stays with Sound ID, and the head/timeline fit at 1280x720 and 1024x600 / 1.5 scale. Retail head pose checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
 | Mods and content packs | Can users combine common TLC mods, see conflicts and undo installs? | Mod-pack and Freeroam/Aeon research exists; integration outcomes vary by install order. | Exercise representative local corpus packs in an isolated install and document exact supported paths. |
 | Live game link and deployment | Does a previewed change appear in TLC, and are failure messages actionable? | Scratch-install terrain, theme and custom-theme writes pass; the resulting Greatwood_1 chunk audits cleanly. Failed pack and missing-STB paths restore files and keep edits dirty. | Verify object/terrain/foliage in a running game, then inspect restore from the GUI. |
@@ -274,6 +274,15 @@ Model/theme import errors now stay beside the action and wrap at compact widths.
 Actual missing-input clicks, successful retries and screenshots pass at 800x600
 / 1.5 scale. Direct asynchronous errors and install-switch reset preserve the
 scratch fixture's bytes. Full-palette and install-switch regressions pass.
+
+## 2026-10-01 new-level lifecycle
+
+Compact origin values now remain readable. Unsaved-edit refusal and retention
+of edits made during creation pass in the expanded new-level suite. Actual
+dedicated-region creation and GUI restore pass at 800x600 / 1.5; eight original
+file hashes match after restore. A stale removed-map preview was reproduced and
+fixed, with GPU-mesh absence checked by the expanded Setup restore test.
+No new live-game, loose-layout or new-level pack-deployment evidence was added.
 
 ## Audit rule
 

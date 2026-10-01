@@ -3227,19 +3227,25 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##newlevelname", "Level name (letters, digits, _)", newLevelName_, sizeof newLevelName_);
     auto_.registerWidget("input_new_level_name");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", newLevelName_);
     const float lblW = ImGui::CalcTextSize("X").x + S(6);
     const float half = (cardInner - S(10) - 2 * lblW) * 0.5f;
+    const bool stackOrigin = half < ImGui::CalcTextSize("-123456").x + 2 * ImGui::GetFrameHeight() + S(16);
+    const float originWidth = stackOrigin ? cardInner - lblW : half;
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::vec(theme::Muted), "X");
     ImGui::SameLine(0, S(6));
-    ImGui::SetNextItemWidth(half);
+    ImGui::SetNextItemWidth(originWidth);
     ImGui::InputInt("##newlevelx", &newLevelX_, 32, 128);
+    auto_.registerWidget("input_new_level_x");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("World origin X (32-unit grid).");
-    ImGui::SameLine(0, S(10));
+    if (!stackOrigin) ImGui::SameLine(0, S(10));
+    else ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::vec(theme::Muted), "Y");
     ImGui::SameLine(0, S(6));
-    ImGui::SetNextItemWidth(half);
+    ImGui::SetNextItemWidth(originWidth);
     ImGui::InputInt("##newlevely", &newLevelY_, 32, 128);
+    auto_.registerWidget("input_new_level_y");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("World origin (32-unit grid). The suggestion is the first free spot right of the existing maps.");
     ImGui::SetNextItemWidth(cardInner);
     if (ImGui::BeginCombo("##newlevelregion", newLevelRegion_.empty() ? "(owning region)" : newLevelRegion_.c_str())) {
@@ -3249,12 +3255,12 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("combo_new_level_region");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The region that owns the new map when it does not get its own (existing saves see it at once).");
-    theme::toggle("Own region + minimap", &newLevelOwnRegion_);
+    theme::toggle("Own region", &newLevelOwnRegion_);
     auto_.registerWidget("toggle_new_level_own_region");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The level gets its own region: its own name on the map screen and a minimap baked from its\nterrain (appended to textures.big and registered; one-time .forge-orig backups).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The level gets its own name on the map screen.\nDirect creation also bakes a minimap; pack creation does not include one yet.");
     if (newLevelOwnRegion_) {
         int mode = newLevelDedicated_ ? 0 : 1;
-        if (theme::segmented("##ownmode", mode, {"New region slot", "Take over a filler"}, cardInner)) newLevelDedicated_ = mode == 0;
+        if (theme::segmented("##ownmode", mode, {"New slot", "Use filler"}, cardInner)) newLevelDedicated_ = mode == 0;
         auto_.registerWidget("seg_new_level_own_mode");
         ImGui::PushFont(fontSmall_);
         if (newLevelDedicated_)
@@ -3262,18 +3268,19 @@ void App::drawNewLevelCard(float pad, float inner, float cardInner) {
         else if (reusableRegions_.size() >= 2)
             theme::hint(("Takes over " + reusableRegions_.front().name + " (slot " + std::to_string(reusableRegions_.front().slot) + ", " + std::to_string(reusableRegions_.front().maps) + " map(s) -> " + reusableRegions_.back().name + "); existing saves see it.").c_str());
         else
-            ImGui::TextColored(theme::vec(theme::Warn), "No filler region slot is free to take over.");
+            theme::hint("No filler region slot is free to take over.");
         ImGui::PopFont();
         ImGui::SetNextItemWidth(cardInner);
-        ImGui::InputTextWithHint("##newleveldisplay", "Display name on the map screen (default: level name)", newLevelDisplay_, sizeof newLevelDisplay_);
+        ImGui::InputTextWithHint("##newleveldisplay", "Map-screen name (optional)", newLevelDisplay_, sizeof newLevelDisplay_);
     }
     const bool gridOk = newLevelX_ % 32 == 0 && newLevelY_ % 32 == 0;
     const bool can = newLevelInfoOk_ && newLevelName_[0] != 0 && gridOk && (!newLevelRegion_.empty() || newLevelOwnRegion_) && !newLevelFuture_.valid() &&
-                     (!newLevelOwnRegion_ || reusableRegions_.size() >= 2) &&
+                     (!newLevelOwnRegion_ || newLevelDedicated_ || reusableRegions_.size() >= 2) && !hasUnsavedEdits() &&
                      (newLevelMode_ == 0 || (blankTheme_ >= 0 && ctx_.themeLibrary()));
-    if (newLevelMode_ == 1 && !ctx_.themeLibrary()) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Waiting for the ENGINE_THEME library (textures loading)."); ImGui::PopFont(); }
+    if (newLevelMode_ == 1 && !ctx_.themeLibrary()) { ImGui::PushFont(fontSmall_); theme::hint("Waiting for ground themes to load."); ImGui::PopFont(); }
+    if (hasUnsavedEdits()) { ImGui::PushFont(fontSmall_); theme::hint("Save or discard the current edits before creating a level."); ImGui::PopFont(); }
     if (!gridOk) { ImGui::PushFont(fontSmall_); ImGui::TextColored(theme::vec(theme::Warn), "Origin must be a multiple of 32."); ImGui::PopFont(); }
-    if (theme::primaryButton(newLevelFuture_.valid() ? jobLabel("Installing").c_str() : "Create level in the game", ImVec2(cardInner, S(32)), can)) startNewLevel();
+    if (theme::primaryButton(newLevelFuture_.valid() ? jobLabel("Installing").c_str() : packDest_.empty() ? "Create level in game" : "Add level to pack", ImVec2(cardInner, S(32)), can)) startNewLevel();
     auto_.registerWidget("btn_new_level");
     drawRuleNotice("region", cardInner);
     theme::endCard();
@@ -3299,6 +3306,7 @@ void App::selectBlankSize(int w, int h) {
 
 void App::startNewLevel() {
     if (!documentLoaded() || newLevelFuture_.valid()) return;
+    if (hasUnsavedEdits()) { pushLog("new level: save or discard the current edits before creating a level", 1); return; }
     if (packDest_.empty() && gameWriteBlocked("new level")) return;
     const std::string root = saveRoot();
     const std::string pack = packDest_;   // "" = the game directly

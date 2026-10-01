@@ -82,7 +82,39 @@ def main() -> int:
             if not ok:
                 print("\n".join(log.splitlines()[-25:]))
                 return 1
-        return 0
+        # Restoring a newly created selected map removes it entirely, including
+        # its GPU preview; clearing only foliage left the old ground on screen.
+        created = [levels / "AddedDraft.lev", levels / "AddedDraft.tng"]
+        created[0].write_bytes(level(4))
+        created[1].write_bytes(b"Version 2;\r\n")
+        for path in created:
+            Path(str(path) + ".forge-created").write_text("created by FableForge\n")
+        script = ROOT / "build" / "setup_restore_created.txt"
+        script.write_text("""wait_maps
+wait_ready
+select AddedDraft
+wait_loaded
+assert_state preview_has_mesh 1
+restore_all
+wait_maps
+wait_ready
+assert_state selected
+assert_state doc_loaded 0
+assert_state preview_loaded 0
+assert_state preview_has_mesh 0
+clear_toasts
+screenshot build/ui/setup_restore_created_removed.png
+quit
+""", encoding="utf-8")
+        run = subprocess.run([str(ROOT / "build/FableForge.exe"), "--install", str(SCRATCH),
+                              "--auto", str(script)], cwd=ROOT, timeout=120)
+        log = Path(str(script) + ".log").read_text(encoding="utf-8", errors="replace")
+        ok = run.returncode == 0 and "RESULT PASS" in log and all(
+            not p.exists() and not Path(str(p) + ".forge-created").exists() for p in created)
+        print("setup restore removes selected draft preview", "OK" if ok else "FAILED")
+        if not ok:
+            print("\n".join(log.splitlines()[-25:]))
+        return 0 if ok else 1
     finally:
         shutil.rmtree(SCRATCH, ignore_errors=True)
 

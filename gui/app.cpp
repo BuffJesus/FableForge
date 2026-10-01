@@ -522,7 +522,12 @@ bool App::restoreAllBackups() {
         scanInstall(installPath_);
         selectedName_.clear(); docLoadedFor_.clear();
         previewLoadedFor_.clear(); foliageLoadedFor_.clear();
-        renderer_.clearLayer(0); renderer_.clearLayer(2); renderer_.clearThings();
+        previewPendingName_.clear(); foliagePendingName_.clear(); neighboursFor_.clear(); lastFramedFor_.clear();
+        renderer_.clear(); renderer_.clearThings();
+        previewScene_ = {}; previewTextured_ = false;
+        foliageInstances_ = thingInstances_ = 0;
+        selectedThing_ = -1; selectedUid_ = 0; extraUids_.clear();
+        worldLoaded_ = false; worldLoadedFrom_.clear(); newLevelDonor_.clear();
         if (findEntry(selected)) selectMap(selected);
     }
     return err.empty();
@@ -1396,6 +1401,7 @@ std::vector<std::string> App::stateDump() const {
     { ImGuiContext& g = *ImGui::GetCurrentContext(); v.push_back(std::string("hovered_window=") + (g.HoveredWindow ? g.HoveredWindow->Name : "-")); v.push_back("mouse=" + std::to_string(int(g.IO.MousePos.x)) + "," + std::to_string(int(g.IO.MousePos.y))); if (g.HoveredWindow) v.push_back("hovered_scrollmax=" + std::to_string(int(g.HoveredWindow->ScrollMax.y)));
       v.push_back(std::string("wheeling_window=") + (g.WheelingWindow ? g.WheelingWindow->Name : "-") + " scrolled_frame=" + std::to_string(g.WheelingWindowScrolledFrame) + " frame=" + std::to_string(g.FrameCount) + " hovered_flags=" + std::to_string(g.HoveredWindow ? g.HoveredWindow->Flags : 0) + " parent=" + (g.HoveredWindow && g.HoveredWindow->ParentWindow ? g.HoveredWindow->ParentWindow->Name : "-") + " parent_scrollmax=" + std::to_string(g.HoveredWindow && g.HoveredWindow->ParentWindow ? int(g.HoveredWindow->ParentWindow->ScrollMax.y) : -1)); }
     v.push_back("preview_loaded=" + std::string(previewLoaded() ? "1" : "0"));
+    v.push_back("preview_has_mesh=" + std::string(renderer_.hasMesh() ? "1" : "0"));
     v.push_back("preview_textured=" + std::string(previewTextured_ ? "1" : "0"));
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
@@ -1775,11 +1781,16 @@ void App::frame(float dt) {
             newLevelDonor_.clear();
             worldLoaded_ = false; worldLoadedFrom_.clear();   // the World tab re-reads the layout with the new map
             if (saveRoot_.empty() || saveRoot_ == installPath_) {
-                // the WAD has a new entry: rescan, then open the copy (the texture context is unchanged)
+                // Refresh the map list, preserving edits made while creation ran.
                 const std::string root = installPath_;
+                const bool keepCurrentEdits = hasUnsavedEdits();
                 scanInstall(root);
-                discardEdits_ = true;
-                selectMap(r.name);
+                if (keepCurrentEdits) {
+                    pushLog("new level: kept the current map because it was edited during creation; the new level is available in Maps", 1);
+                } else {
+                    discardEdits_ = true;
+                    selectMap(r.name);
+                }
             } else {
                 pushLog("new level written under the save root " + saveRoot_ + " (not the explorer's install)", 1);
             }

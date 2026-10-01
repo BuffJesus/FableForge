@@ -642,6 +642,9 @@ live probe `tests/ui/spawner_adult_live.txt`.
 The Edit panel's **New level** card adds a level to the world; a free
 32-aligned origin is suggested (first slot right of the existing maps), the
 owning region defaults to the selected map's, the name must be a bare stem.
+Save or discard current map edits before starting. If you edit the current map
+while creation runs, Forge keeps it open with its undo history; select the new
+level from Maps when ready. Otherwise the new level opens automatically.
 Two modes:
 
 * **Blank** (`forge blank-level <name> [--size WxH] [--theme
