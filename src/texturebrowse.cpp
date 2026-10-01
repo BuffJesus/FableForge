@@ -7,6 +7,7 @@
 #include <numeric>
 
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "forge/big.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/texturewrite.hpp"
@@ -15,8 +16,6 @@ namespace albion::texbrowse {
 namespace fs = std::filesystem;
 
 namespace {
-bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
-
 fs::path bigPath(const fs::path& gameRoot) { return gameRoot / "data" / "graphics" / "pc" / "textures.big"; }
 
 std::string formatLabel(uint32_t f) {
@@ -50,42 +49,42 @@ const forge::big::Entry* findEntry(const forge::big::File& file, const std::stri
     return nullptr;
 }
 
-// the importer writes a sibling file; swap it in, backup first, refuse while the game runs
+// Prepare and validate an owned output before backing up and replacing the bank.
 bool runImport(const fs::path& gameRoot, forge::terraintex::ImportRequest ir, uint32_t& idOut,
                std::vector<std::string>& notes, std::string& error) {
-    if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; rewriting textures.big underneath it crashes it. Quit to the desktop first."; return false; }
-    const fs::path big = bigPath(gameRoot);
-    std::error_code ec;
-    if (!fs::exists(big, ec)) { error = "no " + big.string(); return false; }
-    if (!fs::exists(ir.png, ec)) { error = "no such image " + ir.png.string(); return false; }
-    if (!ir.add) {   // the importer matches the raw symbol; the user names the label (or the id)
-        try {
-            const auto file = forge::big::File::open(big);
-            const auto* e = findEntry(file, ir.entryName);
-            if (!e) { error = "no texture named " + ir.entryName; return false; }
-            ir.entryName = e->name;
-        } catch (const std::exception& ex) { error = ex.what(); return false; }
-    }
-    if (!backupOnce(big, error)) return false;
-    ir.srcBig = big;
-    ir.outBig = big.string() + ".atlas-tmp";
-    const auto r = forge::terraintex::importPng(ir);
-    if (!r.ok) {
-        fs::remove(ir.outBig, ec);
-        error = r.output.empty() ? r.command : r.output;
-        for (const auto& e : r.validation.errors) error += (error.empty() ? "" : "; ") + e;
-        if (error.empty()) error = "texture import failed";
-        return false;
-    }
-    fs::rename(ir.outBig, big, ec);
-    if (ec) { error = "cannot replace textures.big: " + ec.message(); return false; }
-    idOut = r.entryId;
-    const auto& v = r.validation;
-    notes.push_back((ir.add ? "appended " : "replaced ") + entryLabel(ir.entryName) + " (id " + std::to_string(r.entryId) + ", " + std::to_string(v.info.frameWidth) + "x" +
-                    std::to_string(v.info.frameHeight) + " " + formatLabel(v.info.pixelFormat) + ", " + std::to_string(int(v.info.mipLevels)) + " mips) in textures.big from " + ir.png.filename().string());
-    for (const auto& w : v.warnings) notes.push_back("warning: " + w);
-    if (!v.ok) { for (const auto& e : v.errors) notes.push_back("ERROR: " + e); error = "the written entry does not match the retail texture contract"; return false; }
-    return true;
+    try {
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; rewriting textures.big underneath it crashes it. Quit to the desktop first."; return false; }
+        const fs::path big = bigPath(gameRoot);
+        std::error_code ec;
+        if (!fs::exists(big, ec)) { error = "no " + big.string(); return false; }
+        if (!fs::exists(ir.png, ec)) { error = "no such image " + ir.png.string(); return false; }
+        if (!ir.add) {   // the importer matches the raw symbol; the user names the label (or the id)
+            try {
+                const auto file = forge::big::File::open(big);
+                const auto* e = findEntry(file, ir.entryName);
+                if (!e) { error = "no texture named " + ir.entryName; return false; }
+                ir.entryName = e->name;
+            } catch (const std::exception& ex) { error = ex.what(); return false; }
+        }
+        detail::PendingBanks pending(gameRoot, ".forge-texture-import-");
+        ir.srcBig = big;
+        ir.outBig = pending.prepare("data/graphics/pc/textures.big");
+        const auto r = forge::terraintex::importPng(ir);
+        if (!r.ok || !r.validation.ok) {
+            error = r.output.empty() ? r.command : r.output;
+            for (const auto& e : r.validation.errors) error += (error.empty() ? "" : "; ") + e;
+            if (error.empty()) error = "texture import failed";
+            return false;
+        }
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable started during texture import; quit the game before replacing textures.big"; return false; }
+        if (!pending.install(true, error)) return false;
+        idOut = r.entryId;
+        const auto& v = r.validation;
+        notes.push_back((ir.add ? "appended " : "replaced ") + entryLabel(ir.entryName) + " (id " + std::to_string(r.entryId) + ", " + std::to_string(v.info.frameWidth) + "x" +
+                        std::to_string(v.info.frameHeight) + " " + formatLabel(v.info.pixelFormat) + ", " + std::to_string(int(v.info.mipLevels)) + " mips) in textures.big from " + ir.png.filename().string());
+        for (const auto& w : v.warnings) notes.push_back("warning: " + w);
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 }  // namespace
 

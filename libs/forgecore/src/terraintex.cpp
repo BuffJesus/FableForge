@@ -565,6 +565,7 @@ ImportResult importPng(const ImportRequest& request) {
         std::ofstream out(request.outBig, std::ios::binary | std::ios::trunc);
         if (!out) return fail("cannot write " + request.outBig.string());
         out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        out.close();
         if (!out) return fail("write to " + request.outBig.string() + " failed");
     }
     result.command = std::string("native texturewrite: ") + (request.add ? "add " : "replace ") + request.entryName + " " +

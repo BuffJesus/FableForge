@@ -818,7 +818,10 @@ keeps its allocated size and pixel format, mips are rebuilt, the entry is valida
 against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a
 barrel is: select it, click its texture, *Replace from image*. One-time
-`textures.big.forge-orig` backup; refused while the game runs. CLI: `FableForge
+`textures.big.forge-orig` backup; refused while the game runs. Imports are prepared
+and validated in an owned workspace before backup/replacement. Invalid images
+leave bank bytes and recovery metadata unchanged; unrelated temporary files are
+preserved, and locked replacement leaves the previous bank intact. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 
 ## Mods tab

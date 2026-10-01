@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: prepare texture imports before recovery metadata
+
+`build/texture-recovery-yxqv_6_1/invalid_report.json` reproduced an invalid PNG
+creating an original backup and deleting an unrelated textures.big.atlas-tmp.
+The add/replace wrapper now imports and validates into an owned PendingBanks
+workspace, then checks the game process again and installs with backup preflight.
+Validation failure does not publish a bank or create recovery metadata. Read/file
+exceptions return through bool/error rather than escaping the GUI/CLI call. The
+core native importer also checks its output stream close; texture encoding and
+bank serialization are unchanged.
+
+`tools/test_texture_recovery.py` copies real game.bin/textures.big, preserves an
+unowned temporary-file sentinel, refuses invalid images and both read/rename
+locks, retries add + replace, verifies an unrelated exported texture byte-exact,
+and Restores the full bank and inventory exactly. Normal
+`build/texture-recovery-doioront` and ASan CLI `build/texture-recovery-i3chtle9` pass.
+Normal editor/CLI targets build. This tests the shared file workflow; no new GUI
+visual inspection or live-game texture rendering was performed.
+
 ## 2026-10-01 continuation: owned STB compaction output
 
 `build/compact-workspace-before.log` reproduced compaction consuming an unrelated
