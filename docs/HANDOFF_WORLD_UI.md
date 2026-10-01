@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: read mod decisions before reverting a stage
+
+`build/mod-picks-inputs-bak5gyhx` reproduced a missing --picks file silently
+rebuilding the deployed stage with load-order defaults. The shared CLI choice
+reader now rejects non-files, failed opens and failed reads. Deploy loads the
+order, sources and choices before reverting its current stage, and passes the
+loaded choices into the build instead of reopening the file after reversal.
+An absent implicit default remains an ordinary no-choice build.
+
+`tools/test_mod_picks_inputs.py` passes missing/directory/locked explicit choices,
+a directory at the default path, malformed order preservation, a valid explicit
+winner retry, no-choice fallback and byte-exact undeploy. Direct defs/qst merge
+also refuse missing choices without touching existing outputs. Evidence:
+normal `build/mod-picks-inputs-xjpxbl3c`, ASan `build/mod-picks-inputs-_bwwh_d5`.
+The 37-case mod argument regression still passes at `build/mod-cli-inputs-lktsvt0x`.
+Both CLI builds pass; unchanged core gates are reused. Later deployment failures
+can still leave the install at baseline; this is decision-input preflight, not
+a transactional deployment rewrite.
+
 ## 2026-10-01 continuation: validate mod commands before mutation
 
 `build/mod-cli-inputs-j0np6i7b` reproduced `mods undeploy --typo`

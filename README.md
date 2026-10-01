@@ -280,6 +280,8 @@ back. Things a mod placed are badged in the editor with the mod's name. Shell:
 `forge-tools mods list/add/remove/move/enable/disable/build/deploy/undeploy/conflicts`.
 These commands reject unknown or incomplete options before editing the order or
 reverting a stage. Reorder indices must be complete signed decimal integers.
+Missing or unreadable conflict-choice files are errors; deploy reads the order
+and choices before reverting the previous stage.
 
 ## Building
 

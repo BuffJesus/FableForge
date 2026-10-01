@@ -1241,7 +1241,10 @@ int tngMerge(const std::string& basePath,
 std::map<std::string, std::string> loadPicks(const std::string& picksPath) {
     std::map<std::string, std::string> picks;
     if (picksPath.empty()) return picks;
+    if (!std::filesystem::is_regular_file(picksPath))
+        throw std::runtime_error("conflict choices are not a regular file: " + picksPath);
     std::ifstream pf(picksPath);
+    if (!pf) throw std::runtime_error("cannot open conflict choices: " + picksPath);
     std::string line;
     while (std::getline(pf, line)) {
         if (line.empty() || line[0] == '#') continue;
@@ -1255,6 +1258,7 @@ std::map<std::string, std::string> loadPicks(const std::string& picksPath) {
         while (!win.empty() && std::isspace((unsigned char)win.back())) win.pop_back();
         if (!rec.empty()) picks[rec] = win;
     }
+    if (pf.bad() || !pf.eof()) throw std::runtime_error("cannot read conflict choices: " + picksPath);
     return picks;
 }
 
@@ -8161,7 +8165,9 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
 std::string modsPicksDefault(const std::string& root) {
     const std::filesystem::path p = std::filesystem::path(root) / "forge_mods_picks.txt";
     std::error_code ec;
-    return std::filesystem::exists(p, ec) ? p.string() : std::string();
+    const bool exists = std::filesystem::exists(p, ec);
+    if (ec) throw std::runtime_error("cannot inspect conflict choices: " + p.string() + ": " + ec.message());
+    return exists ? p.string() : std::string();
 }
 
 json collectMissingMesh(const std::filesystem::path& root,
@@ -8171,7 +8177,8 @@ json collectMissingMesh(const std::filesystem::path& root,
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sources,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
-              const std::vector<std::string>& labels, const std::string& picksPath) {
+              const std::vector<std::string>& labels, const std::string& picksPath,
+              const std::map<std::string, std::string>* loadedPicks = nullptr) {
     namespace fs = std::filesystem;
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
@@ -8187,7 +8194,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (auto& ch : leaf) if (!std::isalnum(static_cast<unsigned char>(ch))) ch = '_';
         return (tmp / (std::to_string(i) + "_" + leaf)).string();
     };
-    const ModsPicks picks = splitModsPicks(loadPicks(picksPath));
+    const ModsPicks picks = splitModsPicks(loadedPicks ? *loadedPicks : loadPicks(picksPath));
     json rep;   // `--json`: the one report, printed at the end
     {
         json srcs = json::array();
@@ -12259,6 +12266,17 @@ int main(int argc, char** argv) {
                     return 0;
                 }
                 if (args[1] == "deploy" || args[1] == "undeploy") {
+                    mo::Order order;
+                    std::vector<std::string> sources;
+                    std::string picksPath;
+                    std::map<std::string, std::string> loadedPicks;
+                    if (args[1] == "deploy") {
+                        // Read user decisions before reverting; reuse this snapshot during the build.
+                        order = mo::load(root);
+                        sources = mo::buildSources(order, root);
+                        picksPath = picksOverride.value_or(modsPicksDefault(root));
+                        loadedPicks = loadPicks(picksPath);
+                    }
                     // deploy = the install rebuilt from the order: a previous stage is reverted first (its
                     // .forgebak originals come back), the order is built into a scratch folder and staged;
                     // undeploy = revert alone. Uninstalling a mod is `mods remove` + `mods deploy`.
@@ -12269,14 +12287,11 @@ int main(int argc, char** argv) {
                         std::printf("nothing staged on %s\n", root.c_str());
                     }
                     if (args[1] == "undeploy") return 0;
-                    const auto order = mo::load(root);
-                    const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
-                    const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const albion::detail::TemporaryDirectory workspace("mods-deploy-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath);
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath, &loadedPicks);
                     return rc;
                 }
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files

@@ -1630,6 +1630,25 @@ at `build/mod-workspaces-oxvui_r0`. Both CLI builds pass. This parser-only chang
 reuses the preceding 35-suite core gate. Deploy still reverts its old stage before
 building; this change does not make the complete deployment transactional.
 
+## 2026-10-01 continuation: read mod decisions before reverting a stage
+
+`build/mod-picks-inputs-bak5gyhx` reproduced a missing --picks file silently
+rebuilding the deployed stage with load-order defaults. The shared CLI choice
+reader now rejects non-files, failed opens and failed reads. Deploy loads the
+order, sources and choices before reverting its current stage, and passes the
+loaded choices into the build instead of reopening the file after reversal.
+An absent implicit default remains an ordinary no-choice build.
+
+`tools/test_mod_picks_inputs.py` passes missing/directory/locked explicit choices,
+a directory at the default path, malformed order preservation, a valid explicit
+winner retry, no-choice fallback and byte-exact undeploy. Direct defs/qst merge
+also refuse missing choices without touching existing outputs. Evidence:
+normal `build/mod-picks-inputs-xjpxbl3c`, ASan `build/mod-picks-inputs-_bwwh_d5`.
+The 37-case mod argument regression still passes at `build/mod-cli-inputs-lktsvt0x`.
+Both CLI builds pass; unchanged core gates are reused. Later deployment failures
+can still leave the install at baseline; this is decision-input preflight, not
+a transactional deployment rewrite.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
