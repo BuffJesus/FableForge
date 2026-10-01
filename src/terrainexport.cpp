@@ -1285,14 +1285,14 @@ std::vector<fs::path> writeObj(const Scene& scene, const fs::path& out) {
 
         auto mtl = detail::exportStream(mtlPath);
         mtl << "newmtl terrain\nKa 1 1 1\nKd 1 1 1\nKs 0 0 0\nd 1\nillum 1\n";
-        if (!scene.water.empty()) mtl << "newmtl water\nKa 0.16 0.36 0.5\nKd 0.16 0.36 0.5\nKs 0.3 0.3 0.3\nd 0.62\nillum 2\n"
-                                       << "newmtl ice\nKa 0.78 0.86 0.92\nKd 0.78 0.86 0.92\nKs 0.2 0.2 0.2\nd 0.9\nillum 2\n";
         if (scene.hasAlbedo) {
             mtl << "map_Kd " << pngPath.filename().string() << "\n";
             const auto png = encodePng(scene.albedo);
             detail::writeExportBytes(pngPath, png);
             written.push_back(pngPath);
         }
+        if (!scene.water.empty()) mtl << "newmtl water\nKa 0.16 0.36 0.5\nKd 0.16 0.36 0.5\nKs 0.3 0.3 0.3\nd 0.62\nillum 2\n"
+                                       << "newmtl ice\nKa 0.78 0.86 0.92\nKd 0.78 0.86 0.92\nKs 0.2 0.2 0.2\nd 0.9\nillum 2\n";
         written.push_back(mtlPath);
         for (auto& p : writeLayerSidecars(scene, out)) written.push_back(p);
         obj.close();

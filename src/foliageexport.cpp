@@ -739,7 +739,7 @@ std::vector<fs::path> writeGlbWithFoliage(const te::Scene& terrain, const Scene&
 namespace {
 
 void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::path& out,
-                    uint32_t& base, std::vector<fs::path>& written) {
+                    uint32_t& positionBase, uint32_t& attributeBase, std::vector<fs::path>& written) {
     if (foliage.instances.empty()) return;
     const std::string stem = out.stem().string();
     const fs::path mtlPath = out.parent_path() / (stem + ".mtl");
@@ -794,12 +794,14 @@ void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::pa
                 obj << "usemtl " << (part.image >= 0 ? imageMaterial[part.image] : lower(foliage.rootName) + "_untextured") << "\n";
             }
             for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
-                const uint32_t a = base + part.indices[k] + 1, bb = base + part.indices[k + 1] + 1, c = base + part.indices[k + 2] + 1;
-                std::snprintf(line, sizeof line, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, a, a, bb, bb, bb, c, c, c);
+                const uint32_t a = positionBase + part.indices[k] + 1, bb = positionBase + part.indices[k + 1] + 1, c = positionBase + part.indices[k + 2] + 1;
+                const uint32_t ta = attributeBase + part.indices[k] + 1, tb = attributeBase + part.indices[k + 1] + 1, tc = attributeBase + part.indices[k + 2] + 1;
+                std::snprintf(line, sizeof line, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, ta, ta, bb, tb, tb, c, tc, tc);
                 obj << line;
             }
         }
-        base += uint32_t(m.geometry.vertices.size());
+        positionBase += uint32_t(m.geometry.vertices.size());
+        attributeBase += uint32_t(m.geometry.vertices.size());
     }
     obj.close();
     mtl.close();
@@ -810,8 +812,9 @@ void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::pa
 std::vector<fs::path> writeObjWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {
     return detail::publishExport(out, [&](const fs::path& out) {
         auto written = te::writeObj(terrain, out);
-        uint32_t base = uint32_t(terrain.vertices.size());
-        for (const Scene* layer : layers) if (layer) appendObjLayer(terrain, *layer, out, base, written);
+        uint32_t attributeBase = uint32_t(terrain.vertices.size());
+        uint32_t positionBase = attributeBase + (terrain.water.empty() ? 0 : uint32_t(terrain.water.positions.size() / 3));
+        for (const Scene* layer : layers) if (layer) appendObjLayer(terrain, *layer, out, positionBase, attributeBase, written);
         return written;
     });
 }

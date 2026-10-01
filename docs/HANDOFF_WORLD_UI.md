@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: OBJ water no longer corrupts later layers
+
+A synthetic terrain/water/ice/foliage/object fixture reproduced two OBJ bugs:
+water's position-only vertices shifted subsequent geometry, but appendObjLayer
+used one shared position/UV/normal base; and the terrain map_Kd line followed the
+ice material declaration, leaving terrain untextured. The failing export-suite
+log is retained in `build/obj-water-baseline-d90h9n1s/test.log`.
+
+OBJ append now tracks position and attribute bases separately across every
+instance and layer, counting emitted water positions only in the former. The
+terrain albedo declaration now precedes water/ice material declarations. The
+synthetic test verifies distinct indices through two appended layers, bounds,
+and terrain material ownership. The focused suite passes normally and under
+ASan. No geometry generation, GLB output or game-file writer changed.
+
+`tools/test_obj_water_export.py` exports TeleporterGreatwood with water and
+foliage, checks every OBJ index, opens every referenced diffuse PNG and loads
+the result independently through trimesh. Normal `build/obj-water-export-l0vf5w5x`
+and ASan `build/obj-water-export-mq7kjuj8` pass: 148985 positions, 148257 UVs and
+normals, 728 water-only positions, 123550 appended faces and 17 loaded geometries.
+Both writer builds and all 35 normal suites pass (28.72 seconds). Tests read the
+retail source and write only owned build outputs; no live-game check was run.
+
 ## 2026-10-01 continuation: model geometry and sidecars publish together
 
 `build/model-export-recovery-_pg0ai4m/glb_locked_metadata.log` reproduced export

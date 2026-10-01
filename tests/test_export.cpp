@@ -722,6 +722,45 @@ void testFoliageGlb(const fs::path& lev, const fs::path& dir) {
     std::ifstream f(dir / "fol.obj"); std::string line; int v = 0, objs = 0, faces = 0;
     while (std::getline(f, line)) { if (line.rfind("v ", 0) == 0) ++v; if (line.rfind("o ", 0) == 0) ++objs; if (line.rfind("f ", 0) == 0) ++faces; }
     CHECK(v == 20 + 8 && objs == 2 && faces == 24 + 4);
+
+    // Water contributes positions only; later layers need separate v/vt/vn bases.
+    auto wet = terrain;
+    wet.water.positions = {100, 1, 100, 101, 1, 100, 100, 1, 101};
+    wet.water.indices = {0, 1, 2};
+    wet.water.iceIndices = {0, 2, 1};
+    wet.hasAlbedo = true;
+    wet.albedo = img;
+    auto objects = fol;
+    objects.rootName = "Objects";
+    fe::writeObjWith(wet, {&fol, &objects}, dir / "wet.obj");
+    std::ifstream wetObj(dir / "wet.obj");
+    bool appended = false;
+    int appendedFaces = 0;
+    while (std::getline(wetObj, line)) {
+        if (line.rfind("o ", 0) == 0) appended = line == "o wet_Foliage" || line == "o wet_Objects";
+        if (appended && line.rfind("f ", 0) == 0) {
+            unsigned p[3]{}, uv[3]{}, normal[3]{};
+            CHECK(std::sscanf(line.c_str(), "f %u/%u/%u %u/%u/%u %u/%u/%u",
+                &p[0], &uv[0], &normal[0], &p[1], &uv[1], &normal[1], &p[2], &uv[2], &normal[2]) == 9);
+            for (int k = 0; k < 3; ++k) {
+                CHECK(p[k] == uv[k] + 3 && uv[k] == normal[k]);
+                CHECK(p[k] > 23 && p[k] <= 39 && uv[k] <= 36);
+            }
+            ++appendedFaces;
+        }
+    }
+    CHECK(appendedFaces == 8);
+    std::ifstream wetMtl(dir / "wet.mtl");
+    std::string material;
+    bool terrainTextured = false;
+    while (std::getline(wetMtl, line)) {
+        if (line.rfind("newmtl ", 0) == 0) material = line.substr(7);
+        if (line == "map_Kd wet_albedo.png") {
+            CHECK(material == "terrain");
+            terrainTextured = material == "terrain";
+        }
+    }
+    CHECK(terrainTextured);
 }
 
 void testPng() {
