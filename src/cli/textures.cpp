@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "forge/minimapframe.hpp"
@@ -113,12 +115,40 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
     if (cmd == "minimap-bake") {   // minimap-bake <map> <out.png> [--region R | --framing s,ox,oy] [--install root]: the minimap a new region gets, as a PNG (nothing written to the install)
         std::string installArg, regionArg, framingArg; std::vector<std::string> pos;
         for (size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else if (args[i] == "--region" && i + 1 < args.size()) regionArg = args[++i];
-            else if (args[i] == "--framing" && i + 1 < args.size()) framingArg = args[++i];
-            else pos.push_back(args[i]);
+            const auto& option = args[i];
+            if (option == "--install" || option == "--region" || option == "--framing") {
+                if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].rfind("--", 0) == 0) {
+                    std::fprintf(stderr, "%s needs a value\n", option.c_str()); return 2;
+                }
+                if (option == "--install") installArg = args[++i];
+                else if (option == "--region") regionArg = args[++i];
+                else framingArg = args[++i];
+            } else if (option.rfind("--", 0) == 0) {
+                std::fprintf(stderr, "unknown option %s\n", option.c_str()); return 2;
+            } else pos.push_back(option);
         }
-        if (pos.size() < 2) { std::fprintf(stderr, "usage: forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY] [--install <root>]\n"); return 2; }
+        if (pos.size() != 2 || pos[0].empty() || pos[1].empty()) { std::fprintf(stderr, "usage: forge minimap-bake <map> <out.png> [--region <name> | --framing scale,offX,offY] [--install <root>]\n"); return 2; }
+        if (!regionArg.empty() && !framingArg.empty()) { std::fprintf(stderr, "use either --region or --framing, not both\n"); return 2; }
+        forge::minimapframe::Framing frame;
+        if (!framingArg.empty()) {
+            std::string_view remaining = framingArg;
+            const std::array<float*, 3> values{&frame.scale, &frame.offsetX, &frame.offsetY};
+            bool valid = true;
+            for (size_t i = 0; i < values.size(); ++i) {
+                const auto comma = remaining.find(',');
+                if ((i < 2) != (comma != std::string_view::npos)) { valid = false; break; }
+                auto value = remaining.substr(0, comma);
+                if (!value.empty() && value.front() == '+') {
+                    value.remove_prefix(1);
+                    if (!value.empty() && value.front() == '-') { valid = false; break; }
+                }
+                if (value.empty()) { valid = false; break; }
+                const auto parsed = std::from_chars(value.data(), value.data() + value.size(), *values[i]);
+                if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || !std::isfinite(*values[i])) { valid = false; break; }
+                if (comma != std::string_view::npos) remaining.remove_prefix(comma + 1);
+            }
+            if (!valid || frame.scale <= 0) { std::fprintf(stderr, "--framing needs three complete finite numbers scale,offX,offY with positive scale\n"); return 2; }
+        }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         LevelWorkspace tempLev;
@@ -127,10 +157,8 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         std::string name = fs::path(pos[0]).stem().string(), err;
         te::Image img;
-        forge::minimapframe::Framing frame;
         forge::minimapframe::Framing* given = nullptr;
         if (!framingArg.empty()) {
-            if (std::sscanf(framingArg.c_str(), "%f,%f,%f", &frame.scale, &frame.offsetX, &frame.offsetY) != 3) { std::fprintf(stderr, "--framing wants scale,offX,offY\n"); return 2; }
             given = &frame;
         } else if (!regionArg.empty()) {
             const auto world = forge::wld::File::parse(install.root / "data" / "Levels" / "FinalAlbion.wld");

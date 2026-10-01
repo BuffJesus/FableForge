@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: reject malformed minimap framing
+
+`build/minimap-inputs-4fnkjjv4/0.json` reproduced minimap-bake accepting
+`--framing 1,0,0tail` and replacing the prior PNG. Framing now requires exactly
+three complete finite numbers and a positive scale. The command rejects
+unknown/incomplete options, extra arguments, empty required values and combined
+--region/--framing before lookup or export. Signed/scientific values remain
+supported. bakeMinimapImage separately rejects invalid framing before template
+work, including values loaded from a WLD or supplied by other callers.
+
+`tools/test_minimap_inputs.py` passes 23 refusal cases while preserving an old
+export, then verifies default and signed explicit framing produce identical PNGs
+and region lookup succeeds. Normal `build/minimap-inputs-ul63jbyd` and ASan CLI
+`build/minimap-inputs-xvi78an3` pass with unchanged copied banks. The worlddraft
+suite covers six API framing refusals before file/pixel creation and passes in
+normal and ASan builds. All 35 rebuilt normal suites pass (20.77s), and normal
+editor/CLI/tools builds pass. No minimap transform or pixel algorithm changed.
+
 ## 2026-10-01 continuation: strict texture-command options
 
 `build/texture-cli-inputs-di0nm4pm/0.json` reproduced texture-add silently

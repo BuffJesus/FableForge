@@ -854,6 +854,8 @@ Texture commands reject unknown or incomplete options and extra arguments.
 Texture and minimap PNG exports prepare and close the new image before replacing
 an existing output; locked or invalid destinations report failure and preserve
 the previous file. Standalone exports do not create install backups.
+`minimap-bake --framing scale,offX,offY` requires finite values and a positive
+scale; choose either explicit framing or `--region`, not both.
 
 ## Mods tab
 

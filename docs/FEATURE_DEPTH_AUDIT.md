@@ -1335,6 +1335,24 @@ Normal `build/texture-cli-inputs-lw16wal2` and ASan CLI
 35-suite export gate (20.50s) covers the unchanged core; it was not repeated
 for this CLI-only argument change.
 
+## 2026-10-01 continuation: reject malformed minimap framing
+
+`build/minimap-inputs-4fnkjjv4/0.json` reproduced minimap-bake accepting
+`--framing 1,0,0tail` and replacing the prior PNG. Framing now requires exactly
+three complete finite numbers and a positive scale. The command rejects
+unknown/incomplete options, extra arguments, empty required values and combined
+--region/--framing before lookup or export. Signed/scientific values remain
+supported. bakeMinimapImage separately rejects invalid framing before template
+work, including values loaded from a WLD or supplied by other callers.
+
+`tools/test_minimap_inputs.py` passes 23 refusal cases while preserving an old
+export, then verifies default and signed explicit framing produce identical PNGs
+and region lookup succeeds. Normal `build/minimap-inputs-ul63jbyd` and ASan CLI
+`build/minimap-inputs-xvi78an3` pass with unchanged copied banks. The worlddraft
+suite covers six API framing refusals before file/pixel creation and passes in
+normal and ASan builds. All 35 rebuilt normal suites pass (20.77s), and normal
+editor/CLI/tools builds pass. No minimap transform or pixel algorithm changed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

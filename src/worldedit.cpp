@@ -287,6 +287,10 @@ bool bakeMinimapImage(const fs::path& gameRoot, const std::string& levelName, co
                       const forge::minimapframe::Framing* framing, forge::minimapframe::Framing* used,
                       albion::terrainexport::Image& img, std::string& error) {
     try {
+        if (framing && (!std::isfinite(framing->scale) || framing->scale <= 0 ||
+                        !std::isfinite(framing->offsetX) || !std::isfinite(framing->offsetY))) {
+            error = "minimap framing needs finite values and a positive scale"; return false;
+        }
         detail::TemporaryDirectory scratch("minimap-lev-");
         const fs::path levTmp = scratch.path() / fs::path(levelName + ".lev").filename();
         writeScratchFile(levTmp, levBytes);

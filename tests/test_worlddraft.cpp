@@ -1,5 +1,6 @@
 #include "worlddraft.hpp"
 #include "worldedit.hpp"
+#include "terrainexport.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/temporarydirectory.hpp"
 #include <iostream>
@@ -14,6 +15,15 @@ int main() {
         // template or creating any workspace, even without CLI validation.
         forge::TemporaryDirectory scratch(std::filesystem::temp_directory_path(), "ForgeBlankPreflight-");
         forge::terraintex::ThemeLibrary themes;
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float inf = std::numeric_limits<float>::infinity();
+        for (const forge::minimapframe::Framing frame : {forge::minimapframe::Framing{0,0,0},
+                {-1,0,0}, {nan,0,0}, {inf,0,0}, {1,inf,0}, {1,0,nan}}) {
+            albion::terrainexport::Image image; std::string error;
+            check(!bakeMinimapImage(scratch.path(), "InvalidFrame", {}, &frame, nullptr, image, error) &&
+                  error.find("minimap framing") != std::string::npos, "invalid minimap framing reached level work");
+            check(std::filesystem::is_empty(scratch.path()) && image.rgba.empty(), "invalid framing created files or pixels");
+        }
         for (const float height : {std::numeric_limits<float>::quiet_NaN(),
                                    std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
             BlankLevelRequest request; request.name="InvalidHeight"; request.groundHeight=height;
