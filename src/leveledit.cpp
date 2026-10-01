@@ -2,6 +2,7 @@
 #include <fstream>
 #include "backups.hpp"
 #include "leveledit.hpp"
+#include "temporarydirectory.hpp"
 #include "vanilla_props.hpp"
 
 #include <algorithm>
@@ -1388,11 +1389,33 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                                   const std::function<void(const std::string&)>& progress) {
     const auto stage = [&](const char* s) { if (progress) progress(s); };
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
-    const bool themesChanged = themesDirty();
-    if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
-    const std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
+    bool themesChanged = themesDirty();
+    std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
     fs::path stbTemp;
     try {
+        if (!packOut_.empty()) {
+            // Each pack bake starts from gameRoot's STB, not the previous pack
+            // chunk. Its height/theme baseline must come from that same root.
+            const auto bytes = forge::levelstore::requireFile(forge::levelstore::detect(gameRoot), mapName_ + ".lev");
+            const albion::detail::TemporaryDirectory scratch("terrain-baseline-");
+            const fs::path path = scratch.path() / "baseline.lev";
+            std::ofstream out(path, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            out.close();
+            if (!out) throw std::runtime_error("cannot write terrain baseline " + path.string());
+            Document baseline;
+            if (!baseline.loadLevel(path, error)) return false;
+            if (baseline.cellsX() != cellsX() || baseline.cellsY() != cellsY()) {
+                error = "pack terrain dimensions differ from the source bank";
+                return false;
+            }
+            before = baseline.terrain_;
+            themesChanged = terrain_->themeIndex != before->themeIndex || terrain_->themeStrength != before->themeStrength;
+            for (size_t i = 0; i < terrain_->palette.size() && !themesChanged; ++i)
+                themesChanged = i >= before->palette.size() || terrain_->palette[i].name != before->palette[i].name ||
+                                terrain_->palette[i].value != before->palette[i].value;
+        }
+        if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
         // 1. loose .lev (also the bytes for the WAD)
         stage("writing the .lev (navigation patch)");
         const fs::path levRoot = packOut_.empty() ? gameRoot : packOut_;

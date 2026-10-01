@@ -324,6 +324,16 @@ map screenshot shows terrain/water; the reduced fixture lacks graphics.big.
 Neither check supplies new in-game evidence. Concurrent writers targeting
 the same pack/bank remain a separate audit item.
 
+## Repeated terrain pack writes, 2026-10-01
+
+Pack bakes now compare against the terrain belonging to their source STB,
+so successive saves retain the complete foliage height adjustment and painted
+layer rebuilds. Stock and extracted scratch tests compare all three pack files
+byte-for-byte for single versus repeated writes, including painted themes.
+All source/extracted-file hashes remain unchanged and no active WAD is created
+in the extracted layout. A missing-source failure preserves the previous pack
+and keeps the draft dirty. This does not serialize competing write jobs.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

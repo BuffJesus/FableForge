@@ -34,6 +34,12 @@ removed overrides. Files absent from the shadow leave existing pack entries alon
 unrelated recipe assets stay in place. The destination must differ from both
 source directories.
 
+Terrain writes use a snapshot of the draft taken when the write starts. Later
+strokes stay unsaved. Each pack bake uses the source install's terrain and STB
+together, so writing the pack again retains the full sculpt, foliage adjustment
+and painted layers. The source install is unchanged; Mods > Deploy applies the
+result. Stock WAD and extracted-level source layouts are supported.
+
 ## Lip sync recipes in Forge packs
 
 Assets > Dialogue can save staged frame edits to a selected Forge pack. The

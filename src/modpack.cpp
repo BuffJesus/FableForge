@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <cctype>
 #include <fstream>
@@ -15,6 +14,7 @@
 #include "forge/wad.hpp"
 #include "meshimport.hpp"
 #include "pendingbanks.hpp"
+#include "temporarydirectory.hpp"
 #include "nlohmann/json.hpp"
 #include "worldedit.hpp"
 
@@ -406,29 +406,7 @@ StbReport applyStaticMaps(const fs::path& folder, const fs::path& baseRoot, cons
 }
 
 namespace {
-class PackWorkspace {
-    fs::path parent_, path_;
-public:
-    explicit PackWorkspace(const char* prefix) {
-        parent_ = fs::absolute(fs::temp_directory_path() / "FableForge").lexically_normal();
-        fs::create_directories(parent_);
-        static std::atomic<uint64_t> serial{0};
-        for (;;) {
-            const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
-            const auto candidate = parent_ / (std::string(prefix) + std::to_string(tick) + "-" + std::to_string(serial++));
-            if (fs::create_directory(candidate)) { path_ = candidate; break; }
-        }
-    }
-    PackWorkspace(const PackWorkspace&) = delete;
-    PackWorkspace& operator=(const PackWorkspace&) = delete;
-    ~PackWorkspace() {
-        if (!path_.empty() && path_.parent_path() == parent_) {
-            std::error_code error;
-            fs::remove_all(path_, error);
-        }
-    }
-    const fs::path& path() const { return path_; }
-};
+using PackWorkspace = albion::detail::TemporaryDirectory;
 
 std::vector<uint8_t> slurpFile(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);

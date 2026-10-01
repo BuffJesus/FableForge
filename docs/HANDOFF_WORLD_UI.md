@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: repeated terrain pack writes
+
+Writing two height strokes in separate pack saves reproduced differing chunk
+and record bytes from writing both together, despite identical LEVs. Each pack
+bake reads the install's STB, but foliage deltas and the theme-rebuild decision
+used the previous saved draft as their baseline. Pack writes now read the LEV
+from that same source install via levelstore, compare heights/themes/palette
+against it, and reject mismatched dimensions before output. The format and bake
+algorithms are unchanged. The existing owned pack-workspace helper is shared as
+`TemporaryDirectory` for the short-lived baseline LEV; cleanup stays scoped to
+the exclusively created child.
+
+The expanded `tools/test_terrain_async.py` passes eight GUI cases on stock and
+extracted scratch roots, including no-change repeat, two strokes saved together
+versus separately, and painted themes written twice. All compared LEV/chunk/
+record bytes match. Source-bank and extracted-file hashes are unchanged; the
+renamed WAD stays untouched and no active WAD appears. Evidence remains at
+`build/terrain-async-m_luzikk` (stock) and `build/terrain-async-thl88qq_` (loose).
+A redirected missing-source probe preserves existing pack bytes and leaves the
+draft dirty. Full build/all 27 CTest suites pass (22.58 seconds); focused normal
+and ASan pack/snapshot checks pass. These are offline results, not in-game proof.
+
 ## 2026-10-01 continuation: terrain writes while editing
 
 A Greatwood_1 scratch probe reproduced an inconsistent pack: sculpt, start a
