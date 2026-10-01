@@ -7,6 +7,7 @@
 #include "dialogueaudio.hpp"
 
 #include <array>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -72,6 +73,7 @@ void App::resetModDestination() {
     modsVerb_.clear();
     thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
     refreshModOrder();
+    modPicks_.clear();
     loadModPicks();
 }
 
@@ -195,19 +197,35 @@ void App::launchModsCommand(const std::string& cmd) {
     });
 }
 
-// forge_mods_picks.txt: `key<TAB>winner` per line (forge-tools loadPicks), the keys namespaced by stage
-void App::loadModPicks() {
-    modPicks_.clear();
-    std::ifstream in(fs::path(saveRoot()) / "forge_mods_picks.txt");
+// Read a fresh candidate before editing so external choices are not overwritten.
+namespace {
+std::map<std::string, std::string> readModPicks(const fs::path& root) {
+    const auto path = root / "forge_mods_picks.txt";
+    std::map<std::string, std::string> picks;
+    if (!fs::exists(path)) return picks;
+    if (!fs::is_regular_file(path)) throw std::runtime_error("not a regular file: " + path.string());
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot open " + path.string());
     std::string line;
     while (std::getline(in, line)) {
-        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
         if (line.empty() || line[0] == '#') continue;
         size_t sep = line.find('\t');
         if (sep == std::string::npos) sep = line.find('=');
         if (sep == std::string::npos) continue;
-        modPicks_[line.substr(0, sep)] = line.substr(sep + 1);
+        auto key = line.substr(0, sep), winner = line.substr(sep + 1);
+        while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.pop_back();
+        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.front()))) winner.erase(winner.begin());
+        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.back()))) winner.pop_back();
+        if (!key.empty()) picks[key] = winner;
     }
+    if (in.bad() || !in.eof()) throw std::runtime_error("incomplete read of " + path.string());
+    return picks;
+}
+} // namespace
+
+void App::loadModPicks() {
+    try { modPicks_ = readModPicks(saveRoot()); }
+    catch (const std::exception& e) { pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2); }
 }
 
 bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
@@ -233,8 +251,12 @@ bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
 
 bool App::setModPick(const std::string& key, const std::string& winner) {
     if (fileWriteBlocked("mod conflict choice")) return false;
-    if (modPicks_.empty()) loadModPicks();
-    auto picks = modPicks_;
+    std::map<std::string, std::string> picks;
+    try { picks = readModPicks(saveRoot()); }
+    catch (const std::exception& e) {
+        pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
+        return false;
+    }
     if (winner == "-") picks.erase(key); else picks[key] = winner;
     if (!saveModPicks(picks)) return false;
     modPicks_ = std::move(picks);

@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: preserve externally edited conflict choices
+
+`build/mod-pick-refresh-3k185jt1` reproduced the GUI overwriting a choice added
+externally after its conflict report loaded. Each choice edit now reads a fresh
+candidate from disk and only adopts it after the existing recoverable save
+succeeds. Failed reads preserve the cached display and refuse the edit. Switching
+save roots explicitly clears old-root choices. Parsing matches CLI whitespace
+and equals/tab separator handling.
+
+`tools/test_mod_pick_refresh.py` passes at `build/mod-pick-refresh-jo7qlaiy`:
+external choices survive an edit, and a lock that denies reads while allowing
+replacement refuses an edit with byte-exact file and cached-choice preservation.
+The failure capture at `build/mod-pick-refresh-jl9bgerq/unreadable.png` was visually
+checked: prior winner and a readable error remain. The earlier locked-write,
+retry and removal regression passes at `build/mod-pick-recovery-x8uq2f07`.
+Normal GUI build passes; unchanged core/sanitizer gates are reused. Concurrent
+writers during the brief read-to-replacement interval remain unsupported.
+
 ## 2026-10-01 continuation: keep deploy JSON parseable
 
 `build/mod-cli-inputs-bz52ybl2` reproduced a successful redeploy whose stdout
