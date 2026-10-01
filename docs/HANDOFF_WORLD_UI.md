@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: world-edit file group rollback
+
+`build/world-move-recovery-rcetgvgd/failure_report.json` reproduced a locked STB
+leaving OrchardFarm's WLD/BWD copies, packed and loose creature positions changed,
+and consuming both unrelated .atlas-tmp files. applyWorldEdits now prepares every
+affected WLD/BWD, loose TNG, WAD and STB in one PendingBanks workspace. WLD/BWD,
+replacement WAD entries and changed STB chunks are read back before backup and
+replacement. A late failure rolls back earlier replacements. Invalid region edits
+leave no recovery metadata; success notes publish after commit, and the game
+process is checked at entry and before commit. Placement/terrain/TNG algorithms
+are unchanged. Unaffected WAD/STB files no longer receive redundant backups; the
+older overworld test now requires backups for every changed bank.
+
+`tools/test_world_move_recovery.py` tests late-STB refusal, original hashes,
+unowned temporary files, invalid owner/visibility requests, retry, WLD/BWD/STB
+placement, packed/loose TNG agreement, creature coordinate deltas and exact Restore.
+Normal packed `build/world-move-recovery-ii4pgkha`, normal extracted
+`build/world-move-recovery-nrhv_nnn`, and ASan packed
+`build/world-move-recovery-zdjg2yva` pass (the latter two include the added invalid
+region and coordinate-delta assertions). All 34 rebuilt normal suites pass (26.50s).
+
+The hidden World tab workflow also passes on ii4pgkha's restored copy: move
+refusal, queued undo/redo, batch apply/move-back, ownership and visibility changes,
+and exact Restore. Its `world_gui.txt.log` records RESULT PASS; w3_applied.png was
+visually inspected and shows the new selected coordinates and mapped overview.
+The fixture adapts the 400-map source count and disables optional seam stitching.
+Stitching remains a separate subsequent operation, and no live-game transition
+was performed. This rollback handles reported file errors, not power loss.
+
 ## 2026-10-01 continuation: region-property bank rollback
 
 `build/region-recovery-ez_o4rb2/failure_report.json` reproduced a locked final BWD

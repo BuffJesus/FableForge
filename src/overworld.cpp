@@ -42,8 +42,6 @@ std::string stemOf(const std::string& levelName) {
     return fs::path(levelName).stem().string();
 }
 
-bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
-
 std::vector<uint8_t> readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
     if (!in) throw std::runtime_error("cannot read " + p.string());
@@ -360,6 +358,8 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                      std::vector<std::string>& notes, std::string& error, ProgressFn progress) {
     const auto stage = [&](const std::string& s) { if (progress) progress(s); };
     try {
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+        std::vector<std::string> preparedNotes;
         if (moves.empty() && owners.empty() && seesEdits.empty()) { error = "nothing to do"; return false; }
         WorldLayout before;
         if (!loadWorldLayout(gameRoot, before, error)) return false;
@@ -390,9 +390,8 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
         const fs::path levels = gameRoot / "data" / "Levels";
         const fs::path wldPath = levels / "FinalAlbion.wld", bwdPath = levels / "FinalAlbion.bwd";
         const fs::path stbPath = levels / "FinalAlbion_RT.stb", wadPath = levels / "FinalAlbion.wad";
-        for (const fs::path& p : {wldPath, bwdPath, stbPath, wadPath}) if (!backupOnce(p, error)) return false;
         const fs::path mirrors[] = {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"};
-        for (const auto& m : mirrors) if (fs::exists(m) && !backupOnce(m, error)) return false;
+        detail::PendingBanks pending(gameRoot, ".forge-world-edit-");
 
         // 1. STB first (the slow part; nothing is written until it succeeds)
         if (!moves.empty()) stage("translating and re-baking terrain chunks");
@@ -412,7 +411,7 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
             for (int slot : rebake) {
                 const WorldMapBox* box = nullptr;
                 for (const auto& b : after.maps) if (b.slot == slot) box = &b;
-                if (!box->inStb) { notes.push_back(box->name + ": no terrain chunk, placement only"); continue; }
+                if (!box->inStb) { preparedNotes.push_back(box->name + ": no terrain chunk, placement only"); continue; }
                 const forge::stb::StaticMap* map = nullptr;
                 for (const auto& m : archive.staticMaps())
                     if (lower(stemOf(m.levelName)) == lower(box->name)) { map = &m; break; }
@@ -469,8 +468,8 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                     info.cameraMapBounds[3] = float(box->x + box->w); info.cameraMapBounds[4] = float(box->y + box->h);
                     const auto header = forge::stbinfo::writeInfoBlock(info);
                     std::copy(header.begin(), header.end(), newRecord.begin());
-                    for (const auto& n : rr.notes) notes.push_back(box->name + ": " + n);
-                    notes.push_back("moved " + box->name + " -> (" + std::to_string(box->x) + "," + std::to_string(box->y) + "): chunk translated (" +
+                    for (const auto& n : rr.notes) preparedNotes.push_back(box->name + ": " + n);
+                    preparedNotes.push_back("moved " + box->name + " -> (" + std::to_string(box->x) + "," + std::to_string(box->y) + "): chunk translated (" +
                                     std::to_string(rr.foregroundFrames) + " foreground, " + std::to_string(rr.patchFrames) + " patches, " + std::to_string(rr.groupFrames) + " foliage groups), " + std::to_string(newChunk.size()) + " bytes");
                 } else {
                     // a neighbour only re-bakes for its shared-edge samples: when its
@@ -479,7 +478,7 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                     forge::stbbake::HeightfieldBakeResult baked;
                     try { baked = forge::stbbake::bakeHeightfield(chunk, lev, box->x, box->y, opt); }
                     catch (const std::exception& e) {
-                        notes.push_back("neighbour " + box->name + " kept its retail bake (" + e.what() + ")");
+                        preparedNotes.push_back("neighbour " + box->name + " kept its retail bake (" + e.what() + ")");
                         continue;
                     }
                     newChunk = std::move(baked.chunk);
@@ -487,19 +486,19 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                         RelocateReport gr;
                         std::string gerr;
                         if (!replacePatchVertices(newChunk, newRecord, baked.deferred, gr, gerr)) {
-                            notes.push_back("neighbour " + box->name + " kept its retail bake (grown patches: " + gerr + ")");
+                            preparedNotes.push_back("neighbour " + box->name + " kept its retail bake (grown patches: " + gerr + ")");
                             continue;
                         }
-                        notes.push_back("neighbour " + box->name + ": " + std::to_string(baked.deferred.size()) + " patch(es) outgrew their slot and were re-laid");
+                        preparedNotes.push_back("neighbour " + box->name + ": " + std::to_string(baked.deferred.size()) + " patch(es) outgrew their slot and were re-laid");
                     }
-                    notes.push_back("neighbour " + box->name + ": chunk re-baked, " + std::to_string(newChunk.size()) + " bytes" + (neighbourList.empty() ? "" : ", edges from " + neighbourList));
+                    preparedNotes.push_back("neighbour " + box->name + ": chunk re-baked, " + std::to_string(newChunk.size()) + " bytes" + (neighbourList.empty() ? "" : ", edges from " + neighbourList));
                 }
                 if (newChunk.size() != chunk.size()) sameSize = false;
                 batch.push_back({map->levelName, entry->name, newChunk, newRecord});
             }
         }
 
-        stage("writing FinalAlbion.wld / .bwd" + std::string(moves.empty() ? "" : " / _RT.stb"));
+        stage("preparing FinalAlbion.wld / .bwd" + std::string(moves.empty() ? "" : " / _RT.stb"));
         // 2. WLD: placement, owners, visibility (line-precise edits)
         // 3. BWD: the on-disk records with the boxes patched for the moves and
         //    the contains/sees lists taken from the edited WLD (forgecore's
@@ -537,31 +536,40 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                 if (!box) { error = "unknown map " + o.map; return false; }
                 if (!wld.findRegion(o.region)) { error = "unknown region " + o.region; return false; }
                 wld.setMapOwner(o.region, box->levelName);
-                notes.push_back(o.map + " is now owned by " + o.region);
+                preparedNotes.push_back(o.map + " is now owned by " + o.region);
             }
             std::string text = wld.serialize();
             for (const auto& se : seesEdits) {
                 const WorldMapBox* box = before.find(se.map);
                 if (!box) { error = "unknown map " + se.map; return false; }
                 text = editSeesLine(text, wld, se.region, box->levelName, se.sees);
-                notes.push_back(se.region + (se.sees ? " now sees " : " no longer sees ") + se.map);
+                preparedNotes.push_back(se.region + (se.sees ? " now sees " : " no longer sees ") + se.map);
             }
-            writeFile(wldPath, text.data(), text.size());
+            const auto wldOut = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wld");
+            writeFile(wldOut, text.data(), text.size());
+            const auto edited = forge::wld::File::parse(wldOut);
+            if (edited.serialize() != text) throw std::runtime_error("prepared world WLD failed read-back verification");
             for (const auto& [slot, mv] : moveOf) {
                 auto& m = bwd.maps().at(size_t(slot - 1));
                 const int w = m.right - m.left, h = m.bottom - m.top;
                 m.left = mv.x; m.top = mv.y; m.right = mv.x + w; m.bottom = mv.y + h;
             }
             if (!owners.empty() || !seesEdits.empty()) {
-                const auto edited = forge::wld::File::parse(wldPath);
                 const auto compiled = forge::bwd::compileFromWld(edited, dims);
                 for (size_t i = 0; i < bwd.regions().size(); ++i) {
                     bwd.regions()[i].contains = compiled.regions()[i].contains;
                     bwd.regions()[i].sees = compiled.regions()[i].sees;
                 }
             }
-            bwd.write(bwdPath);
-            for (const auto& m : mirrors) if (fs::exists(m)) bwd.write(m);
+            const auto binary = bwd.serialize();
+            const auto prepareBwd = [&](const fs::path& relative) {
+                const auto prepared = pending.prepare(relative);
+                writeFile(prepared, binary.data(), binary.size());
+                if (forge::bwd::File::parse(prepared).serialize() != binary)
+                    throw std::runtime_error("prepared world BWD failed read-back verification");
+            };
+            prepareBwd(fs::path("data") / "Levels" / "FinalAlbion.bwd");
+            for (const auto& m : mirrors) if (fs::exists(m)) prepareBwd(m.lexically_relative(gameRoot));
         }
         // 3b. TNG: thing positions are map-local, but AI creatures carry their
         //     InitialPosX/Y in WORLD units (791/802 retail values sit in the map's
@@ -598,27 +606,42 @@ bool applyWorldEdits(const fs::path& gameRoot, const std::vector<MapMove>& moves
                 if (!shifted) continue;
                 const std::string out = tng.serialize();
                 if (fs::exists(loose)) {
-                    if (!backupOnce(loose, error)) return false;   // in a loose-level install this is the game's copy
-                    writeFile(loose, out.data(), out.size());
+                    const auto prepared = pending.prepare(loose.lexically_relative(gameRoot));
+                    writeFile(prepared, out.data(), out.size());
                 }
                 if (!entryName.empty()) replacements[entryName] = std::vector<uint8_t>(out.begin(), out.end());
-                notes.push_back(was->name + ".tng: " + std::to_string(shifted) + " creature InitialPos shifted");
+                preparedNotes.push_back(was->name + ".tng: " + std::to_string(shifted) + " creature InitialPos shifted");
             }
             if (!replacements.empty()) {
-                const fs::path temp = wadPath.string() + ".atlas-tmp";
-                forge::wad::repack(wadPath, replacements, temp);
-                fs::rename(temp, wadPath);
+                const auto prepared = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wad");
+                forge::wad::repack(wadPath, replacements, prepared);
+                const auto verified = forge::wad::Archive::open(prepared);
+                for (const auto& [name, bytes] : replacements) {
+                    const auto found = std::find_if(verified.entries().begin(), verified.entries().end(),
+                        [&](const forge::wad::Entry& entry) { return entry.name == name; });
+                    if (found == verified.entries().end() || verified.read(*found) != bytes)
+                        throw std::runtime_error("prepared world WAD failed read-back verification: " + name);
+                }
             }
         }
         // 4. STB
         if (!batch.empty()) {
-            const fs::path tmp = stbPath.string() + ".atlas-tmp";
+            const auto tmp = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion_RT.stb");
             if (sameSize) forge::stb::replaceStaticMaps(stbPath, tmp, batch);
             else forge::stb::replaceStaticMapsRelayout(stbPath, tmp, batch);
-            fs::rename(tmp, stbPath);
-            notes.push_back(std::string("FinalAlbion_RT.stb: ") + std::to_string(batch.size()) + " chunk(s) " + (sameSize ? "replaced in place" : "re-laid (sizes changed)"));
+            const auto verified = forge::stb::Archive::open(tmp);
+            for (const auto& replacement : batch) {
+                const auto* entry = verified.findEntry(replacement.entryName);
+                if (!entry || verified.read(*entry) != replacement.chunk)
+                    throw std::runtime_error("prepared world STB failed read-back verification: " + replacement.entryName);
+            }
+            preparedNotes.push_back(std::string("FinalAlbion_RT.stb: ") + std::to_string(batch.size()) + " chunk(s) " + (sameSize ? "replaced in place" : "re-laid (sizes changed)"));
         }
-        notes.push_back("FinalAlbion.wld + FinalAlbion.bwd (" + std::to_string(1 + std::count_if(std::begin(mirrors), std::end(mirrors), [](const fs::path& p) { return fs::exists(p); })) + " copies) updated: " + std::to_string(moveOf.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(seesEdits.size()) + " visibility change(s)");
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable started during world edit; quit to the desktop first"; return false; }
+        stage("installing prepared world files");
+        if (!pending.install(true, error)) return false;
+        preparedNotes.push_back("FinalAlbion.wld + FinalAlbion.bwd (" + std::to_string(1 + std::count_if(std::begin(mirrors), std::end(mirrors), [](const fs::path& p) { return fs::exists(p); })) + " copies) updated: " + std::to_string(moveOf.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(seesEdits.size()) + " visibility change(s)");
+        notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

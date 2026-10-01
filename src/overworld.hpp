@@ -7,7 +7,8 @@
 // camera bounds and the terrain chunk re-baked for the new origin (vertex grid
 // coordinates and the background-LOD quad directory are absolute). Neighbours
 // whose shared edge changed are re-baked as well so seam samples stay right.
-// Thing positions (.tng) are map-local and untouched. Debug-editor model:
+// Thing positions (.tng) are map-local; creature InitialPosX/Y are world-space
+// and shift in existing loose files and WAD entries. Debug-editor model:
 // CEditWorldMap; the engine's own rule for what counts as a neighbour is
 // "owned or seen by one of my regions AND touching", kept here.
 
@@ -82,12 +83,13 @@ bool checkMove(const WorldLayout& layout, const std::vector<MapMove>& moves, con
 struct OwnerEdit { std::string map, region; };
 struct SeesEdit { std::string region, map; bool sees = true; };
 
-// Apply moves and region edits in one go. One-time .forge-orig backups of the
-// four containers. The WLD is edited line-precisely; the BWD is compiled from
-// the edited WLD (forgecore's compileFromWld, checked byte-exact against the
-// current BWD before anything is written; a mismatch falls back to box edits
-// and refuses region edits). Moved maps get their terrain chunk translated in
-// FinalAlbion_RT.stb; touching neighbours re-bake best-effort.
+// Apply moves and region edits in one go. Prepare all affected WLD/BWD, TNG,
+// WAD and STB files before making one-time .forge-orig backups and installing
+// with rollback on a reported file error. The WLD is edited line-precisely;
+// BWD placement boxes change for moves and contains/sees lists come from the
+// edited WLD. Region edits require matching WLD/BWD ownership and visibility
+// before modification; other BWD fields are preserved. Moved maps get their
+// terrain chunk translated; touching neighbours re-bake best-effort.
 bool applyWorldEdits(const std::filesystem::path& gameRoot, const std::vector<MapMove>& moves,
                      const std::vector<OwnerEdit>& owners, const std::vector<SeesEdit>& sees,
                      std::vector<std::string>& notes, std::string& error, ProgressFn progress = {});

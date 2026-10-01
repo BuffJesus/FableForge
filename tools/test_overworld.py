@@ -7,7 +7,7 @@ the WLD/BWD byte-for-byte. Needs the Fable install (skips cleanly without one).
 
   python tools/test_overworld.py [--root <fable-root>] [--keep]
 """
-import argparse, os, re, shutil, struct, subprocess, sys, time
+import argparse, hashlib, os, re, shutil, struct, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_INSTALL = r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters"
@@ -77,6 +77,10 @@ def main() -> int:
     sl = os.path.join(scratch, "data", "Levels")
     wld, bwd = os.path.join(sl, "FinalAlbion.wld"), os.path.join(sl, "FinalAlbion.bwd")
     orig = {c: open(os.path.join(sl, c), "rb").read() for c in ("FinalAlbion.wld", "FinalAlbion.bwd")}
+    def digest(path):
+        with open(path, "rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
+    original_banks = {c: digest(os.path.join(sl, c)) for c in CONTAINERS[:4]}
     expected_maps = len(re.findall(rb'\bLevelName\s+"', orig["FinalAlbion.wld"]))
     ok = True
 
@@ -125,8 +129,9 @@ def main() -> int:
     if line is None or "baked at" in line or f" {nx} " not in line:
         print("STB info block origin not updated"); ok = False
     for c in CONTAINERS[:4]:   # a world move never touches the .gtg
-        if not any(os.path.exists(os.path.join(sl, c + sfx)) for sfx in (".forge-orig", ".atlas-orig")):
-            print("missing backup", c); ok = False
+        if digest(os.path.join(sl, c)) != original_banks[c] and not any(
+                os.path.exists(os.path.join(sl, c + sfx)) for sfx in (".forge-orig", ".atlas-orig")):
+            print("missing backup for changed bank", c); ok = False
     # the export path still reads the moved map at its new place
     r = subprocess.run([cli, "export", a.map, "--install", scratch, "--out", os.path.join(scratch, "moved.glb"), "--no-textures", "--world", "--quiet"], capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(os.path.join(scratch, "moved.glb")):

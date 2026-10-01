@@ -417,6 +417,12 @@ with undo/redo relative to the saved layout. Putting a field back during a write
 also stays pending when the earlier change has already been saved. Saving again
 writes the later draft. The usual 128-step undo limit still applies.
 
+World moves prepare the affected WLD, BWD copies, creature TNGs, WAD and STB before
+replacing any file. Original backups are made for the affected files, and a
+reported replacement failure rolls back earlier replacements. Ownership and
+visibility edits use the same handling. Optional seam stitching runs afterward
+as a separate operation; Restore may be needed if that later operation fails.
+
 In **Fly over (3D)**, distant foliage uses filtering that preserves thin cutout
 shapes to reduce shimmer. Mesh lighting also accounts for non-uniform scale.
 Automatic detail adapts the number of nearby detailed maps to frame time and GPU
