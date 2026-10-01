@@ -50,7 +50,7 @@ struct Entry {
 };
 
 // Every backup and creation marker under the install (Levels, the loose
-// FinalAlbion folder, CompiledDefs, graphics/pc, FSE, the root BWD, Saves).
+// FinalAlbion folder, CompiledDefs, graphics and graphics/pc, FSE, root BWD).
 std::vector<Entry> scan(const std::filesystem::path& gameRoot);
 
 // Fable.exe running? (restores are refused then: the engine holds the files open)

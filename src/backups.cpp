@@ -171,6 +171,7 @@ std::vector<Entry> scan(const fs::path& gameRoot) {
     scanDir(gameRoot / "data" / "Levels", out);
     scanDir(gameRoot / "data" / "Levels" / "FinalAlbion", out);
     scanDir(gameRoot / "data" / "CompiledDefs", out);
+    scanDir(gameRoot / "data" / "graphics", out);
     scanDir(gameRoot / "data" / "graphics" / "pc", out);
     scanDir(gameRoot / "data" / "Misc" / "pc", out);
     scanDir(gameRoot / "data" / "lang" / "English", out);

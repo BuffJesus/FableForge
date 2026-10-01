@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: Restore includes the standard graphics bank
+
+Real GLB+texture import changed all four banks, but Restore omitted
+`data/graphics/graphics.big` and left its backup (`build/mesh-restore-8vsljipr`).
+Backup scanning now includes `data/graphics` as well as its `pc` subdirectory.
+This applies to backup listing, conflict preflight and Restore.
+
+`tools/test_mesh_restore.py` imports the existing synthetic cube fixture into
+real copied banks, verifies all four backups/changes, then lists and restores
+all banks byte-exactly with no extra files. Normal standard graphics path
+(`build/mesh-restore-ye00564z`), normal `--graphics-pc` fallback
+(`build/mesh-restore-drkfyyqr`) and ASan CLI standard path
+(`build/mesh-restore-uyghjdof`) pass. Each import creates 24 vertices/12 triangles,
+its collision hull, texture and OBJECT definition. All three normal writer targets
+and the ASan CLI build; source install files remain untouched.
+
 ## 2026-10-01 continuation: require multiple originals to agree
 
 Restore consumed a live stage plus differing modern/legacy originals and reported

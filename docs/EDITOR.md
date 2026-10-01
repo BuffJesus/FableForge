@@ -32,7 +32,7 @@ listed in that plan are eligible. If preparation fails, the stage manifest and
 originals remain for retry.
 `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
-CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over
+CompiledDefs, graphics and graphics/pc, FSE) and puts things back: originals are copied over
 the live file (the backup stays as the baseline), created files are deleted.
 Refused while Fable.exe runs *from this install* (`backups::gameRunningIn`: the process's image path under the root; a scratch tree or another copy is not blocked; every GUI writer shares the check in `App::gameWriteBlocked`, plus the live-link heartbeat). CLI `forge backups` (list, which differ) and
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
