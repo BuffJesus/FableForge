@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--root', type=Path, default=Path(os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters')))
     parser.add_argument('--gui', type=Path, default=repo / 'build/FableForge.exe')
+    parser.add_argument("--cwd", type=Path, default=repo, help="working directory for packaged tool checks")
     args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='mod-gui-paths-', dir=repo / 'build')).resolve()
     assert work.parent == (repo / 'build').resolve()
@@ -34,7 +35,7 @@ def main():
             'models': [], 'groundThemes': []}), encoding='utf-8')
         (pack / 'data/Misc/shared.txt').write_text('from pack ' + tag, encoding='utf-8')
         result = subprocess.run([str(tool), 'mods', 'add', str(root), str(pack), '--name', 'Pack' + tag],
-            cwd=repo, capture_output=True, text=True, timeout=60)
+            cwd=args.cwd.resolve(), capture_output=True, text=True, timeout=60)
         assert result.returncode == 0, result.stdout + result.stderr
     decoy = work / 'install expanded & content'
     (decoy / 'data/CompiledDefs').mkdir(parents=True)
@@ -55,7 +56,7 @@ def main():
             f'set saveroot {root}\\', 'mods_tab 1', 'frames 2',
             'assert_state mods_count 2', *commands, 'quit', '']), encoding='utf-8')
         result = subprocess.run([str(args.gui.resolve()), '--auto', str(script), '--install', str(args.root)],
-            cwd=repo, capture_output=True, text=True, timeout=180,
+            cwd=args.cwd.resolve(), capture_output=True, text=True, timeout=180,
             env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', FORGE_TEST_TOKEN='expanded'))
         (work / (label + '_output.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
         log = Path(str(script) + '.log').read_text(encoding='utf-8')

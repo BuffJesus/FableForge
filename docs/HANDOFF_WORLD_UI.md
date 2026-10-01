@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: extracted-package workflow and linked docs
+
+`tools/test_package.py` extracts a local zip into an owned path containing spaces,
+percent signs and an ampersand, then runs the packaged tools from an unrelated
+working directory. It checks archive CRCs/paths, shipped files, linked local docs,
+retail definition listing, eight GLB exports, GUI pixel/export assertions and the
+literal-path mod conflict/deploy/undeploy/failure workflow. The existing GUI smoke
+and mod-path harnesses accept an explicit process working directory.
+
+The first package ran successfully but its notice linked outside the archive to
+profiling docs. Following linked guides also found seven broken screenshot paths
+in the nested docs/EDITOR.md. Packaging now includes the referenced profiling
+and research guides, fixes the notice path and adjusts the nested editor image
+paths. CLI.md was regenerated and now reflects the current 0.18.0-dev binary.
+
+`build/package-smoke-15uuybi0` passes all 66 local documentation links and every
+runtime check on `dist/FableForge-0.18.0-dev.local42709cf.3-win64.zip` (28.7 MB).
+GUI evidence: `build/ui-smoke-rpanzfrd`, 18,721 vertices/36,864 triangles with
+384x768 albedo and pixel checks; mod workflow: `build/mod-gui-paths-ingy_4rm`.
+The earlier broken-doc evidence is `build/package-smoke-t6tzc4s0` and
+`build/package-smoke-j3q6zeq7`. Packaging used --no-check with the preceding
+normal/ASan, core and corpus gates; the extracted archive was then tested directly.
+No release was published. A separate-machine/VM and live-game pass remain open.
+
 ## 2026-10-01 continuation: launch mod commands with literal paths
 
 `build/mod-gui-paths-c9sz4pvk` reproduced shell expansion of a percent-delimited

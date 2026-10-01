@@ -52,6 +52,7 @@ def main():
     ap.add_argument("--exe", type=Path, default=repo / "build/FableForge.exe")
     ap.add_argument("--script", type=Path, default=repo / "tests/ui/smoke.txt")
     ap.add_argument("--install", type=Path, help="explicit read-only source install")
+    ap.add_argument("--cwd", type=Path, default=repo, help="working directory for the GUI process")
     a = ap.parse_args()
     work = Path(tempfile.mkdtemp(prefix="ui-smoke-", dir=repo / "build")).resolve()
     assert work.parent == (repo / "build").resolve()
@@ -64,7 +65,7 @@ def main():
     if a.install:
         command += ["--install", str(a.install.resolve())]
     t0 = time.time()
-    r = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=600,
+    r = subprocess.run(command, cwd=a.cwd.resolve(), capture_output=True, text=True, timeout=600,
                        env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN="1"))
     dt = time.time() - t0
     (work / "gui_output.log").write_text(r.stdout + r.stderr, encoding="utf-8")

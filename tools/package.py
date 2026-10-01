@@ -48,7 +48,9 @@ def main():
         print("  defc.exe from", defc)
     else:
         print("  (no defc.exe at hand: the EgoCore .def text path will need FORGE_DEFC on the user's machine)")
-    shutil.copy(os.path.join("vendor", "VENDORED.md"), os.path.join(stage, "THIRD_PARTY.md"))
+    notices = (root / "vendor/VENDORED.md").read_text(encoding="utf-8")
+    notices = notices.replace("../docs/PROFILING.md", "docs/PROFILING.md")
+    (Path(stage) / "THIRD_PARTY.md").write_text(notices, encoding="utf-8")
     shutil.copy(os.path.join("vendor", "EgoCore-LICENSE.txt"), stage)
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
     shutil.copy(os.path.join("docs", "EDITOR.md"), stage)
@@ -62,7 +64,13 @@ def main():
     shutil.copytree(os.path.join("docs", "modding"), os.path.join(stage, "docs", "modding"))   # the mod-pack / .fmp / load-order design the forge-tools mods family implements
     shutil.copytree(os.path.join("docs", "releases"), os.path.join(stage, "docs", "releases"))
     shutil.copy(os.path.join("docs", "FEATURE_GALLERY.md"), os.path.join(stage, "docs", "FEATURE_GALLERY.md"))
-    shutil.copy(os.path.join("docs", "EDITOR.md"), os.path.join(stage, "docs", "EDITOR.md"))
+    nested_editor = (root / "docs/EDITOR.md").read_text(encoding="utf-8")
+    nested_editor = nested_editor.replace("](walkthrough/", "](../walkthrough/")
+    (Path(stage) / "docs/EDITOR.md").write_text(nested_editor, encoding="utf-8")
+    # The profiling notice links these local guides; preserve their relative links.
+    for doc in ("PROFILING.md", "WORLD_PERFORMANCE.md", "WORLD_RENDERING_RESEARCH.md",
+                "HANDOFF_WORLD_UI.md", "ARENA_HALL_CONTENT_AUDIT.md", "EGOCORE_PARTICLES_20260929.md", "AUTOMATION.md"):
+        shutil.copy(root / "docs" / doc, Path(stage) / "docs" / doc)
     shutil.copytree(os.path.join("docs", "screenshots"), os.path.join(stage, "docs", "screenshots"))
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))

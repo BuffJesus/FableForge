@@ -47,7 +47,10 @@ are unaffected. Builds should use a bounded job count, e.g. `cmake --build build
    Windows 10/11 needs nothing installed), README, LICENSE, THIRD_PARTY, the user docs,
    the walkthrough, presets, `docs/re_reference` (forge-tools reads `def_schema.json`),
    `docs/modding`.
-7. Unzip on a machine/VM without the repo, point it at a retail Steam install, run
+7. Run `python tools/test_package.py dist/FableForge-<version>-win64.zip --root <retail-install>`
+   for the local extracted-package check. It validates linked documentation, retail
+   exports, GUI pixels and mod commands from an unrelated working directory, retaining
+   evidence under `build/package-smoke-*`. Then unzip on a machine/VM without the repo, point it at a retail Steam install, run
    `docs/FIRST_LEVEL.md` end to end (the stranger's test, 1.0-rc #5). Every workaround is a
    bug to fix before tagging.
    *(Local dry run 2026-09-19: the 0.16.0 zip unpacked to a scratch folder found the Steam
