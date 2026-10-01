@@ -197,13 +197,21 @@ an inspected brown cube in Arena and byte-exact placement undo. Core export,
 texture round-trip and eight-map retail export checks pass. In-game imported-model
 behavior remains unverified. See HANDOFF_WORLD_UI.
 
-## Audit rule
+## 2026-10-01 model-input boundaries
 
 GLB container input validation now has 313 retail-independent checks, passing
 both normal and AddressSanitizer builds, plus the full scratch model-import
 suite. Short/overflowing/truncated chunks and invalid ordering are rejected;
 valid triangle geometry and unknown extension chunks are preserved. Accessor
 bounds and scene traversal are not covered by this container-only checkpoint.
+
+The accessor follow-up reproduces reads outside a declared buffer view and
+checks logical buffer lengths, offset/count overflow, alignment and strides
+before decoding. Sparse data now reports unsupported instead of being ignored.
+The suite now passes 334 checks in normal and AddressSanitizer builds, including
+interleaved data and both view/accessor offsets. Scene traversal remains open.
+
+## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
 artifact if applicable, the visual result, undo/restore result, and any known

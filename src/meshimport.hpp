@@ -23,7 +23,8 @@ struct Model {
     std::vector<std::string> notes;
 };
 
-// .glb / .gltf (embedded or sidecar buffers; POSITION, NORMAL, TEXCOORD_0, indices, any component types)
+// .glb / .gltf (embedded or sidecar buffers; POSITION, NORMAL, TEXCOORD_0, indices;
+// scalar/vector component types, including interleaving; sparse accessors are rejected)
 // or .obj (v / vt / vn / f, usemtl groups). Throws std::runtime_error with a reason.
 Model loadModel(const std::filesystem::path& path);
 

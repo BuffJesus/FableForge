@@ -518,6 +518,11 @@ Use **Import model...** on this page for the existing import workflow below.
 
 ## Custom models (Import model)
 
+GLB files must use the version 2 container with complete, aligned chunks. The
+glTF reader checks declared buffer and accessor ranges, including interleaved
+vertex data. Sparse accessors are unsupported and report an error; export a
+model with ordinary buffer-backed attributes before importing it.
+
 The *Assets* tab's *Models* page (the Objects tab links to it) takes a `.glb` / `.gltf` / `.obj` (Y up, 1 unit =
 1 metre; glTF node transforms are applied, OBJ `usemtl` groups become primitives), a NAME
 and an optional diffuse PNG, and makes a new object out of it: `MESH_<NAME>` is composed

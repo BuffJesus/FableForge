@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <tuple>
@@ -117,6 +118,16 @@ Vec3 toFableDir(float x, float y, float z) { return {x, -z, y}; }
 
 struct GltfBuffers { json doc; std::vector<std::vector<uint8_t>> buffers; };
 
+size_t gltfSize(const json& object, const char* key, size_t fallback = 0) {
+    if (!object.contains(key)) return fallback;
+    const auto& value = object.at(key);
+    if (!value.is_number_integer() || (!value.is_number_unsigned() && value.get<int64_t>() < 0))
+        throw std::runtime_error(std::string("invalid nonnegative integer: ") + key);
+    const auto number = value.get<uint64_t>();
+    if (number > std::numeric_limits<size_t>::max()) throw std::runtime_error(std::string("size overflow: ") + key);
+    return size_t(number);
+}
+
 GltfBuffers openGltf(const fs::path& path) {
     GltfBuffers g;
     const auto bytes = readFile(path);
@@ -179,6 +190,10 @@ GltfBuffers openGltf(const fs::path& path) {
         } else {
             g.buffers.push_back(glbBin);
         }
+        const size_t length = gltfSize(b, "byteLength");
+        if (!length || length > g.buffers.back().size()) throw std::runtime_error("glTF buffer has an invalid declared length");
+        // Padding and extra external-file bytes are not part of the logical buffer.
+        g.buffers.back().resize(length);
     }
     return g;
 }
@@ -189,16 +204,33 @@ std::vector<float> readAccessor(const GltfBuffers& g, int index, int& comps) {
     const std::string type = acc.value("type", "SCALAR");
     comps = type == "SCALAR" ? 1 : type == "VEC2" ? 2 : type == "VEC3" ? 3 : type == "VEC4" ? 4 : 0;
     if (!comps) throw std::runtime_error("unsupported accessor type " + type);
-    const size_t count = acc.value("count", 0);
+    const size_t count = gltfSize(acc, "count");
     const int ct = acc.value("componentType", 5126);
     const bool norm = acc.value("normalized", false);
-    std::vector<float> out(count * size_t(comps), 0.0f);
-    if (!acc.contains("bufferView")) return out;   // all zeros (sparse not supported)
-    const auto& bv = g.doc["bufferViews"].at(acc["bufferView"].get<size_t>());
-    const auto& buf = g.buffers.at(bv.value("buffer", 0));
+    if (!count || count > std::vector<float>().max_size() / size_t(comps))
+        throw std::runtime_error("invalid accessor count");
+    if (ct != 5120 && ct != 5121 && ct != 5122 && ct != 5123 && ct != 5125 && ct != 5126)
+        throw std::runtime_error("unsupported componentType " + std::to_string(ct));
+    if (acc.contains("sparse")) throw std::runtime_error("sparse glTF accessors are not supported");
+    if (!acc.contains("bufferView")) return std::vector<float>(count * size_t(comps), 0.0f);
+    const auto& bv = g.doc["bufferViews"].at(gltfSize(acc, "bufferView"));
+    const auto& buf = g.buffers.at(gltfSize(bv, "buffer"));
     const size_t csize = ct == 5126 || ct == 5125 ? 4 : ct == 5123 || ct == 5122 ? 2 : 1;
-    const size_t stride = bv.value("byteStride", size_t(0)) ? bv.value("byteStride", size_t(0)) : csize * size_t(comps);
-    size_t base = bv.value("byteOffset", size_t(0)) + acc.value("byteOffset", size_t(0));
+    const size_t element = csize * size_t(comps);
+    const size_t stride = gltfSize(bv, "byteStride", element);
+    const size_t viewOffset = gltfSize(bv, "byteOffset"), viewLength = gltfSize(bv, "byteLength");
+    const size_t accessorOffset = gltfSize(acc, "byteOffset");
+    if (!viewLength || viewOffset > buf.size() || viewLength > buf.size() - viewOffset)
+        throw std::runtime_error("buffer view reads past its buffer");
+    if (stride < element || stride % csize || (bv.contains("byteStride") && (stride < 4 || stride > 252 || stride % 4)))
+        throw std::runtime_error("invalid accessor stride");
+    if (accessorOffset % csize || viewOffset % csize)
+        throw std::runtime_error("unaligned accessor offset");
+    if (accessorOffset > viewLength || element > viewLength - accessorOffset ||
+        count - 1 > (viewLength - accessorOffset - element) / stride)
+        throw std::runtime_error("accessor reads past its buffer view");
+    const size_t base = viewOffset + accessorOffset;
+    std::vector<float> out(count * size_t(comps), 0.0f);
     for (size_t i = 0; i < count; ++i) {
         for (int c = 0; c < comps; ++c) {
             const size_t o = base + i * stride + size_t(c) * csize;

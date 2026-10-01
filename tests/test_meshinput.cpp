@@ -1,4 +1,5 @@
 #include "meshimport.hpp"
+#include "nlohmann/json.hpp"
 
 #include <bit>
 #include <chrono>
@@ -64,6 +65,55 @@ int main() {
         for (float f : {0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 1.f, 0.f}) put32(positions, std::bit_cast<uint32_t>(f));
         chunk(good, 0x004e4942, positions);
         triangle(good, "ordinary GLB");
+
+        const auto document = nlohmann::json::parse(json);
+        auto withDocument = [&](const nlohmann::json& doc, const Bytes& binary) {
+            std::string encoded = doc.dump();
+            while (encoded.size() % 4) encoded += ' ';
+            Bytes result; put32(result, 0x46546c67); put32(result, 2); put32(result, 0);
+            chunk(result, 0x4e4f534a, Bytes(encoded.begin(), encoded.end()));
+            chunk(result, 0x004e4942, binary);
+            return result;
+        };
+        auto changed = document;
+        changed["bufferViews"][0]["byteLength"] = 12;
+        rejects(withDocument(changed, positions), "accessor outside its declared buffer view");
+        auto invalidField = [&](const char* collection, const char* key, nlohmann::json value, const char* label) {
+            auto doc = document; doc[collection][0][key] = std::move(value);
+            rejects(withDocument(doc, positions), label);
+        };
+        invalidField("buffers", "byteLength", 40, "truncated logical buffer");
+        invalidField("buffers", "byteLength", 32, "view outside logical buffer");
+        invalidField("bufferViews", "byteOffset", uint64_t(-4), "overflowing view offset");
+        invalidField("bufferViews", "byteLength", uint64_t(-1), "overflowing view length");
+        invalidField("bufferViews", "byteStride", 4, "overlapping accessor elements");
+        invalidField("bufferViews", "byteStride", 13, "unaligned stride");
+        invalidField("bufferViews", "byteStride", 0, "explicit zero stride");
+        invalidField("bufferViews", "byteStride", uint64_t(-4), "overflowing stride");
+        invalidField("accessors", "byteOffset", uint64_t(-4), "overflowing accessor offset");
+        invalidField("accessors", "byteOffset", 1, "unaligned accessor offset");
+        invalidField("accessors", "count", uint64_t(-1), "overflowing accessor count");
+        invalidField("accessors", "count", uint64_t(0x100000003), "count narrowed to int");
+        invalidField("accessors", "count", -1, "negative count");
+        invalidField("accessors", "count", 3.5, "fractional count");
+        invalidField("accessors", "count", 0, "zero count");
+        invalidField("accessors", "componentType", 5124, "unknown component type");
+        invalidField("accessors", "sparse", {{"count", 1}}, "unsupported sparse data");
+        Bytes interleaved(4, 0);
+        for (size_t i = 0; i < 3; ++i) {
+            interleaved.insert(interleaved.end(), positions.begin() + i * 12, positions.begin() + (i + 1) * 12);
+            interleaved.insert(interleaved.end(), 4, 0);
+        }
+        changed = document;
+        changed["buffers"][0]["byteLength"] = interleaved.size();
+        changed["bufferViews"][0] = {{"buffer", 0}, {"byteOffset", 4}, {"byteLength", 48}, {"byteStride", 16}};
+        triangle(withDocument(changed, interleaved), "interleaved positions with view offset");
+        changed["bufferViews"][0]["byteOffset"] = 0;
+        changed["bufferViews"][0]["byteLength"] = 52;
+        changed["accessors"][0]["byteOffset"] = 4;
+        triangle(withDocument(changed, interleaved), "interleaved positions with accessor offset");
+        auto padded = positions; padded.insert(padded.end(), 4, 0);
+        triangle(withDocument(document, padded), "extra binary bytes outside the logical buffer");
 
         auto bad = good; set32(bad, 4, 1); rejects(bad, "GLB version 1");
         bad = good; set32(bad, 8, uint32_t(good.size() - 4)); rejects(bad, "short declared length");

@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: accessor ranges
+
+A triangle with a 12-byte buffer view and 36 bytes of POSITION data reproduced
+an accepted out-of-view read. The reader now validates logical buffer lengths,
+view ranges, accessor ranges, integer counts/offsets, component alignment and
+strides before allocation and decoding. Subtraction/division bounds checks
+avoid wraparound; large counts no longer narrow through an int default. Sparse
+accessors are explicitly rejected instead of silently ignoring substitutions.
+All 334 model-input checks pass in normal and AddressSanitizer builds, including
+valid interleaved positions with separate view/accessor offsets. The full scratch
+model-import suite passes, including the two unchanged-file failure cases.
+Scene traversal remains a separate follow-up.
+
 ## 2026-10-01 continuation: GLB container boundaries
 
 The model reader now checks the GLB version, total length, complete chunk headers,
