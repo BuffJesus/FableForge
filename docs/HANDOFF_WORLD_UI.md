@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned new-level helper workspaces
+
+Own-region blank creation and the GUI palette probe overwrote all five shared
+files: new-level LEV, template palette LEV, entrance LEV, minimap LEV and PNG
+(`build/newlevel-workspace-1r5nu3r6`). Each helper now owns its workspace; every
+scratch write, including the generated navigation replacement, is checked.
+The baseline fixture was corrected to read stock-created LEVs from the WAD,
+then finished its palette check and exact Restore on the same scratch tree.
+
+`tools/test_newlevel_workspace.py` passes normal stock
+(`build/newlevel-workspace-tdml8n1s`), ASan CLI+GUI stock
+(`build/newlevel-workspace-kcetwpdb`) and normal loose
+(`build/newlevel-workspace-j1vpt0cq`). It creates a 64x64 own-region level at
+6400,6400, verifies its entrance, bakes its 256x256 minimap, opens the GUI palette,
+preserves old-path markers, cleans owned folders and restores exact original
+inventory/hashes. Loose mode retains the renamed WAD. Normal and ASan authored
+LEV/PNG hashes match the baseline. Full build and all 29 core suites pass
+(19.45 seconds). No native creation/minimap algorithms changed.
+
 ## 2026-10-01 continuation: owned GUI level and tile extraction
 
 Preview/document/fit/export loading overwrote shared LEVs in

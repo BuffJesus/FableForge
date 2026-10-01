@@ -472,6 +472,15 @@ The export and tile payloads match before/after (tile source keys excluded).
 Screenshots show expected fit terrain and World shoreline/water. The fixture
 omits graphics.big; placed-object rendering is not covered by these probes.
 
+## New-level helper workspace ownership, 2026-10-01
+
+Blank authoring, palette lookup, entrance setup and minimap LEV/PNG generation
+own their scratch files and check writes. Stock, loose and ASan CLI+GUI tests
+create a 64x64 own-region level, verify entrance/minimap, exercise GUI palette
+loading, preserve old shared files and restore exact original inventories.
+Authored LEV/minimap PNG match baseline bytes. Full build and all 29 core suites
+pass. Creation and minimap algorithms are unchanged.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

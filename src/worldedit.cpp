@@ -1,5 +1,6 @@
 #include "backups.hpp"
 #include "pendingbanks.hpp"
+#include "temporarydirectory.hpp"
 #include "worldedit.hpp"
 #include "gtg.hpp"
 
@@ -55,6 +56,14 @@ std::vector<uint8_t> readFile(const fs::path& p) {
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
+void writeScratchFile(const fs::path& path, const std::vector<uint8_t>& bytes) {
+    std::ofstream out;
+    out.exceptions(std::ios::failbit | std::ios::badbit);
+    out.open(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    out.close();
+}
+
 // The donor's .lev / .tng bytes as the game would load them: loose file first,
 // else the WAD entry (a loose-level install has no WAD).
 std::vector<uint8_t> levelBytes(const forge::levelstore::Layout& levels, const std::string& stem, const char* ext) {
@@ -99,10 +108,9 @@ bool defaultEntrance(const fs::path& gameRoot, int slot, const std::string& leve
                      std::vector<std::string>& notes, std::string& error) {
     if (!fs::exists(gameRoot / "data" / "Levels" / "FinalAlbion.gtg")) { notes.push_back("no FinalAlbion.gtg in this tree: region entrance skipped (set it later from the Level tab)"); return true; }
     try {
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "entrance";
-        fs::create_directories(tmp);
-        const fs::path levTmp = tmp / (levelName + ".lev");
-        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
+        detail::TemporaryDirectory scratch("entrance-lev-");
+        const fs::path levTmp = scratch.path() / fs::path(levelName + ".lev").filename();
+        writeScratchFile(levTmp, levBytes);
         const auto lev = forge::lev::File::open(levTmp);
         const int cx = lev.cellsX() / 2, cy = lev.cellsY() / 2;
         const float pos[3] = {float(cx), float(cy), lev.heightAt(cx, cy)};
@@ -270,10 +278,9 @@ bool bakeMinimapImage(const fs::path& gameRoot, const std::string& levelName, co
                       const forge::minimapframe::Framing* framing, forge::minimapframe::Framing* used,
                       albion::terrainexport::Image& img, std::string& error) {
     try {
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "minimap";
-        fs::create_directories(tmp);
-        const fs::path levTmp = tmp / (levelName + ".lev");
-        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
+        detail::TemporaryDirectory scratch("minimap-lev-");
+        const fs::path levTmp = scratch.path() / fs::path(levelName + ".lev").filename();
+        writeScratchFile(levTmp, levBytes);
         const auto lev = forge::lev::File::open(levTmp);
         // top-down albedo from the LEV themes (no STB needed), lit by a simple hillshade
         albion::terrainexport::Context ctx;
@@ -345,12 +352,11 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
         (void)library;
         albion::terrainexport::Image img;
         if (!bakeMinimapImage(gameRoot, levelName, levBytes, nullptr, &framing, img, error)) return false;
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "minimap";
-        fs::create_directories(tmp);
-        const fs::path png = tmp / (levelName + "_minimap.png");
+        detail::TemporaryDirectory scratch("minimap-png-");
+        const fs::path png = scratch.path() / fs::path(levelName + "_minimap.png").filename();
         {
             const auto bytes = albion::terrainexport::encodePng(img);
-            std::ofstream(png, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            writeScratchFile(png, bytes);
         }
         // Retail resolves a region's MiniMapGraphic through PLAYER_GUI.MiniMapGraphics
         // (name -> GBANK_MAIN_PC id), so a new texture is appended under its own
@@ -513,10 +519,9 @@ bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, u
 bool templatePalette(const fs::path& gameRoot, const std::string& level, std::vector<std::string>& names, std::string& error) {
     try {
         const auto bytes = levelBytes(forge::levelstore::detect(gameRoot), level, ".lev");
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
-        fs::create_directories(tmp);
-        const fs::path levTmp = tmp / (level + ".palette.lev");
-        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        detail::TemporaryDirectory scratch("template-palette-");
+        const fs::path levTmp = scratch.path() / fs::path(level + ".palette.lev").filename();
+        writeScratchFile(levTmp, bytes);
         const auto lev = forge::lev::File::open(levTmp);
         names.assign(256, "");
         for (size_t i = 0; i < lev.groundThemes().size() && i < 256; ++i) names[i] = lev.groundThemes()[i].name;
@@ -540,10 +545,9 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("authoring the level from the " + templateLevel + " skeleton");
         const auto templateBytes = levelBytes(forge::levelstore::detect(gameRoot), templateLevel, ".lev");
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "newlevel";
-        fs::create_directories(tmp);
-        const fs::path levTmp = tmp / (req.name + ".lev");
-        std::ofstream(levTmp, std::ios::binary).write(reinterpret_cast<const char*>(templateBytes.data()), std::streamsize(templateBytes.size()));
+        detail::TemporaryDirectory scratch("blank-level-");
+        const fs::path levTmp = scratch.path() / fs::path(req.name + ".lev").filename();
+        writeScratchFile(levTmp, templateBytes);
         auto lev = forge::lev::File::open(levTmp);
         if (lev.width() != req.width || lev.height() != req.height) { error = "template " + templateLevel + " is " + std::to_string(lev.width()) + "x" + std::to_string(lev.height()) + ", not " + std::to_string(req.width) + "x" + std::to_string(req.height); return false; }
         out.notes.push_back("template " + templateLevel + " (" + std::to_string(lev.width()) + "x" + std::to_string(lev.height()) + ")");
@@ -579,7 +583,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         {
             const auto saved = forge::lev::File::open(levTmp);
             const auto nav = forge::navmesh::generateTerrain(saved);
-            std::ofstream(levTmp, std::ios::binary | std::ios::trunc).write(reinterpret_cast<const char*>(nav.levBytes.data()), std::streamsize(nav.levBytes.size()));
+            writeScratchFile(levTmp, nav.levBytes);
             out.notes.push_back("navigation: " + std::to_string(nav.navigableLeaves) + " leaves over " + std::to_string(nav.walkableCells) + " walkable cells");
         }
         lev = forge::lev::File::open(levTmp);
