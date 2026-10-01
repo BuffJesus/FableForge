@@ -41,6 +41,18 @@ fs::path targetKey(const fs::path& file) {
     return key;
 }
 
+bool hasCreationMarker(const fs::path& file) {
+    bool found = false;
+    for (const char* suffix : {kCreatedSuffix, kLegacyCreatedSuffix}) {
+        const fs::path marker = file.string() + suffix;
+        if (!fs::exists(marker)) continue;
+        if (!fs::is_regular_file(marker))
+            throw std::runtime_error("creation marker is not a file: " + marker.string());
+        found = true;
+    }
+    return found;
+}
+
 bool sameBytes(const fs::path& a, const fs::path& b) {
     std::error_code ec;
     if (!fs::exists(a, ec) || !fs::exists(b, ec)) return false;
@@ -129,17 +141,20 @@ bool hasOriginal(const fs::path& file) {
 
 bool backupOnce(const fs::path& file, std::string& error) {
     try {
-        if (fs::exists(file) && !hasOriginal(file) &&
-            !fs::exists(file.string() + kCreatedSuffix) && !fs::exists(file.string() + kLegacyCreatedSuffix))
+        const bool created = hasCreationMarker(file);
+        if (fs::exists(file) && !hasOriginal(file) && !created)
             fs::copy_file(file, file.string() + kOrigSuffix);
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 void markCreated(const fs::path& file) {
-    std::error_code ec;
-    if (fs::exists(file.string() + kLegacyCreatedSuffix, ec)) return;
-    std::ofstream(file.string() + kCreatedSuffix) << "created by FableForge\n";
+    if (hasCreationMarker(file) || hasOriginal(file)) return;
+    const fs::path marker = file.string() + kCreatedSuffix;
+    std::ofstream out(marker, std::ios::binary);
+    out << "created by FableForge\n";
+    out.close();
+    if (!out) throw std::runtime_error("cannot write creation marker: " + marker.string());
 }
 
 std::vector<Entry> scan(const fs::path& gameRoot) {

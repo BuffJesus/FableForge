@@ -40,7 +40,10 @@ files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
 Later edits to a file marked as created retain that marker as their baseline; they
 do not create an original backup. This includes repeated terrain writes and WAD
-TNG deployment synchronizing an existing loose copy.
+TNG deployment synchronizing an existing loose copy. Marker paths must be
+regular files and new marker writes are checked. A failed marker preparation
+refuses a loose save and retains its dirty draft. If an original backup already
+exists for a missing loose file, saving retains that original as the baseline.
 
 `--forget` removes originals after restoring, including backups verified identical
 to their current files. Unreadable files are treated as differing. Failed target

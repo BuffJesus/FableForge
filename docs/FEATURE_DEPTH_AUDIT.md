@@ -555,6 +555,23 @@ Normal conflict/failure checks pass (`build/restore-conflicts-r_ekojt2`,
 as does the mixed-convention/staged-rebase check. The mtime heuristic within a
 valid stage is unchanged; concurrent writers to one install remain unsupported.
 
+## 2026-10-01 continuation: checked creation markers
+
+A directory at the creation-marker path made loose TNG Save report success and
+clear the draft, despite leaving the new file untracked by Restore
+(`build/creation-marker-nej29q4j`). Marker validation now rejects non-files and
+marker writes check close/flush success. Loose saves report the error before
+writing their target; the draft remains dirty. Existing regular markers are
+retained, and an existing original backup remains the baseline when a missing
+loose file is written again (no contradictory creation marker is added).
+
+Normal and ASan GUI checks pass (`build/creation-marker-40nt1v6t`,
+`build/creation-marker-6u88aspt`): modern/legacy marker-directory refusal,
+draft retention, successful retry/Restore, modern/legacy original preservation,
+and unchanged eight-bank hashes/inventory. All normal writer targets and ASan
+CLI/GUI build. New-level installation currently adds markers after its core
+commit; late commit failures are being investigated separately.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
