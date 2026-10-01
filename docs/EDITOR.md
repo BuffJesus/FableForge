@@ -370,6 +370,12 @@ tree is what the engine follows.
 
 ## The overworld (World tab)
 
+World writes save the queued edits as they were when the write started. Moves,
+ownership and visibility changes made while it runs stay pending afterward,
+with undo/redo relative to the saved layout. Putting a field back during a write
+also stays pending when the earlier change has already been saved. Saving again
+writes the later draft. The usual 128-step undo limit still applies.
+
 In **Fly over (3D)**, distant foliage uses filtering that preserves thin cutout
 shapes to reduce shimmer. Mesh lighting also accounts for non-uniform scale.
 Automatic detail adapts the number of nearby detailed maps to frame time and GPU

@@ -52,6 +52,7 @@
 #include "particlepreview.hpp"
 #include "particlepreviewrenderer.hpp"
 #include "overworld.hpp"
+#include "worlddraft.hpp"
 
 namespace albion::gui {
 
@@ -973,7 +974,8 @@ public:
     bool worldMove(const std::string& map, int x, int y);
     void worldRevert();
     // undo/redo over the pending region edits (moves, owners, visibility): one step per
-    // move / owner change / visibility toggle / revert; cleared when the edits are written
+    // move / owner change / visibility toggle / revert; a write clears only the
+    // history it saved, retaining edits accepted while that write was running
     bool worldUndo();
     bool worldRedo();
     bool worldCanUndo() const { return !worldUndo_.empty(); }
@@ -1001,11 +1003,13 @@ private:
     std::vector<editor::MapMove> worldPending_;
     std::vector<editor::OwnerEdit> worldOwnerEdits_;
     std::vector<editor::SeesEdit> worldSeesEdits_;
-    struct WorldSnap { std::vector<editor::MapMove> moves; std::vector<editor::OwnerEdit> owners; std::vector<editor::SeesEdit> sees; };
+    using WorldSnap = editor::WorldDraft;
     std::vector<WorldSnap> worldUndo_, worldRedo_;
+    uint64_t worldUndoSerial_ = 0;
     WorldSnap worldSnapshot() const { return WorldSnap{worldPending_, worldOwnerEdits_, worldSeesEdits_}; }
     void worldRestore(const WorldSnap& s);
     void worldPushUndo();
+    void acceptWorldWrite(const WorldSnap& submitted, uint64_t undoSerial);
     std::string worldSelected_;
     std::string worldHover_;
     void drawWorldLabel(const ImVec2& origin, const ImVec2& size);
@@ -1115,7 +1119,7 @@ private:
     bool worldStitch_ = false;               // average shared-edge heights with every neighbour after a move (off: retail leaves seams as they are)
     int worldStitchFeather_ = -1;            // cells the seam correction fades over (-1 = auto: one per unit of step, 4..32)
     bool worldLastOk_ = false;
-    struct WorldJob { bool ok = false; std::string error, pack; std::vector<std::string> notes; };
+    struct WorldJob { bool ok = false; std::string error, pack; std::vector<std::string> notes; WorldSnap submitted; uint64_t undoSerial = 0; };
     std::future<WorldJob> worldFuture_;
     void terrainInput(const ImVec2& origin, const ImVec2& size);
     void drawBrushCursor(const ImVec2& origin, const ImVec2& size);

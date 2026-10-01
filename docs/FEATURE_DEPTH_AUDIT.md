@@ -391,6 +391,16 @@ successful creation and all three undo paths; source-bank hashes remain exact.
 Independent WLD checks confirm queued edits were not captured into the new-level
 pack. Direct-install creation with a World draft remains unexercised.
 
+## World background-write drafts, 2026-10-01
+
+Later moves and owner/visibility edits survive a completed World pack write,
+including fields put back to their old baseline. Undo/redo reaches the new saved
+baseline; truncating the 128-entry history does not drop all later steps. Four
+GUI cases verify queued values, serialized WLD values, repeated saves and exact
+source-bank preservation. The pure draft helper passes normal/ASan tests; the
+complete 29-suite core gate passes. Direct-install and in-game behavior were not
+newly exercised by these cases.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

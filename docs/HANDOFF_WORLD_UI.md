@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: World edits during background writes
+
+A real pack save accepted a later move plus cancelled owner/visibility edits,
+then completion cleared all three and their undo. Successful completion now
+rebases current edits and only the undo steps accepted during the job against
+the saved layout. Removed submitted edits mean the old baseline was requested;
+they become compensating edits when the earlier values land. A monotonic undo
+serial handles truncation of the 128-entry history while a write runs.
+
+`tools/test_world_async.py` passes later edits, Put back/Revert, 132 edits during
+a save, and a second save of the later draft. Independent WLD checks verify the
+first saves contain only their submitted values and the repeated save contains
+the final values. All eight source-bank hashes remain unchanged. Evidence:
+`build/world-async-nhf7zg7r`. Focused normal/ASan WorldDraft tests pass, and all
+29 CTest suites pass (26.91 seconds). The GUI build passes. These new GUI probes
+write packs; direct-install and in-game paths were not newly exercised.
+
 ## 2026-10-01 continuation: World drafts during level creation
 
 A valid new-level pack creation reproduced loss of an already queued World move

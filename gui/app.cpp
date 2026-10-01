@@ -1775,9 +1775,7 @@ void App::frame(float dt) {
         else if (r.ok) pushLog("world: maps moved (start a new game to walk the new layout)", 3);
         else pushLog("world: move failed: " + r.error, 2);
         if (r.ok) {
-            worldUndo_.clear(); worldRedo_.clear();
-            worldLoaded_ = false; worldLoadedFrom_.clear();
-            loadWorld();
+            acceptWorldWrite(r.submitted, r.undoSerial);
             if (saveRoot_.empty() || saveRoot_ == installPath_) { const std::string root = installPath_; scanInstall(root); }
         }
         if (closeSaveWaiting_) {

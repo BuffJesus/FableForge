@@ -167,6 +167,7 @@ void App::worldRevert() {
 }
 
 void App::worldPushUndo() {
+    ++worldUndoSerial_;
     worldUndo_.push_back(worldSnapshot());
     if (worldUndo_.size() > 128) worldUndo_.erase(worldUndo_.begin());
     worldRedo_.clear();
@@ -195,6 +196,25 @@ bool App::worldRedo() {
     return true;
 }
 
+void App::acceptWorldWrite(const WorldSnap& submitted, uint64_t undoSerial) {
+    const editor::WorldLayout before = world_;
+    worldLoaded_ = false; worldLoadedFrom_.clear();
+    loadWorld(true);
+    if (!worldLoaded_) {
+        pushLog("world: write completed, but the saved layout could not be reloaded; kept the draft and undo", 1);
+        return;
+    }
+    const auto current = editor::rebaseWorldDraft(before, world_, submitted, worldSnapshot());
+    // Earlier undo belongs to the saved transaction. Keep only edits accepted
+    // while it ran, expressed relative to the layout that actually landed.
+    const size_t laterCount = size_t(std::min<uint64_t>(worldUndoSerial_ - undoSerial, worldUndo_.size()));
+    worldUndo_.erase(worldUndo_.begin(), worldUndo_.end() - laterCount);
+    for (auto& snapshot : worldUndo_) snapshot = editor::rebaseWorldDraft(before, world_, submitted, std::move(snapshot));
+    worldRedo_.clear();
+    worldRestore(current);
+    if (worldPendingCount()) pushLog("world: kept edits made while the write was running", 0);
+}
+
 void App::worldApply() {
     if (worldPendingCount() == 0 || worldFuture_.valid()) return;
     if (fileWriteBlocked("world")) return;
@@ -204,13 +224,15 @@ void App::worldApply() {
     const std::vector<editor::MapMove> moves = worldPending_;
     const std::vector<editor::OwnerEdit> owners = worldOwnerEdits_;
     const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
+    const uint64_t undoSerial = worldUndoSerial_;
     const bool stitch = worldStitch_ && !moves.empty();
     const int feather = worldStitchFeather_;
     pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
-    worldFuture_ = std::async(std::launch::async, [root, pack, moves, owners, sees, stitch, feather, progress]() {
+    worldFuture_ = std::async(std::launch::async, [root, pack, moves, owners, sees, stitch, feather, progress, undoSerial]() {
         WorldJob r;
+        r.submitted = {moves, owners, sees}; r.undoSerial = undoSerial;
         r.pack = pack;
         if (!pack.empty()) {   // the same edits against a shadow of the game + pack, captured into the pack
             r.ok = albion::modpack::intoPack(root, pack, [&](const std::filesystem::path& shadow, std::string& err) {
