@@ -227,6 +227,15 @@ The GUI refuses a full map palette before bank I/O. Model-import and recipe-pack
 order/deploy/byte-exact undeploy regressions pass. Recovery after abrupt process
 termination remains outside this guarantee; no new live-game probe was run.
 
+## 2026-10-01 mod-order interaction depth
+
+Pack creation through the compact UI persists the correct manifest, source and
+destination. Wrapped mod-name rows make long names readable. Enable/dependency
+mutations are deferred until drawing finishes, avoiding invalid row references.
+Actual popup, checkbox, arrow and drag interactions pass at normal and compact
+sizes with saved order/dependencies checked. Deployment behavior retains the
+separate recipe-pack evidence above.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

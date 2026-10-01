@@ -613,6 +613,11 @@ two roots, an invalid root, a refused dirty switch and returning to the first ro
 Compact asset navigation uses `combo_assets_tab` and `asset_page_0` through
 `asset_page_4`; wide panels retain `seg_assets_tab`.
 
+Mods rows expose `mod_row_<index>` (wrapped name/drag handle),
+`mod_enabled_<index>`, `mod_up_<index>`, `mod_down_<index>` and
+`mod_remove_<index>`. Right-clicking a pack name exposes dependency checkboxes
+as `mod_requires_<row>_<other-row>`. Indices follow the current displayed order.
+
 `selected_mesh_instances` counts uploaded mesh instances belonging to the
 selected thing. The mesh-import UI check waits for scene loading and requires
 one instance before capturing the cube, then verifies byte-exact placement undo.

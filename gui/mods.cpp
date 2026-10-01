@@ -326,6 +326,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (!modOrderError_.empty()) ImGui::TextColored(theme::vec(theme::Warn), "%s", modOrderError_.c_str());
     if (modOrder_.mods.empty()) ImGui::TextColored(theme::vec(theme::Faint), "no mods in the order yet");
     int moveUp = -1, moveDown = -1, remove = -1, dragFrom = -1, dragTo = -1;
+    int enableIndex = -1;
+    bool enableValue = false, requireValue = false;
+    std::string requireMod, requireMaster;
     // the last conflict report per mod: rows it wins, rows it loses
     std::map<std::string, std::pair<std::vector<std::string>, std::vector<std::string>>> wl;
     if (modReportLoaded_)
@@ -344,27 +347,15 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     for (size_t i = 0; i < modOrder_.mods.size(); ++i) {
         auto& e = modOrder_.mods[i];
         ImGui::PushID(int(i));
-        bool en = e.enabled;
-        if (ImGui::Checkbox("##en", &en)) modEnable(std::to_string(i), en);
-        ImGui::SameLine(0, S(6));
-        ImGui::BeginDisabled(i == 0);
-        if (ImGui::ArrowButton("##up", ImGuiDir_Up)) moveUp = int(i);
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Load earlier (the mods below win over it)");
-        ImGui::SameLine(0, S(3));
-        ImGui::BeginDisabled(i + 1 >= modOrder_.mods.size());
-        if (ImGui::ArrowButton("##down", ImGuiDir_Down)) moveDown = int(i);
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Load later (wins over the mods above)");
-        ImGui::SameLine(0, S(3));
-        if (theme::dangerButton("\xC3\x97##rm", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()))) remove = int(i);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove from the order (the mod's own files stay where they are)");
-        ImGui::SameLine(0, S(8));
         // the name is the drag handle: drop it on another row to load it there
         const ModRowInfo& info = i < modRows_.size() ? modRows_[i] : ModRowInfo{};
         const float nameX = ImGui::GetCursorPosX();
         ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(e.enabled ? (info.problems.empty() ? theme::Text : theme::Warn) : theme::Faint));
-        ImGui::Selectable(e.name.c_str(), false, ImGuiSelectableFlags_None, ImVec2(ImGui::CalcTextSize(e.name.c_str()).x, 0));
+        const ImVec2 nameAt = ImGui::GetCursorScreenPos();
+        const float nameHeight = ImGui::CalcTextSize(e.name.c_str(), nullptr, false, cardInner).y;
+        ImGui::Selectable("##name", false, ImGuiSelectableFlags_None, ImVec2(cardInner, nameHeight));
+        ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(), ImGui::GetFontSize(), nameAt,
+            ImGui::GetColorU32(ImGuiCol_Text), e.name.c_str(), nullptr, cardInner);
         ImGui::PopStyleColor();
         auto_.registerWidget(("mod_row_" + std::to_string(i)).c_str());
         if (ImGui::BeginDragDropSource()) {
@@ -378,7 +369,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             ImGui::EndDragDropTarget();
         }
         if (ImGui::IsItemHovered() && !ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-            std::string tip = std::string("Drag onto another row to load it there") + (info.packFolder.empty() ? "" : "; right-click for the mods it requires");
+            std::string tip = e.name + "\nDrag onto another row to load it there" + (info.packFolder.empty() ? "" : "; right-click for the mods it requires");
             for (const auto& r : info.masters) tip += "\nrequires " + r;
             for (const auto& pr : info.problems) tip += "\n! " + pr;
             ImGui::SetTooltip("%s", tip.c_str());
@@ -390,32 +381,58 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 const std::string& other = modOrder_.mods[j].name;
                 bool req = std::find(info.masters.begin(), info.masters.end(), other) != info.masters.end() ||
                            (!modRows_[j].packName.empty() && std::find(info.masters.begin(), info.masters.end(), modRows_[j].packName) != info.masters.end());
-                if (ImGui::Checkbox(other.c_str(), &req)) modSetRequires(e.name, other, req);
+                if (ImGui::Checkbox(other.c_str(), &req)) { requireMod = e.name; requireMaster = other; requireValue = req; }
+                auto_.registerWidget(("mod_requires_" + std::to_string(i) + "_" + std::to_string(j)).c_str());
             }
             ImGui::EndPopup();
         }
-        ImGui::SameLine();
+        bool en = e.enabled;
+        if (ImGui::Checkbox("##en", &en)) { enableIndex = int(i); enableValue = en; }
+        auto_.registerWidget(("mod_enabled_" + std::to_string(i)).c_str());
+        ImGui::SameLine(0, S(6));
+        ImGui::BeginDisabled(i == 0);
+        if (ImGui::ArrowButton("##up", ImGuiDir_Up)) moveUp = int(i);
+        auto_.registerWidget(("mod_up_" + std::to_string(i)).c_str());
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Load earlier (the mods below win over it)");
+        ImGui::SameLine(0, S(3));
+        ImGui::BeginDisabled(i + 1 >= modOrder_.mods.size());
+        if (ImGui::ArrowButton("##down", ImGuiDir_Down)) moveDown = int(i);
+        auto_.registerWidget(("mod_down_" + std::to_string(i)).c_str());
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Load later (wins over the mods above)");
+        ImGui::SameLine(0, S(3));
+        if (theme::dangerButton("\xC3\x97##rm", ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()))) remove = int(i);
+        auto_.registerWidget(("mod_remove_" + std::to_string(i)).c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove from the order (the mod's own files stay where they are)");
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Muted), "%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Muted));
+        ImGui::TextWrapped("%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
+        ImGui::PopStyleColor();
         if (const auto it = wl.find(e.name); it != wl.end()) {
             if (!it->second.first.empty()) {
-                ImGui::SameLine(0, S(8));
                 ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.first.size());
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Wins over the other mods on:", it->second.first).c_str());
             }
             if (!it->second.second.empty()) {
-                ImGui::SameLine(0, S(6));
+                if (!it->second.first.empty()) ImGui::SameLine(0, S(6));
                 ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.second.size());
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Overridden by a later mod (or a pick) on:", it->second.second).c_str());
             }
         }
         for (const auto& pr : info.problems) {
             ImGui::SetCursorPosX(nameX);
-            ImGui::TextColored(theme::vec(theme::Warn), "! %s", pr.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Warn));
+            ImGui::TextWrapped("! %s", pr.c_str());
+            ImGui::PopStyleColor();
         }
         ImGui::PopFont();
+        if (i + 1 < modOrder_.mods.size()) ImGui::Separator();
         ImGui::PopID();
     }
+    // These actions reload modOrder_/modRows_; no row may retain references.
+    if (enableIndex >= 0) modEnable(std::to_string(enableIndex), enableValue);
+    if (!requireMod.empty()) modSetRequires(requireMod, requireMaster, requireValue);
     if (dragFrom >= 0 && dragTo >= 0 && dragFrom != dragTo) modMove(std::to_string(dragFrom), dragTo);
     if (moveUp >= 0) modMove(std::to_string(moveUp), moveUp - 1);
     if (moveDown >= 0) modMove(std::to_string(moveDown), moveDown + 1);

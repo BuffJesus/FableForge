@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: mod rows and interaction lifetime
+
+An actual New pack click at 800x600 / 1.5 scale created the expected manifest,
+relative load-order source and selected destination. Its Mods row exposed a
+clipped name behind four controls. Names now use their own wrapped drag-handle
+row; controls, kind/notes, conflict counts and dependency warnings have room
+below. A long name is fully readable in the inspected compact capture.
+
+Enable and dependency-checkbox actions previously reloaded the order while the
+draw loop retained references into it. Both mutations are deferred until all
+rows finish drawing. `tools/test_mods_masters.py` now exercises the actual popup
+checkbox, enable checkbox, reorder arrow and drag handle, checks persisted order,
+enabled flags and requires metadata, and still checks the composer's dependency
+report. It passes at 1280x720/default scale and 800x600/1.5 scale. No game-bank
+deployment is involved in these interaction checks.
+
 ## 2026-10-01 continuation: custom ground-theme failure recovery
 
 The existing writer installed the base texture before attempting an optional
