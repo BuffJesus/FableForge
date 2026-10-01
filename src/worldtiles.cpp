@@ -171,19 +171,46 @@ Tile buildTile(const forge::lev::File& level, const std::string& name, const ter
     return t;
 }
 
+static std::pair<int, float> gridCoordinate(float v, int count, int cells, int stride) {
+    v = std::clamp(v, 0.0f, float(cells - 1));
+    const float g = v / float(stride);
+    const int i = std::min(int(g), count - 2 < 0 ? 0 : count - 2);
+    const float x0 = float(sampleIndex(i, count, cells, stride)), x1 = float(sampleIndex(std::min(i + 1, count - 1), count, cells, stride));
+    const float f = x1 > x0 ? std::clamp((v - x0) / (x1 - x0), 0.0f, 1.0f) : 0.0f;
+    return std::pair<int, float>{i, f};
+}
+
+static std::array<float, 3> vertexNormal(const Tile& t, int i, int j) {
+    const int il = std::max(i - 1, 0), ir = std::min(i + 1, t.gw - 1), jd = std::max(j - 1, 0), ju = std::min(j + 1, t.gh - 1);
+    const float xl = float(sampleIndex(il, t.gw, t.cellsX, t.stride)), xr = float(sampleIndex(ir, t.gw, t.cellsX, t.stride));
+    const float yd = float(sampleIndex(jd, t.gh, t.cellsY, t.stride)), yu = float(sampleIndex(ju, t.gh, t.cellsY, t.stride));
+    const float dx = xr > xl ? (t.heights[size_t(j) * t.gw + ir] - t.heights[size_t(j) * t.gw + il]) / (xr - xl) : 0;
+    const float dy = yu > yd ? (t.heights[size_t(ju) * t.gw + i] - t.heights[size_t(jd) * t.gw + i]) / (yu - yd) : 0;
+    const float length = std::sqrt(dx * dx + dy * dy + 1);
+    return {-dx / length, -dy / length, 1 / length};
+}
+
+std::array<float, 3> meshNormalAt(const Tile& t, float x, float y) {
+    if (t.gw < 1 || t.gh < 1 || t.cellsX < 1 || t.cellsY < 1 || t.stride < 1 || t.heights.size() != size_t(t.gw)*t.gh) return {0,0,1};
+    const auto [i, fx] = gridCoordinate(x, t.gw, t.cellsX, t.stride);
+    const auto [j, fy] = gridCoordinate(y, t.gh, t.cellsY, t.stride);
+    const int i1 = std::min(i + 1, t.gw - 1), j1 = std::min(j + 1, t.gh - 1);
+    const auto b = vertexNormal(t, i1, j), c = vertexNormal(t, i, j1);
+    std::array<float,3> result;
+    if (fx + fy <= 1) {
+        const auto a = vertexNormal(t, i, j);
+        for (int k = 0; k < 3; ++k) result[k] = a[k] + (b[k]-a[k])*fx + (c[k]-a[k])*fy;
+    } else {
+        const auto d = vertexNormal(t, i1, j1);
+        for (int k = 0; k < 3; ++k) result[k] = d[k] + (c[k]-d[k])*(1-fx) + (b[k]-d[k])*(1-fy);
+    }
+    return result;
+}
+
 static float sampleHeight(const Tile& t, float x, float y, bool triangles) {
     if (t.heights.empty()) return 0.0f;
-    // grid index space: sample i sits at map x = sampleIndex(i); the last column may be closer
-    auto toGrid = [&](float v, int count, int cells) {
-        v = std::clamp(v, 0.0f, float(cells - 1));
-        const float g = v / float(t.stride);
-        const int i = std::min(int(g), count - 2 < 0 ? 0 : count - 2);
-        const float x0 = float(sampleIndex(i, count, cells, t.stride)), x1 = float(sampleIndex(std::min(i + 1, count - 1), count, cells, t.stride));
-        const float f = x1 > x0 ? std::clamp((v - x0) / (x1 - x0), 0.0f, 1.0f) : 0.0f;
-        return std::pair<int, float>{i, f};
-    };
-    const auto [i, fx] = toGrid(x, t.gw, t.cellsX);
-    const auto [j, fy] = toGrid(y, t.gh, t.cellsY);
+    const auto [i, fx] = gridCoordinate(x, t.gw, t.cellsX, t.stride);
+    const auto [j, fy] = gridCoordinate(y, t.gh, t.cellsY, t.stride);
     const int i1 = std::min(i + 1, t.gw - 1), j1 = std::min(j + 1, t.gh - 1);
     auto H = [&](int a, int b) { return t.heights[size_t(b) * t.gw + a]; };
     if (triangles) {
@@ -198,6 +225,56 @@ static float sampleHeight(const Tile& t, float x, float y, bool triangles) {
 float heightAt(const Tile& t, float x, float y) { return sampleHeight(t, x, y, false); }
 float meshHeightAt(const Tile& t, float x, float y) { return sampleHeight(t, x, y, true); }
 
+bool rayHit(const Tile& t, const float o[3], const float d[3], float& distance) {
+    if (t.gw < 2 || t.gh < 2 || t.stride < 1 || t.cellsX < 2 || t.cellsY < 2 ||
+        t.heights.size() != size_t(t.gw)*t.gh || !std::isfinite(distance) || distance < 0) return false;
+    double enter = 0, leave = distance;
+    const double lo[] = {0,0,t.minH}, hi[] = {double(t.cellsX-1),double(t.cellsY-1),t.maxH};
+    for (int a=0;a<3;++a) {
+        if (!std::isfinite(o[a]) || !std::isfinite(d[a])) return false;
+        if (d[a] == 0) { if (o[a]<lo[a] || o[a]>hi[a]) return false; }
+        else {
+            double first=(lo[a]-o[a])/d[a], last=(hi[a]-o[a])/d[a];
+            if (first>last) std::swap(first,last);
+            enter=std::max(enter,first); leave=std::min(leave,last);
+            if (enter>leave) return false;
+        }
+    }
+    int ix=std::clamp(int(std::max(0.0,double(o[0])+d[0]*enter)/t.stride),0,t.gw-2);
+    int iy=std::clamp(int(std::max(0.0,double(o[1])+d[1]*enter)/t.stride),0,t.gh-2);
+    // Visit only cells crossed in XY, at most gw+gh, not every world triangle.
+    for (int step=0;step<t.gw+t.gh && ix>=0 && iy>=0 && ix<t.gw-1 && iy<t.gh-1;++step) {
+        const double x=sampleIndex(ix,t.gw,t.cellsX,t.stride), y=sampleIndex(iy,t.gh,t.cellsY,t.stride);
+        const double w=sampleIndex(ix+1,t.gw,t.cellsX,t.stride)-x, h=sampleIndex(iy+1,t.gh,t.cellsY,t.stride)-y;
+        if (w<=0 || h<=0) return false;
+        const double tx=d[0] ? ((d[0]>0 ? x+w : x)-o[0])/d[0] : leave+1;
+        const double ty=d[1] ? ((d[1]>0 ? y+h : y)-o[1])/d[1] : leave+1;
+        const double end=std::min({leave,tx,ty});
+        const double u0=(o[0]-x)/w, v0=(o[1]-y)/h, du=d[0]/w, dv=d[1]/h;
+        const size_t a=size_t(iy)*t.gw+ix;
+        const double z00=t.heights[a], z10=t.heights[a+1], z01=t.heights[a+t.gw], z11=t.heights[a+t.gw+1];
+        double nearest=double(distance)+1;
+        for (int triangle=0;triangle<2;++triangle) {
+            const double base=triangle ? z10+z01-z11 : z00;
+            const double zu=triangle ? z11-z01 : z10-z00, zv=triangle ? z11-z10 : z01-z00;
+            const double denominator=d[2]-zu*du-zv*dv;
+            if (std::abs(denominator)<1e-12) continue;
+            const double at=(base+zu*u0+zv*v0-o[2])/denominator;
+            if (at<enter-1e-7 || at>end+1e-7 || at<0 || at>distance) continue;
+            const double u=u0+du*at, v=v0+dv*at;
+            if (u < -1e-7 || v < -1e-7 || u > 1+1e-7 || v > 1+1e-7) continue;
+            if (triangle ? u+v < 1-1e-7 : u+v > 1+1e-7) continue;
+            nearest=std::min(nearest,at);
+        }
+        if (nearest<=distance) { distance=float(nearest); return true; }
+        if (end>=leave) break;
+        if (tx<=ty) ix+=d[0]>0 ? 1 : -1;
+        if (ty<=tx) iy+=d[1]>0 ? 1 : -1;
+        enter=end;
+    }
+    return false;
+}
+
 void appendMesh(const Tile& t, foliageexport::Scene& scene, float worldX, float worldY) {
     if (t.gw < 2 || t.gh < 2) return;
     foliageexport::Mesh m;
@@ -207,15 +284,8 @@ void appendMesh(const Tile& t, foliageexport::Scene& scene, float worldX, float 
     for (int j = 0; j < t.gh; ++j)
         for (int i = 0; i < t.gw; ++i) {
             const float x = float(sampleIndex(i, t.gw, t.cellsX, t.stride)), y = float(sampleIndex(j, t.gh, t.cellsY, t.stride));
-            // normal from the neighbouring samples
-            const int il = std::max(i - 1, 0), ir = std::min(i + 1, t.gw - 1), jd = std::max(j - 1, 0), ju = std::min(j + 1, t.gh - 1);
-            const float xl = float(sampleIndex(il, t.gw, t.cellsX, t.stride)), xr = float(sampleIndex(ir, t.gw, t.cellsX, t.stride));
-            const float yd = float(sampleIndex(jd, t.gh, t.cellsY, t.stride)), yu = float(sampleIndex(ju, t.gh, t.cellsY, t.stride));
-            const float dzdx = xr > xl ? (t.heights[size_t(j) * t.gw + ir] - t.heights[size_t(j) * t.gw + il]) / (xr - xl) : 0.0f;
-            const float dzdy = yu > yd ? (t.heights[size_t(ju) * t.gw + i] - t.heights[size_t(jd) * t.gw + i]) / (yu - yd) : 0.0f;
-            float nx = -dzdx, ny = -dzdy, nz = 1.0f;
-            const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-            m.geometry.vertices.push_back({x, y, t.heights[size_t(j) * t.gw + i], nx / len, ny / len, nz / len,
+            const auto n = vertexNormal(t, i, j);
+            m.geometry.vertices.push_back({x, y, t.heights[size_t(j) * t.gw + i], n[0], n[1], n[2],
                                            w > 0 ? x / w : 0.0f, h > 0 ? y / h : 0.0f});
         }
     foliageexport::SubMesh part;

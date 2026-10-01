@@ -1,0 +1,26 @@
+# A failed World write must leave the queued edit and its undo history intact.
+wait_maps
+wait_ready
+world_tab 1
+frames 5
+assert_state world_loaded 1
+world_move TeleporterGreatwood 2048 8064
+assert_state world_pending 1
+set saveroot build/nonexistent_world_write_root
+world_apply
+wait_world
+frames 3
+assert_state world_ok 0
+assert_state world_pending 1
+assert_state world_can_undo 1
+close
+frames 2
+assert_state close_prompt 1
+click btn_unsaved_save
+wait_world
+frames 2
+assert_state close_prompt 1
+assert_state world_pending 1
+click btn_unsaved_cancel
+frames 2
+assert_state world_pending 1

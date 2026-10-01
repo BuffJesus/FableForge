@@ -1,0 +1,32 @@
+# Delete the retail exit inside a copied ground rectangle, then undo exactly.
+wait_maps
+wait_ready
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+edit 1
+wait_foliage
+edit_tab 1
+terrain_mode 14
+frames 3
+snapshot_document
+clip_copy 71 14 73 17 0
+frames 3
+assert_widget btn_clip_delete
+reveal btn_clip_delete
+screenshot build/ui/clip_delete_before.png
+click btn_clip_delete
+frames 3
+assert_log deleted 1 object(s) inside the rectangle
+assert_state selected_thing -1
+undo
+assert_document_same
+mouse_move viewport
+key_down Delete
+key_up Delete
+frames 3
+assert_log deleted 1 object(s) inside the rectangle
+assert_state doc_changes 1
+undo
+assert_document_same
+quit

@@ -1,0 +1,50 @@
+# Retail animated component light, composited wire-volume toggle and exact pause/reset.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select BURNING_HANDS_POWER_UP
+effect_preview_restart
+effect_preview_step 15
+frames 4
+assert_state effect_preview_lights 1
+assert_state effect_preview_light_volumes 1
+assert_state effect_show_light_volumes 1
+clear_toasts
+mouse_move viewport
+screenshot build/ui/effect_light_15.png
+dump_state
+frames 15
+screenshot build/ui/effect_light_paused.png
+click check_effect_light_volumes
+frames 3
+assert_state effect_show_light_volumes 0
+assert_state effect_preview_light_volumes 0
+assert_state effect_preview_lights 1
+mouse_move viewport
+screenshot build/ui/effect_light_hidden.png
+click check_effect_light_volumes
+frames 3
+assert_state effect_preview_light_volumes 1
+effect_preview_step 15
+frames 3
+mouse_move viewport
+screenshot build/ui/effect_light_30.png
+effect_preview_restart
+effect_preview_step 15
+frames 3
+assert_state effect_preview_light_volumes 1
+screenshot build/ui/effect_light_reset.png
+effect_preview_step 47
+frames 3
+assert_state effect_preview_lights 0
+assert_state effect_preview_light_volumes 0
+# A light-free effect clears volume state.
+effect_select BLOOD_POOL
+effect_preview_restart
+effect_preview_step 15
+frames 3
+assert_state effect_preview_lights 0
+assert_state effect_preview_light_volumes 0
+assert_effect_meshes
+quit

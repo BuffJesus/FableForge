@@ -1,0 +1,45 @@
+# Top-centre world label: hover first, selected fallback, hidden when neither.
+wait_maps
+wait_ready
+set world_detail 0
+set world_aa 1
+world_tab 1
+wait_world_tiles
+world_select HookCoast
+mouse_move 20 20
+frames 3
+assert_state world_hover
+assert_state world_label HookCoast
+clear_toasts
+screenshot build/ui/world_label_2d_selected.png
+# Initialize the stored camera before entering 3D to avoid overview auto-framing.
+world_camera 927 4220 0 0.8 0.35 200
+world_pose -100 4220 -1000 -1.5707963 0
+set world_3d 1
+wait_world_tiles
+mouse_move viewport
+frames 3
+assert_state world_hover
+assert_state world_label HookCoast
+screenshot build/ui/world_label_3d_selected.png
+click viewport
+frames 4
+assert_state world_selected
+assert_state world_hover
+assert_state world_label
+screenshot build/ui/world_label_empty.png
+# Looking nearly straight down inside HookCoast: hover overrides another selection.
+world_select StartOakValeWest
+world_pose 850 4220 200 0 1.55
+mouse_move viewport
+frames 4
+assert_state world_hover HookCoast
+assert_state world_label HookCoast
+screenshot build/ui/world_label_3d_hover.png
+mouse_move 20 20
+frames 3
+assert_state world_hover
+assert_state world_label StartOakValeWest
+screenshot build/ui/world_label_3d_fallback.png
+dump_state
+quit

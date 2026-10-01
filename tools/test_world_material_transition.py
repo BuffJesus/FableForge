@@ -15,7 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--baseline', type=Path, help='Compare publication changes and unchanged full-detail endpoints')
-    parser.add_argument('--legacy-material', action='store_true', help='Disable material blending for an otherwise identical baseline')
+    parser.add_argument('--legacy-material', action='store_true', help='Use the legacy height-only transition (colour and normal blending disabled)')
+    parser.add_argument("--legacy-normals", action="store_true", help="Disable normal blending for a matched lighting comparison")
     args = parser.parse_args()
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -26,6 +27,7 @@ def main():
     poses = {'guild': '3398.75 3612.5 95 0.46365 0.35',
              'oakvale': '3550 825 70 0.8 0.4'}
     lines += [f'set world_material_blend {int(not args.legacy_material)}']
+    lines += [f'set world_normal_blend {int(not args.legacy_normals)}']
     for name, pose in poses.items():
         lines += ['set world_detail 0', f'world_pose {pose}', 'frames 3',
                   f'screenshot {(out / (name + "-coarse.png")).as_posix()}',
@@ -63,6 +65,8 @@ def main():
                 raise RuntimeError(f'{name}: publication discontinuity did not improve')
             before = Image.open(args.baseline / f'{name}-10.png').convert('RGB')
             after = Image.open(out / f'{name}-10.png').convert('RGB')
+            if before.size != after.size:
+                raise RuntimeError('Viewport dimensions differ; comparison is invalid')
             box = (285, 65, after.width-356, after.height-4)
             if not np.array_equal(np.asarray(before.crop(box)), np.asarray(after.crop(box))):
                 raise RuntimeError(f'{name}: full-detail endpoint changed')

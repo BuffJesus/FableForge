@@ -5,6 +5,7 @@
 // keyed by the source level and bake dependencies, to avoid rebuilding on the next opening.
 
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -28,7 +29,7 @@ struct Tile {
 };
 
 // The decimation for a map: about `target` quads along its longer side (at least 1 unit).
-int strideFor(int cellsX, int cellsY, int target = 40);
+int strideFor(int cellsX, int cellsY, int target = 80);
 
 // Merge only flat, identically shaded unit quads; retain shores, holes and ice transitions.
 // Unsupported topology is returned unchanged. No height/fade approximation is made.
@@ -47,6 +48,12 @@ int sampleIndex(int i, int count, int cells, int stride);
 float heightAt(const Tile& tile, float localX, float localY);
 // Height on the actual overview triangles, used for a hole-free geometry transition.
 float meshHeightAt(const Tile& tile, float localX, float localY);
+// Nearest overview surface intersection. Ray is tile-local Fable Z-up;
+// distance is an input limit and updated only on a hit. Tile sides are not solid.
+bool rayHit(const Tile& tile, const float origin[3], const float direction[3], float& distance);
+// Interpolated vertex normal of the actual overview triangles, in Fable Z-up axes.
+// Preserve its interpolated length; the pixel shader normalizes after interpolation.
+std::array<float, 3> meshNormalAt(const Tile& tile, float localX, float localY);
 
 // The tile as one mesh in map-local Fable axes (Z up), textured with image 0 of `scene`.
 void appendMesh(const Tile& tile, foliageexport::Scene& scene, float worldX, float worldY);

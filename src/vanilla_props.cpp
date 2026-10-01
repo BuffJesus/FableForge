@@ -22,5 +22,6 @@ const VanillaField* vanillaField(const std::string& ctc, const std::string& key)
         if (ctc == f.ctc && sameKey(f.key, key)) return &f;
     return nullptr;
 }
+std::span<const VanillaField> vanillaFields() { return kFields; }
 
 } // namespace albion::editor

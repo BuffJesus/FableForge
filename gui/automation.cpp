@@ -3,6 +3,7 @@
 // dispatcher; the app-side helpers it calls live in app.cpp / editor.cpp / world.cpp /
 // textures.cpp.
 #include "app.hpp"
+#include "dialogueaudio.hpp"
 #include "profile.hpp"
 
 #include "imgui_internal.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -81,6 +83,19 @@ void Automation::note(const std::string& what) {
 
 bool Automation::tick(App& app) {
     if (!active_ || quit_) return !quit_;
+    if (!worldCoverageWatch_.empty()) {
+        float detail=0;
+        if (const auto found=app.worldDetailShown_.find(worldCoverageWatch_);found!=app.worldDetailShown_.end()) {
+            const float progress=app.worldDetailFadeOverride_.value_or(found->second.fade);
+            detail=app.worldSmoothObjects_ ? worldview::DetailFade::objects(progress) : progress;
+        }
+        const float coarse=app.worldScenery_.preparedCoverage(worldCoverageWatch_);
+        ++worldCoverageWatchFrames_;
+        if (detail+(1-detail)*coarse < 0.999f) {
+            fail("scenery handoff coverage gap for " + worldCoverageWatch_ + ": detail=" + std::to_string(detail) + " coarse=" + std::to_string(coarse));
+            worldCoverageWatch_.clear();
+        }
+    }
     // App::frame has already rendered: record its pose before this tick changes it.
     if (!capturePrefix_.empty()) {
         char suffix[32];
@@ -155,7 +170,15 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "mouse_move") {   // mouse_move <x> <y>  (window pixels) | mouse_move viewport
         ImGuiIO& io = ImGui::GetIO();
-        if (widgets_.count(rest)) {   // a registered widget (or "viewport"): its centre
+        if (rest=="selected_pivot") {
+            float x=0,y=0;
+            if (!app.selectedPivotScreen(x,y)) { fail("mouse_move: selected pivot is off screen"); ++pc_; return true; }
+            setVirtualMouse(x,y);
+        } else if (rest=="selected_glyph") {
+            float x=0,y=0;
+            if (!app.selectedGlyphScreen(x,y)) { fail("mouse_move: selected glyph is off screen"); ++pc_; return true; }
+            setVirtualMouse(x,y);
+        } else if (widgets_.count(rest)) {   // a registered widget (or "viewport"): its centre
             const ImVec4 r = widgets_[rest];
             setVirtualMouse((r.x + r.z) * 0.5f, (r.y + r.w) * 0.5f);
         } else if (rest.empty() || !std::isdigit(static_cast<unsigned char>(rest[0]))) { fail("mouse_move: widget not on screen: " + rest); ++pc_; return true; }
@@ -182,8 +205,11 @@ bool Automation::tick(App& app) {
     else if (cmd == "key_down" || cmd == "key_up") {
         static const std::map<std::string, ImGuiKey> keys = {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
-            {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
-            {"Ctrl", ImGuiKey_LeftCtrl}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal}};
+            {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"H", ImGuiKey_H}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
+            {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},
+            {"Left",ImGuiKey_LeftArrow}, {"Right",ImGuiKey_RightArrow}, {"Up",ImGuiKey_UpArrow}, {"Down",ImGuiKey_DownArrow},
+            {"Comma",ImGuiKey_Comma}, {"Period",ImGuiKey_Period}, {"PageUp",ImGuiKey_PageUp}, {"PageDown",ImGuiKey_PageDown},
+            {"LBracket",ImGuiKey_LeftBracket}, {"RBracket",ImGuiKey_RightBracket}, {"Delete",ImGuiKey_Delete}};
         auto it = keys.find(rest);
         if (it == keys.end()) fail("unknown key " + rest);
         else {
@@ -219,12 +245,22 @@ bool Automation::tick(App& app) {
 #endif
     }
     else if (cmd == "profile_mark") { FORGE_MESSAGE(rest); note("ok   " + line); ++pc_; }
-    else if (cmd == "wait_world_detail") {
+    else if (cmd == "wait_texture_cleanup") waitOn(app.renderer_.retiredTextureBytes() == 0, "retired texture CPU pixels");
+    else if (cmd == "wait_world_detail_held") waitOn(app.worldDetailWork_ && app.worldDetailWork_->held.load(), "held world preparation");
+    else if (cmd == "wait_world_scenery") waitOn(app.worldScenery_.settled, "visible distant scenery");
+    else if (cmd == "watch_world_coverage") {
+        if (rest=="-") { note("coverage watched " + std::to_string(worldCoverageWatchFrames_) + " frames"); worldCoverageWatch_.clear(); }
+        else { worldCoverageWatch_=rest; worldCoverageWatchFrames_=0; }
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "wait_world_detail_idle") waitOn(!app.worldDetailFuture_.valid() && !app.worldDetailUpload_ && app.worldDetailRelease_.idle(), "idle world preparation and retirement");
+    else if (cmd == "wait_world_detail" || cmd == "wait_world_detail_settled") {
         // High-altitude and empty-space views legitimately request zero maps.
         // Refresh demand once before accepting an empty, settled working set.
         if (!worldDetailWaitStarted_) { worldDetailWaitStarted_ = true; app.worldDetailNext_ = 0; return true; }
         const auto before = pc_;
         waitOn(!app.worldDetailFuture_.valid() && !app.worldDetailUpload_ && app.worldDetailWanting_ == 0 &&
+            (cmd == "wait_world_detail_settled" || app.worldDetailDeferred_ == 0) &&
             std::all_of(app.worldDetailShown_.begin(), app.worldDetailShown_.end(), [](const auto& entry) { return entry.second.wanted && entry.second.fade == 1.0f; }), "world detail near the camera");
         if (pc_ != before) worldDetailWaitStarted_ = false;
     }
@@ -237,6 +273,18 @@ bool Automation::tick(App& app) {
         app.worldGroundAt(x, y, inside, &actual);
         if (expected == "-") expected.clear();
         if (actual != expected || inside != !expected.empty()) fail("world ground: expected " + expected + ", got " + actual);
+        else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_world_ray") { // Fable origin/direction, then map, * (any hit), or -
+        float o[3]{},d[3]{}; std::string expected;
+        std::istringstream(rest) >> o[0] >> o[1] >> o[2] >> d[0] >> d[1] >> d[2] >> expected;
+        const float renderO[]={o[0],o[2],-o[1]}, renderD[]={d[0],d[2],-d[1]};
+        float hit[3]{}; std::string actual;
+        const bool found=app.worldPickTile(renderO,renderD,actual,hit);
+        if (expected=="-") expected.clear();
+        if ((expected=="*" && !found) || (expected!="*" && actual!=expected))
+            fail("world ray: expected " + expected + ", got " + actual);
         else note("ok   " + line);
         ++pc_;
     }
@@ -326,6 +374,33 @@ bool Automation::tick(App& app) {
         if (d > 1e-3f) fail("camera not back: off by " + std::to_string(d)); else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "assert_initial_position") {
+        editor::Frame frame;
+        if (app.selectedThing_<0 || !app.doc_.frameOf(size_t(app.selectedThing_),frame)) fail("assert_initial_position: no selected frame");
+        else {
+            const auto rows=app.doc_.propertiesOf(size_t(app.selectedThing_));
+            const char* keys[]={"InitialPosX","InitialPosY","InitialPosZ"};
+            const float expected[]={frame.pos[0]+app.doc_.worldX(),frame.pos[1]+app.doc_.worldY(),frame.pos[2]};
+            bool valid=true;
+            for (int axis=0;axis<3;++axis) {
+                const auto row=std::find_if(rows.begin(),rows.end(),[&](const auto& r) { return r.ctc.empty() && r.key==keys[axis]; });
+                valid=valid && row!=rows.end() && std::abs(std::atof(row->value.c_str())-expected[axis])<.001;
+            }
+            if (valid) note("ok   "+line); else fail("assert_initial_position: saved position differs from world-space physics position");
+        }
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_ground") {
+        editor::Frame frame;
+        if (app.selectedThing_ < 0 || !app.doc_.frameOf(size_t(app.selectedThing_),frame) || !app.doc_.hasTerrain())
+            fail("assert_selected_ground: no terrain or selected frame");
+        else {
+            const auto expected = app.doc_.groundHeight(frame.pos[0],frame.pos[1]);
+            if (!expected || std::abs(frame.pos[2]-*expected)>0.01f) fail("selected object is not on the ground");
+            else note("ok   " + line);
+        }
+        ++pc_;
+    }
     else if (cmd == "camera_above_selected") {   // camera_above_selected [distance]: look straight down at the selected thing
         editor::Frame f;
         float dist = 8;
@@ -371,11 +446,39 @@ bool Automation::tick(App& app) {
         else if (key == "activity") app.activityOpen_ = val == "1" ? 1 : 0;
         else if (key == "world_3d") app.setWorld3D(val == "1");
         else if (key == "world_auto_detail") app.worldAutoDetail_ = val == "1";
+        else if (key == "world_detail_upload_ms") {
+            const int ms=std::atoi(val.c_str()); app.worldDetailUploadBudgetMs_ = ms==2 || ms==4 ? ms : 0;
+        }
+        else if (key == "world_overview_batch_limit") app.worldOverviewBatchLimit_ = std::clamp(std::atoi(val.c_str()), 1, 32);
+        else if (key == "world_detail_fail_prepare") app.worldDetailFailPrepare_ = val == "-" ? "" : val;
+        else if (key == "world_detail_fail_upload") app.worldDetailFailUpload_ = val == "-" ? "" : val;
+        else if (key == "world_detail_hold_prepare") {
+            app.worldDetailHoldPrepare_ = val == "-" ? "" : val;
+            if (val == "-" && app.worldDetailWork_) app.worldDetailWork_->hold = false;
+        }
+        else if (key == "world_objects" || key == "world_creatures" || key == "world_plants") {
+            bool& setting = key == "world_objects" ? app.worldDetailThings_ : key == "world_creatures" ? app.worldDetailCreatures_ : app.worldDetailFoliage_;
+            if (setting != (val == "1")) { setting = val == "1"; app.clearWorldDetail(); }
+        }
         else if (key == "world_culling") app.renderer_.worldCulling = val == "1";
+        else if (key == "world_smooth_objects") app.worldSmoothObjects_ = val == "1";
+        else if (key == "world_aa") { int n = std::atoi(val.c_str()); app.renderer_.worldAaMode = n == 2 || n == 4 ? n : n == 1 ? 1 : 0; }
+        else if (key == "world_aa_test_limit") { int n = std::atoi(val.c_str()); app.renderer_.worldAaTestLimit = n == 2 || n == 4 ? n : 1; }
+        else if (key == "world_cutout_mask") app.renderer_.worldCutoutMask = val == "1";
+        else if (key == "world_cutout_aa") app.renderer_.worldCutoutAa = val == "1";
+        else if (key == "world_cutout_mips") app.renderer_.worldCutoutMips = val == "1";
+        else if (key == "world_cutout_cache") app.worldCutoutCacheOn_ = val == "1";
+        else if (key == "world_texture_mips") app.renderer_.worldTextureMips = val == "1";
+        else if (key == "world_texture_sharing") app.renderer_.worldTextureSharing = val == "1";
+        else if (key == "world_normal_blend") app.renderer_.worldNormalBlend = val == "1";
         else if (key == "world_material_blend") app.renderer_.worldMaterialBlend = val == "1";
         else if (key == "world_terrain") app.worldTerrain2D_ = val == "1";
         else if (key == "world_detail") { app.worldDetailOn_ = val == "1"; if (!app.worldDetailOn_) app.clearWorldDetail(); }
-        else if (key == "world_detail_limit") app.worldDetailMaps_ = std::clamp(std::atoi(val.c_str()), 1, 12);
+        else if (key == "world_detail_limit") { app.worldDetailMaps_ = app.worldDetailAutoMaps_ = std::clamp(std::atoi(val.c_str()), 1, 32); }
+        else if (key == "world_detail_radius") app.worldDetailRadius_ = std::clamp(float(std::atof(val.c_str())), 100.0f, 1000.0f);
+        else if (key == "world_scenery") app.worldSceneryOn_ = val == "1";
+        else if (key == "world_object_lods") app.renderer_.worldObjectLods = val == "1";
+        else if (key == "world_terrain_lods") app.renderer_.worldTerrainLods = val == "1";
         else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
         else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";
@@ -397,6 +500,7 @@ bool Automation::tick(App& app) {
             app.sectionsDirty_ = true;
         }
         else if (key == "place_facing") app.placeFacing_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "place_def") app.placeDef_ = val;
         else if (key == "place_angle") app.placeAngleDeg_ = float(std::atof(val.c_str()));
         else if (key == "place_height") { app.placeFixedHeight_ = !val.empty() && val != "off"; if (app.placeFixedHeight_) app.placeHeight_ = float(std::atof(val.c_str())); }
         else fail("set: unknown key " + key);
@@ -405,7 +509,119 @@ bool Automation::tick(App& app) {
     else if (cmd == "edit") { app.setEditMode(rest == "1" || rest == "on"); note("ok   " + line); ++pc_; }
     else if (cmd == "textures_tab") { app.setTexturesMode(rest == "1"); note("ok   " + line); ++pc_; }
     else if (cmd == "pack_dest") { app.setPackDest(rest == "-" ? std::string() : std::filesystem::absolute(rest).string()); note("ok   " + line); ++pc_; }   // a pack folder, or - = the game
-    else if (cmd == "assets_tab") { app.setTexturesMode(true); app.setAssetsTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 textures, 1 models, 2 ground themes
+    else if (cmd == "assets_tab") { app.setTexturesMode(true); app.setAssetsTab(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }   // 0 textures, 1 models, 2 ground themes, 3 effects, 4 dialogue
+    else if (cmd == "dialogue_select") {
+        std::istringstream rs(rest); int bank=-1,id=0; rs >> bank >> id;
+        if(!rs || bank<0 || bank>3 || id<=0) fail("dialogue_select: expected bank 0..3 and positive Sound ID");
+        else { app.dialogueAudio_.reset();app.dialogueMotionPlaying_=false;
+            app.dialogueError_.clear();
+            app.dialogueBank_=bank; app.dialogueId_=id; app.dialogueLoaded_=false; note("ok   " + line); }
+        ++pc_;
+    }
+    else if (cmd == "dialogue_search") {
+        if(rest.size()>=app.dialogueSearchQuery_.size()) fail("dialogue_search: query too long");
+        else {
+            std::snprintf(app.dialogueSearchQuery_.data(),app.dialogueSearchQuery_.size(),
+                          "%s",rest.c_str());
+            app.dialogueSearchCacheKey_.clear();app.dialogueError_.clear();
+            note("ok   " + line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "dialogue_preset") {
+        const int preset=std::atoi(rest.c_str());
+        if(preset<0 || preset>=int(forge::lipsync::headPresets().size())) fail("dialogue_preset: index out of range");
+        else {app.dialoguePreset_=preset;app.dialoguePresetChecked_=false;note("ok   " + line);}
+        ++pc_;
+    }
+    else if (cmd == "dialogue_view") {
+        std::istringstream rs(rest);
+        float yaw=0,pitch=0,zoom=0;
+        rs >> yaw >> pitch >> zoom;
+        if(!rs || !std::isfinite(yaw) || !std::isfinite(pitch) ||
+           !std::isfinite(zoom) || pitch < -1.5f || pitch > 1.5f ||
+           zoom < 0.5f || zoom > 8.0f)
+            fail("dialogue_view: expected finite yaw, pitch -1.5..1.5, zoom 0.5..8");
+        else {
+            app.dialogueHeadYaw_=yaw;app.dialogueHeadPitch_=pitch;
+            app.dialogueHeadZoom_=zoom;note("ok   " + line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "dialogue_export_path") {
+        const auto absolute=fs::absolute(rest).lexically_normal().string();
+        if(rest.empty() || absolute.size()>=app.dialogueScratchPath_.size())
+            fail("dialogue_export_path: missing or excessive path");
+        else {
+            std::snprintf(app.dialogueScratchPath_.data(),app.dialogueScratchPath_.size(),
+                          "%s",absolute.c_str());
+            app.dialogueExportMessage_.clear();
+            note("ok   " + line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "effect_select") {
+        if (!app.selectEffect(rest)) fail("effect_select: no effect " + rest);
+        else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_play") {
+        app.effectPlaying_ = rest=="1"; note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "effect_preview_restart") {
+        app.effectSimulation_.reset(app.effectBrowserSelection_);app.effectLoopCount_=0;
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "effect_preview_seek") {
+        std::istringstream rs(rest);double seconds=-1;rs>>seconds;
+        if(!rs || !std::isfinite(seconds) || seconds<0 || seconds>app.effectDuration_)
+            fail("effect_preview_seek: time outside duration");
+        else {app.effectPlaying_=false;app.effectSimulation_.seek(app.effectBrowserSelection_,seconds);note("ok   "+line);}
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_speed") {
+        const int index=std::atoi(rest.c_str());
+        if(index<0 || index>3) fail("effect_preview_speed: index out of range");
+        else {app.effectSpeedIndex_=index;note("ok   "+line);}
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_duration") {
+        std::istringstream rs(rest);float seconds=0;rs>>seconds;
+        if(!rs || !std::isfinite(seconds) || seconds<.5f || seconds>300.f)
+            fail("effect_preview_duration: expected 0.5..300 seconds");
+        else {app.effectDuration_=seconds;note("ok   "+line);}
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_loop") {
+        if(rest!="0" && rest!="1") fail("effect_preview_loop: expected 0 or 1");
+        else {app.effectLoop_=rest=="1";note("ok   "+line);}
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_advance_frames") {
+        const int frames=std::atoi(rest.c_str());
+        if(frames<1 || frames>9000) fail("effect_preview_advance_frames: expected 1..9000");
+        else {
+            const bool playing=app.effectPlaying_;
+            app.effectPlaying_=true;
+            for(int i=0;i<frames;++i) app.advanceEffectPlayback(particlepreview::Simulation::TickSeconds);
+            if(!playing) app.effectPlaying_=false;
+            note("ok   "+line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "effect_preview_step") {
+        app.effectPlaying_=false;
+        const int ticks=std::clamp(std::atoi(rest.c_str()),1,600);
+        for (int i=0;i<ticks;++i) app.effectSimulation_.step();
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "effect_search") {
+        std::snprintf(app.effectBrowserSearch_, sizeof app.effectBrowserSearch_, "%s", rest.c_str());
+        note("ok   " + line); ++pc_;
+    }
+    else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
+    else if (cmd == "model_orbit") { std::istringstream rs(rest); rs >> app.modelYaw_ >> app.modelPitch_ >> app.modelZoom_; app.modelPitch_ = std::clamp(app.modelPitch_, -1.5f, 1.5f); app.modelZoom_ = std::clamp(app.modelZoom_, 0.5f, 8.0f); note("ok   " + line); ++pc_; }
     else if (cmd == "texture_select") { if (!app.selectTexture(rest)) fail("texture_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "texture_export") { if (!app.exportSelectedTexture(rest)) fail("texture_export failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "texture_replace") { if (!app.replaceSelectedTexture(rest)) fail("texture_replace failed: " + rest); else note("ok   " + line); ++pc_; }
@@ -510,9 +726,230 @@ bool Automation::tick(App& app) {
     else if (cmd == "wait_world") waitOn(!app.worldBusy(), "world move");
     else if (cmd == "gizmo") { app.setGizmoOp(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "pick") { float u = 0, v = 0; std::istringstream(rest) >> u >> v; const int t = app.pickAt(u, v); note("ok   " + line + " -> thing " + std::to_string(t)); ++pc_; }
+    else if (cmd == "pick_script") {
+        int target=-1;
+        for (size_t i=0;i<app.doc_.thingCount();++i)
+            if (app.doc_.summary(i).scriptName==rest) { target=int(i); break; }
+        const auto glyph=std::find_if(app.thingGlyphs_.begin(),app.thingGlyphs_.end(),
+                                      [&](const App::ThingGlyph& item){return item.thing==target;});
+        if (target<0 || glyph==app.thingGlyphs_.end() || app.viewportSize_.x<=0 || app.viewportSize_.y<=0)
+            fail("pick_script: named thing has no visible glyph: "+rest);
+        else {
+            const float u=(glyph->screen.x-app.viewportOrigin_.x)/app.viewportSize_.x;
+            const float v=(glyph->screen.y-app.viewportOrigin_.y)/app.viewportSize_.y;
+            if (app.pickAt(u,v)!=target) fail("pick_script: viewport selected a different thing: "+rest);
+            else note("ok   "+line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "place_at") {
+        float u = 0, v = 0, point[3]; std::istringstream(rest) >> u >> v;
+        if (app.placeDef_.empty() || !app.groundUnderCursor(u, v, point) || !app.placeDefinitionAt(app.placeDef_, point)) fail("place_at: no definition or ground at " + rest);
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "set_thing_prop") { std::istringstream rs(rest); std::string key, val; rs >> key; std::getline(rs, val); while (!val.empty() && val.front() == ' ') val.erase(val.begin()); if (app.selectedThing() >= 0) { app.document().setProperty(size_t(app.selectedThing()), key, val); note("ok   " + line); } else fail("set_thing_prop: nothing selected"); ++pc_; }
     else if (cmd == "select_def") { const int t = app.selectByDefinition(rest); if (t < 0) fail("select_def: not found " + rest); else note("ok   " + line + " -> " + std::to_string(t)); ++pc_; }
+    else if (cmd == "select_script") {
+        int found=-1;
+        for (size_t i=0;i<app.doc_.thingCount();++i)
+            if (app.doc_.summary(i).scriptName==rest) {found=int(i);break;}
+        if (found<0) fail("select_script: not found "+rest);
+        else {app.selectThing(found);note("ok   "+line+" -> "+std::to_string(found));}
+        ++pc_;
+    }
+    else if (cmd == "assert_link_script") {
+        std::istringstream rs(rest); std::string sourceName,field,targetName;
+        rs>>sourceName>>field>>targetName;
+        int source=-1,target=-1;
+        for (size_t i=0;i<app.doc_.thingCount();++i) {
+            const auto name=app.doc_.summary(i).scriptName;
+            if(name==sourceName) source=int(i);
+            if(name==targetName) target=int(i);
+        }
+        bool matched=source>=0 && (targetName=="-" || target>=0);
+        bool found=false;
+        if(matched) for(const auto& link:app.doc_.linksOf(size_t(source)))
+            if(link.field==field) {found=true;matched=targetName=="-" ? link.target==0 : link.target==app.doc_.uidOf(size_t(target));break;}
+        if(targetName=="-" && !found) matched=source>=0;
+        if(!matched) fail("assert_link_script: unexpected "+field+" on "+sourceName);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "select_owned_parent") {
+        int found=-1;
+        for (size_t i=0;i<app.doc_.thingCount();++i) {
+            editor::Frame parent,child;
+            if (app.doc_.isLocked(i) || !app.doc_.frameOf(i,parent)) continue;
+            for (size_t owned:app.doc_.ownedDescendants({i})) if (app.doc_.frameOf(owned,child)) { found=int(i); break; }
+            if (found>=0) break;
+        }
+        if (found<0) fail("select_owned_parent: no movable owner with framed child");
+        else { app.selectThing(found); note("ok   "+line+" -> "+std::to_string(found)); }
+        ++pc_;
+    }
+    else if (cmd == "snapshot_owned_frame") {
+        ownedFrameSnap_.reset(); ownedSnapUid_=0;
+        ownedSnapParentUid_=app.selectedThing_>=0?app.selectedUid_:0;
+        if (app.selectedThing_>=0) for (size_t child:app.doc_.ownedDescendants({size_t(app.selectedThing_)})) {
+            editor::Frame frame;
+            if (!app.doc_.frameOf(child,frame)) continue;
+            ownedSnapUid_=app.doc_.uidOf(child); ownedFrameSnap_=frame; break;
+        }
+        if (!ownedFrameSnap_) fail("snapshot_owned_frame: selected thing has no framed child");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "toggle_snapshotted_owned" || cmd == "select_snapshotted_owned") {
+        const auto index=app.doc_.indexOfUid(ownedSnapUid_);
+        if (!index) fail(cmd+": owned snapshot missing");
+        else {
+            if (cmd == "toggle_snapshotted_owned") app.toggleSelect(int(*index));
+            else app.selectThing(int(*index));
+            note("ok   "+line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "assert_copied_owned_pair") {
+        const auto selected=app.selectionIndices();
+        bool okay=ownedSnapParentUid_ && ownedSnapUid_ && selected.size()==2 &&
+            app.doc_.uidOf(size_t(selected.front()))!=ownedSnapParentUid_ &&
+            app.doc_.uidOf(size_t(selected.back()))!=ownedSnapUid_;
+        bool copyLinked=false,originalLinked=false;
+        if (okay) {
+            const uint64_t copyOwner=app.doc_.uidOf(size_t(selected.front()));
+            for (const auto& link:app.doc_.linksOf(size_t(selected.back())))
+                if (link.field=="OwnerUID") copyLinked=link.target==copyOwner;
+            const auto original=app.doc_.indexOfUid(ownedSnapUid_);
+            if (original) for (const auto& link:app.doc_.linksOf(*original))
+                if (link.field=="OwnerUID") originalLinked=link.target==ownedSnapParentUid_;
+        }
+        if (!okay || !copyLinked || !originalLinked) fail("assert_copied_owned_pair: copied ownership mismatch");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_owner") {
+        bool okay=app.selectedThing_>=0;
+        bool matched=false;
+        if (okay) for (const auto& link:app.doc_.linksOf(size_t(app.selectedThing_)))
+            if (link.field=="OwnerUID") matched=link.target==std::strtoull(rest.c_str(),nullptr,10);
+        if (!matched) fail("assert_selected_owner: OwnerUID mismatch");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_owned_section") {
+        bool okay=app.selectedThing_>=0;
+        size_t count=0;
+        if (okay) for (size_t child:app.doc_.ownedDescendants({size_t(app.selectedThing_)})) {
+            ++count;
+            okay=okay && app.doc_.sectionOf(child)==rest;
+        }
+        if (!okay || count==0) fail("assert_owned_section: no owned children or section mismatch: "+rest);
+        else note("ok   "+line+" ("+std::to_string(count)+" owned)");
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_sections") {
+        const auto selected=app.selectionIndices();
+        bool okay=!selected.empty();
+        for (int i:selected) okay=okay && app.doc_.sectionOf(size_t(i))==rest;
+        if (!okay) fail("assert_selected_sections: selection section mismatch: "+rest);
+        else note("ok   "+line+" ("+std::to_string(selected.size())+" selected)");
+        ++pc_;
+    }
+    else if (cmd == "assert_owned_moved" || cmd == "assert_owned_frame_same") {
+        editor::Frame frame;
+        const auto index=app.doc_.indexOfUid(ownedSnapUid_);
+        bool okay=ownedFrameSnap_ && index && app.doc_.frameOf(*index,frame);
+        float delta[3]={};
+        if (cmd == "assert_owned_moved") std::istringstream(rest)>>delta[0]>>delta[1]>>delta[2];
+        if (okay) {
+            for (int k=0;k<3;++k)
+                okay=okay && std::abs(frame.pos[k]-ownedFrameSnap_->pos[k]-delta[k])<.005f &&
+                    std::abs(frame.forward[k]-ownedFrameSnap_->forward[k])<.005f &&
+                    std::abs(frame.up[k]-ownedFrameSnap_->up[k])<.005f;
+            okay=okay && std::abs(frame.scale-ownedFrameSnap_->scale)<.005f;
+        }
+        if (!okay) fail(cmd+": owned child's frame differs from expected parent delta");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_owned_snapshot_exists" || cmd == "assert_owned_snapshot_detached") {
+        const auto index=app.doc_.indexOfUid(ownedSnapUid_);
+        bool okay=ownedFrameSnap_.has_value();
+        if (cmd == "assert_owned_snapshot_exists") okay=okay && bool(index)==(rest=="1");
+        else {
+            okay=okay && bool(index);
+            bool detached=false;
+            if (index) for (const auto& link:app.doc_.linksOf(*index))
+                if (link.ctc=="CTCOwnedEntity" && link.field=="OwnerUID") detached=link.target==0;
+            okay=okay && detached;
+        }
+        if (!okay) fail(cmd+": owned snapshot differs from expected state");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_link_def") {
+        std::istringstream rs(rest);
+        std::string field, definition;
+        rs >> field >> definition;
+        uint64_t target = 0;
+        for (size_t i = 0; i < app.doc_.thingCount(); ++i)
+            if (app.doc_.summary(i).definition == definition) { target = app.doc_.uidOf(i); break; }
+        bool matched = false;
+        if (app.selectedThing_ >= 0 && target)
+            for (const auto& link : app.doc_.linksOf(size_t(app.selectedThing_)))
+                if (link.field == field && link.target == target) matched = true;
+        if (!matched) fail("selected link " + field + " does not target " + definition);
+        else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_exit_serialized") {
+        uint64_t target=0;
+        for(size_t i=0;i<app.doc_.thingCount();++i)
+            if(app.doc_.summary(i).definition==rest) {target=app.doc_.uidOf(i);break;}
+        bool matched=app.selectedThing_>=0 && target!=0;
+        bool found=false;
+        if(matched) {
+            const auto& thing=app.doc_.file().things()[size_t(app.selectedThing_)];
+            for(const char* ctc:{"CTCDRegionExit","CTCActionUseScriptedHook"}) {
+                const auto* block=thing.findCtc(ctc);
+                if(!block) continue;
+                found=true;
+                bool copyMatches=false;
+                for(const auto& property:block->properties)
+                    if(property.key=="EntranceConnectedToUID")
+                        copyMatches=property.value==std::to_string(target);
+                matched=matched && copyMatches;
+            }
+        }
+        if(!matched || !found) fail("assert_exit_serialized: present entrance fields must target "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "select_toggle_def") {
+        int found=-1;
+        for (size_t i=0;i<app.doc_.thingCount();++i) if (app.doc_.summary(i).definition==rest) { found=int(i); break; }
+        if (found<0) fail("select_toggle_def: not found "+rest); else { app.toggleSelect(found); note("ok   "+line); }
+        ++pc_;
+    }
+    else if (cmd == "selection_lock") { app.setSelectedLocked(rest=="1"); note("ok   "+line); ++pc_; }
+    else if (cmd == "snapshot_selected") {
+        if (app.selectedThing_<0) fail("snapshot_selected: no selection");
+        else { thingSnapUid_=app.selectedUid_; thingSnap_=app.doc_.file().thingBlockText(size_t(app.selectedThing_)); note("ok   "+line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_snapshot_thing_same") {
+        const auto index=app.doc_.indexOfUid(thingSnapUid_);
+        if (!index || thingSnap_!=app.doc_.file().thingBlockText(*index)) fail("snapshotted object changed or was removed"); else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "snapshot_document") { documentSnap_=app.doc_.text(); note("ok   "+line); ++pc_; }
+    else if (cmd == "assert_document_same") {
+        if (documentSnap_!=app.doc_.text()) fail("document differs from snapshot"); else note("ok   "+line);
+        ++pc_;
+    }
     else if (cmd == "select_thing") { app.selectThing(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
+    else if (cmd == "toggle_thing") { app.toggleSelect(std::atoi(rest.c_str())); note("ok   " + line); ++pc_; }
     else if (cmd == "select_added") {   // select the first thing the Changes list reports as added (uid from "... (uid N)")
         int hit = -1;
         for (const auto& c : app.document().changes()) {
@@ -534,13 +971,173 @@ bool Automation::tick(App& app) {
     else if (cmd == "paste") { app.pasteClipboard(); note("ok   " + line); ++pc_; }
     else if (cmd == "move_thing") { float x = 0, y = 0, z = 0; std::istringstream(rest) >> x >> y >> z; app.moveSelected(x, y, z); note("ok   " + line); ++pc_; }
     else if (cmd == "rotate_thing") { app.rotateSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
+    else if (cmd == "rotate_world") { std::istringstream rs(rest);float deg=0;int axis=-1;rs>>deg>>axis;
+        if(!rs || axis<0 || axis>2) fail("rotate_world: expected degrees and axis 0..2");
+        else {app.rotateSelectedWorld(deg,axis);note("ok   "+line);} ++pc_; }
     else if (cmd == "scale_thing") { app.scaleSelected(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }
     else if (cmd == "ground_thing") { app.snapSelectedToGround(); note("ok   " + line); ++pc_; }
+    else if (cmd == "surface_thing") { app.cycleSelectedSurfaces(); note("ok   "+line); ++pc_; }
+    else if (cmd == "snapshot_frame") {
+        editor::Frame frame;
+        if (!app.frameOfSelected(frame)) fail("no selected frame");
+        else { frameSnap_=frame; note("ok   "+line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_delta") {
+        std::istringstream rs(rest);float dx=0,dy=0,dz=0;rs>>dx>>dy>>dz;
+        editor::Frame frame;
+        bool okay=bool(rs) && frameSnap_ && app.frameOfSelected(frame);
+        if(okay) for(int k=0;k<3;++k) {
+            const float expected=(k==0?dx:k==1?dy:dz);
+            okay=okay && std::abs(frame.pos[k]-frameSnap_->pos[k]-expected)<0.002f;
+        }
+        if(!okay) fail("assert_selected_delta: position differs from snapshot + "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_forward") {
+        std::istringstream rs(rest);float x=0,y=0,z=0;rs>>x>>y>>z;
+        editor::Frame frame;
+        bool okay=bool(rs) && app.frameOfSelected(frame);
+        if(okay) for(int k=0;k<3;++k)
+            okay=okay && std::abs(frame.forward[k]-(k==0?x:k==1?y:z))<0.003f;
+        if(!okay) fail("assert_selected_forward: direction differs from "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_up") {
+        std::istringstream rs(rest);float x=0,y=0,z=0;rs>>x>>y>>z;
+        editor::Frame frame;
+        bool okay=bool(rs) && app.frameOfSelected(frame);
+        if(okay) for(int k=0;k<3;++k)
+            okay=okay && std::abs(frame.up[k]-(k==0?x:k==1?y:z))<0.003f;
+        if(!okay) fail("assert_selected_up: direction differs from "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_facing_changed") {
+        editor::Frame frame;
+        bool okay=frameSnap_ && app.frameOfSelected(frame);
+        if(okay) okay=std::hypot(frame.forward[0]-frameSnap_->forward[0],
+                                frame.forward[1]-frameSnap_->forward[1],
+                                frame.forward[2]-frameSnap_->forward[2])>0.05f;
+        if(!okay) fail("assert_selected_facing_changed: direction did not move");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_moved_xy" || cmd == "assert_selected_frame_same") {
+        editor::Frame frame;
+        bool okay = frameSnap_ && app.frameOfSelected(frame);
+        if (okay) {
+            const auto& before = *frameSnap_;
+            const float xy = std::hypot(frame.pos[0] - before.pos[0], frame.pos[1] - before.pos[1]);
+            okay = cmd == "assert_selected_moved_xy" ? xy > 0.05f : xy < 0.0001f && std::abs(frame.pos[2] - before.pos[2]) < 0.0001f;
+            for (int k = 0; k < 3; ++k)
+                okay = okay && std::abs(frame.forward[k] - before.forward[k]) < 0.0001f &&
+                    std::abs(frame.up[k] - before.up[k]) < 0.0001f;
+            okay = okay && std::abs(frame.scale - before.scale) < 0.0001f;
+        }
+        if (!okay) {
+            std::string detail;
+            if (frameSnap_ && app.frameOfSelected(frame))
+                detail = " (before " + std::to_string(frameSnap_->pos[0]) + "," + std::to_string(frameSnap_->pos[1]) + "," + std::to_string(frameSnap_->pos[2]) +
+                    "; after " + std::to_string(frame.pos[0]) + "," + std::to_string(frame.pos[1]) + "," + std::to_string(frame.pos[2]) + ")";
+            fail(cmd + ": selected frame does not match the snapshot expectation" + detail);
+        } else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_ground_offset_same") {
+        editor::Frame frame;
+        bool okay = frameSnap_ && app.frameOfSelected(frame);
+        if (okay) {
+            const auto a = app.doc_.groundHeight(frameSnap_->pos[0], frameSnap_->pos[1]);
+            const auto b = app.doc_.groundHeight(frame.pos[0], frame.pos[1]);
+            okay = a && b && std::abs((frameSnap_->pos[2] - *a) - (frame.pos[2] - *b)) < 0.005f;
+        }
+        if (!okay) fail("selected thing did not keep its height above ground"); else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_lower") {
+        editor::Frame frame; bool okay=frameSnap_ && app.frameOfSelected(frame);
+        if (okay) {
+            const auto& before=*frameSnap_;
+            okay=std::isfinite(frame.pos[2]) && frame.pos[2]<before.pos[2]-.001f && std::abs(frame.scale-before.scale)<.00001f;
+            for (int k=0;k<3;++k) {
+                if (k<2) okay=okay && std::abs(frame.pos[k]-before.pos[k])<.00001f;
+                okay=okay && std::abs(frame.forward[k]-before.forward[k])<.00001f && std::abs(frame.up[k]-before.up[k])<.00001f;
+            }
+        }
+        if (!okay) fail("selected object did not move only downward"); else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_height") {
+        editor::Frame frame;
+        const float expected=float(std::atof(rest.c_str()));
+        if (!app.frameOfSelected(frame) || !std::isfinite(frame.pos[2]) || std::abs(frame.pos[2]-expected)>.001f)
+            fail("selected height differs from "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_above_ground") {
+        editor::Frame frame;
+        if (!app.frameOfSelected(frame)) fail("no selected frame");
+        else {
+            const auto ground=app.doc_.groundHeight(frame.pos[0],frame.pos[1]);
+            if (!ground || !std::isfinite(frame.pos[2]) || frame.pos[2]<=*ground+.05f) fail("selected object is not supported above terrain");
+            else note("ok   "+line);
+        }
+        ++pc_;
+    }
     else if (cmd == "reseat_things") { app.reseatThings(); note("ok   " + line); ++pc_; }
     else if (cmd == "add_theme") { if (!app.addPaintTheme(rest)) fail("add_theme failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "custom_theme") {   // custom_theme <png> <NAME> [donor] [cliffPng]
         std::istringstream rs(rest); std::string png, nm, donor, cliff; rs >> png >> nm >> donor >> cliff;
         if (!app.createCustomTheme(png, nm, donor, cliff)) fail("custom_theme failed: " + rest); else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "text_input") {
+        ImGui::GetIO().AddInputCharactersUTF8(rest.c_str());
+        note("ok   "+line); ++pc_; waitFrames_=2;
+    }
+    else if (cmd == "snapshot_mesh_orientation") {
+        const auto& meshes=app.effectSimulation_.meshes();
+        if (meshes.empty()) fail("no mesh particle to snapshot");
+        else { meshOrientationId_=meshes.front().mesh; std::copy_n(meshes.front().orientation,4,meshOrientationSnap_.begin()); note("ok   "+line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_mesh_rotated") {
+        const auto& meshes=app.effectSimulation_.meshes();
+        float dot=0;
+        if (!meshes.empty()) for (int k=0;k<4;++k) dot+=meshOrientationSnap_[k]*meshes.front().orientation[k];
+        if (meshes.empty() || meshOrientationId_<0 || meshes.front().mesh!=meshOrientationId_ || std::abs(dot)>.99999f)
+            fail("mesh particle orientation did not change");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_effect_meshes") {
+        if (app.effectSimulation_.meshes().empty() || !app.effectRenderer_.drawnMeshes() || !app.effectRenderer_.meshTriangles())
+            fail("effect mesh preview has no simulated or submitted mesh geometry");
+        else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_component") {
+        std::istringstream input(rest); std::string ctc,key,expected; input>>ctc>>key>>expected;
+        bool found=false,matched=false;
+        if (app.selectedThing_>=0) for (const auto& field:app.doc_.knownComponentProperties(size_t(app.selectedThing_)))
+            if (field.row.ctc==ctc && field.row.key==key) { found=true; matched=expected=="-"?!field.present:field.present && field.row.value==expected; }
+        if (!found || !matched) fail("component override mismatch: "+rest); else note("ok   "+line);
+        ++pc_;
+    }
+    else if (cmd == "assert_list") {
+        // assert_list <CTC> <base> <count> [slot expected-definition]
+        std::istringstream rs(rest); std::string ctc,base,expected; int count=-1,slot=-1;
+        rs>>ctc>>base>>count;
+        const auto entries=app.selectedThing_<0?std::vector<std::string>{}:app.doc_.listEntries(size_t(app.selectedThing_),ctc,base);
+        if (app.selectedThing_<0 || count<0 || entries.size()!=size_t(count)) fail("assert_list count: "+rest+" actual="+std::to_string(entries.size()));
+        else if (rs>>slot>>expected) {
+            if (slot<0 || size_t(slot)>=entries.size() || entries[size_t(slot)]!="\""+expected+"\"") fail("assert_list entry: "+rest);
+            else note("ok   "+line);
+        } else note("ok   "+line);
         ++pc_;
     }
     else if (cmd == "duplicate_thing") { app.duplicateSelected(); note("ok   " + line); ++pc_; }
@@ -561,6 +1158,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "wait_compact") waitOn(!app.compactBusy(), "compaction");
     else if (cmd == "restore_all") { if (!app.restoreAllBackups()) fail("restore failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "setup") { app.setupOpen_ = std::atoi(rest.c_str()) != 0; note("ok   " + line); ++pc_; }
+    else if (cmd == "scan_install") { app.scanInstall(rest); note("ok   " + line); ++pc_; }   // exercise folder changes without a native picker
     else if (cmd == "link_install") { if (!app.linkInstall()) fail("link_install failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_remove") { if (!app.linkRemove()) fail("link_remove failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "link_go") { if (!app.linkGoHere()) fail("link_go failed"); else note("ok   " + line); ++pc_; }
@@ -677,6 +1275,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "dump_state") { for (const auto& kv : app.stateDump()) note("     " + kv); ++pc_; }
     else if (cmd == "dump_log") { for (const auto& [lvl, ln] : app.log_) note("     log: " + ln); ++pc_; }
+    else if (cmd == "close") { app.requestClose(); note("ok   close"); ++pc_; }
     else if (cmd == "quit") { quit_ = true; note("ok   quit"); return false; }
     else { fail("unknown command: " + line); ++pc_; }
     return true;

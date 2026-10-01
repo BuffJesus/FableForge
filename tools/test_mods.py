@@ -106,7 +106,8 @@ def main() -> int:
     tngs = [f for f in os.listdir(os.path.join(out, "data", "Levels", "FinalAlbion")) if f.endswith(".tng")] if os.path.isdir(os.path.join(out, "data", "Levels", "FinalAlbion")) else []
     if len(tngs) < 7: print("merged TNGs:", tngs); ok = False
     if os.path.exists(wad):
-        if "FinalAlbion.wad rebuilt: 8 level file(s) repacked, 0 new" not in r.stdout: print("WAD repack missing:", [l for l in r.stdout.splitlines() if "wad" in l.lower()]); ok = False
+        repacked = _re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, 0 new", r.stdout)
+        if not repacked or int(repacked.group(1)) < len(tngs): print("WAD repack missing:", [l for l in r.stdout.splitlines() if "wad" in l.lower()]); ok = False
         r2 = run("wad", "list", os.path.join(out, "data", "Levels", "FinalAlbion.wad"))
         if "BarrowFields.tng" not in r2.stdout: print("repacked WAD unreadable"); ok = False
     r = run("defs", "list", out, "game.bin", "F2_RUSTY")

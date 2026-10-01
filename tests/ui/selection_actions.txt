@@ -1,0 +1,150 @@
+# Read-only install: all edits remain in memory and are undone. Actual viewport
+# gestures/buttons exercise selection actions, inspector and existing undo paths.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+camera_above_selected 2
+frames 10
+assert_state selection_count 1
+assert_state doc_changes 0
+# RMB click selects underneath and opens context; no camera flight.
+mouse_move viewport
+snapshot_camera
+mouse_down right
+frames 2
+mouse_up right
+frames 3
+assert_camera_back
+assert_state selection_popup 1
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+click menu_selection_properties
+frames 4
+assert_state selection_inspector 1
+assert_state selection_inspector_def OBJECT_BARREL_BREAKABLE
+clear_toasts
+screenshot build/ui/selection_inspector.png
+# Inspector follows existing selection instead of retaining its old object.
+select_def CREATURE_NEW_CHICKEN_01
+frames 3
+assert_state selection_inspector_def CREATURE_NEW_CHICKEN_01
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+frames 3
+assert_state selection_inspector 0
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+camera_above_selected 2
+frames 3
+# Looking with RMB, even returning to the starting pointer, is not a context click.
+mouse_move viewport
+mouse_down right
+mouse_delta 30 0
+mouse_delta -30 0
+mouse_up right
+frames 3
+assert_state selection_popup 0
+# A flight key and wheel likewise suppress the context menu.
+mouse_down right
+key_down W
+frames 2
+key_up W
+mouse_up right
+frames 3
+assert_state selection_popup 0
+frame_selected
+frames 3
+mouse_move viewport
+mouse_down right
+wheel 1
+mouse_up right
+frames 3
+assert_state selection_popup 0
+# The compact toolbar shares the established mutation/undo operations.
+click btn_selection_focus
+frames 3
+click btn_selection_actions
+frames 3
+click menu_selection_duplicate
+wait_foliage
+frames 5
+assert_state doc_changes 1
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+click btn_selection_properties
+frames 3
+assert_state selection_inspector_def OBJECT_BARREL_BREAKABLE
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+frames 3
+click btn_selection_actions
+frames 3
+click menu_selection_delete
+wait_foliage
+frames 5
+assert_state selection_count 0
+assert_state doc_changes 0
+undo
+wait_foliage
+frames 5
+select_added
+assert_state doc_changes 1
+click btn_selection_properties
+frames 3
+delete_thing
+wait_foliage
+frames 5
+assert_state selection_inspector 1
+assert_state selection_inspector_def
+assert_state selection_count 0
+undo
+wait_foliage
+frames 5
+select_added
+frames 3
+assert_state selection_inspector_def OBJECT_BARREL_BREAKABLE
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+frames 3
+move_thing 0 0 5
+frames 3
+click btn_selection_actions
+frames 3
+click menu_selection_drop
+frames 3
+assert_selected_ground
+undo
+undo
+undo
+wait_foliage
+frames 5
+assert_state doc_changes 0
+# A context click on any existing group member preserves the selection group.
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+camera_above_selected 2
+select_toggle 0
+frames 3
+mouse_move viewport
+mouse_down right
+mouse_up right
+frames 3
+assert_state selection_popup 1
+assert_state selection_count 2
+click menu_selection_properties
+frames 3
+assert_state selection_inspector 1
+select_thing -1
+frames 3
+assert_state selection_inspector_def
+screenshot build/ui/selection_inspector_empty.png
+edit 0
+frames 3
+assert_state selection_inspector 0
+dump_state
+quit

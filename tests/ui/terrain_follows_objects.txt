@@ -1,0 +1,30 @@
+# Sculpting keeps grounded placed things in one undo step and re-seats baked foliage in the preview.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+clear_toasts
+edit 1
+edit_tab 1
+terrain_mode 0
+brush 24 10
+snapshot_heights
+terrain_stroke 64 112 1
+frames 5
+assert_heights_changed 1
+wait_foliage
+assert_state foliage_preview_reseated_any 1
+mouse_move 10 300
+frames 2
+screenshot build/ui/terrain_follows_objects_raised.png
+reveal btn_deploy
+frames 2
+screenshot build/ui/terrain_follows_objects_write_actions.png
+undo
+frames 5
+wait_foliage
+assert_heights_changed 0
+assert_state foliage_preview_reseated_any 0
+screenshot build/ui/terrain_follows_objects_undone.png
+quit

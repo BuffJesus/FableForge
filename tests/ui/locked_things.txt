@@ -1,0 +1,100 @@
+# Read-only install: locked transforms/deletion, mixed selection and exact undo.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+camera_above_selected 3
+frames 4
+assert_state selected_locked 0
+assert_state doc_changes 0
+click btn_selection_properties
+frames 3
+reveal check_locked_in_place
+click check_locked_in_place
+frames 3
+assert_state selected_locked 1
+snapshot_document
+move_thing 8 4 2
+rotate_thing 45
+scale_thing 1.5
+ground_thing
+delete_thing
+selection_lock 1
+assert_document_same
+assert_state selection_count 1
+clear_toasts
+screenshot build/ui/locked_properties.png
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+frames 3
+gizmo 1
+drag_gizmo 40 0
+frames 4
+assert_document_same
+# Actual shortcut unlock/undo shows blocked actions did not create undo entries.
+mouse_move viewport
+key_down Ctrl
+key_down L
+frames 2
+key_up L
+key_up Ctrl
+frames 3
+assert_state selected_locked 0
+undo
+assert_state selected_locked 1
+undo
+assert_state selected_locked 0
+assert_state doc_changes 0
+# Lock during a live drag: cancel mouse capture and discard the preview.
+snapshot_document
+mouse_move selected_pivot
+mouse_down left
+frames 3
+mouse_delta 24 0
+frames 3
+assert_state gizmo_using 1
+selection_lock 1
+frames 3
+assert_state gizmo_using 0
+mouse_up left
+undo
+assert_document_same
+assert_state selected_locked 0
+# Unlocked primary + locked extra: movement and deletion leave the locked block exact.
+selection_lock 1
+snapshot_selected
+select_def OBJECT_CUPBOARD_TALL
+select_toggle_def OBJECT_BARREL_BREAKABLE
+assert_state selection_count 2
+snapshot_document
+move_thing 2 3 1
+assert_snapshot_thing_same
+undo
+assert_document_same
+delete_thing
+assert_snapshot_thing_same
+assert_state selection_count 1
+assert_state selected_locked 1
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+undo
+assert_document_same
+# Locked primary still allows unlocked extras to move.
+select_def OBJECT_BARREL_BREAKABLE
+select_toggle_def OBJECT_CUPBOARD_TALL
+move_thing -1 2 1
+assert_snapshot_thing_same
+undo
+assert_document_same
+# One group lock operation can unlock everything and is one undo step.
+selection_lock 0
+assert_state selected_locked 0
+undo
+assert_state selected_locked 1
+undo
+assert_state doc_changes 0
+quit

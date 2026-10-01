@@ -35,6 +35,8 @@ def main():
         readme = f.read()
     for doc in ["FIRST_LEVEL.md", "ENGINE_RULES.md", "EDITOR.md", "AUTOMATION.md", "CLI.md"]:
         readme = readme.replace("docs/" + doc, doc)
+    readme = readme.replace("vendor/EgoCore-LICENSE.txt", "EgoCore-LICENSE.txt")
+    readme = readme.replace("vendor/VENDORED.md", "THIRD_PARTY.md")
     with open(os.path.join(stage, "README.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write(readme)
     shutil.copy("LICENSE", stage)
@@ -47,6 +49,7 @@ def main():
     else:
         print("  (no defc.exe at hand: the EgoCore .def text path will need FORGE_DEFC on the user's machine)")
     shutil.copy(os.path.join("vendor", "VENDORED.md"), os.path.join(stage, "THIRD_PARTY.md"))
+    shutil.copy(os.path.join("vendor", "EgoCore-LICENSE.txt"), stage)
     shutil.copy(os.path.join("docs", "AUTOMATION.md"), stage)
     shutil.copy(os.path.join("docs", "EDITOR.md"), stage)
     shutil.copy(os.path.join("docs", "FIRST_LEVEL.md"), stage)
@@ -58,6 +61,9 @@ def main():
     shutil.copytree(os.path.join("docs", "re_reference"), os.path.join(stage, "docs", "re_reference"))   # forge-tools reads def_schema.json etc.
     shutil.copytree(os.path.join("docs", "modding"), os.path.join(stage, "docs", "modding"))   # the mod-pack / .fmp / load-order design the forge-tools mods family implements
     shutil.copytree(os.path.join("docs", "releases"), os.path.join(stage, "docs", "releases"))
+    shutil.copy(os.path.join("docs", "FEATURE_GALLERY.md"), os.path.join(stage, "docs", "FEATURE_GALLERY.md"))
+    shutil.copy(os.path.join("docs", "EDITOR.md"), os.path.join(stage, "docs", "EDITOR.md"))
+    shutil.copytree(os.path.join("docs", "screenshots"), os.path.join(stage, "docs", "screenshots"))
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
     zpath = os.path.join("dist", name + ".zip")

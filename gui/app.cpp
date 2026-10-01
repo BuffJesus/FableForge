@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "worlddemand.hpp"
 
 #include "ImGuizmo.h"
 #include "imgui_internal.h"
@@ -24,6 +25,7 @@
 #include "forge/wld.hpp"
 #include "nlohmann/json.hpp"
 #include "theme.hpp"
+#include "dialogueaudio.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -132,7 +134,11 @@ void App::buildFonts(float scale) {
 void App::rebuildFonts() { buildFonts(wantScale_); }
 
 App::App() = default;
-App::~App() = default;
+App::~App() {
+    // The future joins during member destruction; release any diagnostic hold
+    // and let obsolete preparation leave at its next worker checkpoint.
+    if (worldDetailWork_) worldDetailWork_->cancel = true;
+}
 
 bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
                const std::string& installOverride) {
@@ -264,7 +270,7 @@ void App::drawHelpOverlay() {
     struct Group { const char* title; std::vector<Row> rows; };
     const Group groups[] = {
         {"Camera (viewport)", {{"RMB drag + W A S D", "look and fly (Q / E down / up)"}, {"LMB drag", "dolly / turn"}, {"Alt + LMB drag", "orbit the focus"}, {"MMB drag", "pan"}, {"Wheel", "zoom"}, {"F", "frame the map, or the selected object"}}},
-        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select what you see (the real mesh)"}, {"Ctrl + click", "add to / remove from the selection"}, {"Ctrl + D", "duplicate"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "clear the selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
+        {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select a thing or marker"}, {"Drag a thing", "carry it across the ground"}, {"Shift + click", "place the palette pick on the ground"}, {"Ctrl + Shift + drag", "clone and carry the selection"}, {"Ctrl + click", "add to / remove from the selection"}, {"Arrows / Shift + arrows", "nudge 0.05 / 0.5 units"}, {"Ctrl + arrows / A", "face a cardinal direction / pointer"}, {"[  ] / Shift / Alt", "rotate 2 degrees about Z / Y / X"}, {",  . / PgDn  PgUp", "lower / raise; Shift uses 0.01"}, {"Ctrl + D", "clone; click ground to drop"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "cancel carry or clear selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
         {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "swap raise / lower (including exact step); paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
         {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
@@ -305,8 +311,12 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     using theme::S;
     if (!*open) return false;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0), ImVec2(width, vp->Size.y - S(60)));   // scrolls on a short screen
+    const float viewportWidth = std::max(S(360), viewportSize_.x - S(24));
+    const float toolWidth = std::min(width, viewportWidth);
+    const ImVec2 centre(viewportOrigin_.x + viewportSize_.x * 0.5f,
+                        viewportOrigin_.y + viewportSize_.y * 0.5f);
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(toolWidth, 0), ImVec2(toolWidth, vp->Size.y - S(60)));   // scrolls on a short screen
     ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
     ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
@@ -354,7 +364,16 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
 void App::endToolWindow() { ImGui::End(); }
 
 void App::drawToolWindows() {
-    if (!editMode_ || !documentLoaded()) return;
+    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) {
+        selectionInspectorOpen_ = fitOpen_ = fractalOpen_ = budgetOpen_ = false;
+        return;
+    }
+    // These are extensions of their sidebar sections, not independent workspaces.
+    // Closing them on navigation keeps a tool from covering an unrelated view.
+    if (editTab_ != 0 && editTab_ != 2) selectionInspectorOpen_ = false;
+    if (editTab_ != 1) fitOpen_ = fractalOpen_ = false;
+    if (editTab_ != 3) budgetOpen_ = false;
+    drawSelectionInspector();
     drawFitWindow();
     drawFractalWindow();
     drawBudgetWindow();
@@ -366,15 +385,19 @@ void App::drawSetupPanel() {
     ImGui::OpenPopup("Setup");
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(S(560), 0));
+    ImGui::SetNextWindowSize(ImVec2(std::min(S(560), vp->Size.x - S(24)),
+                                    std::min(S(installValid_ ? 620 : 400), vp->Size.y - S(24))));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), S(16)));
     if (ImGui::BeginPopupModal("Setup", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar)) {
+        ImGui::BeginChild("##setup_details", ImVec2(0, -S(52)), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoBackground);
+        const float contentWidth = ImGui::GetContentRegionAvail().x;
         const InstallHealth h = installHealth();
         ImGui::PushFont(fontBold_);
         ImGui::TextUnformatted(installValid_ ? "Your Fable install" : "Point FableForge at Fable: The Lost Chapters");
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
-        ImGui::PushTextWrapPos(S(530));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
         ImGui::TextColored(theme::vec(theme::Muted), "%s", installValid_ ? installPath_.c_str() : "The Steam or GOG folder that holds Fable.exe (Steam: steamapps\\common\\Fable The Lost Chapters). Nothing in it is changed until you write something; every file touched gets a one-time .forge-orig backup.");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(8)));
@@ -383,14 +406,14 @@ void App::drawSetupPanel() {
             ImGui::SameLine(0, 0);
             ImGui::TextColored(theme::vec(theme::Text), "%s", what);
             ImGui::SameLine(0, S(8));
-            ImGui::PushTextWrapPos(S(530));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
             ImGui::TextColored(theme::vec(theme::Muted), "%s", ok ? enables : without);
             ImGui::PopTextWrapPos();
         };
         const std::string dataOk = "levels (" + h.levelsHow + "), objects, terrain and the world editor";
         row(h.gameBin && h.levels && h.stb, "game data", dataOk.c_str(), installPath_.empty() ? "no folder chosen yet" : "missing (pick the folder that holds Fable.exe, not its Data folder):");
         if (!installPath_.empty() && !h.missing.empty()) {
-            ImGui::PushTextWrapPos(S(530));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
             for (const auto& m : h.missing) ImGui::TextColored(theme::vec(theme::Warn), "         %s", m.c_str());
             ImGui::PopTextWrapPos();
         }
@@ -400,7 +423,7 @@ void App::drawSetupPanel() {
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, S(10)));
         ImGui::PushFont(fontSmall_);
-        ImGui::PushTextWrapPos(S(530));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
         theme::hintMore("Some changes only show in a new game; hover for the engine's rules.", "Rules the engine imposes: a new region only shows in a game started after it was added (saves cache the region table); new objects and creatures need a fresh game or a first visit; enemy spawners only run once the hero is past childhood; never write while the game is running (the editor refuses when the live link sees a hero).");
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
@@ -413,11 +436,11 @@ void App::drawSetupPanel() {
             size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
             ImGui::Dummy(ImVec2(0, S(10)));
             ImGui::PushFont(fontBold_);
-            ImGui::Text("Backups: %zu file(s) touched, %zu differ from retail", backupList_.size(), changed);
+            ImGui::Text("Backups: %zu file(s) tracked, %zu differ from backup", backupList_.size(), changed);
             ImGui::PopFont();
             if (!backupList_.empty()) {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-                ImGui::BeginChild("##backuplist", ImVec2(S(530), S(std::min(120.0f, 18.0f * float(backupList_.size()) + 8.0f))), ImGuiChildFlags_None);
+                ImGui::BeginChild("##backuplist", ImVec2(contentWidth, S(std::min(120.0f, 18.0f * float(backupList_.size()) + 8.0f))), ImGuiChildFlags_None);
                 ImGui::PopStyleColor();
                 ImGui::PushFont(fontSmall_);
                 for (const auto& e : backupList_) {
@@ -427,11 +450,13 @@ void App::drawSetupPanel() {
                 ImGui::PopFont();
                 ImGui::EndChild();
                 if (!confirmRestore_) {
-                    if (theme::dangerButton(changed ? "Restore the retail files" : "Nothing to restore", ImVec2(S(530), S(28))) && changed) confirmRestore_ = true;
+                    if (changed) {
+                        if (theme::dangerButton("Restore backed-up files", ImVec2(contentWidth, S(28)))) confirmRestore_ = true;
+                    } else theme::ghostButton("Nothing to restore", ImVec2(contentWidth, S(28)));
                     auto_.registerWidget("btn_restore_all");
                 } else {
-                    const int r = confirmRow("Put every backed-up file back and delete the files FableForge created? Your edits in the game are lost (loose .lev/.tng drafts stay).",
-                                             "Yes, restore", S(530), S(28), "btn_restore_confirm");
+                    const int r = confirmRow("Restore every backed-up file and remove files FableForge created? This includes loose .lev/.tng drafts; the open map reloads from disk.",
+                                             "Yes, restore", contentWidth, S(28), "btn_restore_confirm");
                     if (r != 0) confirmRestore_ = false;
                     if (r > 0) restoreAllBackups();
                 }
@@ -445,14 +470,19 @@ void App::drawSetupPanel() {
                                double(bankReport_.bytesBefore) / 1048576.0, double(bankReport_.deadBytes()) / 1048576.0, 3.4);
             ImGui::PopFont();
             const bool busy = compactBusy();
-            if (theme::ghostButton(busy ? "Compacting..." : (bankReport_.deadBytes() ? "Compact the bank (payloads verified, game must be closed)" : "Bank is compact"), ImVec2(S(530), S(28))) && !busy && bankReport_.deadBytes()) compactBank();
+            if (theme::ghostButton(busy ? "Compacting..." : (bankReport_.deadBytes() ? "Compact the bank (payloads verified, game must be closed)" : "Bank is compact"), ImVec2(contentWidth, S(28))) && !busy && bankReport_.deadBytes()) compactBank();
             auto_.registerWidget("btn_compact_stb");
         }
+        ImGui::EndChild();
         ImGui::Dummy(ImVec2(0, S(10)));
-        const float w = (S(530) - S(6)) * 0.5f;
+        const float w = (ImGui::GetContentRegionAvail().x - S(6)) * 0.5f;
         if (theme::ghostButton("Choose the install folder...", ImVec2(w, S(32)))) {
             const std::string picked = pickFolder(hwnd_, installPath_);
-            if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
+            if (!picked.empty()) {
+                const std::string previous = installPath_;
+                scanInstall(picked);
+                if (installPath_ != previous) installSource_ = "manual";
+            }
         }
         auto_.registerWidget("btn_setup_browse");
         ImGui::SameLine(0, S(6));
@@ -473,13 +503,28 @@ bool App::compactBank() {
 
 bool App::restoreAllBackups() {
     if (!installValid_) return false;
+    if (previewFuture_.valid() || foliageFuture_.valid() || neighbourFuture_.valid() || ctxFuture_.valid() ||
+        terrainDeployFuture_.valid() || worldFuture_.valid() || newLevelFuture_.valid() || compactFuture_.valid() ||
+        meshImportFuture_.valid() || modsFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
+        worldDetailFuture_.valid() ||
+        std::any_of(worldTileWorkers_.begin(),worldTileWorkers_.end(),[](const auto& job){ return job.valid(); })) {
+        pushLog("restore: a load or write is still running; try again when it finishes", 1);
+        return false;
+    }
     std::vector<std::string> notes; std::string err;
+    const std::string selected = selectedName_;
     const size_t n = backups::restoreAll(installPath_, true, notes, err);
     for (const auto& x : notes) pushLog("restore: " + x, 0);
     if (!err.empty()) pushLog("restore: " + err, 2);
-    if (n) pushLog("restore: " + std::to_string(n) + " file(s) back to retail; reloading the map list", 3);
+    if (n) pushLog("restore: " + std::to_string(n) + " file(s) returned to their backups; reloading the map", 3);
     rescanBackups();
-    if (n) { scanInstall(installPath_); }
+    if (n) {
+        scanInstall(installPath_);
+        selectedName_.clear(); docLoadedFor_.clear();
+        previewLoadedFor_.clear(); foliageLoadedFor_.clear();
+        renderer_.clearLayer(0); renderer_.clearLayer(2); renderer_.clearThings();
+        if (findEntry(selected)) selectMap(selected);
+    }
     return err.empty();
 }
 
@@ -518,6 +563,13 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.uiScale = std::clamp(j.value("uiScale", settings_.uiScale), 0.8f, 1.5f);
         settings_.showExplorer = j.value("showExplorer", settings_.showExplorer);
         settings_.showActions = j.value("showActions", settings_.showActions);
+        moveOwned_ = j.value("moveOwned", moveOwned_);
+        if (j.contains("effectBackground") && j["effectBackground"].is_array() && j["effectBackground"].size()==3)
+            for (size_t i=0;i<3;++i) {
+                const float colour=j["effectBackground"][i].get<float>();
+                if (std::isfinite(colour)) effectBackground_[i]=std::clamp(colour,0.f,1.f);
+            }
+        effectShowGrid_=j.value("effectShowGrid",effectShowGrid_);
     } catch (...) {}
 }
 
@@ -532,13 +584,15 @@ void App::saveSettings() const {
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
             {"editTab", editTab_}, {"uiScale", settings_.uiScale},
             {"showExplorer", settings_.showExplorer}, {"showActions", settings_.showActions},
+            {"moveOwned", moveOwned_},
+            {"effectBackground", {effectBackground_[0],effectBackground_[1],effectBackground_[2]}},
+            {"effectShowGrid", effectShowGrid_},
         };
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
 }
 
 void App::scanInstall(const std::string& picked) {
-    maps_.clear();
     // the Data folder itself was picked: the install is its parent
     std::string root = picked;
     {
@@ -549,7 +603,51 @@ void App::scanInstall(const std::string& picked) {
             pushLog("that is the install's Data folder; using " + root, 1);
         }
     }
+    const bool switching = !installPath_.empty() &&
+        fs::path(installPath_).lexically_normal() != fs::path(root).lexically_normal();
+    if (switching) {
+        if (hasUnsavedEdits() || worldPendingCount() || !dialogueStaged_.empty()) {
+            pushLog("install: save or discard the current edits before changing folders", 1);
+            return;
+        }
+        if (ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
+            neighbourFuture_.valid() || terrainDeployFuture_.valid() || worldFuture_.valid() ||
+            newLevelFuture_.valid() || compactFuture_.valid() || meshImportFuture_.valid() ||
+            modsFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
+            worldDetailFuture_.valid() ||
+            std::any_of(worldTileWorkers_.begin(), worldTileWorkers_.end(),
+                        [](const auto& job) { return job.valid(); })) {
+            pushLog("install: a load or write is still running; try again when it finishes", 1);
+            return;
+        }
+        selectedName_.clear(); docLoadedFor_.clear(); previewLoadedFor_.clear();
+        foliageLoadedFor_.clear(); previewPendingName_.clear(); foliagePendingName_.clear();
+        neighboursFor_.clear(); lastFramedFor_.clear();
+        renderer_.clear(); renderer_.clearThings();
+        selectedThing_ = -1; selectedUid_ = 0; extraUids_.clear();
+        previewScene_ = {}; previewTextured_ = false;
+        foliageInstances_ = thingInstances_ = 0;
+        worldLoaded_ = false; worldLoadedFrom_.clear();
+        ctx_ = {}; ctxError_.clear();
+        modelsLoaded_ = modelUsersLoaded_ = modelReady_ = false;
+        modelRows_.clear(); modelUsers_.clear(); modelName_.clear();
+        renderer_.clearModelPreview(); renderer_.clearHeadPreview();
+        dialogueAudio_.reset();
+        dialogueLoaded_=false;
+        dialogueExportMessage_.clear();
+        dialogueScratchLanguage_.clear();
+    }
+    maps_.clear();
     installPath_ = root;
+    backupList_.clear(); backupsScannedAt_ = -1; bankReportOk_ = false;
+    effectsLoaded_ = effectBrowserLoaded_ = effectBrowserReady_ = false;
+    effectNames_.clear(); effectPick_.clear();
+    effectBrowserRows_.clear(); effectBrowserSelection_ = {};
+    effectBrowserThumbnails_.clear(); effectBrowserError_.clear();
+    effectSimulation_.reset({}); effectRenderer_.clear(); effectTexturesReady_=false; effectMeshesReady_=false;
+    effectTextureWarnings_.clear();
+    texturesLoaded_ = false; texRows_.clear(); texBanks_.clear(); texSelected_.clear();
+    texPreviewFor_.clear(); texPreview_ = nullptr;
     levels_ = forge::levelstore::detect(root);
     const bool hasDefs = fs::exists(fs::path(root) / "data" / "CompiledDefs" / "game.bin");
     installValid_ = hasDefs && levels_.valid();
@@ -589,6 +687,14 @@ void App::scanInstall(const std::string& picked) {
 
 void App::startContextLoad(const std::string& fromRoot) {
     if (!installValid_) return;
+    modelsLoaded_ = modelUsersLoaded_ = modelReady_ = false;
+    modelRows_.clear(); modelUsers_.clear(); modelName_.clear(); modelError_.clear();
+    modelGeometry_ = {}; modelId_ = 0;
+    renderer_.clearModelPreview();
+    renderer_.clearHeadPreview();
+    dialogueHeadReady_=false;
+    dialoguePresetChecked_=false;
+    modelRoot_ = fromRoot.empty() ? installPath_ : fromRoot;
     ctxPending_ = std::make_shared<te::Context>();
     const fs::path root = fromRoot.empty() ? fs::path(installPath_) : fs::path(fromRoot);
     auto ctx = ctxPending_;
@@ -706,6 +812,15 @@ bool App::openLooseLev(const std::string& path) {
     return true;
 }
 
+void App::requestClose() {
+    if (hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
+        !dialogueStaged_.empty()) {
+        pendingSelect_.clear();
+        closePending_ = true;
+        closeSaveWaiting_ = worldFuture_.valid();
+    } else quit_ = true;
+}
+
 void App::selectMap(const std::string& nameOrKey) {
     if (nameOrKey == selectedName_) return;
     if (hasUnsavedEdits() && !discardEdits_ && (!auto_.active() || promptInAuto_) && pendingSelect_.empty()) { pendingSelect_ = nameOrKey; return; }
@@ -721,6 +836,7 @@ void App::selectMap(const std::string& nameOrKey) {
     renderer_.clearLayer(2);
     renderer_.clearThings();
     foliageLoadedFor_.clear();
+    reportedThingWarnings_.clear();
     foliageInstances_ = 0;
     thingInstances_ = 0;
     foliageStatus_.clear();
@@ -731,7 +847,8 @@ void App::selectMap(const std::string& nameOrKey) {
 void App::setPreviewFoliage(bool on) {
     previewFoliage_ = on;
     renderer_.showFoliage = on;
-    if (on && !foliageLoaded() && !foliageFuture_.valid() && previewLoaded()) startFoliageLoad();
+    if (on && (!foliageLoaded() || (documentLoaded() && doc_.terrainRevision() != foliageTerrainRev_)) &&
+        !foliageFuture_.valid() && previewLoaded()) startFoliageLoad(foliageLoaded());
 }
 
 void App::setPreviewThings(bool on) {
@@ -740,7 +857,7 @@ void App::setPreviewThings(bool on) {
     if (on && !foliageLoaded() && !foliageFuture_.valid() && previewLoaded()) startFoliageLoad();
 }
 
-void App::startFoliageLoad() {
+void App::startFoliageLoad(bool foliageOnly) {
     if (selectedName_.empty() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { foliagePendingName_ = selectedName_; return; }
     const MapEntry* found = findEntry(selectedName_);
@@ -752,21 +869,23 @@ void App::startFoliageLoad() {
     const te::Context* ctx = ctxHold.get();
     const std::string root = installPath_;
     const std::string tngText = documentLoaded() ? doc_.text() : std::string();
-    if (documentLoaded()) syncedRevision_ = doc_.revision();
-    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, tngText]() {
-        FoliageResult r; r.name = entry.key;
+    if (documentLoaded() && !foliageOnly) syncedRevision_ = doc_.revision();
+    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, tngText, foliageOnly]() {
+        FoliageResult r; r.name = entry.key; r.foliageOnly = foliageOnly;
         foliageexport::Options fo;
         fo.gameRoot = root;
         fo.textures = true;
         fo.up = te::UpAxis::Y;
         fo.mapLocal = true;
         try { r.scene = foliageexport::load(entry.name, fo, *ctx); } catch (const std::exception& e) { r.scene.warnings.push_back(e.what()); }
-        thingsexport::Options to;
-        to.gameRoot = root;
-        to.textures = true;
-        to.up = te::UpAxis::Y;
-        to.tngText = tngText;
-        try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
+        if (!foliageOnly) {
+            thingsexport::Options to;
+            to.gameRoot = root;
+            to.textures = true;
+            to.up = te::UpAxis::Y;
+            to.tngText = tngText;
+            try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
+        }
         return r;
     });
 }
@@ -1030,9 +1149,24 @@ void App::pollWorkers() {
             renderer_.uploadThings(r.things, te::UpAxis::Y);
             sectionsDirty_ = true;   // fresh instances start visible
             bindInstances(r.things);
-            for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
+            for (const auto& w : r.things.warnings) if (reportedThingWarnings_.insert(w).second) pushLog("objects: " + w, 1);
         } else if (r.name == selectedName_) {
             foliageLoadedFor_ = r.name;
+            foliagePreviewReseated_ = 0;
+            if (documentLoaded() && doc_.hasTerrain()) {
+                const auto* before = doc_.savedTerrain();
+                if (before && before->heights.size() == doc_.terrain().heights.size()) {
+                    for (auto& inst : r.scene.instances) {
+                        const auto oldHeight = editor::Document::sampleHeight(*before, doc_.cellsX(), doc_.cellsY(), inst.x, inst.y);
+                        const auto newHeight = editor::Document::sampleHeight(doc_.terrain(), doc_.cellsX(), doc_.cellsY(), inst.x, inst.y);
+                        if (oldHeight && newHeight && std::fabs(*newHeight - *oldHeight) > 1e-4f) {
+                            inst.z += *newHeight - *oldHeight;
+                            ++foliagePreviewReseated_;
+                        }
+                    }
+                }
+                foliageTerrainRev_ = doc_.terrainRevision();
+            }
             localDetail_.clear();
             for (const auto& inst : r.scene.instances) {
                 if (inst.mesh < 0 || size_t(inst.mesh) >= r.scene.meshes.size()) continue;
@@ -1041,22 +1175,23 @@ void App::pollWorkers() {
             }
             budgetDirty_ = budgetOpen_;
             foliageInstances_ = r.scene.instances.size();
-            thingInstances_ = r.things.instances.size();
+            if (!r.foliageOnly) thingInstances_ = r.things.instances.size();
             if (r.scene.found && !r.scene.instances.empty()) {
                 renderer_.uploadLayer(0, r.scene, te::UpAxis::Y);
                 foliageStatus_ = std::to_string(r.scene.instances.size()) + " plants (" + std::to_string(r.scene.treeInstances) + " trees)";
             } else {
                 foliageStatus_ = r.scene.found ? "no baked foliage" : "no foliage bank entry";
             }
-            if (!r.things.instances.empty()) {
+            if (!r.foliageOnly && !r.things.instances.empty()) {
                 renderer_.uploadThings(r.things, te::UpAxis::Y);
             sectionsDirty_ = true;   // fresh instances start visible
                 bindInstances(r.things);
                 foliageStatus_ += ", " + std::to_string(r.things.instances.size()) + " objects";
-            } else if (r.things.found) {
+            } else if (!r.foliageOnly && r.things.found) {
                 foliageStatus_ += ", no placed objects";
             }
-            for (const auto& w : r.things.warnings) pushLog("objects: " + w, 1);
+            if (r.foliageOnly && thingInstances_) foliageStatus_ += ", " + std::to_string(thingInstances_) + " objects";
+            for (const auto& w : r.things.warnings) if (reportedThingWarnings_.insert(w).second) pushLog("objects: " + w, 1);
             for (const auto& w : r.scene.warnings)
                 if (w.rfind("mesh", 0) != 0) pushLog("foliage: " + w, 1);
         }
@@ -1116,6 +1251,22 @@ bool App::logContains(const std::string& needle) const {
     return false;
 }
 
+float App::viewportControlsLift() const {
+    using theme::S;
+    if (viewportSize_.x < S(620)) return 0.0f;   // compact View/Show/Frame row
+    ImGui::PushFont(fontSmall_);
+    const float gap = S(6);
+    auto chipW = [&](const char* t) { return ImGui::CalcTextSize(t).x + S(24); };
+    float modesW = chipW("Frame  (F)") + S(8);
+    for (const char* name : kModeNames) modesW += chipW(name) + gap;
+    float layersW = 0;
+    for (const char* name : {"Foliage", "Objects", "Markers", "Water", "Grid", "Neighbours"}) layersW += chipW(name) + gap;
+    const bool twoRows = modesW + layersW + ImGui::CalcTextSize("Show:").x + S(40) > viewportSize_.x;
+    const float lift = twoRows ? ImGui::GetFrameHeight() + S(6) : 0.0f;
+    ImGui::PopFont();
+    return lift;
+}
+
 void App::drawViewportOverlays(const ImVec2& origin, const ImVec2& size) {
     using theme::S;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1136,7 +1287,7 @@ void App::drawViewportOverlays(const ImVec2& origin, const ImVec2& size) {
         char buf[96];
         std::snprintf(buf, sizeof buf, "x %.1f   y %.1f   h %.1f", cursorFable_[0], cursorFable_[1], cursorFable_[2]);
         const ImVec2 ts = ImGui::CalcTextSize(buf);
-        const ImVec2 p0(origin.x + S(14), yChips - ts.y - S(22));
+        const ImVec2 p0(origin.x + S(14), yChips - viewportControlsLift() - ts.y - S(22));
         dl->AddRectFilled(p0, ImVec2(p0.x + ts.x + S(16), p0.y + ts.y + S(10)), theme::col(theme::Bg1) | 0xD0000000, S(6));
         dl->AddText(ImVec2(p0.x + S(8), p0.y + S(5)), theme::col(theme::Muted), buf);
     }
@@ -1198,7 +1349,7 @@ void App::drawToasts(const ImVec2& origin, const ImVec2& size) {
     if (toasts_.empty()) return;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float w = std::min(S(360), size.x - S(32));
-    float y = origin.y + S(14);
+    float y = origin.y + ((size.x < S(620) && renderer_.hasMesh()) ? S(90) : S(14));
     ImGui::PushFont(fontSmall_);
     for (const Toast& t : toasts_) {
         const float age = time_ - t.at;
@@ -1246,6 +1397,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
+    v.push_back("palette_definition="+placeDef_);
+    v.push_back("palette_reveal_pending="+std::to_string(!revealDef_.empty()));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));
     v.push_back("tour_step=" + std::to_string(tourStep_));
@@ -1286,6 +1439,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_mode=" + std::string(worldMode_ ? "1" : "0"));
     v.push_back("world_3d=" + std::string(world3D_ ? "1" : "0"));
     v.push_back("world_tiles=" + std::to_string(worldTiles_.size()));
+    v.push_back("world_overview_upload_frames=" + std::to_string(worldOverviewUploadFrames_));
+    v.push_back("world_thumbnail_upload_frames=" + std::to_string(worldThumbnailUploadFrames_));
+    v.push_back("world_overview_first_map=" + worldOverviewFirstMap_);
     v.push_back("world_tiles_total=" + std::to_string(worldTileTotal_));
     v.push_back("world_tiles_busy=" + std::string(worldTileWorkers_.empty() ? "0" : "1"));
     v.push_back("world_hover=" + worldHover_);
@@ -1307,18 +1463,141 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("world_gpu_memory_simulated=" + std::to_string(worldVideoMemoryOverride_.has_value()));
     v.push_back("world_memory_evictions=" + std::to_string(worldMemoryEvictions_));
     v.push_back("world_detail_cache_hits=" + std::to_string(worldDetailCacheHits_));
+    v.push_back("viewport_x=" + std::to_string(viewportOrigin_.x));
+    v.push_back("viewport_y=" + std::to_string(viewportOrigin_.y));
+    v.push_back("viewport_width=" + std::to_string(viewportSize_.x));
+    v.push_back("viewport_height=" + std::to_string(viewportSize_.y));
+    const auto pool = renderer_.texturePoolStats();
+    v.push_back("texture_retired_cpu_bytes=" + std::to_string(renderer_.retiredTextureBytes()));
+    v.push_back("world_aa_mode=" + std::to_string(renderer_.worldAaMode));
+    v.push_back("world_aa_samples=" + std::to_string(renderer_.aaSamples()));
+    v.push_back("world_aa_support=" + std::to_string(renderer_.aaSupport()));
+    v.push_back("world_aa_target_bytes=" + std::to_string(renderer_.renderTargetBytes()));
+    v.push_back("world_aa_rebuilds=" + std::to_string(renderer_.aaRebuilds()));
+    v.push_back("world_aa_fallbacks=" + std::to_string(renderer_.aaFallbacks()));
+    v.push_back("texture_pool_cutout=" + std::to_string(pool.cutout));
+    v.push_back("texture_pool_mipmapped=" + std::to_string(pool.mipmapped));
+    v.push_back("texture_pool_allocations=" + std::to_string(pool.allocations));
+    v.push_back("texture_pool_gpu_bytes=" + std::to_string(pool.gpuBytes));
+    v.push_back("texture_pool_identity_bytes=" + std::to_string(pool.identityBytes));
+    v.push_back("texture_pool_hits=" + std::to_string(pool.hits));
     v.push_back("world_detail_loads=" + std::to_string(worldDetailLoads_));
+    v.push_back("world_detail_upload_frames=" + std::to_string(worldDetailUploadFrames_));
+    v.push_back("world_detail_cancelled=" + std::to_string(worldDetailCancelled_));
+    v.push_back("world_detail_worker_held=" + std::to_string(worldDetailWork_ && worldDetailWork_->held.load()));
+    v.push_back("world_cutout_cache_bytes=" + std::to_string(worldCutoutCacheStats_.bytes));
+    v.push_back("world_cutout_cache_entries=" + std::to_string(worldCutoutCacheStats_.entries));
+    v.push_back("world_cutout_cache_hits=" + std::to_string(worldCutoutCacheStats_.hits));
+    v.push_back("world_cutout_cache_builds=" + std::to_string(worldCutoutCacheStats_.builds));
+    v.push_back("world_detail_deferred=" + std::to_string(worldDetailDeferred_));
+    v.push_back("world_detail_failures=" + std::to_string(worldDetailFailures_));
+    v.push_back("world_detail_last_objects=" + std::to_string(worldDetailLastObjects_));
+    v.push_back("world_detail_last_creatures=" + std::to_string(worldDetailLastCreatures_));
     std::string detailNames;
     for (const auto& [name, shown] : worldDetailShown_) { if (!detailNames.empty()) detailNames += ","; detailNames += name; }
     v.push_back("world_detail_names=" + detailNames);
     v.push_back("world_water_batches=" + std::to_string(renderer_.worldWaterBatches()));
     v.push_back("world_drawn_batches=" + std::to_string(renderer_.worldDrawnBatches));
     v.push_back("world_culled_batches=" + std::to_string(renderer_.worldCulledBatches));
+    v.push_back("world_drawn_object_parts=" + std::to_string(renderer_.worldDrawnObjects));
+    v.push_back("world_culled_object_parts=" + std::to_string(renderer_.worldCulledObjects));
+    v.push_back("world_lower_lod_parts=" + std::to_string(renderer_.worldLodObjects));
+    v.push_back("world_object_draw_calls=" + std::to_string(renderer_.worldObjectDrawCalls));
+    v.push_back("world_object_distance=" + std::to_string(renderer_.worldObjectDistance));
+    v.push_back("world_scenery_maps=" + std::to_string(worldScenery_.loaded));
+    v.push_back("world_scenery_pending=" + std::to_string(worldScenery_.pending));
+    v.push_back("world_scenery_bytes=" + std::to_string(worldScenery_.bytes));
+    v.push_back("world_scenery_failures=" + std::to_string(worldScenery_.failures));
+    v.push_back("world_scenery_blocked=" + std::to_string(worldScenery_.blocked));
+    v.push_back("world_scenery_priority_evictions=" + std::to_string(worldScenery_.priorityEvictions));
+    v.push_back("world_scenery_memory_limit=" + std::to_string(worldScenery_.memoryLimit));
+    v.push_back("world_scenery_drawn_parts=" + std::to_string(renderer_.worldSceneryDrawnParts));
+    v.push_back("world_scenery_holds=" + std::to_string(worldSceneryHolds_));
+    std::string sceneryNames;
+    for (const auto& name : worldScenery_.names) { if (!sceneryNames.empty()) sceneryNames += ','; sceneryNames += name; }
+    v.push_back("world_scenery_names=" + sceneryNames);
+    v.push_back("world_terrain_triangles=" + std::to_string(renderer_.worldTerrainTriangles));
+    v.push_back("world_terrain_full_triangles=" + std::to_string(renderer_.worldTerrainFullTriangles));
+    v.push_back("world_terrain_coarse_patches=" + std::to_string(renderer_.worldTerrainCoarsePatches));
+    v.push_back("world_label=" + (worldHover_.empty() ? worldSelected_ : worldHover_));
+    v.push_back("world_detail_memory_ceiling=" + std::to_string(worldDetailMemoryMaps_));
+    v.push_back("world_detail_radius=" + std::to_string(worldview::requestedDrawDistance(worldDetailRadius_)));
     v.push_back("world_detail_budget=" + std::to_string(worldAutoDetail_ ? worldDetailBudget_.maps : worldDetailMaps_));
+    v.push_back("assets_tab=" + std::to_string(assetsTab_));
+    v.push_back("dialogue_loaded=" + std::to_string(dialogueLoaded_));
+    v.push_back("dialogue_language=" + dialogueLanguage_);
+    v.push_back("dialogue_bank=" + std::to_string(dialogueBank_));
+    v.push_back("dialogue_id=" + std::to_string(dialogueId_));
+    v.push_back("dialogue_frames=" + std::to_string(dialogueLoaded_ ? dialogueEntry_.frames.size() : 0));
+    v.push_back("dialogue_subtitles_count=" + std::to_string(dialogueSubtitles_.size()));
+    v.push_back("dialogue_subtitle_name=" + (dialogueSubtitles_.empty() ? "" : dialogueSubtitles_.front().name));
+    v.push_back("dialogue_search_results=" + std::to_string(dialogueSearchResults_.size()));
+    v.push_back("dialogue_search_first_id=" + std::to_string(
+        dialogueSearchResults_.empty()?0:dialogueSearchResults_.front().soundId));
+    v.push_back("dialogue_staged=" + std::to_string(dialogueStaged_.size()));
+    v.push_back("dialogue_exported=" + std::to_string(dialogueExportMessage_.rfind("Wrote ",0)==0));
+    v.push_back("dialogue_pack_added=" + std::to_string(dialogueExportMessage_.rfind("Added ",0)==0));
+    v.push_back("dialogue_audio_available=" + std::to_string(dialogueLoaded_ && dialogueAudioDuration_>0));
+    v.push_back("dialogue_scrubbed=" + std::to_string(dialogueLoaded_ && dialogueTime_>0));
+    v.push_back("dialogue_playing=" + std::to_string(dialogueMotionPlaying_ ||
+        (dialogueAudio_ && dialogueAudio_->playing())));
+    v.push_back("dialogue_audio_muted=" + std::to_string(dialogueAudioMuted_));
+    v.push_back("dialogue_audio_advanced=" + std::to_string(dialogueAudio_ && dialogueAudio_->position()>0));
+    v.push_back("dialogue_preset=" + std::to_string(dialoguePreset_));
+    v.push_back("dialogue_preset_ready=" + std::to_string(dialoguePresetChecked_ && dialoguePresetAssets_.complete()));
+    v.push_back("dialogue_head_ready=" + std::to_string(dialogueHeadReady_));
+    v.push_back("dialogue_head_yaw=" + std::to_string(dialogueHeadYaw_));
+    v.push_back("dialogue_head_pitch=" + std::to_string(dialogueHeadPitch_));
+    v.push_back("dialogue_head_zoom=" + std::to_string(dialogueHeadZoom_));
+    v.push_back("dialogue_preset_mesh=" + std::to_string(dialoguePresetAssets_.meshId));
+    v.push_back("effects_count=" + std::to_string(effectBrowserRows_.size()));
+    v.push_back("effects_filtered=" + std::to_string(effectBrowserFiltered_));
+    v.push_back("effect_ready=" + std::to_string(effectBrowserReady_));
+    v.push_back("effect_preview_time=" + std::to_string(effectSimulation_.time()));
+    v.push_back("effect_preview_particles=" + std::to_string(effectSimulation_.particleCount()));
+    v.push_back("effect_preview_supported=" + std::to_string(effectSimulation_.supportedSystems()));
+    v.push_back("effect_preview_warnings=" + std::to_string(effectSimulation_.warnings().size()+effectTextureWarnings_.size()));
+    v.push_back("effect_preview_drawn=" + std::to_string(effectRenderer_.drawnSprites()));
+    v.push_back("effect_preview_meshes=" + std::to_string(effectSimulation_.meshes().size()));
+    v.push_back("effect_preview_lights="+std::to_string(effectSimulation_.lights().size()));
+    v.push_back("effect_preview_light_volumes="+std::to_string(effectLightVolumesDrawn_));
+    v.push_back("effect_show_light_volumes="+std::to_string(effectShowLightVolumes_));
+    v.push_back("effect_background="+std::to_string(effectBackground_[0])+","+
+        std::to_string(effectBackground_[1])+","+std::to_string(effectBackground_[2]));
+    v.push_back("move_owned="+std::to_string(moveOwned_));
+    v.push_back("effect_preview_meshes_drawn=" + std::to_string(effectRenderer_.drawnMeshes()));
+    v.push_back("effect_preview_mesh_triangles=" + std::to_string(effectRenderer_.meshTriangles()));
+    std::set<int32_t> authoredMeshes;
+    for (const auto& mesh:effectBrowserSelection_.meshes)
+        if (effectRenderer_.meshUsesAuthoredBounds(mesh.mesh)) authoredMeshes.insert(mesh.mesh);
+    v.push_back("effect_preview_authored_meshes="+std::to_string(authoredMeshes.size()));
+    v.push_back("effect_preview_playing=" + std::to_string(effectPlaying_));
+    v.push_back("effect_preview_grid=" + std::to_string(effectShowGrid_));
+    v.push_back("effect_preview_loop=" + std::to_string(effectLoop_));
+    v.push_back("effect_preview_loops=" + std::to_string(effectLoopCount_));
+    v.push_back("effect_preview_speed=" + std::to_string(effectSpeedIndex_));
+    v.push_back("effect_preview_duration=" + std::to_string(effectDuration_));
+    v.push_back("effect_selected=" + effectBrowserSelection_.name);
+    v.push_back("effect_id=" + std::to_string(effectBrowserSelection_.id));
+    v.push_back("effect_display_name=" + effectBrowserSelection_.displayName);
+    v.push_back("effect_parsed_fully=" + std::to_string(effectBrowserSelection_.parsedFully));
+    v.push_back("effect_systems=" + std::to_string(effectBrowserSelection_.systems));
+    v.push_back("effect_sprites=" + std::to_string(effectBrowserSelection_.sprites.size()));
+    v.push_back("effect_meshes=" + std::to_string(effectBrowserSelection_.meshes.size()));
+    v.push_back("effect_lights=" + std::to_string(effectBrowserSelection_.lights.size()));
+    v.push_back("models_count=" + std::to_string(modelRows_.size()));
+    v.push_back("models_filtered=" + std::to_string(modelFiltered_));
+    v.push_back("model_selected=" + modelName_);
+    v.push_back("model_ready=" + std::to_string(modelReady_));
+    v.push_back("model_vertices=" + std::to_string(modelGeometry_.vertices.size()));
+    v.push_back("model_triangles=" + std::to_string(modelGeometry_.triangles.size()));
+    v.push_back("model_wire=" + std::to_string(modelWire_));
+    v.push_back("model_users=" + std::to_string(modelUsers_.count(modelId_) ? modelUsers_.at(modelId_).size() : 0));
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
+    v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));
     v.push_back("mesh_import_busy=" + std::string(meshImportFuture_.valid() ? "1" : "0"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
@@ -1352,10 +1631,30 @@ std::vector<std::string> App::stateDump() const {
     if (documentLoaded() && doc_.level()) { size_t named = 0; for (const auto& g : doc_.level()->groundThemes()) named += !g.name.empty(); v.push_back("palette_named=" + std::to_string(named)); }
     if (const auto* wb = world_.find(worldSelected_)) { int wx = 0, wy = 0; worldPlacement(wb->name, wx, wy); v.push_back("world_selected_pos=" + std::to_string(wx) + "," + std::to_string(wy)); }
     v.push_back("doc_loaded=" + std::string(documentLoaded() ? "1" : "0"));
+    v.push_back("selection_popup=" + std::to_string(selectionPopupOpen_));
+    v.push_back("selection_inspector=" + std::to_string(selectionInspectorOpen_));
+    v.push_back("fit_open=" + std::to_string(fitOpen_));
+    v.push_back("fit_preview_has_changes=" + std::to_string(fitPreviewChanged_ > 0));
+    v.push_back("fit_preview_changed=" + std::to_string(fitPreviewChanged_));
+    v.push_back("fractal_open=" + std::to_string(fractalOpen_));
+    v.push_back("foliage_preview_reseated=" + std::to_string(foliagePreviewReseated_));
+    v.push_back("foliage_preview_reseated_any=" + std::to_string(foliagePreviewReseated_ > 0));
+    v.push_back("budget_open=" + std::to_string(budgetOpen_));
+    v.push_back("selection_inspector_def=" + (selectionInspectorOpen_ && documentLoaded() && selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount()
+        ? doc_.summary(size_t(selectedThing_)).definition : std::string{}));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
+    v.push_back("thing_glyphs=" + std::to_string(thingGlyphs_.size()));
+    v.push_back("selected_radius_fields=" + std::to_string(selectedRadiusFields().size()));
     v.push_back("doc_dirty=" + std::string(documentLoaded() && doc_.dirty() ? "1" : "0"));
+    v.push_back("close_prompt=" + std::string(closePending_ ? "1" : "0"));
     v.push_back("doc_changes=" + std::to_string(documentLoaded() ? doc_.changes().size() : 0));
     v.push_back("selected_thing=" + std::to_string(selectedThing_));
+    v.push_back("selected_locked="+std::to_string(selectedThing_>=0 && doc_.isLocked(size_t(selectedThing_))));
+    v.push_back("selection_height_popup="+std::to_string(selectionHeightPopupOpen_));
+    v.push_back("owned_delete_popup="+std::to_string(ownedDeletePopupOpen_));
+    v.push_back("gizmo_using="+std::to_string(ImGuizmo::IsUsing()));
+    v.push_back("carry_armed="+std::to_string(carryArmed_));
+    v.push_back("carrying="+std::to_string(carrying_));
     v.push_back("things_first=" + std::to_string(thingsFirst_));
     v.push_back("things_shown=" + std::to_string(thingsShown_));
     v.push_back(std::string("track_preview=") + (trackPreview_.active ? "1" : "0"));
@@ -1366,7 +1665,14 @@ std::vector<std::string> App::stateDump() const {
     v.push_back(std::string("section_night=") + (showNightOnly_ ? "1" : "0"));
     if (documentLoaded() && selectedThing_ >= 0) {
         v.push_back("selected_def=" + doc_.summary(size_t(selectedThing_)).definition);
+        if (doc_.summary(size_t(selectedThing_)).type == "AICreature") {
+            const auto sex=ctx_.defIntField(doc_.summary(size_t(selectedThing_)).definition,"Sex");
+            v.push_back("selected_creature_sex=" + (sex ? std::to_string(*sex) : std::string("unknown")));
+        }
         v.push_back("selected_section=" + doc_.sectionOf(size_t(selectedThing_)));
+        const auto roots=selectionIndices();
+        v.push_back("selected_owned_count="+std::to_string(doc_.ownedDescendants(
+            std::vector<size_t>(roots.begin(),roots.end())).size()));
         {
             std::string player = "none";
             for (const auto& r : doc_.propertiesOf(size_t(selectedThing_)))
@@ -1402,7 +1708,11 @@ std::vector<std::string> App::stateDump() const {
 // ------------------------------------------------------------------ drawing
 
 void App::frame(float dt) {
+    renderer_.pollTextureCleanup();
     time_ += dt;
+    frameDialoguePlayback();
+    if (texturesMode_ && assetsTab_==3 && effectBrowserReady_ && effectPlaying_)
+        advanceEffectPlayback(dt);
     pollWorkers();
     ImGuizmo::BeginFrame();
     syncInstances();
@@ -1410,6 +1720,8 @@ void App::frame(float dt) {
     editorShortcuts();
     updateTrackPreview(dt);
     pollWorldTiles();
+    updateWorldDetail(); // also retire cancelled work while another tab/2D view is active
+    updateWorldScenery();
     if (terrainDeployFuture_.valid() && terrainDeployFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const TerrainDeployResult r = terrainDeployFuture_.get();
         for (const auto& n : r.notes) pushLog("terrain: " + n, 0);
@@ -1424,9 +1736,17 @@ void App::frame(float dt) {
         if (r.ok && !r.pack.empty()) pushLog("world: edits written into pack " + packLabel(r.pack) + " (Mods > Deploy puts them in the game)", 3);
         else if (r.ok) pushLog("world: maps moved (start a new game to walk the new layout)", 3);
         else pushLog("world: move failed: " + r.error, 2);
-        worldLoaded_ = false; worldLoadedFrom_.clear();
-        loadWorld();
-        if (r.ok && (saveRoot_.empty() || saveRoot_ == installPath_)) { const std::string root = installPath_; scanInstall(root); }
+        if (r.ok) {
+            worldUndo_.clear(); worldRedo_.clear();
+            worldLoaded_ = false; worldLoadedFrom_.clear();
+            loadWorld();
+            if (saveRoot_.empty() || saveRoot_ == installPath_) { const std::string root = installPath_; scanInstall(root); }
+        }
+        if (closeSaveWaiting_) {
+            closeSaveWaiting_ = false;
+            if (r.ok && closePending_ && !hasUnsavedEdits() &&
+                worldPendingCount() == 0 && dialogueStaged_.empty()) quit_ = true;
+        }
     }
     if (newLevelFuture_.valid() && newLevelFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const NewLevelJob r = newLevelFuture_.get();
@@ -1490,9 +1810,17 @@ void App::frame(float dt) {
 
     const float total = ImGui::GetContentRegionAvail().x;
     const float strip = theme::S(14.0f);
-    const float left = settings_.showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
-    const float right = settings_.showActions ? std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f)) : 0.0f;
-    const float middle = std::max(total - left - right - strip * 2, theme::S(200.0f));
+    float left = settings_.showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
+    float right = settings_.showActions ? std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f)) : 0.0f;
+    // On compact windows the nominal panel minimums can exceed the window.
+    // Share the available width rather than letting the tool panel run offscreen.
+    const float panelsAvailable = std::max(0.0f, total - strip * 2 - theme::S(200.0f));
+    if (left + right > panelsAvailable && left + right > 0) {
+        const float fit = panelsAvailable / (left + right);
+        left *= fit;
+        right *= fit;
+    }
+    const float middle = std::max(0.0f, total - left - right - strip * 2);
 
     if (settings_.showExplorer) { drawExplorer(left); ImGui::SameLine(0, 0); }
     drawPanelStrip(true);
@@ -1528,7 +1856,7 @@ void App::drawMenuBar() {
         if (ImGui::MenuItem("Change install folder...")) changeInstall();
         if (ImGui::MenuItem("Setup check...")) setupOpen_ = true;
         ImGui::Separator();
-        if (ImGui::MenuItem("Exit", "Alt+F4")) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+        if (ImGui::MenuItem("Exit", "Alt+F4")) requestClose();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
@@ -1610,7 +1938,11 @@ void App::drawMenuBar() {
 
 void App::changeInstall() {
     const std::string picked = pickFolder(hwnd_, installPath_);
-    if (!picked.empty()) { installSource_ = "manual"; scanInstall(picked); }
+    if (!picked.empty()) {
+        const std::string previous = installPath_;
+        scanInstall(picked);
+        if (installPath_ != previous) installSource_ = "manual";
+    }
 }
 
 void App::openWorldFile() {
@@ -1688,9 +2020,10 @@ void App::drawExplorer(float width) {
     ImGui::SetNextItemWidth(width - S(32));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(7)));
     if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
-    if (ImGui::InputTextWithHint("##filter", "Search maps...   (Ctrl+F)", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
+    if (ImGui::InputTextWithHint("##filter", width < S(250) ? "Search maps..." : "Search maps...   (Ctrl+F)", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
     ImGui::PopStyleVar();
     auto_.registerWidget("input_filter");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Search map names  (Ctrl+F)");
     ImGui::Dummy(ImVec2(0, S(6)));
     {
         // a divider where the list starts: a row scrolled half under it reads as clipped, not as overlap
@@ -1743,6 +2076,7 @@ void App::drawExplorer(float width) {
                 ImGui::PopFont();
                 ImGui::PopStyleVar();
                 auto_.registerWidget(("group_" + m.group).c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m.group.c_str());
             } else if (single) {
                 currentGroup.clear();
                 groupVisible = true;
@@ -1763,7 +2097,10 @@ void App::drawExplorer(float width) {
             if (selected) auto_.registerWidget("row_selected");
             if (selected && scrollToSelected_) { ImGui::SetScrollHereY(0.5f); scrollToSelected_ = false; }
             auto_.registerWidget(("row_" + m.key).c_str());
-            if (!m.loosePath.empty() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m.loosePath.c_str());
+            if (ImGui::IsItemHovered()) {
+                if (m.loosePath.empty()) ImGui::SetTooltip("%s", m.name.c_str());
+                else ImGui::SetTooltip("%s\n%s", m.name.c_str(), m.loosePath.c_str());
+            }
             ImGui::PopID();
         }
         if (shown == 0) {
@@ -1792,6 +2129,11 @@ void App::drawExplorer(float width) {
 void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     ImGuiIO& io = ImGui::GetIO();
     if (!renderer_.hasMesh()) return;
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+        cancelCarry();
+        contextClickArmed_ = clickArmed_ = viewportCaptured_ = false;
+        return;
+    }
     const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     // Keep flying while RMB is held even if the cursor leaves the image.
     const bool active = viewportHovered_ || viewportCaptured_;
@@ -1800,8 +2142,29 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     const float dx = io.MouseDelta.x, dy = io.MouseDelta.y;
     const float panK = camera_.distance / std::max(size.y, 1.0f) * 1.6f;
 
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        contextClickArmed_ = editMode_ && documentLoaded() && viewportHovered_;
+        contextClickMoved_ = false;
+        contextClickPos_ = io.MousePos;
+    }
+    if (contextClickArmed_) {
+        const float mx = io.MousePos.x-contextClickPos_.x, my = io.MousePos.y-contextClickPos_.y;
+        contextClickMoved_ |= mx*mx+my*my > 4 || io.MouseWheel != 0 ||
+            ImGui::IsKeyDown(ImGuiKey_W) || ImGui::IsKeyDown(ImGuiKey_A) ||
+            ImGui::IsKeyDown(ImGuiKey_S) || ImGui::IsKeyDown(ImGuiKey_D) ||
+            ImGui::IsKeyDown(ImGuiKey_Q) || ImGui::IsKeyDown(ImGuiKey_E) ||
+            ImGui::IsMouseDown(ImGuiMouseButton_Left) || ImGui::IsMouseDown(ImGuiMouseButton_Middle);
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+            if (!contextClickMoved_ && viewportHovered_ && size.x > 0 && size.y > 0)
+                selectionPopupRequested_ = pickContextSelection((io.MousePos.x-origin.x)/size.x, (io.MousePos.y-origin.y)/size.y);
+            contextClickArmed_ = false;
+        }
+    }
+
     if (rmb) {
-        camera_.look(-dx * 0.005f, dy * 0.005f);
+        // Ignore click jitter until it becomes a look gesture; flight keys and
+        // wheel still act immediately and prevent a popup on release.
+        if (!contextClickArmed_ || contextClickMoved_) camera_.look(-dx * 0.005f, dy * 0.005f);
         if (io.MouseWheel != 0) camera_.flySpeed = std::clamp(camera_.flySpeed * std::pow(1.25f, io.MouseWheel), 0.5f, 5000.0f);
         float fwd = 0, strafe = 0, rise = 0;
         if (ImGui::IsKeyDown(ImGuiKey_W)) fwd += 1; if (ImGui::IsKeyDown(ImGuiKey_S)) fwd -= 1;
@@ -1810,18 +2173,46 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
         const float boost = io.KeyShift ? 3.0f : 1.0f;
         if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
     } else {
+        if (carryCursorMode_) {
+            if (viewportHovered_ && size.x > 0 && size.y > 0) {
+                updateCarry((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && carrying_) finishCarry();
+            }
+            return;
+        }
         const bool terrainTool = editMode_ && gizmoOp_ == 4 && documentLoaded() && doc_.hasTerrain();
-        const bool gizmo = editMode_ && (ImGuizmo::IsOver() || ImGuizmo::IsUsing() || terrainTool);
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && !gizmo) { clickArmed_ = true; clickPos_ = io.MousePos; }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) && !gizmo) {
-            if (io.KeyAlt) camera_.orbit(-dx * 0.008f, dy * 0.008f);
+        const bool gizmo = editMode_ && (terrainTool || (selectedThing_ >= 0 && gizmoOp_ != 0 && (ImGuizmo::IsOver() || ImGuizmo::IsUsing())));
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && viewportHovered_ && !gizmo) {
+            clickArmed_ = true; clickPos_ = io.MousePos;
+            const bool cloneCarry = io.KeyShift && io.KeyCtrl && !io.KeyAlt;
+            if ((!io.KeyShift && !io.KeyCtrl && !io.KeyAlt || cloneCarry) && size.x > 0 && size.y > 0 &&
+                armCarry((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y))
+                carryCloneRequested_ = cloneCarry;
+        }
+        if (((carrying_ && ImGui::IsMouseDown(ImGuiMouseButton_Left)) || ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) && (carryArmed_ || !gizmo)) {
+            if (carryArmed_) {
+                const float mx = io.MousePos.x - clickPos_.x, my = io.MousePos.y - clickPos_.y;
+                if (carrying_ || mx * mx + my * my >= 16.0f) {
+                    clickArmed_ = false;
+                    if (!carryCloneRequested_ || carryCloneActive_ || startCloneCarry())
+                        updateCarry((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
+                }
+            } else if (io.KeyAlt) camera_.orbit(-dx * 0.008f, dy * 0.008f);
             else { camera_.turn(-dx * 0.005f); camera_.dolly(-dy * 0.02f); }
         }
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && clickArmed_) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && carryArmed_) {
+            finishCarry(); clickArmed_ = false;
+        } else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && clickArmed_) {
             clickArmed_ = false;
             const float mx = io.MousePos.x - clickPos_.x, my = io.MousePos.y - clickPos_.y;
-            if (editMode_ && !gizmo && mx * mx + my * my < 16.0f && size.x > 0 && size.y > 0)
-                pickAt((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
+            if (editMode_ && !gizmo && mx * mx + my * my < 16.0f && size.x > 0 && size.y > 0) {
+                const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
+                float position[3];
+                if (io.KeyShift && !io.KeyCtrl && !io.KeyAlt && !placeDef_.empty() &&
+                    (gizmoOp_ == 0 || gizmoOp_ == 1) && groundUnderCursor(u, v, position))
+                    placeDefinitionAt(placeDef_, position);
+                else pickAt(u, v);
+            }
         }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) camera_.pan(-dx * panK, dy * panK);
         if (io.MouseWheel != 0 && viewportHovered_ && !ImGuizmo::IsUsing()) camera_.dolly(io.MouseWheel);
@@ -1857,6 +2248,27 @@ void App::drawViewport(float width) {
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
+    if (texturesMode_ && assetsTab_ == 3) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawEffectViewport(origin, size);
+        drawViewportEdges();
+        ImGui::EndChild();
+        return;
+    }
+    if (texturesMode_ && assetsTab_ == 4) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawDialogueViewport(origin, size);
+        drawViewportEdges();
+        ImGui::EndChild();
+        return;
+    }
+    if (texturesMode_ && assetsTab_ == 1) {
+        viewportHovered_ = viewportCaptured_ = false;
+        drawModelViewport(origin, size);
+        drawViewportEdges();
+        ImGui::EndChild();
+        return;
+    }
     if (worldMode_ && world3D_) {
         drawWorld3D(origin, size);
         drawViewportEdges();
@@ -1864,6 +2276,7 @@ void App::drawViewport(float width) {
         return;
     }
     if (worldMode_) {
+        thingGlyphs_.clear();
         ImGui::SetCursorScreenPos(origin);
         ImGui::InvisibleButton("##worldcanvas", ImVec2(std::max(size.x, 8.0f), std::max(size.y, 8.0f)), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
         viewportOrigin_ = origin; viewportSize_ = size;
@@ -1881,12 +2294,29 @@ void App::drawViewport(float width) {
         ImGui::Image((ImTextureID)(intptr_t)srv, size);
         viewportOrigin_ = origin; viewportSize_ = size;
         viewportHovered_ = ImGui::IsItemHovered();
+        // The controls are drawn later in this child. Keep their clicks from
+        // selecting terrain or clearing the current thing underneath them.
+        if (viewportHovered_) {
+            const float controlsTop = origin.y + size.y - ImGui::GetFrameHeight() - theme::S(16) - viewportControlsLift();
+            if (ImGui::GetIO().MousePos.y >= controlsTop) viewportHovered_ = false;
+        }
+        refreshThingGlyphs(origin, size);
+        if (editMode_ && selectedThing_ >= 0 && size.x >= theme::S(280) &&
+            ImGui::IsMouseHoveringRect(ImVec2(origin.x+theme::S(12),origin.y+theme::S(100)),
+                                      ImVec2(origin.x+theme::S(276),origin.y+theme::S(140))))
+            viewportHovered_ = false;
         handleViewportInput(origin, size);
         terrainInput(origin, size);
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
+        if (editMode_ && gizmoOp_ == 4 && terrainMode_ == 14 && !clipDrag_ &&
+            clipRectValid_ && clipRectMap_ == doc_.mapName())
+            drawGroundRect(origin, size, float(clipRect_[0]), float(clipRect_[1]),
+                           float(clipRect_[2]), float(clipRect_[3]), IM_COL32(255, 190, 105, 230));
         drawLinkLines(origin, size);
+        drawRadiusRings(origin, size);
         drawTrackLines(origin, size);
+        drawThingGlyphs();
         applySectionVisibility();
         drawViewportOverlays(origin, size);
     }
@@ -1918,6 +2348,7 @@ void App::drawViewport(float width) {
 
     // HUD: map name + stats (top-left)
     if (renderer_.hasMesh() && previewLoaded()) {
+        const bool compactHud = size.x < S(620);
         // text on channel 1, then a translucent backdrop behind the whole block on channel 0,
         // so the name and stats stay readable over bright terrain
         dl->ChannelsSplit(2);
@@ -1927,7 +2358,7 @@ void App::drawViewport(float width) {
         ImGui::PushFont(fontTitle_);
         const MapEntry* cur = findEntry(previewLoadedFor_);
         ImGui::TextUnformatted(cur ? cur->name.c_str() : previewLoadedFor_.c_str());
-        if (cur && !cur->loosePath.empty()) {
+        if (cur && !cur->loosePath.empty() && !compactHud) {
             ImGui::SameLine(0, S(10));
             ImGui::PushFont(fontSmall_);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(9));
@@ -1937,11 +2368,17 @@ void App::drawViewport(float width) {
         ImGui::PopFont();
         ImGui::SetCursorScreenPos(ImVec2(origin.x + S(16), origin.y + S(44)));
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells   |   %zu vertices   |   height %.1f .. %.1f%s",
-                           previewScene_.mapWidth, previewScene_.mapHeight,
-                           previewScene_.vertices.size(), previewScene_.minHeight, previewScene_.maxHeight,
-                           previewTextured_ ? "" : "   |   textures loading...");
-        if (previewFoliage_ || previewThings_) {
+        if (compactHud) {
+            ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells", previewScene_.mapWidth, previewScene_.mapHeight);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%zu vertices | height %.1f .. %.1f%s%s%s",
+                previewScene_.vertices.size(), previewScene_.minHeight, previewScene_.maxHeight,
+                cur && !cur->loosePath.empty() ? "\n" : "", cur && !cur->loosePath.empty() ? cur->loosePath.c_str() : "",
+                previewTextured_ ? "" : "\nTextures loading...");
+        } else ImGui::TextColored(theme::vec(theme::Muted), "%d x %d cells   |   %zu vertices   |   height %.1f .. %.1f%s",
+                                previewScene_.mapWidth, previewScene_.mapHeight,
+                                previewScene_.vertices.size(), previewScene_.minHeight, previewScene_.maxHeight,
+                                previewTextured_ ? "" : "   |   textures loading...");
+        if (!compactHud && (previewFoliage_ || previewThings_)) {
             ImGui::SameLine(0, 0);
             if (foliageFuture_.valid()) ImGui::TextColored(theme::vec(theme::Faint), "   |   plants + objects loading...");
             else if (!foliageStatus_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "   |   %s", foliageStatus_.c_str());
@@ -1964,17 +2401,68 @@ void App::drawViewport(float width) {
     // Chips along the bottom: view modes on the left, layers on the right. When the
     // viewport is too narrow for one row the layer chips move up onto a second row.
     {
+        if (size.x < S(620)) {
+            ImGui::PushFont(fontSmall_);
+            const float gap = S(5), margin = S(12), rowH = ImGui::GetFrameHeight();
+            const float y = origin.y + size.y - rowH - S(10);
+            const float frameW = S(53);
+            const float menusW = size.x - 2 * margin - frameW - 2 * gap;
+            const float menuW = menusW * 0.57f, showW = menusW - menuW;
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + margin, y));
+            ImGui::SetNextItemWidth(menuW);
+            constexpr const char* shortViewNames[] = {"Color", "Wire", "Walk", "Height"};
+            if (ImGui::BeginCombo("##viewport_view", shortViewNames[int(mode_)])) {
+                for (int i = 0; i < 4; ++i) {
+                    if (ImGui::Selectable(kModeNames[i], int(mode_) == i)) mode_ = ViewMode(i);
+                    auto_.registerWidget((std::string("mode_view_") + kModeNames[i]).c_str());
+                }
+                ImGui::EndCombo();
+            }
+            auto_.registerWidget("combo_view_mode");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("View: %s", kModeNames[int(mode_)]);
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + margin + menuW + gap, y));
+            if (ImGui::Button("Show...", ImVec2(showW, rowH))) ImGui::OpenPopup("##viewport_layers");
+            auto_.registerWidget("btn_view_layers");
+            if (ImGui::BeginPopup("##viewport_layers")) {
+                bool foliage = previewFoliage_, things = previewThings_;
+                if (ImGui::Checkbox("Foliage", &foliage)) setPreviewFoliage(foliage);
+                auto_.registerWidget("check_view_foliage");
+                if (ImGui::Checkbox("Objects", &things)) setPreviewThings(things);
+                auto_.registerWidget("check_view_objects");
+                ImGui::Checkbox("Markers", &showThingGlyphs_);
+                auto_.registerWidget("check_view_markers");
+                ImGui::Checkbox("Water", &renderer_.showWater);
+                auto_.registerWidget("check_view_water");
+                ImGui::Checkbox("Grid", &renderer_.showGrid);
+                auto_.registerWidget("check_view_grid");
+                bool neighbours = showNeighbours_;
+                if (ImGui::Checkbox("Neighbours", &neighbours)) {
+                    showNeighbours_ = neighbours;
+                    if (neighbours) startNeighbourLoad();
+                    else { renderer_.clearLayer(2); neighboursFor_.clear(); }
+                }
+                auto_.registerWidget("check_view_neighbours");
+                ImGui::EndPopup();
+            }
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + size.x - margin - frameW, y));
+            if (ImGui::Button("Frame", ImVec2(frameW, rowH))) frameMap();
+            auto_.registerWidget("chip_reset");
+            ImGui::PopFont();
+        } else {
         ImGui::PushFont(fontSmall_);
         const float gap = S(6), rowH = ImGui::GetFrameHeight() + S(2);
-        auto chipW = [&](const char* t) { return ImGui::CalcTextSize(t).x + S(24); };
-        float modesW = 0; for (int i = 0; i < 4; ++i) modesW += chipW(kModeNames[i]) + gap;
-        modesW += chipW("Frame  (F)") + S(8);
-        const char* layerNames[5] = {"Foliage", "Objects", "Water", "Grid", "Neighbours"};
-        float layersW = 0; for (const char* n : layerNames) layersW += chipW(n) + gap;
-        const bool twoRows = modesW + layersW + ImGui::CalcTextSize("Show:").x + S(40) > size.x;
+        const bool twoRows = viewportControlsLift() > 0;
+        float layersW = 0;
+        for (const char* name : {"Foliage", "Objects", "Markers", "Water", "Grid", "Neighbours"})
+            layersW += ImGui::CalcTextSize(name).x + S(24) + gap;
         const float yModes = origin.y + size.y - rowH - S(10);
         const float yLayers = twoRows ? yModes - rowH - S(4) : yModes;
         float x = origin.x + S(14);
+        if (twoRows) {
+            const ImVec2 viewLabel = ImGui::CalcTextSize("View:");
+            dl->AddText(ImVec2(x, yModes + (rowH - viewLabel.y) * 0.5f), theme::col(theme::Faint), "View:");
+            x += viewLabel.x + S(8);
+        }
         for (int i = 0; i < 4; ++i) {
             ImGui::SetCursorScreenPos(ImVec2(x, yModes));
             const bool on = int(mode_) == i;
@@ -1988,7 +2476,9 @@ void App::drawViewport(float width) {
         const float modesEnd = ImGui::GetItemRectMax().x;
         // layer chips, right-aligned, with a "Show:" caption so nobody mistakes them
         // for export settings (those are the toggles in the right panel)
-        float lx = origin.x + size.x - S(14) - layersW + gap;
+        const float showLabelW = ImGui::CalcTextSize("Show:").x;
+        float lx = twoRows ? origin.x + S(14) + showLabelW + S(8)
+                           : origin.x + size.x - S(14) - layersW + gap;
         if (!twoRows && lx < modesEnd + S(16)) lx = modesEnd + S(16);
         {
             const ImVec2 cs = ImGui::CalcTextSize("Show:");
@@ -2000,6 +2490,10 @@ void App::drawViewport(float width) {
         ImGui::SameLine(0, gap);
         if (theme::chip("Objects", previewThings_)) setPreviewThings(!previewThings_);
         auto_.registerWidget("chip_things");
+        ImGui::SameLine(0, gap);
+        if (theme::chip("Markers", showThingGlyphs_)) showThingGlyphs_ = !showThingGlyphs_;
+        auto_.registerWidget("chip_markers");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Editor points for things without a mesh appear as you zoom in.\nYellow diamond M: marker   Cyan circle E/I: region exit/entrance\nPurple square: camera, navigation, switch or other point.\nHover for its role and definition; click to inspect and edit.");
         ImGui::SameLine(0, gap);
         if (theme::chip("Water", renderer_.showWater)) renderer_.showWater = !renderer_.showWater;
         auto_.registerWidget("chip_water");
@@ -2029,7 +2523,9 @@ void App::drawViewport(float width) {
         else if (renderer_.hasMesh() && previewLoaded() && size.y > S(300))
             hintAt(ImVec2(origin.x + S(16), origin.y + S(72) + (previewTextured_ && previewScene_.unresolvedThemes > 0 ? ImGui::GetTextLineHeight() : 0)));
         ImGui::PopFont();
+        }
     }
+    drawSelectionActions(origin, size);
     drawViewportEdges();
         ImGui::EndChild();
 }
@@ -2051,7 +2547,19 @@ void App::drawActions(float width) {
     ImGui::SetCursorPos(ImVec2(pad, S(12)));
     {
         int tab = modsMode_ ? 4 : texturesMode_ ? 3 : worldMode_ ? 2 : editMode_ ? 1 : 0;
-        if (theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Assets", "Mods"}, inner)) {
+        bool changed = false;
+        if (width < S(310)) {
+            constexpr const char* tabs[] = {"Export", "Edit", "World", "Assets", "Mods"};
+            ImGui::SetNextItemWidth(inner);
+            if (ImGui::BeginCombo("##paneltab", tabs[tab])) {
+                for (int i = 0; i < 5; ++i) {
+                    if (ImGui::Selectable(tabs[i], tab == i)) { tab = i; changed = true; }
+                    auto_.registerWidget((std::string("mode_panel_") + tabs[i]).c_str());
+                }
+                ImGui::EndCombo();
+            }
+        } else changed = theme::segmented("##paneltab", tab, {"Export", "Edit", "World", "Assets", "Mods"}, inner);
+        if (changed) {
             if (tab == 4) setModsMode(true);
             else if (tab == 3) { setModsMode(false); setTexturesMode(true); }
             else if (tab == 2) { setModsMode(false); setTexturesMode(false); setWorldMode(true); }
@@ -2228,7 +2736,9 @@ void App::drawActions(float width) {
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hintMore("The asset tools write the game's shared banks; originals are backed up once.", "The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
+        if (assetsTab_ == 3) theme::hint("Effects inspection is read-only.");
+        else if (assetsTab_ == 4) theme::hint("Lip sync edits are staged until you export a new dialogue.big.");
+        else theme::hintMore("The asset tools write the game's shared banks; originals are backed up once.", "The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
         ImGui::PopFont();
     } else if (worldMode_) {
         drawWorldFooter(pad, inner);

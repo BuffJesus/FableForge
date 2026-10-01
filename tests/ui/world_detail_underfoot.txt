@@ -1,0 +1,23 @@
+# A retained neighbour must not keep the camera's own map at overview quality.
+wait_maps
+wait_ready
+world_memory_sample 8589934592 2147483648
+set world_detail 0
+set world_auto_detail 0
+set world_detail_limit 1
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_pose 930 4220 150 0.8 0.35
+set world_detail 1
+wait_world_detail
+assert_state world_detail_names Hookcoast_Filler_02
+world_pose 927 4220 150 0.8 0.35
+wait_world_detail
+assert_state world_detail_names HookCoast
+world_pose 930 4220 150 0.8 0.35
+wait_world_detail
+assert_state world_detail_names Hookcoast_Filler_02
+assert_state world_detail_loads 2
+assert_state world_detail_cache_hits 1
+quit

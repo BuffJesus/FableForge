@@ -158,6 +158,9 @@ static LRESULT WINAPI wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             DragFinish(drop);
             return 0;
         }
+        case WM_CLOSE:
+            if (g_app && !g_automated) { g_app->requestClose(); return 0; }
+            break;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;

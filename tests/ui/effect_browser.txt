@@ -1,0 +1,70 @@
+# Read-only Assets > Effects inspection and texture/model navigation.
+wait_maps
+wait_ready
+assets_tab 3
+frames 4
+assert_state assets_tab 3
+assert_state effects_count 1165
+effect_search no_such_effect_xyz
+frames 3
+assert_state effects_filtered 0
+effect_search brazierfirefinal
+frames 3
+assert_state effects_filtered 1
+effect_select BRAZIERFIREFINAL
+frames 4
+assert_state effect_ready 1
+assert_state effect_selected BRAZIERFIREFINAL
+assert_state effect_id 926
+assert_state effect_display_name BrazierFireFinal
+assert_state effect_parsed_fully 1
+assert_state effect_systems 3
+assert_state effect_sprites 3
+assert_state effect_meshes 0
+assert_state effect_lights 0
+assert_widget effect_decode_status
+reveal effect_texture_0
+frames 3
+assert_widget effect_texture_0
+clear_toasts
+screenshot build/ui/effect_browser_sprites.png
+click effect_texture_0
+frames 4
+assert_state assets_tab 0
+assert_state texture_selected SPRITE_SMOKEPUFF_LONG_02
+assets_tab 3
+effect_search 249
+frames 3
+assert_state effects_filtered 1
+effect_select 249
+frames 4
+assert_state effect_selected ACTIVATE_SKILL_01
+assert_state effect_meshes 2
+reveal effect_model_0
+frames 3
+assert_widget effect_model_0
+screenshot build/ui/effect_browser_meshes.png
+click effect_model_0
+frames 4
+assert_state assets_tab 1
+assert_state model_ready 1
+assets_tab 3
+effect_search ALTAR_GARGOYLE_FLAME
+effect_select ALTAR_GARGOYLE_FLAME
+frames 4
+assert_state effect_lights 1
+assert_state effect_sprites 5
+reveal effect_light_0
+frames 3
+assert_widget effect_light_0
+screenshot build/ui/effect_browser_lights.png
+effect_search
+frames 3
+assert_state effects_filtered 1165
+click btn_effect_refresh
+frames 4
+assert_state effect_selected ALTAR_GARGOYLE_FLAME
+assert_state effect_ready 1
+assert_state effect_parsed_fully 1
+dump_state
+quit

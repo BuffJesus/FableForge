@@ -51,6 +51,8 @@ world_camera 3515 815 2000 0.8 0.62 200
 frames 250
 assert_state world_detail_cached_maps 1
 world_tab 0
+wait_texture_cleanup
+assert_state texture_retired_cpu_bytes 0
 assert_state world_detail_cached_bytes 0
 assert_state world_detail_maps 0
 set world_3d 0

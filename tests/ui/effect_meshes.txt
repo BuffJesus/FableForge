@@ -1,0 +1,35 @@
+# Read-only mesh playback, actual rendered geometry and deterministic restart.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select BLOOD_POOL
+effect_preview_restart
+effect_preview_step 15
+frames 4
+assert_effect_meshes
+assert_state effect_preview_authored_meshes 1
+clear_toasts
+mouse_move viewport
+screenshot build/ui/effect_mesh_15.png
+dump_state
+frames 15
+screenshot build/ui/effect_mesh_paused.png
+effect_preview_step 15
+frames 3
+assert_effect_meshes
+screenshot build/ui/effect_mesh_30.png
+effect_preview_restart
+effect_preview_step 15
+frames 3
+assert_effect_meshes
+screenshot build/ui/effect_mesh_reset.png
+# Switching back releases mesh resources and preserves sprite playback.
+effect_select BRAZIERFIREFINAL
+effect_preview_restart
+effect_preview_step 30
+frames 3
+assert_state effect_preview_meshes 0
+assert_state effect_preview_meshes_drawn 0
+dump_state
+quit

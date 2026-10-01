@@ -1,0 +1,30 @@
+# One long-lived star mesh plus sprite; native-confirmed authored spin.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select DAZED01STAR
+effect_preview_restart
+effect_preview_step 30
+frames 4
+assert_state effect_preview_meshes 1
+assert_effect_meshes
+snapshot_mesh_orientation
+clear_toasts
+mouse_move viewport
+screenshot build/ui/effect_rotation_30.png
+dump_state
+frames 15
+screenshot build/ui/effect_rotation_paused.png
+effect_preview_step 15
+frames 3
+assert_state effect_preview_meshes 1
+assert_mesh_rotated
+assert_effect_meshes
+screenshot build/ui/effect_rotation_45.png
+effect_preview_restart
+effect_preview_step 30
+frames 3
+assert_effect_meshes
+screenshot build/ui/effect_rotation_reset.png
+quit

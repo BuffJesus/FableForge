@@ -66,6 +66,11 @@ public:
         }
         return evicted;
     }
+    std::vector<std::string> names() const {
+        std::vector<std::string> result;
+        for (const auto& entry : entries_) result.push_back(entry.name);
+        return result;
+    }
     size_t bytes() const { return bytes_; }
     size_t size() const { return entries_.size(); }
     size_t budget() const { return budget_; }

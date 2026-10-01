@@ -41,8 +41,25 @@ screenshot build/ui/scale/@TAG@_07_level_tracks.png
 edit_tab 1
 fractal_open 1
 frames 5
+mouse_move 10 300
+frames 1
 screenshot build/ui/scale/@TAG@_08_fractal_window.png
 fractal_open 0
+fit_open 1
+frames 5
+screenshot build/ui/scale/@TAG@_08a_fit_window.png
+fit_open 0
+edit_tab 3
+budget_open 1
+frames 5
+screenshot build/ui/scale/@TAG@_08b_budget_window.png
+budget_open 0
+edit_tab 0
+select_def OBJECT_BARREL_BREAKABLE
+frames 2
+click btn_selection_properties
+frames 3
+screenshot build/ui/scale/@TAG@_08c_properties_window.png
 edit 0
 world_tab 1
 frames 5

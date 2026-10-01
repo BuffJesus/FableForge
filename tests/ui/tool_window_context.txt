@@ -1,0 +1,35 @@
+# Floating tools belong to the editor section that opened them.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+edit 1
+edit_tab 1
+fractal_open 1
+frames 2
+assert_state fractal_open 1
+edit_tab 0
+frames 2
+assert_state fractal_open 0
+edit_tab 1
+fit_open 1
+frames 2
+assert_state fit_open 1
+edit_tab 3
+frames 2
+assert_state fit_open 0
+budget_open 1
+frames 2
+assert_state budget_open 1
+edit_tab 0
+frames 2
+assert_state budget_open 0
+select_def OBJECT_BARREL_BREAKABLE
+frames 2
+click btn_selection_properties
+frames 2
+assert_state selection_inspector 1
+edit_tab 1
+frames 2
+assert_state selection_inspector 0
+quit

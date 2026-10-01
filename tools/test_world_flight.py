@@ -78,6 +78,8 @@ def main():
     parser.add_argument('--focus-distance', type=float, help='Orbit distance retained during free flight; compare with a distant-focus reference')
     parser.add_argument('--assert-focus-coverage', action='store_true', help='Fail if any focus comparison loses more than 64 pixels (allow tiny silhouette shifts)')
     parser.add_argument('--coarse-only', action='store_true', help='Isolate world terrain/water visibility without object streaming')
+    parser.add_argument('--aa', type=int, choices=[0, 1, 2, 4], default=0,
+                        help='Antialiasing upper bound; 0 adapts automatically (memory limits still apply)')
     parser.add_argument('--memory-pressure', action='store_true', help='Simulate an exhausted GPU memory budget throughout the route (no VRAM allocation)')
     parser.add_argument('--sample-step', type=int, default=6, choices=range(1, 25))
     args = parser.parse_args()
@@ -116,7 +118,7 @@ def main():
         poses.append(f'world_pose {x} {y} {height} 0.8 0.35')
     sampled = sorted(set(range(0, len(poses), args.sample_step)) | {len(poses)-1})
     focus_distance = args.focus_distance if args.focus_distance is not None else (8000 if args.stress or args.route == 'world' else 200)
-    lines = ['wait_maps', 'wait_ready', 'set uiscale 1', 'set world_auto_detail 0',
+    lines = ['wait_maps', 'wait_ready', 'set uiscale 1', 'set world_auto_detail 0', f'set world_aa {args.aa}',
              f'set world_detail_limit {1 if args.stress else 6}', 'world_tab 1', 'wait_world_tiles',
              'set world_3d 1', 'wait_world_tiles', 'mouse_move 20 20', 'clear_toasts',
              f'world_camera {start[0]} {start[1]} 5 0 0.3 {focus_distance}']
@@ -219,7 +221,7 @@ def main():
         sheet.paste(im, ((n % 3)*400, (n // 3)*345))
     sheet.save(out / 'contact.png')
     thumbs[0].save(out / 'flight.gif', save_all=True, append_images=thumbs[1:], duration=180, loop=0)
-    report = dict(route=args.route, stress=args.stress, memory_pressure=args.memory_pressure,
+    report = dict(route=args.route, stress=args.stress, memory_pressure=args.memory_pressure, requested_aa=args.aa,
                   samples=results, window_polls=polls, visible_samples=len(visible), foreground_samples=len(foreground))
     if args.continuous:
         report.update(analyze_sequence(out, log, box))

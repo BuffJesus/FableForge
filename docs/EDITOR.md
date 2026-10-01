@@ -71,6 +71,62 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 
 ## What works now (things)
 
+Right-click an object without dragging to open Focus, Properties, Duplicate,
+Drop to ground and Delete. Holding the right mouse button to look or fly keeps
+the camera controls. Right-clicking an object already in a multiple selection
+keeps that selection together.
+
+A selected object also has a compact Focus / Properties / Actions toolbar in
+the viewport. Properties opens a floating inspector that follows selection and
+uses the same editable component fields as the side panel. With several objects
+selected, it shows the primary object's properties. Duplicate, Delete and Drop
+to ground use the normal undo history. Closing the inspector does not deselect
+the object.
+
+In Select or Move mode, drag an unlocked thing across the ground to carry it at
+its existing height above terrain. Shift+click places the current palette pick
+at the pointed ground position. Ctrl+Shift+drag clones the picked thing or
+selection and carries the copies; Ctrl+D starts a copy that follows the cursor
+until the next ground click. Escape cancels either carry. The context menu and
+Actions button duplicate immediately at the original position.
+
+**Move owned things with parent** in the Objects transform card is on by default.
+The Selection card shows `+N owned` when the selection has valid owned children.
+Moving or rotating an owner carries things linked to it by valid `OwnerUID`
+references, including nested children. This also applies to carry, height and
+ground placement, with one undo step for the group. Scaling leaves child frames
+alone. Turn the checkbox off to move just the selected objects. Moving an owner
+to a quest section, including a day/night section, also moves its owned children.
+Deleting an owner with owned children asks whether to delete the whole owned
+group, keep the children and clear their owner links, or cancel. The deletion
+and any link updates undo together.
+Deleting any selected thing also clears valid UID links to it on surviving
+objects; deleting a track node repairs the remaining track segments. The
+Activity log reports how many incoming fields were cleared.
+Duplicating one owned child makes an unowned copy. Duplicating a selected parent
+and child together links the copies to each other. The original objects and
+their links stay as they were.
+
+Use **Locked in place** in Properties or Actions, or **Ctrl+L**, to protect
+selected objects from movement, rotation, scale, deletion and terrain reseating.
+Locked objects remain selectable and their content properties remain editable.
+Mixed selections leave locked objects in place; the lock toggle applies to the
+whole selection as one undo step. Objects without an existing editor settings
+block cannot receive the flag yet. Copying preserves lock metadata.
+
+**Unset component properties** lists supported fields with no saved value.
+Choose **Set value**, enter an explicit value and apply it; **Reset** removes a
+saved override so the game supplies the value. Both support undo. Effective game
+values are not resolved yet. This covers verified scalar fields in existing door,
+searchable container, region exit, creature generator, exploding object, stock
+item and info display components; absent components are not added.
+
+![Unset component properties](walkthrough/w17_component_overrides.png)
+
+![Cycling to a visible surface](walkthrough/w19_surface_cycle.png)
+
+![Floating object properties](walkthrough/w13_selection_inspector.png)
+
 * **Selection**: click in the viewport (CPU ray against every instance's real
   mesh, so you hit what you see), or the *Objects in this map* list. Children
   spawned by a mesh's `CREATEOBJECT` dummies (doors, windows, Arena stands)
@@ -79,6 +135,17 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
   snap), or the numeric fields. While dragging only the preview moves; the
   document gets one undo step on release. Frames use the engine's own object
   matrix (`CalcObjectMatrix`), so what you see is what the game composes.
+* **Cycle surfaces (H)**: step down through visible placed-object surfaces and
+  terrain. From terrain height, cycle from above. Effects, selected objects and
+  their children cannot become landing surfaces. One undo covers the selected
+  unlocked objects. **End** still drops directly to terrain. This uses visible
+  triangles, so it can differ from the game's physics surfaces.
+* **Set height (Ctrl+H)**: enter an absolute height for all selected unlocked
+  objects. Each object stays at or above its local terrain. XY, orientation and
+  scale stay unchanged; one undo restores the group. Available in Actions too.
+* **Show in palette** (Actions): select the highlighted object's definition,
+  open its group and scroll it into view. Creatures switch to the Actors palette.
+  This prepares another placement without changing the selected object.
 * **Duplicate / delete / place**: verbatim block copies with a fresh UID in the
   file's `0xFFFFFE00` namespace, `thingplacer` blocks in retail field order
   (`Object` for `OBJECT_*`, `Building` for `BUILDING_*`). Placement lands on
@@ -86,7 +153,15 @@ with the same amber *Yes, ... / Cancel* row that names the files and the backup.
 * **Multi-select**: Ctrl+click adds/removes (viewport or list); the gizmo, nudges,
   Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
   Copy/paste carries a *fragment* (blocks + positions relative to the centroid),
-  pasted at the view centre on the ground with fresh UIDs.
+  pasted at the view centre on the ground with fresh UIDs. Copy and terrain
+  brushes skip Villages, Switches, PhysicalSwitches, Markers, TrackNodes and
+  things with CTCCreatedEntity, as the retail edit brush does. Direct
+  duplication of a TrackNode makes a standalone node; Village duplication is
+  refused.
+* **Creature links**: the Selection card offers Home, Work, Father, Mother and
+  Spouse even when the selected AICreature has no saved field. Pick a target in
+  the viewport. Spouse links update both creatures; clearing removes optional
+  fields. Father and Mother picks check the target's decoded sex when available.
 * **Presets** (Actors tab): a saved group of objects (`presets/*.preset.tng`, a valid
   loose .tng with a two-line header) placed at the view centre with one click as a
   selected group; *Save N selected objects as a preset* writes to
@@ -290,6 +365,21 @@ tree is what the engine follows.
 
 ## The overworld (World tab)
 
+In **Fly over (3D)**, distant foliage uses filtering that preserves thin cutout
+shapes to reduce shimmer. Mesh lighting also accounts for non-uniform scale.
+Automatic detail adapts the number of nearby detailed maps to frame time and GPU
+memory; the distance and map-limit controls let you adjust the range manually.
+Antialiasing smooths geometry edges with Auto, Off, 2x and 4x choices. Auto adapts
+to sustained frame time; every choice respects hardware support and GPU memory.
+The current sample count appears below the control.
+Nearby detail prioritizes the map under your camera, so crossing a boundary with
+a small map budget loads that map before retaining a neighbouring filler map.
+Plants, Objects and Creatures can be shown independently. Attachments belonging
+to a creature remain with that creature when Objects is turned off.
+If a map's detail fails to load, its overview stays visible while other maps load.
+Forge retries with increasing delays; **Retry detail now** retries immediately.
+The Activity log records the map and failure reason.
+
 The right panel's **World** tab shows every map of `FinalAlbion.bwd` as a box on a
 2D grid (x right, y down, the engine's world units), coloured by the WLD region that
 owns it. Wheel zooms about the cursor, right/middle drag pans, **F** refits. Click a
@@ -410,6 +500,21 @@ Instance matrices are kept as `local * thingWorld`: a move recomputes the
 world matrices of every instance of that thing (including spawned children)
 without touching the GPU meshes. Structural edits (add/remove/undo of those)
 reload the things layer from the in-memory `.tng` text.
+
+## Browse models
+
+Open **Assets > Models** to search compiled render meshes by name or numeric id.
+Select a model to see it in the central preview. Drag to orbit, scroll to zoom,
+and use **Wireframe** or **Reset view** as needed. The details show LOD 0 vertex
+and triangle counts, primitives, bones, helper points, and the object/creature/
+building definitions that reference the mesh. Material texture buttons open the
+corresponding entry in **Textures**. **Refresh** reloads the graphics-bank index.
+Browsing does not write game files. Skinned meshes show a static pose; animation
+playback, collision previews and mesh replacement are not part of this browser.
+
+![Models browser with barrel preview](walkthrough/w11_models.png)
+
+Use **Import model...** on this page for the existing import workflow below.
 
 ## Custom models (Import model)
 
@@ -586,8 +691,48 @@ CLI and the card against a scratch copy of the install.
 
 ## Assets tab
 
-The fourth panel tab holds the tools that write the game's shared banks, kept apart from
-the map editor: *Textures* (below), *Models* (the model import above) and *Ground themes*
+**Effects** lists the installed particle effects by name or numeric id. Select
+an effect to inspect its active sprite, mesh and light systems, including sprite
+textures, colours, sizes, emission rate, lifetime, offsets and light radius.
+Open texture and Open model follow those references to the other Assets pages.
+Partial decodes are marked so missing fields are visible. This page previews
+supported particle systems but does not edit or save them.
+
+![Effects browser and sprite systems](walkthrough/w12_effects.png)
+
+**Dialogue** opens a line by language, dialogue bank and Sound ID. The large
+sidebar search finds linked lines by subtitle text, speaker or text entry name
+within the selected language and bank; choose a result to load its Sound ID.
+The large timeline shows its lip sync visemes; drag across it or use the sidebar slider
+to inspect a frame and its blended weights. Audio duration comes from the
+matching `.lut` clip when present. Play/Pause, Stop and Loop use the audio
+device's position to keep the timeline and animated head in sync. Mute keeps
+the mouth animation playing on its own clock, and a line without audio can
+also be played. Drag the textured head to orbit it, scroll to zoom, or use
+Reset view to restore its front-facing framing. The Head preset selector loads
+five retail head meshes and their phoneme animations, and names any missing
+assets in `graphics.big`. Pause playback to edit the selected frame's byte
+weights. A linked subtitle and speaker appear above the transport when the
+selected language's `text.big` and the matching `data/Defs/*snds.bin` table
+resolve that Sound ID; an unlinked line stays usable for audio and lip sync.
+You can also
+add or remove a phoneme, or insert and delete frames. Edits remain
+staged as you switch Sound IDs and banks. Export writes a new, verified
+`dialogue.big` for the selected language at the path shown; it refuses to
+overwrite an existing archive. Reset this line drops its staged edits.
+Select a Forge pack below Export and use *Add staged lines to pack* to save the
+edited Sound IDs as record recipes. Mods > Deploy composes these recipes in load
+order, so edits to different lines and banks can coexist. A later pack wins
+when two packs edit the same line or one ships a whole `dialogue.big`.
+Mods > Check conflicts lists contested lip sync lines and their winning pack;
+reorder the packs to change the winner.
+Adding the recipes clears the staged edits
+for that language; the current preview stays visible until another line loads.
+Closing Forge with staged lip sync edits opens the unsaved changes prompt;
+*Review dialogue* returns to the export panel.
+
+The Assets panel holds *Textures* (below), *Models* (the browser and import above),
+*Effects* (inspection), *Dialogue* (lip sync inspection) and *Ground themes*
 (a PNG into `textures.big` + a new `ENGINE_THEME` copied from a donor theme; with a map
 open it joins that map's palette ready to paint). *Textures* browses `data/graphics/pc/textures.big` (every bank, search by
 name or id), previews an entry, exports it as PNG, replaces it from any image (the slot
@@ -705,3 +850,52 @@ investigations (texture append resolution, region cap, villagers).
 4. Splat texture paint (STB foreground texture triple + per-vertex blend), the
    creature-generator activation (needs an adult save), the region cap, and the
    live link to the running game through ForgeFSE -- see `docs/PLAN.md`.
+
+The **Assets > Effects** preview has Play/Pause, Restart and Step controls.
+Step advances one 30 Hz tick and pauses playback. Drag the image to orbit and use
+the wheel to zoom. Use Background to pick any RGB colour, or choose Dark, Grey
+or Light to make subtle effects visible. Forge remembers this preview choice.
+The preview lists unsupported components and texture problems;
+supported mesh particles and light volumes animate alongside sprites. Light
+volumes visualize colour/radius rather than illuminating geometry. Playback is
+isolated from the level and does not modify effects.big.
+
+In an object's **Properties**, the **Contents** and **Creature families** groups
+support adding, replacing and removing entries. Open a dropdown and type to
+filter definitions; object choices are grouped by their definition group. Each
+edit is one undo step. Empty existing component blocks still offer an Add control.
+These edits use the normal draft/save destination. A component absent from the
+object file is not created by this control.
+
+Particle previews now include orbit and attraction approximations. Specialized
+orbit modifiers, external targets and multiple attractor points are identified
+where unsupported. Selecting the same effect again preserves paused playback;
+use Restart to reset it. Framing accounts for the sprite's texture aspect.
+
+Moving a creature now updates its existing saved initial-position fields with
+the map's world origin. Pasting into another map rebases them to that destination.
+Rotation/scale alone preserves a separately authored initial position, and undo
+restores the original values along with the transform.
+
+### Particle mesh preview
+
+Assets > Effects previews supported mesh particles together with sprites using
+Play/Pause, Restart and Step. Meshes use diffuse materials, tint/size fades and
+bounded rendering. Drag to orbit and wheel to zoom. Meshes use authored bounds when available; missing or unusable bounds fall back
+to geometry with a warning. Authored XYZ orientation and fixed-axis rotation are
+supported; random initial/spin-axis orientation uses a deterministic preview
+random stream, while direction/game-driven orientation remains unsupported. Unsupported
+behaviors are listed.
+This preview does not add animated particles to the world view.
+
+![Mesh particle playback](walkthrough/w18_mesh_particles.png)
+
+### Particle light volumes
+
+Assets > Effects can show animated light volumes alongside sprites and meshes.
+The rings show authored colour and radius over the light's own lifetime; **Light
+volumes** hides them, and **Frame effect** includes them when enabled. Play, Pause,
+Restart and Step control the same timeline. These are diagnostic volumes, not
+scene illumination. Runtime position parameters use the local origin in this preview.
+
+![Particle light volumes](walkthrough/w22_light_volumes.png)

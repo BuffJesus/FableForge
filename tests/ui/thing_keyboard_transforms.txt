@@ -1,0 +1,69 @@
+# Selected object keyboard transforms use the normal undoable frame path.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+frames 3
+snapshot_frame
+key_down Right
+key_up Right
+assert_selected_delta 0.05 0 0
+undo
+assert_selected_frame_same
+key_down Shift
+key_down Up
+key_up Up
+key_up Shift
+assert_selected_delta 0 0.5 0
+undo
+assert_selected_frame_same
+key_down Period
+key_up Period
+assert_selected_delta 0 0 0.2
+undo
+assert_selected_frame_same
+key_down Shift
+key_down Comma
+key_up Comma
+key_up Shift
+assert_selected_delta 0 0 -0.01
+undo
+assert_selected_frame_same
+key_down Ctrl
+key_down Up
+key_up Up
+key_up Ctrl
+assert_selected_forward 0 1 0
+key_down RBracket
+key_up RBracket
+assert_selected_forward -0.034899 0.999391 0
+undo
+assert_selected_forward 0 1 0
+key_down Alt
+key_down RBracket
+key_up RBracket
+key_up Alt
+assert_selected_forward 0 0.999391 0.034899
+undo
+assert_selected_forward 0 1 0
+key_down Shift
+key_down RBracket
+key_up RBracket
+key_up Shift
+assert_selected_up 0.034899 0 0.999391
+undo
+assert_selected_up 0 0 1
+mouse_move viewport
+mouse_delta 100 0
+snapshot_frame
+key_down A
+key_up A
+assert_selected_facing_changed
+undo
+assert_selected_forward 0 1 0
+quit

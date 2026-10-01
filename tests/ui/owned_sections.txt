@@ -1,0 +1,28 @@
+# Moving a retail owner into a quest section carries valid owned descendants.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+edit_tab 0
+select_owned_parent
+toggle_thing 0
+assert_state selection_count 2
+reveal input_new_section
+click input_new_section
+text_input Q_FORGE_OWNER_TEST
+frames 2
+click btn_add_section
+frames 3
+snapshot_document
+reveal btn_move_section
+click btn_move_section
+frames 3
+assert_state selected_section Q_FORGE_OWNER_TEST
+assert_owned_section Q_FORGE_OWNER_TEST
+assert_selected_sections Q_FORGE_OWNER_TEST
+undo
+frames 3
+assert_document_same

@@ -504,7 +504,7 @@ int Context::graphicModelId(const std::string& name, uint32_t& modelId, float* s
 }
 
 std::optional<int32_t> Context::defIntField(const std::string& name, const std::string& field) const {
-    if (!ready() || !impl_->defs || !impl_->schema) return std::nullopt;
+    if (!impl_ || !impl_->defsReady || !impl_->defs || !impl_->schema) return std::nullopt;
     std::lock_guard<std::mutex> lock(impl_->defMutex);
     const auto* entry = impl_->defs->find(name);
     if (!entry) return std::nullopt;

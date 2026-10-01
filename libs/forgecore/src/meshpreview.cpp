@@ -29,6 +29,24 @@ struct Cursor {
     }
 };
 
+std::optional<BoundingSphere> sphereAt(const std::vector<uint8_t>& bytes,size_t offset,BoundingSphere::Source source) {
+    if(offset>bytes.size() || bytes.size()-offset<16) return std::nullopt;
+    BoundingSphere sphere;
+    std::memcpy(sphere.centre,bytes.data()+offset,12);
+    std::memcpy(&sphere.radius,bytes.data()+offset+12,4);
+    sphere.source=source;
+    for(float coordinate:sphere.centre) if(!std::isfinite(coordinate)) return std::nullopt;
+    if(!std::isfinite(sphere.radius) || sphere.radius<=0) return std::nullopt;
+    return sphere;
+}
+
+void descriptorSphereFallback(Geometry& geometry,const std::vector<uint8_t>& descriptor) {
+    // Entry metadata: PhysicsIndex (i32), sphere (4*f32), AABB (6*f32).
+    // Require the complete fixed bounds header, as in EgoCore MeshParser.
+    if(!geometry.boundingSphere && descriptor.size()>=44)
+        geometry.boundingSphere=sphereAt(descriptor,4,BoundingSphere::Source::Descriptor);
+}
+
 std::vector<uint8_t> fableLzo(Cursor& c, size_t expected) {
     std::vector<uint8_t> out(expected);
     size_t total=0, target=expected>3?expected-3:0;
@@ -93,7 +111,13 @@ uint32_t nameCrc(std::string_view text) {
     return crc;
 }
 
-struct Block { uint32_t count=0,start=0; bool strip=false; int32_t material=-1; };
+struct Block {
+    uint32_t count=0,start=0;
+    bool strip=false;
+    int32_t material=-1;
+    uint32_t vertexCount=0;
+    std::vector<uint8_t> palette;
+};
 void emit(const std::vector<uint16_t>& ib, const Block& b, std::vector<Triangle>& out) {
     if (b.strip) {
         uint32_t parity=b.start&1u;
@@ -129,7 +153,11 @@ void appendFaces(std::vector<Triangle>& destination, std::vector<Triangle> faces
 
 Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     Cursor c{payload}; Geometry result;
-    c.str(); c.u8(); c.skip(40);
+    c.str(); c.u8(); c.need(40);
+    // LOD header: authored sphere centre/radius, then AABB min/max. Confirmed
+    // by meshcompose::meshHeader and EgoCore 55bdc10 MeshParser/CompileSingleLOD.
+    result.boundingSphere=sphereAt(payload,c.p,BoundingSphere::Source::Payload);
+    c.skip(40);
     const uint16_t hp=c.u16(), hdmy=c.u16();
     const uint32_t names=c.u32(); const uint16_t headerTail=c.u16();
     if(hp) fableLzo(c,size_t(hp)*20);
@@ -169,8 +197,41 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         throw std::runtime_error("meshpreview: unreasonable counts");
     result.boneCount=uint32_t(bones);result.primitiveCount=uint32_t(primitives);
     c.u8();c.u16();c.u16();
-    if(bones){c.skip(size_t(bones)*2);fableLzo(c,boneNames);fableLzo(c,size_t(bones)*60);
-              fableLzo(c,size_t(bones)*48);fableLzo(c,size_t(bones)*64);}
+    if(bones) {
+        const size_t count=size_t(bones);
+        c.need(count*2);
+        std::vector<uint16_t> globalIds(count);
+        for(auto& id:globalIds) id=c.u16();
+        const auto namesRaw=fableLzo(c,size_t(boneNames));
+        const auto bonesRaw=fableLzo(c,count*60);
+        fableLzo(c,count*48); // bind-pose TRS; retained by the source archive
+        const auto ibmsRaw=fableLzo(c,count*64);
+        result.bones.reserve(count);
+        size_t namePos=0;
+        for(size_t i=0;i<count;++i) {
+            if(namePos>=namesRaw.size())
+                throw std::runtime_error("meshpreview: truncated bone names");
+            const auto end=std::find(namesRaw.begin()+namePos,namesRaw.end(),uint8_t(0));
+            if(end==namesRaw.end())
+                throw std::runtime_error("meshpreview: unterminated bone name");
+            Bone bone;
+            bone.globalId=globalIds[i];
+            bone.name.assign(reinterpret_cast<const char*>(namesRaw.data()+namePos),
+                             size_t(end-(namesRaw.begin()+namePos)));
+            namePos=size_t(end-namesRaw.begin())+1;
+            std::memcpy(&bone.nameCrc,bonesRaw.data()+i*60,4);
+            std::memcpy(&bone.parent,bonesRaw.data()+i*60+4,4);
+            if(bone.parent<-1 || bone.parent>=bones || bone.parent==int32_t(i))
+                throw std::runtime_error("meshpreview: invalid bone parent");
+            std::memcpy(bone.inverseBind.data(),ibmsRaw.data()+i*64,48);
+            bone.inverseBind[12]=bone.inverseBind[13]=bone.inverseBind[14]=0;
+            bone.inverseBind[15]=1;
+            for(float value:bone.inverseBind)
+                if(!std::isfinite(value))
+                    throw std::runtime_error("meshpreview: nonfinite inverse bind matrix");
+            result.bones.push_back(std::move(bone));
+        }
+    }
     c.skip(48);
     for(int32_t i=0;i<materials;++i){
         Material m; m.id=c.i32(); c.str(); c.i32(); m.diffuseTexture=c.i32();
@@ -196,7 +257,13 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         // only the fallback. Without this, multi-material meshes (roof + walls)
         // render entirely with material 0.
         for(uint32_t i=0;i<sbc;++i){Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};c.skip(2);const int32_t bm=c.i32();if(bm>=0)b.material=bm;staticBlocks.push_back(b);}
-        for(uint32_t i=0;i<abc;++i){Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};c.skip(2);c.u32();c.u16();c.u8();uint8_t gc=c.u8();c.skip(gc);animatedBlocks.push_back(b);}
+        for(uint32_t i=0;i<abc;++i){
+            Block b{c.u32(),c.u32(),c.u8()!=0,primitiveMaterial};
+            c.skip(2);b.vertexCount=c.u32();c.u16();c.u8();
+            const uint8_t gc=c.u8();c.need(gc);
+            b.palette.assign(c.b.begin()+c.p,c.b.begin()+c.p+gc);c.skip(gc);
+            animatedBlocks.push_back(std::move(b));
+        }
         float scale[4],off[4]; c.need(32);std::memcpy(scale,c.b.data()+c.p,16);std::memcpy(off,c.b.data()+c.p+16,16);c.p+=32;
         const uint32_t stride=c.u32();c.u32();
         const VertexLayout layout=vertexLayout(stride,format);
@@ -209,9 +276,32 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
         // SUBM::GetVertices returns exactly VertexCount records.  A non-zero
         // repeat count enlarges the serialized buffers, but those additional
         // streams are not additional spatial vertices in the decoded mesh.
+        size_t animatedBlock=0,withinBlock=0;
         for(uint32_t v=0;v<vc;++v){size_t o=size_t(v)*stride;if(o+(layout.packedPosition?4:12)>vb.size())break;
             Vertex p;if(layout.packedPosition){uint32_t q;std::memcpy(&q,vb.data()+o,4);p=unpackPosition(q,scale,off);}
             else std::memcpy(&p,vb.data()+o,12);
+            if(abc && !result.bones.empty()) {
+                while(animatedBlock+1<animatedBlocks.size() &&
+                      withinBlock>=animatedBlocks[animatedBlock].vertexCount) {
+                    ++animatedBlock;withinBlock=0;
+                }
+                const auto& palette=animatedBlocks[animatedBlock].palette;
+                const size_t jointOffset=o+(layout.packedPosition?4:12);
+                if(jointOffset+8>vb.size())
+                    throw std::runtime_error("meshpreview: truncated skin weights");
+                float total=0;
+                for(size_t k=0;k<4;++k) {
+                    const size_t paletteIndex=vb[jointOffset+k]/3;
+                    const uint16_t joint=paletteIndex<palette.size()?palette[paletteIndex]:0;
+                    p.joints[k]=joint<result.bones.size()?joint:0;
+                    p.weights[k]=float(vb[jointOffset+4+k])/255.0f;
+                    total+=p.weights[k];
+                }
+                if(total>0.001f) for(float& weight:p.weights) weight/=total;
+                else p.weights={1,0,0,0};
+                p.skinned=true;
+                ++withinBlock;
+            }
             if(o+layout.normalOffset+(layout.packedNormal?4:12)<=vb.size()){
                 if(layout.packedNormal){uint32_t q;std::memcpy(&q,vb.data()+o+layout.normalOffset,4);int nx=int(q&0x7ff),ny=int((q>>11)&0x7ff),nz=int(q>>22);if(nx&0x400)nx-=0x800;if(ny&0x400)ny-=0x800;if(nz&0x200)nz-=0x400;p.nx=nx/1023.f;p.ny=ny/1023.f;p.nz=nz/511.f;}
                 else std::memcpy(&p.nx,vb.data()+o+layout.normalOffset,12);
@@ -239,10 +329,36 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     return result;
 }
 
+std::vector<Geometry> decodeLods(const std::vector<uint8_t>& payload,
+                               const std::vector<uint8_t>& descriptor, uint32_t meshType) {
+    Cursor meta{descriptor}; meta.skip(44);
+    const uint32_t count = meta.u32();
+    if (!count || count > 8) throw std::runtime_error("meshpreview: invalid LOD count");
+    std::vector<uint32_t> sizes;
+    size_t total = 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        const uint32_t size = meta.u32();
+        if (!size || size > payload.size() - total) throw std::runtime_error("meshpreview: invalid LOD size");
+        sizes.push_back(size); total += size;
+    }
+    std::vector<Geometry> lods;
+    size_t offset = 0;
+    for (const auto size : sizes) {
+        lods.push_back(decodeLod0({payload.begin() + offset, payload.begin() + offset + size}, meshType));
+        descriptorSphereFallback(lods.back(),descriptor);
+        offset += size;
+    }
+    return lods;
+}
+
 Geometry readLod0(const std::filesystem::path& graphicsBig, uint32_t meshId) {
     const auto file=forge::big::File::open(graphicsBig);const auto* bank=file.findBank("MBANK_ALLMESHES");
     if(!bank)throw std::runtime_error("meshpreview: MBANK_ALLMESHES not found");
-    for(const auto& e:bank->entries)if(e.id==meshId)return decodeLod0(file.entryData(e),e.type);
+    for(const auto& e:bank->entries)if(e.id==meshId) {
+        auto geometry=decodeLod0(file.entryData(e),e.type);
+        descriptorSphereFallback(geometry,e.subHeader);
+        return geometry;
+    }
     throw std::runtime_error("meshpreview: mesh id not found");
 }
 } // namespace forge::meshpreview

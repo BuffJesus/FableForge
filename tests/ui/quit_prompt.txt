@@ -1,0 +1,24 @@
+# Closing must keep an unsaved in-memory edit until Save or Discard is chosen.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+wait_foliage
+tour -1
+select_def OBJECT_BARREL_BREAKABLE
+move_thing 1 0 0
+assert_state doc_dirty 1
+close
+frames 3
+assert_state close_prompt 1
+assert_widget btn_unsaved_cancel
+click btn_unsaved_cancel
+frames 3
+assert_state close_prompt 0
+assert_state doc_dirty 1
+close
+frames 3
+assert_state close_prompt 1
+click btn_unsaved_discard

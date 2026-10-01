@@ -46,7 +46,8 @@ struct MeshCache {
     fs::path path;
     std::unique_ptr<forge::big::File> big;
     std::map<uint32_t, const forge::big::Entry*> byId;
-    std::map<uint32_t, forge::meshpreview::Geometry> decoded;
+    std::map<uint32_t, std::shared_ptr<const forge::meshpreview::Geometry>> decoded;
+    std::map<uint32_t, std::vector<forge::meshpreview::Geometry>> lowerLods;
     std::map<uint32_t, std::string> names;
 
     bool open(const fs::path& graphics, std::string& err) {
@@ -56,7 +57,7 @@ struct MeshCache {
             auto f = std::make_unique<forge::big::File>(forge::big::File::open(graphics));
             const auto* bank = f->findBank("MBANK_ALLMESHES");
             if (!bank) { err = "no MBANK_ALLMESHES bank in " + graphics.string(); return false; }
-            byId.clear(); decoded.clear(); names.clear();
+            byId.clear(); decoded.clear(); lowerLods.clear(); names.clear();
             for (const auto& e : bank->entries) { byId[e.id] = &e; names[e.id] = e.name; }
             big = std::move(f);
             path = graphics;
@@ -69,20 +70,20 @@ struct MeshCache {
 
     void close() {
         std::lock_guard<std::mutex> lock(mutex);
-        big.reset(); path.clear(); byId.clear(); decoded.clear(); names.clear();
+        big.reset(); path.clear(); byId.clear(); decoded.clear(); lowerLods.clear(); names.clear();
     }
 
-    const forge::meshpreview::Geometry* get(uint32_t id, std::string& err) {
+    std::shared_ptr<const forge::meshpreview::Geometry> get(uint32_t id, std::string& err) {
     FORGE_ZONE("Mesh cache lookup / decode");
         std::lock_guard<std::mutex> lock(mutex);
         auto hit = decoded.find(id);
-        if (hit != decoded.end()) return &hit->second;
+        if (hit != decoded.end()) return hit->second;
         auto e = byId.find(id);
         if (e == byId.end()) { err = "mesh id " + std::to_string(id) + " not in MBANK_ALLMESHES"; return nullptr; }
         try {
             auto g = forge::meshpreview::decodeLod0(big->entryData(*e->second), e->second->type);
             if (g.empty()) { err = "mesh " + e->second->name + " has no LOD0 geometry"; return nullptr; }
-            return &(decoded[id] = std::move(g));
+            return decoded[id] = std::make_shared<const forge::meshpreview::Geometry>(std::move(g));
         } catch (const std::exception& ex) {
             err = std::string("mesh ") + e->second->name + ": " + ex.what();
             return nullptr;
@@ -96,7 +97,7 @@ MeshCache& meshCache() { static MeshCache c; return c; }
 
 bool openMeshBank(const fs::path& graphicsBig, std::string& err) { return meshCache().open(graphicsBig, err); }
 void closeMeshBank() { meshCache().close(); }
-const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err) { return meshCache().get(id, err); }
+std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(uint32_t id, std::string& err) { return meshCache().get(id, err); }
 std::string meshName(uint32_t id) {
     std::lock_guard<std::mutex> lock(meshCache().mutex);
     auto it = meshCache().names.find(id);
@@ -133,6 +134,29 @@ te::Image limitTexture(const te::Image& src) {
 
 void setTextureLimit(int maxDimension) { g_textureLimit = maxDimension; }
 int textureLimit() { return g_textureLimit.load(); }
+
+void loadWorldLods(Scene& scene, const te::Context& context) {
+    std::map<uint32_t, int> images;
+    for (const auto& mesh : scene.meshes) for (const auto& part : mesh.parts)
+        if (part.diffuseTexture) images[part.diffuseTexture] = part.image;
+    auto& cache = meshCache();
+    std::lock_guard<std::mutex> lock(cache.mutex);
+    for (auto& mesh : scene.meshes) {
+        auto entry = cache.byId.find(mesh.meshId);
+        if (entry == cache.byId.end() || !mesh.lods.empty()) continue;
+        auto found = cache.lowerLods.find(mesh.meshId);
+        if (found == cache.lowerLods.end()) {
+            std::vector<forge::meshpreview::Geometry> lower;
+            try {
+                auto chain = forge::meshpreview::decodeLods(cache.big->entryData(*entry->second), entry->second->subHeader, entry->second->type);
+                for (size_t i = 1; i < chain.size(); ++i) if (!chain[i].empty()) lower.push_back(std::move(chain[i]));
+            } catch (const std::exception& e) { scene.warnings.push_back(mesh.name + ": LOD0 fallback: " + e.what()); }
+            found = cache.lowerLods.emplace(mesh.meshId, std::move(lower)).first;
+        }
+        for (const auto& geo : found->second)
+            mesh.lods.push_back(makeMesh(mesh.meshId, mesh.name, mesh.label, geo, true, context, scene.images, images, scene.warnings));
+    }
+}
 
 Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label,
               const forge::meshpreview::Geometry& geo, bool textures,
@@ -520,7 +544,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
             if (known != meshIdToIndex.end()) meshIndex = known->second;
             else {
                 std::string merr;
-                const auto* geo = meshCache().get(type.meshIdx, merr);
+                const auto geo = meshCache().get(type.meshIdx, merr);
                 if (!geo) { warn(options, scene, merr); meshIdToIndex[type.meshIdx] = -1; typeToMesh[inst.type] = -1; continue; }
                 std::vector<std::string> mw;
                 const std::string bankName = meshName(type.meshIdx);

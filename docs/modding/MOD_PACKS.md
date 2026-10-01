@@ -1,8 +1,32 @@
-> Ported verbatim from FableForge-legacy `docs/MOD_PACKS.md` on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`; the commands it names live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, the legacy repo called that exe `forge`).
+> Based on FableForge-legacy `docs/MOD_PACKS.md`, ported on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`. Current Forge additions are documented below. The commands live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, while the legacy repo called that exe `forge`).
 
 # Mod packs, load order, and conflict resolution
 
-The problem: big overhaul mods (e.g. Aeon Edition) replace whole files —
+## Lip sync recipes in Forge packs
+
+Assets > Dialogue can save staged frame edits to a selected Forge pack. The
+pack's `forge_pack.json` stores a `lipSync` array. Each entry identifies one
+`language`, exact `bank`, and `soundId`, followed by `fps`, `durationBits`, a
+viseme `dictionary` (`id` and `symbol`), and `frames` of `[id, weight]` pairs.
+For example, `LIPSYNC_ENGLISH_MAIN` and Sound ID 2 identify one line in
+`data/lang/English/dialogue.big`.
+
+`mods build` applies each enabled pack's lip sync recipes to the current output
+archive in load order. A later whole-file `dialogue.big` overrides earlier
+recipes; a later recipe overlays the whole-file archive. Different lines and
+banks combine, and the later pack wins when two packs edit the same line.
+The build report explains when a later whole-file archive skips earlier
+recipes. `mods conflicts --json` lists differing recipes for the same
+language, bank and Sound ID, with the active load-order winner. The Mods panel
+shows that winner and pack badges; reorder packs to change it. The base game
+archive starts the build when no whole-file layer
+supplied one. Use Mods > Deploy
+to build and stage the composed archive. A scratch `dialogue.big` export is also
+available for inspecting the edited file outside the pack workflow.
+
+The problem: big overhaul mods (e.g.
+[Fable: Aeon Edition](https://www.nexusmods.com/fablethelostchapters/mods/454)
+by Alexander The Alright) replace whole files —
 `game.bin`, `script.bin`, `text.big`, `graphics.big`, WADs. Stacking several
 packs with naive file-copy means the last install wins the *entire file* and
 silently discards every other mod's changes, even when they edited unrelated
@@ -28,9 +52,11 @@ Grounding this in how Fable mods are really distributed and installed today:
 - **ShadowNet Fable Explorer already has "fmp merging" built in** — the community
   independently arrived at record-level merge as the answer, but it's manual and
   limited (no field-level merge, no conflict report, no reversible deploy).
-- **Overhauls (Aeon Edition, Fable: The Lost Content) touch** `game.bin`,
-  `text.big`, `textures.big`/`graphics.big`, `script.bin`, and
-  `FinalAlbion.wad`/level files — the full record set across every container.
+- **Overhauls (Aeon Edition, Fable: The Lost Content) can touch** `game.bin`,
+  `text.big`, `textures.big`/`graphics.big`, `script.bin`, and level files.
+  Aeon Edition 5.03 ships loose level files, `FinalAlbionNoBarriers.wad`,
+  `FinalAlbion_RT.stb`, graphics and texture banks, but no `FinalAlbion.wad`;
+  do not assume every overhaul replaces the retail WAD.
 
 **Takeaways that shape FableForge:**
 1. The `.fmp` record-delta model *is* the record-level approach — the ecosystem
@@ -217,9 +243,10 @@ over the banks, replaced or appended with the next id, applied in load order aft
 layers so a whole bank a tree ships is their base), and thing provenance (`forge_mods_provenance.json`
 from the build; the editor's badges / filter / *Back to retail*). GB packs (Project Seasons, 2026-09-20,
 `tools/test_gbpack.py`): the parked `_FinalAlbion.wad` and a shipped `userst.ini` are not layers,
-whole files identical to the install are skipped, the 794 loose levels are repacked into the real WAD
-(448 TNGs, provenance for each), the new `ProjectAutumn/` folder and the whole STB / banks ride as
-whole-file layers; UFP's bsdiff underneath composes without a conflict -- 24 s. FSE packs: `FSE/quests.lua`
+whole files identical to the install are skipped, and changed levels are repacked into the real WAD
+(423 entries, 75 changed TNGs with provenance in the current baseline-aware test),
+the new `ProjectAutumn/` folder and the whole STB / banks ride as
+whole-file layers; UFP's bsdiff underneath composes without a conflict. FSE packs: `FSE/quests.lua`
 is a key-level union (own bytes per entry, `fse:<key>` picks, id clashes reported); an FSE-only folder is a
 tree source. EgoCore partial TNG mods (`[Settings]` + `Replace=true` / `DeleteUIDs:`, TngMerger.h) merge by
 UID into the level, deletions applied, even as the only editor.
@@ -232,3 +259,131 @@ GB-pack case: Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/
 text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records both touch (Aeon wins
 by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
 the whole-file game.bin instead of failing on it.
+
+Aeon Edition + Controller Support (2026-09-30): the author-provided install
+sequence is Aeon first, Controller Support `.fmp` through a legacy package
+editor, then only `FableControllerSupport.dll` in
+`Mods/FableControllerSupport/`, enabled through EgoCore. EgoCore's optional WAD
+decompile step should be skipped for this combination. Forge's equivalent
+scratch order is the Aeon tree, `ControllerSupport.fmp`, then a DLL-only EgoCore
+folder. `python tools/test_aeon_controller.py` builds this order over retail:
+1,392 definition changes (854 added), two records merged per field, zero field
+or whole-record conflicts; the controller scheme is Aeon's 70 bindings before
+the package and 141 after it. The DLL is byte-identical in output and registered
+in `Mods.ini`. With retail `FinalAlbion.wad` in the scratch input, Forge repacks
+547 changed level files and appends 47 new level files; the output WAD lists
+`BarrowFields.tng`. The two extra replacements are Aeon's root-level
+`Data/Levels/creature_hub.lev` and `.tng`: both are also present in retail's WAD,
+so Forge must repack them at that path. The test extracts the rebuilt WAD and
+compares all 843 Aeon level payloads against the effective build (594 loose
+overrides and the unchanged WAD entries). This proves
+the composed files and order, not runtime behavior on
+Retroid/Android or under EgoCore. The test never deploys to the real install.
+The test includes Aeon's `graphics.big`, `textures.big`, `FinalAlbion_RT.stb`
+and `Bones` files from the original 5.03 archive. A read-only
+`forge-tools assets missing-mesh <built-root> <schema.json>` audit finds zero
+missing `Graphic` model IDs against Aeon's output graphics bank. Auditing those
+same definitions against the retail graphics bank alone reports 243 absent IDs,
+which shows why checking an incomplete Aeon extraction gives a false alarm.
+This audit checks direct `Graphic` references in `game.bin`; it does not prove
+that map scenery, scripted visibility, meshes or textures render correctly.
+
+The Mods tab's **Check conflicts** dry run also checks these direct model
+references before deploy. Its report uses the composed definitions and the
+graphics bank the build will use (a mod's replacement bank, or the base bank),
+then compares with the base install. The panel names only *newly introduced*
+missing references, including the definition and mesh ID; existing base
+defects are counted separately. A missing bank or unavailable schema is shown
+as "model check unavailable", not as a clean result. The read-only
+`forge-tools assets missing-mesh` command lists every broken direct reference
+for deeper inspection. `tools/test_mod_asset_health.py` injects one broken
+OBJECT into a scratch load order and checks both the JSON report and Mods UI.
+
+A later Discord troubleshooting exchange (2026-09-24) explains why **DLL-only**
+is part of that recipe: leaving `Mods/FableControllerSupport/Data/` in place
+causes EgoCore to recompile the controller text definitions, potentially over
+Aeon's installed definitions. The author advised reinstalling Aeon if that
+already happened, applying the controller `.fmp`, then enabling just the DLL.
+One user reported success with Aeon, UltraPlus, draw-distance and EgoCore
+graphics patches in an install sequence that included Freeroam; another user
+reported a stuck Guild dormitory chest and a Picnic Area crash even after
+retrying. These are user reports, not a proven general compatibility guarantee.
+The local corpus has a separate `Freeroam.fmp` (76 LEV entries); the user's
+`D:/Downloads/freeroam.zip` contains only `FreeRoam.exe`. Decompilation of that
+executable shows its patched extraction option sets walkability and camera
+passability to 1 in every cell of every extracted LEV. The FMP carries 76 already
+patched LEVs; for example, Witchwood_9 changes from 504/4,225 walkable cells in
+retail to 4,225/4,225. Forge now imports an FMP's `FinalAlbionWAD` level entries
+as normal content layers and repacks them into its output WAD. The scratch test
+`python tools/test_freeroam.py` confirms all 76 FMP levels remain fully walkable
+in the rebuilt WAD. The two artifacts have different scope: the executable can
+patch every extracted LEV, while this FMP names only 76. The corpus has no UltraPlus, DrawDistance, starfield
+or particle-limit pack, so the scratch test does not cover that larger stack.
+
+Aeon's own 5.03 `readme.txt` says to run Freeroam first, copy every package folder
+except Guide into the game's `data` folder, and start a new game. It calls
+Freeroam technically optional if `FinalAlbion.wad` is renamed/deleted and
+`UseLevelWAD` in `userst.ini` is set to `FALSE`. Forge instead repacks the loose
+levels into an output `FinalAlbion.wad`; extraction and payload comparison prove
+the archive contains the intended built level bytes. Forge also detects and edits
+an install already converted to loose levels. A stock-WAD build has not been
+shown gameplay-equivalent to the author's loose-level install; keep that as a
+separate compatibility gate. Installing FreeRoam.exe is not required to use
+Forge's WAD build route, but a stock WAD alone does not provide Freeroam's
+unrestricted traversal. A map must contain patched walkability bytes, supplied
+by a content pack, the FMP, or Forge terrain edits. Aeon 5.03 already has all 76
+maps named by the FMP fully walkable; applying this FMP after Aeon would replace
+Aeon's other edits to those LEVs, so do not stack it as a whole-file override.
+
+AlbionSecrets Modpack 492 is a close derivative of Project Seasons 122: their
+ZIP manifests share 915 file paths; CRCs differ for 22 shared files, and the
+Modpack adds one lighting file. Both pass `python tools/test_gbpack.py` on a
+scratch retail root under the Unofficial Fable Patch, as does their combined
+load order (`--pack seasons`, `--pack modpack`, `--pack both`). The current
+composer compares TNGs against the retail WAD baseline and omits unchanged
+copies. Seasons alone has 75 changed TNGs / 423 repacked WAD entries; Modpack
+alone has 85 / 433. Their combined build reports 839 definition changes
+(592 new records), 85 changed TNGs, three thing merges and 16 thing conflicts
+resolved by load order. All 433 built loose level payloads match the extracted
+WAD. That confirms build completion and output structure, not that
+both visual overhauls' intended appearances survive their overlapping whole
+banks and maps.
+
+Expanded Chapters v1 needs both its content RAR and its separate graphics RAR.
+`python tools/test_expanded_chapters.py` builds the combined tree on scratch
+retail. All 798 source LEV/TNG payloads resolve to the expected WAD bytes,
+and all 583 built loose level payloads match WAD extraction. Forge replaces
+579 entries and appends four (`ArenaNew_Leadout_01` and
+`DemonDoor_GreatwoodGrannysHouseNew` LEV/TNG pairs). Its 838 definition
+changes include 761 new records; zero direct Graphic mesh IDs are missing
+against its own graphics bank. In-game quests and visuals remain unverified.
+
+Fable: The Lost Content 0.7.5 has a current full-tree scratch build. Its
+`python tools/test_lost_content.py` check finds 1,002 source LEV/TNG files;
+all match the effective rebuilt WAD bytes. Forge replaces 498 entries and
+appends 206, leaves the pack's parked `_FinalAlbion.wad` and `userst.ini` out
+of the output, and reports zero missing direct `Graphic` mesh references
+against the pack's graphics bank. `python tools/test_lost_content.py
+--with-aeon` now checks the current Aeon-first combined build: 3,085
+definition changes (2,503 new), 38 records composed per field, 36 field
+conflicts and seven whole-record conflicts; 293 changed TNG levels, 79
+thing-merged and 1,812 thing conflicts. Forge replaces 568 WAD entries,
+appends 247, and all 815 built loose level payloads match the extracted WAD.
+The final Lost Content graphics bank has zero missing direct `Graphic` mesh
+IDs, but matching IDs do not prove matching mesh content or intended textures.
+The conflict count and whole-bank winner make this a manual compatibility
+decision, not an automatically compatible pair.
+
+Dragon Cliff Restored V2 has eight new maps directly under `Data/Levels/`
+(16 LEV/TNG files), plus Hook Coast edits and whole asset banks. Its scratch
+test (`python tools/test_dragoncliff.py`) passes: two Hook Coast WAD entries
+replaced, all 16 root entries appended, extracted bytes equal the built loose
+files, and zero missing direct `Graphic` mesh references against its bank.
+Its world, static-map and quest behavior still needs an in-game pass.
+
+The separate Discord question about `Gameplay.wad` and missing buildings is
+unresolved: neither inspected local Fable install contains a `Gameplay.wad`
+(both have `FinalAlbion.wad`), and no WAD or screenshots were supplied. A WAD
+name alone cannot establish retail playability or asset coverage. The author
+reported a separate mod for a Guild building and absent assets in a village
+map; those are case-specific observations, not a general Forge capability.

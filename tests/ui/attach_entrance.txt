@@ -1,0 +1,32 @@
+# Target-side region exit mode uses a real meshless entrance in MayorsHouseHallway.
+wait_maps
+wait_ready
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+select_def REGION_EXIT_POINT
+frame_selected
+frames 5
+snapshot_document
+reveal btn_attach_EntranceConnectedToUID
+click btn_attach_EntranceConnectedToUID
+frames 3
+assert_widget btn_stop_attaching
+pick 0.5 0.47
+assert_log attach: pick a different thing
+assert_document_same
+select_def REGION_ENTRANCE_POINT
+frame_selected
+frames 5
+select_def REGION_EXIT_POINT
+reveal btn_attach_EntranceConnectedToUID
+click btn_attach_EntranceConnectedToUID
+frames 3
+pick 0.5 0.47
+assert_selected_link_def EntranceConnectedToUID REGION_ENTRANCE_POINT
+assert_exit_serialized REGION_ENTRANCE_POINT
+undo
+assert_document_same
+quit

@@ -1,0 +1,39 @@
+# Change install with an open map, an unsaved stroke, an invalid path and a second root.
+wait_maps
+wait_ready
+select SwitchA
+wait_loaded
+edit 1
+edit_tab 1
+terrain_mode 0
+brush 3 10
+terrain_stroke 3 3 1
+assert_state terrain_dirty 1
+scan_install @ROOT_B@
+assert_state selected SwitchA
+assert_state terrain_dirty 1
+assert_log save or discard the current edits
+undo
+assert_state terrain_dirty 0
+scan_install @INVALID@
+assert_state install_valid 0
+assert_state maps 0
+assert_state selected
+assert_state doc_loaded 0
+assert_state preview_loaded 0
+setup 1
+frames 3
+screenshot build/ui/install_switch_invalid.png
+setup 0
+frames 3
+screenshot build/ui/install_switch_cleared.png
+scan_install @ROOT_B@
+wait_maps
+wait_ready
+assert_state install_valid 1
+assert_state maps 1
+select SwitchB
+wait_loaded
+assert_state selected SwitchB
+assert_state doc_loaded 1
+quit

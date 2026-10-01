@@ -295,11 +295,8 @@ brush 8 6
 terrain_stroke 64 112 1
 frames 2
 assert_state terrain_dirty 1
-reseat_things
-frames 1
-assert_log object(s) re-seated on the sculpted ground
+# Grounded objects follow the stroke in its undo step.
 assert_state selected_ground_delta 0.00
-undo
 undo
 undo
 frames 2

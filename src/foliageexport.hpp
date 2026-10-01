@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,7 @@ struct SubMesh {
 };
 
 struct Mesh {
+    std::vector<Mesh> lods;             // optional authored lower levels, world preview only
     uint32_t meshId = 0;                 // MBANK_ALLMESHES entry id
     std::string name;                    // e.g. MESH_DANDELIONFLOWERS_01
     std::string label;                   // human label from the palette catalog, if known
@@ -123,12 +125,16 @@ int textureLimit();
 bool openMeshBank(const std::filesystem::path& graphicsBig, std::string& err);
 // forget the open bank and every decoded mesh (after graphics.big was rewritten: an import)
 void closeMeshBank();
-const forge::meshpreview::Geometry* cachedMesh(uint32_t id, std::string& err);
+// Retain immutable geometry while exporting: closing/reopening the bank drops
+// cache ownership but must not invalidate an active worker's mesh.
+std::shared_ptr<const forge::meshpreview::Geometry> cachedMesh(uint32_t id, std::string& err);
 std::string meshName(uint32_t id);
 uint32_t meshIdByName(const std::string& name);   // 0 when unknown
 // Build a Mesh (parts split by material, textures resolved through `context`,
 // UVs normalised) from a decoded geometry. `images` / `textureToImage` are the
 // scene's shared image table.
+void loadWorldLods(Scene& scene, const terrainexport::Context& context);
+
 Mesh makeMesh(uint32_t meshId, const std::string& name, const std::string& label,
               const forge::meshpreview::Geometry& geo, bool textures,
               const terrainexport::Context& context, std::vector<terrainexport::Image>& images,

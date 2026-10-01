@@ -1,0 +1,123 @@
+# Read-only, language-local dialogue/lip sync inspection.
+wait_maps
+wait_ready
+assets_tab 4
+frames 3
+assert_state assets_tab 4
+assert_widget combo_dialogue_language
+assert_widget combo_dialogue_bank
+assert_widget combo_dialogue_preset
+assert_state dialogue_preset_ready 1
+assert_state dialogue_head_ready 1
+dialogue_preset 3
+frames 3
+assert_state dialogue_preset 3
+assert_state dialogue_preset_ready 1
+assert_state dialogue_head_ready 1
+assert_state dialogue_preset_mesh 3985
+dialogue_preset 1
+frames 3
+assert_state dialogue_head_ready 1
+dialogue_preset 2
+frames 3
+assert_state dialogue_head_ready 1
+dialogue_preset 4
+frames 3
+assert_state dialogue_head_ready 1
+dialogue_preset 0
+frames 3
+assert_state dialogue_preset_ready 1
+assert_state dialogue_head_ready 1
+dialogue_select 0 2
+click button_dialogue_load
+frames 3
+assert_state dialogue_loaded 1
+assert_state dialogue_language English
+assert_state dialogue_bank 0
+assert_state dialogue_id 2
+assert_state dialogue_audio_available 1
+assert_widget button_dialogue_play_pause
+assert_widget button_dialogue_stop
+assert_widget checkbox_dialogue_loop
+assert_widget checkbox_dialogue_mute
+assert_widget button_dialogue_reset_view
+click button_dialogue_play_pause
+frames 10
+assert_state dialogue_playing 1
+assert_state dialogue_audio_advanced 1
+click checkbox_dialogue_mute
+frames 3
+assert_state dialogue_audio_muted 1
+assert_state dialogue_playing 1
+click checkbox_dialogue_mute
+frames 3
+assert_state dialogue_audio_muted 0
+assert_state dialogue_playing 1
+click button_dialogue_play_pause
+frames 2
+assert_state dialogue_playing 0
+click checkbox_dialogue_mute
+frames 2
+assert_state dialogue_audio_muted 1
+click button_dialogue_stop
+click button_dialogue_play_pause
+frames 10
+assert_state dialogue_playing 1
+assert_state dialogue_scrubbed 1
+click button_dialogue_play_pause
+frames 2
+assert_state dialogue_playing 0
+click checkbox_dialogue_mute
+frames 2
+assert_state dialogue_audio_muted 0
+assert_widget slider_dialogue_time
+assert_widget timeline_dialogue
+assert_widget timeline_dialogue_large
+assert_widget dialogue_head_viewport
+click timeline_dialogue_large
+frames 2
+assert_state dialogue_scrubbed 1
+dialogue_view 1.57 0.55 1
+frames 2
+assert_state dialogue_head_yaw 1.570000
+click button_dialogue_reset_view
+frames 2
+assert_state dialogue_head_yaw 0.000000
+assert_state dialogue_head_pitch 0.150000
+assert_state dialogue_head_zoom 0.800000
+screenshot build/ui/dialogue_browser.png
+click button_dialogue_stop
+frames 2
+assert_state dialogue_scrubbed 0
+dialogue_select 3 3
+click button_dialogue_load
+frames 3
+assert_state dialogue_loaded 1
+assert_state dialogue_bank 3
+assert_state dialogue_id 3
+assert_state dialogue_audio_available 1
+dialogue_select 3 2
+click button_dialogue_load
+frames 3
+assert_state dialogue_loaded 0
+dialogue_select 0 2
+dialogue_search beefy
+frames 3
+assert_state dialogue_search_results 0
+dialogue_select 2 1
+frames 3
+assert_state dialogue_search_results 1
+assert_state dialogue_search_first_id 5080
+assert_widget dialogue_search_result_0
+screenshot build/ui/dialogue_search.png
+click dialogue_search_result_0
+frames 3
+assert_state dialogue_loaded 1
+assert_state dialogue_id 5080
+assert_state dialogue_subtitles_count 1
+assert_state dialogue_subtitle_name TEXT_QST_088_EAT_PIES_INTRO_40
+dialogue_preset 3
+frames 3
+assert_state dialogue_head_ready 1
+screenshot build/ui/dialogue_subtitle.png
+quit

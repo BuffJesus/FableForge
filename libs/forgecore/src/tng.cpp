@@ -245,6 +245,18 @@ void File::setThingProperty(size_t thingIndex, std::string_view key,
     reindex();
 }
 
+void File::insertThingPropertyBefore(size_t thingIndex, std::string_view key,
+                                     std::string_view value, std::string_view anchorKey) {
+    const Thing& thing = thingAt(thingIndex);
+    if (findProperty(thing.properties, key))
+        throw std::invalid_argument("tng: top-level property already exists: " + std::string(key));
+    size_t at = thing.endLine;
+    if (const Property* anchor = findProperty(thing.properties, anchorKey)) at = anchor->line;
+    else if (const Property* health = findProperty(thing.properties, "Health")) at = health->line + 1;
+    insertLine(at, std::string(key) + ' ' + std::string(value) + ';' + lineTerminator_);
+    reindex();
+}
+
 bool File::removeThingProperty(size_t thingIndex, std::string_view key) {
     const Thing& thing = thingAt(thingIndex);
     const Property* prop = findProperty(thing.properties, key);
@@ -303,6 +315,31 @@ bool File::removeCtcProperty(size_t thingIndex, std::string_view ctcName,
     const Property* prop = findProperty(block->properties, key);
     if (prop == nullptr) return false;
     rawLines_.erase(rawLines_.begin() + static_cast<ptrdiff_t>(prop->line));
+    reindex();
+    return true;
+}
+
+void File::addCtcBlock(size_t thingIndex, std::string_view ctcName,
+                       const std::vector<std::pair<std::string,std::string>>& properties) {
+    const Thing& thing=thingAt(thingIndex);
+    if (thing.findCtc(ctcName)) throw std::invalid_argument("tng: CTC block already exists: "+std::string(ctcName));
+    size_t at=thing.endLine;
+    if (!thing.ctcBlocks.empty()) at=thing.ctcBlocks.back().endLine+1;
+    else if (const Property* health=findProperty(thing.properties,"Health")) at=health->line;
+    std::string block="Start"+std::string(ctcName)+";"+lineTerminator_;
+    for (const auto& [key,value]:properties)
+        block+=key+' '+value+';'+lineTerminator_;
+    block+="End"+std::string(ctcName)+";"+lineTerminator_;
+    insertLine(at,std::move(block));
+    reindex();
+}
+
+bool File::removeCtcBlock(size_t thingIndex, std::string_view ctcName) {
+    const Thing& thing=thingAt(thingIndex);
+    const CtcBlock* block=thing.findCtc(ctcName);
+    if (!block) return false;
+    rawLines_.erase(rawLines_.begin()+static_cast<ptrdiff_t>(block->startLine),
+                    rawLines_.begin()+static_cast<ptrdiff_t>(block->endLine+1));
     reindex();
     return true;
 }

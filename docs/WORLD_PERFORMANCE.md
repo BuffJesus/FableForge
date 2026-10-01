@@ -1,9 +1,92 @@
 # World rendering performance research - 2026-09-28
 
+## Derived cutout cache (2026-09-29 ultra pass)
+
+Matched 24-map captures with the same profile executable and 33 ms pacing show
+cutout-mip worker time falling from 1512.38 ms without reuse to 909.23 ms with reuse;
+total map-worker time falls from 3475.14 to 2887.20 ms. Median per-map cutout work
+falls from 52.77 to 0.743 ms. The serial worker retains up to 32 MiB of source and
+derived pixel payload, checks exact source identity, and evicts least-recently-used
+entries. Upload payloads share immutable chains rather than copying them. This
+adds bounded CPU residency; it does not enlarge the GPU texture working set.
+
+The subsequent exact-coverage search shortcut preserves chosen alpha scales and
+avoids scans that cannot improve zero error. Final capture: cutout work 905.65 ms,
+map preparation 2804.03 ms; that small incremental cutout change is within normal
+capture variation, so no separate timing claim. Captures are
+`build/profiles/ultra-cache-{off,on,search}`. No profiler diagnostics. Pixel checks
+are in `build/world-cutout-cache-search`; cache and uncached/saved-baseline output
+are identical at all four poses, with matching GPU texture payloads.
+
+These are paced worker-cost comparisons, not FPS benchmarks. Cold map work still
+reaches roughly 555 ms; model/texture decoding and cache misses remain. See the
+current [handoff](HANDOFF_WORLD_UI.md) for lifetime/budget details and validation.
+
 The user's target is responsive, high-quality flight with continuous terrain and
 water. Optimize frame-time spikes and visible transitions as well as throughput.
 The current work is in `feat/editor-ui-shell`; implementation history and UI
 requirements are in [HANDOFF_WORLD_UI.md](HANDOFF_WORLD_UI.md).
+
+## Terrain normal transitions (2026-09-29)
+
+Detail now interpolates from the actual overview triangle's smooth vertex normal
+as well as its height and colour. The CPU sampler uses the overview's a-c-b / b-c-d
+triangulation and shortened edge cells, retaining the interpolated normal length.
+A packed R10G10B10A2 attribute carries that normal in render axes; the shader blends
+before its usual per-pixel normalization. Full detail skips the blend. Vertex
+stride grows from 36 to 40 bytes (11.1% in vertex buffers; index/texture bytes are
+unchanged), and tracked resource accounting includes it. No extra texture or draw
+pass is added. Normal packing is bounded to half a 10-bit step per component.
+
+Matched hidden captures in `build/world-normals-{before,after}` use the same binary,
+poses, dimensions, disabled animated water and eleven held transition fractions.
+Only `world_normal_blend` differs. Coarse-to-publication mean max-channel pixel
+change falls from 0.68794 to 0.17283 at Guild (74.9%) and 2.42430 to 0.23765 at
+Oakvale (90.2%). Full-detail endpoints are pixel-identical at both poses. These
+are cropped-viewport image differences, not FPS or proof of invisible transitions.
+Intermediate steps still contain object dithering and moving silhouettes.
+
+CPU regressions cover both triangle halves, planar slopes, shortened edge cells,
+empty tiles, clamping, quantization and the GPU input layout. The diagnostic is
+`tools/test_world_material_transition.py --legacy-normals` for the baseline, then
+`--baseline <baseline-directory>` for the enabled comparison.
+
+Validation also passes the full 494-frame flight and five UI/resource regressions
+(model browser, extended range, inactive cache, memory pressure, water). The flight
+has zero sampled culling mismatch, a two-pixel maximum transient candidate, and
+remaining stationary colour changes up to 243 pixels. No broad-route A/B claim.
+
+The clang capture `build/profiles/world-normal-blend` prepares 24 maps totaling
+304.9 MiB geometry (not peak residency); CPU editor-update/viewport p99/max is
+4.013/5.642 ms, GPU viewport 0.927/1.204 ms, and paced upload 2.615/2.912 ms.
+No profiler diagnostics. This 33 ms paced run is an overhead sanity check, not an
+FPS benchmark or a matched performance comparison.
+
+## Active detail distance and memory (2026-09-29)
+
+Automatic detail starts at six maps and may grow to 24 by default (user ceiling
+1..32). Growth still requires five seconds of sustained frame time below 1/55 s,
+with no pending streaming and a focused window; two seconds above 1/45 s reduce
+it. DXGI telemetry further limits the ceiling once per second: reserve the larger
+of 256 MiB or 20% of the process budget, subtract other usage (including inactive
+cache), and estimate each map at the larger of 64 MiB or 1.5 times the largest
+observed resident map. Missing telemetry limits expansion to six. Pressure clamps
+the budget immediately; normal fade-out then retires excess maps. These estimates
+are conservative heuristics, not hard VRAM bounds or cross-hardware benchmarks.
+
+The base detail distance is adjustable from 100 to 1000 metres. Automatic mode
+scales it by sqrt(current map budget / 6), bounded to 1..2; the default 250 metres
+can therefore reach 500. Manual mode uses the specified distance and map limit.
+Neither depends on orbit focus distance. Eye position still controls residency.
+Overview terrain now targets 80 quads along the long side instead of 40; the cache
+key changes so old coarse tiles are not reused. This improves distant terrain
+sampling; it does not add geometry to authored low-poly object meshes.
+
+`tests/ui/world_detail_range.txt` covers 18 resident maps at 500 metres, stable
+residency when focus distance changes from 200 to 8000 at the same eye, and
+synthetic ample/overbudget/unavailable telemetry. CPU tests cover expansion,
+pressure, missing telemetry, large map costs and user ceilings. Full-detail
+objects still use the existing LOD 0 decoder. Per-object LOD transitions remain open; normal interpolation is covered above.
 
 ## Adaptive inactive GPU cache
 
@@ -266,3 +349,235 @@ decoding and rendering a fixed set of authored legacy assets. Compare the time
 until a navigable, coherent scene appears, frame-time distribution during motion,
 visible detail and memory use. Forge should amortize its fixed conversion work
 through caching and use progressive refinement to reach that responsive feel.
+
+
+## Shared textures and opaque mipmaps (2026-09-29 marathon)
+
+Layer GPU textures are pooled by name/dimensions/policy with exact pixel comparison.
+Weak ownership releases the allocation after the final batch/coarse-albedo owner.
+The 18-map fixture drops texture payload from 443.6 MiB to 227.7 MiB with identical
+pixels, or 291.0 MiB with opaque mip chains enabled. These are texture payloads,
+not total DXGI usage. Pixel identity consumes a retained CPU copy (227.7 MiB in the
+fixture); integrated/low-memory hardware still needs direct validation. Ordinary
+uncorrected cutout mipmaps remain disabled. The subsequent pass below adds
+coverage-preserving partial chains for world-detail cutouts.
+
+The memory controller credits only textures exclusively owned by the active or
+inactive map set. Sharing therefore cannot create fictitious free memory by
+subtracting the same allocation more than once. Cache per-map charges deliberately
+remain conservative. Resource lifetime, failed allocations, replacement pixels,
+sampling policies, shape mismatches and mip-byte arithmetic have CPU/UI checks.
+
+Object coverage now eases over 0.6 s while ground morphing keeps its 0.25 s duration.
+This has no extra draw passes or geometry cost. Held-time arrival comparisons and
+texture/filtering evidence are in `HANDOFF_WORLD_UI.md`; remaining screen-door
+noise and map streaming boundaries are not claimed fixed.
+
+CPU identity cleanup now uses the existing deferred-release worker abstraction,
+with a 64 MiB pending limit and at most one 64 MiB worker payload. Busy/oversized
+overflow releases synchronously; GPU objects never enter that worker. This avoids
+an unbounded RAM backlog during memory-pressure eviction. The application polls
+cleanup even outside the 3D viewport. The final paced capture's map-retirement max
+is 1.24 ms and editor update/viewport CPU p99/max 3.612/4.556 ms; see the handoff for
+capture paths, GPU timings, observed overflow and measurement limits.
+
+## Cutout filtering and scaled-mesh normals (continued marathon)
+
+World-detail cutouts now prepare partial mip chains on the streaming worker.
+Alpha-weighted colour reduction rejects transparent RGB; RGBA8 alpha correction
+preserves measured wrapped bilinear coverage. Levels that cannot meet both a
+3-percentage-point and 10%-relative coverage tolerance are omitted, retaining the
+last trustworthy level. Authored base images remain unchanged. See the handoff for
+the independent implementation's [coverage-scaling reference](https://github.com/microsoft/DirectXTex/wiki/ScaleMipMapsAlphaForCoverage),
+controlled captures, CPU tests and limitations.
+
+The Guild/Oakvale capture adds 12.6/13.1 MiB of GPU texture payload; temporary CPU
+mips retire with the existing world-detail worker payload. No persistent CPU mip
+cache was added. The 24-map paced profile records worker preparation median/max
+54.5/224.4 ms per map and cutout GPU upload max 0.865 ms. This is extra loading work
+off the UI thread, not free processing or a claim of lower frame time.
+
+World baked normals and editable object shader normals use inverse-transpose
+bases for non-uniform scale/shear. Normalized cofactors avoid tiny-scale overflow;
+reflection direction is preserved. The per-object constant buffer adds one 4x4
+normal matrix. Terrain geometry, draw counts and asset topology remain unchanged.
+## World antialiasing, 2026-09-29
+
+World-only MSAA resolves into the existing UI texture. Auto chooses up to 4x;
+supported 2x and 1x targets are allocation fallbacks. Sustained eligible frame
+times above 1/45 s for 1.5 s lower one tier; below 1/55 s for 10 s restore one.
+The recovery tolerance allows steady 60 Hz VSync presentation to recover quality.
+Memory policy limits the target to 1/16 of DXGI budget and reserves at least
+256 MiB or 20% of budget, with extra upgrade headroom. Unknown telemetry uses 1x.
+Target payload is width * height * (8 * samples + 4) bytes for MSAA, or 8 bytes
+per pixel at 1x. Transactional allocation temporarily retains the old target.
+These are resource estimates, not measured whole-process VRAM or FPS claims.
+Validation and the related EgoCore particle review are in `HANDOFF_WORLD_UI.md`.
+
+## Obsolete preparation cancellation (2026-09-29)
+
+The serial detail worker now checks a per-job cancellation flag between decoding,
+geometry preparation and individual cutout chains. Camera demand changes request
+cancellation at the existing demand refresh; invalidation/view exit requests it
+immediately. This avoids finishing every remaining stage for a map no longer
+wanted. Current decoder/mip calls still run to completion. Disabled/2D/other-tab
+frames collect finished work and retire its payload on the existing CPU worker.
+
+Deterministic checks use a held terrain checkpoint, covering camera movement,
+filters, disable/view exit and native shutdown. They prove control flow and
+unchanged restored pixels/resource accounting, not a measured latency gain.
+The 494-frame one-map stress flight observed one cancellation without a test hold,
+zero failures and zero sampled coverage gaps. Evidence and residual foliage
+transitions: `HANDOFF_WORLD_UI.md`, `build/world-flight-cancel`.
+
+## Cutout-edge multisampling (2026-09-29)
+
+World 2x/4x MSAA now uses alpha-to-coverage for cutout textures. Previously
+multisampling smoothed triangle boundaries but the texture's 0.5 alpha test was
+still binary. A derivative-width ramp retains the 0.5 contour and supplies
+fractional sample coverage. Texture/alpha derivatives are evaluated before the
+spatial fade discard. 1x and blend-state allocation failure retain the hard test.
+No extra render targets or texture payloads are introduced.
+
+The blend state preserves the target's cleared alpha while replacing covered
+colour/depth samples, so viewport compositing does not apply coverage a second
+time. Water keeps its separate existing blend state. API semantics:
+[Microsoft's alpha-to-coverage documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d11/d3d10-graphics-programming-guide-blend-state#alpha-to-coverage).
+
+Initial two-scene diagnostic (`build/world-cutout-aa`) retains the unsuccessful
+mean-absolute-motion gate: Guild changes from 2.16758 to 2.17020 at 4x, while
+squared motion drops from 17.23357 to 12.20244 and changes above 80 levels drop
+from 46 to 1.82 per frame. Oakvale squared motion drops from 23.27652 to 13.96154,
+large changes from 66.18 to 4.55. Smoothing redistributes smaller changes, so the
+final gate measures squared motion and abrupt changes, and still reports the
+absolute mean. These are image diagnostics on a tiny camera pan, not FPS or
+general perceptual quality scores. GPU texture bytes are identical; weighted
+cutout silhouette coverage changes by less than 1.3% at these poses.
+
+## Draw distance beyond near-map slots (2026-09-29)
+
+User feedback at 250-500 metres altitude exposed a residency limit: prior mesh LOD
+selection worked only in loaded near maps. Increasing radius could leave the
+same six maps resident and show little difference. Draw distance now requests
+100-1000 metres independently of the adaptive near-detail map count.
+
+A separate service prepares the last usable authored object LOD for other maps
+within a padded view cone. Existing mesh classes, materials and cutouts are reused;
+missing chains retain base geometry. Coarse scenery and near/full detail use
+complementary dither coverage. True 3D box distance drives demand, with preload
+radius `drawDistance * 1.15 + 32` and 32 metres of resident range hysteresis.
+The near-map residency priority bonus is capped at 45 metres. Terrain refinement
+retains its own budget. This supersedes the earlier 85%-of-load-radius policy.
+
+Outer scenery is bounded to 64 maps and up to 1 GiB of accounted resources,
+also constrained by one quarter of adapter budget and headroom after reserving
+the larger of 256 MiB or one fifth of adapter budget. Unknown
+telemetry permits 64 MiB. Shared textures and transient uploads mean this is not
+a total process VRAM limit. More preparation, geometry and draws require profiling;
+no frame-rate improvement is claimed. A fixed-camera 350-metre-altitude comparison
+should show farther scenery when increasing distance from 250 to 1000 without
+crossing a map boundary. The first actual-slider comparison with one full-detail
+slot (`build/world-distance-first`) increased scenery maps 10 -> 37 and distant
+drawn parts 0 -> 827 (445 lower-LOD parts), changing 11,680 pixels and restoring
+identical pixels on return. Its gate failed assumptions of zero pending demand
+and exact resident-name restoration: nine maps were budget-blocked and hysteresis
+retained three extra residents. Final checks instead enforce memory bounds,
+pending-versus-blocked demand and restored pixels under the revised allowance.
+The final actual-slider run **passes** in `build/world-distance-final`. At fixed
+350-metre camera height and one near GuildExterior slot, distance 250 -> 1000
+increases scenery maps 10 -> 46. The high setting draws 4,709 scenery parts and
+2,897 lower-LOD parts, with 723,205,836 accounted bytes under 1 GiB and zero pending,
+blocked or failed demand. The images differ at 27,613 pixels; returning to 250
+restores identical pixels while hysteresis retains 13 maps.
+
+`build/world-scenery-lifecycle-final` also passes: pressure removes all residents,
+including empty payload entries; recovery, disable/re-enable, in-flight
+invalidation and filter restoration preserve settled pixels. The creatures-off
+fixture has 46 scenery maps, 603,647,848 bytes and 4,484 drawn parts. An optional
+fully hidden coarse copy of the near map is allowed in residency comparisons.
+The handoff route observes 129 frames without an aggregate CPU coverage gap and
+records 30 holds of outgoing detail while its fallback becomes available. This
+checks map coverage state, not pixel-level GPU continuity. Extended range passes
+with synthetic 16 GiB memory telemetry. Six CTest suites and the normal near-LOD
+and focused UI regressions pass. `build/world-scenery-cancel-final.log` and its
+artifact directory also pass: five deterministic cancellations, clean held-worker
+shutdown, zero failures, identical restored pixels and 177,118,448 texture bytes
+before/after. This verifies lifecycle behavior, not cancellation latency.
+
+Far scenery uses its coarsest usable authored level, while nearby refinement has
+its own budget. Serial preparation, the 64-map/GPU caps and conservative approximate
+map bounds remain limitations. No FPS or universally seamless-flight claim follows.
+
+Subsequent review fixed MeshCache lifetime across bank invalidation with immutable
+shared mesh ownership. A deterministic concurrent cache-close/reopen regression
+passes, as do all six normal CTest suites (13.74 seconds).
+
+The first constrained-memory priority run (`build/world-scenery-priority-first`)
+failed to settle: priority evictions rose from zero to 448 by 136 seconds. Its
+owned hidden process was stopped with evidence retained. Admission now preflights
+exact aggregate reclaimability, including textures shared by the victim group,
+before admitting a ready higher-priority map. The policy suite passes 232 CPU
+checks and the normal GUI is rebuilt. Native `build/world-scenery-priority-final`
+passes in 33.68 seconds: 34 maps/265,581,812 bytes/zero evictions before movement,
+39 maps/267,818,616 bytes/two evictions afterward, with 12 blocked requests at
+both poses and a 268,435,456-byte limit. Over another 240 stationary frames,
+resident names, bytes, drawn parts, eviction counter and pixels remain identical.
+There are no failures. Final normal-build distance control also passes in
+`build/world-distance-admission-final` (26.20 seconds): 46 scenery maps, 4,709 drawn
+parts, 723,205,836 bytes, 27,613 changed pixels and exact restoration, matching the
+prior comparison. Final handoff passes 129 watched frames with 29 fallback holds
+(`build/world-scenery-handoff-admission-final.log`); final cancellation passes five
+cancellations with identical restored pixels and 177,118,448 texture bytes
+(`build/world-scenery-cancel-admission-final`). These test durations are not FPS
+measurements. Latest interactive launch is verified responding with a FableForge
+window. Serial coarse preparation, 64-map/GPU limits and available authored
+levels remain the coverage/quality constraints.
+
+## Population and cross-level mesh LOD continuation (2026-09-29)
+
+World picking now intersects overview triangles instead of repeatedly marching
+through map footprints. This fixes false hover hits when rays enter a map below
+its ground from the void. CPU/native ray and cursor regressions pass; the
+selectable surface remains an overview approximation.
+
+Overview uploads retain a 2 ms soft budget and raise the count guard from 4 to 32.
+Pending geometry sorts by camera-to-map-box distance. At 33 ms pacing,
+`build/world-population-final` records thumbnail upload frames 100 versus 15 and
+geometry frames 115 versus 92, with identical final pixels and 21,669,456 GPU
+texture bytes. Both sides include camera priority, isolating the count guard.
+These counts are not FPS measurements. Single driver calls may overrun the slice.
+
+The new object path selects authored variants
+by projected size with complementary coverage transitions, distance visibility
+and per-object frustum culling inside material batches. The common world camera
+applies across map tags to foliage and all placed mesh classes the scene loaders
+produce. Retail research found multiple levels in 2,447 of 3,294 meshes. Missing
+or unusable chains keep base geometry with size/distance visibility; this does
+not synthesize missing levels or implement animation. Terrain uses 32-cell
+patches with step 1/2/4/8 index levels, unchanged vertices and full-resolution
+patch perimeters. A one-pixel projected vertical-error limit selects terrain
+levels; conservative bounds/error include both morph endpoints. Water stays
+on its existing independent geometry path.
+
+Retained CPU ranges and 32 GPU metadata bytes per range support selection and
+coverage. Adjacent visible ranges merge into draws. Geometry includes authored
+alternatives, so resource bytes and draw calls may rise even when fewer triangles
+reach the screen. Native visual/resource checks and profiles remain necessary.
+
+Cross-map scheduling adds a bounded, feathered view-cone bonus, absolute underfoot
+priority, resident hysteresis and an omnidirectional near ring. No map is rejected
+solely for leaving the cone. Radius/altitude limits and adaptive map/memory caps
+remain. Draw distance is 85% of loading radius, leaving a preload band. The
+serial worker and whole-map publication still limit first appearance; this is
+not spatial chunk streaming. Standalone demand tests pass 176 checks; native
+cross-map native coverage includes the six-map LOD/recovery comparison below.
+
+Detail upload requests 4 ms for a responsive current frame sample (at least
+45 Hz), otherwise 2 ms. Fixed 2/4 ms overrides and a frame counter support
+comparison. `build/world-lods-review` records 67 versus 36 upload frames for
+the six-map scene, with identical final pixels at six poses/settings and
+204,125,040 GPU texture bytes. This does not establish worst-case frame time.
+The near pose draws 499 lower-LOD parts among 3,266 selected material parts
+(691 merged draws). Frustum on/off and camera recovery produce identical pixels.
+Far terrain submits 36,208 versus 38,912 full-resolution triangles; two patches
+choose coarser levels. Near terrain remains full detail at the one-pixel limit.

@@ -59,3 +59,12 @@ The Fable def compiler (Rust, Zlib license, https://github.com/jamen/fable-defs)
 `Data/Defs` tree into the CompiledDefs bins byte-deterministically. FableForge runs it as a separate
 process for the EgoCore pack type (`.def` text overrides) and never links it. Found next to the
 running executable, then `FORGE_DEFC`, then PATH.
+
+## EgoCore particle reference
+
+The particle field layouts and selected preview behavior were adapted or
+cross-checked against [AeoN's EgoCore](https://github.com/eeeeeAeoN/EgoCore)
+commit `55bdc10` (2026-09-29). The full
+upstream parser/renderer is not vendored. Applicable Forge code is in
+`src/effects.cpp`, `src/particlepreview.cpp` and `gui/particlepreviewrenderer.cpp`.
+Upstream copyright and MIT terms: [EgoCore-LICENSE.txt](EgoCore-LICENSE.txt).

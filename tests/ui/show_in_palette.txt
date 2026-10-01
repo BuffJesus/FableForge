@@ -1,0 +1,37 @@
+# Find selected definition without placing or changing any thing.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+snapshot_document
+edit_tab 1
+assert_state gizmo 4
+frames 3
+click btn_selection_actions
+frames 3
+click menu_selection_palette
+frames 8
+assert_state palette_definition OBJECT_BARREL_BREAKABLE
+assert_state palette_reveal_pending 0
+assert_state edit_tab 0
+assert_state gizmo 1
+assert_document_same
+clear_toasts
+screenshot build/ui/show_in_palette.png
+select_def CREATURE_NEW_CHICKEN_01
+frames 3
+click btn_selection_actions
+frames 3
+click menu_selection_palette
+frames 8
+assert_state palette_definition CREATURE_NEW_CHICKEN_01
+assert_state palette_reveal_pending 0
+assert_state edit_tab 2
+assert_document_same
+assert_state doc_changes 0
+quit

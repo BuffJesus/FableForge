@@ -1,5 +1,147 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-09-30 depth review: existing workflows are being audited feature by feature
+in [FEATURE_DEPTH_AUDIT.md](FEATURE_DEPTH_AUDIT.md), starting with terrain,
+objects and foliage. Grounded objects now follow terrain edits in the same undo
+step, and baked foliage follows in the preview; focused core and retail UI checks
+pass. The audit tracks unverified workflows explicitly.
+
+AeoN's early editor feedback is reconciled in
+[AEON_EDITOR_FEEDBACK.md](AEON_EDITOR_FEEDBACK.md). It distinguishes features now
+present from workflow depth and retail-game checks that still need work.
+
+2026-09-30 editor UX: active selection is above Quest sections; overview edit
+points yield to nearby points while selected points remain visible. Floating
+Terrain, Level and Properties tools close when their source section is left.
+Six size/scale tours and the tool-window context test pass; see HANDOFF_WORLD_UI.
+
+2026-09-30 area deletion: the Copy terrain rectangle now deletes enclosed
+unlocked things by button or Del, with link/ownership cleanup and one undo.
+Core and retail UI checks pass; see HANDOFF_WORLD_UI.
+
+2026-09-30 radius view: selected radius-bearing things now show labelled,
+terrain-following circles with an elevation line. The retail exit UI check
+and viewport capture pass; see HANDOFF_WORLD_UI.
+
+2026-09-30 meshless point clarity: viewport markers now have role letters,
+distinct shapes, selected/hover labels and an in-view legend. The retail region
+point UI workflow passes. Live FableWin comparison waits for the running game
+to close; see HANDOFF_WORLD_UI.
+
+2026-09-30 keyboard transforms: Edit now has selected-thing nudge, cardinal and
+pointer facing, all three small-angle rotations, and fine/coarse height keys.
+The retail UI script covers exact deltas and undo. See HANDOFF_WORLD_UI.
+
+2026-09-30 parent validation: known Father/Mother sex mismatches now fail in
+Document::setLink, using the editor's live definition lookup. Defs-only
+sessions support that lookup. Core and retail male/female UI checks pass.
+See HANDOFF_WORLD_UI.
+
+2026-09-30 creature links: absent Home, Work, Father, Mother and Spouse fields
+are now offered for AICreatures and saved in native order. Spouse edits are
+reciprocal; clearing and deletion remove optional lines. The GUI checks
+known parent sex from definitions, warning when unknown. Core and editor UI
+tests pass; see HANDOFF_WORLD_UI.
+
+2026-09-30 track naming: linking a new chain now assigns a unique
+TrackTempName, preserving explicit names and avoiding numbers already loaded
+in the map. Unlinking shares the allocator. Native decompilation and core/UI
+tests verify the behavior; see HANDOFF_WORLD_UI.
+
+2026-09-30 copy safety: native edit-brush copy exclusions now apply to
+selection copy, terrain brushes, pasted old fragments and preset loading.
+TrackNode duplication creates an unlinked standalone node; verbatim Village
+duplication is refused before group edits. Core tests cover filter, clone,
+paste and brush behavior. See HANDOFF_WORLD_UI.
+
+2026-09-30 continuation: Assets > Effects now lets users choose Dark, Grey,
+Light or a custom RGB preview background, saved in Forge settings. A paused
+sprite preview shows the three clear colours in native UI captures; the Effects
+browser regression passes. See HANDOFF_WORLD_UI.
+
+2026-09-30 owner research: read-only retail decompilation confirms that
+CTCOwnedEntity activation resolves its serialized OwnerUID and registers the
+child in a live CTCThingOwner list, creating that component when needed. This
+supports the existing strict UID graph. Valid owned descendants now follow
+parent movement and rotation, including gizmo/carry preview, height and ground
+commands, in one undo step. A saved checkbox disables transform propagation.
+Quest-section and day/night changes now move valid owned descendants too, with
+byte-preserving relocation and exact undo. Deleting an owner now offers Delete
+all, Only selection (which detaches surviving children), or Cancel. Core and
+native UI checks pass with one-step exact undo; details are in HANDOFF_WORLD_UI.
+Single-object duplication now clears a copied `OwnerUID`; duplicating a selected
+parent-child group remaps the copied links to the copied owners. Native clone
+creates a fresh definition instance, while Forge still preserves the copied
+block's other properties. Core/UI duplication and carry regressions pass.
+The Selection card now displays a cached `+N owned` hint for valid descendants;
+its selection changes and visible placement are UI checked.
+Deleting a thing now clears unambiguous incoming UID links and repairs a
+surviving track chain in the same undo step. Duplicate target IDs and ambiguous
+fields are left untouched. Core and editor delete/track regressions pass.
+
+2026-09-30 continuation: Shift+click now places the chosen thing on pointed
+terrain. Left drag carries unlocked things and selected groups over terrain,
+preserving ground offsets; Escape cancels and release gives one undo step.
+Fixed-height carry and the viewport path pass `ground_place_carry.txt`.
+Ctrl+Shift+drag clones and carries; Ctrl+D carries a new copy until ground click
+or Escape. One undo restores the pre-clone document. See HANDOFF_WORLD_UI.
+
+2026-09-30 continuation: window close and File > Exit now guard unsaved object,
+terrain and pending World edits. Failed World writes retain pending edits/undo;
+native close, map-switch and failed-write UI checks pass on in-memory or
+nonexistent-root fixtures. See HANDOFF_WORLD_UI.
+
+2026-09-30 continuation: meshless markers and region exits now have shared Edit
+viewport glyph drawing/picking, a Markers chip, Objects-list filtering and focus.
+MayorsHouseHallway native UI checks pass for visibility, Ctrl picking and context
+selection and cross-document reload. CTCDRegionExit entrance links are now exposed
+and synchronized with scripted-hook links; core and UI checks now cover both
+same-marker rejection and valid entrance targeting with exact undo. See HANDOFF_WORLD_UI.
+
+Bedtime checkpoint (2026-09-29): work paused at the user's request. Current build,
+validation, remaining limitations and the researched next marker/picking feature
+are recorded at the top of [HANDOFF_WORLD_UI.md](HANDOFF_WORLD_UI.md).
+
+2026-09-29 continuation: **Assets > Models** now browses meshes with an orbitable
+textured/wireframe preview, material links and definition references. World flight
+now has denser overview terrain, stable distance selection, and memory-constrained
+automatic expansion beyond six maps. Validation and remaining limitations are in
+[the world/UI handoff](HANDOFF_WORLD_UI.md).
+
+Later that day, performance work paused at the user's request. **Assets > Effects**
+now inspects decoded sprite/mesh/light systems with asset links, and the editor
+has contextual object actions plus a floating selection inspector; native UI
+checks pass. Selected-effect sprite playback now adds Play/Pause, Restart, Step,
+orbit and zoom. Bounded mesh playback now composites with sprites; fixed and
+random initial/spin-axis mesh orientation are previewed. Direction/game-driven
+mesh orientation, actual light illumination,
+in-world playback and editing remain unfinished. The reported
+ArenaHallOfHeroes appearance is reproducible, but missing-mesh checks are clean
+and no speculative orientation fix was applied; see the
+[content audit](ARENA_HALL_CONTENT_AUDIT.md).
+
+Further continuation: existing container contents and creature-family lists now
+support grouped/searchable add, replace and remove controls, including empty
+blocks, with tested undo. Particle previews additionally simulate bounded orbit
+and attraction, and correct size flags, scaling and alpha-test behavior against
+the pinned EgoCore reference. Specialized orbit modifiers remain approximations.
+Creature movement and cross-map paste now synchronize existing saved InitialPos
+fields with the destination world origin; undo and rotation preservation are tested.
+Locked in place now protects transforms, deletion and terrain reseating, with
+checkbox/menu/Ctrl+L controls, mixed-selection handling and tested drag cancellation.
+Known scalar overrides on seven existing component types can now be added when
+omitted and reset, with strict validation and byte-exact undo. Effective defaults
+and definition-declared missing components remain unresolved.
+Particle meshes now use authored bounds and native-confirmed XYZ/fixed-axis
+rotation, with deterministic native UI and pixel checks.
+H now cycles visible object surfaces with locked-selection filtering and undo;
+End remains direct terrain drop. Native physics-radius sweeps remain separate.
+Ctrl+H sets absolute selection height with per-object terrain clamping, locks
+and grouped undo; owned-child movement now follows the shared transform path.
+Show in palette reveals the selected object/creature definition without editing.
+Component lights now animate bounded colour/radius volumes using native timers;
+scene illumination and runtime light-position parameters remain separate.
+
 Latest continuation: [world view, UI validation and next asset/UX work](HANDOFF_WORLD_UI.md)
 (2026-09-28). Covers visible streamed water, world-picking speed, culling,
 automatic detail budgets and the user's design constraints.
@@ -31,7 +173,7 @@ the panel wiring builds but nobody has looked at it on screen.
 | 7 | Heightmap path maker | **Done** `0f2c3f3`: Draw path, drag start -> end (vanilla `EditDrawPathPenUndoable`). Screenshot seen 2026-09-28. |
 | 8 | Load other .wld files, not just FinalAlbion | **Done (stage 1)** `6c455b0`: File > Open world, maps grouped by region; the map's own .lev/.tng are read and saved. Later: STB bake for other worlds; world moves / regions for them. Screenshot seen 2026-09-28 with a Lionhead dev world (lake-n-shack.wld: Lake_and_Shack opens with terrain, water, objects; `tests/ui/open_world.txt`). |
 | 9 | Paintable themes from ENGINE_THEME defs (grouped), local detail applied | **Grouping done** `ec002b4`: tree by ENGINE_THEME_GROUP (screenshot seen 2026-09-28). Local detail is open; it is not proven editor-side in vanilla. |
-| 10 | Per-class property tabs (CTC editing) | **Done** `595dda5` + `6526402`: property grid per CTC block, vanilla captions/def pickers/enums/ranges from the recovered table (`docs/re_reference/vanilla_property_fields.tsv`), kind-checked edits (screenshot seen 2026-09-28). Open: list fields (CreatureFamilies), Light colour as a colour picker, CameraTrack name<->UID, adding a component a def lacks. |
+| 10 | Per-class property tabs (CTC editing) | **Done** `595dda5` + `6526402`: property grid per CTC block, vanilla captions/def pickers/enums/ranges from the recovered table (`docs/re_reference/vanilla_property_fields.tsv`), kind-checked edits (screenshot seen 2026-09-28). CreatureFamilies list controls and CTCLight colour picker have since landed. Open: CameraTrack name<->UID and adding a component a def lacks. |
 | 11 | Actors from def entity groups by category, not Forge presets | **Done** `80aa11d`: type -> THING_GROUP -> def tree (3,972 defs / 93 groups vs retail), Actors tab leads with creatures by group, `forge def-groups`. Screenshot seen 2026-09-28. Presets card kept (user's call). Markers / villages / switches are not placeable yet. |
 | 12 | Whole-world view, click a map to activate it, several maps at once | **Done (view) 2026-09-28**: the World tab draws every map's ground in its 2D box (vanilla world-map quads) and has a **Fly over (3D)** view of all 400 maps at their WLD origins (src/worldtiles: a ~40-quad height grid + a 1-texel/cell ground picture per map, built on worker threads, cached in %LOCALAPPDATA%/FableForge/worldtiles: 400 tiles in 0.1 s warm); hover names a map, click selects, double-click edits it with the camera kept (`tests/ui/world_view.txt`, screenshots seen). Open: several maps editable at once (vanilla "Locked for editing" per region); placed objects in the 3D world view. |
 | 13 | Quest sections: toggle, choose current, add | **Done** `72037f6`: show/hide, current section for new things, add (free names, beyond vanilla), move selection (screenshot seen 2026-09-28). Later: FSE quest registration of a new section. |
@@ -468,6 +610,11 @@ that the theme pass already used.
 
 ### 0.17 — "Content" (meshes, creatures, textures, particles, Blender)
 
+2026-09-29 particle follow-up: reviewed EgoCore `55bdc10`'s new simulator and
+renderer. Forge now respects disabled systems/components in static proxies;
+all 1165 retail effects still parse. Animated preview remains open. See
+[upstream review and integration boundary](EGOCORE_PARTICLES_20260929.md).
+
 Everything here already exists as **decoded formats and Python/Blender tooling in the FableTLC
 repo**; the work is bringing it into Atlas so a modder never sees Python. Sizing is honest:
 this is the biggest milestone and the one with real unknowns.
@@ -588,7 +735,7 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
 5. Merge coverage: `text.big` key union, WAD-resident TNG (extract -> thing-merge -> repack).
    *M* -- whole-file layers of tree sources (LEV / WLD / BWD / STB / INI / banks: last source
    wins, contested paths counted) DONE 2026-09-20; `text.big` key union DONE 2026-09-20; the merged
-   loose FinalAlbion/*.lev|*.tng are REPACKED into FinalAlbion.wad (replaced entries, new levels
+   loose FinalAlbion/*.lev|*.tng and root Levels/*.lev|*.tng are REPACKED into FinalAlbion.wad (replaced entries, new levels
    appended as native entries) DONE 2026-09-20 -- the GB packs (Project Seasons, AlbionSecrets) ship
    loose levels and rename the WAD to `_FinalAlbion.wad`, i.e. modders treat the WAD as winning, so
    the composer makes the WAD carry the merge whatever the precedence (`ENGINE_RULES` supported over
@@ -653,7 +800,7 @@ one `quests.lua` per DLL. None of the family is in `docs/CLI.md`.
      a check that refuses to stage when EgoCore's backups show it has deployed.
    - GB packs DONE 2026-09-20 (`tools/test_gbpack.py`, Project Seasons under the UFP): the parked
      `_FinalAlbion.wad` and `userst.ini` are never layers, identical whole files are skipped
-     (streamed compare), the 794 loose levels are repacked into the real WAD, ProjectAutumn/ +
+     (streamed compare), changed FinalAlbion/root levels are repacked into the real WAD (423 entries in the 2026-09-30 Project Seasons retest), ProjectAutumn/ +
      the whole STB / banks ride as whole-file layers; 24 s. AlbionSecrets Modpack has the same
      shape (zip peeked, not extracted).
    - Test matrix from the corpus (`work/nexus_mods/CATALOGUE.md`): Unofficial Patch + Aeon

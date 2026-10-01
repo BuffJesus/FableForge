@@ -1,0 +1,86 @@
+# Visible support query; all edits stay in memory and are undone.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+ground_thing
+frames 4
+assert_selected_ground
+snapshot_document
+# Native H-style ground wrap reaches the tavern geometry above this barrel.
+mouse_move viewport
+key_down H
+frames 2
+key_up H
+frames 3
+assert_selected_above_ground
+frame_selected
+frames 3
+clear_toasts
+screenshot build/ui/surface_cycle.png
+dump_state
+snapshot_frame
+surface_thing
+frames 3
+assert_selected_lower
+dump_state
+undo
+frames 3
+undo
+frames 3
+assert_document_same
+assert_selected_ground
+# Actual action menu uses the same support operation.
+click btn_selection_actions
+frames 3
+click menu_selection_surface
+frames 3
+assert_selected_above_ground
+undo
+frames 3
+assert_document_same
+# A locked object cannot cycle, including as part of a mixed selection.
+selection_lock 1
+frames 3
+snapshot_selected
+surface_thing
+assert_snapshot_thing_same
+select_def OBJECT_CUPBOARD_TALL
+move_thing 0 0 10
+select_toggle_def OBJECT_BARREL_BREAKABLE
+frames 3
+snapshot_document
+surface_thing
+frames 3
+assert_snapshot_thing_same
+undo
+frames 3
+assert_document_same
+undo
+frames 3
+undo
+frames 3
+select_def OBJECT_BARREL_BREAKABLE
+assert_state selected_locked 0
+undo
+frames 3
+assert_state doc_changes 0
+# Creature surface movement goes through the saved InitialPos synchronization.
+select_def CREATURE_NEW_CHICKEN_01
+snapshot_document
+move_thing 0 0 10
+frames 3
+surface_thing
+frames 3
+assert_initial_position
+undo
+assert_initial_position
+undo
+assert_document_same
+assert_state doc_changes 0
+quit

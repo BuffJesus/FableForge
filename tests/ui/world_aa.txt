@@ -1,0 +1,52 @@
+# Device used for this integration check must support 4x RGBA8/D24S8.
+wait_maps
+wait_ready
+world_memory_sample 8589934592 2147483648
+set world_auto_detail 0
+set world_detail_limit 6
+set world_aa 4
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_pose 3398.75 3612.5 130 0.46365 0.5
+wait_world_detail
+set preview_water 0
+clear_toasts
+frames 3
+assert_state world_aa_samples 4
+screenshot build/world-aa-4x.png
+set world_aa_test_limit 2
+frames 3
+assert_state world_aa_samples 2
+assert_state world_aa_fallbacks 1
+frames 20
+assert_state world_aa_fallbacks 1
+set world_aa_test_limit 1
+frames 3
+assert_state world_aa_samples 1
+assert_state world_aa_fallbacks 2
+set world_aa_test_limit 4
+frames 3
+assert_state world_aa_samples 4
+world_memory_sample 1073741824 1073741824
+frames 3
+assert_state world_aa_samples 1
+world_memory_sample unavailable
+frames 3
+assert_state world_aa_samples 1
+world_memory_sample 8589934592 2147483648
+frames 3
+assert_state world_aa_samples 4
+set world_aa 1
+frames 3
+assert_state world_aa_samples 1
+screenshot build/world-aa-off.png
+set world_detail 0
+set world_aa 4
+frames 3
+assert_state world_aa_samples 4
+world_memory_sample unavailable
+frames 3
+assert_state world_aa_samples 1
+dump_state
+quit

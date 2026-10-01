@@ -1,0 +1,75 @@
+# Meshless region exits use the same overlay for drawing and viewport picking.
+wait_maps
+wait_ready
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+edit 1
+wait_foliage
+tour -1
+select_def REGION_EXIT_POINT
+frame_selected
+frames 6
+screenshot build/ui/thing_glyphs.png
+click chip_markers
+frames 3
+assert_state thing_glyphs 0
+click chip_markers
+frames 3
+set section_hidden NULL 1
+frames 3
+assert_state thing_glyphs 0
+set section_hidden NULL 0
+frames 3
+select_def REGION_EXIT_POINT
+frame_selected
+frames 5
+pick 0.5 0.47
+assert_state selected_thing 0
+key_down Ctrl
+pick 0.5 0.47
+key_up Ctrl
+assert_state selection_count 0
+pick 0.5 0.47
+assert_state selected_thing 0
+mouse_move selected_glyph
+mouse_down right
+frames 2
+mouse_up right
+frames 3
+assert_state selection_popup 1
+key_down Escape
+key_up Escape
+frames 2
+select StartOakValeWest
+wait_loaded
+wait_foliage
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+select_def REGION_EXIT_POINT
+frame_selected
+frames 5
+pick 0.5 0.47
+assert_state selected_thing 0
+reveal btn_link_pick_EntranceConnectedToUID
+click btn_link_pick_EntranceConnectedToUID
+frames 2
+pick 0.5 0.47
+assert_log link: no target picked
+assert_state doc_changes 0
+# Link the exit to a real, visible meshless entrance in this map.
+snapshot_document
+select_def REGION_ENTRANCE_POINT
+frame_selected
+frames 5
+select_def REGION_EXIT_POINT
+reveal btn_link_pick_EntranceConnectedToUID
+click btn_link_pick_EntranceConnectedToUID
+frames 2
+pick 0.5 0.47
+assert_state doc_changes 1
+assert_selected_link_def EntranceConnectedToUID REGION_ENTRANCE_POINT
+undo
+assert_document_same
+assert_state doc_changes 0

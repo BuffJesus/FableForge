@@ -190,7 +190,7 @@ int runExport(const std::string& cmd, const Args& args) {
             int full = 0, partial = 0, sprites = 0, lights = 0, meshes = 0;
             for (const auto& b : bank.banks())
                 for (const auto& e : b.entries) {
-                    const auto* fx = albion::effects::byName(e.name);
+                    const auto fx = albion::effects::byName(install.root,e.name);
                     if (!fx) continue;
                     if (fx->parsedFully) ++full; else { ++partial; if (!target.empty() && target == "verbose") std::printf("partial: %s\n", e.name.c_str()); }
                     sprites += int(fx->sprites.size()); lights += int(fx->lights.size()); meshes += int(fx->meshes.size());

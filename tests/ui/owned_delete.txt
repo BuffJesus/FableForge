@@ -1,0 +1,41 @@
+# Confirmed owner deletion, detached survivors and exact undo on retail data.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+select_owned_parent
+snapshot_owned_frame
+snapshot_document
+delete_thing
+frames 2
+assert_state owned_delete_popup 1
+screenshot build/ui/owned_delete_modal.png
+reveal btn_owned_delete_cancel
+click btn_owned_delete_cancel
+frames 2
+assert_document_same
+
+delete_thing
+frames 2
+assert_state owned_delete_popup 1
+click btn_owned_delete_only
+wait_foliage
+assert_owned_snapshot_exists 1
+assert_owned_snapshot_detached
+undo
+wait_foliage
+assert_document_same
+
+select_owned_parent
+delete_thing
+frames 2
+assert_state owned_delete_popup 1
+click btn_owned_delete_all
+wait_foliage
+assert_owned_snapshot_exists 0
+undo
+wait_foliage
+assert_document_same

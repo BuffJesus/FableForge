@@ -13,12 +13,24 @@ fit_open 1
 frames 2
 wait_fit
 frames 4
+assert_state fit_preview_has_changes 1
 screenshot build/ui/fit_card.png
+snapshot_heights
 fit_apply
 assert_log vertices rebuilt to meet 4 touching map
+assert_heights_changed 1
 frames 2
 fit_open 1
 frames 4
+assert_state fit_preview_has_changes 0
 screenshot build/ui/fit_applied.png
+undo
+frames 4
+assert_heights_changed 0
+assert_state fit_preview_has_changes 1
+redo
+frames 4
+assert_heights_changed 1
+assert_state fit_preview_has_changes 0
 dump_log
 quit

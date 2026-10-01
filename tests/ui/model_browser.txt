@@ -1,0 +1,43 @@
+wait_maps
+wait_ready
+assets_tab 1
+frames 4
+model_select MESH_OBJECT_BARREL
+frames 4
+assert_state model_ready 1
+assert_state model_vertices 96
+assert_state model_triangles 188
+assert_state model_users 2
+assert_state model_selected MESH_OBJECT_BARREL
+assert_widget check_model_wire
+clear_toasts
+screenshot build/ui/model_browser.png
+click check_model_wire
+frames 3
+assert_state model_wire 1
+model_orbit 1.8 0.3 0.8
+frames 3
+screenshot build/ui/model_browser_wire.png
+model_search no_such_model_xyz
+frames 3
+assert_state models_filtered 0
+model_search 169
+frames 3
+assert_state models_filtered 1
+model_search mesh_object_barrel
+frames 3
+dump_state build/ui/model_browser_state.txt
+reveal model_texture_0_Diffuse
+click model_texture_0_Diffuse
+frames 3
+assert_state assets_tab 0
+assert_state texture_selected GRAPHIC_OLD_VILLAGE_OBJECTS
+assets_tab 1
+frames 3
+click btn_model_refresh
+frames 3
+assert_state model_ready 0
+model_select MESH_OBJECT_BARREL
+frames 3
+assert_state model_ready 1
+quit

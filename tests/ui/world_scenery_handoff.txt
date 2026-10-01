@@ -1,0 +1,38 @@
+# Leave a detailed chunk which has no pre-existing coarse fallback. Coverage
+# must stay complete on EVERY frame, including worker/upload/fade delays.
+wait_maps
+wait_ready
+set world_detail 0
+set world_scenery 0
+set world_auto_detail 0
+set world_detail_limit 1
+set world_detail_radius 1000
+set world_aa 1
+set preview_water 0
+world_memory_sample 8589934592 2147483648
+world_tab 1
+wait_world_tiles
+world_camera 927 4220 0 0.8 0.35 200
+world_pose 927 4220 150 0.8 0.35
+set world_3d 1
+wait_world_tiles
+set world_detail 1
+wait_world_detail
+assert_state world_detail_names HookCoast
+set world_scenery 1
+wait_world_scenery
+watch_world_coverage HookCoast
+world_pose 930 4220 150 0.8 0.35
+wait_world_detail
+wait_world_scenery
+assert_state world_detail_names Hookcoast_Filler_02
+frames 20
+dump_state
+world_pose 927 4220 150 0.8 0.35
+wait_world_detail
+wait_world_scenery
+assert_state world_detail_names HookCoast
+frames 20
+watch_world_coverage -
+dump_state
+quit

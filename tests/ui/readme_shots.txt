@@ -17,6 +17,11 @@ wait_foliage
 frames 2
 gizmo 0
 frames 3
+click chip_markers
+frames 2
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+mouse_move 10 500
+frames 2
 clear_toasts
 screenshot docs/screenshot_oakvale.png
 # 2. Terrain tab: the sculpt brush over Greatwood's lake shore

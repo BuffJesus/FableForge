@@ -55,21 +55,70 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 # "-dev" until the release is tagged (docs/RELEASE.md step 5 clears it)
-set(FORGE_VERSION_SUFFIX "-rc.1")
+set(FORGE_VERSION_SUFFIX "-rc.2")
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}${FORGE_VERSION_SUFFIX}")
 add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/vanilla_props.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp src/navlines.cpp src/worldtiles.cpp
     src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp src/meshimport.cpp src/modpack.cpp)
 target_include_directories(fableforge PUBLIC src)
 target_link_libraries(fableforge PUBLIC forgecore_slice)
+target_sources(fableforge PRIVATE src/particlepreview.cpp)
 
 file(GLOB CLI_SOURCES CONFIGURE_DEPENDS src/cli/*.cpp)
 add_executable(forge src/main.cpp ${CLI_SOURCES})
 target_link_libraries(forge PRIVATE fableforge)
 
 enable_testing()
+add_executable(fableforge_meshbounds_tests tests/test_meshbounds.cpp)
+target_link_libraries(fableforge_meshbounds_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_meshbounds_tests COMMAND fableforge_meshbounds_tests)
+add_executable(fableforge_meshskeleton_tests tests/test_meshskeleton.cpp)
+target_link_libraries(fableforge_meshskeleton_tests PRIVATE forgecore_slice)
+add_executable(fableforge_animation_tests tests/test_animation.cpp)
+target_link_libraries(fableforge_animation_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_animation_tests COMMAND fableforge_animation_tests)
+add_executable(fableforge_headpose_tests tests/test_headpose.cpp)
+target_link_libraries(fableforge_headpose_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_headpose_tests COMMAND fableforge_headpose_tests)
+add_executable(fableforge_componentoverride_tests tests/test_componentoverrides.cpp)
+target_link_libraries(fableforge_componentoverride_tests PRIVATE fableforge)
+add_test(NAME fableforge_componentoverride_tests COMMAND fableforge_componentoverride_tests)
+add_executable(fableforge_creatureframe_tests tests/test_creatureframe.cpp)
+target_link_libraries(fableforge_creatureframe_tests PRIVATE fableforge)
+add_test(NAME fableforge_creatureframe_tests COMMAND fableforge_creatureframe_tests)
+add_executable(fableforge_particlepreview_tests tests/test_particlepreview.cpp)
+target_link_libraries(fableforge_particlepreview_tests PRIVATE fableforge)
+add_test(NAME fableforge_particlepreview_tests COMMAND fableforge_particlepreview_tests)
+add_executable(fableforge_lightpreview_tests tests/test_lightpreview.cpp)
+target_link_libraries(fableforge_lightpreview_tests PRIVATE fableforge)
+add_test(NAME fableforge_lightpreview_tests COMMAND fableforge_lightpreview_tests)
+add_executable(fableforge_worlddemand_tests tests/test_worlddemand.cpp)
+target_include_directories(fableforge_worlddemand_tests PRIVATE src)
+add_test(NAME fableforge_worlddemand_tests COMMAND fableforge_worlddemand_tests)
+add_executable(fableforge_terrainlod_tests tests/test_terrainlod.cpp)
+target_include_directories(fableforge_terrainlod_tests PRIVATE src)
+add_test(NAME fableforge_terrainlod_tests COMMAND fableforge_terrainlod_tests)
 add_executable(fableforge_tests tests/test_export.cpp)
 target_link_libraries(fableforge_tests PRIVATE fableforge)
 add_test(NAME fableforge_tests COMMAND fableforge_tests)
+add_executable(fableforge_lipsync_tests tests/test_lipsync.cpp)
+target_link_libraries(fableforge_lipsync_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_lipsync_tests COMMAND fableforge_lipsync_tests)
+add_executable(fableforge_lipsync_preset_tests tests/test_lipsync_presets.cpp)
+target_link_libraries(fableforge_lipsync_preset_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_lipsync_preset_tests COMMAND fableforge_lipsync_preset_tests)
+add_executable(fableforge_lipsync_pack_tests tests/test_lipsync_pack.cpp)
+target_link_libraries(fableforge_lipsync_pack_tests PRIVATE fableforge)
+add_test(NAME fableforge_lipsync_pack_tests COMMAND fableforge_lipsync_pack_tests)
+add_executable(fableforge_lut_tests tests/test_lut.cpp)
+target_link_libraries(fableforge_lut_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_lut_tests COMMAND fableforge_lut_tests)
+add_executable(fableforge_dialoguetext_tests tests/test_dialoguetext.cpp)
+target_link_libraries(fableforge_dialoguetext_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_dialoguetext_tests COMMAND fableforge_dialoguetext_tests)
+
+add_executable(fableforge_spriteframe_tests tests/test_spriteframes.cpp)
+target_link_libraries(fableforge_spriteframe_tests PRIVATE fableforge)
+add_test(NAME fableforge_spriteframe_tests COMMAND fableforge_spriteframe_tests)
 
 find_package(Threads REQUIRED)
 add_executable(fableforge_row_tests tests/test_rowexecutor.cpp)
@@ -103,19 +152,34 @@ if(WIN32)
     gui/app.cpp
     gui/editor.cpp
     gui/textures.cpp
+    gui/effectbrowser.cpp
+    gui/dialoguebrowser.cpp
+    gui/dialogueaudio.cpp
     gui/mods.cpp
     gui/automation.cpp
     gui/world.cpp
     gui/worldview.cpp
+    gui/worldscenery.cpp
+    gui/particlepreviewrenderer.cpp
     gui/theme.cpp
     gui/renderer.cpp
   )
   target_include_directories(FableForge PRIVATE gui)
-  target_link_libraries(FableForge PRIVATE fableforge albion_imgui)
+  target_link_libraries(FableForge PRIVATE fableforge albion_imgui winmm)
   add_executable(fableforge_geometry_tests tests/test_renderer_prepare.cpp gui/renderer.cpp)
   target_include_directories(fableforge_geometry_tests PRIVATE gui)
   target_link_libraries(fableforge_geometry_tests PRIVATE fableforge albion_imgui)
   add_test(NAME fableforge_geometry_tests COMMAND fableforge_geometry_tests)
+  add_executable(fableforge_picking_tests tests/test_renderer_picking.cpp gui/renderer.cpp)
+  target_include_directories(fableforge_picking_tests PRIVATE gui)
+  target_link_libraries(fableforge_picking_tests PRIVATE fableforge albion_imgui)
+  add_test(NAME fableforge_picking_tests COMMAND fableforge_picking_tests)
+  set_tests_properties(fableforge_picking_tests PROPERTIES TIMEOUT 60)
+  add_executable(fableforge_particlepreviewrenderer_tests tests/test_particlepreviewrenderer.cpp gui/particlepreviewrenderer.cpp)
+  target_include_directories(fableforge_particlepreviewrenderer_tests PRIVATE gui)
+  target_link_libraries(fableforge_particlepreviewrenderer_tests PRIVATE fableforge d3d11 d3dcompiler dxgi)
+  add_test(NAME fableforge_particlepreviewrenderer_tests COMMAND fableforge_particlepreviewrenderer_tests)
+  set_tests_properties(fableforge_particlepreviewrenderer_tests PROPERTIES TIMEOUT 60)
   if(FABLEFORGE_PROFILE)
     add_custom_command(TARGET FableForge POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${tracy_SOURCE_DIR}/LICENSE $<TARGET_FILE_DIR:FableForge>/TRACY-LICENSE.txt)
@@ -142,3 +206,19 @@ add_custom_command(TARGET FableForge POST_BUILD
 add_executable(forge-tools tools/forge-cli/main.cpp)
 # fableforge too: the mod composer re-runs FableForge packs' recipes (src/modpack: model / theme imports)
 target_link_libraries(forge-tools PRIVATE fableforge)
+
+add_executable(fableforge_containerlist_tests tests/test_containerlists.cpp)
+target_link_libraries(fableforge_containerlist_tests PRIVATE fableforge)
+add_test(NAME fableforge_containerlist_tests COMMAND fableforge_containerlist_tests)
+
+add_executable(fableforge_lockedthings_tests tests/test_lockedthings.cpp)
+target_link_libraries(fableforge_lockedthings_tests PRIVATE fableforge)
+add_test(NAME fableforge_lockedthings_tests COMMAND fableforge_lockedthings_tests)
+
+add_executable(fableforge_setheight_tests tests/test_setheight.cpp)
+target_link_libraries(fableforge_setheight_tests PRIVATE fableforge)
+add_test(NAME fableforge_setheight_tests COMMAND fableforge_setheight_tests)
+
+add_executable(fableforge_ownedgraph_tests tests/test_ownedgraph.cpp)
+target_link_libraries(fableforge_ownedgraph_tests PRIVATE fableforge)
+add_test(NAME fableforge_ownedgraph_tests COMMAND fableforge_ownedgraph_tests)

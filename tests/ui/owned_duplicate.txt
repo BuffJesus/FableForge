@@ -1,0 +1,35 @@
+# Copying a child alone detaches it; copying its parent with it reconnects copies.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+select_owned_parent
+frames 2
+assert_state selected_owned_count 10
+reveal text_owned_count
+assert_widget text_owned_count
+screenshot build/ui/owned_count_hint.png
+snapshot_owned_frame
+snapshot_document
+toggle_snapshotted_owned
+assert_state selection_count 2
+frames 2
+assert_state selected_owned_count 9
+duplicate_thing
+wait_foliage
+assert_copied_owned_pair
+assert_state selected_owned_count 0
+undo
+wait_foliage
+assert_document_same
+
+select_snapshotted_owned
+duplicate_thing
+wait_foliage
+assert_selected_owner 0
+undo
+wait_foliage
+assert_document_same

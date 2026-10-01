@@ -1,0 +1,101 @@
+# Actual override widgets; changes remain in memory and are fully undone.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BUILDING_DOOR_3
+frames 3
+snapshot_document
+assert_component CTCDoor Open FALSE
+click btn_selection_properties
+frames 3
+reveal property_reset_CTCDoor_Open
+click property_reset_CTCDoor_Open
+frames 3
+assert_component CTCDoor Open -
+reveal property_set_CTCDoor_Open
+click property_set_CTCDoor_Open
+frames 3
+click property_override_bool
+frames 3
+click property_bool_TRUE
+frames 3
+click property_override_apply
+frames 3
+assert_component CTCDoor Open TRUE
+clear_toasts
+mouse_move viewport
+screenshot build/ui/component_override_door.png
+undo
+assert_component CTCDoor Open -
+undo
+assert_document_same
+assert_state doc_changes 0
+# Numeric override and recovered range validation, using a real cupboard.
+select_def OBJECT_CUPBOARD_TALL
+frames 3
+assert_component CTCSearchableContainer NumberOfTimesToSearch 0
+reveal property_group_CTCSearchableContainer
+click property_group_CTCSearchableContainer
+frames 3
+reveal property_reset_CTCSearchableContainer_NumberOfTimesToSearch
+click property_reset_CTCSearchableContainer_NumberOfTimesToSearch
+frames 3
+assert_component CTCSearchableContainer NumberOfTimesToSearch -
+reveal property_set_CTCSearchableContainer_NumberOfTimesToSearch
+click property_set_CTCSearchableContainer_NumberOfTimesToSearch
+frames 3
+click property_override_value
+text_input 101
+click property_override_apply
+frames 3
+assert_component CTCSearchableContainer NumberOfTimesToSearch -
+click property_override_value
+key_down Ctrl
+key_down A
+frames 2
+key_up A
+key_up Ctrl
+text_input 3
+click property_override_apply
+frames 3
+assert_component CTCSearchableContainer NumberOfTimesToSearch 3
+undo
+assert_component CTCSearchableContainer NumberOfTimesToSearch -
+undo
+assert_document_same
+assert_state doc_changes 0
+# A genuinely absent retail field, without first removing an existing value.
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+select_def REGION_EXIT_POINT
+frames 3
+snapshot_document
+assert_component CTCDRegionExit ReversedOnMiniMap -
+click btn_selection_properties
+frames 3
+reveal property_set_CTCDRegionExit_ReversedOnMiniMap
+clear_toasts
+mouse_move viewport
+screenshot build/ui/component_unset_retail.png
+click property_set_CTCDRegionExit_ReversedOnMiniMap
+frames 3
+click property_override_bool
+frames 3
+click property_bool_TRUE
+frames 3
+click property_override_apply
+frames 3
+assert_component CTCDRegionExit ReversedOnMiniMap TRUE
+undo
+assert_component CTCDRegionExit ReversedOnMiniMap -
+assert_document_same
+assert_state doc_changes 0
+quit

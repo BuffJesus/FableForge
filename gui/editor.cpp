@@ -19,8 +19,10 @@
 #include <functional>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <sstream>
 
 #include "ImGuizmo.h"
 #include "theme.hpp"
@@ -52,7 +54,9 @@ float yawDegrees(const editor::Frame& f) {
 // ------------------------------------------------------------ document
 
 void App::openDocument() {
+    cancelCarry();
     docLoadedFor_.clear();
+    thingGlyphs_.clear();
     selectedThing_ = -1; selectedUid_ = 0;
     renderer_.selectedThing = -1;
     instLocal_.clear(); instUids_.clear();
@@ -66,11 +70,14 @@ void App::openDocument() {
         if (!derr.empty()) pushLog("editor: " + derr, 1);
         return;
     }
+    doc_.setCreatureSexLookup([this](const std::string& definition) {
+        return ctx_.defIntField(definition,"Sex");
+    });
     if (!derr.empty()) pushLog("editor: " + derr, 1);
     docLoadedFor_ = selectedName_;
     syncedRevision_ = doc_.revision();
     hiddenSections_.clear(); sectionsDirty_ = true; sectionsCardRev_ = ~0ull;
-    tracksCacheRev_ = ~0ull; linkPick_.active = false; trackLinkPick_ = false;
+    tracksCacheRev_ = ~0ull; linkPick_.active = false; trackLinkPick_ = false; attachPick_.active = false;
     loadThingOrigins();
 }
 
@@ -105,10 +112,12 @@ const char* App::originOf(uint64_t uid) const {
 }
 
 void App::setEditMode(bool on) {
+    if (!on) cancelCarry();
     editMode_ = on;
     if (on && !documentLoaded()) openDocument();
     if (on && previewThings_ == false) setPreviewThings(true);
-    if (!on) { selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1; }
+    if (!on) { selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1; thingGlyphs_.clear();
+        selectionInspectorOpen_ = selectionPopupRequested_ = selectionPopupOpen_ = contextClickArmed_ = false; }
 }
 
 void App::bindInstances(const foliageexport::Scene& things) {
@@ -210,7 +219,11 @@ void App::startThingsReload() {
 void App::selectThing(int index) {
     extraUids_.clear();
     syncExtraSelection();
-    if (!documentLoaded() || index < 0 || size_t(index) >= doc_.thingCount()) { selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1; return; }
+    if (!documentLoaded() || index < 0 || size_t(index) >= doc_.thingCount()) {
+        attachPick_.active = false;
+        selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1; return;
+    }
+    if (attachPick_.active && doc_.uidOf(size_t(index))!=attachPick_.anchorUid) attachPick_.active=false;
     selectedThing_ = index;
     selectedUid_ = doc_.uidOf(size_t(index));
     renderer_.selectedThing = index;
@@ -255,7 +268,10 @@ void App::copySelection() {
     if (sel.empty()) { pushLog("copy: nothing selected", 1); return; }
     std::vector<size_t> idx(sel.begin(), sel.end());
     clipboard_ = doc_.extract(idx);
-    pushLog("copied " + std::to_string(sel.size()) + " object" + (sel.size() == 1 ? "" : "s"), 0);
+    const size_t copied=clipboard_.items.size(), skipped=sel.size()-copied;
+    pushLog("copied " + std::to_string(copied) + " object" + (copied == 1 ? "" : "s") +
+            (skipped ? "; skipped " + std::to_string(skipped) + " non-copyable " +
+                       (skipped == 1 ? "thing" : "things") : ""), skipped ? 1 : 0);
 }
 
 void App::pasteClipboard() {
@@ -370,11 +386,30 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
     if (selectedThing_ >= 0) {
         const std::string target = doc_.placementSection().empty() ? std::string("NULL") : doc_.placementSection();
         const std::string mine = doc_.sectionOf(size_t(selectedThing_));
-        if (lowerCopy(mine) != lowerCopy(target)) {
+        const auto selected=selectionIndices();
+        const bool needsMove=std::any_of(selected.begin(),selected.end(),[&](int i) {
+            return lowerCopy(doc_.sectionOf(size_t(i)))!=lowerCopy(target);
+        });
+        if (needsMove) {
             const std::string full = "Move selection to " + target + "  (from " + mine + ")";
             const std::string l = theme::fitText("Move selection to " + target, cardInner - S(20));
             if (theme::ghostButton(l.c_str(), ImVec2(cardInner, S(26)))) {
-                if (const auto n = doc_.moveToSection(size_t(selectedThing_), target)) { selectThing(int(*n)); sectionsDirty_ = true; }
+                std::vector<uint64_t> uids;
+                for (int i:selected) uids.push_back(doc_.uidOf(size_t(i)));
+                doc_.beginBatch();
+                try {
+                    for (uint64_t uid:uids)
+                        if (const auto i=doc_.indexOfUid(uid)) doc_.moveToSection(*i,target);
+                    doc_.endBatch();
+                    if (const auto i=doc_.indexOfUid(selectedUid_)) {
+                        selectedThing_=int(*i); renderer_.selectedThing=selectedThing_;
+                    }
+                    syncExtraSelection();
+                    sectionsDirty_=true;
+                } catch (const std::exception& e) {
+                    doc_.endBatch();
+                    pushLog(std::string("Move section: ")+e.what(),2);
+                }
             }
             auto_.registerWidget("btn_move_section");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", full.c_str());
@@ -387,14 +422,169 @@ void App::drawSectionsCard(float pad, float inner, float cardInner) {
 // (CTCDoor, CTCChest, CTCLight ...) like the vanilla Thing Properties tabs. TRUE /
 // FALSE fields are checkboxes; the rest are text fields committed on Enter or when
 // focus leaves, refused (and logged) when the value does not fit the field.
+namespace {
+struct EditableList { const char* ctc; const char* base; const char* type; const char* caption; };
+constexpr EditableList editableLists[] = {
+    {"CTCCreatureGenerator","CreatureFamilies","CREATURE_GENERATION_FAMILY","Creature families"},
+    {"CTCDCreatureGenerator","CreatureFamilies","CREATURE_GENERATION_FAMILY","Creature families"},
+    {"CTCChest","ContainerContents","OBJECT","Contents"},
+    {"CTCSearchableContainer","ContainerContents","OBJECT","Contents"},
+    {"CTCContainerRewardHero","ContainerContents","OBJECT","Contents"},
+    {"CTCOnDieContainer","ContainerContents","OBJECT","Contents"}
+};
+}
+
+void App::drawListProperties(float cardInner) {
+    using theme::S;
+    if (selectedThing_<0) return;
+    const size_t idx=size_t(selectedThing_);
+    const auto blocks=doc_.ctcBlocksOf(idx);
+    for (const auto& list:editableLists) {
+        if (std::find(blocks.begin(),blocks.end(),list.ctc)==blocks.end()) continue;
+        ImGui::PushID(list.ctc);
+        const std::string title=std::string(list.caption)+" ("+list.ctc+")##list";
+        const bool open=ImGui::CollapsingHeader(title.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
+        auto_.registerWidget((std::string("list_header_")+list.ctc).c_str());
+        if (!open) { ImGui::PopID(); continue; }
+        if (!doc_.listEditable(idx,list.ctc,list.base)) {
+            theme::hint("This list has duplicate, missing or invalid entries. Its fields remain available in the component properties above.");
+            ImGui::PopID(); continue;
+        }
+        const auto entries=doc_.listEntries(idx,list.ctc,list.base);
+        if (entries.empty()) theme::hint(std::string(list.type)=="OBJECT"?"No explicit entries. The game may supply contents from its definition or scripts.":"No creature families assigned.");
+        auto picker=[&](const char* id,const std::string& preview,float width)->std::string {
+            std::string chosen;
+            ImGui::SetNextItemWidth(width);
+            const bool popup=ImGui::BeginCombo((std::string("##")+id).c_str(),preview.c_str(),ImGuiComboFlags_HeightLarge);
+            auto_.registerWidget((std::string("list_")+id+"_"+list.ctc).c_str());
+            if (!popup) return chosen;
+            if (ImGui::IsWindowAppearing()) { listPropertySearch_[0]=0; ImGui::SetKeyboardFocusHere(); }
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputTextWithHint("##filter","Search definitions",listPropertySearch_,sizeof listPropertySearch_);
+            auto_.registerWidget("input_list_definition_search");
+            const std::string query=lowerCopy(listPropertySearch_);
+            std::vector<terrainexport::Context::GroupedDefinition> familyDefs;
+            if (std::string(list.type)=="OBJECT") {
+                if (defList_.empty()) defList_=ctx_.groupedDefinitions({"OBJECT","BUILDING","CREATURE"});
+            } else for (const auto& [name,type]:ctx_.definitions({list.type})) familyDefs.push_back({name,type,{}});
+            const auto& definitions=std::string(list.type)=="OBJECT"?defList_:familyDefs;
+            std::string group="\x01"; bool groupOpen=false; size_t matches=0;
+            for (const auto& def:definitions) {
+                if (def.type!=list.type || (!query.empty() && lowerCopy(def.name).find(query)==std::string::npos)) continue;
+                ++matches;
+                if (def.group!=group) {
+                    group=def.group;
+                    if (!query.empty()) ImGui::SetNextItemOpen(true,ImGuiCond_Always);
+                    groupOpen=ImGui::CollapsingHeader(group.empty()?"(no group)":group.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
+                }
+                if (!groupOpen) continue;
+                if (ImGui::Selectable(def.name.c_str(),def.name==preview)) chosen=def.name;
+                auto_.registerWidget(("list_choice_"+def.name).c_str());
+            }
+            if (!matches) theme::hint("No matching definitions.");
+            ImGui::EndCombo(); return chosen;
+        };
+        bool changed=false;
+        for (size_t i=0;i<entries.size();++i) {
+            ImGui::PushID(int(i));
+            const auto& value=entries[i];
+            const std::string current=value.size()>=2 && value.front()=='"' && value.back()=='"'?value.substr(1,value.size()-2):value;
+            ImGui::BeginDisabled(!ctx_.ready());
+            const std::string chosen=picker(("entry_"+std::to_string(i)).c_str(),current,cardInner-S(32));
+            ImGui::EndDisabled();
+            if (!chosen.empty()) changed=doc_.setPropertyValue(idx,list.ctc,std::string(list.base)+"["+std::to_string(i)+"]","\""+chosen+"\"");
+            ImGui::SameLine(0,S(4));
+            if (theme::ghostButton("x",ImVec2(S(24),S(22)))) changed=doc_.removeListEntry(idx,list.ctc,list.base,int(i));
+            auto_.registerWidget((std::string("list_remove_")+list.ctc+"_"+std::to_string(i)).c_str());
+            ImGui::PopID();
+            if (changed) break;
+        }
+        if (!changed) {
+            ImGui::BeginDisabled(!ctx_.ready());
+            const std::string chosen=picker("add",std::string("+ add ")+(std::string(list.type)=="OBJECT"?"an item":"a creature family"),cardInner);
+            ImGui::EndDisabled();
+            if (!chosen.empty()) changed=doc_.addListEntry(idx,list.ctc,list.base,"\""+chosen+"\"");
+        }
+        if (changed) pushLog(std::string(list.caption)+" updated",0);
+        ImGui::PopID();
+        if (changed) break;
+    }
+}
+
+void App::drawMissingComponentProperties(float cardInner) {
+    using theme::S;
+    const size_t index=size_t(selectedThing_);
+    const auto known=doc_.knownComponentProperties(index);
+    if (std::none_of(known.begin(),known.end(),[](const auto& field) { return !field.present; })) return;
+    if (!ImGui::CollapsingHeader("Unset component properties",ImGuiTreeNodeFlags_DefaultOpen)) return;
+    ImGui::TextWrapped("These fields have no saved override. Their effective values are supplied by the game.");
+    for (const auto& field:known) {
+        if (field.present) continue;
+        const auto& row=field.row;
+        const auto* metadata=editor::vanillaField(row.ctc,row.key);
+        const std::string id=row.ctc+"_"+row.key;
+        ImGui::PushID(id.c_str());
+        ImGui::Separator();
+        ImGui::TextDisabled("%s",row.ctc.c_str());
+        ImGui::TextWrapped("%s",metadata?metadata->label:row.key.c_str());
+        if (ImGui::Button("Set value...",ImVec2(cardInner,0))) {
+            componentOverrideValue_[0]=0;
+            ImGui::OpenPopup("##override");
+        }
+        auto_.registerWidget(("property_set_"+id).c_str());
+        bool changed=false;
+        if (ImGui::BeginPopup("##override")) {
+            ImGui::TextUnformatted(metadata?metadata->label:row.key.c_str());
+            ImGui::TextDisabled("No override saved; effective value unknown.");
+            if (row.kind==editor::Document::PropertyRow::Kind::Bool) {
+                if (ImGui::BeginCombo("Value",componentOverrideValue_[0]?componentOverrideValue_:"Choose value")) {
+                    for (const char* value:{"TRUE","FALSE"}) {
+                        if (ImGui::Selectable(value)) std::snprintf(componentOverrideValue_,sizeof componentOverrideValue_,"%s",value);
+                        auto_.registerWidget((std::string("property_bool_")+value).c_str());
+                    }
+                    ImGui::EndCombo();
+                }
+                auto_.registerWidget("property_override_bool");
+            } else {
+                ImGui::InputTextWithHint("Value",row.kind==editor::Document::PropertyRow::Kind::Int?"Whole number":"Number",componentOverrideValue_,sizeof componentOverrideValue_);
+                auto_.registerWidget("property_override_value");
+            }
+            if (metadata && metadata->hasRange) ImGui::TextDisabled("Range: %g to %g",metadata->min,metadata->max);
+            ImGui::BeginDisabled(componentOverrideValue_[0]==0);
+            if (ImGui::Button("Apply")) {
+                changed=doc_.setComponentOverride(index,row.ctc,row.key,componentOverrideValue_);
+                if (changed) { pushLog(row.ctc+"."+row.key+" override saved",0); ImGui::CloseCurrentPopup(); }
+                else pushLog("That value does not fit this component property",1);
+            }
+            auto_.registerWidget("property_override_apply");
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+        if (changed) break;
+    }
+}
+
 void App::drawPropertyGrid(float cardInner) {
     using theme::S;
     if (selectedThing_ < 0) return;
     const size_t idx = size_t(selectedThing_);
     const auto rows = doc_.propertiesOf(idx);
-    if (rows.empty()) return;
+    const auto knownProperties=doc_.knownComponentProperties(idx);
+    if (rows.empty() && doc_.ctcBlocksOf(idx).empty()) return;
     ImGui::Dummy(ImVec2(0, S(4)));
     theme::label("Properties");
+    const auto blocks=doc_.ctcBlocksOf(idx);
+    const bool lockAvailable=std::any_of(blocks.begin(),blocks.end(),[](const auto& block) { return lowerCopy(block)=="ctceditor"; });
+    bool locked=doc_.isLocked(idx);
+    ImGui::BeginDisabled(!lockAvailable);
+    if (ImGui::Checkbox("Locked in place (Ctrl+L)",&locked)) setSelectedLocked(locked);
+    auto_.registerWidget("check_locked_in_place");
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s",lockAvailable?"Applies to the selected objects. Protects transforms and deletion; properties remain editable.":"This object has no editor settings block in its file.");
     if (doc_.summary(idx).type == "AICreature") {
         // vanilla CTCDayOrNightOnlySupport "DayNightExclusive": the creature's section carries it
         int mode = editor::Document::splitDayNight(doc_.sectionOf(idx)).second;
@@ -414,13 +604,27 @@ void App::drawPropertyGrid(float cardInner) {
     const float keyW = cardInner * 0.45f;
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto& r = rows[i];
+        if (r.ctc=="CTCEditor" && lowerCopy(r.key)=="lockedinplace") continue;
+        bool listEntry=false;
+        for (const auto& list:editableLists) if (r.ctc==list.ctc && doc_.listEditable(idx,list.ctc,list.base)) {
+            const auto entries=doc_.listEntries(idx,list.ctc,list.base);
+            for (size_t n=0;n<entries.size();++n)
+                if (r.key==std::string(list.base)+"["+std::to_string(n)+"]") listEntry=true;
+        }
+        if (listEntry) continue;
         if (r.ctc != group) {
             group = r.ctc;
             const std::string title = (group.empty() ? std::string("General") : group) + "##pg" + group;
             open = ImGui::CollapsingHeader(title.c_str(), group.empty() || group == "CTCDoor" || group == "CTCChest" ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+            auto_.registerWidget(("property_group_"+group).c_str());
         }
         if (!open) continue;
         ImGui::PushID(int(i));
+        const std::string propertyBlock=lowerCopy(r.ctc),propertyKey=lowerCopy(r.key);
+        const bool protectedTransform=(propertyBlock.empty() && propertyKey=="objectscale") ||
+            ((propertyBlock=="ctcphysicsstandard" || propertyBlock=="ctcphysicsnavigator") &&
+             (propertyKey.rfind("position",0)==0 || propertyKey.rfind("rhsetforward",0)==0 || propertyKey.rfind("rhsetup",0)==0));
+        ImGui::BeginDisabled(doc_.isLocked(idx) && protectedTransform);
         // the vanilla dialog's caption and widget for this key, when recovered
         const editor::VanillaField* vf = editor::vanillaField(r.ctc, r.key);
         ImGui::AlignTextToFramePadding();
@@ -439,13 +643,15 @@ void App::drawPropertyGrid(float cardInner) {
             else ImGui::SetTooltip(".tng key %s (no vanilla dialog entry recovered)", r.key.c_str());
         }
         ImGui::SameLine(keyW);
-        ImGui::SetNextItemWidth(cardInner - keyW);
+        const bool canReset=std::any_of(knownProperties.begin(),knownProperties.end(),[&](const auto& field) {
+            return field.present && field.row.ctc==r.ctc && lowerCopy(field.row.key)==lowerCopy(r.key);
+        });
+        ImGui::SetNextItemWidth(cardInner - keyW - (canReset?S(55):0));
         std::string next;
         bool commit = false;
         const std::string vkind = vf ? vf->kind : "";
         int rgba[4];
         const bool isColour = std::sscanf(r.value.c_str(), "CRGBColour(%d,%d,%d,%d)", &rgba[0], &rgba[1], &rgba[2], &rgba[3]) == 4;
-        const bool isFamily = r.key.rfind("CreatureFamilies[", 0) == 0 && r.kind == K::String;
         if (isColour) {
             // CTCLight / CTCSpotLight Colour: the dialog's ColourRed/Green/Blue spins as one RGBA editor,
             // committed once the edit ends (one undo step, not one per frame of a drag)
@@ -461,20 +667,6 @@ void App::drawPropertyGrid(float cardInner) {
                 std::snprintf(buf, sizeof buf, "CRGBColour(%d,%d,%d,%d)", int(std::lround(col[0] * 255)), int(std::lround(col[1] * 255)), int(std::lround(col[2] * 255)), int(std::lround(col[3] * 255)));
                 next = buf; commit = true;
                 pendingColour_.live = false;
-            }
-        } else if (isFamily && ctx_.ready()) {
-            // a spawner's creature family slot: the CREATURE_GENERATION_FAMILY defs (vanilla DefIndexList)
-            const std::string cur = r.value.size() >= 2 ? r.value.substr(1, r.value.size() - 2) : r.value;
-            ImGui::SetNextItemWidth(cardInner - keyW - S(28));
-            if (ImGui::BeginCombo("##v", cur.c_str())) {
-                for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{"CREATURE_GENERATION_FAMILY"}))
-                    if (ImGui::Selectable(name.c_str(), name == cur)) { next = "\"" + name + "\""; commit = true; }
-                ImGui::EndCombo();
-            }
-            ImGui::SameLine(0, S(4));
-            const int slot = std::atoi(r.key.c_str() + std::strlen("CreatureFamilies["));
-            if (theme::ghostButton("x##famx", ImVec2(S(24), S(22)))) {
-                if (doc_.removeListEntry(idx, r.ctc, "CreatureFamilies", slot)) { pushLog("spawner: family " + cur + " removed", 0); ImGui::PopID(); break; }
             }
         } else if (vkind == "def" && vf->defType[0] && ctx_.ready() && r.kind != K::Bool) {
             // a def picker; the value keeps the file's spelling (quoted or bare), NULL = none
@@ -535,24 +727,24 @@ void App::drawPropertyGrid(float cardInner) {
                 commit = false;
             }
         }
-        // a spawner group ends with "add a family" (the list has no count field; entries stay contiguous)
-        const bool lastOfGroup = i + 1 == rows.size() || rows[i + 1].ctc != r.ctc;
-        if (lastOfGroup && ctx_.ready() && (r.ctc == "CTCCreatureGenerator" || r.ctc == "CTCDCreatureGenerator")) {
-            ImGui::SetNextItemWidth(cardInner);
-            if (ImGui::BeginCombo("##addfam", "+ add a creature family")) {
-                for (const auto& [name, type] : ctx_.definitions(std::vector<std::string>{"CREATURE_GENERATION_FAMILY"}))
-                    if (ImGui::Selectable(name.c_str())) {
-                        if (doc_.addListEntry(idx, r.ctc, "CreatureFamilies", "\"" + name + "\"")) pushLog("spawner: family " + name + " added", 0);
-                    }
-                ImGui::EndCombo();
-            }
-        }
         if (commit && next != r.value) {
-            if (doc_.setPropertyValue(idx, r.ctc, r.key, next)) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);
+            const bool updated=canReset?doc_.setComponentOverride(idx,r.ctc,r.key,next):doc_.setPropertyValue(idx,r.ctc,r.key,next);
+            if (updated) pushLog((r.ctc.empty() ? "" : r.ctc + ".") + r.key + " = " + next, 0);
             else pushLog("property: " + next + " does not fit " + r.key + (r.kind == K::String ? " (a quoted \"text\")" : r.kind == K::Int ? " (a whole number)" : r.kind == K::Float ? " (a number)" : ""), 1);
         }
+        if (canReset) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Reset")) {
+                if (doc_.resetComponentOverride(idx,r.ctc,r.key)) pushLog(r.ctc+"."+r.key+" saved override removed",0);
+            }
+            auto_.registerWidget(("property_reset_"+r.ctc+"_"+r.key).c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Remove the saved value and let the game supply it. Undo restores the exact original text.");
+        }
+        ImGui::EndDisabled();
         ImGui::PopID();
     }
+    drawListProperties(cardInner);
+    drawMissingComponentProperties(cardInner);
     ImGui::PopFont();
 }
 
@@ -786,6 +978,122 @@ void App::drawTrackLines(const ImVec2& origin, const ImVec2& size) {
     }
 }
 
+void App::refreshThingGlyphs(const ImVec2& origin, const ImVec2& size) {
+    thingGlyphs_.clear();
+    suppressedThingGlyphs_ = 0;
+    if (!editMode_ || !previewThings_ || !showThingGlyphs_ || !documentLoaded() || thingsStale()) return;
+    std::vector<bool> hasInstance(doc_.thingCount(), false);
+    for (size_t i = 0; i < renderer_.instanceCount(); ++i) {
+        const int thing = renderer_.instance(i).thing;
+        if (thing >= 0 && size_t(thing) < hasInstance.size()) hasInstance[size_t(thing)] = true;
+    }
+    const auto sections = doc_.thingSections();
+    for (size_t i = 0; i < hasInstance.size(); ++i) {
+        if (hasInstance[i] || doc_.isTrackNode(i) || thingHiddenBySection(sections, i)) continue;
+        editor::Frame f;
+        if (!doc_.frameOf(i, f)) continue;
+        const float p[3] = {f.pos[0], f.pos[2] + 0.3f, -f.pos[1]};
+        const float dx=p[0]-camera_.posX,dy=p[1]-camera_.posY,dz=p[2]-camera_.posZ;
+        if (int(i)!=selectedThing_ && dx*dx+dy*dy+dz*dz>75.0f*75.0f) {
+            ++suppressedThingGlyphs_;
+            continue;
+        }
+        float u, v;
+        if (!renderer_.projectVisible(p, u, v)) continue;
+        const auto s = doc_.summary(i);
+        const bool region = s.definition.find("REGION_") != std::string::npos;
+        const bool marker = s.type == "Marker" && !region;
+        const bool camera = s.definition.find("CAMERA") != std::string::npos;
+        const bool switchPoint = s.definition.find("SWITCH") != std::string::npos;
+        const bool nav = s.definition.find("NAV") != std::string::npos;
+        const ImU32 colour = marker ? IM_COL32(255, 194, 80, 240)
+            : region ? IM_COL32(105, 220, 255, 240) : IM_COL32(190, 150, 255, 240);
+        const char* role = region ? (s.definition.find("EXIT") != std::string::npos ? "Region exit"
+            : s.definition.find("ENTRANCE") != std::string::npos ? "Region entrance" : "Region point")
+            : marker ? "Marker / reference point" : camera ? "Camera point"
+            : switchPoint ? "Switch / trigger" : nav ? "Navigation point" : "Meshless game object";
+        const char symbol = region ? (s.definition.find("EXIT") != std::string::npos ? 'E' : 'I')
+            : marker ? 'M' : camera ? 'C' : switchPoint ? 'S' : nav ? 'N' : '?';
+        thingGlyphs_.push_back({int(i), ImVec2(origin.x + u * size.x, origin.y + v * size.y), colour, role, symbol});
+    }
+}
+
+int App::glyphThingAt(float px, float py) const {
+    int best = -1;
+    float bestD = theme::S(12.0f) * theme::S(12.0f);
+    for (const auto& glyph : thingGlyphs_) {
+        const float dx = glyph.screen.x - px, dy = glyph.screen.y - py;
+        const float d = dx * dx + dy * dy;
+        if (d < bestD) { best = glyph.thing; bestD = d; }
+    }
+    return best;
+}
+
+bool App::selectedGlyphScreen(float& x, float& y) const {
+    for (const auto& glyph : thingGlyphs_) if (glyph.thing == selectedThing_) {
+        x = glyph.screen.x; y = glyph.screen.y; return true;
+    }
+    return false;
+}
+
+void App::drawThingGlyphs() {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if ((editTab_ == 0 || editTab_ == 2) && thingGlyphs_.empty() && suppressedThingGlyphs_ && viewportSize_.x >= theme::S(330)) {
+        const ImVec2 p(viewportOrigin_.x + theme::S(12),viewportOrigin_.y + viewportSize_.y - theme::S(111) - viewportControlsLift());
+        dl->AddRectFilled(p,ImVec2(p.x+theme::S(306),p.y+theme::S(25)),IM_COL32(18,23,34,195),theme::S(4));
+        dl->AddText(ImVec2(p.x+theme::S(8),p.y+theme::S(5)),IM_COL32(220,205,255,245),
+                    "Edit points appear as you zoom in");
+    }
+    const float radius = theme::S(8.0f);
+    const int hovered = viewportHovered_ ? glyphThingAt(ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y) : -1;
+    for (const auto& glyph : thingGlyphs_) {
+        const bool selected = glyph.thing == selectedThing_ ||
+            std::find(renderer_.alsoSelected.begin(), renderer_.alsoSelected.end(), glyph.thing) != renderer_.alsoSelected.end();
+        const bool region = glyph.symbol == 'E' || glyph.symbol == 'I';
+        const bool marker = glyph.symbol == 'M';
+        const ImU32 outline = selected ? IM_COL32(255, 255, 255, 255) : IM_COL32(18, 23, 34, 230);
+        if (marker) {
+            const ImVec2 a(glyph.screen.x, glyph.screen.y - radius), b(glyph.screen.x + radius, glyph.screen.y);
+            const ImVec2 c(glyph.screen.x, glyph.screen.y + radius), d(glyph.screen.x - radius, glyph.screen.y);
+            dl->AddQuadFilled(a, b, c, d, glyph.colour);
+            dl->AddQuad(a, b, c, d, outline, theme::S(1.5f));
+        } else if (region) {
+            dl->AddCircleFilled(glyph.screen, radius, glyph.colour, 12);
+            dl->AddCircle(glyph.screen, radius, outline, 12, theme::S(1.5f));
+        } else {
+            dl->AddRectFilled(ImVec2(glyph.screen.x-radius, glyph.screen.y-radius), ImVec2(glyph.screen.x+radius, glyph.screen.y+radius), glyph.colour, theme::S(2));
+            dl->AddRect(ImVec2(glyph.screen.x-radius, glyph.screen.y-radius), ImVec2(glyph.screen.x+radius, glyph.screen.y+radius), outline, theme::S(2), 0, theme::S(1.5f));
+        }
+        char symbol[2] = {glyph.symbol, 0};
+        const ImVec2 textSize = ImGui::CalcTextSize(symbol);
+        dl->AddText(ImVec2(glyph.screen.x-textSize.x*0.5f, glyph.screen.y-textSize.y*0.5f), IM_COL32(18, 23, 34, 255), symbol);
+        if (glyph.thing == hovered || glyph.thing == selectedThing_) {
+            const auto s = doc_.summary(size_t(glyph.thing));
+            std::string label = glyph.role;
+            label += ": ";
+            label += s.scriptName.empty() ? s.definition : s.scriptName;
+            if (label.size() > 48) label.resize(45), label += "...";
+            const ImVec2 sz = ImGui::CalcTextSize(label.c_str());
+            const float x = std::clamp(glyph.screen.x + theme::S(13), viewportOrigin_.x + theme::S(4), viewportOrigin_.x + viewportSize_.x - sz.x - theme::S(12));
+            const float y = std::clamp(glyph.screen.y - sz.y*0.5f, viewportOrigin_.y + theme::S(4), viewportOrigin_.y + viewportSize_.y - sz.y - theme::S(8));
+            dl->AddRectFilled(ImVec2(x-theme::S(4),y-theme::S(2)), ImVec2(x+sz.x+theme::S(4),y+sz.y+theme::S(2)), IM_COL32(18,23,34,225), theme::S(3));
+            dl->AddText(ImVec2(x,y), IM_COL32(255,255,255,255), label.c_str());
+        }
+    }
+    if (!thingGlyphs_.empty() && viewportSize_.x >= theme::S(440)) {
+        const ImVec2 p(viewportOrigin_.x + theme::S(12), viewportOrigin_.y + viewportSize_.y - theme::S(125) - viewportControlsLift());
+        dl->AddRectFilled(p, ImVec2(p.x+theme::S(430), p.y+theme::S(37)), IM_COL32(18,23,34,195), theme::S(4));
+        dl->AddText(ImVec2(p.x+theme::S(7),p.y+theme::S(2)), IM_COL32(235,235,240,245), "Yellow M: marker   Cyan E/I: region exit/entrance");
+        dl->AddText(ImVec2(p.x+theme::S(7),p.y+theme::S(18)), IM_COL32(220,205,255,245), "Purple C/S/N: camera/switch/nav   ?: other point");
+    }
+    if (hovered >= 0) {
+        const auto& glyph = *std::find_if(thingGlyphs_.begin(), thingGlyphs_.end(), [hovered](const ThingGlyph& g) { return g.thing == hovered; });
+        const auto s = doc_.summary(size_t(hovered));
+        ImGui::SetTooltip("%s\n%s\nDefinition: %s\nClick to select and inspect properties", glyph.role,
+            s.scriptName.empty() ? "Unnamed" : s.scriptName.c_str(), s.definition.c_str());
+    }
+}
+
 void App::applySectionVisibility() {
     if (!documentLoaded()) return;
     const size_t n = renderer_.instanceCount();
@@ -831,6 +1139,85 @@ std::string App::thingLabel(size_t index) const {
     return s.scriptName.empty() ? s.definition : s.scriptName + " (" + s.definition + ")";
 }
 
+std::vector<App::RadiusField> App::selectedRadiusFields() const {
+    std::vector<RadiusField> out;
+    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || size_t(selectedThing_) >= doc_.thingCount() ||
+        thingHiddenBySection(doc_.thingSections(), size_t(selectedThing_))) return out;
+    for (const auto& row : doc_.propertiesOf(size_t(selectedThing_))) {
+        if (row.kind != editor::Document::PropertyRow::Kind::Int && row.kind != editor::Document::PropertyRow::Kind::Float) continue;
+        const std::string key = lowerCopy(row.key);
+        if (key.find("radius") == std::string::npos) continue;
+        char* end = nullptr;
+        const float radius = std::strtof(row.value.c_str(), &end);
+        if (end == row.value.c_str() || *end != '\0' || !std::isfinite(radius) || radius <= 0.0f || radius > 10000.0f) continue;
+        const auto* field = editor::vanillaField(row.ctc, row.key);
+        const std::string label = field ? field->label : row.key;
+        const ImU32 colour = key == "triggerradius" ? IM_COL32(120,200,210,225)
+            : key == "generationradius" ? IM_COL32(255,210,100,225)
+            : key == "selftriggerradius" ? IM_COL32(255,150,90,225)
+            : key == "messageradius" ? IM_COL32(200,155,255,225)
+            : key == "innerradius" ? IM_COL32(145,230,155,225)
+            : key == "outerradius" ? IM_COL32(120,175,255,225)
+            : IM_COL32(235,210,145,225);
+        out.push_back({label, radius, colour});
+        if (out.size() == 12) break;
+    }
+    return out;
+}
+
+void App::drawRadiusRings(const ImVec2& origin, const ImVec2& size) {
+    const auto fields = selectedRadiusFields();
+    if (fields.empty()) return;
+    editor::Frame f;
+    if (!doc_.frameOf(size_t(selectedThing_), f)) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float ground = doc_.terrainHeight(f.pos[0], f.pos[1]).value_or(f.pos[2]);
+    if (std::abs(f.pos[2] - ground) > 0.5f) {
+        const float top[3] = {f.pos[0], f.pos[2], -f.pos[1]};
+        const float base[3] = {f.pos[0], ground + 0.05f, -f.pos[1]};
+        float tu, tv, bu, bv;
+        if (renderer_.projectVisible(top, tu, tv) && renderer_.projectVisible(base, bu, bv)) {
+            const ImVec2 a(origin.x + tu * size.x, origin.y + tv * size.y);
+            const ImVec2 b(origin.x + bu * size.x, origin.y + bv * size.y);
+            dl->AddLine(a, b, fields.front().colour, theme::S(1.5f));
+            dl->AddCircleFilled(b, theme::S(3.0f), fields.front().colour);
+        }
+    }
+    constexpr int segments = 64;
+    for (size_t ring = 0; ring < fields.size(); ++ring) {
+        const auto& field = fields[ring];
+        ImVec2 first, previous, captionPoint;
+        bool firstVisible = false, previousVisible = false;
+        bool haveCaption = false;
+        for (int i = 0; i < segments; ++i) {
+            const float a = float(i) * (6.2831853f / float(segments));
+            const float fx = f.pos[0] + field.radius * std::cos(a);
+            const float fy = f.pos[1] + field.radius * std::sin(a);
+            const float p[3] = {fx, doc_.terrainHeight(fx, fy).value_or(f.pos[2]) + 0.05f, -fy};
+            float u, v;
+            const bool visible = renderer_.projectVisible(p, u, v);
+            if (visible) {
+                const ImVec2 point(origin.x + u * size.x, origin.y + v * size.y);
+                if (previousVisible) dl->AddLine(previous, point, field.colour, theme::S(2.0f));
+                if (i == 0) { first = point; firstVisible = true; }
+                if (!haveCaption || point.y < captionPoint.y) { captionPoint = point; haveCaption = true; }
+                previous = point;
+            }
+            previousVisible = visible;
+        }
+        if (firstVisible && previousVisible) dl->AddLine(previous, first, field.colour, theme::S(2.0f));
+        if (haveCaption) {
+            char caption[160];
+            std::snprintf(caption, sizeof caption, "%s %.2f", field.label.c_str(), field.radius);
+            const ImVec2 textSize = ImGui::CalcTextSize(caption);
+            const float x = std::clamp(captionPoint.x - textSize.x * 0.5f, origin.x + theme::S(4), origin.x + size.x - textSize.x - theme::S(4));
+            const float y = std::max(origin.y + theme::S(4), captionPoint.y - theme::S(18) - float(ring) * theme::S(14));
+            dl->AddRectFilled(ImVec2(x-theme::S(3),y-theme::S(2)), ImVec2(x+textSize.x+theme::S(3),y+textSize.y+theme::S(2)), IM_COL32(18,23,34,200), theme::S(3));
+            dl->AddText(ImVec2(x,y), field.colour, caption);
+        }
+    }
+}
+
 // Lines from the selected thing to the things it links to (the vanilla editor's
 // DrawAttachModeLines): owner, village, home, exit -> entrance ...
 void App::drawLinkLines(const ImVec2& origin, const ImVec2& size) {
@@ -847,6 +1234,7 @@ void App::drawLinkLines(const ImVec2& origin, const ImVec2& size) {
     };
     ImVec2 a;
     if (!screen(from, a)) return;
+    size_t labeled=0;
     for (const auto& l : doc_.linksOf(size_t(selectedThing_))) {
         editor::Frame to;
         ImVec2 b;
@@ -854,8 +1242,167 @@ void App::drawLinkLines(const ImVec2& origin, const ImVec2& size) {
         const ImU32 col = l.field == "VillageUID" ? IM_COL32(120, 200, 255, 220) : l.field == "EntranceConnectedToUID" ? IM_COL32(255, 170, 60, 220) : IM_COL32(200, 160, 255, 220);
         dl->AddLine(a, b, col, theme::S(2.0f));
         dl->AddCircleFilled(b, theme::S(4.0f), col);
-        dl->AddText(ImVec2((a.x + b.x) * 0.5f + theme::S(4), (a.y + b.y) * 0.5f), col, l.label.c_str());
+        if (labeled++<50)
+            dl->AddText(ImVec2((a.x + b.x) * 0.5f + theme::S(4), (a.y + b.y) * 0.5f), col, l.label.c_str());
     }
+    std::string activeField;
+    if (attachPick_.active)
+        for (const auto& mode:doc_.viableAttachModes(size_t(selectedThing_)))
+            if (mode.mode==attachPick_.mode) {activeField=mode.field;break;}
+    for (const auto& entry:doc_.linksInto(size_t(selectedThing_))) {
+        if (attachPick_.active && entry.link.field!=activeField) continue;
+        editor::Frame source;
+        ImVec2 b;
+        if (!doc_.frameOf(entry.source,source) || !screen(source,b)) continue;
+        const ImU32 col=entry.link.field=="VillageUID" ? IM_COL32(120,200,255,180) :
+                        entry.link.field=="HomeBuildingUID" ? IM_COL32(135,235,175,180) :
+                        entry.link.field=="WorkBuildingUID" ? IM_COL32(255,210,100,180) :
+                        IM_COL32(210,150,250,180);
+        dl->AddLine(b,a,col,theme::S(1.5f));
+        dl->AddCircleFilled(b,theme::S(3.0f),col);
+        if (labeled++<50)
+            dl->AddText(ImVec2((a.x+b.x)*0.5f+theme::S(4),(a.y+b.y)*0.5f),col,entry.link.label.c_str());
+    }
+    if (attachPick_.active && attachPick_.anchorUid==doc_.uidOf(size_t(selectedThing_))) {
+        const std::string banner="Attaching: "+attachPick_.caption+"  (Esc to stop)";
+        const ImVec2 pos(origin.x+theme::S(12),origin.y+theme::S(40));
+        dl->AddRectFilled(pos,ImVec2(pos.x+theme::S(340),pos.y+theme::S(28)),IM_COL32(20,25,35,210),theme::S(5));
+        dl->AddText(ImVec2(pos.x+theme::S(8),pos.y+theme::S(7)),IM_COL32(255,255,255,240),banner.c_str());
+    }
+}
+
+bool App::pickContextSelection(float u, float v) {
+    if (!documentLoaded() || thingsStale()) return false;
+    float origin[3], direction[3], distance;
+    renderer_.screenRay(u,v,origin,direction);
+    const int hit = renderer_.pick(origin,direction,distance);
+    const int glyph = glyphThingAt(viewportOrigin_.x + u * viewportSize_.x, viewportOrigin_.y + v * viewportSize_.y);
+    const int thing = glyph >= 0 ? glyph : hit < 0 ? -1 : renderer_.instance(size_t(hit)).thing;
+    linkPick_.active = false;
+    trackLinkPick_ = false;
+    attachPick_.active = false;
+    const auto selected = selectionIndices();
+    if (thing < 0 || std::find(selected.begin(),selected.end(),thing)==selected.end()) selectThing(thing);
+    // Context selection never executes a pending link or terrain/placement tool.
+    return true;
+}
+
+void App::drawSelectionActions(const ImVec2& origin, const ImVec2& size) {
+    using theme::S;
+    selectionPopupOpen_ = false;
+    selectionHeightPopupOpen_=false;
+    ownedDeletePopupOpen_=false;
+    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { selectionHeightRequested_=false; return; }
+    const bool selected = selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount();
+    if (selected && size.x >= S(280) && size.y >= S(220)) {
+        const ImVec2 cursor = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(origin.x+S(12),origin.y+S(100)));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg,theme::vec(theme::Bg0));
+        ImGui::BeginChild("##selection_tools",ImVec2(S(264),S(40)),ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PushFont(fontSmall_);
+        if (ImGui::Button("Focus",ImVec2(S(66),S(28)))) frameSelected();
+        auto_.registerWidget("btn_selection_focus"); ImGui::SameLine();
+        if (ImGui::Button("Properties",ImVec2(S(88),S(28)))) selectionInspectorOpen_ = true;
+        auto_.registerWidget("btn_selection_properties"); ImGui::SameLine();
+        if (ImGui::Button("Actions",ImVec2(S(74),S(28)))) selectionPopupRequested_ = true;
+        auto_.registerWidget("btn_selection_actions");
+        ImGui::PopFont(); ImGui::EndChild(); ImGui::PopStyleColor();
+        ImGui::SetCursorScreenPos(cursor);
+    }
+    if (selectionPopupRequested_) { ImGui::OpenPopup("##selection_actions"); selectionPopupRequested_ = false; }
+    if (ImGui::BeginPopup("##selection_actions")) {
+        selectionPopupOpen_ = true;
+        if (!selected) ImGui::TextDisabled("No object selected");
+        if (ImGui::MenuItem("Focus", "F", false,selected)) frameSelected();
+        auto_.registerWidget("menu_selection_focus");
+        if (ImGui::MenuItem("Properties", nullptr,false,selected)) selectionInspectorOpen_ = true;
+        auto_.registerWidget("menu_selection_properties");
+        if (ImGui::MenuItem("Show in palette",nullptr,false,selected && ctx_.ready() && !ctxFuture_.valid())) showSelectedInPalette();
+        auto_.registerWidget("menu_selection_palette");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Duplicate here", nullptr, false, selected)) duplicateSelected();
+        auto_.registerWidget("menu_selection_duplicate");
+        const bool mutableSelection=selected && !unlockedSelection(false).empty();
+        if (ImGui::MenuItem("Locked in place", "Ctrl+L",selected && doc_.isLocked(size_t(selectedThing_)),selected))
+            setSelectedLocked(!doc_.isLocked(size_t(selectedThing_)));
+        auto_.registerWidget("menu_selection_lock");
+        if (ImGui::MenuItem("Cycle surfaces below", "H",false,mutableSelection && !thingsStale())) cycleSelectedSurfaces();
+        auto_.registerWidget("menu_selection_surface");
+        if (ImGui::MenuItem("Set selection height...", "Ctrl+H",false,mutableSelection && doc_.hasTerrain())) requestSelectionHeight();
+        auto_.registerWidget("menu_selection_height");
+        if (ImGui::MenuItem("Drop to ground", "End",false,mutableSelection)) snapSelectedToGround();
+        auto_.registerWidget("menu_selection_drop");
+        if (ImGui::MenuItem("Delete", "Del",false,mutableSelection)) deleteSelected();
+        auto_.registerWidget("menu_selection_delete");
+        ImGui::EndPopup();
+    }
+    if (selectionHeightRequested_) { ImGui::OpenPopup("Set selection height"); selectionHeightRequested_=false; }
+    if (ImGui::BeginPopupModal("Set selection height",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        selectionHeightPopupOpen_=true;
+        std::vector<uint64_t> current;
+        for (int index:selectionIndices()) current.push_back(doc_.uidOf(size_t(index)));
+        const bool sameSelection=selectionHeightMap_==doc_.mapName() && current==selectionHeightUids_;
+        ImGui::TextUnformatted("Set unlocked objects to this absolute height.");
+        ImGui::TextUnformatted("Terrain is the minimum at each object's position.");
+        ImGui::SetNextItemWidth(S(240));
+        ImGui::InputFloat("Height",&selectionHeight_,0,0,"%.3f");
+        auto_.registerWidget("input_selection_height");
+        if (!sameSelection) ImGui::TextUnformatted("Selection changed. Cancel and reopen this control.");
+        ImGui::BeginDisabled(!sameSelection || !std::isfinite(selectionHeight_));
+        if (ImGui::Button("Apply height",ImVec2(S(120),0))) { setSelectedHeight(selectionHeight_); ImGui::CloseCurrentPopup(); }
+        auto_.registerWidget("btn_selection_height_apply");
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Cancel",ImVec2(S(120),0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        auto_.registerWidget("btn_selection_height_cancel");
+        ImGui::EndPopup();
+    }
+    if (ownedDeleteRequested_) { ImGui::OpenPopup("Delete owned things"); ownedDeleteRequested_=false; }
+    if (ImGui::IsPopupOpen("Delete owned things"))
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),ImGuiCond_Always,ImVec2(0.5f,0.5f));
+    if (ImGui::BeginPopupModal("Delete owned things",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ownedDeletePopupOpen_=true;
+        const bool same=ownedDeleteMap_==doc_.mapName() &&
+            ownedDeleteRevision_==doc_.revision() &&
+            ownedDeleteSelection_==selectionIndices();
+        ImGui::Text("The selection owns %zu other thing(s).",ownedDeleteCount_);
+        ImGui::TextWrapped("Delete them with their owner, or keep them and clear their owner links?");
+        if (!same) ImGui::TextUnformatted("Selection changed. Cancel and choose Delete again.");
+        ImGui::BeginDisabled(!same);
+        if (ImGui::Button("Delete all",ImVec2(S(110),0))) {
+            applyOwnedDelete(true); ImGui::CloseCurrentPopup();
+        }
+        auto_.registerWidget("btn_owned_delete_all");
+        ImGui::SameLine();
+        if (ImGui::Button("Only selection",ImVec2(S(130),0))) {
+            applyOwnedDelete(false); ImGui::CloseCurrentPopup();
+        }
+        auto_.registerWidget("btn_owned_delete_only");
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Cancel",ImVec2(S(90),0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            ownedDeleteRoots_.clear(); ownedDeleteSelection_.clear(); ownedDeleteCount_=0;
+            ImGui::CloseCurrentPopup();
+        }
+        auto_.registerWidget("btn_owned_delete_cancel");
+        ImGui::EndPopup();
+    }
+}
+
+void App::drawSelectionInspector() {
+    using theme::S;
+    if (!selectionInspectorOpen_) return;
+    const bool selected = selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount();
+    const std::string title = selected ? doc_.summary(size_t(selectedThing_)).definition : "No object selected";
+    if (!beginToolWindow("##selection_inspector","Object properties",title.c_str(),&selectionInspectorOpen_,S(440))) return;
+    if (selected) {
+        if (selectionCount()>1) ImGui::TextWrapped("%zu selected; showing the primary object's properties.",selectionCount());
+        ImGui::PushID("inspector");
+        drawPropertyGrid(toolWindowInner_);
+        ImGui::PopID();
+    } else theme::hint("Select an object in the viewport or object list.");
+    if (theme::ghostButton("Close properties",ImVec2(toolWindowInner_,S(28)))) selectionInspectorOpen_ = false;
+    auto_.registerWidget("btn_selection_inspector_close");
+    endToolWindow();
 }
 
 int App::pickAt(float u, float v) {
@@ -863,6 +1410,19 @@ int App::pickAt(float u, float v) {
     renderer_.screenRay(u, v, o, d);
     float t;
     const int inst = renderer_.pick(o, d, t);
+    const int glyph = glyphThingAt(viewportOrigin_.x + u * viewportSize_.x, viewportOrigin_.y + v * viewportSize_.y);
+    if (attachPick_.active) {
+        if (thingsStale()) { pushLog("attach: objects are reloading; click again in a moment",1); return -1; }
+        const auto anchor=doc_.indexOfUid(attachPick_.anchorUid);
+        if (!anchor) { attachPick_.active=false; return -1; }
+        const int clicked=glyph>=0 ? glyph : inst<0 ? -1 : renderer_.instance(size_t(inst)).thing;
+        if (clicked<0) return -1;
+        std::string error;
+        if (doc_.toggleAttachment(*anchor,attachPick_.mode,size_t(clicked),error))
+            pushLog("attach: " + attachPick_.caption + " toggled for " + thingLabel(size_t(clicked)),0);
+        else pushLog("attach: " + error,1);
+        return clicked;
+    }
     if (trackLinkPick_) {
         trackLinkPick_ = false;
         // the drawn node dots (a track node may have no mesh to pick), else a mesh hit
@@ -878,17 +1438,28 @@ int App::pickAt(float u, float v) {
         // link pick: the clicked thing becomes the target; the selection stays
         if (thingsStale()) { pushLog("link: the objects are reloading after an edit; click again in a moment", 1); return -1; }
         linkPick_.active = false;
-        const int target = inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
+        const int target = glyph >= 0 ? glyph : inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
         if (target < 0 || selectedThing_ < 0 || target == selectedThing_) { pushLog("link: no target picked", 1); return -1; }
         editor::Document::Link link;
         for (const auto& l : doc_.linksOf(size_t(selectedThing_))) if (l.ctc == linkPick_.ctc && l.field == linkPick_.field) link = l;
+        if (link.field == "FatherCreatureUID" || link.field == "MotherCreatureUID") {
+            const auto sex=ctx_.defIntField(doc_.summary(size_t(target)).definition,"Sex");
+            const int expected=link.field=="FatherCreatureUID" ? 1 : 2;
+            if (sex && *sex!=expected) {
+                pushLog("link: " + linkPick_.label + " needs a " +
+                        (expected==1 ? std::string("male") : std::string("female")) + " creature",1);
+                return -1;
+            }
+            if (!sex) pushLog("link: creature sex is unavailable in the definition; verify the parent",1);
+        }
         if (!doc_.linkTargetFits(link, size_t(target))) { pushLog("link: " + linkPick_.label + " wants " + link.wants + "; " + thingLabel(size_t(target)) + " is not one", 1); return -1; }
         if (doc_.setLink(size_t(selectedThing_), linkPick_.ctc, linkPick_.field, doc_.uidOf(size_t(target))))
             pushLog("link: " + linkPick_.label + " -> " + thingLabel(size_t(target)), 0);
+        else pushLog("link: could not set " + linkPick_.label + " (target or existing link is incompatible)", 1);
         return target;
     }
-    if (inst < 0) { if (!ImGui::GetIO().KeyCtrl) selectThing(-1); return -1; }
-    const int thing = renderer_.instance(size_t(inst)).thing;
+    if (inst < 0 && glyph < 0) { if (!ImGui::GetIO().KeyCtrl) selectThing(-1); return -1; }
+    const int thing = glyph >= 0 ? glyph : renderer_.instance(size_t(inst)).thing;
     if (ImGui::GetIO().KeyCtrl) toggleSelect(thing); else selectThing(thing);
     if (editTab_ == 1 || editTab_ == 3) setEditTab(0);
     return thing;
@@ -898,23 +1469,106 @@ bool App::frameOfSelected(editor::Frame& f) const {
     return documentLoaded() && selectedThing_ >= 0 && doc_.frameOf(size_t(selectedThing_), f);
 }
 
+std::vector<int> App::unlockedSelection(bool report) {
+    auto selected=selectionIndices();
+    const size_t before=selected.size();
+    std::erase_if(selected,[&](int index) { return doc_.isLocked(size_t(index)); });
+    if (report && selected.size()!=before) pushLog(std::to_string(before-selected.size())+" locked object(s) left in place",1);
+    return selected;
+}
+
+void App::setSelectedLocked(bool locked) {
+    if (!documentLoaded()) return;
+    if (gizmoWasUsing_ || ImGuizmo::IsUsing()) {
+        // A drag is only a preview until release. Cancel it before changing locks,
+        // including ImGuizmo's internal mouse capture, and restore saved frames.
+        ImGuizmo::Enable(false);
+        editor::Frame saved;
+        if (selectedThing_>=0 && doc_.frameOf(size_t(selectedThing_),saved)) applyFrame(selectedThing_,saved);
+        for (const auto& [index,start]:groupStart_)
+            if (doc_.frameOf(size_t(index),saved)) applyFrame(index,saved);
+        restoreOwnedPreview();
+        groupStart_.clear();
+        gizmoWasUsing_=false;
+    }
+    size_t unavailable=0;
+    doc_.beginBatch();
+    for (const int index:selectionIndices()) if (!doc_.setLocked(size_t(index),locked)) ++unavailable;
+    doc_.endBatch();
+    if (unavailable) pushLog(std::to_string(unavailable)+" object(s) have no editor settings block; lock unchanged",1);
+}
+
 void App::commitFrame(const editor::Frame& f) {
     if (!documentLoaded() || selectedThing_ < 0) return;
-    try { doc_.setFrame(size_t(selectedThing_), f); }
-    catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
+    if (doc_.isLocked(size_t(selectedThing_))) { pushLog("Object is locked in place",1); return; }
+    commitFramesWithOwned({{selectedThing_,f}});
+}
+
+namespace {
+bool frameChanged(const editor::Frame& a,const editor::Frame& b) {
+    for (int k=0;k<3;++k)
+        if (std::abs(a.pos[k]-b.pos[k])>0.0001f ||
+            std::abs(a.forward[k]-b.forward[k])>0.0001f ||
+            std::abs(a.up[k]-b.up[k])>0.0001f) return true;
+    return std::abs(a.scale-b.scale)>0.0001f;
+}
+}
+
+void App::previewOwned(const std::vector<std::pair<int,editor::Frame>>& roots) {
+    if (!moveOwned_) { restoreOwnedPreview(); return; }
+    std::vector<std::pair<size_t,editor::Frame>> edits;
+    for (const auto& [index,frame]:roots) if (index>=0 && !doc_.isLocked(size_t(index)))
+        edits.push_back({size_t(index),frame});
+    for (const auto& [index,frame]:doc_.ownedFramesAfter(edits)) {
+        applyFrame(int(index),frame);
+        ownedPreview_.insert(int(index));
+    }
+}
+
+void App::restoreOwnedPreview() {
+    for (int index:ownedPreview_) {
+        editor::Frame frame;
+        if (doc_.frameOf(size_t(index),frame)) applyFrame(index,frame);
+    }
+    ownedPreview_.clear();
+}
+
+void App::commitFramesWithOwned(const std::vector<std::pair<int,editor::Frame>>& roots) {
+    if (!documentLoaded()) return;
+    std::vector<std::pair<size_t,editor::Frame>> edits;
+    for (const auto& [index,frame]:roots) {
+        editor::Frame before;
+        if (index<0 || doc_.isLocked(size_t(index)) || !doc_.frameOf(size_t(index),before) || !frameChanged(before,frame)) continue;
+        edits.push_back({size_t(index),frame});
+    }
+    if (edits.empty()) { restoreOwnedPreview(); return; }
+    const auto owned=moveOwned_?doc_.ownedFramesAfter(edits):std::vector<std::pair<size_t,editor::Frame>>{};
+    doc_.beginBatch();
+    for (const auto& [index,frame]:edits) {
+        try { doc_.setFrame(index,frame); }
+        catch (const std::exception& error) { pushLog(std::string("editor: ")+error.what(),2); }
+    }
+    for (const auto& [index,frame]:owned) {
+        editor::Frame before;
+        if (!doc_.frameOf(index,before) || !frameChanged(before,frame)) continue;
+        try { doc_.setOwnedFrame(index,frame); }
+        catch (const std::exception& error) { pushLog(std::string("Owned move: ")+error.what(),2); }
+    }
+    doc_.endBatch();
+    ownedPreview_.clear();
 }
 
 void App::moveSelected(float dx, float dy, float dz) {
     editor::Frame f;
     if (!frameOfSelected(f)) return;
-    doc_.beginBatch();
-    for (const int i : selectionIndices()) {
+    std::vector<std::pair<int,editor::Frame>> edits;
+    for (const int i : unlockedSelection()) {
         editor::Frame g;
         if (!doc_.frameOf(size_t(i), g)) continue;
         g.pos[0] += dx; g.pos[1] += dy; g.pos[2] += dz;
-        try { doc_.setFrame(size_t(i), g); } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
+        edits.push_back({i,g});
     }
-    doc_.endBatch();
+    commitFramesWithOwned(edits);
 }
 
 void App::rotateSelected(float degrees) {
@@ -932,6 +1586,47 @@ void App::rotateSelected(float degrees) {
     for (int k = 0; k < 3; ++k) r[k] = w[k] * c + cr[k] * s + u[k] * dot * (1 - c);
     f.forward[0] = r[0]; f.forward[1] = r[1]; f.forward[2] = r[2];
     commitFrame(f);
+}
+
+void App::rotateSelectedWorld(float degrees,int axis) {
+    editor::Frame primary;
+    if (!frameOfSelected(primary) || axis<0 || axis>2) return;
+    const float angle=degrees*3.14159265f/180.0f;
+    const float c=std::cos(angle),s=std::sin(angle);
+    const int k=axis==0?2:axis==1?0:1;
+    auto turn=[&](float v[3]) {
+        const float x=v[0],y=v[1],z=v[2];
+        if(k==2) {v[0]=x*c-y*s;v[1]=x*s+y*c;}
+        else if(k==0) {v[1]=y*c-z*s;v[2]=y*s+z*c;}
+        else {v[0]=x*c+z*s;v[2]=-x*s+z*c;}
+    };
+    std::vector<std::pair<int,editor::Frame>> edits;
+    for(const int index:unlockedSelection()) {
+        editor::Frame frame;
+        if(!doc_.frameOf(size_t(index),frame)) continue;
+        float relative[3]={frame.pos[0]-primary.pos[0],frame.pos[1]-primary.pos[1],
+                           frame.pos[2]-primary.pos[2]};
+        turn(relative);turn(frame.forward);turn(frame.up);
+        for(int i=0;i<3;++i) frame.pos[i]=primary.pos[i]+relative[i];
+        edits.push_back({index,frame});
+    }
+    commitFramesWithOwned(edits);
+}
+
+void App::setSelectedFacing(float turns) {
+    editor::Frame primary;
+    if(!frameOfSelected(primary)) return;
+    const float angle=turns*2.0f*3.14159265f;
+    std::vector<std::pair<int,editor::Frame>> edits;
+    for(const int index:unlockedSelection()) {
+        editor::Frame frame;
+        if(!doc_.frameOf(size_t(index),frame)) continue;
+        frame.forward[0]=std::sin(angle);frame.forward[1]=std::cos(angle);
+        frame.forward[2]=0;
+        frame.up[0]=frame.up[1]=0;frame.up[2]=1;
+        edits.push_back({index,frame});
+    }
+    commitFramesWithOwned(edits);
 }
 
 void App::scaleSelected(float factor) {
@@ -1180,13 +1875,249 @@ void App::reseatThings() {
     pushLog("editor: " + std::to_string(n) + " object(s) re-seated on the sculpted ground", 0);
 }
 
+void App::requestSelectionHeight() {
+    editor::Frame frame;
+    if (!documentLoaded() || !doc_.hasTerrain() || !frameOfSelected(frame) || unlockedSelection(false).empty()) return;
+    if (ImGuizmo::IsUsing()) { pushLog("Set height: finish the current drag first",1); return; }
+    if (doc_.strokeActive()) { pushLog("Set height: finish the terrain stroke first",1); return; }
+    selectionHeight_=frame.pos[2];
+    selectionHeightMap_=doc_.mapName();
+    selectionHeightUids_.clear();
+    for (int index:selectionIndices()) selectionHeightUids_.push_back(doc_.uidOf(size_t(index)));
+    selectionHeightRequested_=true;
+}
+
+bool App::groundUnderCursor(float u, float v, float out[3]) const {
+    if (!documentLoaded() || !doc_.hasTerrain() || !std::isfinite(u) || !std::isfinite(v) ||
+        u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) return false;
+    float origin[3], direction[3], hit[3];
+    renderer_.screenRay(u, v, origin, direction);
+    if (!renderer_.rayTerrain(origin, direction, hit)) return false;
+    out[0] = hit[0]; out[1] = -hit[2];
+    out[2] = doc_.groundHeight(out[0], out[1]).value_or(hit[1]);
+    return std::isfinite(out[0]) && std::isfinite(out[1]) && std::isfinite(out[2]);
+}
+
+bool App::armCarry(float u, float v) {
+    if (!editMode_ || !documentLoaded() || thingsStale() || (gizmoOp_ != 0 && gizmoOp_ != 1)) return false;
+    float ground[3], origin[3], direction[3], distance;
+    if (!groundUnderCursor(u, v, ground)) return false;
+    renderer_.screenRay(u, v, origin, direction);
+    const int inst = renderer_.pick(origin, direction, distance);
+    const int glyph = glyphThingAt(viewportOrigin_.x + u * viewportSize_.x, viewportOrigin_.y + v * viewportSize_.y);
+    int hit = glyph >= 0 ? glyph : inst < 0 ? -1 : renderer_.instance(size_t(inst)).thing;
+    // A selected pivot is an explicit handle even when another mesh lies in
+    // front of it. This also lets a meshless selected thing be carried.
+    float pivotX = 0, pivotY = 0;
+    const float px = viewportOrigin_.x + u * viewportSize_.x, py = viewportOrigin_.y + v * viewportSize_.y;
+    if (selectedThing_ >= 0 && selectedPivotScreen(pivotX, pivotY) &&
+        std::hypot(px - pivotX, py - pivotY) <= theme::S(12.0f)) hit = selectedThing_;
+    if (hit < 0 || size_t(hit) >= doc_.thingCount() || doc_.isLocked(size_t(hit))) return false;
+    const auto selected = selectionIndices();
+    if (std::find(selected.begin(), selected.end(), hit) == selected.end()) selectThing(hit);
+    if (!frameOfSelected(carryStart_) || doc_.isLocked(size_t(selectedThing_))) return false;
+    carryFrame_ = carryStart_;
+    carryGrab_[0] = carryStart_.pos[0] - ground[0];
+    carryGrab_[1] = carryStart_.pos[1] - ground[1];
+    carryOffsetZ_ = carryStart_.pos[2] - doc_.groundHeight(carryStart_.pos[0], carryStart_.pos[1]).value_or(carryStart_.pos[2]);
+    carryGroup_.clear();
+    for (int index : selectionIndices()) {
+        if (index == selectedThing_ || doc_.isLocked(size_t(index))) continue;
+        editor::Frame frame;
+        if (doc_.frameOf(size_t(index), frame)) carryGroup_.push_back({index, frame});
+    }
+    carryArmed_ = true;
+    carrying_ = false;
+    carryCloneRequested_ = false;
+    return true;
+}
+
+bool App::startCloneCarry() {
+    if (!carryArmed_ || !carryCloneRequested_ || carryCloneActive_) return false;
+    carryOriginalUid_ = selectedUid_;
+    carryOriginalExtraUids_ = extraUids_;
+    const size_t before = doc_.thingCount();
+    doc_.beginBatch();
+    duplicateSelected();
+    if (doc_.thingCount() <= before || selectedUid_ == carryOriginalUid_ ||
+        selectedThing_ < 0 || doc_.isLocked(size_t(selectedThing_))) {
+        doc_.endBatch();
+        if (doc_.thingCount() > before) doc_.undo();
+        selectedUid_ = carryOriginalUid_;
+        extraUids_ = carryOriginalExtraUids_;
+        const auto original = doc_.indexOfUid(selectedUid_);
+        selectedThing_ = original ? int(*original) : -1;
+        renderer_.selectedThing = selectedThing_;
+        syncExtraSelection();
+        carryArmed_ = carryCloneRequested_ = false;
+        carryGroup_.clear();
+        return false;
+    }
+    carryCloneActive_ = true;
+    carryGroup_.clear();
+    for (int index : selectionIndices()) {
+        if (index == selectedThing_ || doc_.isLocked(size_t(index))) continue;
+        editor::Frame frame;
+        if (doc_.frameOf(size_t(index), frame)) carryGroup_.push_back({index, frame});
+    }
+    return true;
+}
+
+bool App::beginCursorCloneCarry() {
+    if (!documentLoaded() || !doc_.hasTerrain() || selectedThing_ < 0 ||
+        doc_.isLocked(size_t(selectedThing_)) || carryArmed_ ||
+        !frameOfSelected(carryStart_)) return false;
+    carryFrame_ = carryStart_;
+    carryGrab_[0] = carryGrab_[1] = 0.0f;
+    carryOffsetZ_ = carryStart_.pos[2] -
+        doc_.groundHeight(carryStart_.pos[0], carryStart_.pos[1]).value_or(carryStart_.pos[2]);
+    carryArmed_ = carryCloneRequested_ = true;
+    carrying_ = false;
+    if (!startCloneCarry()) return false;
+    carryCursorMode_ = true;
+    return true;
+}
+
+editor::Frame App::carriedExtra(const editor::Frame& start) const {
+    editor::Frame frame = start;
+    frame.pos[0] += carryFrame_.pos[0] - carryStart_.pos[0];
+    frame.pos[1] += carryFrame_.pos[1] - carryStart_.pos[1];
+    const auto oldGround = doc_.groundHeight(start.pos[0], start.pos[1]);
+    const auto newGround = doc_.groundHeight(frame.pos[0], frame.pos[1]);
+    frame.pos[2] = oldGround && newGround ? *newGround + (start.pos[2] - *oldGround)
+        : start.pos[2] + (carryFrame_.pos[2] - carryStart_.pos[2]);
+    return frame;
+}
+
+void App::updateCarry(float u, float v) {
+    if (!carryArmed_) return;
+    float ground[3];
+    if (!groundUnderCursor(u, v, ground)) return;
+    const float x = ground[0] + carryGrab_[0], y = ground[1] + carryGrab_[1];
+    const auto height = doc_.groundHeight(x, y);
+    if (!height) return;
+    carrying_ = true;
+    carryFrame_ = carryStart_;
+    carryFrame_.pos[0] = x; carryFrame_.pos[1] = y;
+    carryFrame_.pos[2] = placeFixedHeight_ ? forge::thingplacer::constantPlacementHeight(placeHeight_, *height) : *height + carryOffsetZ_;
+    applyFrame(selectedThing_, carryFrame_);
+    std::vector<std::pair<int,editor::Frame>> edits{{selectedThing_,carryFrame_}};
+    for (const auto& [index, start] : carryGroup_) {
+        const auto frame=carriedExtra(start);
+        applyFrame(index,frame);
+        edits.push_back({index,frame});
+    }
+    previewOwned(edits);
+}
+
+void App::cancelCarry() {
+    if (!carryArmed_) return;
+    if (carrying_) {
+        applyFrame(selectedThing_, carryStart_);
+        for (const auto& [index, start] : carryGroup_) applyFrame(index, start);
+    }
+    restoreOwnedPreview();
+    if (carryCloneActive_) {
+        doc_.endBatch();
+        doc_.undo();
+        selectedUid_ = carryOriginalUid_;
+        extraUids_ = carryOriginalExtraUids_;
+        const auto original = doc_.indexOfUid(selectedUid_);
+        selectedThing_ = original ? int(*original) : -1;
+        renderer_.selectedThing = selectedThing_;
+        syncExtraSelection();
+    }
+    carryArmed_ = carrying_ = false;
+    carryCloneRequested_ = carryCloneActive_ = carryCursorMode_ = false;
+    carryGroup_.clear();
+}
+
+void App::finishCarry() {
+    if (!carryArmed_) return;
+    if (carrying_) {
+        std::vector<std::pair<int,editor::Frame>> edits{{selectedThing_,carryFrame_}};
+        for (const auto& [index,start]:carryGroup_) edits.push_back({index,carriedExtra(start)});
+        commitFramesWithOwned(edits);
+    }
+    if (carryCloneActive_) doc_.endBatch();
+    carryArmed_ = carrying_ = false;
+    carryCloneRequested_ = carryCloneActive_ = carryCursorMode_ = false;
+    carryGroup_.clear();
+}
+
+void App::setSelectedHeight(float height) {
+    if (!documentLoaded() || !std::isfinite(height)) return;
+    if (ImGuizmo::IsUsing()) { pushLog("Set height: finish the current drag first",1); return; }
+    const auto selected=unlockedSelection();
+    if (selected.empty()) return;
+    size_t missed=0;
+    std::vector<std::pair<int,editor::Frame>> pending;
+    for (int index:selected) {
+        editor::Frame frame;
+        if (!doc_.frameOf(size_t(index),frame)) { ++missed; continue; }
+        const auto ground=doc_.groundHeight(frame.pos[0],frame.pos[1]);
+        if (!ground || !std::isfinite(*ground)) { ++missed; continue; }
+        frame.pos[2]=std::max(height,*ground);
+        pending.push_back({index,frame});
+    }
+    commitFramesWithOwned(pending);
+    if (missed) pushLog("No terrain or position for "+std::to_string(missed)+" selected object(s); height unchanged",1);
+}
+
+std::optional<float> App::surfaceBelow(const editor::Frame& frame,const std::vector<int>& excludedThings) const {
+    for (float position:frame.pos) if (!std::isfinite(position)) return std::nullopt;
+    const auto ground=doc_.groundHeight(frame.pos[0],frame.pos[1]);
+    // Native PaintInputCycleThingZOverSurfaces: wrap only when already on the
+    // terrain. Other positions start slightly below the current surface.
+    const float start=ground && std::abs(frame.pos[2]-*ground)<.0001f?*ground+150.f:frame.pos[2]-.1f;
+    std::optional<float> result;
+    if (ground && std::isfinite(*ground) && *ground<=start) result=*ground;
+    const float origin[3]={frame.pos[0],start,-frame.pos[1]},direction[3]={0,-1,0};
+    float distance=0;
+    if (renderer_.pick(origin,direction,distance,excludedThings,true)>=0 && std::isfinite(distance) && distance>=0) {
+        const float height=start-distance;
+        if (std::isfinite(height) && (!result || height>*result)) result=height;
+    }
+    return result;
+}
+
+void App::cycleSelectedSurfaces() {
+    if (!documentLoaded() || selectedThing_<0) return;
+    if (thingsStale()) { pushLog("Surface placement: wait for objects to finish loading",1); return; }
+    if (ImGuizmo::IsUsing()) { pushLog("Surface placement: finish the current drag first",1); return; }
+    const auto movable=unlockedSelection();
+    if (movable.empty()) return;
+    // Exclude selected roots and their owned descendants from the surface ray.
+    auto excluded=selectionIndices();
+    const std::vector<size_t> roots(excluded.begin(),excluded.end());
+    for (size_t child:doc_.ownedDescendants(roots)) excluded.push_back(int(child));
+    std::vector<std::pair<int,editor::Frame>> pending;
+    size_t missed=0;
+    for (int index:movable) {
+        editor::Frame frame;
+        if (!doc_.frameOf(size_t(index),frame)) continue;
+        const auto height=surfaceBelow(frame,excluded);
+        if (!height) { ++missed; continue; }
+        if (std::abs(frame.pos[2]-*height)<.00001f) continue;
+        frame.pos[2]=*height;
+        pending.push_back({index,frame});
+    }
+    commitFramesWithOwned(pending);
+    if (missed) pushLog("No visible surface below "+std::to_string(missed)+" selected object(s)",1);
+}
+
 void App::snapSelectedToGround() {
-    editor::Frame f;
-    if (!frameOfSelected(f)) return;
-    const auto h = doc_.groundHeight(f.pos[0], f.pos[1]);
-    if (!h) { pushLog("editor: no terrain height under the object", 1); return; }
-    f.pos[2] = *h;
-    commitFrame(f);
+    if (!documentLoaded()) return;
+    std::vector<std::pair<int,editor::Frame>> pending;
+    for (int index:unlockedSelection()) {
+        editor::Frame frame;
+        if (!doc_.frameOf(size_t(index),frame)) continue;
+        const auto height=doc_.groundHeight(frame.pos[0],frame.pos[1]);
+        if (!height) { pushLog("editor: no terrain height under the object",1); continue; }
+        if (frame.pos[2]==*height) continue;
+        frame.pos[2]=*height; pending.push_back({index,frame});
+    }
+    commitFramesWithOwned(pending);
 }
 
 void App::duplicateSelected() {
@@ -1194,40 +2125,61 @@ void App::duplicateSelected() {
     auto sel = selectionIndices();
     if (sel.empty()) return;
     try {
-        // highest index first so the insert-after-original does not shift the rest;
-        // the copies become the new selection (the primary's copy stays primary)
-        std::vector<int> order = sel;
-        std::sort(order.begin(), order.end(), std::greater<int>());
-        std::vector<uint64_t> copies;
-        uint64_t primaryCopy = 0;
-        doc_.beginBatch();
-        for (const int i : order) {
-            const size_t n = doc_.duplicate(size_t(i));
-            const uint64_t uid = doc_.uidOf(n);
-            if (i == selectedThing_) primaryCopy = uid; else copies.push_back(uid);
-        }
-        doc_.endBatch();
-        extraUids_ = copies;
+        std::vector<size_t> sources(sel.begin(),sel.end());
+        const auto copies=doc_.duplicateGroup(sources);
+        if (copies.empty()) return;
+        const uint64_t primaryCopy=doc_.uidOf(copies.front());
+        extraUids_.clear();
+        for (size_t i=1;i<copies.size();++i) extraUids_.push_back(doc_.uidOf(copies[i]));
         if (const auto p = doc_.indexOfUid(primaryCopy)) { selectedThing_ = int(*p); selectedUid_ = primaryCopy; renderer_.selectedThing = selectedThing_; }
         syncExtraSelection();
         pushLog(sel.size() == 1 ? "duplicated " + doc_.summary(size_t(selectedThing_)).definition : "duplicated " + std::to_string(sel.size()) + " objects", 0);
-    } catch (const std::exception& e) { doc_.endBatch(); pushLog(std::string("editor: ") + e.what(), 2); }
+    } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
 }
 
 void App::deleteSelected() {
     if (!documentLoaded() || selectedThing_ < 0) return;
-    auto sel = selectionIndices();
+    auto sel = unlockedSelection();
     if (sel.empty()) return;
-    const std::string what = sel.size() == 1 ? doc_.summary(size_t(selectedThing_)).definition : std::to_string(sel.size()) + " objects";
-    std::sort(sel.begin(), sel.end(), std::greater<int>());
+    ownedDeleteRoots_.assign(sel.begin(),sel.end());
+    ownedDeleteSelection_=selectionIndices();
+    ownedDeleteMap_=doc_.mapName();
+    ownedDeleteRevision_=doc_.revision();
+    ownedDeleteCount_=0;
+    const std::set<size_t> roots(ownedDeleteRoots_.begin(),ownedDeleteRoots_.end());
+    for (size_t child:doc_.ownedDescendants(ownedDeleteRoots_))
+        if (!roots.count(child)) ++ownedDeleteCount_;
+    if (ownedDeleteCount_) { ownedDeleteRequested_=true; return; }
+    applyOwnedDelete(true);
+}
+
+void App::applyOwnedDelete(bool includeOwned) {
+    if (!documentLoaded() || ownedDeleteMap_!=doc_.mapName() ||
+        ownedDeleteRevision_!=doc_.revision() || ownedDeleteSelection_!=selectionIndices()) {
+        pushLog("Delete: selection or document changed; choose Delete again",1);
+        return;
+    }
+    std::vector<uint64_t> survivors;
+    for (int index:ownedDeleteSelection_)
+        if (doc_.isLocked(size_t(index))) survivors.push_back(doc_.uidOf(size_t(index)));
+    const std::string what=ownedDeleteRoots_.size()==1
+        ?doc_.summary(ownedDeleteRoots_.front()).definition
+        :std::to_string(ownedDeleteRoots_.size())+" objects";
+    size_t clearedLinks=0;
     try {
-        doc_.beginBatch();
-        for (const int i : sel) doc_.remove(size_t(i));
-        doc_.endBatch();
-    } catch (const std::exception& e) { doc_.endBatch(); pushLog(std::string("editor: ") + e.what(), 2); return; }
+        doc_.removeWithOwned(ownedDeleteRoots_,includeOwned,&clearedLinks);
+    } catch (const std::exception& e) { pushLog(std::string("Delete: ") + e.what(),2); return; }
     selectedThing_ = -1; selectedUid_ = 0; renderer_.selectedThing = -1;
-    extraUids_.clear(); syncExtraSelection();
-    pushLog("removed " + what, 0);
+    extraUids_.clear();
+    if (!survivors.empty()) {
+        if (const auto index=doc_.indexOfUid(survivors.front())) selectThing(int(*index));
+        extraUids_.assign(survivors.begin()+1,survivors.end());
+    }
+    syncExtraSelection();
+    pushLog("removed " + what + (includeOwned && ownedDeleteCount_
+        ?" and "+std::to_string(ownedDeleteCount_)+" owned thing(s)":"")+
+        (clearedLinks?"; cleared "+std::to_string(clearedLinks)+" incoming link(s)":""),0);
+    ownedDeleteRoots_.clear(); ownedDeleteSelection_.clear(); ownedDeleteCount_=0;
 }
 
 void App::editUndo() { if (documentLoaded()) doc_.undo(); }
@@ -1242,9 +2194,24 @@ void App::frameSelected() {
         if (!renderer_.instanceBounds(i, ic, ir)) continue;
         c[0] += ic[0]; c[1] += ic[1]; c[2] += ic[2]; r = std::max(r, ir); ++n;
     }
-    if (!n) { frameMap(); return; }
+    if (!n) {
+        editor::Frame f;
+        if (doc_.frameOf(size_t(selectedThing_), f)) camera_.lookAt(f.pos[0], f.pos[2], -f.pos[1], camera_.yaw, std::max(camera_.pitch, 0.35f), 8.0f);
+        else frameMap();
+        return;
+    }
     c[0] /= n; c[1] /= n; c[2] /= n;
     camera_.lookAt(c[0], c[1], c[2], camera_.yaw, std::max(camera_.pitch, 0.35f), std::max(r * 4.0f, 8.0f));
+}
+
+void App::showSelectedInPalette() {
+    if (!documentLoaded() || selectedThing_<0 || size_t(selectedThing_)>=doc_.thingCount() || !ctx_.ready() || ctxFuture_.valid()) return;
+    if (defList_.empty()) defList_=ctx_.groupedDefinitions({"OBJECT","BUILDING","CREATURE"});
+    const auto name=doc_.summary(size_t(selectedThing_)).definition;
+    const auto found=std::find_if(defList_.begin(),defList_.end(),[&](const auto& definition) { return definition.name==name; });
+    if (found==defList_.end()) { pushLog("No placement definition for "+name,1); return; }
+    placeDef_=name; revealDef_=name; defSearch_[0]=0;
+    setEditTab(found->type=="CREATURE"?2:0);
 }
 
 // The placement palette: with an empty search, a tree of type -> THING_GROUP -> def
@@ -1253,6 +2220,9 @@ void App::frameSelected() {
 void App::drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height) {
     using theme::S;
     if (defList_.empty() && ctx_.ready()) defList_ = ctx_.groupedDefinitions({"OBJECT", "BUILDING", "CREATURE"});
+    const auto reveal=std::find_if(defList_.begin(),defList_.end(),[&](const auto& d) { return d.name==revealDef_; });
+    const std::string revealType=reveal==defList_.end()?"":reveal->type;
+    const std::string revealGroup=reveal==defList_.end()?"":reveal->group;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild(id, ImVec2(width, height), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
@@ -1263,6 +2233,8 @@ void App::drawDefPalette(const char* id, const std::vector<std::string>& types, 
         const ImVec2 rowPos = ImGui::GetCursorScreenPos();
         if (ImGui::Selectable((std::string("##def") + d.name).c_str(), d.name == placeDef_, 0, ImVec2(0, rowH))) placeDef_ = d.name;
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) { placeDef_ = d.name; placeDefinition(d.name); }
+        if (d.name==placeDef_) auto_.registerWidget("palette_selected_definition");
+        if (d.name==revealDef_) { ImGui::SetScrollHereY(.5f); revealDef_.clear(); }
         // thumbnail + name drawn over the row; rows off screen are not decoded
         if (ImGui::IsItemVisible()) {
             bool pending = false;
@@ -1304,6 +2276,7 @@ void App::drawDefPalette(const char* id, const std::vector<std::string>& types, 
             while (typeEnd < defList_.size() && defList_[typeEnd].type == type) ++typeEnd;
             if (!wanted(type)) { i = typeEnd; continue; }
             char head[96]; std::snprintf(head, sizeof head, "%s  (%zu)", type.c_str(), typeEnd - i);
+            if (!oneType && type==revealType) ImGui::SetNextItemOpen(true);
             const bool typeOpen = oneType || ImGui::TreeNodeEx((std::string(head) + "##t" + type).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth);
             if (typeOpen) {
                 for (size_t j = i; j < typeEnd;) {
@@ -1313,6 +2286,7 @@ void App::drawDefPalette(const char* id, const std::vector<std::string>& types, 
                     char gh[128]; std::snprintf(gh, sizeof gh, "%s  (%zu)##g%s%s", groupLabel(group).c_str(), groupEnd - j, type.c_str(), group.c_str());
                     const bool old = group.find("DO_NOT_USE") != std::string::npos;
                     if (old) ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Faint));
+                    if (type==revealType && group==revealGroup) ImGui::SetNextItemOpen(true);
                     const bool open = ImGui::TreeNodeEx(gh, ImGuiTreeNodeFlags_SpanAvailWidth);
                     if (old) ImGui::PopStyleColor();
                     if (open) {
@@ -1424,17 +2398,23 @@ bool App::thingHiddenBySection(const std::vector<std::string>& per, size_t t) co
 }
 
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
+    float focus[3]; camera_.focus(focus);
+    const float position[3] = {focus[0], -focus[2], focus[1]};
+    return placeDefinitionAt(def, position, scriptName);
+}
+
+bool App::placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
+    if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2])) return false;
     uint32_t modelId = 0;
     const int code = ctx_.graphicModelId(def, modelId);
     if (code == 0) { pushLog("editor: " + def + " is not in game.bin", 2); return false; }
-    if (code < 0 || modelId == 0) pushLog("editor: " + def + " has no mesh; it will be placed but not drawn", 1);
-    float focus[3]; camera_.focus(focus);
+    if (code < 0 || modelId == 0) pushLog("editor: " + def + " has no mesh; it will appear as an editor marker", 1);
     forge::thingplacer::Placement p;
     p.definitionType = def;
     p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
     p.scriptName = scriptName;
-    p.position = {focus[0], -focus[2], focus[1]};
+    p.position = {position[0], position[1], position[2]};
     p.player = ownerFor(def);
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
     if (placeFixedHeight_) p.position.z = forge::thingplacer::constantPlacementHeight(placeHeight_, p.position.z);
@@ -1537,10 +2517,13 @@ void App::syncTerrain() {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
     if (doc_.themeRevision() != syncedThemeRev_) { syncedThemeRev_ = doc_.themeRevision(); if (syncedThemeRev_ > 1 || doc_.themesDirty()) startThemeRebake(); }
     if (rebakePending_ && !previewFuture_.valid()) startThemeRebake();
-    if (doc_.terrainRevision() == syncedTerrainRev_) return;
-    const auto& t = doc_.liveTerrain();
-    if (renderer_.updateTerrain(t.heights.data(), t.walkable.data(), doc_.cellsX(), doc_.cellsY()))
-        syncedTerrainRev_ = doc_.terrainRevision();
+    if (doc_.terrainRevision() != syncedTerrainRev_) {
+        const auto& t = doc_.liveTerrain();
+        if (renderer_.updateTerrain(t.heights.data(), t.walkable.data(), doc_.cellsX(), doc_.cellsY()))
+            syncedTerrainRev_ = doc_.terrainRevision();
+    }
+    if (!doc_.strokeActive() && previewFoliage_ && foliageLoaded() &&
+        foliageTerrainRev_ != doc_.terrainRevision() && !foliageFuture_.valid()) startFoliageLoad(true);
 }
 
 // A picker over the map's LEV ground-theme palette (named slots only).
@@ -2341,6 +3324,7 @@ void App::startTerrainDeploy() {
     const std::string root = saveRoot();
     const auto ctxHold = std::make_shared<const te::Context>(ctx_);   // the library lives in it; a reload must not free it
     const forge::terraintex::ThemeLibrary* lib = ctxHold->themeLibrary();
+    if (doc_.dirty()) pushLog("Terrain write leaves placed-object edits in the draft. Use the object write below to update their positions in the game.", 1);
     pushLog(std::string("terrain: writing .lev") + (writesLoose() ? "" : ", FinalAlbion.wad") + " and re-baking the FinalAlbion_RT.stb chunk...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
@@ -2359,7 +3343,10 @@ void App::startTerrainDeploy() {
 void App::editorShortcuts() {
     if (!editMode_ || !documentLoaded()) return;
     ImGuiIO& io = ImGui::GetIO();
+    if (carryArmed_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { cancelCarry(); clickArmed_ = false; return; }
     if (ImGui::IsAnyItemActive() || io.WantTextInput) return;
+    if (ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
+    if (selectionInspectorOpen_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { selectionInspectorOpen_ = false; return; }
     const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     if (!rmb) {
         if (ImGui::IsKeyPressed(ImGuiKey_Q)) gizmoOp_ = 0;
@@ -2378,24 +3365,82 @@ void App::editorShortcuts() {
             if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) brushRadius_ = std::min(60.0f, brushRadius_ + 1.0f);
         }
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedThing_ >= 0) deleteSelected();
+    if (io.KeyCtrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_L,false) && selectedThing_>=0)
+        setSelectedLocked(!doc_.isLocked(size_t(selectedThing_)));
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+        if (gizmoOp_ == 4 && terrainMode_ == 14 && clipRectValid_ && clipRectMap_ == doc_.mapName()) deleteRegionThings();
+        else if (selectedThing_ >= 0) deleteSelected();
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_V) && !io.KeyCtrl) showFirstInvalid();   // vanilla: find the invalid thing
     // vanilla saves with Ctrl+S / F6: here the draft (the loose .tng); writing into the game stays a confirmed button
     if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && doc_.dirty()) saveDocument();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) editRedo();
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) duplicateSelected();
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) {
+        if (!doc_.hasTerrain() || doc_.isLocked(size_t(selectedThing_))) duplicateSelected();
+        else if (!beginCursorCloneCarry()) pushLog("Clone carry: try again after objects finish loading", 1);
+    }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C) && selectedThing_ >= 0) copySelection();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) pasteClipboard();
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && (linkPick_.active || trackLinkPick_)) { linkPick_.active = false; trackLinkPick_ = false; }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && (linkPick_.active || trackLinkPick_ || attachPick_.active)) {
+        linkPick_.active = false; trackLinkPick_ = false; attachPick_.active = false;
+    }
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && selectedThing_ >= 0) selectThing(-1);
     if (ImGui::IsKeyPressed(ImGuiKey_End) && selectedThing_ >= 0) snapSelectedToGround();
+    if (!rmb && !io.KeyCtrl && !io.KeyAlt && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_H,false) && selectedThing_>=0) cycleSelectedSurfaces();
+    if (!rmb && io.KeyCtrl && !io.KeyAlt && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_H,false) && selectedThing_>=0) requestSelectionHeight();
+    if (!rmb && !carryArmed_ && !gizmoWasUsing_ && selectedThing_>=0 && gizmoOp_!=4) {
+        const bool left=ImGui::IsKeyPressed(ImGuiKey_LeftArrow,true);
+        const bool right=ImGui::IsKeyPressed(ImGuiKey_RightArrow,true);
+        const bool up=ImGui::IsKeyPressed(ImGuiKey_UpArrow,true);
+        const bool down=ImGui::IsKeyPressed(ImGuiKey_DownArrow,true);
+        if(!io.KeyAlt) {
+            if(io.KeyCtrl) {
+                if(up) setSelectedFacing(0);
+                else if(down) setSelectedFacing(0.5f);
+                else if(right) setSelectedFacing(0.25f);
+                else if(left) setSelectedFacing(0.75f);
+            } else if(left || right || up || down) {
+                const float step=io.KeyShift?0.5f:0.05f;
+                moveSelected((right?step:0)-(left?step:0),
+                             (up?step:0)-(down?step:0),0);
+            }
+            const float height=io.KeyShift?0.01f:0.2f;
+            if(ImGui::IsKeyPressed(ImGuiKey_Comma,true) ||
+               ImGui::IsKeyPressed(ImGuiKey_PageDown,true)) moveSelected(0,0,-height);
+            if(ImGui::IsKeyPressed(ImGuiKey_Period,true) ||
+               ImGui::IsKeyPressed(ImGuiKey_PageUp,true)) moveSelected(0,0,height);
+        }
+        if(!io.KeyCtrl) {
+            const bool minus=ImGui::IsKeyPressed(ImGuiKey_LeftBracket,true);
+            const bool plus=ImGui::IsKeyPressed(ImGuiKey_RightBracket,true);
+            if(minus!=plus) rotateSelectedWorld(plus?2.0f:-2.0f,
+                                                 io.KeyAlt?1:io.KeyShift?2:0);
+        }
+        if(!io.KeyCtrl && !io.KeyAlt && viewportHovered_ &&
+           ImGui::IsKeyPressed(ImGuiKey_A,false) && viewportSize_.x>0 && viewportSize_.y>0) {
+            editor::Frame frame;
+            float point[3];
+            const float u=(io.MousePos.x-viewportOrigin_.x)/viewportSize_.x;
+            const float v=(io.MousePos.y-viewportOrigin_.y)/viewportSize_.y;
+            if(frameOfSelected(frame) && groundUnderCursor(u,v,point)) {
+                const float dx=point[0]-frame.pos[0],dy=point[1]-frame.pos[1];
+                if(std::hypot(dx,dy)>0.001f)
+                    setSelectedFacing(std::atan2(dx,dy)/(2.0f*3.14159265f));
+            }
+        }
+    }
     // vanilla O: the selection takes the owner picked in Add an object (Auto = Neutral)
     if (!io.KeyCtrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_O, false) && selectedThing_ >= 0) applyOwnerToSelection();
 }
 
 void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
     if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
+    // ImGuizmo's viewport-rectangle fallback can see clicks behind a modal.
+    // Do not start a drag through a popup; let an existing drag finish normally.
+    if (!gizmoWasUsing_ && ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) { ImGuizmo::Enable(false); return; }
+    if (doc_.isLocked(size_t(selectedThing_))) { ImGuizmo::Enable(false); gizmoWasUsing_=false; return; }
+    ImGuizmo::Enable(true);
     editor::Frame f;
     if (!frameOfSelected(f)) return;
     if (!gizmoWasUsing_) {
@@ -2403,7 +3448,7 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
         gizmoStart_ = f;
         groupStart_.clear();
         for (const int i : selectionIndices()) {
-            if (i == selectedThing_) continue;
+            if (i == selectedThing_ || doc_.isLocked(size_t(i))) continue;
             editor::Frame g;
             if (doc_.frameOf(size_t(i), g)) groupStart_.push_back({i, g});
         }
@@ -2435,17 +3480,18 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
             if (gizmoOp_ == 3) { nf.pos[0] = gizmoFrame_.pos[0]; nf.pos[1] = gizmoFrame_.pos[1]; nf.pos[2] = gizmoFrame_.pos[2]; }
             gizmoFrame_ = nf;
             applyFrame(selectedThing_, gizmoFrame_);
-            for (const auto& [i, g] : groupStart_) applyFrame(i, groupFrame(g));
+            std::vector<std::pair<int,editor::Frame>> edits{{selectedThing_,gizmoFrame_}};
+            for (const auto& [i, g] : groupStart_) {
+                const auto frame=groupFrame(g);
+                applyFrame(i,frame);
+                edits.push_back({i,frame});
+            }
+            if (gizmoOp_!=3) previewOwned(edits);
         }
     } else if (gizmoWasUsing_) {
-        // one undo step per drag, the whole group
-        doc_.beginBatch();
-        commitFrame(gizmoFrame_);
-        for (const auto& [i, g] : groupStart_) {
-            try { doc_.setFrame(size_t(i), groupFrame(g)); }
-            catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); }
-        }
-        doc_.endBatch();
+        std::vector<std::pair<int,editor::Frame>> edits{{selectedThing_,gizmoFrame_}};
+        for (const auto& [i,g]:groupStart_) edits.push_back({i,groupFrame(g)});
+        commitFramesWithOwned(edits);
     }
     gizmoWasUsing_ = using_;
 }
@@ -2470,7 +3516,7 @@ editor::Frame App::groupFrame(const editor::Frame& start) const {
 // ------------------------------------------------------------ unsaved-changes prompt
 
 void App::drawUnsavedPrompt() {
-    if (pendingSelect_.empty()) return;
+    if (pendingSelect_.empty() && !closePending_) return;
     using theme::S;
     ImGui::OpenPopup("Unsaved changes");
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -2483,26 +3529,67 @@ void App::drawUnsavedPrompt() {
         ImGui::TextUnformatted("Unsaved changes");
         ImGui::PopFont();
         ImGui::PushTextWrapPos(S(390));
-        ImGui::TextColored(theme::vec(theme::Muted), "%s has edits that have not been written (%s). Switching maps drops them.",
-                           cur ? cur->name.c_str() : selectedName_.c_str(),
-                           doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
+        if (closePending_) {
+            if (hasUnsavedEdits())
+                ImGui::TextColored(theme::vec(theme::Muted), "%s has edits that have not been written (%s). Closing FableForge drops them.",
+                                   cur ? cur->name.c_str() : selectedName_.c_str(),
+                                   doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
+            if (worldPendingCount())
+                ImGui::TextColored(theme::vec(theme::Muted), "%zu pending world change%s not written.", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
+            if (!dialogueStaged_.empty())
+                ImGui::TextColored(theme::vec(theme::Muted),
+                    "%zu lip sync line edit%s staged. Export them from Assets > Dialogue before closing.",
+                    dialogueStaged_.size(),dialogueStaged_.size()==1?" is":"s are");
+            if (worldFuture_.valid()) ImGui::TextColored(theme::vec(theme::Muted), "World write in progress; waiting for its result.");
+        } else {
+            ImGui::TextColored(theme::vec(theme::Muted), "%s has edits that have not been written (%s). Switching maps drops them.",
+                               cur ? cur->name.c_str() : selectedName_.c_str(),
+                               doc_.dirty() && doc_.hasTerrain() && doc_.terrainDirty() ? "objects and terrain" : doc_.dirty() ? "objects" : "terrain");
+        }
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(390) - 2 * S(6)) / 3.0f;
-        if (theme::primaryButton("Save draft", ImVec2(w, S(32)), doc_.dirty())) { saveDocument(); if (!hasUnsavedEdits()) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); } }
+        const bool canSave = closePending_ ? (doc_.dirty() || worldPendingCount() > 0) && !worldFuture_.valid() : doc_.dirty();
+        const bool reviewDialogue=closePending_ && !canSave && !dialogueStaged_.empty() &&
+            !worldFuture_.valid();
+        if (theme::primaryButton(reviewDialogue ? "Review dialogue" :
+                                 closePending_ ? "Save work" : "Save draft",
+                                 ImVec2(w, S(32)), canSave || reviewDialogue)) {
+            if(reviewDialogue) {
+                closePending_=false;
+                setTexturesMode(true);
+                setAssetsTab(4);
+            } else
+            if (closePending_) {
+                const bool draftSaved = !doc_.dirty() || saveDocument();
+                if (draftSaved && worldPendingCount() > 0) {
+                    worldApply();
+                    closeSaveWaiting_ = worldFuture_.valid();
+                }
+                if (draftSaved && !hasUnsavedEdits() && worldPendingCount() == 0 &&
+                    !worldFuture_.valid() && dialogueStaged_.empty()) quit_ = true;
+            } else if (saveDocument() && !hasUnsavedEdits()) {
+                const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t);
+            }
+        }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        if (theme::dangerButton("Discard", ImVec2(w, S(32)))) { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
+        ImGui::BeginDisabled(worldFuture_.valid());
+        if (theme::dangerButton("Discard", ImVec2(w, S(32)))) {
+            if (closePending_) quit_ = true;
+            else { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
+        }
+        ImGui::EndDisabled();
         auto_.registerWidget("btn_unsaved_discard");
         ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Cancel", ImVec2(w, S(32)))) pendingSelect_.clear();
+        if (theme::ghostButton("Cancel", ImVec2(w, S(32)))) { pendingSelect_.clear(); closePending_ = false; closeSaveWaiting_ = false; }
         auto_.registerWidget("btn_unsaved_cancel");
         if (doc_.hasTerrain() && doc_.terrainDirty()) {
             ImGui::PushFont(fontSmall_);
             theme::hint("Terrain edits are written with 'Save terrain into the game' in the Edit panel.");
             ImGui::PopFont();
         }
-        if (pendingSelect_.empty()) ImGui::CloseCurrentPopup();
+        if (pendingSelect_.empty() && !closePending_) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar();
@@ -2527,7 +3614,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     theme::toggle("Snap (0.5 units / 15 deg / 0.1x)", &gizmoSnap_);
     auto_.registerWidget("toggle_snap");
     ImGui::PushFont(fontSmall_);
-    theme::hintMore("Click to select; drag the gizmo or type values. Del deletes, Ctrl+D duplicates, End drops to the ground.", "Click an object to select it. Drag the gizmo, or type values below. Del removes, Ctrl+D duplicates, Ctrl+Z/Y undo/redo, F frames, End drops to the ground.");
+    theme::hintMore("Click to select; drag a thing on the ground. Shift+click places the palette pick.", "Click an object to select it. Drag it across the ground or use the gizmo. Arrows nudge, Ctrl+arrows face, [ and ] rotate, comma/period change height, A faces the pointer. Ctrl+Shift+drag clones and carries. Ctrl+D clones and follows the cursor; click ground to drop, Esc to cancel. Shift+click the ground places the picked definition. Del removes, Ctrl+Z/Y undo/redo, F frames, End drops to the ground.");
     ImGui::PopFont();
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
@@ -2590,6 +3677,17 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 theme::hint(terrainMode_ == 14 ? "Drag a rectangle on the ground to copy its heights, ground themes and objects (the vanilla Copy and paste dialog). The copy survives switching maps."
                                                : "Click to paste with the copy's first corner there; R turns it 90 degrees. Themes are matched by name (a missing one takes a free palette slot). One undo step per paste.");
                 ImGui::PopFont();
+                if (terrainMode_ == 14 && clipRectValid_ && clipRectMap_ == doc_.mapName()) {
+                    const auto inside = doc_.thingsInRect(clipRect_[0], clipRect_[1], clipRect_[2], clipRect_[3]);
+                    const size_t locked = std::count_if(inside.begin(), inside.end(), [&](size_t i) { return doc_.isLocked(i); });
+                    const size_t removable = inside.size() - locked;
+                    const std::string caption = "Delete " + std::to_string(removable) + " object" + (removable == 1 ? "" : "s") + " inside (Del)";
+                    ImGui::BeginDisabled(removable == 0);
+                    if (theme::dangerButton(caption.c_str(), ImVec2(cardInner, S(28)))) deleteRegionThings();
+                    ImGui::EndDisabled();
+                    auto_.registerWidget("btn_clip_delete");
+                    if (locked) ImGui::TextDisabled("%zu locked object%s kept", locked, locked == 1 ? "" : "s");
+                }
                 drawBrushLibrary(cardInner);
             }
         }
@@ -2811,9 +3909,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         // ---- the vanilla Fractals dialog (CFractalDialog), ported generator
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##fractal", inner);
-        if (theme::ghostButton(fractalOpen_ ? "Fractal terrain  (open)" : "Fractal terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
+        if (theme::ghostButton(fractalOpen_ ? "Generate terrain  (open)" : "Generate terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
         auto_.registerWidget("btn_fractal_toggle");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The vanilla editor's fractal generator: set this map's ground to a hybrid multifractal.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Create hills and valleys from a repeatable pattern. Preview the result before replacing this map's ground heights. Based on the vanilla Fractals tool.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
         drawFitCard(pad, inner, cardInner);
@@ -2821,6 +3919,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
 
     if (editTab_ == 2) {
         // creatures by their GroupDef (G_CREATURES_BANDIT, _FAE, _HOSTILE ...), like the vanilla Things tree
+        const bool revealPalette=!revealDef_.empty();
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##actordefs", inner);
         theme::label("Creatures by group");
@@ -2835,10 +3934,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         auto_.registerWidget("btn_place_actor");
         drawRuleNotice("creature", cardInner);
         theme::endCard();
+        if (revealPalette) ImGui::SetScrollHereY(.5f);
         ImGui::Dummy(ImVec2(0, S(8)));
     }
-    if (editTab_ == 0 || editTab_ == 2) { drawSectionsCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
-
     // ---- selection (Objects and Actors: both tabs place things)
     if (editTab_ == 0 || editTab_ == 2) {
     ImGui::SetCursorPosX(pad);
@@ -2876,12 +3974,31 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PopTextWrapPos();
             ImGui::PopFont();
         }
+        const auto roots=selectionIndices();
+        if (ownedCountMap_!=doc_.mapName() || ownedCountRevision_!=doc_.revision() ||
+            ownedCountSelection_!=roots) {
+            ownedCountMap_=doc_.mapName();
+            ownedCountRevision_=doc_.revision();
+            ownedCountSelection_=roots;
+            std::vector<size_t> indices(roots.begin(),roots.end());
+            ownedCountCached_=doc_.ownedDescendants(indices).size();
+        }
+        if (ownedCountCached_) {
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Muted),"+%zu owned",ownedCountCached_);
+            auto_.registerWidget("text_owned_count");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Valid OwnerUID descendants of the selection. Movement follows the checkbox below; Delete asks what to do with them.");
+            ImGui::PopFont();
+        }
         ImGui::PushFont(fontSmall_);
         ImGui::TextColored(theme::vec(theme::Muted), "%s%s%s   uid %llu", s.type.c_str(), s.scriptName.empty() ? "" : "   ", s.scriptName.c_str(), (unsigned long long)s.uid);
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, S(4)));
         bool changed = false;
         const float third = (cardInner - 2 * S(6)) / 3.0f;
+        const bool locked=doc_.isLocked(size_t(selectedThing_));
+        if (locked) theme::hint("Locked in place: unlock in Properties or press Ctrl+L to transform.");
+        ImGui::BeginDisabled(locked);
         theme::label("Position (map-local)");
         ImGui::PushItemWidth(third);
         ImGui::DragFloat("##px", &f.pos[0], 0.05f, -1e6f, 1e6f, "X %.3f"); changed |= ImGui::IsItemDeactivatedAfterEdit(); auto_.registerWidget("drag_px");
@@ -2914,20 +4031,41 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             changed |= yawDone;
         }
         // live preview while a field is being dragged, commit when released
-        if (ImGui::IsAnyItemActive()) applyFrame(selectedThing_, f);
+        if (!locked && ImGui::IsAnyItemActive()) {
+            applyFrame(selectedThing_, f);
+            previewOwned({{selectedThing_,f}});
+        }
         if (changed) commitFrame(f);
+        ImGui::EndDisabled();
         ImGui::Dummy(ImVec2(0, S(4)));
+        if (ImGui::Checkbox("Move owned things with parent",&moveOwned_)) saveSettings();
+        auto_.registerWidget("check_move_owned");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("When moving or rotating a thing, carry its OwnerUID children with it. Directly selected locked things stay protected.");
         const float half = (cardInner - S(6)) * 0.5f;
+        const bool mutableSelection=!unlockedSelection(false).empty();
+        ImGui::BeginDisabled(!mutableSelection);
         if (theme::ghostButton("Drop to ground  (End)", ImVec2(half, S(28)))) snapSelectedToGround();
-        auto_.registerWidget("btn_ground");
+        auto_.registerWidget("btn_ground"); ImGui::EndDisabled();
         ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Focus  (F)", ImVec2(half, S(28)))) frameSelected();
         auto_.registerWidget("btn_focus");
-        if (theme::ghostButton("Duplicate  (Ctrl+D)", ImVec2(half, S(28)))) duplicateSelected();
+        if (theme::ghostButton("Duplicate here", ImVec2(half, S(28)))) duplicateSelected();
         auto_.registerWidget("btn_duplicate");
         ImGui::SameLine(0, S(6));
+        ImGui::BeginDisabled(!mutableSelection);
         if (theme::dangerButton("Delete  (Del)", ImVec2(half, S(28)))) deleteSelected();
-        auto_.registerWidget("btn_delete");
+        auto_.registerWidget("btn_delete"); ImGui::EndDisabled();
+        ImGui::BeginDisabled(!mutableSelection || thingsStale());
+        if (theme::ghostButton("Surfaces  (H)",ImVec2(half,S(28)))) cycleSelectedSurfaces();
+        auto_.registerWidget("btn_surface");
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Move down to the next visible object surface or terrain. From terrain, cycle from above.\nUses visible surfaces; effects and selected objects are excluded. End drops directly to terrain.");
+        ImGui::SameLine(0,S(6));
+        ImGui::BeginDisabled(!mutableSelection || !doc_.hasTerrain());
+        if (theme::ghostButton("Set height...",ImVec2(half,S(28)))) requestSelectionHeight();
+        auto_.registerWidget("btn_selection_height");
+        ImGui::EndDisabled();
         // village membership: buildings, markers and creatures belong to a Village thing by uid
         if (s.type != "Village") {
             const auto vills = doc_.villages();
@@ -2977,10 +4115,63 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
             ImGui::PopID();
         }
+        const auto incoming=doc_.linksInto(size_t(selectedThing_));
+        const auto modes=doc_.viableAttachModes(size_t(selectedThing_));
+        if (!incoming.empty() || !modes.empty()) {
+            ImGui::Dummy(ImVec2(0,S(5)));
+            theme::label(("Attached here  ("+std::to_string(incoming.size())+")").c_str());
+            if (!incoming.empty() && ImGui::BeginChild("##incoming_links",ImVec2(cardInner,S(120)),true)) {
+                ImGuiListClipper clipper;
+                clipper.Begin(int(incoming.size()));
+                while (clipper.Step())
+                    for (int row=clipper.DisplayStart;row<clipper.DisplayEnd;++row) {
+                        const auto& entry=incoming[size_t(row)];
+                        if (entry.source>=doc_.thingCount()) continue;
+                        ImGui::PushID(row);
+                        const std::string label=entry.link.label+": "+thingLabel(entry.source);
+                        ImGui::PushFont(fontSmall_);
+                        if (ImGui::Selectable(label.c_str(),false,0,ImVec2(cardInner-S(46),0)))
+                            selectThing(int(entry.source));
+                        ImGui::PopFont();
+                        ImGui::SameLine();
+                        if (theme::ghostButton("x",ImVec2(S(22),S(20)))) {
+                            doc_.setLink(entry.source,entry.link.ctc,entry.link.field,0);
+                            pushLog("link: "+entry.link.label+" cleared",0);
+                        }
+                        ImGui::PopID();
+                    }
+            }
+            if (!incoming.empty()) ImGui::EndChild();
+            for (const auto& mode:modes) {
+                ImGui::PushID(mode.field.c_str());
+                const bool active=attachPick_.active && attachPick_.mode==mode.mode &&
+                                  attachPick_.anchorUid==s.uid;
+                const std::string caption=(active ? "Stop: " : "")+mode.caption;
+                if (theme::ghostButton(caption.c_str(),ImVec2(cardInner,S(25)))) {
+                    if (active) attachPick_.active=false;
+                    else {
+                        attachPick_={true,s.uid,mode.mode,mode.caption};
+                        linkPick_.active=false; trackLinkPick_=false;
+                    }
+                }
+                auto_.registerWidget(("btn_attach_"+mode.field).c_str());
+                ImGui::PopID();
+            }
+            if (attachPick_.active && attachPick_.anchorUid==s.uid) {
+                theme::hint("Click eligible things in the view; Esc stops attaching.");
+                if (theme::ghostButton("Stop attaching",ImVec2(cardInner,S(25)))) attachPick_.active=false;
+                auto_.registerWidget("btn_stop_attaching");
+            }
+        }
         drawPropertyGrid(cardInner);
     }
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
+    }
+
+    if (editTab_ == 0 || editTab_ == 2) {
+        drawSectionsCard(pad, inner, cardInner);
+        ImGui::Dummy(ImVec2(0, S(8)));
     }
 
     // ---- objects in this map
@@ -3006,6 +4197,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     }
     // the vanilla Scene Browser's two switches (CSceneDialog): script-named things only, nearest first
     ImGui::PushFont(fontSmall_);
+    ImGui::SetNextItemWidth(S(115));
+    ImGui::Combo("##thing_kind", &thingsKindFilter_, "All things\0Objects\0Markers\0");
+    auto_.registerWidget("combo_thing_kind");
     ImGui::Checkbox("Script-named only##tso", &thingsScriptOnly_);
     auto_.registerWidget("check_things_script_only");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only things with a ScriptName (the ones quests and cut-scenes refer to).");
@@ -3022,7 +4216,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     rows.reserve(doc_.thingCount());
     for (size_t i = 0; i < doc_.thingCount(); ++i) {
         const auto s = doc_.summary(i);
-        if (!s.hasFrame || s.type == "Marker" || s.type == "TrackNode") continue;
+        if (!s.hasFrame || s.type == "TrackNode") continue;
+        if (thingsKindFilter_ == 1 && s.type == "Marker") continue;
+        if (thingsKindFilter_ == 2 && s.type != "Marker") continue;
         if (thingSearch_[0] && !contains(s.definition, thingSearch_) && !contains(s.scriptName, thingSearch_)) continue;
         if (thingsScriptOnly_ && s.scriptName.empty()) continue;
         if (!originFilter_.empty()) {
@@ -3056,7 +4252,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; ++r) {
             const int i = rows[size_t(r)];
             const auto s = doc_.summary(size_t(i));
-            std::string labelText = s.definition;
+            std::string labelText = (doc_.isLocked(size_t(i))?"[locked] ":"")+s.definition;
             if (!s.scriptName.empty()) labelText += "  (" + s.scriptName + ")";
             const char* origin = originOf(s.uid);
             if (origin) {   // leave the badge its room: ellipsise the label
@@ -3085,6 +4281,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     // ---- add
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##add", inner);
+    const bool revealPalette=!revealDef_.empty();
     theme::label("Add an object");
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
@@ -3095,15 +4292,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     const std::string placeLabel = placeDef_.empty() ? "Place at view centre" : "Place " + placeDef_;
     if (theme::ghostButton(placeLabel.c_str(), ImVec2(cardInner, S(30))) && !placeDef_.empty()) placeDefinition(placeDef_);
     auto_.registerWidget("btn_place");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Placed where the camera looks, on the terrain (or at the fixed height below).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The button places at the camera focus. Shift+click the ground in the view to place this definition at the pointer.");
     drawPlacementOptions(cardInner);
     drawRuleNotice("creature", cardInner);
     theme::endCard();
+    if (revealPalette) ImGui::SetScrollHereY(.5f);
     ImGui::Dummy(ImVec2(0, S(8)));
 
     // model import lives in the Assets tab (it writes the game's banks, not this map)
     ImGui::SetCursorPosX(pad);
-    if (theme::ghostButton("Import your own model...  (Assets tab)", ImVec2(inner, S(26)))) { setTexturesMode(true); assetsTab_ = 1; }
+    if (theme::ghostButton("Import your own model...  (Assets tab)", ImVec2(inner, S(26)))) { setTexturesMode(true); assetsTab_ = 1; modelImportOpen_ = true; }
     auto_.registerWidget("btn_goto_model_import");
     ImGui::Dummy(ImVec2(0, S(8)));
     }
@@ -3173,13 +4371,19 @@ void App::drawEditFooter(float pad, float inner) {
     drawPackPicker(inner);
     const bool toPack = !packDest_.empty();
     if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
-        // objects standing on sculpted ground follow it (their offset kept); one undo step
+        // Repair objects stranded by a draft from before automatic terrain following.
         ImGui::SetCursorPosX(pad);
-        if (theme::ghostButton("Re-seat objects on the new ground", ImVec2(inner, S(28)))) reseatThings();
+        if (theme::ghostButton("Repair older object positions", ImVec2(inner, S(28)))) reseatThings();
         auto_.registerWidget("btn_reseat_things");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Every placed object that stood on the ground before this sculpt session\n(within 1 unit) moves with it, keeping its offset. Buried or floating objects stay.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("For drafts made before objects followed terrain automatically. Moves objects that still sit near the old ground toward the new ground. Already moved, buried, floating and locked objects stay.");
     }
     if (doc_.hasTerrain() && (doc_.terrainDirty() || terrainDeployFuture_.valid())) {
+        if (dirty) {
+            ImGui::SetCursorPosX(pad);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
+            ImGui::TextColored(theme::vec(theme::Muted), "Ground and placed objects changed. Write both below to see both in %s.", toPack ? "the pack" : "the game");
+            ImGui::PopTextWrapPos();
+        }
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
             theme::primaryButton(jobLabel("Saving terrain").c_str(), ImVec2(inner, S(36)), false);
@@ -3195,7 +4399,7 @@ void App::drawEditFooter(float pad, float inner) {
                 ? "Writes the loose .lev (this install has no FinalAlbion.wad, so the game reads it) and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of both files."
                 : "Writes the loose .lev, replaces it in FinalAlbion.wad and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of all three files.");
         } else {
-            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev" + (writesLoose() ? "" : ", FinalAlbion.wad") + " and FinalAlbion_RT.stb? (one-time .forge-orig backups)";
+            const std::string q = "Rewrite " + doc_.mapName() + "'s terrain in the .lev" + (writesLoose() ? "" : ", FinalAlbion.wad") + " and FinalAlbion_RT.stb?" + (dirty ? " Placed objects need their own write below." : "") + " (one-time .forge-orig backups)";
             const int r = confirmRow(q.c_str(), "Yes, write it", inner, S(36), "btn_terrain_deploy_confirm");
             if (r != 0) confirmTerrainDeploy_ = false;
             if (r > 0) startTerrainDeploy();
@@ -3206,11 +4410,11 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     const float half = (inner - S(6)) * 0.5f;
     if (toPack) {
-        if (theme::primaryButton(("Write into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) deployDocument();
+        if (theme::primaryButton(("Write objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) deployDocument();
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes %s.tng into the pack (data/Levels/FinalAlbion); Mods > Deploy merges it thing by thing\nwith the other mods and writes it into the game. Nothing in the game changes now.", doc_.mapName().c_str());
     } else if (!confirmDeploy_) {
-        if (theme::primaryButton(writesLoose() ? "Write into the game (loose .tng)" : "Write into FinalAlbion.wad", ImVec2(inner, S(42)))) confirmDeploy_ = true;
+        if (theme::primaryButton(writesLoose() ? "Write objects into game" : "Write objects into WAD", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) {
             if (writesLoose()) ImGui::SetTooltip("This install has no FinalAlbion.wad: the game reads the loose files in data/Levels/FinalAlbion,\nso this writes %s.tng there. The original file is backed up once as .forge-orig.", doc_.mapName().c_str());
@@ -3303,7 +4507,7 @@ void App::drawEffectsCard(float pad, float inner, float cardInner) {
     using theme::S;
     if (!effectsLoaded_) {
         std::string err;
-        if (effects::bankOpen() || effects::openBank(installPath_, err)) effectNames_ = effects::entryNames();   // read-only: the install, not a scratch save root
+        if (effects::openBank(installPath_, err)) effectNames_ = effects::entryNames(installPath_);   // read-only: the install, not a scratch save root
         else pushLog("effects: " + err, 1);
         effectsLoaded_ = true;
     }
@@ -3445,7 +4649,7 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
         if (!thumbBankOpen_) { pushLog("thumbnails: " + err, 1); defThumbs_[def] = nullptr; return nullptr; }
     }
     std::string merr;
-    const auto* geo = foliageexport::cachedMesh(modelId, merr);
+    const auto geo = foliageexport::cachedMesh(modelId, merr);
     if (!geo) { defThumbs_[def] = nullptr; return nullptr; }
     std::vector<std::string> warnings;
     const foliageexport::Mesh m = foliageexport::makeMesh(modelId, foliageexport::meshName(modelId), def, *geo, true, ctx_, thumbImages_, thumbTextureToImage_, warnings);
@@ -3559,7 +4763,7 @@ size_t App::fitApply() {
     forge::fillerfit::Report rep;
     const size_t n = doc_.fitToNeighbours(fitParams_, fitNeighbours_, &rep);
     fitPreviewKey_.clear();   // "now" is the fitted ground from here on
-    if (n) pushLog("fit to neighbours: " + std::to_string(n) + " vertices rebuilt to meet " + std::to_string(fitNeighbours_.size()) + " touching map(s) (one undo step; Write terrain saves it)", 3);
+    if (n) pushLog("fit to neighbours: " + std::to_string(n) + " vertices rebuilt to meet " + std::to_string(fitNeighbours_.size()) + " touching map(s) (one undo step; write terrain and any moved objects separately)", 3);
     else pushLog("fit to neighbours: nothing changed", 1);
     return n;
 }
@@ -3635,12 +4839,14 @@ terrainexport::Image fractalImage(const std::vector<float>& h, int cx, int cy, i
 
 void App::drawFractalWindow() {
     using theme::S;
-    if (!beginToolWindow("##fractalwin", "Fractal terrain", "Set this map's ground to the vanilla editor's fractal - sampled at world positions, so maps done one after another meet.", &fractalOpen_, S(620))) return;
+    const std::string sub = "Terrain / " + doc_.mapName() + " - Create hills and valleys from a repeatable pattern. Preview before applying.";
+    if (!beginToolWindow("##fractalwin", "Generate terrain", sub.c_str(), &fractalOpen_, S(620))) return;
     const float inner = toolWindowInner_;
     auto& f = fractal_;
     const float gap = S(18);
-    const float leftW = std::floor(inner * 0.52f);
-    const float rightW = inner - leftW - gap;
+    const bool stacked = inner < S(570);
+    const float leftW = stacked ? inner : std::floor(inner * 0.52f);
+    const float rightW = stacked ? inner : inner - leftW - gap;
     const float x0 = ImGui::GetCursorPosX();
 
     // left: the fields, friendly names (the vanilla ones in the tooltips)
@@ -3658,7 +4864,7 @@ void App::drawFractalWindow() {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
             v = std::clamp(v, lo, hi);
         };
-        field("Height", "##fsc", f.scale, 5.0, 0.001, 2048.0, "%.1f",
+        field("Height scale", "##fsc", f.scale, 5.0, 0.001, 2048.0, "%.1f",
               "Scale: the ground is SET to fractal (0..1) x this, in world units.\nRetail ground spans about 0..70; the vanilla default is 1000.");
         field("Feature size", "##fws", f.worldScaler, 0.05, 0.001, 10.0, "%.3f",
               "World scaler: one noise unit spans 4096 x this world units. Bigger = broader hills.");
@@ -3682,32 +4888,51 @@ void App::drawFractalWindow() {
     ImGui::EndGroup();
 
     // right: the preview (relief, the fitted maps' colours), then the actions
-    ImGui::SameLine(x0 + leftW + gap);
+    if (stacked) { ImGui::Dummy(ImVec2(0, S(8))); ImGui::Separator(); ImGui::Dummy(ImVec2(0, S(8))); }
+    else ImGui::SameLine(x0 + leftW + gap);
     ImGui::BeginGroup();
     {
         const int cx = doc_.cellsX(), cy = doc_.cellsY();
-        char key[256];
-        std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%g|%d|%g|%g|%d|%d|%g", doc_.mapName().c_str(), f.lacunarity, f.dimension, f.octaves, f.mapX, f.mapY,
-                      f.worldScaler, int(f.useFalloff), f.startFalloff, f.endFalloff, doc_.worldX(), doc_.worldY(), f.scale);
-        if (fractalPreviewKey_ != key) {
-            fractalPreviewKey_ = key;
+        std::ostringstream key;
+        key << doc_.mapName() << '|' << std::hexfloat << f.lacunarity << '|' << f.dimension << '|' << f.octaves
+            << '|' << f.mapX << '|' << f.mapY << '|' << f.worldScaler << '|' << f.useFalloff
+            << '|' << f.startFalloff << '|' << f.endFalloff << '|' << doc_.worldX() << '|' << doc_.worldY()
+            << '|' << f.scale;
+        if (fractalPreviewKey_ != key.str()) {
+            fractalPreviewKey_ = key.str();
             const forge::fractal::Generator gen(f);
             std::vector<float> h(size_t(cx) * cy);
             for (int y = 0; y < cy; ++y)
                 for (int x = 0; x < cx; ++x) h[size_t(y) * cx + x] = gen.heightAt(double(doc_.worldX() + x), double(doc_.worldY() + y));
+            if (!h.empty()) {
+                const auto [low, high] = std::minmax_element(h.begin(), h.end());
+                fractalPreviewMin_ = float(std::clamp(double(*low) * f.scale, 0.0, 2047.9999));
+                fractalPreviewMax_ = float(std::clamp(double(*high) * f.scale, 0.0, 2047.9999));
+            }
             fractalPreview_ = renderer_.uiTexture("fractal", fractalImage(h, cx, cy, int(doc_.worldX()), int(doc_.worldY()), 160));
         }
         ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Accent), "This map with it");
+        ImGui::TextColored(theme::vec(theme::Accent), "Pattern preview (relative height)");
         ImGui::PopFont();
         if (fractalPreview_) {
             const float aspect = float(cx) / float(std::max(cy, 1));
             // Leave room for both actions and the footer even at large text sizes.
-            const float maxH = std::max(S(60), ImGui::GetMainViewport()->Size.y - S(60) - ImGui::GetCursorPosY() - S(130));
+            const float maxH = stacked ? S(220) : std::max(S(60), ImGui::GetMainViewport()->Size.y - S(60) - ImGui::GetCursorPosY() - S(130));
             const float h = std::min({rightW / aspect, rightW * 1.3f, maxH});
             const ImVec2 side(h * aspect, h);
             ImGui::Image((ImTextureID)(intptr_t)fractalPreview_, side);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The fractal over this map in the vanilla dialog's colours: black at 0, then blue, cyan, yellow, green, pink and white\nby height (steps of 0.2), shaded by slope, with its 256-unit checkerboard.");
+        }
+        ImGui::Dummy(ImVec2(0, S(6)));
+        if (const auto* current = doc_.terrainHeights(); current && !current->empty()) {
+            const auto [low, high] = std::minmax_element(current->begin(), current->end());
+            ImGui::TextColored(theme::vec(theme::Muted), "Current ground: %.1f to %.1f", *low, *high);
+            ImGui::TextColored(theme::vec(theme::Text), "Generated ground: %.1f to %.1f", fractalPreviewMin_, fractalPreviewMax_);
+            if (fractalPreviewMax_ > std::max(100.0f, *high * 3.0f)) {
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + rightW);
+                ImGui::TextColored(theme::vec(theme::Warn), "Much taller than this map. Grounded objects follow; floating or locked placements may need repositioning.");
+                ImGui::PopTextWrapPos();
+            }
         }
         ImGui::Dummy(ImVec2(0, S(6)));
         const std::string go = "Apply to " + doc_.mapName();
@@ -3723,7 +4948,7 @@ void App::drawFractalWindow() {
     ImGui::Dummy(ImVec2(0, S(6)));
     ImGui::PushFont(fontSmall_);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
-    theme::hintMore("Replaces every height of the map; one undo step.", "Ported from the vanilla editor's code (a hybrid multifractal over Perlin noise). It SETS every height, it does not add. One undo step (Ctrl+Z); Write terrain saves it.");
+    theme::hintMore("Replaces every height of the map; one undo step.", "Ported from the vanilla editor's code (a hybrid multifractal over Perlin noise). It SETS every height, it does not add. Grounded objects follow. One undo step (Ctrl+Z); write terrain and any moved objects separately.");
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     endToolWindow();
@@ -3771,14 +4996,20 @@ void App::drawFitWindow() {
     // the preview: re-fit on a copy whenever a field or the ground changes
     const auto* now = doc_.terrainHeights();
     const int cx = doc_.cellsX(), cy = doc_.cellsY();
-    char key[256];
-    std::snprintf(key, sizeof key, "%s|%g|%g|%g|%g|%g|%zu|%llu", doc_.mapName().c_str(), fitParams_.peakHeight, fitParams_.step, fitParams_.tension,
-                  fitParams_.lowNoise, fitParams_.highNoise, fitNeighbours_.size(), (unsigned long long)doc_.terrainRevision());
-    if (now && fitPreviewKey_ != key) {
-        fitPreviewKey_ = key;
+    std::ostringstream key;
+    key << doc_.mapName() << '|' << std::hexfloat << fitParams_.peakHeight << '|' << fitParams_.step
+        << '|' << fitParams_.tension << '|' << fitParams_.lowNoise << '|' << fitParams_.highNoise
+        << '|' << fitNeighbours_.size() << '|' << doc_.terrainRevision();
+    if (now && fitPreviewKey_ != key.str()) {
+        fitPreviewKey_ = key.str();
         fitReport_ = {};
         const auto after = doc_.fittedHeights(fitParams_, fitNeighbours_, &fitReport_);
         fitHasResult_ = !after.empty();
+        fitPreviewChanged_ = 0; fitPreviewMaxDelta_ = 0;
+        if (fitHasResult_) for (size_t i=0;i<after.size();++i) {
+            if (after[i] != (*now)[i]) ++fitPreviewChanged_;
+            fitPreviewMaxDelta_ = std::max(fitPreviewMaxDelta_,std::fabs(after[i]-(*now)[i]));
+        }
         float lo = 1e9f, hi = -1e9f;
         for (const float v : *now) { lo = std::min(lo, v); hi = std::max(hi, v); }
         for (const float v : after) { lo = std::min(lo, v); hi = std::max(hi, v); }
@@ -3895,8 +5126,11 @@ void App::drawFitWindow() {
 
     ImGui::Dummy(ImVec2(0, S(6)));
     ImGui::PushFont(fontSmall_);
+    ImGui::TextColored(theme::vec(theme::Muted), "%zu vertices change  |  largest height shift %.1f", fitPreviewChanged_, fitPreviewMaxDelta_);
+    ImGui::PopFont();
+    ImGui::PushFont(fontSmall_);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
-    ImGui::TextColored(theme::vec(theme::Faint), "Rebuilds the whole map: the edges take the touching maps' heights, open stretches curve between them, and the inside rises to a ridge. Objects stay put (Re-seat them after). One undo step (Ctrl+Z); Write terrain saves it.");
+    ImGui::TextColored(theme::vec(theme::Faint), "Rebuilds the whole map: the edges take the touching maps' heights, open stretches curve between them, and the inside rises to a ridge. Grounded objects follow; floating and locked objects stay. One undo step (Ctrl+Z); Write terrain and objects to see both in game.");
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     close();
@@ -3952,7 +5186,7 @@ void App::runBudgetSurvey() {
         bg::MeshCost m;
         m.name = foliageexport::meshName(id);
         std::string err;
-        const auto* g = foliageexport::cachedMesh(id, err);
+        const auto g = foliageexport::cachedMesh(id, err);
         if (!g) return m;
         m.ok = true;
         // what the renderer draws: the collision hull on texture-less materials is not
@@ -3995,8 +5229,9 @@ void App::runBudgetSurvey() {
 void App::drawBudgetWindow() {
     using theme::S;
     namespace bg = forge::budget;
+    const std::string sub = "Level / " + doc_.mapName() + " - Survey things, geometry and texture memory in this area.";
     if (!beginToolWindow("##budgetwin", "Budget survey",
-                         "What this area costs to draw: things, triangles, vertices and texture memory. The vanilla editor's Surveys > Engine tab.",
+                         sub.c_str(),
                          &budgetOpen_, S(560))) return;
     const float inner = toolWindowInner_;
     bool changed = false;
@@ -4151,10 +5386,29 @@ void App::drawBudgetWindow() {
 bool App::copyRegion(int x0, int y0, int x1, int y1) {
     if (!documentLoaded() || !doc_.hasTerrain()) return false;
     terrainClip_ = doc_.copyTerrain(x0, y0, x1, y1, clipThings_);
+    clipRect_[0] = std::clamp(std::min(x0, x1), 0, doc_.cellsX() - 1);
+    clipRect_[1] = std::clamp(std::min(y0, y1), 0, doc_.cellsY() - 1);
+    clipRect_[2] = std::clamp(std::max(x0, x1), 0, doc_.cellsX() - 1);
+    clipRect_[3] = std::clamp(std::max(y0, y1), 0, doc_.cellsY() - 1);
+    clipRectValid_ = !terrainClip_.empty();
+    clipRectMap_ = doc_.mapName();
     clipTurns_ = 0;
     pushLog("copied " + std::to_string(terrainClip_.w) + " x " + std::to_string(terrainClip_.h) + " vertices of ground" +
             (clipThings_ ? " and " + std::to_string(terrainClip_.things.size()) + " object(s)" : std::string()) + "; Paste region places it", 0);
     return !terrainClip_.empty();
+}
+
+size_t App::deleteRegionThings() {
+    if (!documentLoaded() || !clipRectValid_ || clipRectMap_ != doc_.mapName()) return 0;
+    size_t skipped = 0, cleared = 0, removed = 0;
+    try {
+        removed = doc_.removeThingsInRect(clipRect_[0], clipRect_[1], clipRect_[2], clipRect_[3], &skipped, &cleared);
+    } catch (const std::exception& e) { pushLog(std::string("Delete area: ") + e.what(), 2); return 0; }
+    if (removed) selectThing(-1);
+    pushLog("deleted " + std::to_string(removed) + " object(s) inside the rectangle (one undo step)" +
+        (skipped ? "; kept " + std::to_string(skipped) + " locked" : "") +
+        (cleared ? "; cleared " + std::to_string(cleared) + " incoming link(s)" : ""), 0);
+    return removed;
 }
 
 size_t App::pasteRegion(int x, int y) {

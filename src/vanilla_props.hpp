@@ -4,6 +4,7 @@
 // vanilla_props.inc): the label, category and widget each .tng key had there.
 
 #include <string>
+#include <span>
 
 namespace albion::editor {
 
@@ -22,5 +23,7 @@ struct VanillaField {
 
 // The vanilla field for a CTC block's key (case-sensitive block, case-insensitive key); nullptr if none.
 const VanillaField* vanillaField(const std::string& ctc, const std::string& key);
+// Read-only generated metadata; entries describe widgets, not default values.
+std::span<const VanillaField> vanillaFields();
 
 } // namespace albion::editor

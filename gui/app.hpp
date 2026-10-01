@@ -1,4 +1,6 @@
 #pragma once
+#include "detailretry.hpp"
+#include "cutoutcache.hpp"
 // FableForge GUI application state + ImGui drawing. Three-slot layout:
 // explorer (left) | 3D preview (middle) | actions (right). All heavy work
 // (install scan, texture context, preview bake, export) runs on worker threads
@@ -16,6 +18,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include <array>
@@ -26,6 +29,10 @@
 #include "detailcache.hpp"
 #include "forge/budget.hpp"
 #include "forge/levelstore.hpp"
+#include "forge/lipsync.hpp"
+#include "forge/lipsync_preset.hpp"
+#include "forge/dialoguetext.hpp"
+#include "forge/headpose.hpp"
 #include "forge/modorder.hpp"
 #include "imgui.h"
 #include "foliageexport.hpp"
@@ -34,15 +41,21 @@
 #include "backups.hpp"
 #include "stbcompact.hpp"
 #include "renderer.hpp"
+#include "worldscenery.hpp"
 #include "thingsexport.hpp"
 #include "terrainexport.hpp"
 #include "worldedit.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
 #include "texturebrowse.hpp"
+#include "effects.hpp"
+#include "particlepreview.hpp"
+#include "particlepreviewrenderer.hpp"
 #include "overworld.hpp"
 
 namespace albion::gui {
+
+class DialogueAudioPlayer;
 
 struct MapEntry {
     std::string name;        // display + output file stem
@@ -107,8 +120,18 @@ private:
     std::string captureShot_;
     int captureFrame_ = 0;
     bool worldDetailWaitStarted_ = false;
+    std::string worldCoverageWatch_;
+    size_t worldCoverageWatchFrames_ = 0;
     std::string clickTarget_;
     std::string revealTarget_;
+    std::string documentSnap_,thingSnap_;
+    uint64_t thingSnapUid_=0;
+    std::array<float,4> meshOrientationSnap_={0,0,0,1};
+    int32_t meshOrientationId_=-1;
+    std::optional<editor::Frame> frameSnap_;
+    std::optional<editor::Frame> ownedFrameSnap_;
+    uint64_t ownedSnapUid_=0;
+    uint64_t ownedSnapParentUid_=0;
     std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
@@ -176,6 +199,7 @@ public:
     bool installValid() const { return installValid_; }
     std::string lastError() const { return lastError_; }
     void requestQuit() { quit_ = true; }
+    void requestClose();
     std::vector<std::string> stateDump() const;
     bool logContains(const std::string& needle) const;   // any drained log line holding `needle` (scripted assert_log)
 
@@ -211,10 +235,16 @@ public:
     bool hasClipboard() const { return !clipboard_.empty(); }
     // Screen position (window pixels) of the selected thing's pivot, for scripted gizmo drags.
     bool selectedPivotScreen(float& x, float& y) const;
+    bool selectedGlyphScreen(float& x, float& y) const;
     void setGizmoOp(int op) { gizmoOp_ = op; }
     int gizmoOp() const { return gizmoOp_; }
     // Ray pick at viewport-relative (u, v) in [0,1]; selects the hit thing.
     int pickAt(float u, float v);
+    bool groundUnderCursor(float u, float v, float out[3]) const;
+    bool armCarry(float u, float v);
+    void updateCarry(float u, float v);
+    void finishCarry();
+    void cancelCarry();
     // terrain tool (scripted tests): one brush application at a map-local point
     void terrainStroke(float x, float y, float seconds);
     void setTerrainMode(int m) { terrainMode_ = m; }
@@ -224,6 +254,8 @@ public:
     void deployTerrain() { startTerrainDeploy(); }
     void moveSelected(float dx, float dy, float dz);   // map-local Fable units
     void rotateSelected(float degrees);                // yaw about the up axis
+    void rotateSelectedWorld(float degrees,int axis);  // 0=Z, 1=X, 2=Y
+    void setSelectedFacing(float turns);
     void scaleSelected(float factor);
     void snapSelectedToGround();
     void reseatThings();             // objects on ground that changed since the last save follow it
@@ -246,11 +278,14 @@ public:
 private:
     void duplicateSelected();
     void deleteSelected();
+    void applyOwnedDelete(bool includeOwned);
     void editUndo();
     void editRedo();
     void frameSelected();
+    void showSelectedInPalette();
     void drawPlacementOptions(float width);
     bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
+    bool placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName = "");
     bool saveDocument();                                // loose .tng under saveRoot()
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
     void revertDocument();
@@ -262,7 +297,7 @@ private:
     void scanInstall(const std::string& root);
     void startContextLoad(const std::string& root = "");   // textures.big + defs from `root` (default: the install)
     void startPreviewLoad();
-    void startFoliageLoad();
+    void startFoliageLoad(bool foliageOnly = false);
     void pollWorkers();
     void pushLog(const std::string& line, int level = 0);
     // The one confirm pattern (0.15b #7): an amber question, then [Yes, <verb>] [Cancel]
@@ -327,6 +362,22 @@ private:
     void syncInstances();                                     // document revision -> instance worlds / reload
     void applyFrame(int thing, const editor::Frame& f);       // preview only (no command)
     bool frameOfSelected(editor::Frame& f) const;
+    std::vector<int> unlockedSelection(bool report = true);
+    void setSelectedLocked(bool locked);
+    void cycleSelectedSurfaces();
+    std::optional<float> surfaceBelow(const editor::Frame&,const std::vector<int>& excludedThings) const;
+    void requestSelectionHeight();
+    void setSelectedHeight(float height);
+    bool selectionHeightRequested_=false,selectionHeightPopupOpen_=false;
+    float selectionHeight_=0;
+    std::string selectionHeightMap_;
+    std::vector<uint64_t> selectionHeightUids_;
+    bool ownedDeleteRequested_=false,ownedDeletePopupOpen_=false;
+    std::vector<size_t> ownedDeleteRoots_;
+    std::vector<int> ownedDeleteSelection_;
+    std::string ownedDeleteMap_;
+    uint64_t ownedDeleteRevision_=0;
+    size_t ownedDeleteCount_=0;
     void commitFrame(const editor::Frame& f);                 // document command
     void drawGizmo(const ImVec2& origin, const ImVec2& size);
     void editorShortcuts();
@@ -340,8 +391,27 @@ private:
     uint64_t selectedUid_ = 0;
     int gizmoOp_ = 1;            // 0 select, 1 move, 2 rotate, 3 scale
     std::vector<uint64_t> extraUids_;                 // the multi-selection beyond the primary
+    bool moveOwned_=true;
+    std::string ownedCountMap_;
+    uint64_t ownedCountRevision_=~uint64_t(0);
+    std::vector<int> ownedCountSelection_;
+    size_t ownedCountCached_=0;
+    std::set<int> ownedPreview_;
+    void previewOwned(const std::vector<std::pair<int,editor::Frame>>& roots);
+    void restoreOwnedPreview();
+    void commitFramesWithOwned(const std::vector<std::pair<int,editor::Frame>>& roots);
     editor::Frame gizmoStart_;                        // the primary's frame when the drag began
     std::vector<std::pair<int, editor::Frame>> groupStart_;   // the extras' frames when the drag began
+    bool carryArmed_ = false, carrying_ = false;
+    bool carryCloneRequested_ = false, carryCloneActive_ = false, carryCursorMode_ = false;
+    uint64_t carryOriginalUid_ = 0;
+    std::vector<uint64_t> carryOriginalExtraUids_;
+    editor::Frame carryStart_, carryFrame_;
+    float carryGrab_[2] = {}, carryOffsetZ_ = 0.0f;
+    std::vector<std::pair<int, editor::Frame>> carryGroup_;
+    editor::Frame carriedExtra(const editor::Frame& start) const;
+    bool startCloneCarry();
+    bool beginCursorCloneCarry();
     editor::Document::Fragment clipboard_;
     std::vector<editor::PresetInfo> presets_;
     bool presetsLoaded_ = false;
@@ -385,6 +455,7 @@ private:
     // the vanilla editor's Things tree (thing type -> group -> def)
     std::vector<terrainexport::Context::GroupedDefinition> defList_;
     std::string placeDef_;           // the def the Place button puts down
+    std::string revealDef_;          // pending palette tree/scroll target
     // how new things face and sit (the vanilla Things dialog's placement options)
     int placeFacing_ = 0;            // 0 toward the camera, 1 random (vanilla), 2 fixed angle
     float placeAngleDeg_ = 0.0f;     // fixed angle, degrees clockwise from +Y (vanilla turns x 360)
@@ -406,6 +477,12 @@ private:
     uint32_t placeSeed_ = 0;         // GFFloatRandom state for random angles (vanilla uses the world seed)
     // link pick mode: the next viewport click on a thing sets this link of the selection
     struct LinkPick { std::string ctc, field, label; bool active = false; } linkPick_;
+    struct AttachPick {
+        bool active = false;
+        uint64_t anchorUid = 0;
+        editor::Document::AttachMode mode = editor::Document::AttachMode::Owned;
+        std::string caption;
+    } attachPick_;
     // quest sections: hidden ones (lower-case names) are not drawn or pickable
     std::set<std::string> hiddenSections_;
     char newSection_[64] = {};
@@ -414,6 +491,15 @@ private:
     bool sectionsDirty_ = true;
     void drawSectionsCard(float pad, float inner, float cardInner);
     void drawPropertyGrid(float cardInner);
+    void drawListProperties(float cardInner);
+    char listPropertySearch_[96] = {};
+    void drawMissingComponentProperties(float cardInner);
+    char componentOverrideValue_[128] = {};
+    void drawSelectionInspector();
+    void drawSelectionActions(const ImVec2& origin, const ImVec2& size);
+    bool pickContextSelection(float u, float v);
+    bool selectionInspectorOpen_ = false;
+    bool selectionPopupRequested_ = false, selectionPopupOpen_ = false;
     // Assets tab (was Textures): 0 textures, 1 models, 2 ground themes -- the tools that
     // write the game's shared banks, kept out of the map editor
     int assetsTab_ = 0;
@@ -434,11 +520,14 @@ private:
     bool addToPackOrGame(bool model);
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:
-    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 2); }
+    void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 4); }
 private:
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();
     void drawLinkLines(const ImVec2& origin, const ImVec2& size);
+    struct RadiusField { std::string label; float radius; ImU32 colour; };
+    std::vector<RadiusField> selectedRadiusFields() const;
+    void drawRadiusRings(const ImVec2& origin, const ImVec2& size);
     // tracks (Level tab): the card, the pick-a-node-to-link mode, the lines in the view
     void drawTracksCard(float pad, float inner, float cardInner);
     // the invalid-thing check (vanilla V): cached per revision
@@ -449,6 +538,12 @@ private:
     uint64_t issuesRev_ = ~0ull;
     std::set<std::string> familyNames_;   // CREATURE_GENERATION_FAMILY defs, once per context
     void drawTrackLines(const ImVec2& origin, const ImVec2& size);
+    struct ThingGlyph { int thing; ImVec2 screen; ImU32 colour; const char* role; char symbol; };
+    std::vector<ThingGlyph> thingGlyphs_;
+    size_t suppressedThingGlyphs_ = 0;
+    void refreshThingGlyphs(const ImVec2& origin, const ImVec2& size);
+    void drawThingGlyphs();
+    int glyphThingAt(float px, float py) const;
     bool trackLinkPick_ = false;
     int trackNodeAt(float px, float py) const;   // a drawn track node near a screen point, -1 = none
     // per-revision caches (the cards redraw every frame; the document scans are O(things))
@@ -465,6 +560,7 @@ private:
     std::map<std::string, std::string> themeGroupOf_;   // ENGINE_THEME -> its ENGINE_THEME_GROUP (the vanilla Themes lists)
     void drawDefPalette(const char* id, const std::vector<std::string>& types, float width, float height);
     char thingSearch_[64] = {};
+    int thingsKindFilter_ = 0;   // all, ordinary things, markers
     // forge_mods_provenance.json (written by a mod deploy): "uid:<n>" -> mod for the open map;
     // badges in the object list, an origin filter, "back to retail" = a vanilla pick
     std::map<std::string, std::string> thingOrigin_;
@@ -523,8 +619,12 @@ public:
     bool copyRegion(int x0, int y0, int x1, int y1);            // automation: mode 14's drag
     size_t pasteRegion(int x, int y);                           // automation: mode 15's click
 private:
+    size_t deleteRegionThings();
     bool clipDrag_ = false;
     float clipStart_[2] = {0, 0};
+    int clipRect_[4] = {0, 0, 0, 0};
+    bool clipRectValid_ = false;
+    std::string clipRectMap_;
     void drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, float y0, float x1, float y1, ImU32 col);
     // Fit to neighbours (the vanilla world map's Fit Neighbours, forge/fillerfit.hpp): the
     // touching maps' heights, read once per map on a worker; two preview images (now / fitted)
@@ -538,6 +638,8 @@ private:
     std::string fitPreviewKey_;
     forge::fillerfit::Report fitReport_;
     bool fitHasResult_ = false;
+    size_t fitPreviewChanged_ = 0;
+    float fitPreviewMaxDelta_ = 0.0f;
     int fitScrollTo_ = 0;        // frames left to bring the opened card into view (the content height lags a frame)
     void startFitNeighbourLoad();
     void drawFitCard(float pad, float inner, float cardInner);   // the sidebar entry: a button that opens the window
@@ -578,6 +680,7 @@ private:
     void drawBudgetCard(float pad, float inner, float cardInner);
     ID3D11ShaderResourceView* fractalPreview_ = nullptr;   // owned by the renderer (uiTexture "fractal")
     std::string fractalPreviewKey_;                         // params + map it was drawn for
+    float fractalPreviewMin_ = 0.0f, fractalPreviewMax_ = 0.0f;
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};
     void paletteCombo(const char* id, int& slot, float width);
@@ -703,6 +806,86 @@ public:
     bool addTexture(const std::string& name, const std::string& image, const std::string& bank, const std::string& format);
     std::vector<uint32_t> selectedThingTextures() const;
     void drawTexturesPanel(float pad, float inner, float cardInner);
+    void refreshModels();
+    bool selectModel(const std::string& nameOrId);
+    void drawModelBrowser(float pad, float inner, float cardInner);
+    void drawModelViewport(const ImVec2& origin, const ImVec2& size);
+    struct ModelRow { uint32_t id, type, bytes; std::string name; };
+    std::vector<ModelRow> modelRows_;
+    std::map<uint32_t, std::vector<std::string>> modelUsers_;
+    bool modelsLoaded_ = false, modelUsersLoaded_ = false, modelReady_ = false, modelImportOpen_ = false;
+    std::string modelRoot_, modelBankPath_, modelName_, modelError_;
+    uint32_t modelId_ = 0;
+    forge::meshpreview::Geometry modelGeometry_;
+    char modelSearch_[96] = {};
+    size_t modelFiltered_ = 0;
+    float modelYaw_ = 0.8f, modelPitch_ = 0.55f, modelZoom_ = 1.0f;
+    bool modelWire_ = false;
+    // ---- Read-only Effects browser (gui/effectbrowser.cpp).
+    struct EffectBrowserRow { uint32_t id = 0; std::string name, displayName; };
+    std::vector<EffectBrowserRow> effectBrowserRows_;
+    effects::Effect effectBrowserSelection_;
+    bool effectBrowserLoaded_ = false, effectBrowserReady_ = false;
+    char effectBrowserSearch_[96] = {};
+    size_t effectBrowserFiltered_ = 0;
+    std::string effectBrowserError_;
+    struct EffectThumbnail { bool attempted = false; ID3D11ShaderResourceView* image = nullptr; std::string error; };
+    std::vector<EffectThumbnail> effectBrowserThumbnails_;
+    void frameEffectPreview(bool currentOnly=false);
+    particlepreview::Simulation effectSimulation_;
+    ParticlePreviewRenderer effectRenderer_;
+    Camera effectCamera_;
+    float effectBackground_[3]={.025f,.035f,.05f};
+    bool effectShowGrid_=false;
+    bool effectShowLightVolumes_=true;
+    size_t effectLightVolumesDrawn_=0;
+    bool effectPlaying_ = true, effectTexturesReady_ = false, effectRendererReady_ = false, effectMeshesReady_ = false;
+    bool effectLoop_=true;
+    float effectDuration_=10.0f;
+    int effectSpeedIndex_=2;
+    size_t effectLoopCount_=0;
+    void advanceEffectPlayback(double seconds);
+    std::vector<std::string> effectTextureWarnings_;
+    void refreshEffectBrowser();
+    bool selectEffect(const std::string& nameOrId);
+    void drawEffectBrowser(float pad, float inner, float cardInner);
+    void drawEffectViewport(const ImVec2& origin, const ImVec2& size);
+    // Dialogue and lip sync preview/editor (gui/dialoguebrowser.cpp).
+    void drawDialogueBrowser(float pad, float inner, float cardInner);
+    void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);
+    void frameDialoguePlayback();
+    std::string dialogueLanguage_ = "English";
+    int dialogueBank_ = 0, dialogueId_ = 1;
+    bool dialogueLoaded_ = false;
+    forge::lipsync::Entry dialogueEntry_;
+    forge::lipsync::Entry dialogueOriginalEntry_;
+    std::map<std::tuple<std::string,std::string,uint32_t>,forge::lipsync::Entry> dialogueStaged_;
+    std::array<char,512> dialogueScratchPath_{};
+    std::string dialogueScratchLanguage_, dialogueExportMessage_;
+    double dialogueAudioDuration_ = 0;
+    float dialogueTime_ = 0;
+    bool dialogueLoop_ = false;
+    bool dialogueMotionPlaying_ = false;
+    bool dialogueAudioMuted_ = false;
+    std::unique_ptr<DialogueAudioPlayer> dialogueAudio_;
+    std::string dialogueError_;
+    std::string dialogueTextRoot_, dialogueTextError_;
+    std::unique_ptr<forge::dialoguetext::Index> dialogueTextIndex_;
+    std::vector<forge::dialoguetext::Line> dialogueSubtitles_;
+    std::array<char,160> dialogueSearchQuery_{};
+    std::string dialogueSearchCacheKey_;
+    std::vector<forge::dialoguetext::Match> dialogueSearchResults_;
+    int dialoguePreset_ = 0;
+    bool dialoguePresetChecked_ = false;
+    forge::lipsync::PresetAssets dialoguePresetAssets_;
+    std::string dialoguePresetError_;
+    forge::meshpreview::Geometry dialogueHeadGeometry_;
+    foliageexport::Mesh dialogueHeadMesh_;
+    std::map<std::string,forge::animation::Animation> dialogueHeadAnimations_;
+    bool dialogueHeadReady_ = false;
+    float dialogueHeadLastTime_ = -1, dialogueHeadYaw_ = 0;
+    float dialogueHeadPitch_ = 0.15f, dialogueHeadZoom_ = 0.8f;
+    bool dialogueHeadWire_ = false;
     // the Mods tab (gui/mods.cpp): the save root's load order + forge-tools.exe for deploy/undeploy/conflicts
     void setModsMode(bool on);
     bool modsMode() const { return modsMode_; }
@@ -734,12 +917,18 @@ private:
     // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:
-    struct ModConflict { std::string kind, key, label; std::vector<std::string> mods; std::string winner; bool overridden = false; };
+    struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
+                         std::string winner; bool overridden = false, pickable = true; };
 private:
     std::vector<ModConflict> modConflicts_;
     std::map<std::string, std::string> modPicks_;
     bool modReportLoaded_ = false;
     std::string modReportSummary_;
+    struct ModMissingMesh { std::string definition, type; uint32_t meshId = 0; };
+    std::vector<ModMissingMesh> modNewMissingMeshes_;
+    size_t modMissingMeshTotal_ = 0, modMissingMeshBaseline_ = 0;
+    size_t modAssetUnparsed_ = 0;
+    std::string modAssetStatus_, modAssetError_;
     void loadModPicks();
     void saveModPicks();
 public:
@@ -806,6 +995,7 @@ private:
     void worldPushUndo();
     std::string worldSelected_;
     std::string worldHover_;
+    void drawWorldLabel(const ImVec2& origin, const ImVec2& size);
     // ---- the whole-world overview (gui/worldview.cpp): map tiles for the textured 2D map and the 3D view
     std::map<std::string, worldtiles::Tile> worldTiles_;
     std::map<std::string, ID3D11ShaderResourceView*> worldTileTex_;   // owned by the renderer (uiTexture)
@@ -815,6 +1005,9 @@ private:
     std::shared_ptr<std::atomic<bool>> worldTileCancel_;
     std::chrono::steady_clock::time_point worldTileStarted_;
     size_t worldTileTotal_ = 0;
+    int worldOverviewBatchLimit_ = 32; // count guard; each upload phase still has a 2 ms budget
+    size_t worldOverviewUploadFrames_ = 0, worldThumbnailUploadFrames_ = 0;
+    std::string worldOverviewFirstMap_;
     std::string worldTilesFor_;
     std::map<std::string, std::pair<int, int>> worldLayerAt_;   // tiles in the 3D layer, at which origin
     bool world3D_ = false;
@@ -835,21 +1028,44 @@ private:
     struct WorldDetail {
         std::string name;
         std::vector<Renderer::PreparedBatch> batches;
+        std::map<int, std::shared_ptr<const cutoutmips::Chain>> cutoutMips;
+        cutoutmips::Cache::Stats cutoutCacheStats;
         std::vector<terrainexport::Image> images;
         uint64_t generation = 0;
+        int objects = 0, creatures = 0;
+        std::string error;
+        bool cancelled = false;
     };
     uint64_t worldDetailGeneration_ = 0;
+    struct WorldDetailWork {
+        std::atomic<bool> cancel{false}, hold{false}, held{false};
+    };
+    std::shared_ptr<WorldDetailWork> worldDetailWork_;
+    std::string worldDetailHoldPrepare_; // automation: pause after terrain preparation
+    size_t worldDetailCancelled_ = 0;
+    std::shared_ptr<cutoutmips::Cache> worldCutoutCache_ = std::make_shared<cutoutmips::Cache>();
+    cutoutmips::Cache::Stats worldCutoutCacheStats_;
+    bool worldCutoutCacheOn_ = true;
     bool worldDetailOn_ = true;
+    bool worldSmoothObjects_ = true; // automation A/B diagnostic
     bool worldDetailFoliage_ = true, worldDetailThings_ = true, worldDetailCreatures_ = true;
     float worldDetailRadius_ = 250.0f;   // world units around the camera's ground point
     int worldDetailMaps_ = 6;            // at most this many maps in full detail
     bool worldAutoDetail_ = true;
+    WorldScenery worldScenery_;
+    bool worldSceneryOn_ = true; // automation can isolate the near-detail path
+    size_t worldSceneryHolds_ = 0;
+    int worldDetailAutoMaps_ = 24;
+    int worldDetailMemoryMaps_ = 6;
+    uint64_t worldDetailLargestMap_ = 0;
     worldview::DetailBudget worldDetailBudget_;
     std::future<WorldDetail> worldDetailFuture_;
     std::optional<WorldDetail> worldDetailUpload_;
     DeferredRelease<WorldDetail> worldDetailRelease_;
     bool worldDetailRetiring_ = false;
     size_t worldDetailUploadAt_ = 0;
+    size_t worldDetailUploadFrames_ = 0;
+    int worldDetailUploadBudgetMs_ = 0; // automation: 0 adaptive, 2/4 fixed comparison
     struct WorldDetailVisibility { float fade = 0; bool wanted = true; };
     std::map<std::string, WorldDetailVisibility> worldDetailShown_;   // fully uploaded maps, including transitions
     worldview::DetailCache worldDetailCache_;
@@ -860,11 +1076,17 @@ private:
     double worldVideoMemoryNext_ = 0;
     size_t worldMemoryEvictions_ = 0;
     size_t worldDetailCacheHits_ = 0, worldDetailLoads_ = 0;
+    int worldDetailLastObjects_ = 0, worldDetailLastCreatures_ = 0;
+    worldview::DetailRetry worldDetailRetries_;
+    size_t worldDetailDeferred_ = 0, worldDetailFailures_ = 0;
+    std::string worldDetailFailPrepare_, worldDetailFailUpload_; // automation injection
+    void failWorldDetail(const std::string& name, const std::string& reason);
     std::string worldDetailLoading_;
     size_t worldDetailWanting_ = 0;   // wanted maps not in the layer yet (automation waits on 0)
     double worldDetailNext_ = 0;
     int worldTag(const std::string& name) const;
     void updateWorldDetail();
+    void updateWorldScenery();
     void clearWorldDetail();
     bool releaseWorldDetail();
     float worldPanX_ = 0, worldPanY_ = 0, worldZoom_ = 0;   // zoom = pixels per world unit (0 = fit)
@@ -888,7 +1110,11 @@ private:
     void startTerrainDeploy();
     bool clickArmed_ = false;
     ImVec2 clickPos_;
+    bool contextClickArmed_ = false, contextClickMoved_ = false;
+    ImVec2 contextClickPos_;
     std::string pendingSelect_;      // map switch held back by the unsaved-changes prompt
+    bool closePending_ = false;      // window close held back by unsaved work
+    bool closeSaveWaiting_ = false;  // a World write started from the close prompt
     bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
     bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
     void drawUnsavedPrompt();
@@ -899,6 +1125,7 @@ private:
     bool cursorHit_ = false;
     float cursorFable_[3] = {0, 0, 0};   // x, y (Fable), height
     void drawViewportOverlays(const ImVec2& origin, const ImVec2& size);
+    float viewportControlsLift() const;
     // Toasts (0.15b #2): every warning / error / success log line also surfaces in the
     // viewport's top-right corner for a few seconds, so a job's result is seen without
     // reading the Activity log. Info lines (level 0) stay in the log only.
@@ -974,8 +1201,9 @@ private:
         const int longest = std::max(std::max(cellsX, cellsY), 1);
         return std::clamp(4096 / longest, 4, 16);
     }
-    struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; bool thingsOnly = false; };
+    struct FoliageResult { std::string name; foliageexport::Scene scene; foliageexport::Scene things; thingsexport::Stats thingStats; bool thingsOnly = false, foliageOnly = false; };
     bool previewThings_ = true;
+    bool showThingGlyphs_ = true;
     size_t thingInstances_ = 0;
     std::future<FoliageResult> foliageFuture_;
     // the maps touching the open one, low-res and textured at their WLD offsets (layer 2):
@@ -986,10 +1214,13 @@ private:
     std::future<NeighbourResult> neighbourFuture_;
     void startNeighbourLoad();
     std::string foliageLoadedFor_;
+    uint64_t foliageTerrainRev_ = 0;
+    size_t foliagePreviewReseated_ = 0;
     std::string foliagePendingName_;
     bool previewFoliage_ = true;
     size_t foliageInstances_ = 0;
     std::string foliageStatus_;
+    std::set<std::string> reportedThingWarnings_; // avoid repeating the same import warning after every terrain stroke
 
     // export
     ExportSettings settings_;

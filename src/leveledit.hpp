@@ -25,8 +25,10 @@
 #include <memory>
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "forge/lev.hpp"
@@ -159,6 +161,14 @@ public:
     ThingSummary summary(size_t index) const;
     std::optional<size_t> indexOfUid(uint64_t uid) const;
     uint64_t uidOf(size_t index) const;
+    // Stable breadth-first descendants, excluding roots. Ambiguous/malformed
+    // UID or ownership declarations are not traversed; cycles are visited once.
+    // Each ownedTree entry is {child, direct parent}, in parent-before-child order.
+    std::vector<std::pair<size_t,size_t>> ownedTree(const std::vector<size_t>& roots) const;
+    std::vector<size_t> ownedDescendants(const std::vector<size_t>& roots) const;
+    // Rigidly move/rotate owned descendants from explicit root frame edits.
+    // Scale alone has no effect on children. Pure query for live preview.
+    std::vector<std::pair<size_t,Frame>> ownedFramesAfter(const std::vector<std::pair<size_t,Frame>>& roots) const;
     bool frameOf(size_t index, Frame& out) const;
 
     // Ground height (bilinear LEV sample) at a map-local XY; nullopt when no
@@ -168,11 +178,21 @@ public:
     const forge::lev::File* level() const { return level_.get(); }
 
     // ---- commands (each one undo step) ----
+    // Missing/empty CTCEditor defaults to unlocked. setLocked requires the block;
+    // a missing flag is inserted, but unrelated component schemas are not created.
+    bool isLocked(size_t index) const;
+    bool setLocked(size_t index, bool locked);
     void setFrame(size_t index, const Frame& frame);
-    // After the ground changed (a stitch, a scripted sculpt): every thing that
-    // stood on the old ground (|z - old height| <= tolerance; retail things sit
-    // within 0.4 of it, buried ones further) follows it, keeping its offset.
-    // One undo step; returns how many moved.
+    // The native owner move ignores the child's own editor lock. Call only for
+    // descendants returned by ownedFramesAfter for an unlocked edited parent.
+    void setOwnedFrame(size_t index, const Frame& frame);
+    // Absolute Z, clamped to terrain at this XY. False for unavailable terrain,
+    // invalid/nonfinite input, missing frame or locks. Successful no-ops keep history.
+    bool setHeight(size_t index, float height);
+    // Repairs an older draft after the ground changed. Current brush and direct
+    // height edits already move grounded unlocked things in their own undo step.
+    // A thing near the old ground follows only if it is not already closer to
+    // the new ground; deliberately floating/buried things stay. Returns moved count.
     size_t reseatThings(const TerrainState& before, float tolerance = 1.0f);
     // The same against the terrain as last saved/deployed (the sculpt session's baseline).
     size_t reseatThingsSinceSave(float tolerance = 1.0f) { return savedTerrain_ ? reseatThings(*savedTerrain_, tolerance) : 0; }
@@ -191,8 +211,9 @@ public:
     // the section does not exist.
     void setPlacementSection(const std::string& name) { placementSection_ = name; }
     const std::string& placementSection() const { return placementSection_; }
-    // Moves a thing into another section (vanilla RCtrl+; AddSelectedThingToCurrentQuest).
-    // One undo step; returns the thing's new index (nullopt: bad index / no such section).
+    // Moves a thing and its valid OwnerUID descendants into another section
+    // (vanilla RCtrl+; AddSelectedThingToCurrentQuest). Preserves each thing's
+    // block text. One undo step; returns the root's new index.
     std::optional<size_t> moveToSection(size_t index, const std::string& name);
     // Day / night-only creatures (vanilla CTCDayOrNightOnlySupport, on every CREATURE_BASE_TEMPLATE
     // def): nothing is written into the thing block -- its section carries it, "<quest>%DayOnly" or
@@ -213,6 +234,15 @@ public:
         enum class Kind { Bool, Int, Float, String, Raw } kind = Kind::Raw;
     };
     std::vector<PropertyRow> propertiesOf(size_t index) const;
+    // Known scalar overrides on a conservative set of existing, unique CTCs.
+    // An absent row has an empty value: no definition/engine default is inferred.
+    // General fields, component creation, coupled light/script controls and lists
+    // are excluded. Ambiguous duplicate blocks/keys are never admitted.
+    struct KnownProperty { PropertyRow row; bool present = false; };
+    std::vector<KnownProperty> knownComponentProperties(size_t index) const;
+    bool setComponentOverride(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
+    bool resetComponentOverride(size_t index, const std::string& ctc, const std::string& key);
+    std::vector<std::string> ctcBlocksOf(size_t index) const;
     // Sets one field (value as the .tng spells it: TRUE, 3, 1.5, "text"); one undo
     // step. False when the value does not fit the field's kind or the field is absent.
     bool setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value);
@@ -220,6 +250,8 @@ public:
     // Indexed list fields (CTCCreatureGenerator CreatureFamilies[n]; no count field,
     // contiguous from 0): append after the last entry / remove entry i shifting the
     // rest down. One undo step each; false when the block is absent / i is out of range.
+    // Structured editing requires one block and a unique contiguous quoted list.
+    bool listEditable(size_t index, const std::string& ctc, const std::string& base) const;
     bool addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value);
     bool removeListEntry(size_t index, const std::string& ctc, const std::string& base, int i);
     std::vector<std::string> listEntries(size_t index, const std::string& ctc, const std::string& base) const;
@@ -275,12 +307,31 @@ public:
     // EntranceConnectedToUID, a building for Home/WorkBuildingUID ...)? The vanilla
     // editor offers only viable modes (GetViableAttachModesForThing).
     bool linkTargetFits(const Link& link, size_t target) const;
+    // Optional definition lookup for Father/Mother target validation. Unknown
+    // sex remains permissible; a known mismatch is rejected by setLink.
+    void setCreatureSexLookup(std::function<std::optional<int32_t>(const std::string&)> lookup) {
+        creatureSexLookup_ = std::move(lookup);
+    }
     // Sets the field to `targetUid` (0 clears). One undo step; false when the thing
     // lacks that link.
     bool setLink(size_t index, const std::string& ctc, const std::string& field, uint64_t targetUid);
+    struct IncomingLink { size_t source = 0; Link link; };
+    std::vector<IncomingLink> linksInto(size_t target) const;
+    enum class AttachMode { Owned, LivesIn, WorksIn, Village, Receptor,
+                            RegionEntrance, RouteTarget, Spouse, Father, Mother };
+    struct AttachOption { AttachMode mode; std::string field, ctc, caption; };
+    std::vector<AttachOption> viableAttachModes(size_t anchor) const;
+    bool canAttach(size_t anchor, AttachMode mode, size_t clicked, std::string* reason = nullptr) const;
+    // Toggle one clicked thing while the anchor stays selected; one undo step.
+    bool toggleAttachment(size_t anchor, AttachMode mode, size_t clicked, std::string& error);
     // Copy of a thing with a fresh UID and ScriptName NULL, inserted right
-    // after the original. Returns the new index.
+    // after the original. A saved OwnerUID is cleared on the copy so it does
+    // not remain owned by the source's parent. Returns the new index.
     size_t duplicate(size_t index);
+    // Copy selected things in one undo step. Links whose unique targets are
+    // also selected point to the corresponding copies; external links stay put.
+    // Returns copy indices in the input order after all insertions.
+    std::vector<size_t> duplicateGroup(const std::vector<size_t>& indices);
     size_t place(forge::thingplacer::Placement placement);
     // An enemy spawner: a MARKER_CREATURE_GENERATOR thing carrying the retail
     // CTCCreatureGenerator block (self-triggering when the hero comes within
@@ -319,7 +370,21 @@ public:
     int worldX() const { return worldX_; }
     int worldY() const { return worldY_; }
     int worldSlot() const { return worldSlot_; }   // WLD map slot (GoToMapSlotRetailTransition), 0 = unknown
-    void remove(size_t index);
+    // Deletes one unlocked thing, clears saved incoming UID links and repairs a
+    // surviving track chain. Returns the number of cleared link fields.
+    size_t remove(size_t index);
+    // Delete unlocked selected roots, optionally including valid OwnerUID
+    // descendants even when those children carry an editor lock. If children
+    // are kept, unlink only surviving direct children of deleted roots.
+    // One undo step; returns the number of things removed.
+    size_t removeWithOwned(const std::vector<size_t>& roots, bool includeOwned,
+                           size_t* clearedLinks=nullptr);
+    // Framed things within an inclusive map-local rectangle (including locked
+    // things and helpers). The delete skips locked roots and keeps descendants
+    // outside the rectangle, using the normal owned/link cleanup in one undo.
+    std::vector<size_t> thingsInRect(int x0, int y0, int x1, int y1) const;
+    size_t removeThingsInRect(int x0, int y0, int x1, int y1,
+                             size_t* skipped=nullptr, size_t* clearedLinks=nullptr);
 
     // Several commands as ONE undo step (multi-select move / delete / duplicate / paste):
     // the first pushUndo inside the batch snapshots, the rest are skipped. Nestable.
@@ -339,6 +404,7 @@ public:
         bool empty() const { return items.empty(); }
     };
     Fragment extract(const std::vector<size_t>& indices) const;
+    bool isEditBrushCopyable(size_t index) const;
     std::vector<size_t> paste(const Fragment& fragment, const float at[3], bool dropToGround);
 
     bool canUndo() const { return !undo_.empty(); }
@@ -368,15 +434,16 @@ public:
     const TerrainState& terrain() const { return *terrain_; }
     // The state being drawn: the stroke's working copy while one is active.
     const TerrainState& liveTerrain() const { return stroke_ && working_ ? *working_ : *terrain_; }
+    const TerrainState* savedTerrain() const { return savedTerrain_.get(); }
     // Strokes: beginStroke snapshots for undo, applyBrush edits the working
     // copy (call every frame while the mouse is down), endStroke writes the
-    // result into the .lev and closes the undo step.
+    // result into the .lev and moves grounded things in the same undo step.
     void beginStroke(const TerrainBrush& brush);
     void applyBrush(const TerrainBrush& brush, float dt);
     bool strokeActive() const { return stroke_; }
     void endStroke();
-    // One undo step that sets vertex heights directly (the seam stitcher; no
-    // brush). Out-of-range vertices are ignored. False when no terrain is loaded.
+    // One undo step that sets vertex heights directly and moves grounded things
+    // with them (the seam stitcher; no brush). Out-of-range vertices are ignored.
     struct VertexHeight { int x = 0, y = 0; float h = 0; };
     // Bilinear height of a terrain state at a map-local point (nullopt outside the grid).
     static std::optional<float> sampleHeight(const TerrainState& t, int cellsX, int cellsY, float x, float y);
@@ -489,7 +556,11 @@ private:
     void restore(const Snapshot& s);
     Snapshot snapshot() const;
     void writeTerrainToLevel();
+    size_t reseatGroundedThings(const TerrainState& before, float tolerance, bool recordUndo);
     std::string mapName_;
+    std::function<std::optional<int32_t>(const std::string&)> creatureSexLookup_;
+    mutable uint64_t incomingCacheRevision_ = ~0ull;
+    mutable std::unordered_map<uint64_t,std::vector<IncomingLink>> incomingCache_;
     int worldX_ = 0, worldY_ = 0, worldSlot_ = 0;
     forge::tng::File file_;
     std::string original_;
@@ -513,7 +584,7 @@ private:
     std::filesystem::path loosePath_;
     std::filesystem::path externalWld_, externalLev_;   // set for a map of another world
     std::string placementSection_ = "NULL";
-    int trackTempCounter_ = 0;
+    uint64_t trackTempCounter_ = 0;
     // track helpers (no undo step of their own)
     uint64_t trackLink(size_t node, int which) const;          // 1 = prev, 2 = next
     void setTrackField(size_t node, const std::string& key, const std::string& value);
@@ -521,6 +592,9 @@ private:
     std::vector<size_t> trackChain(size_t node, const std::unordered_map<uint64_t, size_t>* uidIndex) const;
     void fixTrackEnds(const std::vector<size_t>& chain);
     void nameChain(const std::vector<size_t>& chain, const std::string& name);
+    std::string nextTrackTempName();
+    size_t clearLinksTo(uint64_t uid, size_t except, const std::set<size_t>* pending);
+    size_t removeOne(size_t index, const std::set<size_t>* pending=nullptr); // assumes caller checked direct locks
     bool soundListGrew_ = false;   // a sound name was added: the .lev must be written
     std::filesystem::path packOut_;   // set while deployTerrainToPack runs: write into the pack, not the game
     std::string targetSection() const;   // placementSection_ when it exists, else NULL

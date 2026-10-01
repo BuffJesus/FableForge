@@ -33,6 +33,18 @@ std::vector<TextureRow> listTextures(const std::filesystem::path& texturesBig, s
 bool decodeTexture(const std::filesystem::path& texturesBig, const std::string& entryName,
                    terrainexport::Image& out, std::string& error);
 
+// Authored sprite frames, cropped out of allocation padding and stacked vertically.
+// Supports sheets and repeated raw mip chains; a non-reconstructable animation
+// reports an error instead of treating the complete sheet as one particle.
+struct SpriteTexture {
+    terrainexport::Image image;
+    uint32_t frames = 0;
+};
+bool decodeSpriteFrames(const std::vector<uint8_t>& info, const std::vector<uint8_t>& payload,
+                        SpriteTexture& out, std::string& error);
+bool decodeSpriteTexture(const std::filesystem::path& texturesBig, const std::string& entryName,
+                         SpriteTexture& out, std::string& error);
+
 bool exportPng(const std::filesystem::path& texturesBig, const std::string& entryName,
                const std::filesystem::path& png, std::string& error);
 

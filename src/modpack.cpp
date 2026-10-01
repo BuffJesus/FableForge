@@ -1,6 +1,9 @@
 #include "modpack.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <cctype>
 #include <fstream>
 #include <map>
 #include <iterator>
@@ -42,6 +45,32 @@ Pack load(const fs::path& folder) {
         r.name = t.value("name", ""); r.png = t.value("png", ""); r.cliffPng = t.value("cliffPng", ""); r.donor = t.value("donor", r.donor);
         p.groundThemes.push_back(std::move(r));
     }
+    for (const auto& row : j.value("lipSync", json::array())) {
+        LipSyncRecipe recipe;
+        recipe.language=row.at("language").get<std::string>();
+        recipe.bank=row.at("bank").get<std::string>();
+        recipe.soundId=row.at("soundId").get<uint32_t>();
+        recipe.value.fps=row.at("fps").get<uint32_t>();
+        recipe.value.durationBits=row.at("durationBits").get<uint32_t>();
+        for(const auto& item:row.at("dictionary")) {
+            const int id=item.at("id").get<int>();
+            if(id<0 || id>255) throw std::runtime_error("lipSync dictionary ID out of range");
+            recipe.value.dictionary.push_back({uint8_t(id),item.at("symbol").get<std::string>()});
+        }
+        for(const auto& frame:row.at("frames")) {
+            forge::lipsync::Frame keys;
+            for(const auto& item:frame) {
+                if(!item.is_array() || item.size()!=2)
+                    throw std::runtime_error("lipSync frame key must be [ID, weight]");
+                const int id=item[0].get<int>(),weight=item[1].get<int>();
+                if(id<0 || id>255 || weight<0 || weight>255)
+                    throw std::runtime_error("lipSync frame key out of byte range");
+                keys.push_back({uint8_t(id),uint8_t(weight)});
+            }
+            recipe.value.frames.push_back(std::move(keys));
+        }
+        p.lipSync.push_back(std::move(recipe));
+    }
     for (const auto& r : j.value("requires", json::array())) if (r.is_string()) p.masters.push_back(r.get<std::string>());
     return p;
 }
@@ -56,6 +85,21 @@ void save(const fs::path& folder, const Pack& pack) {
     j["groundThemes"] = json::array();
     for (const auto& t : pack.groundThemes)
         j["groundThemes"].push_back({{"name", t.name}, {"png", t.png}, {"cliffPng", t.cliffPng}, {"donor", t.donor}});
+    j["lipSync"]=json::array();
+    for(const auto& recipe:pack.lipSync) {
+        json dictionary=json::array(),frames=json::array();
+        for(const auto& viseme:recipe.value.dictionary)
+            dictionary.push_back({{"id",viseme.id},{"symbol",viseme.symbol}});
+        for(const auto& frame:recipe.value.frames) {
+            json keys=json::array();
+            for(const auto& key:frame) keys.push_back(json::array({key.id,key.weight}));
+            frames.push_back(std::move(keys));
+        }
+        j["lipSync"].push_back({{"language",recipe.language},{"bank",recipe.bank},
+            {"soundId",recipe.soundId},{"fps",recipe.value.fps},
+            {"durationBits",recipe.value.durationBits},
+            {"dictionary",std::move(dictionary)},{"frames",std::move(frames)}});
+    }
     if (!pack.masters.empty()) j["requires"] = pack.masters;
     fs::create_directories(folder);
     std::ofstream(folder / kFileName) << j.dump(2);
@@ -90,6 +134,17 @@ bool validName(const std::string& n) {
     if (n.empty() || n.size() > 96) return false;
     for (const char c : n) if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) return false;
     return true;
+}
+bool validLipBank(const std::string& language,const std::string& bank) {
+    if(language.empty()) return false;
+    std::string upper;
+    for(unsigned char ch:language) {
+        if(!std::isalpha(ch)) return false;
+        upper.push_back(char(std::toupper(ch)));
+    }
+    for(const char* suffix:{"MAIN","MAIN_2","SCRIPT","SCRIPT_2"})
+        if(bank=="LIPSYNC_"+upper+"_"+suffix) return true;
+    return false;
 }
 } // namespace
 
@@ -129,7 +184,31 @@ bool addGroundTheme(const fs::path& folder, GroundThemeRecipe recipe, std::strin
     return true;
 }
 
-ApplyReport apply(const fs::path& folder, const fs::path& baseRoot, const fs::path& outRoot) {
+bool addLipSync(const fs::path& folder,const std::string& language,
+                std::span<const forge::lipsync::ArchiveEdit> edits,std::string& error) {
+    try {
+        if(!isPack(folder)) throw std::runtime_error(folder.string()+" is not a FableForge pack");
+        if(edits.empty()) throw std::runtime_error("no lip sync edits staged");
+        Pack pack=load(folder);
+        for(const auto& edit:edits) {
+            if(!validLipBank(language,edit.bankName) || !edit.soundId)
+                throw std::runtime_error("lip sync language, bank or Sound ID is invalid");
+            // Validate the recipe's binary representation before changing the manifest.
+            const auto data=forge::lipsync::encode(edit.value);
+            forge::lipsync::decode(data,forge::lipsync::encodeInfo(edit.value));
+            std::erase_if(pack.lipSync,[&](const LipSyncRecipe& old) {
+                return old.language==language && old.bank==edit.bankName &&
+                       old.soundId==edit.soundId;
+            });
+            pack.lipSync.push_back({language,edit.bankName,edit.soundId,edit.value});
+        }
+        save(folder,pack);
+        return true;
+    } catch(const std::exception& ex) {error=ex.what();return false;}
+}
+
+ApplyReport apply(const fs::path& folder, const fs::path& baseRoot, const fs::path& outRoot,
+                  const std::set<std::string>& skipLipLanguages) {
     ApplyReport rep;
     Pack p;
     try { p = load(folder); } catch (const std::exception& e) { rep.errors.push_back(e.what()); return rep; }
@@ -153,6 +232,46 @@ ApplyReport apply(const fs::path& folder, const fs::path& baseRoot, const fs::pa
         if (!meshimport::importModel(baseRoot, outRoot, req, out, err)) { rep.errors.push_back(m.name + ": " + err); continue; }
         rep.added.push_back(out.objectName + " (mesh " + std::to_string(out.meshId) + ", def " + std::to_string(out.defIndex) + ")");
         for (const auto& n : out.notes) rep.notes.push_back(n);
+    }
+    std::map<std::string,std::vector<forge::lipsync::ArchiveEdit>> dialogue;
+    std::set<std::string> reportedSkipped;
+    for(const auto& recipe:p.lipSync) {
+        if(skipLipLanguages.contains(recipe.language)) {
+            if(reportedSkipped.insert(recipe.language).second)
+                rep.notes.push_back(recipe.language+
+                    " lip sync recipes skipped: a later whole-file dialogue.big wins");
+            continue;
+        }
+        if(!validLipBank(recipe.language,recipe.bank) || !recipe.soundId) {
+            rep.errors.push_back("invalid lip sync recipe language/bank/ID");
+            continue;
+        }
+        dialogue[recipe.language].push_back({recipe.bank,recipe.soundId,recipe.value});
+    }
+    for(const auto& [language,edits]:dialogue) {
+        const fs::path relative=fs::path("data")/"lang"/language/"dialogue.big";
+        const fs::path output=outRoot/relative;
+        const fs::path source=fs::exists(output)?output:baseRoot/relative;
+        if(!fs::is_regular_file(source)) {
+            rep.errors.push_back(language+": source dialogue.big is missing");
+            continue;
+        }
+        fs::path temporary=output;
+        temporary+=std::string(".recipe.")+std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
+        try {
+            forge::lipsync::writeScratchArchive(source,temporary,edits);
+            if(fs::exists(output)) {
+                fs::copy_file(temporary,output,fs::copy_options::overwrite_existing);
+                fs::remove(temporary);
+            } else fs::rename(temporary,output);
+            rep.added.push_back(language+" dialogue: "+std::to_string(edits.size())+
+                                " lip sync line(s)");
+        } catch(const std::exception& ex) {
+            std::error_code ignored;
+            fs::remove(temporary,ignored);
+            rep.errors.push_back(language+": "+ex.what());
+        }
     }
     return rep;
 }

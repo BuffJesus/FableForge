@@ -16,7 +16,9 @@
 #include <optional>
 #include <numeric>
 #include <set>
+#include <tuple>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "modpack.hpp"
@@ -250,6 +252,7 @@ int usage() {
         "  forge big extract <file.big> <out-dir> [bank-filter]\n"
         "  forge save read <FableSave-file> [--json]\n"
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
+        "  forge assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n"
         "  forge fmp list <file.fmp> [--json]\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
@@ -8151,8 +8154,35 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                          b, bank->entries.size());
     }
 
-    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added)\n",
-                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added);
+    // ChocolateBox packages can carry level payloads in the WAD bank. Stage
+    // them as loose levels so the normal composer can merge TNGs and repack
+    // LEVs into the output WAD. Freeroam.fmp uses this bank exclusively.
+    size_t wadLevels = 0;
+    if (const auto* bank = pkg.findBank("FinalAlbionWAD"); bank != nullptr) {
+        for (const auto& e : bank->entries) {
+            std::string name = e.name;
+            std::replace(name.begin(), name.end(), '\\', '/');
+            const std::string lower = lowered(name);
+            constexpr std::string_view prefix = "data/levels/";
+            if (!lower.starts_with(prefix)) {
+                std::fprintf(stderr, "  warning: skipped unexpected WAD entry %s\n", e.name.c_str());
+                continue;
+            }
+            const fs::path rel = fs::path(name.substr(prefix.size()));
+            if (rel.empty() || rel.is_absolute() ||
+                std::find(rel.begin(), rel.end(), fs::path("..")) != rel.end()) {
+                std::fprintf(stderr, "  warning: skipped unsafe WAD entry %s\n", e.name.c_str());
+                continue;
+            }
+            const fs::path dst = fs::path(outRoot) / "data" / "Levels" / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), pkg.entryData(e));
+            ++wadLevels;
+        }
+    }
+
+    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu)\n",
+                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels);
     return 0;
 }
 
@@ -8315,6 +8345,10 @@ std::string modsPicksDefault(const std::string& root) {
     return std::filesystem::exists(p, ec) ? p.string() : std::string();
 }
 
+json collectMissingMesh(const std::filesystem::path& root,
+                        const std::filesystem::path& schemaPath,
+                        std::filesystem::path graphicsPath);
+
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sources,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
@@ -8346,6 +8380,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     std::vector<std::string> roots;
     std::vector<std::string> rootLabels;   // parallel to roots
+    std::vector<std::string> contentRoots = sources; // .fmp WAD banks become staged trees
     std::vector<std::string> egoFolders;
     std::vector<size_t> forgePacks;   // FableForge packs (forge_pack.json): their recipes run after the layers below
     for (size_t i = 0; i < sources.size(); ++i) {
@@ -8358,6 +8393,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (ext == ".fmp" || ext == ".FMP") {
             const std::string root = tmpRoot(i);
             fmpApply(baseRoot, s, root, jsonOutput);
+            contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
         } else if (ext == ".patch" || ext == ".PATCH") {
             const std::string root = tmpRoot(i);
@@ -8403,16 +8439,46 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 
-    // --- Level TNG merge (loose .tng under data/Levels of dir sources) ---------
-    // .fmp/.patch temp roots carry no loose TNGs (their level data lives in a WAD
-    // bank — a follow-up), so only real dir sources contribute here.
+    // --- Level TNG merge (loose .tng under data/Levels of content roots) -------
+    // An FMP's WAD bank is staged above, so its TNGs join this merge too.
     const fs::path baseLevels = fs::path(baseRoot) / "data" / "Levels";
+    // A stock install has its TNG baseline inside FinalAlbion.wad. Materialize
+    // only the entries a mod touches, so multi-pack edits can use the same
+    // three-way merge as an already extracted (Freeroam-style) install.
+    std::optional<forge::wad::Archive> baseLevelWad;
+    std::map<std::string, const forge::wad::Entry*> baseWadLevels;
+    if (fs::exists(baseLevels / "FinalAlbion.wad")) {
+        baseLevelWad.emplace(forge::wad::Archive::open(baseLevels / "FinalAlbion.wad"));
+        for (const auto& entry : baseLevelWad->entries()) {
+            std::string key = entry.name;
+            std::replace(key.begin(), key.end(), '\\', '/');
+            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            constexpr std::string_view prefix = "data/levels/";
+            if (key.starts_with(prefix)) baseWadLevels[key.substr(prefix.size())] = &entry;
+        }
+    }
+    auto baselineLevelPath = [&](const std::string& key) -> fs::path {
+        const fs::path loose = baseLevels / key;
+        if (fs::exists(loose)) return loose;
+        if (!baseLevelWad) return loose;
+        std::string lookup = key;
+        std::replace(lookup.begin(), lookup.end(), '\\', '/');
+        std::transform(lookup.begin(), lookup.end(), lookup.begin(), ::tolower);
+        const auto found = baseWadLevels.find(lookup);
+        if (found == baseWadLevels.end()) return loose;
+        const fs::path materialized = tmp / "wad_baseline" / key;
+        if (!fs::exists(materialized)) {
+            fs::create_directories(materialized.parent_path());
+            writeAllBytes(materialized.string(), baseLevelWad->read(*found->second));
+        }
+        return materialized;
+    };
     // key (path relative to data/Levels) -> [(label, absPath) that differ from base]
     std::map<std::string, std::vector<std::pair<std::string, std::string>>> tngChangers;
     std::map<std::string, std::vector<std::pair<std::string, std::string>>> qstChangers;
     if (fs::exists(baseLevels)) {
         for (size_t si = 0; si < sources.size(); ++si) {
-            const std::string& s = sources[si];
+            const std::string& s = contentRoots[si];
             const fs::path srcLevels = fs::path(s) / "data" / "Levels";
             if (!fs::is_directory(srcLevels)) continue;
             const std::string label = srcLabel(si);
@@ -8422,15 +8488,22 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (ext != ".tng" && ext != ".qst") continue;
                 const std::string key =
                     fs::relative(de.path(), srcLevels).generic_string();
-                const fs::path basePath = baseLevels / key;
+                const fs::path basePath = ext == ".tng" ? baselineLevelPath(key) : baseLevels / key;
                 // Changed vs base (or new) => a candidate for this level.
                 bool differs = true;
                 if (fs::exists(basePath))
                     differs = readAllBytes(de.path().string()) !=
                               readAllBytes(basePath.string());
-                if (differs)
-                    (ext == ".tng" ? tngChangers : qstChangers)[key].push_back(
-                        {label, de.path().string()});
+                if (differs) {
+                    auto& changers = (ext == ".tng" ? tngChangers : qstChangers)[key];
+                    // A derivative pack may ship the same complete TNG as its
+                    // predecessor. Keep the later owner without parsing and
+                    // merging hundreds of identical copies.
+                    if (ext == ".tng" && !changers.empty() &&
+                        filesIdentical(de.path(), changers.back().second))
+                        changers.back() = {label, de.path().string()};
+                    else changers.push_back({label, de.path().string()});
+                }
             }
         }
     }
@@ -8440,7 +8513,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     json provenance;   // level -> thing key -> mod, for the editor's badges (forge_mods_provenance.json)
     for (const auto& [key, changers] : tngChangers) {
         const fs::path outTng = fs::path(outDir) / "data" / "Levels" / key;
-        const fs::path baseTng = baseLevels / key;
+        const fs::path baseTng = baselineLevelPath(key);
         json row{{"level", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
         // EgoCore-style partial TNG mods (a [Settings] header, or far fewer things than the level)
@@ -8708,14 +8781,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // source that carries a path wins; a path several sources carry is reported.
     struct WorldCarrier { std::string label; fs::path wld, bwd; };
     std::vector<WorldCarrier> worldCarriers;   // mods shipping FinalAlbion.wld / .bwd, in load order (merged per record below)
+    std::map<std::string, size_t> dialogueWholeFileAt; // final raw archive layer for each language
     {
-        struct Carrier { std::string label; fs::path src; std::string rel; };
+        struct Carrier { std::string label; fs::path src; std::string rel; size_t sourceIndex; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
         std::set<std::string> settingsSkipped, parkedWad;
         size_t unchanged = 0;
         std::error_code ec;
         for (size_t si = 0; si < sources.size(); ++si) {
-            const std::string& s = sources[si];
+            const std::string& s = contentRoots[si];
             if (!fs::is_directory(s)) continue;
             if (fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) continue;   // EgoCore: below
             for (auto& de : fs::recursive_directory_iterator(s)) {
@@ -8744,7 +8818,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 fs::path basePath = fs::path(baseRoot) / rel;
                 if (!fs::exists(basePath, ec)) basePath = fs::path(baseRoot) / fs::path(rel).parent_path() / de.path().filename();
                 if (filesIdentical(de.path(), basePath)) { ++unchanged; continue; }
-                carriers[lower].push_back({srcLabel(si), de.path(), rel});
+                carriers[lower].push_back({srcLabel(si), de.path(), rel, si});
             }
         }
         size_t contested = 0;
@@ -8770,6 +8844,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             fs::path outPath = fs::path(outDir) / win->rel;
             fs::create_directories(outPath.parent_path());
             fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
+            if(lower.rfind("data/lang/",0)==0 && lower.ends_with("/dialogue.big"))
+                dialogueWholeFileAt[lower]=win->sourceIndex;
         }
         if (jsonOutput) rep["files"] = {{"copied", carriers.size()}, {"unchanged", unchanged}, {"contested", fileRows}, {"settings_skipped", std::vector<std::string>(settingsSkipped.begin(), settingsSkipped.end())}, {"parked_wad", std::vector<std::string>(parkedWad.begin(), parkedWad.end())}};
         if (!carriers.empty() || unchanged)
@@ -8812,8 +8888,37 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             }
         }
     }
+    struct LipVersion {
+        size_t sourceIndex;
+        std::string mod;
+        std::vector<uint8_t> payload, info;
+    };
+    std::map<std::tuple<std::string,std::string,uint32_t>,std::vector<LipVersion>> lipVersions;
     for (const size_t pi : forgePacks) {
-        const auto prep = albion::modpack::apply(sources[pi], baseRoot, outDir);
+        std::set<std::string> skipLipLanguages;
+        try {
+            const auto pack=albion::modpack::load(sources[pi]);
+            for(const auto& recipe:pack.lipSync) {
+                std::string key=(fs::path("data")/"lang"/recipe.language/"dialogue.big").generic_string();
+                std::transform(key.begin(),key.end(),key.begin(),::tolower);
+                if(const auto it=dialogueWholeFileAt.find(key);
+                   it!=dialogueWholeFileAt.end() && it->second>pi)
+                    skipLipLanguages.insert(recipe.language);
+            }
+            for(const auto& recipe:pack.lipSync) {
+                if(skipLipLanguages.contains(recipe.language)) continue;
+                try {
+                    auto& versions=lipVersions[{recipe.language,recipe.bank,recipe.soundId}];
+                    LipVersion version{pi,srcLabel(pi),forge::lipsync::encode(recipe.value),
+                                       forge::lipsync::encodeInfo(recipe.value)};
+                    if(!versions.empty() && versions.back().sourceIndex==pi)
+                        versions.back()=std::move(version);
+                    else versions.push_back(std::move(version));
+                } catch(const std::exception&) {} // apply reports invalid payloads
+            }
+        } catch(const std::exception&) {} // apply reports malformed manifests
+        const auto prep = albion::modpack::apply(sources[pi], baseRoot, outDir,
+                                                skipLipLanguages);
         for (const auto& e : prep.errors) std::fprintf(stderr, "pack %s: %s\n", srcLabel(pi).c_str(), e.c_str());
         // the pack's terrain edits: re-baked static-map chunks into the STB being built
         const auto srep = albion::modpack::applyStaticMaps(sources[pi], baseRoot, outDir);
@@ -8824,12 +8929,32 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         }
         if (jsonOutput && (!srep.maps.empty() || !srep.errors.empty())) rep["forge_stb"].push_back({{"mod", srcLabel(pi)}, {"maps", srep.maps}, {"errors", srep.errors}});
         if (!jsonOutput && !srep.maps.empty()) std::printf("pack %s: %zu static-map chunk(s) into FinalAlbion_RT.stb\n", srcLabel(pi).c_str(), srep.maps.size());
-        if (jsonOutput) rep["forge"].push_back({{"mod", srcLabel(pi)}, {"added", prep.added}, {"errors", prep.errors}});
+        if (jsonOutput) rep["forge"].push_back({{"mod", srcLabel(pi)}, {"added", prep.added},
+                                                  {"notes", prep.notes}, {"errors", prep.errors}});
         if (!jsonOutput) {
             std::printf("pack %s: %zu recipe(s) applied%s\n", srcLabel(pi).c_str(), prep.added.size(), prep.errors.empty() ? "" : (", " + std::to_string(prep.errors.size()) + " failed").c_str());
             for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
+            for (const auto& note : prep.notes) std::printf("  %s\n", note.c_str());
         }
     }
+    json lipRows=json::array();
+    for(const auto& [key,versions]:lipVersions) {
+        if(versions.size()<2) continue;
+        bool disagree=false;
+        for(size_t i=1;i<versions.size();++i)
+            if(versions[i].payload!=versions[0].payload ||
+               versions[i].info!=versions[0].info) {disagree=true;break;}
+        if(!disagree) continue;
+        const auto& [language,bank,soundId]=key;
+        json mods=json::array();
+        for(const auto& version:versions) mods.push_back(version.mod);
+        lipRows.push_back({{"language",language},{"bank",bank},{"soundId",soundId},
+                           {"mods",mods},{"winner",versions.back().mod}});
+    }
+    const size_t lipSyncConflicts=lipRows.size();
+    if(jsonOutput) rep["lip_sync"]={{"contested",std::move(lipRows)}};
+    else if(lipSyncConflicts) std::printf("lip sync: %zu line conflict(s), later pack wins\n",
+                                         lipSyncConflicts);
 
     // --- World: FinalAlbion.bwd / .wld merged per map and region (forge/worldmerge.hpp) --
     // every mod's added levels, moves and region edits land instead of the last whole file.
@@ -8966,29 +9091,36 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     // --- The WAD carries the levels the engine loads (ENGINE_RULES: the WAD wins over loose
     // files; the GB packs disable it by renaming it to _FinalAlbion.wad so their loose levels
-    // load). Every loose FinalAlbion/*.lev / *.tng this build produced that has a WAD entry is
-    // repacked into a rebuilt FinalAlbion.wad, so the merged levels load whatever the precedence;
-    // a level the WAD never had stays loose (and is reported).
+    // load). Repack loose FinalAlbion/*.lev / *.tng AND root Levels/*.lev / *.tng (the latter
+    // includes creature_hub). A level the WAD never had is appended at its actual archive path.
     {
         const fs::path baseWad = fs::path(baseRoot) / "data" / "Levels" / "FinalAlbion.wad";
-        const fs::path looseDir = fs::path(outDir) / "data" / "Levels" / "FinalAlbion";
-        if (fs::exists(baseWad) && (fs::is_directory(looseDir) || !paletteFixes.empty())) {
+        const fs::path levelsDir = fs::path(outDir) / "data" / "Levels";
+        const fs::path looseDir = levelsDir / "FinalAlbion";
+        if (fs::exists(baseWad) && (fs::is_directory(levelsDir) || !paletteFixes.empty())) {
             std::set<std::string> known;
             {
                 const auto archive = forge::wad::Archive::open(baseWad);
                 for (const auto& e : archive.entries()) { std::string k = e.name; std::transform(k.begin(), k.end(), k.begin(), ::tolower); known.insert(k); }
             }
             std::map<std::string, std::vector<uint8_t>> replacements = paletteFixes;
-            std::vector<std::string> newLevels;
-            if (fs::is_directory(looseDir)) for (const auto& de : fs::directory_iterator(looseDir)) {
-                if (!de.is_regular_file()) continue;
-                std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext != ".lev" && ext != ".tng") continue;
-                const std::string key = "Data\\Levels\\FinalAlbion\\" + de.path().filename().string();
-                std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
-                if (known.count(lk)) replacements[key] = readAllBytes(de.path().string());
-                else newLevels.push_back(de.path().filename().string());
-            }
+            std::vector<std::pair<std::string, fs::path>> newLevels;
+            auto collectLoose = [&](const fs::path& dir, const std::string& prefix) {
+                if (!fs::is_directory(dir)) return;
+                for (const auto& de : fs::directory_iterator(dir)) {
+                    if (!de.is_regular_file()) continue;
+                    std::string ext = de.path().extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    if (ext != ".lev" && ext != ".tng") continue;
+                    const std::string key = prefix + de.path().filename().string();
+                    std::string lk = key;
+                    std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower);
+                    if (known.count(lk)) replacements[key] = readAllBytes(de.path().string());
+                    else newLevels.emplace_back(key, de.path());
+                }
+            };
+            collectLoose(looseDir, "Data\\Levels\\FinalAlbion\\");
+            collectLoose(levelsDir, "Data\\Levels\\");
             if (!replacements.empty() || !newLevels.empty()) {
                 const fs::path outWad = fs::path(outDir) / "data" / "Levels" / "FinalAlbion.wad";
                 fs::path srcWad = fs::exists(outWad) ? outWad : baseWad;   // a pack may have shipped a whole WAD as a layer
@@ -9002,8 +9134,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (!newLevels.empty()) {
                     // levels the WAD never had (a pack's own maps) become native entries, like new-level does
                     std::vector<forge::wad::NativeEntry> natives;
-                    for (const auto& leaf : newLevels)
-                        natives.push_back({"Data\\Levels\\FinalAlbion\\" + leaf, readAllBytes((looseDir / leaf).string())});
+                    for (const auto& [key, path] : newLevels)
+                        natives.push_back({key, readAllBytes(path.string())});
                     const fs::path tmpWad = outWad.string() + ".tmp";
                     added = forge::wad::appendNativeEntries(srcWad, natives, tmpWad);
                     fs::rename(tmpWad, outWad);
@@ -9017,6 +9149,39 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (!stbContested.empty()) {
         if (jsonOutput) rep["forge_stb_contested"] = stbContested;
         else for (const auto& c : stbContested) std::printf("static map contested (the later pack wins): %s\n", c.c_str());
+    }
+
+    // Check the composed definitions against the graphics bank that will actually
+    // be used: the build's replacement when present, otherwise the install's.
+    // Compare with the install so pre-existing missing references are not blamed
+    // on the enabled mods. This runs before stage/apply and is read-only.
+    try {
+        fs::path builtGraphics = fs::path(outDir) / "data" / "graphics" / "graphics.big";
+        if (!fs::exists(builtGraphics)) {
+            builtGraphics = fs::path(baseRoot) / "data" / "graphics" / "graphics.big";
+            if (!fs::exists(builtGraphics))
+                builtGraphics = fs::path(baseRoot) / "data" / "graphics" / "pc" / "graphics.big";
+        }
+        const auto baseline = collectMissingMesh(baseRoot, schemaPath, {});
+        const auto built = collectMissingMesh(outDir, schemaPath, builtGraphics);
+        std::set<std::pair<std::string, uint32_t>> baselineKeys;
+        for (const auto& row : baseline["missing"])
+            baselineKeys.emplace(row["definition"].get<std::string>(), row["mesh_id"].get<uint32_t>());
+        json introduced = json::array();
+        for (const auto& row : built["missing"])
+            if (!baselineKeys.count({row["definition"].get<std::string>(), row["mesh_id"].get<uint32_t>()}))
+                introduced.push_back(row);
+        if (jsonOutput)
+            rep["asset_health"] = {{"status", "checked"}, {"introduced", introduced},
+                                   {"missing_total", built["missing"].size()},
+                                   {"baseline_missing", baseline["missing"].size()},
+                                   {"unparsed_defs", built["unparsed_defs"]},
+                                   {"graphics", built["graphics"]}};
+        else if (!introduced.empty())
+            std::printf("warning: %zu new definition Graphic reference(s) point to missing mesh ids (forge-tools assets missing-mesh inspects them)\n", introduced.size());
+    } catch (const std::exception& e) {
+        if (jsonOutput) rep["asset_health"] = {{"status", "unavailable"}, {"reason", e.what()}};
+        else std::printf("asset health: unavailable (%s)\n", e.what());
     }
 
     if (doStage) {
@@ -9047,6 +9212,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const size_t defsConflicts = rep.contains("defs") ? rep["defs"]["summary"]["record_conflicts"].get<size_t>() : 0;
         rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
                           {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
+                          {"lip_sync_contested", lipSyncConflicts},
                           {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
         std::puts(rep.dump(2).c_str());
     }
@@ -9783,6 +9949,71 @@ int terrainVerifyTiledLevels(const std::vector<std::string>& args) {
     return mismatched ? 1 : 0;
 }
 
+json collectMissingMesh(const std::filesystem::path& root,
+                        const std::filesystem::path& schemaPath,
+                        std::filesystem::path graphicsPath) {
+    namespace fs = std::filesystem;
+    if (graphicsPath.empty()) {
+        graphicsPath = root / "data" / "graphics" / "graphics.big";
+        if (!fs::exists(graphicsPath))
+            graphicsPath = root / "data" / "graphics" / "pc" / "graphics.big";
+    }
+    if (!fs::exists(graphicsPath))
+        throw std::runtime_error("assets missing-mesh: graphics.big not found; pass --graphics <graphics.big> for a mod-build overlay");
+    const auto graphics = forge::big::File::open(graphicsPath);
+    const auto* bank = graphics.findBank("MBANK_ALLMESHES");
+    if (!bank) throw std::runtime_error("assets missing-mesh: MBANK_ALLMESHES missing");
+    std::set<uint32_t> meshIds;
+    for (const auto& e : bank->entries) meshIds.insert(e.id);
+
+    const auto defs = openDefs(root.string(), "game.bin");
+    const auto schema = forge::defschema::Schema::load(schemaPath);
+    json missing = json::array();
+    size_t graphicRefs = 0, unparsed = 0;
+    for (const auto& e : defs.entries()) {
+        if (e.name.empty()) continue;
+        const auto* type = forge::defdecode::resolveType(schema, e.definition, e.data);
+        if (!type) { ++unparsed; continue; }
+        const auto decoded = forge::defdecode::decode(e.data, *type);
+        if (!decoded.clean()) { ++unparsed; continue; }
+        for (const auto& field : decoded.fields) {
+            if (field.name != "Graphic") continue;
+            if (field.value.size() < 8) { ++unparsed; break; }
+            uint32_t modelId = 0;
+            std::memcpy(&modelId, field.value.data() + 4, 4);
+            if (modelId) {
+                ++graphicRefs;
+                if (!meshIds.count(modelId))
+                    missing.push_back({{"definition", e.name}, {"type", e.definition},
+                                       {"mesh_id", modelId}});
+            }
+            break;
+        }
+    }
+    return json{{"game_root", root.generic_string()},
+                {"graphics", graphicsPath.generic_string()},
+                {"graphic_refs", graphicRefs}, {"mesh_ids", meshIds.size()},
+                {"unparsed_defs", unparsed}, {"missing", missing}};
+}
+
+int assetsMissingMesh(const std::filesystem::path& root,
+                      const std::filesystem::path& schemaPath,
+                      std::filesystem::path graphicsPath, bool asJson) {
+    const auto audit = collectMissingMesh(root, schemaPath, graphicsPath);
+    if (asJson) std::puts(audit.dump(2).c_str());
+    else {
+        std::printf("%zu Graphic references checked against %zu mesh ids: %zu missing; %zu definitions could not be decoded\n",
+                    audit["graphic_refs"].get<size_t>(), audit["mesh_ids"].get<size_t>(),
+                    audit["missing"].size(), audit["unparsed_defs"].get<size_t>());
+        for (const auto& row : audit["missing"])
+            std::printf("  %s (%s) -> mesh id %u\n",
+                        row["definition"].get<std::string>().c_str(),
+                        row["type"].get<std::string>().c_str(),
+                        row["mesh_id"].get<uint32_t>());
+    }
+    return 0;
+}
+
 int sceneAudit(const std::vector<std::string>& args) {
     if(args.size()<3) throw std::invalid_argument(
         "scene audit: <game-root> <def-schema.json> <level.tng>");
@@ -10128,6 +10359,20 @@ int main(int argc, char** argv) {
         }
         if (args.size() >= 4 && args[0] == "big" && args[1] == "extract") {
             return fmpExtract(args[2], args[3], args.size() > 4 ? args[4] : "");
+        }
+        if (args.size() >= 2 && args[0] == "assets" && args[1] == "missing-mesh") {
+            if (args.size() < 4) {
+                std::fprintf(stderr, "assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n");
+                return 2;
+            }
+            std::filesystem::path graphicsPath;
+            bool asJson = false;
+            for (size_t i = 4; i < args.size(); ++i) {
+                if (args[i] == "--graphics" && i + 1 < args.size()) graphicsPath = args[++i];
+                else if (args[i] == "--json") asJson = true;
+                else throw std::invalid_argument("assets missing-mesh: unknown or incomplete option " + args[i]);
+            }
+            return assetsMissingMesh(args[2], args[3], graphicsPath, asJson);
         }
         if (args.size() >= 3 && args[0] == "mesh" && args[1] == "physics-scan") {   // mesh physics-scan <graphics.big>: which [PHYSICS] hulls carry NAV_LAYER_0n helpers
             const auto file = forge::big::File::open(args[2]);

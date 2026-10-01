@@ -50,6 +50,7 @@ namespace albion::thingsexport {
 struct Options {
     std::filesystem::path gameRoot;
     bool textures = true;
+    bool objects = true;      // non-creature roots; attachments follow their parent
     bool creatures = false;
     bool particles = false;    // static stand-ins for particle emitters (off: out of scope for a map exporter)
     terrainexport::UpAxis up = terrainexport::UpAxis::Y;
@@ -70,6 +71,8 @@ struct Stats {
     int noMesh = 0;          // model id not in graphics.big / undecodable
     int noPosition = 0;      // no physics block
     int skippedCreatures = 0;
+    int skippedObjects = 0;
+    int rootObjectsPlaced = 0, rootCreaturesPlaced = 0;
     int childThings = 0;     // CREATEOBJECT / CREATEBUILDING dummies seen in placed meshes
     int childPlaced = 0;     // ...of which produced an instance
     int childParticles = 0;  // CREATEPARTICLE dummies seen in placed meshes

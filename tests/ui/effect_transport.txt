@@ -1,0 +1,49 @@
+# Fixed-tick seek, playback speed, loop and visible timeline controls.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select BRAZIERFIREFINAL
+effect_preview_restart
+frames 3
+assert_widget check_effect_loop
+assert_widget drag_effect_duration
+assert_widget combo_effect_speed
+assert_widget effect_timeline
+effect_preview_speed 0
+effect_preview_advance_frames 120
+assert_state effect_preview_time 1.000000
+effect_preview_seek 0
+effect_preview_speed 3
+effect_preview_advance_frames 30
+assert_state effect_preview_time 2.000000
+assert_state effect_preview_speed 3
+effect_preview_speed 2
+effect_preview_duration 1
+effect_preview_loop 0
+effect_preview_seek 0
+effect_preview_advance_frames 30
+assert_state effect_preview_time 1.000000
+assert_state effect_preview_playing 0
+assert_state effect_preview_loops 0
+effect_preview_loop 1
+effect_preview_seek 0
+effect_preview_advance_frames 30
+assert_state effect_preview_time 0.000000
+assert_state effect_preview_loops 1
+# At 2x speed, the sixteenth tick crosses a 15-tick loop. Keep its remainder.
+effect_preview_duration 0.5
+effect_preview_speed 3
+effect_preview_seek 0
+effect_preview_advance_frames 8
+assert_state effect_preview_time 0.033333
+assert_state effect_preview_loops 2
+effect_preview_duration 1
+effect_preview_speed 2
+effect_preview_seek 0
+click effect_timeline
+frames 2
+assert_state effect_preview_playing 0
+assert_state effect_preview_time 0.500000
+screenshot build/ui/effect_transport.png
+quit

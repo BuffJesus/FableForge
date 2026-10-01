@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace forge::tng {
@@ -72,6 +73,10 @@ public:
     // "Key Value;" line just before EndThing when the key is absent.
     void setThingProperty(size_t thingIndex, std::string_view key,
                           std::string_view value);
+    // Insert a missing top-level property before anchorKey; if absent, after
+    // Health when present, otherwise before EndThing. Preserves all other lines.
+    void insertThingPropertyBefore(size_t thingIndex, std::string_view key,
+                                   std::string_view value, std::string_view anchorKey);
     // Set EVERY top-level line of `key` (a track node writes ScriptName twice).
     // Returns how many lines changed; 0 inserts nothing (use setThingProperty).
     size_t setThingPropertyAll(size_t thingIndex, std::string_view key, std::string_view value);
@@ -88,6 +93,11 @@ public:
                                 std::string_view key, std::string_view value);
     bool removeCtcProperty(size_t thingIndex, std::string_view ctcName,
                            std::string_view key);
+    // Add or remove one whole component block, preserving all other raw lines.
+    // Addition goes after existing CTCs and before trailing Health when present.
+    void addCtcBlock(size_t thingIndex, std::string_view ctcName,
+                     const std::vector<std::pair<std::string,std::string>>& properties);
+    bool removeCtcBlock(size_t thingIndex, std::string_view ctcName);
 
     // Append a serialized copy of `thing` (its line fields are ignored) before
     // XXXSectionEnd (or at EOF), blank-line separated. Returns the new index.

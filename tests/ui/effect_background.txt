@@ -1,0 +1,28 @@
+# FX preview background choices are view-only and update the offscreen clear.
+wait_maps
+wait_ready
+assets_tab 3
+effect_select BRAZIERFIREFINAL
+frames 4
+assert_state effect_ready 1
+assert_widget effect_background_color
+click btn_effect_play
+effect_preview_restart
+effect_preview_step 28
+frames 2
+assert_state effect_preview_drawn 17
+reveal btn_effect_bg_dark
+click btn_effect_bg_dark
+frames 2
+assert_state effect_background 0.025000,0.035000,0.050000
+screenshot build/ui/effect_bg_dark.png
+click btn_effect_bg_light
+frames 2
+assert_state effect_background 0.900000,0.900000,0.900000
+screenshot build/ui/effect_bg_light.png
+click btn_effect_bg_grey
+frames 2
+assert_state effect_background 0.350000,0.350000,0.350000
+screenshot build/ui/effect_bg_grey.png
+assert_state effect_preview_playing 0
+quit

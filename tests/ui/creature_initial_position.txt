@@ -1,0 +1,38 @@
+# Creature transforms update saved world-space InitialPos; all edits undone.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+select_def CREATURE_NEW_CHICKEN_01
+assert_state doc_changes 0
+move_thing 5 -3 2
+assert_initial_position
+rotate_thing 45
+assert_initial_position
+scale_thing 1.2
+assert_initial_position
+ground_thing
+assert_initial_position
+undo
+undo
+undo
+undo
+assert_state doc_changes 0
+select_def CREATURE_NEW_CHICKEN_01
+duplicate_thing
+move_thing 2 3 1
+assert_initial_position
+undo
+undo
+assert_state doc_changes 0
+select_def CREATURE_NEW_CHICKEN_01
+frame_selected
+copy
+paste
+assert_initial_position
+undo
+assert_state doc_changes 0
+quit

@@ -57,6 +57,8 @@ void App::setModsMode(bool on) {
 
 void App::refreshModOrder() {
     modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
+    modNewMissingMeshes_.clear(); modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
+    modAssetStatus_.clear(); modAssetError_.clear();
     try { modOrder_ = mo::load(saveRoot()); modOrderError_.clear(); }
     catch (const std::exception& e) { modOrderError_ = e.what(); modOrder_ = mo::Order(); }
     // the FableForge packs' masters, checked against this order
@@ -192,6 +194,7 @@ bool App::modPick(const std::string& key, const std::string& winner) {
     const ModConflict* row = nullptr;
     for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
+    if (!row->pickable) { pushLog("mods: reorder packs to choose this lip sync winner", 1); return false; }
     if (winner == "-") modPicks_.erase(row->key);
     else modPicks_[row->key] = winner;
     saveModPicks();
@@ -235,6 +238,18 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
     if (rep.contains("files"))
         for (const auto& c : rep["files"].value("contested", json::array()))
             rows.push_back({"file", "file:" + c.value("path", ""), c.value("path", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+    if (rep.contains("lip_sync"))
+        for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
+            const std::string language=c.value("language",""),bank=c.value("bank","");
+            const uint32_t id=c.value("soundId",0U);
+            const std::string key="lip:"+language+"|"+bank+"|"+std::to_string(id);
+            const size_t bankSeparator=bank.find('_',8);
+            const std::string shortBank=bankSeparator==std::string::npos ? bank :
+                                        bank.substr(bankSeparator+1);
+            const std::string label=language+"  "+shortBank+"  Sound "+std::to_string(id);
+            rows.push_back({"lip sync",key,label,mods(c["mods"]),c.value("winner",""),
+                            false,false});
+        }
 }
 
 void App::pollModsTool() {
@@ -247,13 +262,27 @@ void App::pollModsTool() {
             const auto rep = nlohmann::json::parse(text.substr(text.find('{')));
             modConflicts_.clear();
             collectConflicts(rep, modConflicts_);
+            modNewMissingMeshes_.clear();
+            modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
+            modAssetStatus_.clear(); modAssetError_.clear();
+            if (const auto health = rep.find("asset_health"); health != rep.end()) {
+                modAssetStatus_ = health->value("status", "unavailable");
+                if (modAssetStatus_ == "checked") {
+                    modMissingMeshTotal_ = health->value("missing_total", size_t(0));
+                    modMissingMeshBaseline_ = health->value("baseline_missing", size_t(0));
+                    modAssetUnparsed_ = health->value("unparsed_defs", size_t(0));
+                    for (const auto& row : health->value("introduced", nlohmann::json::array()))
+                        modNewMissingMeshes_.push_back({row.value("definition", ""), row.value("type", ""), row.value("mesh_id", 0U)});
+                } else modAssetError_ = health->value("reason", "asset audit was unavailable");
+            }
             loadModPicks();
             modReportLoaded_ = true;
             const auto& sm = rep.value("summary", nlohmann::json::object());
             char buf[256];
-            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file",
+            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu lip sync",
                           modConflicts_.size(), size_t(sm.value("sources", 0)), size_t(sm.value("defs_conflicts", 0)), size_t(sm.value("tng_conflicts", 0)),
-                          size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)));
+                          size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)),
+                          size_t(sm.value("lip_sync_contested", 0)));
             modReportSummary_ = buf;
             pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
             return;
@@ -287,7 +316,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (modReportLoaded_)
         for (const auto& c : modConflicts_) {
             if (c.key.empty()) continue;
-            const auto pk = modPicks_.find(c.key);
+            const auto pk = c.pickable ? modPicks_.find(c.key) : modPicks_.end();
             const std::string win = pk != modPicks_.end() ? pk->second : c.winner;
             for (const auto& m : c.mods) (m == win ? wl[m].first : wl[m].second).push_back(c.label);
         }
@@ -385,7 +414,21 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         theme::label("Conflicts");
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
-        if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently; the load order decides unless you pick. Picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
+        if (modAssetStatus_ == "checked") {
+            if (modNewMissingMeshes_.empty())
+                ImGui::TextColored(theme::vec(theme::Faint), "Models: no new missing mesh references (%zu in build, %zu in base)", modMissingMeshTotal_, modMissingMeshBaseline_);
+            else {
+                ImGui::TextColored(theme::vec(theme::Warn), "Models: %zu new missing mesh reference(s)", modNewMissingMeshes_.size());
+                for (size_t i = 0; i < modNewMissingMeshes_.size() && i < 20; ++i) {
+                    const auto& row = modNewMissingMeshes_[i];
+                    ImGui::TextWrapped("%s (%s) -> mesh %u", row.definition.c_str(), row.type.c_str(), row.meshId);
+                }
+                if (modNewMissingMeshes_.size() > 20) theme::hint("More entries are in the forge-tools mods conflicts --json report.");
+            }
+            if (modAssetUnparsed_) ImGui::TextColored(theme::vec(theme::Warn), "%zu definitions could not be decoded for the model check", modAssetUnparsed_);
+        } else if (!modAssetError_.empty())
+            ImGui::TextColored(theme::vec(theme::Warn), "Model check unavailable: %s", modAssetError_.c_str());
+        if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently. Reorder packs to choose a lip sync winner. Other winner picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
         if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
         // one row = the kind and the label (ellipsised to the card), then the winner combo
@@ -406,7 +449,14 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             ImGui::TextUnformatted(fit(c.label, cardInner - S(52)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", c.label.c_str());
             ImGui::PopFont();
-            if (c.key.empty()) { ImGui::PopID(); continue; }   // informational row (an id clash): nothing to pick
+            if (c.key.empty()) { ImGui::PopID(); continue; }   // informational row (an id clash)
+            if (!c.pickable) {
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
+                ImGui::TextUnformatted(c.winner.c_str());
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("Reorder packs to change this lip sync winner");
+                ImGui::PopID();
+                continue;
+            }
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
             const auto pk = modPicks_.find(c.key);
             const std::string current = pk != modPicks_.end() ? pk->second : c.winner;

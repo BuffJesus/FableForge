@@ -1,0 +1,32 @@
+# Authored orbit and attraction fixtures. Read-only.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select BUTTERFLY_BLUE
+effect_preview_restart
+effect_preview_step 30
+frames 3
+assert_state effect_preview_time 1.000000
+assert_state effect_preview_particles 1
+assert_state effect_preview_drawn 1
+clear_toasts
+screenshot build/ui/effect_orbit_30.png
+effect_preview_step 30
+frames 3
+assert_state effect_preview_time 2.000000
+assert_state effect_preview_particles 1
+screenshot build/ui/effect_orbit_60.png
+dump_state
+effect_select EXP_WHISP_BIG
+effect_preview_restart
+effect_preview_step 30
+frames 3
+assert_state effect_preview_particles 11
+screenshot build/ui/effect_attractor_30.png
+effect_preview_step 30
+frames 3
+assert_state effect_preview_particles 23
+screenshot build/ui/effect_attractor_60.png
+dump_state
+quit

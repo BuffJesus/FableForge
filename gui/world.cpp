@@ -195,7 +195,6 @@ void App::worldApply() {
     const std::vector<editor::SeesEdit> sees = worldSeesEdits_;
     const bool stitch = worldStitch_ && !moves.empty();
     const int feather = worldStitchFeather_;
-    worldUndo_.clear(); worldRedo_.clear();
     pushLog("world: " + std::to_string(moves.size()) + " move(s), " + std::to_string(owners.size()) + " owner change(s), " + std::to_string(sees.size()) + " visibility change(s): writing the WLD/BWD" + (moves.empty() ? "" : " and translating terrain chunks in FinalAlbion_RT.stb") + (stitch ? ", then stitching seams" : "") + "...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
@@ -419,17 +418,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
             dl->AddRect(g0, g1, theme::col(theme::Muted), 0, 0, 1.0f);
         }
     }
-    // hover tooltip
-    if (!worldHover_.empty() && !worldDragging_ && !worldPanning_) {
-        const auto* b = world_.find(worldHover_);
-        int x, y; placement(b, x, y);
-        ImGui::BeginTooltip();
-        ImGui::TextUnformatted(b->name.c_str());
-        ImGui::PushFont(fontSmall_);
-        ImGui::TextColored(theme::vec(theme::Muted), "%s  |  %dx%d at %d,%d%s", b->region.empty() ? "(no region)" : b->region.c_str(), b->w, b->h, x, y, b->inStb ? "" : "  |  no terrain chunk");
-        ImGui::PopFont();
-        ImGui::EndTooltip();
-    }
+    drawWorldLabel(origin, size);
     if (worldDragging_) {
         ImGui::PushFont(fontSmall_);
         char t[160];
@@ -466,25 +455,49 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
             ImGui::Checkbox("Water##wdw", &renderer_.showWater);
             auto_.registerWidget("check_world_water");
             // full detail near the camera (the vanilla 3D view shows the loaded maps as the game does)
-            if (ImGui::Checkbox("Full detail near the camera##wdet", &worldDetailOn_) && !worldDetailOn_) clearWorldDetail();
+            if (ImGui::Checkbox("World scenery and detail##wdet", &worldDetailOn_) && !worldDetailOn_) clearWorldDetail();
             auto_.registerWidget("check_world_detail");
             if (worldDetailOn_) {
                 bool changed = false;
                 ImGui::PushFont(fontSmall_);
-                changed |= ImGui::Checkbox("Plants##wdf", &worldDetailFoliage_); ImGui::SameLine();
-                changed |= ImGui::Checkbox("Objects##wdt", &worldDetailThings_); ImGui::SameLine();
+                changed |= ImGui::Checkbox("Plants##wdf", &worldDetailFoliage_);
+                auto_.registerWidget("check_world_plants"); ImGui::SameLine();
+                changed |= ImGui::Checkbox("Objects##wdt", &worldDetailThings_);
+                auto_.registerWidget("check_world_objects"); ImGui::SameLine();
                 changed |= ImGui::Checkbox("Creatures##wdc", &worldDetailCreatures_);
+                auto_.registerWidget("check_world_creatures");
                 ImGui::Checkbox("Automatic detail##wdauto", &worldAutoDetail_);
                 auto_.registerWidget("check_world_auto_detail");
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adjusts the number of detailed maps to sustained frame time, up to the limit below. Turn off for a fixed budget.");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adjusts nearby terrain refinement to frame time and GPU memory. Distant scenery loads throughout the draw range independently.");
                 ImGui::SetNextItemWidth(cardInner);
-                ImGui::SliderInt("##wdmaps", &worldDetailMaps_, 1, 12, "up to %d maps");
+                ImGui::SliderInt("##wdmaps", worldAutoDetail_ ? &worldDetailAutoMaps_ : &worldDetailMaps_, 1, 32, "Near detail: up to %d maps");
                 auto_.registerWidget("slider_world_detail_maps");
-                if (worldAutoDetail_) ImGui::TextColored(theme::vec(theme::Muted), "Current budget: %d maps", worldDetailBudget_.maps);
-                if (worldDetailLoading_.size()) ImGui::TextColored(theme::vec(theme::Muted), "Loading %s...", worldDetailLoading_.c_str());
+                ImGui::SetNextItemWidth(cardInner);
+                if (ImGui::SliderFloat("##wdradius", &worldDetailRadius_, 100.0f, 1000.0f, "Draw distance: %.0f m")) worldDetailNext_ = 0;
+                auto_.registerWidget("slider_world_detail_radius");
+                if (worldAutoDetail_) ImGui::TextColored(theme::vec(theme::Muted), "Near detail: %d maps", worldDetailBudget_.maps);
+                ImGui::TextColored(theme::vec(theme::Muted), "Scenery: %zu levels ready", worldScenery_.loaded);
+                if (worldScenery_.pending > worldScenery_.blocked)
+                    ImGui::TextColored(theme::vec(theme::Muted), "Loading scenery in %zu levels...", worldScenery_.pending-worldScenery_.blocked);
+                if (worldScenery_.blocked) ImGui::TextWrapped("Some distant scenery is waiting for memory or retry.");
+                if (worldDetailLoading_.size()) ImGui::TextColored(theme::vec(theme::Muted), "Refining %s...", worldDetailLoading_.c_str());
+                if (worldDetailDeferred_) {
+                    ImGui::TextWrapped("%zu map(s) kept in overview; detail will retry.", worldDetailDeferred_);
+                    if (ImGui::SmallButton("Retry detail now")) { worldDetailRetries_.clear(); worldDetailDeferred_ = 0; worldDetailNext_ = 0; }
+                    auto_.registerWidget("btn_world_retry_detail");
+                }
                 ImGui::PopFont();
                 if (changed) clearWorldDetail();
             }
+            ImGui::PushFont(fontSmall_);
+            int aa = renderer_.worldAaMode == 4 ? 3 : renderer_.worldAaMode;
+            ImGui::SetNextItemWidth(cardInner);
+            if (ImGui::Combo("##worldaa", &aa, "Antialiasing: Auto\0Antialiasing: Off\0Antialiasing: 2x\0Antialiasing: 4x\0"))
+                renderer_.worldAaMode = aa == 3 ? 4 : aa;
+            auto_.registerWidget("combo_world_aa");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Smooths geometry and cutout edges, including leaves and grass. Auto adapts to sustained frame time; all modes respect device support and GPU memory headroom.");
+            ImGui::TextColored(theme::vec(theme::Muted), "Current antialiasing: %ux", renderer_.aaSamples());
+            ImGui::PopFont();
         }
         ImGui::PushFont(fontSmall_);
         if (!worldTileWorkers_.empty())

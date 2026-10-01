@@ -1,0 +1,18 @@
+# Retail region exit: the saved radius is visible, labelled and tied to the selected point.
+wait_maps
+wait_ready
+select MayorsHouseHallway
+wait_loaded
+wait_foliage
+edit 1
+wait_foliage
+tour -1
+select_def REGION_EXIT_POINT
+frame_selected
+frames 5
+assert_state selected_radius_fields 1
+screenshot build/ui/radius_ring_exit.png
+select_def REGION_ENTRANCE_POINT
+frames 3
+assert_state selected_radius_fields 0
+quit

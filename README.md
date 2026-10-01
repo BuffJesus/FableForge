@@ -1,20 +1,21 @@
 # FableForge
 
-**Current preview: [0.18.0-rc.1](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.1)** — whole-world flight, persistent water, smoother
-terrain transitions, adaptive detail/cache budgets, and expanded editing tools.
-See the [release notes](docs/releases/0.18.0-rc.1.md) for changes and validation limits.
+**Current preview: [0.18.0-rc.2](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.2)** — a deeper editor workflow pass, improved world view,
+asset browsers for models, effects and dialogue, and safer mod and terrain writes.
+See the [release notes](docs/releases/0.18.0-rc.2.md) for changes and validation limits.
 The latest final release remains 0.17.1 while fresh-game and separate-machine
 release checks are completed.
 
 *Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
 library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
 
-View, export and edit **Fable: The Lost Chapters** maps — terrain, ground textures,
-grass, trees, water and placed objects — straight from your Steam install. Export to
-`.glb` (glTF binary) or `.obj`, or move, add and remove the objects of a level and
-write the result back into the game. Three small Windows executables, no dependencies:
+Explore, edit and export **Fable: The Lost Chapters** maps straight from your Steam
+install. Forge has a 2D atlas and a 3D flyover of Albion, terrain and object editing,
+model, texture, effect and dialogue browsers, and a mod load order with conflict
+checks. Export a map to `.glb` or `.obj`, or write reviewed changes back into the
+game. Three small Windows executables, no dependencies:
 
-* **`FableForge.exe`** — pick your install, browse the 399 maps on the left,
+* **`FableForge.exe`** — pick your install, browse its maps on the left,
   see the map in 3D in the middle, export or edit on the right. Drag a `.lev`
   onto the window to open a loose file (drop a PNG to make a ground texture from it). Export one map or all of them.
 * **`forge.exe`** — the same exporter as a command line tool.
@@ -23,9 +24,34 @@ write the result back into the game. Three small Windows executables, no depende
 Runs on anything with Direct3D 10-class graphics (falls back to the software
 rasterizer if it has to).
 
+![Fly over Albion in the 3D World view](docs/screenshots/world_flyover.png)
+
+## Editor at a glance
+
+| Area | What you can do |
+| --- | --- |
+| **World** | Explore the whole level layout on a textured 2D map or fly through it in 3D with nearby terrain, water and scenery. Select a map to edit, move map positions, set region ownership and connect new neighbours. |
+| **Edit** | Place, transform, duplicate, link and remove things with undo. Sculpt and paint terrain, set walkability, copy a region, generate terrain and fit its edges to neighbouring maps. Grounded things and baked foliage follow height edits in the preview. |
+| **Assets** | Browse textures and models, inspect meshes and their users, preview particle systems against adjustable backgrounds, and inspect or edit dialogue lip sync with a 3D head and timeline. Build ground themes from PNG files. |
+| **Mods** | Arrange supported packs and EgoCore folders in one load order, inspect conflicts and missing asset references, build, deploy and restore backed-up files. See [mod-pack limits](docs/modding/MOD_PACKS.md) before combining large overhauls. |
+| **Export and tools** | Export textured maps and assets, inspect retail data, and use `forge.exe` or `forge-tools.exe` for repeatable command-line work. |
+
 ![Oakvale in Edit mode](docs/screenshot_oakvale.png)
-![Greatwood and the terrain tools](docs/screenshot_greatwood.png)
-![The Arena from the Export side](docs/screenshot_arena.png)
+
+The [feature gallery](docs/FEATURE_GALLERY.md) shows the 2D World map, terrain
+and brushes, effects, dialogue, mods, setup and budget survey. The
+[Greatwood terrain](docs/screenshot_greatwood.png) and
+[Arena export](docs/screenshot_arena.png) captures show two more editor views.
+
+## Start in the editor
+
+1. Unzip the [current preview](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.2)
+   and run `FableForge.exe`. Choose the folder containing `Fable.exe` if it is
+   not found automatically.
+2. Pick a map on the left, or open **World** to find it on the 2D map or in the
+   3D flyover. Double-click a map in World to open it for editing.
+3. Use **Export**, **Edit**, **Assets** or **Mods** on the right. Start with
+   [your first level](docs/FIRST_LEVEL.md) for a guided edit and safe save.
 
 ```
 forge list                             # every map in FinalAlbion.wad
@@ -52,7 +78,7 @@ WAD would override every loose level.
 New here? Read **[docs/FIRST_LEVEL.md](docs/FIRST_LEVEL.md)** -- your first level in ten minutes, with screenshots.
 
 **Your install is safe.** Every file FableForge writes into the game is backed up first
-(`forge backups` lists them); `forge restore` -- or *Restore the retail files* on the GUI's Setup panel -- puts the retail
+(`forge backups` lists them); `forge restore` -- or *Restore backed-up files* on the GUI's Setup panel -- puts the backed-up
 files back. Every writer refuses to touch an install the game is currently running from. The
 engine's own rules (a new region needs a new game, saves cache a level's entities, ...) are in
 [docs/ENGINE_RULES.md](docs/ENGINE_RULES.md).
@@ -157,8 +183,8 @@ dollies/turns, **MMB** drag pans, **Alt+LMB** orbits, wheel zooms, **F** frames
 the map. Textured / Wireframe / Walkable / Height views, Foliage toggle. Right:
 export settings, `Export <map>` (Ctrl+E), `Export all`, activity log. Settings
 are remembered in `%APPDATA%\FableForge`.
-The UI is DPI-aware and scales with the window (0.85x on small windows up to 1.25x on
-a 1440p one); it stays usable down to 1024 x 700.
+The UI is DPI-aware and uses compact controls when panels narrow. The main panes and
+their menus have been checked at 800 x 600 with 1.5x UI scale.
 
 ## Editing a level
 
@@ -193,7 +219,8 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
   afar, and a tall edit whose patches no longer fit their old slots grows them (the
   chunk is re-laid). `forge-tools stb patch-heights` checks every patch against the `.lev`.
   One-time `.forge-orig` backups. The chunk's trees and grass ride the sculpted
-  ground; *Re-seat objects on the new ground* moves placed things with it.
+  ground; grounded placed things follow the edit in the preview and undo step.
+  Terrain and object positions have separate game writes, both named in the panel.
 * **Paint ground**: brush any ground theme of the map's palette, add any
   `ENGINE_THEME` the game has to the palette, or turn your own PNG into a theme
   (*Assets* tab, *Ground themes*: appended to `textures.big` + a new `ENGINE_THEME`
@@ -203,7 +230,9 @@ crashes and with undo. See [docs/EDITOR.md](docs/EDITOR.md) for the details.
 * **Live link**: with ForgeFSE installed, one click hooks a tiny Lua thread into the
   running game -- jump the hero to the spot you are looking at, spawn the selected
   creature there, let the camera follow him. No native code, removable.
-* **World** (third tab): the whole of Albion as boxes on a grid, coloured by region.
+* **World** (third tab): Albion's textured ground on a 2D map, with a 3D flyover
+  that loads nearby terrain, water and scenery as you travel. Select or open a
+  level from either view. On the 2D map,
   Drag a map to a new 32-aligned spot (overlaps refused, touching neighbours
   highlighted), queue as many moves as you like, then **Move N maps into the game**:
   the WLD/BWD placement and the map's terrain chunk (ground, LOD, water, trees and
@@ -259,7 +288,21 @@ clean-room implementation verified against minilzo in the test suite).
 
 ## Credits
 
-Format knowledge: the FableTLC decompilation project, FableForge, EgoCore (AeoN),
-FableMod / ChocolateBox. Thanks to the Fable modding Discord.
+Thanks to [**AeoN (AlbionSecrets)**](https://github.com/eeeeeAeoN) for
+[EgoCore](https://github.com/eeeeeAeoN/EgoCore)
+([Nexus page](https://www.nexusmods.com/fablethelostchapters/mods/592)).
+Its open source asset work and modding workflows have been a major reference and
+inspiration for Forge. Particle field layouts and selected preview behavior
+were adapted or checked against EgoCore under its MIT license; the upstream
+license is included in [EgoCore-LICENSE.txt](vendor/EgoCore-LICENSE.txt) and the
+scope is recorded in [THIRD_PARTY.md](vendor/VENDORED.md).
+
+[Fable: Aeon Edition](https://www.nexusmods.com/fablethelostchapters/mods/454)
+is a separate overhaul by Alexander The Alright. We use it in compatibility
+research and scratch tests; its assets are not distributed with Forge.
+
+Format knowledge also comes from the FableTLC decompilation project, the
+original FableForge core, and FableMod / ChocolateBox references. Thanks to
+the Fable modding Discord for testing and sharing findings.
 
 Editor status and the plan: `docs/EDITOR.md`, `docs/PLAN.md`.

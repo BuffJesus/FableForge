@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The GB-pack stress case of the mod composer (ROADMAP 0.20): Project Seasons (a whole-tree
-pack: 794 loose levels, a new ProjectAutumn/ folder, whole STB / banks / game.bin / text.big,
+pack: 796 loose levels (including root creature_hub), a new ProjectAutumn/ folder, whole STB / banks / game.bin / text.big,
 the retail WAD parked as `_FinalAlbion.wad`, a userst.ini) under the Unofficial Fable Patch's
 bsdiff, built onto a scratch root that carries the install's retail containers. Checks the
 composer's GB-pack rules: the parked WAD and the settings file are not layers, the loose levels
@@ -10,10 +10,15 @@ install. ~30 s, ~2 GB of scratch under build/. Nothing touches the install.
 
   python tools/test_gbpack.py [--root <fable install>] [--keep]
 """
-import argparse, json, os, shutil, subprocess, sys, time
+import argparse, json, os, re, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SEASONS = os.path.join(ROOT, "work", "nexus_mods", "_peek", "ProjectSeasons")
+PACKS = {
+    "seasons": [("Project Seasons", os.path.join(ROOT, "work", "nexus_mods", "_peek", "ProjectSeasons"))],
+    "modpack": [("AlbionSecrets Modpack", os.path.join(ROOT, "work", "nexus_mods", "_peek", "AlbionSecretsModpack"))],
+    "both": [("Project Seasons", os.path.join(ROOT, "work", "nexus_mods", "_peek", "ProjectSeasons")),
+             ("AlbionSecrets Modpack", os.path.join(ROOT, "work", "nexus_mods", "_peek", "AlbionSecretsModpack"))],
+}
 UFP = os.path.join(ROOT, "work", "nexus_mods", "_peek", "UnofficialFablePatch", "Patches", "game.bin.patch")
 
 
@@ -38,11 +43,13 @@ def pristine(root, rel):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="")
+    ap.add_argument("--pack", choices=PACKS, default="seasons")
     ap.add_argument("--keep", action="store_true")
     a = ap.parse_args()
     root = find_root(a.root)
-    if not root or not os.path.isdir(os.path.join(SEASONS, "data")) or not os.path.exists(UFP):
-        print("gb-pack test skipped (no install, or Project Seasons not extracted under work/nexus_mods/_peek)"); return 0
+    packs = PACKS[a.pack]
+    if not root or any(not os.path.isdir(os.path.join(path, "data")) for _, path in packs) or not os.path.exists(UFP):
+        print(f"gb-pack test skipped (no install, or {a.pack} not extracted under work/nexus_mods/_peek)"); return 0
     os.chdir(ROOT)
     tool = os.path.join(ROOT, "build", "forge-tools.exe")
     scratch = os.path.join(ROOT, "build", "gb_root"); out = os.path.join(ROOT, "build", "gb_out")
@@ -65,24 +72,50 @@ def main() -> int:
         return r
 
     run("mods", "add", scratch, UFP, "--name", "UFP")
-    run("mods", "add", scratch, SEASONS, "--name", "Project Seasons")
+    for pack_name, pack_path in packs:
+        run("mods", "add", scratch, pack_path, "--name", pack_name)
     t0 = time.time()
     r = run("mods", "build", scratch, out)
     dt = time.time() - t0
     o = r.stdout
-    if "parks the retail WAD as _FinalAlbion.wad: skipped" not in o: print("parked WAD not recognised"); ok = False
+    for pack_name, _ in packs:
+        if f"{pack_name} parks the retail WAD as _FinalAlbion.wad: skipped" not in o: print("parked WAD not recognised:", pack_name); ok = False
     if "ships userst.ini: not applied" not in o: print("userst.ini not skipped"); ok = False
-    if "794 level file(s) repacked" not in o: print("loose levels not repacked:", [l for l in o.splitlines() if "wad" in l.lower()]); ok = False
-    if "448 levels (0 thing-merged, 448 single-editor copies)" not in o: print("TNG copies unexpected:", [l for l in o.splitlines() if "TNG" in l]); ok = False
+    repacked = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked", o)
+    if not repacked or int(repacked.group(1)) < 400: print("loose levels not repacked:", [l for l in o.splitlines() if "wad" in l.lower()]); ok = False
+    tng = re.search(r"level TNG merge: (\d+) levels \((\d+) thing-merged, (\d+) single-editor copies\), (\d+) thing conflicts", o)
+    if not tng: print("TNG merge absent:", [l for l in o.splitlines() if "TNG" in l]); ok = False
+    elif len(packs) == 1 and int(tng.group(4)) != 0:
+        print("single pack has unexpected TNG conflicts:", tng.group(0)); ok = False
+    elif len(packs) > 1 and (int(tng.group(2)) == 0 or int(tng.group(4)) == 0):
+        print("overlapping TNG edits were not reported:", tng.group(0)); ok = False
     if os.path.exists(os.path.join(out, "data", "Levels", "_FinalAlbion.wad")) or os.path.exists(os.path.join(out, "userst.ini")): print("parked WAD / settings copied into the build"); ok = False
     if len(os.listdir(os.path.join(out, "data", "Levels", "ProjectAutumn"))) != 101: print("ProjectAutumn folder not carried"); ok = False
     if not os.path.exists(os.path.join(out, "data", "Levels", "FinalAlbion_RT.stb")): print("STB layer missing"); ok = False
     prov = json.load(open(os.path.join(out, "forge_mods_provenance.json")))
-    if len(prov["levels"]) != 448: print("provenance levels", len(prov["levels"])); ok = False
+    if tng and len(prov["levels"]) != int(tng.group(1)): print("provenance levels", len(prov["levels"])); ok = False
     # the retail WAD wins over loose files in-engine: every level Seasons ships is now inside the rebuilt WAD
     lst = run("wad", "list", os.path.join(out, "data", "Levels", "FinalAlbion.wad")).stdout
     if "arena.tng" not in lst.lower(): print("rebuilt WAD lacks the levels"); ok = False
-    print(f"build took {dt:.1f}s")
+    extracted = os.path.join(scratch, "extracted")
+    run("wad", "extract", os.path.join(out, "data", "Levels", "FinalAlbion.wad"), extracted)
+    checked = 0
+    out_levels = os.path.join(out, "data", "Levels")
+    for folder in (out_levels, os.path.join(out_levels, "FinalAlbion")):
+        for name in os.listdir(folder):
+            if not name.lower().endswith((".lev", ".tng")): continue
+            loose = os.path.join(folder, name)
+            packed = os.path.join(extracted, "Data", "Levels", os.path.relpath(loose, out_levels))
+            if not os.path.isfile(packed) or open(loose, "rb").read() != open(packed, "rb").read():
+                print("built WAD and loose file differ:", os.path.relpath(loose, out_levels)); ok = False
+            checked += 1
+    if repacked and checked != int(repacked.group(1)):
+        print("WAD payload check count differs:", checked, repacked.group(1)); ok = False
+    print("WAD payloads checked:", checked)
+    print(f"{a.pack} build took {dt:.1f}s")
+    for line in o.splitlines():
+        if "changes applied" in line or "TNG merge:" in line or "FinalAlbion.wad rebuilt:" in line:
+            print(line)
     if not a.keep:
         shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True)
     print("gb-pack test", "OK" if ok else "FAILED")

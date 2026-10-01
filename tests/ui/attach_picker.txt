@@ -1,0 +1,34 @@
+# The selected object's Attach objects button drives the viewport picker.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+place OBJECT_BARREL_BREAKABLE AttachParent
+place OBJECT_BARREL_BREAKABLE AttachChild
+move_thing 4 0 0
+wait_foliage
+frame_selected
+frames 3
+snapshot_document
+select_script AttachParent
+reveal btn_attach_OwnerUID
+click btn_attach_OwnerUID
+frames 3
+assert_widget btn_stop_attaching
+pick_script AttachChild
+wait_foliage
+assert_link_script AttachChild OwnerUID AttachParent
+assert_log attach: Attach objects toggled
+pick_script AttachChild
+wait_foliage
+assert_link_script AttachChild OwnerUID -
+undo
+wait_foliage
+assert_link_script AttachChild OwnerUID AttachParent
+undo
+wait_foliage
+assert_document_same
+quit

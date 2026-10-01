@@ -1,0 +1,69 @@
+# Deterministic selected-effect playback, pause, reset and unsupported components.
+wait_maps
+wait_ready
+assets_tab 3
+effect_select BRAZIERFIREFINAL
+effect_preview_play 0
+effect_preview_restart
+effect_preview_step 30
+frames 4
+assert_state effect_preview_time 1.000000
+assert_state effect_preview_playing 0
+assert_widget effect_preview_image
+clear_toasts
+screenshot build/ui/effect_playback_30.png
+dump_state
+frames 30
+assert_state effect_preview_time 1.000000
+screenshot build/ui/effect_playback_paused.png
+effect_select BRAZIERFIREFINAL
+frames 3
+assert_state effect_preview_time 1.000000
+effect_preview_step 30
+frames 3
+assert_state effect_preview_time 2.000000
+screenshot build/ui/effect_playback_60.png
+effect_preview_restart
+effect_preview_step 30
+frames 3
+assert_state effect_preview_time 1.000000
+screenshot build/ui/effect_playback_reset.png
+effect_select ACTIVATE_SKILL_01
+effect_preview_restart
+effect_preview_step 30
+frames 3
+screenshot build/ui/effect_playback_mesh.png
+dump_state
+effect_select ALTAR_GARGOYLE_FLAME
+effect_preview_restart
+effect_preview_step 30
+frames 3
+screenshot build/ui/effect_playback_altar.png
+dump_state
+effect_select CANDLE_FLAME
+effect_preview_restart
+effect_preview_step 60
+frames 3
+screenshot build/ui/effect_playback_candle.png
+dump_state
+effect_select LARGEWATERFALL
+effect_preview_restart
+effect_preview_step 90
+frames 3
+screenshot build/ui/effect_playback_waterfall.png
+dump_state
+reveal btn_effect_play
+frames 3
+click btn_effect_play
+frames 4
+assert_state effect_preview_playing 1
+click btn_effect_play
+frames 3
+assert_state effect_preview_playing 0
+click btn_effect_restart
+frames 3
+assert_state effect_preview_time 0.000000
+click btn_effect_step
+frames 3
+assert_state effect_preview_time 0.033333
+quit

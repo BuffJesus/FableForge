@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstddef>
 #include <d3dcompiler.h>
 #include <dxgi1_4.h>
 #include <map>
@@ -23,27 +24,45 @@ cbuffer Frame : register(b0) {
     float4 params;        // x = mode, y = minH, z = maxH, w = time
     float4 eye;
     float4 flags;         // x = pass (0 terrain, 1 instances, 2 water), y = alpha test (cutout materials)
+    float4 detail;        // x = object LOD enabled, y = projection in pixels, z = draw distance
 };
 cbuffer Object : register(b1) {
     row_major float4x4 world;   // identity for baked geometry; per-thing for instances
+    row_major float4x4 normalWorld;
     float4 tint;                // a > 0: flat colour (selection outline)
 };
 Texture2D albedo : register(t0);
 Texture2D coarseAlbedo : register(t1);
+Buffer<float4> objectBounds : register(t2);
 SamplerState samp : register(s0);
 
-struct VSIn  { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; };
-struct VSOut { float4 pos : SV_Position; float3 wpos : TEXCOORD2; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; };
+struct VSIn  { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; float4 coarseNormal : NORMAL1; };
+struct VSOut { float4 pos : SV_Position; float3 wpos : TEXCOORD2; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; float2 lodCoverage : TEXCOORD3; };
 
 VSOut VS(VSIn i) {
     VSOut o;
+    o.lodCoverage = float2(0,1);
+    if (detail.x > 0.5) {
+        float4 bounds = objectBounds[uint(i.walk)*2];
+        float4 levels = objectBounds[uint(i.walk)*2+1];
+        float dist = distance(eye.xyz, bounds.xyz);
+        float pixels = 2 * max(bounds.w,0.001) * detail.y / max(dist,0.001);
+        float nearCut = levels.x > 0 ? smoothstep(0.9,1.1,pixels/levels.x) : 0;
+        float farKeep = levels.y > 0 ? smoothstep(0.9,1.1,pixels/levels.y) : 1;
+        float rangeKeep = 1-smoothstep(0.85,1.0,max(0,dist-bounds.w)/max(detail.z,1));
+        o.lodCoverage = flags.w > 0.5
+            ? float2(lerp(nearCut,farKeep,flags.z),farKeep) * rangeKeep
+            : float2(nearCut,farKeep) * rangeKeep * flags.z;
+    }
     // World ground reuses the otherwise unused walk attribute for overview height.
     // Keep it opaque and move its surface, rather than cutting holes in two
     // differently shaped meshes during a screen-space crossfade.
     if (flags.w > 1.5) i.pos.y = lerp(i.walk, i.pos.y, flags.z);
+    if (flags.w > 3.5 && flags.z < 1.0)
+        i.nrm = lerp(i.coarseNormal.xyz * 2.0 - 1.0, i.nrm, flags.z);
     float4 wp = mul(float4(i.pos, 1.0), world);
     o.pos = mul(wp, viewProj);
-    o.wpos = wp.xyz; o.nrm = mul(i.nrm, (float3x3)world); o.uv = i.uv; o.walk = i.walk;
+    o.wpos = wp.xyz; o.nrm = mul(i.nrm, (float3x3)normalWorld); o.uv = i.uv; o.walk = i.walk;
     return o;
 }
 
@@ -60,13 +79,26 @@ float3 heightRamp(float t) {
 
 float4 PS(VSOut i) : SV_Target {
     if (tint.a > 0.0) return float4(tint.rgb, 1.0);
+    // Evaluate texture/alpha derivatives before the spatially divergent fade
+    // discard. The 0.5 contour stays fixed; only its pixel footprint is softened.
+    float4 surface = float4(1,1,1,1);
+    float cutoutCoverage = 1.0;
+    if (flags.x > 0.5 && flags.x < 1.5) {
+        surface = albedo.Sample(samp, i.uv);
+        if (flags.y > 2.5)
+            cutoutCoverage = saturate((surface.a - 0.5) / max(fwidth(surface.a), 0.0001) + 0.5);
+    }
     // Complementary screen-space coverage keeps the coarse ground under detail
     // during its short transition. Water uses a continuous opacity fade below.
-    if (flags.x < 1.5 && flags.w < 1.5 && (flags.z < 1.0 || flags.w > 0.5)) {
+    if (detail.x < 0.5 && flags.x < 1.5 && flags.w < 1.5 && (flags.z < 1.0 || flags.w > 0.5)) {
         float threshold = frac(52.9829189 * frac(dot(floor(i.pos.xy), float2(0.06711056, 0.00583715))));
         if (flags.w > 0.5 ? threshold < flags.z : threshold >= flags.z) discard;
     }
     float3 n = normalize(i.nrm);
+    if (detail.x > 0.5) {
+        float threshold = frac(52.9829189 * frac(dot(floor(i.pos.xy), float2(0.06711056,0.00583715))));
+        if (threshold < i.lodCoverage.x || threshold >= i.lodCoverage.y) discard;
+    }
     float ndl = saturate(dot(n, lightDir.xyz));
     float hemi = 0.55 + 0.45 * saturate(n.y);           // sky ambient
     float light = 0.30 * hemi + 0.72 * ndl;
@@ -87,17 +119,18 @@ float4 PS(VSOut i) : SV_Target {
         return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), fade * (0.7 + 0.25 * rim) * flags.z);
     }
     if (flags.x > 0.5) {
-        float4 tex = albedo.Sample(samp, i.uv);
+        float4 tex = surface;
         // Ground geometry already morphs from the overview. Blend its material
         // too, instead of replacing every texel on the publication frame.
         if (flags.w > 2.5 && flags.z < 1.0)
             tex = lerp(coarseAlbedo.Sample(samp, i.uv), tex, flags.z);
-        if (flags.y > 0.5 && tex.a < 0.5) discard;
+        if (flags.y > 0.5 && flags.y < 2.5 && tex.a < 0.5) discard;
+        if ((flags.y > 1.5 && flags.y < 2.5) || flags.y > 3.5) return float4(1,1,1,cutoutCoverage);
         // foliage: soften lighting so blades read as translucent-ish
         float3 col = tex.rgb * (0.45 + 0.65 * ndl + 0.2 * hemi);
         float dist = distance(eye.xyz, i.wpos);
         float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
-        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), 1.0);
+        return float4(lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7), cutoutCoverage);
     }
     if (mode == 0) {
         base = albedo.Sample(samp, i.uv).rgb;
@@ -150,10 +183,12 @@ struct FrameCB {
     float params[4];
     float eye[4];
     float flags[4];
+    float detail[4];
 };
 
 struct ObjectCB {
     float world[16];
+    float normalWorld[16];
     float tint[4];
 };
 
@@ -241,8 +276,8 @@ void mul4(const float a[16], const float b[16], float out[16]) {
         }
 }
 
-void lookAtRH(const float eye[3], const float at[3], float out[16]) {
-    float z[3] = {eye[0] - at[0], eye[1] - at[1], eye[2] - at[2]};
+void lookAlongRH(const float eye[3], const float direction[3], float out[16]) {
+    float z[3] = {-direction[0], -direction[1], -direction[2]};
     float zl = std::sqrt(z[0] * z[0] + z[1] * z[1] + z[2] * z[2]);
     for (float& v : z) v /= zl;
     const float up[3] = {0, 1, 0};
@@ -260,6 +295,11 @@ void lookAtRH(const float eye[3], const float at[3], float out[16]) {
     std::memcpy(out, m, sizeof m);
 }
 
+void lookAtRH(const float eye[3], const float at[3], float out[16]) {
+    const float direction[3] = {at[0]-eye[0], at[1]-eye[1], at[2]-eye[2]};
+    lookAlongRH(eye, direction, out);
+}
+
 void perspectiveRH(float fovY, float aspect, float zn, float zf, float out[16]) {
     const float h = 1.0f / std::tan(fovY * 0.5f), w = h / aspect;
     const float m[16] = {w, 0, 0, 0,
@@ -270,6 +310,7 @@ void perspectiveRH(float fovY, float aspect, float zn, float zf, float out[16]) 
 }
 
 using GpuVertex = Renderer::LayerVertex;
+static_assert(sizeof(GpuVertex) == 40 && offsetof(GpuVertex, coarseNormal) == 36);
 
 } // namespace
 
@@ -296,6 +337,13 @@ void Camera::up(float out[3]) const {
 void Camera::focus(float out[3]) const {
     float d[3]; dir(d);
     out[0] = posX + d[0] * distance; out[1] = posY + d[1] * distance; out[2] = posZ + d[2] * distance;
+}
+
+void Camera::view(float out[16]) const {
+    float position[3], direction[3]; eye(position); dir(direction);
+    // Avoid subtracting nearby large world coordinates to reconstruct direction.
+    // Picking already uses dir(); orbit focus is only a navigation control.
+    lookAlongRH(position, direction, out);
 }
 
 void Camera::lookAt(float tx, float ty, float tz, float y, float p, float dist) {
@@ -338,6 +386,8 @@ void Camera::fly(float forward, float strafe, float rise, float dt) {
 }
 
 Renderer::~Renderer() {
+    clearModelPreview();
+    clearHeadPreview();
     for (auto& [key, srv] : thumbs_) release(srv);
     thumbs_.clear();
     for (auto& [id, srv] : swatches_) release(srv);
@@ -350,7 +400,7 @@ Renderer::~Renderer() {
     for (int i = 0; i < kLayers; ++i) clearLayer(i);
     clearThings();
     release(white_);
-    release(blend_); release(alphaBlend_); release(depth_); release(depthNoWrite_); release(depthOverlay_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
+    release(blend_); release(cutoutBlend_); release(alphaBlend_); release(depth_); release(depthNoWrite_); release(depthOverlay_); release(wire_); release(solid_); release(sampler_); release(wrapSampler_);
     release(cbuffer_); release(ocbuffer_); release(layout_); release(ps_); release(vs_);
 }
 
@@ -372,6 +422,16 @@ Renderer::VideoMemoryInfo Renderer::queryVideoMemory() const {
 
 bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     device_ = device; ctx_ = context;
+    UINT support=0;
+    if (SUCCEEDED(device_->CheckFormatSupport(DXGI_FORMAT_R8G8B8A8_UNORM,&support)) &&
+        (support & D3D11_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET) && (support & D3D11_FORMAT_SUPPORT_MULTISAMPLE_RESOLVE)) {
+        for (UINT samples : {2u,4u}) {
+            UINT colour=0, depth=0;
+            if (SUCCEEDED(device_->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM,samples,&colour)) && colour &&
+                SUCCEEDED(device_->CheckMultisampleQualityLevels(DXGI_FORMAT_D24_UNORM_S8_UINT,samples,&depth)) && depth)
+                aaSupport_ |= samples;
+        }
+    }
     ID3DBlob *v = nullptr, *p = nullptr, *err = nullptr;
     if (FAILED(D3DCompile(kShader, std::strlen(kShader), nullptr, nullptr, nullptr, "VS", "vs_4_0", 0, 0, &v, &err))) {
         errorText_ = err ? std::string(static_cast<const char*>(err->GetBufferPointer())) : "VS compile failed";
@@ -394,8 +454,9 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
         {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"NORMAL", 1, DXGI_FORMAT_R10G10B10A2_UNORM, 0, 36, D3D11_INPUT_PER_VERTEX_DATA, 0},
     };
-    device_->CreateInputLayout(il, 4, v->GetBufferPointer(), v->GetBufferSize(), &layout_);
+    device_->CreateInputLayout(il, 5, v->GetBufferPointer(), v->GetBufferSize(), &layout_);
     release(v); release(p);
 
     D3D11_BUFFER_DESC cb = {};
@@ -416,7 +477,7 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     device_->CreateSamplerState(&sd, &wrapSampler_);
 
     D3D11_RASTERIZER_DESC rd = {};
-    rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;
+    rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE; rd.MultisampleEnable = TRUE;
     device_->CreateRasterizerState(&rd, &solid_);
     rd.FillMode = D3D11_FILL_WIREFRAME; rd.AntialiasedLineEnable = TRUE;
     device_->CreateRasterizerState(&rd, &wire_);
@@ -429,6 +490,16 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
     bd.RenderTarget[0].BlendEnable = FALSE;
     bd.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     device_->CreateBlendState(&bd, &blend_);
+    // Coverage consumes shader alpha, but the resolved viewport must stay opaque
+    // when ImGui composites it. Preserve the target's cleared alpha of one.
+    bd.AlphaToCoverageEnable = TRUE;
+    bd.RenderTarget[0].BlendEnable = TRUE;
+    bd.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE; bd.RenderTarget[0].DestBlend = D3D11_BLEND_ZERO;
+    bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    bd.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO; bd.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    bd.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    device_->CreateBlendState(&bd, &cutoutBlend_);
+    bd.AlphaToCoverageEnable = FALSE;
     bd.RenderTarget[0].BlendEnable = TRUE;
     bd.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA; bd.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
     bd.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
@@ -457,8 +528,13 @@ bool Renderer::init(ID3D11Device* device, ID3D11DeviceContext* context) {
 }
 
 void Renderer::setObject(const float world[16], const float tint[4]) {
-    ObjectCB o;
+    ObjectCB o{};
     std::memcpy(o.world, world, sizeof o.world);
+    float basis[3][3], normals[3][3];
+    for(int row=0;row<3;++row) for(int axis=0;axis<3;++axis) basis[row][axis]=world[row*4+axis];
+    normalBasis(basis,normals);
+    for(int row=0;row<3;++row) for(int axis=0;axis<3;++axis) o.normalWorld[row*4+axis]=normals[row][axis];
+    o.normalWorld[15]=1;
     std::memcpy(o.tint, tint, sizeof o.tint);
     D3D11_MAPPED_SUBRESOURCE map;
     if (SUCCEEDED(ctx_->Map(ocbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &o, sizeof o); ctx_->Unmap(ocbuffer_, 0); }
@@ -496,11 +572,13 @@ bool Renderer::uploadThings(const foliageexport::Scene& scene, terrainexport::Up
 }
 
 void Renderer::uploadMesh(const foliageexport::Mesh& m, const std::vector<terrainexport::Image>& images,
-                          std::map<int, ID3D11ShaderResourceView*>& imageSrv, GpuMesh& g) {
+                          std::map<int, ID3D11ShaderResourceView*>& imageSrv, GpuMesh& g,
+                          bool dynamic) {
     {
         g.bmin[0] = g.bmin[1] = g.bmin[2] = 1e30f; g.bmax[0] = g.bmax[1] = g.bmax[2] = -1e30f;
         for (const auto& part : m.parts) {
             std::vector<GpuVertex> verts;
+            FoliageBatch b;
             verts.reserve(part.indices.size());
             for (size_t k = 0; k + 2 < part.indices.size(); k += 3) {
                 const uint32_t ids[3] = {part.indices[k], part.indices[k + 1], part.indices[k + 2]};
@@ -510,16 +588,18 @@ void Renderer::uploadMesh(const foliageexport::Mesh& m, const std::vector<terrai
                 for (uint32_t id : ids) {
                     const auto& v = m.geometry.vertices[id];
                     verts.push_back({v.x, v.y, v.z, v.nx, v.ny, v.nz, v.u, v.v, 1.0f});
+                    if(dynamic) b.sourceIndices.push_back(id);
                     g.tris.push_back(v.x); g.tris.push_back(v.y); g.tris.push_back(v.z);
                     g.bmin[0] = std::min(g.bmin[0], v.x); g.bmin[1] = std::min(g.bmin[1], v.y); g.bmin[2] = std::min(g.bmin[2], v.z);
                     g.bmax[0] = std::max(g.bmax[0], v.x); g.bmax[1] = std::max(g.bmax[1], v.y); g.bmax[2] = std::max(g.bmax[2], v.z);
                 }
             }
             if (verts.empty()) continue;
-            FoliageBatch b;
             D3D11_BUFFER_DESC bd = {};
-            bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
+            bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex));
+            bd.Usage = dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_IMMUTABLE;
             bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+            bd.CPUAccessFlags = dynamic ? D3D11_CPU_ACCESS_WRITE : 0;
             D3D11_SUBRESOURCE_DATA sd = {verts.data(), 0, 0};
             if (FAILED(device_->CreateBuffer(&bd, &sd, &b.vb))) continue;
             b.count = uint32_t(verts.size());
@@ -552,7 +632,41 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     for (auto& [id, srv] : imageSrv) release(srv);
     if (g.parts.empty()) { thumbs_[key] = nullptr; return nullptr; }
 
-    // its own little target
+    auto* srv = renderMeshPreview(g, size, 0.8f, 0.55f, 1.0f, false);
+    releaseMesh(g);
+    thumbs_[key] = srv;
+    return srv;
+}
+
+void Renderer::clearModelPreview() {
+    releaseMesh(modelMesh_);
+    release(modelSrv_);
+    modelSize_ = 0;
+}
+
+bool Renderer::setModelPreview(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images) {
+    clearModelPreview();
+    if (!device_ || !vs_) return false;
+    std::map<int, ID3D11ShaderResourceView*> imageSrv;
+    uploadMesh(mesh, images, imageSrv, modelMesh_);
+    for (auto& [id, srv] : imageSrv) release(srv);
+    return !modelMesh_.parts.empty();
+}
+
+ID3D11ShaderResourceView* Renderer::modelPreview(uint32_t size, float yaw, float pitch, float zoom, bool wire) {
+    if (modelMesh_.parts.empty()) return nullptr;
+    size = std::clamp(size, 8u, 2048u);
+    if (!modelSrv_ || size != modelSize_ || yaw != modelYaw_ || pitch != modelPitch_ || zoom != modelZoom_ || wire != modelWire_) {
+        release(modelSrv_);
+        modelSrv_ = renderMeshPreview(modelMesh_, size, yaw, pitch, zoom, wire);
+        modelSize_ = size; modelYaw_ = yaw; modelPitch_ = pitch; modelZoom_ = zoom; modelWire_ = wire;
+    }
+    return modelSrv_;
+}
+
+ID3D11ShaderResourceView* Renderer::renderMeshPreview(const GpuMesh& g, uint32_t size,
+                                                    float yaw, float pitch, float zoom, bool wire) {
+    // The target is retained by its SRV; mesh uploads are independent of camera changes.
     ID3D11Texture2D* tex = nullptr; ID3D11Texture2D* depth = nullptr;
     ID3D11RenderTargetView* rtv = nullptr; ID3D11DepthStencilView* dsv = nullptr; ID3D11ShaderResourceView* srv = nullptr;
     D3D11_TEXTURE2D_DESC td = {};
@@ -564,8 +678,8 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     if (FAILED(device_->CreateTexture2D(&td, nullptr, &tex)) || FAILED(device_->CreateRenderTargetView(tex, nullptr, &rtv)) ||
         FAILED(device_->CreateShaderResourceView(tex, nullptr, &srv)) || FAILED(device_->CreateTexture2D(&dd, nullptr, &depth)) ||
         FAILED(device_->CreateDepthStencilView(depth, nullptr, &dsv))) {
-        release(tex); release(rtv); release(srv); release(depth); release(dsv); releaseMesh(g);
-        thumbs_[key] = nullptr; return nullptr;
+        release(tex); release(rtv); release(srv); release(depth); release(dsv);
+        return nullptr;
     }
 
     // frame the bounds (mesh-local Fable axes -> Y up) from a three-quarter view
@@ -576,11 +690,11 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     // to Y-up render space: at = c * kFableToYUp
     for (int k = 0; k < 4; ++k) at[k] = cy[0] * kFableToYUp[0 * 4 + k] + cy[1] * kFableToYUp[1 * 4 + k] + cy[2] * kFableToYUp[2 * 4 + k] + cy[3] * kFableToYUp[3 * 4 + k];
     Camera cam;
-    cam.lookAt(at[0], at[1], at[2], 0.8f, 0.55f, r * 2.6f);
+    cam.lookAt(at[0], at[1], at[2], yaw, pitch, r * 2.6f * zoom);
     float eye[3]; cam.eye(eye);
     float view[16], proj[16];
     lookAtRH(eye, at, view);
-    perspectiveRH(cam.fovY, 1.0f, std::max(r * 0.05f, 0.01f), r * 10.0f, proj);
+    perspectiveRH(cam.fovY, 1.0f, std::max(r * 0.05f, 0.01f), r * (10.0f + 2.6f * zoom), proj);
     FrameCB cb = {};
     cb.flags[2] = 1.0f;
     mul4(view, proj, cb.viewProj);
@@ -610,7 +724,7 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     ctx_->PSSetConstantBuffers(0, 1, &cbuffer_);
     ctx_->PSSetConstantBuffers(1, 1, &ocbuffer_);
     ctx_->PSSetSamplers(0, 1, &wrapSampler_);
-    ctx_->RSSetState(solid_);
+    ctx_->RSSetState(wire ? wire_ : solid_);
     ctx_->OMSetDepthStencilState(depth_, 0);
     const float bf[4] = {0, 0, 0, 0};
     ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
@@ -630,8 +744,6 @@ ID3D11ShaderResourceView* Renderer::thumbnail(const std::string& key, const foli
     ID3D11RenderTargetView* none = nullptr;
     ctx_->OMSetRenderTargets(1, &none, nullptr);
     release(rtv); release(dsv); release(depth); release(tex);   // the SRV keeps the texture alive
-    releaseMesh(g);
-    thumbs_[key] = srv;
     return srv;
 }
 
@@ -655,11 +767,18 @@ bool Renderer::instanceBounds(size_t i, float center[3], float& radius) const {
 }
 
 int Renderer::pick(const float origin[3], const float dir[3], float& tBest) const {
+    static const std::vector<int> none;
+    return pick(origin, dir, tBest, none, false);
+}
+
+int Renderer::pick(const float origin[3], const float dir[3], float& tBest,
+                   const std::vector<int>& excludedThings, bool placedOnly) const {
     int best = -1;
     tBest = 1e30f;
     for (size_t i = 0; i < instances_.size(); ++i) {
         const auto& d = instances_[i];
-        if (!d.visible) continue;
+        if (!d.visible || (placedOnly && d.thing < 0) ||
+            std::find(excludedThings.begin(), excludedThings.end(), d.thing) != excludedThings.end()) continue;
         const auto& g = meshes_[size_t(d.mesh)];
         if (g.tris.empty()) continue;
         float inv[16];
@@ -760,6 +879,73 @@ bool Renderer::rayTerrain(const float origin[3], const float dir[3], float hit[3
     return false;
 }
 
+bool Renderer::projectVisible(const float p[3], float& u, float& v) const {
+    float e[4], c[4];
+    const float q[4] = {p[0], p[1], p[2], 1.0f};
+    for (int j = 0; j < 4; ++j) e[j] = q[0] * lastView_[j] + q[1] * lastView_[4 + j] + q[2] * lastView_[8 + j] + q[3] * lastView_[12 + j];
+    for (int j = 0; j < 4; ++j) c[j] = e[0] * lastProj_[j] + e[1] * lastProj_[4 + j] + e[2] * lastProj_[8 + j] + e[3] * lastProj_[12 + j];
+    if (!std::isfinite(c[3]) || c[3] <= 1e-6f) return false;
+    const float x = c[0] / c[3], y = c[1] / c[3], z = c[2] / c[3];
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        x < -1.0f || x > 1.0f || y < -1.0f || y > 1.0f || z < 0.0f || z > 1.0f) return false;
+    u = x * 0.5f + 0.5f; v = 0.5f - y * 0.5f;
+    return true;
+}
+
+void Renderer::clearHeadPreview() {
+    releaseMesh(headMesh_);
+    release(headSrv_);
+    headSize_=0;
+}
+
+bool Renderer::setHeadPreview(const foliageexport::Mesh& mesh,
+                              const std::vector<terrainexport::Image>& images) {
+    clearHeadPreview();
+    if(!device_ || !vs_) return false;
+    std::map<int,ID3D11ShaderResourceView*> imageSrv;
+    uploadMesh(mesh,images,imageSrv,headMesh_,true);
+    for(auto& [id,srv]:imageSrv) release(srv);
+    return !headMesh_.parts.empty();
+}
+
+bool Renderer::updateHeadPreview(const foliageexport::Mesh& posed) {
+    if(headMesh_.parts.size()!=posed.parts.size()) return false;
+    for(size_t i=0;i<headMesh_.parts.size();++i) {
+        auto& batch=headMesh_.parts[i];
+        if(batch.sourceIndices.size()!=batch.count || !batch.vb) return false;
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(ctx_->Map(batch.vb,0,D3D11_MAP_WRITE_DISCARD,0,&mapped))) return false;
+        auto* vertices=static_cast<GpuVertex*>(mapped.pData);
+        for(size_t j=0;j<batch.sourceIndices.size();++j) {
+            const uint32_t id=batch.sourceIndices[j];
+            if(id>=posed.geometry.vertices.size()) {
+                ctx_->Unmap(batch.vb,0);return false;
+            }
+            const auto& v=posed.geometry.vertices[id];
+            vertices[j]={v.x,v.y,v.z,v.nx,v.ny,v.nz,v.u,v.v,1.0f};
+        }
+        ctx_->Unmap(batch.vb,0);
+    }
+    release(headSrv_);
+    return true;
+}
+
+ID3D11ShaderResourceView* Renderer::headPreview(uint32_t size,float yaw,float pitch,
+                                                float zoom,bool wire) {
+    if(headMesh_.parts.empty()) return nullptr;
+    size=std::clamp(size,8u,2048u);
+    if(!headSrv_ || size!=headSize_ || yaw!=headYaw_ || pitch!=headPitch_ ||
+       zoom!=headZoom_ || wire!=headWire_) {
+        release(headSrv_);
+        // Keep hair and facial silhouettes legible at the compact Dialogue size.
+        // The ImGui image samples this render target down to the logical side.
+        headSrv_=renderMeshPreview(headMesh_,std::min(size*2u,2048u),
+                                   yaw,pitch,zoom,wire);
+        headSize_=size;headYaw_=yaw;headPitch_=pitch;headZoom_=zoom;headWire_=wire;
+    }
+    return headSrv_;
+}
+
 bool Renderer::project(const float p[3], float& u, float& v) const {
     float e[4], c[4];
     const float q[4] = {p[0], p[1], p[2], 1.0f};
@@ -788,9 +974,48 @@ void Renderer::releaseMesh() {
 
 void Renderer::clear() { releaseMesh(); for (int i = 0; i < kLayers; ++i) clearLayer(i); }
 
+void Renderer::pollTextureCleanup() {
+    if (!retiredTexturePixels_) return;
+    if (texturePixelsRelease_.tryRelease(retiredTexturePixels_)) {
+        texturePixelsInFlight_ = retiredTextureBytes_; retiredTextureBytes_ = 0;
+    }
+}
+
+void Renderer::retireTexturePixels(std::vector<uint8_t>& pixels) {
+    if (pixels.empty()) return;
+    // At most 64 MiB queued plus one 64 MiB worker payload. Under extreme
+    // churn/oversized textures, fall back to synchronous release, never grow
+    // an unbounded CPU queue while the GPU memory policy is trying to shed maps.
+    constexpr size_t limit = 64u * 1024u * 1024u;
+    if (pixels.size() > limit - retiredTextureBytes_) pollTextureCleanup();
+    if (pixels.size() > limit - retiredTextureBytes_) {
+        FORGE_ZONE("Texture identity synchronous overflow release");
+        std::vector<uint8_t>().swap(pixels);
+        return;
+    }
+    if (!retiredTexturePixels_) retiredTexturePixels_.emplace();
+    retiredTextureBytes_ += pixels.size();
+    retiredTexturePixels_->push_back(std::move(pixels));
+}
+
+void Renderer::releaseBatch(FoliageBatch& b) {
+    { FORGE_ZONE("Layer geometry release"); release(b.vb); release(b.ib); release(b.objectBounds); }
+    auto drop = [this](auto& texture, auto*& srv) {
+        if (texture && texture.use_count() == 1) {
+            FORGE_ZONE("Texture identity cleanup handoff");
+            retireTexturePixels(texture->pixels);
+        }
+        { FORGE_ZONE("Layer texture reference release");
+            if (texture) { texture.reset(); srv = nullptr; } else release(srv);
+        }
+    };
+    drop(b.texture, b.srv); drop(b.coarseTexture, b.coarseSrv);
+}
+
 void Renderer::clearLayer(int layer) {
-    for (auto& b : layers_[layer]) { release(b.vb); release(b.ib); release(b.srv); release(b.coarseSrv); }
+    for (auto& b : layers_[layer]) { releaseBatch(b); }
     layers_[layer].clear();
+    pollTextureCleanup();
 }
 
 ID3D11ShaderResourceView* Renderer::uiTexture(const std::string& key, const terrainexport::Image& img) {
@@ -833,21 +1058,50 @@ ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Ima
     return srv;
 }
 
-ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img) {
+ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img, bool mipmaps) {
     FORGE_ZONE("D3D texture create");
-    if (!img.width || !img.height) return nullptr;
+    if (!LayerTexturePool::valid(img)) return nullptr;
     D3D11_TEXTURE2D_DESC td = {};
-    td.Width = img.width; td.Height = img.height; td.MipLevels = 1; td.ArraySize = 1;
+    td.Width = img.width; td.Height = img.height; td.MipLevels = mipmaps ? 0 : 1; td.ArraySize = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
     td.Usage = D3D11_USAGE_IMMUTABLE; td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     D3D11_SUBRESOURCE_DATA init = {img.rgba.data(), img.width * 4, 0};
     ID3D11Texture2D* tex = nullptr;
     ID3D11ShaderResourceView* srv = nullptr;
-    if (SUCCEEDED(device_->CreateTexture2D(&td, &init, &tex))) {
+    if (mipmaps) {
+        td.Usage = D3D11_USAGE_DEFAULT;
+        td.BindFlags |= D3D11_BIND_RENDER_TARGET;
+        td.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    }
+    if (SUCCEEDED(device_->CreateTexture2D(&td, mipmaps ? nullptr : &init, &tex))) {
+        if (mipmaps) ctx_->UpdateSubresource(tex, 0, nullptr, img.rgba.data(), img.width * 4, 0);
         device_->CreateShaderResourceView(tex, nullptr, &srv);
+        if (mipmaps && srv) ctx_->GenerateMips(srv);
         tex->Release();
     }
     return srv;
+}
+
+ID3D11ShaderResourceView* Renderer::makeCutoutTexture(const terrainexport::Image& image, const cutoutmips::Chain& chain) {
+    FORGE_ZONE("D3D cutout mip upload");
+    std::vector<D3D11_SUBRESOURCE_DATA> data{{image.rgba.data(), image.width*4, 0}};
+    uint32_t width=image.width, height=image.height;
+    if (!LayerTexturePool::valid(image)) return nullptr;
+    for (const auto& mip : chain) {
+        width=std::max(1u,width/2); height=std::max(1u,height/2);
+        if (!LayerTexturePool::valid(mip) || mip.width!=width || mip.height!=height) return nullptr;
+        data.push_back({mip.rgba.data(), mip.width*4, 0});
+    }
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width=image.width; desc.Height=image.height; desc.MipLevels=UINT(data.size()); desc.ArraySize=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count=1;
+    desc.Usage=D3D11_USAGE_IMMUTABLE; desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    ID3D11Texture2D* texture=nullptr;
+    ID3D11ShaderResourceView* view=nullptr;
+    if (SUCCEEDED(device_->CreateTexture2D(&desc,data.data(),&texture))) {
+        device_->CreateShaderResourceView(texture,nullptr,&view); texture->Release();
+    }
+    return view;
 }
 
 bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up) {
@@ -856,14 +1110,35 @@ bool Renderer::uploadLayer(int layer, const foliageexport::Scene& scene, terrain
 }
 
 void Renderer::removeLayerTag(int layer, int tag) {
+    FORGE_ZONE("Layer map resources retire");
     auto& v = layers_[layer];
-    for (auto& b : v) if (b.tag == tag) { release(b.vb); release(b.ib); release(b.srv); release(b.coarseSrv); }
+    for (auto& b : v) if (b.tag == tag) { releaseBatch(b); }
     v.erase(std::remove_if(v.begin(), v.end(), [&](const FoliageBatch& b) { return b.tag == tag; }), v.end());
+    pollTextureCleanup();
 }
 
 size_t Renderer::layerTagBytes(int layer, int tag) const {
+    return layerSetBytes(layer, {tag}, false);
+}
+
+size_t Renderer::layerSetBytes(int layer, const std::vector<int>& tags, bool exclusiveTextures) const {
+    FORGE_ZONE("Layer texture ownership accounting");
     size_t bytes = 0;
-    for (const auto& batch : layers_[layer]) if (batch.tag == tag) bytes += batch.resourceBytes;
+    struct References { size_t inside = 0, total = 0, bytes = 0; bool primary = false; };
+    std::map<const LayerTexturePool::Entry*, References> textures;
+    for (const auto& batch : layers_[layer]) {
+        if (std::find(tags.begin(), tags.end(), batch.tag) == tags.end()) continue;
+        bytes += batch.resourceBytes;
+        auto include = [&](const auto& texture, bool primary) {
+            if (!texture) return;
+            auto& refs = textures[texture.get()];
+            ++refs.inside; refs.total = size_t(texture.use_count());
+            refs.bytes = texture->bytes; refs.primary |= primary;
+        };
+        include(batch.texture, true); include(batch.coarseTexture, false);
+    }
+    for (const auto& [texture, refs] : textures)
+        if (refs.primary && (!exclusiveTextures || refs.inside == refs.total)) bytes += refs.bytes;
     return bytes;
 }
 
@@ -871,8 +1146,11 @@ void Renderer::setLayerTagVisible(int layer, int tag, bool visible) {
     for (auto& b : layers_[layer]) if (b.tag == tag && !(layer == kWorldLayer && b.water)) b.visible = visible;
 }
 
-void Renderer::setLayerTagFade(int layer, int tag, float coverage, bool inverse) {
-    for (auto& b : layers_[layer]) if (b.tag == tag && !(layer == kWorldLayer && b.water)) { b.coverage = std::clamp(coverage, 0.0f, 1.0f); b.inverseFade = inverse; }
+void Renderer::setLayerTagFade(int layer, int tag, float coverage, bool inverse, float objectCoverage) {
+    for (auto& b : layers_[layer]) if (b.tag == tag && !(layer == kWorldLayer && b.water)) {
+        b.coverage = std::clamp(!b.terrainMorph && objectCoverage >= 0 ? objectCoverage : coverage, 0.0f, 1.0f);
+        b.inverseFade = inverse;
+    }
 }
 
 bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag) {
@@ -881,7 +1159,28 @@ bool Renderer::appendLayer(int layer, const foliageexport::Scene& scene, terrain
     return added;
 }
 
-std::vector<Renderer::PreparedBatch> Renderer::prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up) {
+void Renderer::normalBasis(const float basis[3][3], float result[3][3]) {
+    double cofactors[3][3], largest=0;
+    for(int row=0;row<3;++row) for(int axis=0;axis<3;++axis) {
+        const int a=(row+1)%3, b=(row+2)%3, u=(axis+1)%3, v=(axis+2)%3;
+        cofactors[row][axis]=double(basis[a][u])*basis[b][v]-double(basis[a][v])*basis[b][u];
+        largest=std::max(largest,std::abs(cofactors[row][axis]));
+    }
+    const double determinant=double(basis[0][0])*cofactors[0][0]+double(basis[0][1])*cofactors[0][1]+double(basis[0][2])*cofactors[0][2];
+    if (!(largest>0) || !std::isfinite(largest) || !std::isfinite(determinant)) {
+        for(int row=0;row<3;++row) for(int axis=0;axis<3;++axis) result[row][axis]=row==axis ? 1.0f : 0.0f;
+        return;
+    }
+    const double factor=(determinant<0 ? -1.0 : 1.0)/largest;
+    for(int row=0;row<3;++row) for(int axis=0;axis<3;++axis) result[row][axis]=float(cofactors[row][axis]*factor);
+}
+
+uint32_t Renderer::packNormal(float x, float y, float z) {
+    auto channel = [](float v) { return uint32_t(std::lround((std::clamp(v, -1.0f, 1.0f) * 0.5f + 0.5f) * 1023.0f)); };
+    return channel(x) | (channel(y) << 10) | (channel(z) << 20);
+}
+
+std::vector<Renderer::PreparedBatch> Renderer::prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up, bool objectLods, bool coarseOnly) {
     FORGE_ZONE("Indexed geometry prepare / bounds");
     auto toUp = [up](float x, float y, float z, float& ox, float& oy, float& oz) {
         if (up == terrainexport::UpAxis::Y) { ox = x; oy = z; oz = -y; } else { ox = x; oy = y; oz = z; }
@@ -889,10 +1188,33 @@ std::vector<Renderer::PreparedBatch> Renderer::prepareLayer(const foliageexport:
     std::map<std::pair<int, bool>, PreparedBatch> byImage;   // (image index, cutout) ; -1 = untextured
     for (const auto& inst : scene.instances) {
         if (inst.mesh < 0 || size_t(inst.mesh) >= scene.meshes.size()) continue;
-        const auto& m = scene.meshes[size_t(inst.mesh)];
-        float col[3][3]; foliageexport::instanceBasis(inst, col);
+        const auto& baseMesh = scene.meshes[size_t(inst.mesh)];
+        float col[3][3], normals[3][3]; foliageexport::instanceBasis(inst, col);
+        normalBasis(col, normals);
+        ObjectRange object;
+        if (objectLods) {
+            float lo[3] = {1e30f,1e30f,1e30f}, hi[3] = {-1e30f,-1e30f,-1e30f};
+            auto include = [&](const auto& mesh) { for (const auto& v : mesh.geometry.vertices) {
+                float p[3];
+                toUp(inst.x + v.x*col[0][0] + v.y*col[1][0] + v.z*col[2][0],
+                     inst.y + v.x*col[0][1] + v.y*col[1][1] + v.z*col[2][1],
+                     inst.z + v.x*col[0][2] + v.y*col[1][2] + v.z*col[2][2], p[0],p[1],p[2]);
+                for (int a=0;a<3;++a) { lo[a]=std::min(lo[a],p[a]); hi[a]=std::max(hi[a],p[a]); }
+            }};
+            include(baseMesh); for (const auto& lod : baseMesh.lods) include(lod);
+            float squared = 0;
+            for (int a=0;a<3;++a) { object.center[a]=(lo[a]+hi[a])*0.5f; squared+=(hi[a]-lo[a])*(hi[a]-lo[a])*0.25f; }
+            object.radius = std::sqrt(squared);
+        }
+        const size_t levels = objectLods ? baseMesh.lods.size()+1 : 1;
+        for (size_t level=coarseOnly ? levels-1 : 0; level<levels; ++level) {
+        const auto& m = level ? baseMesh.lods[level-1] : baseMesh;
         for (const auto& part : m.parts) {
           auto& out = byImage[{part.image, part.hasAlpha}];
+          object.first = uint32_t(out.indices.size());
+          object.lod = uint32_t(level);
+          object.nearPixels = level && !coarseOnly ? worldview::lodPixels(unsigned(level-1)) : 0;
+          object.farPixels = level+1 < levels ? worldview::lodPixels(unsigned(level)) : 1.5f;
           // Transform each referenced source vertex once per instance/material.
           // Keep the original triangle order, seams, normals and UVs unchanged.
           std::vector<uint32_t> remap(m.geometry.vertices.size(), UINT32_MAX);
@@ -906,15 +1228,18 @@ std::vector<Renderer::PreparedBatch> Renderer::prepareLayer(const foliageexport:
                 toUp(inst.x + v.x * col[0][0] + v.y * col[1][0] + v.z * col[2][0],
                      inst.y + v.x * col[0][1] + v.y * col[1][1] + v.z * col[2][1],
                      inst.z + v.x * col[0][2] + v.y * col[1][2] + v.z * col[2][2], g.px, g.py, g.pz);
-                toUp(v.nx * col[0][0] + v.ny * col[1][0] + v.nz * col[2][0],
-                     v.nx * col[0][1] + v.ny * col[1][1] + v.nz * col[2][1],
-                     v.nx * col[0][2] + v.ny * col[1][2] + v.nz * col[2][2], g.nx, g.ny, g.nz);
-                g.u = v.u; g.v = v.v; g.walk = 1.0f;
+                toUp(v.nx * normals[0][0] + v.ny * normals[1][0] + v.nz * normals[2][0],
+                     v.nx * normals[0][1] + v.ny * normals[1][1] + v.nz * normals[2][1],
+                     v.nx * normals[0][2] + v.ny * normals[1][2] + v.nz * normals[2][2], g.nx, g.ny, g.nz);
+                g.u = v.u; g.v = v.v; g.walk = objectLods ? float(out.objects.size()) : 1.0f;
                 remap[id] = uint32_t(out.vertices.size());
                 out.indices.push_back(remap[id]);
                 out.vertices.push_back(g);
             }
           }
+          object.count = uint32_t(out.indices.size()) - object.first;
+          if (objectLods && object.count) out.objects.push_back(object);
+        }
         }
     }
     std::vector<PreparedBatch> batches;
@@ -959,12 +1284,13 @@ Renderer::PreparedBatch Renderer::prepareWater(const terrainexport::WaterMesh& w
     return batch;
 }
 
-bool Renderer::appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible) {
+bool Renderer::appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible, const cutoutmips::Chain* cutout) {
     FORGE_ZONE("D3D batch upload");
     const auto& verts = batch.vertices;
     if (verts.empty() || verts.size() > UINT32_MAX / sizeof(GpuVertex) || batch.indices.size() > UINT32_MAX / sizeof(uint32_t)) return false;
     FoliageBatch b;
     b.terrainMorph = batch.terrainMorph;
+    b.terrainPatches = batch.terrainPatches;
     D3D11_BUFFER_DESC bd = {};
     bd.ByteWidth = UINT(verts.size() * sizeof(GpuVertex)); bd.Usage = D3D11_USAGE_IMMUTABLE;
     bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
@@ -979,27 +1305,56 @@ bool Renderer::appendPreparedBatch(int layer, const PreparedBatch& batch, const 
         b.count = uint32_t(batch.indices.size());
     }
     if (batch.image >= 0 && size_t(batch.image) < images.size()) {
-        b.srv = makeTexture(images[size_t(batch.image)]);
-        if (!b.srv) { release(b.vb); release(b.ib); return false; }
         const auto& image = images[size_t(batch.image)];
-        b.resourceBytes += size_t(image.width) * image.height * 4;
+        const bool mipmaps = worldTextureMips && !batch.alpha;
+        const bool filteredCutout = worldCutoutMips && batch.alpha && cutout && !cutout->empty();
+        size_t bytes = texturePayloadBytes(image.width, image.height, mipmaps);
+        if (filteredCutout) for (const auto& mip : *cutout) bytes += mip.rgba.size();
+        b.texture = texturePool_.acquire(image, filteredCutout ? 2 : int(mipmaps), bytes,
+            worldTextureSharing, [&] {
+                return std::shared_ptr<ID3D11ShaderResourceView>(filteredCutout ? makeCutoutTexture(image, *cutout) : makeTexture(image, mipmaps),
+                    [](ID3D11ShaderResourceView* srv) { if (srv) srv->Release(); });
+            });
+        if (!b.texture) { releaseBatch(b); return false; }
+        b.srv = b.texture->resource.get();
     }
     b.resourceBytes += verts.size() * sizeof(GpuVertex) + batch.indices.size() * sizeof(uint32_t);
+    if (!batch.objects.empty()) {
+        std::vector<float> bounds;
+        bounds.reserve(batch.objects.size()*8);
+        for (const auto& object : batch.objects) {
+            bounds.insert(bounds.end(), {object.center[0],object.center[1],object.center[2],object.radius,
+                                        object.nearPixels,object.farPixels,0,0});
+        }
+        if (bounds.size() > UINT32_MAX/sizeof(float)) { releaseBatch(b); return false; }
+        bd = {}; bd.ByteWidth = UINT(bounds.size()*sizeof(float)); bd.Usage = D3D11_USAGE_IMMUTABLE;
+        bd.BindFlags = D3D11_BIND_SHADER_RESOURCE; sd.pSysMem = bounds.data();
+        ID3D11Buffer* buffer = nullptr;
+        if (FAILED(device_->CreateBuffer(&bd,&sd,&buffer))) { releaseBatch(b); return false; }
+        D3D11_SHADER_RESOURCE_VIEW_DESC view = {};
+        view.Format = DXGI_FORMAT_R32G32B32A32_FLOAT; view.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+        view.Buffer.NumElements = UINT(bounds.size()/4);
+        const auto status = device_->CreateShaderResourceView(buffer,&view,&b.objectBounds);
+        release(buffer);
+        if (FAILED(status)) { releaseBatch(b); return false; }
+        b.resourceBytes += bounds.size()*sizeof(float);
+        b.objects = batch.objects;
+    }
     std::copy(std::begin(batch.lo), std::end(batch.lo), b.lo);
     std::copy(std::begin(batch.hi), std::end(batch.hi), b.hi);
     if (b.terrainMorph) {
         for (const auto& overview : layers_[kWorldLayer])
             if (overview.tag == tag && !overview.water && overview.srv) {
-                b.coarseSrv = overview.srv; b.coarseSrv->AddRef(); break;
+                b.coarseTexture = overview.texture; b.coarseSrv = overview.srv; break;
             }
     } else if (layer == kWorldLayer && !b.water && b.srv) {
         // Overview uploads can arrive after the first detailed map.
         for (auto& detail : layers_[kWorldDetailLayer])
             if (detail.tag == tag && detail.terrainMorph && !detail.coarseSrv) {
-                detail.coarseSrv = b.srv; detail.coarseSrv->AddRef();
+                detail.coarseTexture = b.texture; detail.coarseSrv = b.srv;
             }
     }
-    layers_[layer].push_back(b);
+    layers_[layer].push_back(std::move(b));
     return true;
 }
 
@@ -1106,54 +1461,92 @@ bool Renderer::upload(const terrainexport::Scene& scene, Camera& camera, bool fr
     return true;
 }
 
-bool Renderer::ensureTarget(uint32_t w, uint32_t h) {
-    if (w == width_ && h == height_ && rtv_) return true;
-    releaseTarget();
-    D3D11_TEXTURE2D_DESC td = {};
-    td.Width = w; td.Height = h; td.MipLevels = 1; td.ArraySize = 1;
-    td.Format = DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count = 1;
-    td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    if (FAILED(device_->CreateTexture2D(&td, nullptr, &target_))) return false;
-    device_->CreateRenderTargetView(target_, nullptr, &rtv_);
-    device_->CreateShaderResourceView(target_, nullptr, &srv_);
-    td.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; td.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-    if (FAILED(device_->CreateTexture2D(&td, nullptr, &depthTex_))) return false;
-    device_->CreateDepthStencilView(depthTex_, nullptr, &dsv_);
-    width_ = w; height_ = h;
-    return rtv_ && srv_ && dsv_;
+bool Renderer::ensureTarget(uint32_t w, uint32_t h, unsigned requested) {
+    if (w == width_ && h == height_ && requested == targetRequestedSamples_ &&
+        targetTestLimit_ == worldAaTestLimit && rtv_) return true;
+    FORGE_ZONE("Viewport target allocation");
+    for (unsigned samples : {4u,2u,1u}) {
+        if (samples > requested || !(aaSupport_ & samples)) continue;
+        struct Candidate {
+            ID3D11Texture2D *colour=nullptr, *multisample=nullptr, *depth=nullptr;
+            ID3D11RenderTargetView* rtv=nullptr;
+            ID3D11ShaderResourceView* srv=nullptr;
+            ID3D11DepthStencilView* dsv=nullptr;
+            ~Candidate() { release(dsv); release(depth); release(srv); release(rtv); release(multisample); release(colour); }
+        } next;
+        D3D11_TEXTURE2D_DESC td{};
+        td.Width=w; td.Height=h; td.MipLevels=1; td.ArraySize=1;
+        td.Format=DXGI_FORMAT_R8G8B8A8_UNORM; td.SampleDesc.Count=1;
+        td.Usage=D3D11_USAGE_DEFAULT; td.BindFlags=D3D11_BIND_RENDER_TARGET|D3D11_BIND_SHADER_RESOURCE;
+        if (FAILED(device_->CreateTexture2D(&td,nullptr,&next.colour)) ||
+            FAILED(device_->CreateShaderResourceView(next.colour,nullptr,&next.srv))) continue;
+        if (samples > 1) {
+            td.SampleDesc.Count=samples; td.BindFlags=D3D11_BIND_RENDER_TARGET;
+            if (FAILED(device_->CreateTexture2D(&td,nullptr,&next.multisample))) continue;
+        }
+        if (FAILED(device_->CreateRenderTargetView(samples>1 ? next.multisample : next.colour,nullptr,&next.rtv))) continue;
+        // Exercise cleanup of partial allocations in hidden regression tests.
+        if (samples > worldAaTestLimit) continue;
+        td.SampleDesc.Count=samples; td.Format=DXGI_FORMAT_D24_UNORM_S8_UINT; td.BindFlags=D3D11_BIND_DEPTH_STENCIL;
+        if (FAILED(device_->CreateTexture2D(&td,nullptr,&next.depth)) ||
+            FAILED(device_->CreateDepthStencilView(next.depth,nullptr,&next.dsv))) continue;
+        ID3D11ShaderResourceView* nullSrv=nullptr;
+        ctx_->PSSetShaderResources(0,1,&nullSrv); ctx_->OMSetRenderTargets(0,nullptr,nullptr);
+        releaseTarget();
+        target_=next.colour; next.colour=nullptr;
+        multisampleTarget_=next.multisample; next.multisample=nullptr;
+        rtv_=next.rtv; next.rtv=nullptr; srv_=next.srv; next.srv=nullptr;
+        depthTex_=next.depth; next.depth=nullptr; dsv_=next.dsv; next.dsv=nullptr;
+        width_=w; height_=h; targetSamples_=samples; targetRequestedSamples_=requested;
+        targetTestLimit_=worldAaTestLimit; ++aaRebuilds_;
+        if(samples<requested) ++aaFallbacks_;
+        return true;
+    }
+    return false; // keep the last complete image if even the 1x target fails
+}
+
+void Renderer::resolveTarget() {
+    ctx_->OMSetRenderTargets(0,nullptr,nullptr);
+    if (multisampleTarget_) {
+        FORGE_ZONE("Viewport multisample resolve");
+        FORGE_GPU_ZONE("Viewport multisample resolve");
+        ctx_->ResolveSubresource(target_,0,multisampleTarget_,0,DXGI_FORMAT_R8G8B8A8_UNORM);
+    }
 }
 
 void Renderer::releaseTarget() {
-    release(dsv_); release(depthTex_); release(srv_); release(rtv_); release(target_);
-    width_ = height_ = 0;
+    release(dsv_); release(depthTex_); release(srv_); release(rtv_); release(multisampleTarget_); release(target_);
+    width_=height_=0; targetSamples_=1;
 }
 
 ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, const Camera& camera,
                                            ViewMode mode, float time, float nearPlane) {
+    pollTextureCleanup();
     FORGE_ZONE("Viewport CPU submit");
     FORGE_GPU_ZONE("Viewport");
     width = std::max(width, 8u); height = std::max(height, 8u);
-    if (!ensureTarget(width, height)) return nullptr;
+    const unsigned requested = worldOnly ? worldview::aaSamples(worldAaMode ? unsigned(worldAaMode) : aaBudget_.samples,
+        aaSupport_, aaMemory_.valid, aaMemory_.budget, aaMemory_.usage, aaSampledTargetBytes_, width, height, targetSamples_) : 1;
+    if (!ensureTarget(width, height, requested)) return srv_;
 
     const float clearCol[4] = {0.075f, 0.07f, 0.10f, 1.0f};
     ctx_->OMSetRenderTargets(1, &rtv_, dsv_);
     ctx_->ClearRenderTargetView(rtv_, clearCol);
     ctx_->ClearDepthStencilView(dsv_, D3D11_CLEAR_DEPTH, 1.0f, 0);
-    if (!indexCount_ && !(worldOnly && !layers_[kWorldLayer].empty())) return srv_;
+    if (!indexCount_ && !(worldOnly && !layers_[kWorldLayer].empty())) { resolveTarget(); return srv_; }
 
     D3D11_VIEWPORT vp = {0, 0, float(width), float(height), 0, 1};
     ctx_->RSSetViewports(1, &vp);
 
     float eye[3]; camera.eye(eye);
-    float at[3]; camera.focus(at);
     float view[16], proj[16];
-    lookAtRH(eye, at, view);
+    camera.view(view);
     const float zn = nearPlane > 0 ? nearPlane : std::max(camera.distance * 0.01f, 0.05f);
     float zf = camera.distance * 30.0f + 1000.0f;
     float fogDistance = camera.distance;
     if (worldOnly) {
         float lo[3] = {eye[0], eye[1], eye[2]}, hi[3] = {eye[0], eye[1], eye[2]};
-        for (int layer : {kWorldLayer, kWorldDetailLayer})
+        for (int layer : {kWorldLayer, kWorldDetailLayer, kWorldSceneryLayer})
             for (const auto& batch : layers_[layer])
                 for (int axis = 0; axis < 3; ++axis) {
                     lo[axis] = std::min(lo[axis], batch.lo[axis]);
@@ -1174,6 +1567,9 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     cb.flags[2] = 1.0f;
     mul4(view, proj, cb.viewProj);
     worldDrawnBatches = worldCulledBatches = 0;
+    worldDrawnObjects = worldCulledObjects = worldLodObjects = worldObjectDrawCalls = 0;
+    worldSceneryDrawnParts = 0;
+    worldTerrainTriangles = worldTerrainFullTriangles = worldTerrainCoarsePatches = 0;
     auto visibleBatch = [&](const FoliageBatch& batch) {
         if (!worldOnly) return true;
         if (worldCulling && !worldview::visible(cb.viewProj, batch.lo, batch.hi)) { ++worldCulledBatches; return false; }
@@ -1210,11 +1606,12 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     ctx_->RSSetState(mode == ViewMode::Wireframe ? wire_ : solid_);
     ctx_->OMSetDepthStencilState(depth_, 0);
     const float bf[4] = {0, 0, 0, 0};
-    ctx_->OMSetBlendState(blend_, bf, 0xFFFFFFFF);
+    const bool cutoutAa = worldOnly && worldCutoutAa && targetSamples_ > 1 && cutoutBlend_;
+    ctx_->OMSetBlendState(cutoutAa ? cutoutBlend_ : blend_, bf, 0xFFFFFFFF);
     if (!worldOnly && indexCount_) ctx_->DrawIndexed(indexCount_, 0, 0);
     // the world view draws only its layer; the map views never draw it
     auto layerOn = [&](int i) {
-        const bool world = i == kWorldLayer || i == kWorldDetailLayer;
+        const bool world = i == kWorldLayer || i == kWorldDetailLayer || i == kWorldSceneryLayer;
         return worldOnly ? (world && showLayer[i]) : (!world && showLayer[i]);
     };
 
@@ -1231,16 +1628,21 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
             }
             ctx_->RSSetState(solid_);
             ctx_->PSSetSamplers(0, 1, &wrapSampler_);
-            bool currentAlpha = true;
             for (int i = 0; i < kLayers; ++i) {
                 if (!layerOn(i)) continue;
                 for (const auto& b : layers_[i]) {
-                    if (!b.visible || b.water) continue;
+                    if (!b.visible || b.water || (worldOnly && worldCutoutMask && !b.alpha)) continue;
+                    if (b.inverseFade && b.coverage >= 1) continue;
+                    if (!b.terrainMorph && !b.inverseFade && b.coverage <= 0) continue;
                     if (!visibleBatch(b)) continue;
-                    const float transition = b.terrainMorph ? (worldMaterialBlend ? 3.0f : 2.0f) : float(b.inverseFade);
-                    if (b.alpha != currentAlpha || cb.flags[2] != b.coverage || cb.flags[3] != transition) {
-                        currentAlpha = b.alpha;
-                        cb.flags[0] = 1.0f; cb.flags[1] = currentAlpha ? 1.0f : 0.0f;
+                    const float transition = b.terrainMorph ? (worldMaterialBlend ? (worldNormalBlend ? 4.0f : 3.0f) : 2.0f) : float(b.inverseFade);
+                    const float alphaMode = b.alpha ? (worldOnly && worldCutoutMask ? 2.0f : 1.0f) + (cutoutAa ? 2.0f : 0.0f) : 0.0f;
+                    const float objectLods = worldOnly && worldObjectLods && b.objectBounds ? 1.0f : 0.0f;
+                    if (cb.flags[1] != alphaMode || cb.flags[2] != b.coverage || cb.flags[3] != transition || cb.detail[0] != objectLods) {
+                        cb.detail[0] = objectLods;
+                        cb.detail[1] = float(height) * std::abs(lastProj_[5]) * 0.5f;
+                        cb.detail[2] = worldObjectDistance;
+                        cb.flags[0] = 1.0f; cb.flags[1] = alphaMode;
                         cb.flags[2] = b.coverage; cb.flags[3] = transition;
                         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
                     }
@@ -1248,7 +1650,45 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
                         b.coarseSrv ? b.coarseSrv : (b.srv ? b.srv : white_)};
                     ctx_->PSSetShaderResources(0, 2, textures);
                     ctx_->IASetVertexBuffers(0, 1, &b.vb, &stride, &offset);
-                    drawBatch(b);
+                    ctx_->VSSetShaderResources(2,1,&b.objectBounds);
+                    if (worldOnly && !b.terrainPatches.empty()) {
+                        ctx_->IASetIndexBuffer(b.ib,DXGI_FORMAT_R32_UINT,0);
+                        for (const auto& patch : b.terrainPatches) {
+                            if (worldCulling && !worldview::visible(cb.viewProj,patch.lo,patch.hi)) continue;
+                            float squared = 0;
+                            for (int axis=0;axis<3;++axis) {
+                                const float d=std::max({patch.lo[axis]-cb.eye[axis],0.0f,cb.eye[axis]-patch.hi[axis]}); squared+=d*d;
+                            }
+                            const float distance=std::max(std::sqrt(squared),0.1f);
+                            size_t level=0;
+                            if (worldTerrainLods) for (size_t candidate=1;candidate<patch.levels.size();++candidate)
+                                if (patch.levels[candidate].error*float(height)*std::abs(lastProj_[5])*0.5f <= distance) level=candidate;
+                            const auto& chosen=patch.levels[level];
+                            ctx_->DrawIndexed(chosen.count,chosen.first,0);
+                            worldTerrainTriangles+=chosen.count/3;
+                            worldTerrainFullTriangles+=patch.levels[0].count/3;
+                            if (level) ++worldTerrainCoarsePatches;
+                        }
+                    } else if (worldOnly && !b.objects.empty()) {
+                        ctx_->IASetIndexBuffer(b.ib,DXGI_FORMAT_R32_UINT,0);
+                        uint32_t first = 0, count = 0;
+                        auto flush = [&] { if (count) { ctx_->DrawIndexed(count,first,0); ++worldObjectDrawCalls; count=0; } };
+                        for (const auto& object : b.objects) {
+                            float lo[3],hi[3],squared = 0;
+                            for (int axis=0;axis<3;++axis) {
+                                lo[axis]=object.center[axis]-object.radius; hi[axis]=object.center[axis]+object.radius;
+                                const float delta=object.center[axis]-cb.eye[axis]; squared+=delta*delta;
+                            }
+                            const bool selected = worldObjectLods ? worldview::objectCoverage(std::sqrt(squared),object.radius,cb.detail[1],object.nearPixels,object.farPixels,worldObjectDistance)>0 : (object.lod==0 || i==kWorldSceneryLayer);
+                            if (!selected || (worldCulling && !worldview::visible(cb.viewProj,lo,hi))) { ++worldCulledObjects; flush(); continue; }
+                            ++worldDrawnObjects; if (object.lod) ++worldLodObjects;
+                            if (i==kWorldSceneryLayer) ++worldSceneryDrawnParts;
+                            if (count && first+count!=object.first) flush();
+                            if (!count) first=object.first;
+                            count+=object.count;
+                        }
+                        flush();
+                    } else drawBatch(b);
                 }
             }
         }
@@ -1302,6 +1742,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
         FORGE_ZONE("Water submit");
         FORGE_GPU_ZONE("Water");
         cb.flags[0] = 2.0f; cb.flags[1] = 0.0f;
+        cb.detail[0] = 0;
         cb.flags[2] = 1.0f; cb.flags[3] = 0.0f;
         if (SUCCEEDED(ctx_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &map))) { std::memcpy(map.pData, &cb, sizeof cb); ctx_->Unmap(cbuffer_, 0); }
         ctx_->RSSetState(solid_);
@@ -1332,8 +1773,8 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     FORGE_PLOT("World drawn batches", worldDrawnBatches);
     FORGE_PLOT("World culled batches", worldCulledBatches);
     ctx_->PSSetShaderResources(0, 2, nullSrv);
-    ID3D11RenderTargetView* nullRtv = nullptr;
-    ctx_->OMSetRenderTargets(1, &nullRtv, nullptr);
+    ctx_->VSSetShaderResources(2, 1, nullSrv);
+    resolveTarget();
     return srv_;
 }
 

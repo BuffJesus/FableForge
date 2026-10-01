@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <fstream>
+#include <numeric>
 
 #include "backups.hpp"
 #include "forge/big.hpp"
@@ -124,6 +125,89 @@ bool decodeTexture(const fs::path& texturesBig, const std::string& entryName, te
         out = terrainexport::Image{};
         out.width = mip.width; out.height = mip.height; out.rgba = std::move(rgba); out.name = e->name;
         return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool decodeSpriteFrames(const std::vector<uint8_t>& info, const std::vector<uint8_t>& payload,
+                        SpriteTexture& out, std::string& error) {
+    out = {}; error.clear();
+    try {
+        forge::terraintex::TextureInfo header;
+        if (!forge::terraintex::parseTextureInfo(info.data(), info.size(), header, error)) return false;
+        const uint32_t frames = std::max(1u, uint32_t(header.frameCount));
+        constexpr uint64_t maxPixels = 16ull * 1024 * 1024;
+        auto rounded = [](uint32_t v) { uint32_t n=1; while(n<v) n<<=1; return n; };
+        if (!header.frameWidth || !header.frameHeight || !header.allocWidth || !header.allocHeight ||
+            header.allocWidth > 8192 || header.allocHeight > 8192 || header.frameWidth > 8192 ||
+            uint64_t(header.frameHeight) * frames > 8192 ||
+            uint64_t(header.frameWidth) * header.frameHeight * frames > maxPixels ||
+            uint64_t(rounded(header.allocWidth)) * rounded(header.allocHeight) > maxPixels) {
+            error = "Invalid or oversized sprite frame/atlas dimensions"; return false;
+        }
+        if (header.depth > 1) { error = "Volume textures are not sprite frame arrays"; return false; }
+        const auto validation = forge::terraintex::validateTextureEntry(info, payload);
+        if (!validation.ok) {
+            error = validation.errors.empty() ? "Invalid sprite texture" : validation.errors.front(); return false;
+        }
+        const size_t rawChain = std::accumulate(validation.mipRawSizes.begin(), validation.mipRawSizes.end(), size_t(0));
+        const size_t diskChain = rawChain - validation.mipRawSizes.front() + validation.mip0RegionSize;
+        const bool repeated = frames > 1 && header.mipSize0 == 0 && payload.size() == rawChain * frames;
+        if (header.mipSize0 && frames > 1 && payload.size() != diskChain) {
+            error = "Compressed multi-frame texture arrays are not supported by the preview"; return false;
+        }
+        const uint32_t columns = header.allocWidth / header.frameWidth;
+        const uint32_t rows = header.allocHeight / header.frameHeight;
+        if (!repeated && (payload.size() != diskChain || uint64_t(columns) * rows < frames)) {
+            error = "Declared sprite frames are missing from the stored texture"; return false;
+        }
+        auto singleInfo = info; singleInfo[10] = 1; singleInfo[11] = 0;
+        SpriteTexture result; result.frames = frames;
+        result.image.width = header.frameWidth; result.image.height = header.frameHeight * frames;
+        result.image.rgba.resize(size_t(result.image.width) * result.image.height * 4);
+        std::vector<uint8_t> pixels;
+        uint32_t surfaceWidth = 0, surfaceHeight = 0;
+        for (uint32_t frame = 0; frame < frames; ++frame) {
+            if (frame == 0 || repeated) {
+                const size_t begin = repeated ? size_t(frame) * rawChain : 0;
+                const size_t length = repeated ? rawChain : diskChain;
+                const std::vector<uint8_t> chain(payload.begin() + begin, payload.begin() + begin + length);
+                const auto mip = forge::terraintex::decodeMip0(singleInfo, chain);
+                if (!mip.ok) { error = mip.error; return false; }
+                surfaceWidth = mip.width; surfaceHeight = mip.height;
+                // Non-power-of-two allocation fields are rounded by the native
+                // decoder. Bound that actual allocation before RGBA expansion.
+                if (uint64_t(surfaceWidth) * surfaceHeight > maxPixels) {
+                    error = "Rounded sprite surface exceeds the preview pixel limit"; return false;
+                }
+                using F = forge::terraintex::PreviewFormat;
+                if (mip.format == F::BC1) pixels = terrainexport::decodeBc1ToRgba(mip.bytes.data(), mip.width, mip.height);
+                else if (mip.format == F::BC2) pixels = terrainexport::decodeBc2ToRgba(mip.bytes.data(), mip.width, mip.height);
+                else pixels = terrainexport::bgra8ToRgba(mip.bytes.data(), mip.width, mip.height);
+            }
+            const uint32_t x = repeated ? 0 : (frame % columns) * header.frameWidth;
+            const uint32_t y = repeated ? 0 : (frame / columns) * header.frameHeight;
+            if (x + header.frameWidth > surfaceWidth || y + header.frameHeight > surfaceHeight) {
+                error = "Sprite frame exceeds its decoded surface"; return false;
+            }
+            for (uint32_t row = 0; row < header.frameHeight; ++row) {
+                const size_t source = (size_t(y + row) * surfaceWidth + x) * 4;
+                const size_t dest = (size_t(frame) * header.frameHeight + row) * header.frameWidth * 4;
+                std::copy_n(pixels.data() + source, size_t(header.frameWidth) * 4, result.image.rgba.data() + dest);
+            }
+        }
+        out = std::move(result); return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool decodeSpriteTexture(const fs::path& texturesBig, const std::string& entryName,
+                         SpriteTexture& out, std::string& error) {
+    out = {}; error.clear();
+    try {
+        const auto file = forge::big::File::open(texturesBig);
+        const auto* e = findEntry(file, entryName);
+        if (!e) { error = "no texture named " + entryName; return false; }
+        if (!decodeSpriteFrames(e->subHeader, file.entryData(*e), out, error)) return false;
+        out.image.name = e->name; return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 

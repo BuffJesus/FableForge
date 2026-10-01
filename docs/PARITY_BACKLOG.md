@@ -12,6 +12,22 @@ deviates from vanilla in a way a user notices. Status is tracked in ROADMAP_1.0.
 #### Things with no mesh (markers, camera points, region exits, nav seeds, switches) are not drawn, cannot be picked and are left out of the list
 *gap, effort M, value high*
 
+2026-09-30: implemented for things lacking a renderer instance. Shared visible
+glyphs handle draw, ordinary/Ctrl/context selection and link targeting; Markers
+chip, list filter and focus fallback are wired. MayorsHouseHallway UI checks pass.
+The viewport link picker now has a successful exit-to-entrance UID assertion and
+byte-exact undo coverage in addition to invalid-target rejection.
+Authored editor meshes and native occlusion remain separate follow-ups. See
+HANDOFF_WORLD_UI for validation and limits.
+
+2026-09-29 bedtime checkpoint: researched, not implemented. Updated integration
+notes in HANDOFF_WORLD_UI supersede the old mesh-first picking proposal below:
+a mesh-first fallback prevents selecting markers drawn over floors/walls. Use one
+shared visible overlay set and an explicit hit-priority policy, with viewport/depth
+checks, section/toggle guards and context/link handling. Renderer ownership caching
+must refresh at actual upload/bind/clear, not just document revision.
+
+
 **Vanilla:** The editor draws and selects every thing through CTCEditor (IsDrawable 0x02037620, IsSelectable 0x01f964e0, AddReasonToNotDraw/NotBeSelectable only for quest or type filters). Driver things (MARKER, REGION_ENTRANCE/EXIT, NAVIGATION_SEED, CAMERA_POINT) can be selected, moved, linked and deleted. The dev FinalAlbion has 1,628 Marker things and 1,074 'Thing' things (2,493 CTCDCameraPoint, 198 CTCDRegionExit, 119 CTCDNavigationSeed).
 
 **Fix:** 1. **Pick glyphs for things with no mesh.**
@@ -48,8 +64,32 @@ deviates from vanilla in a way a user notices. Status is tracked in ROADMAP_1.0.
 
 Effort is M. Value is high: region exits, entrances, camera points, nav seeds and hero-start markers become selectable, movable, linkable and deletable, which row 17 exit-to-entrance linking needs.
 
-#### Owned things do not follow their owner when it is moved, rotated, deleted or moved to another quest section
+#### Owned thing lifecycle parity
 *weakness, effort M, value high*
+
+**Current status (2026-09-30):** Movement, rotation, height and surface placement
+now carry valid owned descendants in one undo step. The shared frame helper also
+supports gizmo/carry preview, nested owners and locked children. The saved toggle
+defaults on. The implementation plan below is retained as native evidence and
+remaining scope; its transform, section and deletion steps are complete. OwnerUID
+remapping on selected group copies and the cached count hint are complete. Full native
+clone-from-definition behavior remains open. Other copied UID links still point
+to their original targets. Quest-section and
+day/night changes move valid owned descendants in one undo step; the UI supports
+multiple selected roots and keeps selection by UID.
+Deletion offers Delete all, Only selection (detaching surviving direct children),
+and Cancel. Locked derived children follow owner deletion; direct locked selections
+remain protected. Core and UI checks cover exact undo and no surviving LINK issue.
+
+2026-09-30 native evidence update: FableTLC `CTCOwnedEntity::OnSerialise`
+`0x007e8460` reads/writes the 64-bit OwnerUID, `InitialActivate` `0x007e8820`
+resolves it, and `SetPOwner` `0x007e8590` creates the parent's CTCThingOwner
+component if needed and inserts the child in its live list. This supports the
+strict `Document::ownedDescendants` graph for valid links. Malformed, duplicate,
+zero and unresolved IDs remain excluded; FableWin editor-specific movement
+rules still come from its own disassembly. See HANDOFF_WORLD_UI. Transform
+propagation landed for valid edges, with a saved UI toggle and one-step undo.
+Deletion, section moves and selected-group OwnerUID remapping have since landed.
 
 **Vanilla:** CTCThingOwner::OnEditorMove 0x025739b0 applies CMoveThing(delta) and CRotateThing(about the owner's position) to every owned object. It is called from every edit path: DragCarriedThingTo 0x029979ad, Drop 0x0299740e, MoveSelectedThing, RotateAngleXY, SetSelectedThingAngle, AdjustHeight, SetThingZ, CycleZ, SetThingFacingPos and UndoMovement. Deleting runs CTCThingOwner::OnKill 0x02573660 (CKillThing on the owned list). AddSelectedThingToCurrentQuest 0x02035420 also calls SetOwnedObjectsSerialisationSectionName 0x020354e2. The dev FinalAlbion has 2,434 owned things: 740 owned by Buildings, 974 by Objects, 222 by Markers.
 
@@ -73,7 +113,7 @@ Effort is M. Value is high: region exits, entrances, camera points, nav seeds an
    - `setDayNight`: do the same for the owned closure inside its existing batch.
    - editor.cpp:376: pass the selection plus the owned closure, then reselect the primary by UID.
 
-6. **Placement from the palette or paste.** Vanilla `PaintInputPlaceThingAt` also calls `OnEditorMove` and `SetOwnedObjectsSerialisationSectionName`. `duplicateSelected` copies without owned things, which is acceptable, so no change there.
+6. **Placement from the palette or paste.** Vanilla `PaintInputPlaceThingAt` also calls `OnEditorMove` and `SetOwnedObjectsSerialisationSectionName`. Forge's richer verbatim duplication now clears a single copy's OwnerUID and reconnects copied parent-child selections. Full native clone-from-definition behavior remains separate.
 
 7. **UI toggle.** Add `bool moveOwned_ = true;` in app.hpp and a checkbox "Move owned things with it" in the Objects-tab transform card near "Drop to ground" (editor.cpp:~2919), registered with `auto_`. When the selection owns things, show a muted hint "+N owned".
 
@@ -83,6 +123,13 @@ Effort: M. Value: high.
 
 #### No click-to-place and no drag-on-ground carry: new things go to the view centre and moving needs the axis gizmo
 *weakness, effort M, value high*
+
+2026-09-30: pointer placement and ground carry implemented for unlocked primary
+and selected extras. The native UI script covers Shift+click, ground offsets,
+fixed height, grouped undo and Escape cancellation. Ctrl+Shift+drag clones and
+carries a thing or selected group; Ctrl+D carries a new copy until ground click
+or Escape. Both have one-step undo. Valid owned descendants now follow carried
+parents through the shared transform path.
 
 **Vanilla:** Shift+LMB places the chosen def at the pointed ground position (PaintInputPlaceThingAt 0x02994490, from ProcessInput 0x0294e80d). LMB picks up the nearest thing (PaintInputPickUpNearestThing 0x02996270), and dragging carries it over the terrain (DragCarriedThingTo 0x02997650: Z = GetGroundSizeZAt + the carried height offset at +0xb18, so it keeps its height above ground). Release drops it (0x02996e10), and Esc restores the start position (PaintInputUndoMovementOfSelectedThing 0x02996000). C+click clones the nearest thing and carries the clone (PaintInputCloneNearestThing 0x02996750). Ctrl+click samples the ground height into the Height box.
 
@@ -116,62 +163,76 @@ Files: gui/app.hpp (state and the two new methods), gui/app.cpp:1760-1772 (input
 
 Effort M. Value high.
 
-#### The property grid shows only keys already in the .tng, so default-valued fields and new things' components cannot be edited
-*weakness, effort M, value high*
+#### Omitted properties and definition-declared components
+*partially implemented 2026-09-29; absent components and coupled controls remain*
 
-**Vanilla:** CThingPropertyDialog::CreateGenericVars 0x02918380 builds its tabs from GetPropertiesStruct on every TC the live thing has (all of its def's components), so every field shows with its current value, defaults included, and RefreshThingFromGenericVars 0x029197b0 writes them back. Setting Script>Usable adds or removes the whole CTCActionUseScriptedHook (per docs/re_reference/vanilla_property_fields.tsv).
+Known serialized scalar fields on existing unique CTCDoor,
+CTCSearchableContainer, CTCDRegionExit, CTCCreatureGenerator,
+CTCExplodingObject, CTCStockItem and CTCInfoDisplay blocks can now be set when
+absent, or reset by removing their explicit value. The inspector labels these
+as unset with unknown effective values; it never guesses a default. Bool, signed
+integer and finite float validation follows serialization evidence and recovered
+ranges. Generator/explosion radius fields serialize floats despite integer
+widgets in the native dialog. Existing unknown bytes and undo/redo are preserved;
+ambiguous duplicate blocks/keys are refused.
 
-**Fix:** Plan, effort M, value high:
+Validation: 43 core checks; native `tests/ui/component_overrides.txt` exercises
+real bool/numeric controls, rejected out-of-range values, exact undo, and an
+actually omitted retail ReversedOnMiniMap field in MayorsHouseHallway. Screenshot:
+`walkthrough/w17_component_overrides.png`.
 
-1. Declared components of the def: add a helper to the Document or ctx_ layer (e.g. `std::vector<std::string> Document::defComponents(const std::string& defName)`). Build it by lifting the existing CThingComponentSet walk out of src/cli/nav.cpp:202-225. That code reads the "Components" field tag, then a u32 count, then 9-byte {name offset, param, flag} entries, and resolves them through defs.originalNameOffset. Put the shared version in libs/forgecore, next to defdecode, so nav and the editor use the same code. Also include every CTC block already present in the .tng, as the current code does.
+Remaining work: decode definition-declared components with a checked shared
+CThingComponentSet reader, including parameter/flag records and original name
+offsets; then add absent blocks only where supported by definition/native evidence.
+The navigation helper's arbitrary payload scan is not a sufficient writer basis.
+Do not append all General metadata rows to every thing: some describe specialized
+classes. The table describes widget kinds/ranges, not engine default values.
 
-2. Missing rows: in propertiesOf, take the TSV rows (the generated table in src/vanilla_props.inc, which is what vanillaField(ctc,key) reads from) for each declared component and for the General block. For every row whose ctc/key is absent from the text, append a PropertyRow with a new flag `bool implicit = true`. Take its kind from the TSV kind column (bool/int/float/string/def/enum) instead of kindOf(value), since there is no value to infer from.
-   - Value: use the def's own value for that field when defdecode can read it from the component's parameter data.
-   - Otherwise leave the value empty. The grid then shows "(not set: engine default)" dimmed, with an empty editor of the right widget type. Do not invent defaults: the TSV has no default column.
-   - Handle the multi-label TSV keys as they are handled today. Colour maps to one row.
-
-3. Grid (gui/editor.cpp:413-551):
-   - Render implicit rows in theme::Muted, with a tooltip saying the value is not in the file and the game uses the def/engine default.
-   - Offer "Reset to default" on explicit rows that have a TSV entry. It calls the existing tng::File::removeCtcProperty or removeThingProperty.
-   - Keep the early `if (rows.empty()) return` only for things with no def and no TSV rows.
-
-4. Writing: in setPropertyValue, when the matched row is implicit:
-   - check the value against the TSV kind (the same fits-logic as now, keyed off the TSV kind);
-   - then pushUndo;
-   - if ctc is empty, call setThingProperty. It already inserts before EndThing.
-   - otherwise call a new `tng::File::ensureCtcBlock(size_t thing, std::string_view ctc)`, then the existing setCtcProperty, which already inserts missing keys.
-   - ensureCtcBlock inserts "Start<ctc>" and "End<ctc>" before the StartCTCEditor line if there is one, else before EndThing, then reindexes. Retail's .tng keeps CTCEditor after the gameplay blocks; thingplacer.cpp:237 writes it in that order.
-
-5. CTCLight: when Overridden changes FALSE->TRUE, write Colour, InnerRadius, OuterRadius, Flicker and Inverted in the same undo step. Use the def light's values when decodable, else the grid's current display values. This matches vanilla OnSerialise 02228dd2, which writes them all once Overridden is TRUE. When it changes TRUE->FALSE, keep the lines; the loader ignores them.
-
-6. Usable (CTCActionUseScriptedHook):
-   - Show the Usable row on every thing, as the vanilla Get 01cf40a6 does via PeekTC.
-   - Setting it TRUE on a thing without the block: add the `CreateTC "CTCActionUseScriptedHook"` generic line plus the block, with the same default body thingplacer.cpp:240-250 writes. Factor that body into a shared thingplacer helper.
-   - Setting it FALSE: remove both the block and the CreateTC line. This mirrors the vanilla Set at 01cf485c.
-
-7. Tests in tests/test_export.cpp:
-   - a CTCDoor thing with no DoorTriggerType line gets the row and can be set;
-   - a thingplacer-placed chest def gets CTCChest rows, and the first edit creates Start/EndCTCChest in order;
-   - Overridden TRUE seeds the light keys;
-   - Usable toggles the block and the CreateTC line;
-   - undo restores the text byte-for-byte.
-
-This also closes the ROADMAP_1.0.md row 10 item "adding a component a def lacks" only for components the def declares. Adding truly foreign components stays out of scope.
+CTCLight's coordinated Overridden/Colour/radius/flicker fields and Script>Usable's
+component creation/removal remain separate work requiring their complete native
+serialization contract. The earlier proposed DoorTriggerType fixture was invalid
+(the recovered CTCDoor table only has Open), and there are no CTCChest table rows
+to synthesize. Native CreateGenericVars 0x02918380 builds from live components;
+RefreshThingFromGenericVars 0x029197b0 writes those effective values. Forge does
+not yet instantiate live components or resolve their effective defaults.
 
 #### Moving a creature leaves its world-space InitialPos behind
-*weakness, effort S, value high*
+*Fixed 2026-09-29; preservation policy verified separately from native drag.*
 
-**Vanilla:** DragCarriedThingTo 0x02997650 and DropCarriedThingAt 0x02996e10 call CThingCreatureBase::SetInitialPos (0x02997a07) on creatures, so the saved InitialPosX/Y/Z follows the move. In every dev .tng, InitialPos = PositionXY + the map's world origin (for example BanditCampPath_1 +2048,+2048 and ArenaExterior +2240,+3552; 804 creatures).
+`writeFrame` now updates each existing InitialPos axis when position changes,
+using map-local XY plus the destination world's origin and unchanged Z. Paste
+forces rebasing even when local coordinates match the source. Generic navigator
+PositionX/Y/Z edits use the same synchronization in one undo step. Pure rotation
+or scale preserves separately authored initial positions; missing axes remain
+absent. Raw-text document loading clears any previous world origin.
 
-**Fix:** 1. In src/leveledit.cpp, change writeFrame to `void writeFrame(forge::tng::File& file, size_t index, const Frame& frame, int worldX, int worldY)`. After the scale handling, add: `if (file.things()[index].find("InitialPosX")) { file.setThingProperty(index, "InitialPosX", formatFloat(frame.pos[0] + float(worldX))); file.setThingProperty(index, "InitialPosY", formatFloat(frame.pos[1] + float(worldY))); file.setThingProperty(index, "InitialPosZ", formatFloat(frame.pos[2])); }`. Update the key only if it is already there, which matches vanilla: SetInitialPos exists only on CThingCreatureBase, so objects stay untouched. Use the same float formula as placeCreature (leveledit.cpp:2008-2010) so a new creature and a moved one serialize identically.
-2. Update both call sites to pass the origin: setFrame (leveledit.cpp:1353) becomes `writeFrame(file_, index, frame, worldX_, worldY_)`, and paste staging (leveledit.cpp:373) becomes `writeFrame(stage, 0, nf, worldX_, worldY_)`. This covers gizmo drag, nudge, group move, rotate (harmless, since the position does not change), paste, duplicate and drop-to-ground, and it re-bases creatures pasted from another map.
-3. Leave the change summary as it is: in the diff at leveledit.cpp:2216-2232, a moved creature now also changes thing-level lines, which is still reported only as "moved" if that branch comes first. Check that it does not also list a spurious "changed" line.
-4. Add a test in tests/ that opens a retail creature map (or a synthetic TNG with a Villager block, InitialPosX = PositionX + 2048), sets worldX_/worldY_ through a WLD fixture, calls setFrame with a new position, and asserts InitialPos - Position == (worldX, worldY, 0). Also paste a creature and assert the same.
-5. Record the evidence in docs/VANILLA_EDITOR_INVENTORY.md (Things section): PaintInputDragCarriedThingTo 0x02997650 → SetInitialPos 0x02997b50 via thunk 0x17ff38c at 0x2997a07; the drop path 0x02996e10 does not call it.
-Effort: S. Value: high. Without the fix, moved villagers and guards keep AI home positions at their old spot.
+Native evidence correction: FableWin drag02997650 sets physics position, checks
+creature type1/2, then calls SetInitialPos through017ff38c at02997a07. Setter02997b50
+copies XYZ into creature+0x138. Drop02996e10 has no direct setter call in its body;
+the earlier claim that both drag and drop call it was incorrect. Forge applies
+the consistent saved-position rule to all actual position changes, including
+Drop to ground. Native drag has no position-equality gate; preserving independent
+InitialPos during pure rotate/scale is an intentional Forge preservation policy.
+
+`tests/test_creatureframe.cpp` covers nonzero origins, cross-map paste at equal
+local coordinates, partial/absent fields, raw-load origin reset, property edits,
+and byte-exact undo/redo. Native evidence is retained in
+`build/creature-initialpos-native.txt` (SHA256 and scoped disassembly).
 
 #### Container contents (Contnrs tab) cannot be added to, removed from, or filled on an empty chest
 *gap, effort S, value high*
+
+**Implemented 2026-09-29:** a searchable, grouped definition picker adds/replaces
+items; remove compacts indices. Empty existing container and generator blocks
+remain editable after the last entry is removed. Works in the sidebar and floating
+Properties window, one undo step per edit. Duplicate blocks, duplicate/gapped
+indices and non-string entries retain raw fields and disable structured mutation.
+CPU tests prove unrelated-field preservation and byte-identical undo; native
+`container_lists.txt` exercises actual typing/clicks with retail apple definitions
+and creature families. The available definition metadata does not expose the
+native template flag, so the picker still includes templates. Components absent
+from the TNG remain the separate default-component gap above.
+
 
 **Vanilla:** The Contnrs tab lists a container's items and adds or removes them: a THING_GROUP list with a NONE entry (InitContainerGroupListBox 0x02921020), then the non-template defs of that group (InitContainerListBox 0x02920840), then ContainersAddObject 0x0291a9f0 (CTCContainer::InsertItem with the def's global index) and ContainersRemoveObject 0x0291b330 (RemoveItem). The dev FinalAlbion has 501 ContainerContents[] entries across CTCChest (119), CTCSearchableContainer (135) and CTCContainerRewardHero (213); most RewardHero blocks are empty.
 
@@ -221,10 +282,21 @@ Stage 3 (L): scripted camera points and splines.
 - Draw the key positions as dots joined by the spline, and make them pickable like the track nodes.
 - Leave out the c:\cameras.bin clipboard import. "Add key from view" replaces it.
 
-#### Linking works one field at a time on the child only, needs the block to exist, and misses the CTCDRegionExit link
-*weakness, effort M, value med*
+#### Target-side attachment modes
+*mostly implemented; remaining: batched undo and additional native parity checks*
 
-**Vanilla:** The anchor is the selected parent. GetViableAttachModesForThing 0x020342f0 offers 'Attach objects' (a thing owner), 'Attach people who live here / work here' (a building with a SimBuildingDef), 'Attach things to village', 'Attach triggers to this receptor', 'Select region entrance to connect to' and 'Select target to calculate route to'. Each click then toggles the clicked thing (ToggleThingAttachment 0x020326e0). For owned-by it adds the CTCOwnedEntity TC when missing (AddTC 0x02032893) and removes it when untoggled (RemoveTC 0x02032864). For region exits it sets both CTCDRegionExit::SetPEntranceConnectedTo (0x0203391e) and CTCActionUseScriptedHook's (0x02033979). Lines are drawn for all attachments (DrawAttachModeLines 0x02048230). Spouse and parent exist but are not serialised in the .tng (0 fields in the dev data), so they can be skipped.
+2026-09-30: the CTCDRegionExit entrance field is exposed. A source with both
+exit and scripted-hook components shows one row and writes both under one undo.
+Parent-anchored attachment modes, incoming links, visible link lines, owner CTC
+addition/removal and a persistent viewport picker are implemented. Core tests
+and `tests/ui/attach_picker.txt` cover attachment, detachment and exact undo.
+The documented mode eligibility is still an approximation where it depends on
+SimBuildingDef flags, and multiple clicks still create separate undo steps.
+The MayorsHouseHallway region entrance picker now passes a retail GUI test,
+including serialization and exact undo. The selected exit has only
+CTCDRegionExit; the two-block case remains covered by a synthetic core fixture.
+
+**Vanilla:** The anchor is the selected parent. GetViableAttachModesForThing 0x020342f0 offers 'Attach objects' (a thing owner), 'Attach people who live here / work here' (a building with a SimBuildingDef), 'Attach things to village', 'Attach triggers to this receptor', 'Select region entrance to connect to' and 'Select target to calculate route to'. Each click then toggles the clicked thing (ToggleThingAttachment 0x020326e0). For owned-by it adds the CTCOwnedEntity TC when missing (AddTC 0x02032893) and removes it when untoggled (RemoveTC 0x02032864). For region exits it sets both CTCDRegionExit::SetPEntranceConnectedTo (0x0203391e) and CTCActionUseScriptedHook's (0x02033979). Lines are drawn for all attachments (DrawAttachModeLines 0x02048230). Spouse and parent fields are absent in the scanned dev .tng data, but CThingAICreature::Save writes them conditionally when set.
 
 **Fix:** 1. Link table (src/leveledit.cpp:1368)
 - Add {"CTCDRegionExit","EntranceConnectedToUID","Region exit to entrance","a region entrance"}.
@@ -273,14 +345,14 @@ Effort M (about a day: tng block add/remove, document API with undo batching, UI
 **Fix:** 1. **Palette (gui/editor.cpp:1252, and the Objects tab list at ~3091):** use the same type set as `forge def-groups` (src/cli/export.cpp:213): OBJECT, BUILDING, CREATURE, MARKER, HOLY_SITE, SWITCH, PHYSICAL_SWITCH, VILLAGE, THING. Put that set in one shared constant so the CLI and GUI can't drift apart. groupedDefinitions (src/terrainexport.cpp:556) already groups by def type and then THING_GROUP, which matches the vanilla tree (CThingDialog 0x028f2e90). Leave NOISE out; noise defs are not placed as things.
 
 2. **Map the def type to the NewThing type:** add `forge::thingplacer::thingTypeForDefClass(defClass)` in libs/forgecore/src/thingplacer.cpp:
-   - OBJECT → "Object"
-   - BUILDING → "Building"
-   - MARKER → "Marker"
-   - HOLY_SITE → "Holy Site"
-   - SWITCH and PHYSICAL_SWITCH → "Switch" (retail has 5 "NewThing Switch"; check a PHYSICAL_SWITCH instance's header in the corpus before fixing the string)
-   - THING → "Thing"
-   - VILLAGE → keep routing to Document::placeVillage
-   - CREATURE → keep placeCreature
+   - OBJECT â†’ "Object"
+   - BUILDING â†’ "Building"
+   - MARKER â†’ "Marker"
+   - HOLY_SITE â†’ "Holy Site"
+   - SWITCH and PHYSICAL_SWITCH â†’ "Switch" (retail has 5 "NewThing Switch"; check a PHYSICAL_SWITCH instance's header in the corpus before fixing the string)
+   - THING â†’ "Thing"
+   - VILLAGE â†’ keep routing to Document::placeVillage
+   - CREATURE â†’ keep placeCreature
 
    In placeDefinition (gui/editor.cpp:1431), replace the BUILDING_ prefix test with a lookup of the def's bin definition string (GroupedDefinition::type, or a new Context::definitionClassOf(name)). Stop using the name prefix.
 
@@ -298,68 +370,114 @@ Effort M (about a day: tng block add/remove, document API with undo batching, UI
 
 Effort: M. Value: medium.
 
-#### Locked In Place is neither honoured nor toggleable
-*gap, effort S, value med*
+#### Locked In Place protection and controls
+*implemented 2026-09-29; existing CTCEditor blocks only*
 
-**Vanilla:** CTCEditor::IsLockedInPlace 0x020377c0 blocks pick-up, move, rotate (XY/YZ/XZ), SetAngle, SetFacingPos, height adjust, SetThingZ, CycleZ, delete and area delete (xrefs 0x02996544 .. 0x0299cd4d). Ctrl+L calls ToggleLockedStatusOfSelectedThing 0x02037740 (SetAsLockedInPlace, then the dialog's UpdateLockedStatus). The Properties main tab has a 'Locked In Place' checkbox. 131 dev things are LockedInPlace TRUE.
+The document now enforces locks for movement, rotation, scale, direct physics
+property edits, deletion and terrain reseating. Missing/empty editor settings
+mean unlocked; an existing empty block can receive the flag. Missing blocks are
+not invented. Copying and content/owner edits remain allowed. Ctrl+L, the
+Properties checkbox and Actions menu apply the primary's toggled state to the
+selection in one undo step. Mixed transforms/deletion preserve locked objects;
+the Objects list marks them. Locking during a drag cancels the preview/capture.
 
-**Fix:** 1) src/leveledit.hpp/.cpp: add `bool Document::isLocked(size_t i) const`. It finds the thing's CtcBlock named "CTCEditor" and returns true when its LockedInPlace value is TRUE (reuse the propF/prop lookup helpers near leveledit.cpp:47). Also add `void Document::setLocked(size_t i, bool on)`, which edits through the same staged-block path as the other writers. It sets `LockedInPlace TRUE;` / `FALSE;` inside StartCTCEditor..EndCTCEditor, and creates the key if it is missing (the retail defaults at leveledit.cpp:1887 etc. write an empty CTCEditor). Make it undoable as one batch step.
+Native evidence: CTCEditor constructor 0x01b9c8f9 initializes the flag false;
+IsLockedInPlace 0x020377c0 reads it, and pickup 0x02996544 refuses locked things.
+ToggleLockedStatusOfSelectedThing 0x02037740 acts on the single selected thing;
+SetAsLockedInPlace 0x02555a20 also visits live owned children. Forge's group toggle
+and scale protection are editor policy; no claim of exact group-toggle parity or
+that arbitrary TNG OwnerUID links reproduce the native live child list. The old
+proposal to block owner changes was not supported and was not implemented.
 
-2) gui/editor.cpp: add `std::vector<int> App::unlockedSelection(int& skipped)`, which filters selectionIndices() through doc_.isLocked. Use it in moveSelected (905), rotateSelected and scaleSelected (918+, commitFrame path), snapSelectedToGround (1180), deleteSelected (1214) and applyOwnerToSelection (1394). Also use it for any Z-cycle, height or angle key handlers and for area delete, if they exist. When skipped>0, pushLog("N locked thing(s) left in place", 1). This mirrors vanilla, where each PaintInput* handler returns early on IsLockedInPlace.
+Core fixtures cover no-op history, byte-exact undo, mixed locks, copy/paste and
+terrain reseating. Native `tests/ui/locked_things.txt` exercises the actual
+checkbox/shortcut, protected transforms and mixed selection. Terrain reseating
+also synchronizes existing InitialPos fields on unlocked creatures.
 
-3) drawGizmo (editor.cpp:2383): don't show the handles, or refuse the drag, when the primary selection is locked. Also skip locked things in the owned-follow move set. Vanilla PaintInputPickUpNearestThing refuses to pick up a locked thing; selecting it for viewing properties should stay allowed.
+#### Surface cycling and direct terrain drop
+*visible-surface cycle implemented 2026-09-29; native physics sweep/owner movement remain*
 
-4) Toggle: bind Ctrl+L next to the End/O keys (~editor.cpp:2378). When the selection has one or more things, flip the primary's state and apply that same state to the whole selection, like vanilla ToggleLockedStatusOfSelectedThing 0x02037740 (SetAsLockedInPlace 0x02555a20, then the dialog's UpdateLockedStatus). Add a "Lock in place (Ctrl+L)" ghost toggle beside Drop to ground/Duplicate in the Selection card (~editor.cpp:2919-2924), plus a lock checkbox on the Properties main card, matching the vanilla "Locked In Place" main-tab control (CreateMainControls 0x0290e2a0). Show a small lock badge on locked rows in the Objects list.
+H and the Cycle surfaces below action now search visible placed-object triangles
+and terrain. End retains explicit terrain-only drop. Particle proxies (thing=-1),
+foliage, selected objects and generated children are excluded; transitive OwnerUID
+children are excluded with a cycle guard. Hidden geometry is not a support. Queries
+use actual transformed triangles, not bounding-box tops. All results are computed
+before a batch of frame edits, preserving locks and creature InitialPos/undo.
+Stale object geometry and active gizmo previews refuse the action.
 
-5) Add a `lock`/`unlock` verb to docs/AUTOMATION.md if the automation layer exposes the selection ops.
+Read-only FableWin disassembly verifies PaintInputCycleThingZOverSurfaces
+0x02998ce0 checks locks at0x02998f09; compares abs(groundZ-currentZ) to0.0001
+at0x029990d0; uses ground+150 at0x029990df when on terrain, otherwise Z-0.1
+at0x029990ed. GetHeightZBelowAt at0x0299916a uses the physics radius and a
+CIsNotThing filter. The earlier arbitrary no-hit wrap proposal was not supported.
+Native also calls CTCThingOwner::OnEditorMove at0x02999344; Forge's existing
+selection gizmo does not implement that cascade, contrary to the earlier backlog.
 
-Effort S. Value med: the retail .tng files have dev-locked things, and honouring the lock stops accidental drags of set-dressing.
+Forge's central, double-sided render-triangle ray is explicitly approximate:
+nonphysical decorations may support objects, invisible physics surfaces do not,
+and it lacks the native radius sweep. Explicit owned objects are not moved with
+an owner. Ctrl+H now opens the absolute-height control described below.
 
-#### Drop to ground (End) knows only the terrain: objects indoors or on tables fall to the terrain under the floor
-*weakness, effort S, value med*
+Tests cover transformed/hidden/proxy/selected-child supports and exact triangle
+hits, keyboard/menu operation, elevated retail roof support, locked mixtures,
+InitialPos and byte-exact undo. Main native repeated-step test passes roof
+Z16.328 to terrain Z8.395 at fixed XY, orientation and scale; locking and selection
+regressions pass too (`build/surface-cycle-native-final.log`).
 
-**Vanilla:** H calls PaintInputCycleThingZOverSurfaces 0x02998ce0: CWorldMap::GetHeightZBelowAt with a CIsNotThing filter, which lands the thing on the next surface below (floors, tables, other things' physics). Pressing again steps further down. Modifier+H calls PaintInputSetThingZ 0x02998570 with the Things dialog's Height box value.
+#### Fixed selection height: implemented 2026-09-29
 
-**Fix:** 1) Renderer (gui/renderer.hpp:101 and gui/renderer.cpp:622): add an overload pick(origin, dir, t, const std::vector<int>* skipThings). It skips any instance whose owning thing index is in skipThings; use whatever instance-to-thing map editor.cpp:863 already uses. Hiding instances with setInstanceVisible would also work, but a skip list does not mess up the draw state.
+Ctrl+H and Set selection height open a modal for an absolute Z. Each unlocked
+selected thing clamps up to its own terrain height, preserving XY/basis/scale.
+Existing creature InitialPos is synchronized by setFrame; the group is one undo.
+Nonfinite inputs, missing terrain/frames and locked things leave data untouched;
+identical heights do not create history or clear redo. Changed selection disables
+Apply; active gizmo and terrain strokes refuse opening. Popups block new gizmo
+captures behind them.
 
-2) New helper App::surfaceBelow(x, y, zStart, skip) -> optional<float>. Convert (x, y, zStart - 0.01) to render space the same way editor.cpp:863 does, cast straight down (render -Y, or the up axis in use), and turn the hit back into Fable Z. Take the higher of the mesh hit and doc_.groundHeight(x, y) that is still below zStart. Return nullopt only if neither exists. This follows vanilla GetHeightZBelowAt: it searches below the given Z, skips the moving thing (CIsNotThing), and includes the ground (GetGroundSizeZAt).
+Native PaintInputSetThingZ 0x02998570 assigns requested Z at0x02998935,
+GetGroundSizeZAt/GFLimitLower clamps at0x0299895a and lock check is at0x02998799.
+ProcessInput routes H at0x0294f262: Ctrl0x1d or extended0x67 chooses SetThingZ;
+Alt0x38 suppresses it. Forge uses the standard Ctrl modifier; extended native
+key identity is unverified. Native owner notification at0x02998b31 remains a
+separate missing cascade. Evidence uses the FableWin SHA recorded above.
 
-3) Rewrite snapSelectedToGround (editor.cpp:1180) as cycleSelectedZOverSurfaces:
-- Loop over selectionIndices(), not just frameOfSelected. Skip things the editor treats as locked; vanilla checks CTCEditor::IsLockedInPlace.
-- For each thing, zStart = the thing's current z, then call surfaceBelow with skip = the whole selection.
-- If nothing is below, wrap: start from the top of the thing's bounds, or from a large Z, so it lands on the topmost surface. Pressing End again steps down one surface at a time, as in the vanilla "cycle" name.
-- Put all frame commits into one undo step and move owned things with their owner, reusing the path the move gizmo takes for a multi-selection.
-
-4) Shift+End (editor.cpp:2378) and a "Set height" entry next to the button at editor.cpp:2919 set z = placeHeight_ for the selection. This ports PaintInputSetThingZ 0x02998570. Its exact key binding in vanilla is unverified, so present it as a FableForge binding.
-
-5) Keep the automation command ground_thing (automation.cpp:434) mapped to the new function, and add set_thing_z <h>. Update the tooltip to "Drop to surface below (End, repeat to step down)".
-
-Effort S-M: about 60 lines, and pick already exists. Value: med.
+27 core checks pass, including sloped terrain, negative requests, missing ground,
+locks, no-op redo preservation and exact batch undo. Native selection_height tests
+exercise popup typing, Ctrl+H/menu, terrain clamp, cancel, mixed locks, creature
+InitialPos and background gizmo blocking.
 
 #### No keyboard nudge, rotate, height or facing keys for things
 *gap, effort S, value med*
+
+2026-09-30: implemented in the Edit viewport. Arrow keys nudge 0.05 (Shift
+0.5), Ctrl+arrows set cardinal facing, A faces the pointed ground, brackets
+rotate 2 degrees about Z (Shift Y, Alt X), and comma/period or PageDown/PageUp
+adjust height 0.2 (Shift 0.01). The existing batch path carries valid owned
+descendants and gives one undo step. Retail UI automation checks exact movement,
+all three rotation axes, facing and undo; see HANDOFF_WORLD_UI. Ctrl+brackets
+remain the panel controls.
 
 **Vanilla:** From the CEditInputProcessEditThings::ProcessInput 0x0294e6b0 constants: N/S/E/W nudge 0.05 units (MoveSelectedThing); Shift+N/S/E/W face 0 / 0.5 / 0.25 / 0.75 turns (SetSelectedThingAngle); [ / ] rotate -/+1/180 turn (2 degrees) about Z, with Ctrl giving YZ and Shift XZ; , / . lower/raise 0.2, or 0.01 with Shift (AdjustSelectedThingHeight); A turns the thing to face the pointer. All respect the lock and carry owned things.
 
 **Fix:** 1. **Where it goes.** Add a thing-transform block in App::editorShortcuts (gui/editor.cpp, after line 2365). Guard it with `!rmb && gizmoOp_ != 4 && selectedThing_ >= 0 && !io.KeyAlt`, the same guard the RMB fly camera already relies on. Use `IsKeyPressed(key, true)` so that holding a key repeats.
 
 2. **Nudge (vanilla MoveSelectedThing 0x02999580, step 0.05).**
-   - Left/Right/Up/Down call moveSelected(∓0.05, 0, 0) and moveSelected(0, ±0.05, 0) in world X/Y. Match vanilla's N=+Y / E=+X convention.
-   - Shift multiplies the step by 10, which fits vanilla's Shift ×10 on move speed.
+   - Left/Right/Up/Down call moveSelected(âˆ“0.05, 0, 0) and moveSelected(0, Â±0.05, 0) in world X/Y. Match vanilla's N=+Y / E=+X convention.
+   - Shift multiplies the step by 10, which fits vanilla's Shift Ã—10 on move speed.
    - moveSelected already batches the whole selection into one undo step.
 
-3. **Facing (vanilla Shift+N/S/E/W → SetSelectedThingAngle 0 / 0.5 / 0.25 / 0.75 turn).**
-   - Add `App::setSelectedFacing(float turns)`. It sets each selected thing's forward to (sin, cos, 0) of turns·2π in the XY plane, keeps up = (0,0,1) and keeps the thing's scale. Check vanilla's zero-angle axis by reading the fld sites at 0x0294efde-0x0294f21a.
+3. **Facing (vanilla Shift+N/S/E/W â†’ SetSelectedThingAngle 0 / 0.5 / 0.25 / 0.75 turn).**
+   - Add `App::setSelectedFacing(float turns)`. It sets each selected thing's forward to (sin, cos, 0) of turnsÂ·2Ï€ in the XY plane, keeps up = (0,0,1) and keeps the thing's scale. Check vanilla's zero-angle axis by reading the fld sites at 0x0294efde-0x0294f21a.
    - Bind it to Ctrl+arrows, not Shift, because Shift is the coarse nudge. Wrap it in doc_.beginBatch()/endBatch().
 
-4. **Rotate (vanilla [ / ] ±1/180 turn, i.e. ±2 degrees, at 0x0294f556-0x0294f692; plain = XY, Ctrl = YZ, Shift = XZ).**
+4. **Rotate (vanilla [ / ] Â±1/180 turn, i.e. Â±2 degrees, at 0x0294f556-0x0294f692; plain = XY, Ctrl = YZ, Shift = XZ).**
    - Generalise rotateSelected to `rotateSelected(float degrees, int axis)`: 0 = world Z (yaw), 1 = X (YZ plane), 2 = Y (XZ plane).
    - Build the rotation matrix R about the primary's pivot. Apply it to every selectionIndices() frame: rotate each forward/up by R and each pos about the primary's pos, which is the same rigid transform groupFrame uses (editor.cpp:2442-2454).
    - Wrap it in one beginBatch/endBatch.
    - Bind [ / ] only when gizmoOp_ != 4, so the brush-radius binding keeps working in terrain mode. Ctrl+[ / ] still toggles the explorer and actions panels (app.cpp:1426-1427), so either move those panel toggles to Ctrl+Shift or use Alt+[ / ] for YZ.
 
-5. **Height (vanilla , / . = ∓0.2, Shift ∓0.01, AdjustSelectedThingHeight 0x02997e00).**
-   - Comma/Period call moveSelected(0, 0, ∓0.2), or ∓0.01 with Shift. Add PgDn/PgUp as aliases.
+5. **Height (vanilla , / . = âˆ“0.2, Shift âˆ“0.01, AdjustSelectedThingHeight 0x02997e00).**
+   - Comma/Period call moveSelected(0, 0, âˆ“0.2), or âˆ“0.01 with Shift. Add PgDn/PgUp as aliases.
 
 6. **Discoverability.** Add the key list to the Objects-tab tool hint and to the shortcut table in app.cpp:267. Expose the keys in automation, alongside rotateSelected at automation.cpp:422-424, as a `rotateSelected axis` argument.
 
@@ -368,6 +486,13 @@ Effort: S. Value: medium.
 #### Deleting leaves other things' links pointing at the removed UID
 *weakness, effort S, value med*
 
+**Status (2026-09-30):** Implemented for unambiguous incoming link fields.
+`remove` and `removeWithOwned` clear them within the delete undo step, including
+both region-exit fields. Track-node removal repairs surviving chains. Duplicate
+target UIDs and repeated/malformed fields are deliberately left unchanged.
+Core tests cover links, track validation and exact undo; delete, lock, track
+preview and editor UI regressions pass. The Activity log reports cleared fields.
+
 **Vanilla:** Links are CIntelligentPointer, so a deleted thing's referrers go null at once. PaintInputDeleteSelectedThing 0x0299bda0 also runs UpdateRegionExitConnections 0x020457c0 (0x0299c750/0x0299c7a2) to keep entrance/exit pairs consistent. Saved files therefore never carry stale UIDs.
 
 **Fix:** 1) Add a private helper in src/leveledit.cpp, `size_t Document::clearLinksTo(uint64_t uid, size_t except)`. It loops over every thing index i != except and over linksOf(i), and for each link with l.target == uid it writes "0" directly. For a CTC link (l.ctc non-empty) it uses file_.setCtcProperty(i, l.ctc, l.field, "0"), and otherwise file_.setThingProperty(i, l.field, "0"). It writes directly rather than through setLink so it does not push its own undo, and it returns how many links it cleared. Declare it in src/leveledit.hpp. 2) Rewrite Document::remove(size_t index) as follows. Bounds-check, then beginBatch() and pushUndo(), so that one delete, or a whole multi-select deleteSelected (which already runs in a batch), is a single undo step. Get const uint64_t uid = uidOf(index). If isTrackNode(index), first detach it from its chain using the body of unlinkTrackNode (leveledit.cpp:1597-1620), which relinks the before/after parts, calls fixTrackEnds to fix the Start/End flags, and runs the INVALID/TrackTempName naming. Move that body into an internal unlinkTrackNodeNoUndo(node) that unlinkTrackNode also calls, so the existing Tracks-card behaviour stays the same. Next, const size_t n = clearLinksTo(uid, index). Then file_.removeThing(index), ++revision_ and endBatch(). Keep the n value where the UI can read it, e.g. make remove return size_t or store lastClearedLinks_. 3) In App::deleteSelected (gui/editor.cpp:1214-1230), add up the cleared counts. When the total is non-zero, log "removed <what>; cleared N links that pointed at it" (level 0) so the user can see that other things changed. Note that deleteSelected removes indices from highest to lowest, so indices shift only above the removed one. Since clearLinksTo works by UID, that ordering is safe. 4) Region pairs, matching UpdateRegionExitConnections 0x020457c0: deleting a CTCDRegionEntrance zeroes EntranceConnectedToUID on every hook that pointed at it, which clearLinksTo already covers. Deleting a region-exit hook needs nothing on the entrance side, because the link is stored one way on the exit (kLinkKinds line 1374). 5) Test in tests/: build a map with A (CTCVillageMember VillageUID = B's UID) and a 3-node track, delete B and the middle track node, then check that A's VillageUID is 0, that validateMap reports no LINK/TRACK problems, and that a single undo brings back both the deleted things and the original link values.
@@ -375,12 +500,27 @@ Effort: S. Value: medium.
 #### No 'delete all things in an area'
 *gap, effort S, value med*
 
+2026-09-30: implemented in the Copy terrain tool. Its retained ground rectangle
+shows a count and Delete button; Del uses the rectangle while this tool is
+active. The document enumerates all framed things in the normalized inclusive
+rectangle, skips locked roots, detaches owned descendants outside it and clears
+incoming links through the existing grouped delete path. Core checks cover
+locked, owned and linked things with exact one-step undo. The retail
+MayorsHouseHallway UI check deletes its exit by button and key, then undoes both.
+
 **Vanilla:** In Copy and paste mode, Delete with a region selected calls PaintInputDeleteAllThingsInArea 0x0299ca70 (from CEditInputProcessCopyPaste::ProcessInput 0x02952eea). It removes every unlocked thing in the box and runs UpdateRegionExitConnections.
 
 **Fix:** 1) Document (src/leveledit.hpp/.cpp): split the thing loop in copyTerrain (leveledit.cpp:787-799) into `std::vector<size_t> Document::thingsInRect(int x0,int y0,int x1,int y1) const`. It should normalise and clamp the corners exactly as copyTerrain does (lines 764-767), then test frameOf(i).pos[0..1] against the box. Have copyTerrain use it. Add `size_t Document::removeThingsInRect(int x0,int y0,int x1,int y1, size_t* skipped)`. It calls thingsInRect, sorts the indices in descending order, and removes them inside a single beginBatch()/endBatch(), which is the equivalent of vanilla's Backup (0x02045590) as one undo step. Remove each thing with the same doc_.remove() path deleteSelected uses, so any link or script-brush cleanup there also applies. That cleanup stands in for RemoveThingFromScriptBrushes (0x02042850). If FableForge ever models the editor-only LockedInPlace flag (CTCEditor::IsLockedInPlace 0x020377c0), skip those things and count them in *skipped. Until then, leave a TODO and skip nothing. 2) App (gui/app.hpp, gui/editor.cpp): store the last dragged rectangle in a member, e.g. `int clipRect_[4]; bool clipRectValid_`, when the mode 14 drag is released (editor.cpp:1666-1670). Draw it as an overlay while it is valid. In the mode 14 panel (editor.cpp:2582-2590), add a theme::dangerButton "Delete N objects inside (Del)". Get N from thingsInRect and refresh it when the rectangle or the document changes. In mode 14, bind ImGuiKey_Delete to this action when clipRectValid_ is set, the same gate as vanilla's [this+0x74] check. Keep the existing selection-delete binding at 2367 for other modes, and clear the selection afterwards. Log "removed N objects (one undo step)". 3) Optional modern extra: add a "Select objects inside" button that fills extraUids_/selectedThing_ from thingsInRect, so the usual move, duplicate and delete apply to the result. 4) Automation (gui/automation.cpp near line 339): add `clip_delete x0 y0 x1 y1`, which calls removeThingsInRect. Effort S. Value med.
 
 #### No trigger or radius circles for switches, exits, spawners or lights
 *gap, effort S, value med*
+
+2026-09-30: implemented for selected things with saved, positive numeric Radius
+fields. Forge draws terrain-following circles, a labelled arc and an elevation
+line from the selected point to the circle centre. TriggerRadius uses the vanilla
+teal; other radius fields have distinct colours. MayorsHouseHallway's saved
+CTCDRegionExit Radius is exercised by `tests/ui/radius_rings.txt`; entrance
+selection without a saved radius draws none. Read-only game access; no map write.
 
 **Vanilla:** CEditControlCentre::DrawSwitchRadius 0x02049fe0, called from PreparePrimitivesForEngine 0x02046f27, draws the selected switch's TriggerRadius as a ground circle through DrawCircle 0x0184fa08 (via a thunk). Radius-bearing properties are edited in the same dialog: region-exit Radius/MessageRadius, CreatureGen GenerationRadius/SelfTriggerRadius, Light Inner/OuterRadius, StealableItemLocation radii, and so on.
 
@@ -391,24 +531,22 @@ Effort: S. Value: medium.
 5) Live update needs no extra work because rows are re-read every frame, so dragging the value in the property grid or the spawner card redraws the ring at once. As an optional extra, also draw a preview ring for spawnerRadius_ at the view centre while the spawner card is open.
 Effort S, value med. The switch TriggerRadius ring is vanilla parity; the other radius fields are an extension of that behaviour.
 
-#### No 'Find selected' (jump from the selected thing to its def in the palette) and no snap to a mesh attachment point
+#### Find selected implemented; mesh attachment snapping remains
 *gap, effort M, value low*
 
 **Vanilla:** CThingDialog FIND_SELECTED_BUTTON (handler 0x028f6168-0x028f625c) takes PeekPSelectedThing, then GetDefGlobalIndex, then the def name, and selects that tree entry, ready to place another of the same thing. Ctrl+D calls SnapSelectionToNearestDummyObject 0x02052eb0: it searches nearby things (CThingFilter_OverlappingArea), reads their graphic dummies (CTCGraphicAppearance::GetDummyObject 0x0205318d) and snaps the selection's position and orientation to the nearest one (items onto shelves, wall mounts: 9 CTCWallMount).
 
-**Fix:** **(A) "Show in palette" (Find selected; vanilla FIND_SELECTED_BUTTON, CThingDialog 0x028f6168-0x028f625c). Effort S.**
-1. In the Selection card (gui/editor.cpp around 2841-2930, next to the Duplicate button at :2924), add a ghost button "Show in palette". It is shown when selectedThing_ >= 0.
-2. The button sets `placeDef_ = <the selected thing's def name>`, clears defSearch_ (`defSearch_[0] = 0`), and sets a new member `revealDef_ = placeDef_`.
-3. If the selected thing is a CREATURE, it also switches to the Actors tab, because its palette is `##actorlist` (:2830). Otherwise it uses the Objects `##deflist` (:3092).
-4. In drawDefPalette:
-   - When revealDef_ is non-empty, call `ImGui::SetNextItemOpen(true)` before the TreeNodeEx of the matching type (:1304) and group (:1313).
-   - In `row()`, call `ImGui::SetScrollHereY(0.5f)` when `d.name == revealDef_`, then clear revealDef_.
-   - Look up the def's group once from defList_ so only that type and group node are forced open.
-5. Optionally add a docs/AUTOMATION.md verb.
+**(A) Show in palette implemented 2026-09-29.** The selection Actions menu
+selects the definition, clears filtering, opens its type/group, scrolls the inner
+row and outer settings panel, and routes creatures to Actors. Tab changes use the
+normal tool transition, so Terrain cannot remain active under Objects/Actors.
+Missing/unplaceable definitions report without changing the existing palette.
+Native show_in_palette verifies retail object/creature navigation from Terrain
+and an unchanged document; screenshot `walkthrough/w21_show_in_palette.png`.
 
 **(B) "Snap to nearest attachment point" (port of CEditControlCentre::SnapSelectionToNearestDummyObject 0x02052eb0). Effort M.**
 1. Add `editor::nearestDummyFrame(const Document&, int thingIdx, Frame& out)` in src/leveledit.cpp/.hpp, or a small helper next to thingsexport.
-2. Candidates: every other thing whose XY lies within ±500 of the selection's position. This is vanilla's C2DBoxI with half-extent 500.0f, the constant at 0x4166278. Skip the selection itself.
+2. Candidates: every other thing whose XY lies within Â±500 of the selection's position. This is vanilla's C2DBoxI with half-extent 500.0f, the constant at 0x4166278. Skip the selection itself.
 3. For each candidate:
    - Resolve its graphic model through `context.graphicModelId(def, modelId, &graphicScale)`.
    - Load the geometry with `fe::cachedMesh(modelId)`.
@@ -560,7 +698,7 @@ Effort S (about 20 lines, one function). Value med: it stops accidental sculptin
    - Optionally add a hint: "0.25-0.5 = one vertex".
    - Keep the widget name "slider_radius" for automation.
 
-3. **Change the keys** at editor.cpp:2363-2364 to step the exponent: `brushSizeExp_ = clamp(brushSizeExp_ ± 0.5f, -2, 5.9069f)`, then recompute `brushRadius_`. Half-octave steps give 0.25, 0.35, 0.5, 0.71, 1, 1.4, 2 and so on up to 60.
+3. **Change the keys** at editor.cpp:2363-2364 to step the exponent: `brushSizeExp_ = clamp(brushSizeExp_ Â± 0.5f, -2, 5.9069f)`, then recompute `brushRadius_`. Half-octave steps give 0.25, 0.35, 0.5, 0.71, 1, 1.4, 2 and so on up to 60.
 
 4. **Keep automation in sync.** `App::setBrush` (app.hpp:215) and the `brush` command (gui/automation.cpp:502) should also set `brushSizeExp_ = log2(max(r, 0.25f))`, so the slider matches a scripted radius.
 
@@ -889,7 +1027,7 @@ Effort: S-M (mostly wiring; the save function exists). Value: high.
 4. Manual snapshots (the port of CreateBackupFile 0x0204b690 + SaveSingleLevel's '.backup' names):
    - Add a 'Snapshot' action (Level-tab footer next to 'Save draft' at editor.cpp:3226, plus Ctrl+B, which is vanilla's backup key per inventory:115).
    - For the current map, the action writes <map>.tng + <map>.lev (from the in-memory doc, unsaved edits included) plus copies of FinalAlbion.wld/.bwd into snapshots/<map>/<YYYYMMDD-HHMMSS>/.
-   - Add a 'Snapshots…' list in the Level tab with timestamp, what it holds, and Restore / Delete. Restore loads into the doc as an undoable edit (never straight into the game), and the user then saves or deploys as usual. World-file restore goes through the existing World-tab apply path, so the running-game guard and .forge-orig backups still apply.
+   - Add a 'Snapshotsâ€¦' list in the Level tab with timestamp, what it holds, and Restore / Delete. Restore loads into the doc as an undoable edit (never straight into the game), and the user then saves or deploys as usual. World-file restore goes through the existing World-tab apply path, so the running-game guard and .forge-orig backups still apply.
    - Optionally add 'Snapshot all changed maps' later. Vanilla's SaveAllLevels(1,0) covers every edited map, but FableForge only has one open doc.
 
 5. Automation (docs/AUTOMATION.md): add `autosave_now`, `assert_autosave_exists 0|1`, `snapshot`, `restore_snapshot <i>`. Add a test that sculpts, calls autosave_now, reopens, recovers and checks assert_heights_changed 1.
@@ -899,7 +1037,7 @@ Effort: M (about 1 day; the async copy and dialogs already have patterns in edit
 #### World tab cannot create, remove or rename regions or set their display name, def, minimap or world-map flag
 *gap, effort M, value high*
 
-**Vanilla:** CRegionDialog (Maps and Regions > Regions radio) shows a tree of regions with their maps and supports: CreateNewRegion 0x02965870 (CEditWorldMap::CreateNewRegion plus GetUniqueNameForRegion), RemoveSelectedRegion 0x02967a30 with 'confirm removal', RenameSelectedRegion 0x02965f80, RenameSelectedRegionDisplayText 0x029668b0, and the Region def text box (SetRegionDefTextBoxText 0x02963ee0). All of it is saved by EditSaveRegionsToString 0x0296b850 (RegionName, NewDisplayName, RegionDef, AppearOnWorldMap, MiniMapGraphic, MiniMapScale/Offset…).
+**Vanilla:** CRegionDialog (Maps and Regions > Regions radio) shows a tree of regions with their maps and supports: CreateNewRegion 0x02965870 (CEditWorldMap::CreateNewRegion plus GetUniqueNameForRegion), RemoveSelectedRegion 0x02967a30 with 'confirm removal', RenameSelectedRegion 0x02965f80, RenameSelectedRegionDisplayText 0x029668b0, and the Region def text box (SetRegionDefTextBoxText 0x02963ee0). All of it is saved by EditSaveRegionsToString 0x0296b850 (RegionName, NewDisplayName, RegionDef, AppearOnWorldMap, MiniMapGraphic, MiniMapScale/Offsetâ€¦).
 
 **Fix:** Plan (effort M, value high):
 
@@ -962,7 +1100,12 @@ Effort: M (about 1 day; the async copy and dialogs already have patterns in edit
 Effort M (mostly refactoring existing bake/install code plus TNG UID remapping). Value high (dev-tree test levels, other worlds' maps and other modders' levels become usable).
 
 #### Closing FableForge silently drops unsaved object, terrain and world edits
-*weakness, effort S, value high*
+*weakness, effort S, value high; implemented 2026-09-30*
+
+2026-09-30: implemented close prompt for window close/File > Exit, with Save,
+Discard and Cancel. Pending World writes wait for success before exit and survive
+failure with undo history. Native close, map-switch and failed-write UI scripts
+pass; terrain still uses its separate explicit save action.
 
 **Vanilla:** File > Exit (MENU_ITEM_FILE_QUIT) and Alt+X both call SaveAllIfChanged(1,0) 0x0204b550 before OnExit (menu handler 0x02947fc0). Vanilla never loses edits on exit.
 
@@ -971,7 +1114,7 @@ Effort M (mostly refactoring existing bake/install code plus TNG UID remapping).
 #### No map resize
 *gap, effort L, value med*
 
-**Vanilla:** Popup RESIZE_MAP (SelectMapForResize 0x02044e30), then drag the new box, then ApplyMapResize 0x02044f60. The rules: area > 0 ('The map must have an area greater than zero!'), the new box must overlap the original ('The new map area must overlap the original map area.'), and it must not overlap another map (CanPlaceMapAt on the four grown strips; 'The new map area overlaps another map.'). CEditWorldMap::EditResizeMap 0x02974110 kills things outside the new area (CThingFilter_InArea negated), resizes the game map (CThingMapManager::ResizeGameMap), and calls CEditMap::EditResizeMap 0x029a8f40 → CHeightMap::Resize 0x029e27c0 + CGameMap::Resize 0x024a0160 + SetDimensions, then SetMapPlacement and a re-added engine map. Only allowed on editable maps.
+**Vanilla:** Popup RESIZE_MAP (SelectMapForResize 0x02044e30), then drag the new box, then ApplyMapResize 0x02044f60. The rules: area > 0 ('The map must have an area greater than zero!'), the new box must overlap the original ('The new map area must overlap the original map area.'), and it must not overlap another map (CanPlaceMapAt on the four grown strips; 'The new map area overlaps another map.'). CEditWorldMap::EditResizeMap 0x02974110 kills things outside the new area (CThingFilter_InArea negated), resizes the game map (CThingMapManager::ResizeGameMap), and calls CEditMap::EditResizeMap 0x029a8f40 â†’ CHeightMap::Resize 0x029e27c0 + CGameMap::Resize 0x024a0160 + SetDimensions, then SetMapPlacement and a re-added engine map. Only allowed on editable maps.
 
 **Fix:** 1. forgecore LEV resize (libs/forgecore/src/lev.cpp, lev.hpp): add `File resized(int newW, int newH, int offX, int offY) const`, a port of CHeightMap::Resize 0x029e27c0.
    - Build a (newW+1)*(newH+1) grid of 21-byte cells. Initialise every cell from a "default cell" that has the u32 21 / u8 7 record header, height 0, theme slot 0, strength 0 and walkable/camera flags cleared, matching the default-constructed CHeightField cell. Offer an option to use the template ground height instead: vanilla fills with defaults, but a UI "fill new ground at edge height" toggle is useful.
@@ -1032,7 +1175,7 @@ Effort L: the full LEV writer, the GameMap resize, re-baking a chunk of a new si
    - Run the vanilla follow-ups from CEditControlCentre::RemoveMap 0x0204c460: mark the world changed, take a backup, then refresh the region list and the region exit connections. In FableForge that means rescanning world_ and the region list, and warning if any region exit still targets the removed map.
 
 4. GUI (gui/world.cpp Selected-map card, after the owner combo ~line 513):
-   - Add a theme::dangerButton "Remove from world…" wrapped in confirmRow, like the restore confirm in app.cpp:422.
+   - Add a theme::dangerButton "Remove from worldâ€¦" wrapped in confirmRow, like the restore confirm in app.cpp:422.
    - Confirm text: "saves that visited this map keep cached region data; test on a new game".
    - Enable the button directly for maps whose .lev backups::scan reports as Kind::Created (src/backups.cpp:81). For retail maps, add a second "remove a retail map" confirm, which mirrors vanilla's IsMapEditable gate. Refuse while Fable runs.
    - Register an automation widget such as btn_world_remove_map.
@@ -1042,14 +1185,14 @@ Effort L: the full LEV writer, the GameMap resize, re-baking a chunk of a new si
 #### Opening another .wld does not switch the World tab or the quest list to it
 *weakness, effort M, value med*
 
-**Vanilla:** File > Load World → LoadWorld 0x02038d90 replaces the whole editing world (maps, regions, world map view) and loads the matching quest file, so the section list comes from that world's registered quests.
+**Vanilla:** File > Load World â†’ LoadWorld 0x02038d90 replaces the whole editing world (maps, regions, world map view) and loads the matching quest file, so the section list comes from that world's registered quests.
 
 **Fix:** 1) src/overworld.hpp/.cpp: add `loadWorldLayoutFromWld(const fs::path& wldPath, WorldLayout&, std::string& err)`. It parses the .wld (regions, contains, sees and mapX/mapY, reusing the region loop at overworld.cpp:143-150). It builds each WorldMapBox from the .wld map list. Box w/h come from the <wld dir>/<LevelName> .lev header (width/height in tiles, the same units the BWD rect uses). Load <stem>.bwd only if it exists. Set inStb=false and slot=map index. Keep loadWorldLayout(gameRoot) as the FinalAlbion wrapper. 2) Add `saveWorldLayoutText(wldPath, moves, owners, seesEdits)`. It rewrites only that .wld: MapX/MapY, ContainsMaps and SeesMaps, going through the forge::wld writer that the FinalAlbion path already uses. There is no BWD, mirror or STB step. If no <stem>_RT.stb exists, return the note "text world: no static-map bake". 3) gui/world.cpp App::loadWorld: key the cache on the chosen world (add `std::string worldTarget_`, empty meaning FinalAlbion). When worldTarget_ is set, call loadWorldLayoutFromWld. Route apply and save to saveWorldLayoutText, and disable the STB, pack-shadow and 3D-bake actions with a tooltip. 4) World tab header: add a small combo listing FinalAlbion plus each distinct MapEntry.worldFile from maps_. openWorld (gui/app.cpp:617) sets worldTarget_ to the new .wld and clears worldLoaded_. selectMap on a map with worldFile set also switches it. 5) gui/app.cpp:773 and gui/editor.cpp:3525 (fit-to-neighbours) currently bail for other worlds. Point them at the active layout so neighbours work there too. 6) Add a tests/ui script: open lake-n-shack.wld, switch to World, and assert the region and map count match the .wld. Leave out the quest-file loading from the original fix (sections already come from the map's .tng). Effort M, value low-med.
 
 #### Region visibility (SeesMap) is editable only for touching neighbours, and a region's full sees list is not shown
 *weakness, effort S, value med*
 
-**Vanilla:** The Map Visibility dialog (CMapVisDialog) takes the clicked map's region (SetEditedMap 0x028e6ad0 → GetRegionNumberMapIsIn → GetRegion), lists that region's GetVisMaps (UpdateVisListBox 0x028e6b60), and AddVisibleMap 0x028e6cc0 adds any clicked map that is not already owned or seen. The Regions tree has 'Visibility' mode add/remove for any map (AddMapToSelectedRegion 0x02968eb0 pushes into GetVisMaps). Retail relies on non-adjacent sees: PicnicArea sees 22 maps including OrchardFarm and GreatwoodBanditToll, and LookoutPoint sees Greatwood_1/2 (from `forge world --regions`).
+**Vanilla:** The Map Visibility dialog (CMapVisDialog) takes the clicked map's region (SetEditedMap 0x028e6ad0 â†’ GetRegionNumberMapIsIn â†’ GetRegion), lists that region's GetVisMaps (UpdateVisListBox 0x028e6b60), and AddVisibleMap 0x028e6cc0 adds any clicked map that is not already owned or seen. The Regions tree has 'Visibility' mode add/remove for any map (AddMapToSelectedRegion 0x02968eb0 pushes into GetVisMaps). Retail relies on non-adjacent sees: PicnicArea sees 22 maps including OrchardFarm and GreatwoodBanditToll, and LookoutPoint sees Greatwood_1/2 (from `forge world --regions`).
 
 **Fix:** All changes are in gui/world.cpp plus one pick-mode member in gui/app.hpp. worldSetSees and its undo and pending plumbing are reused as they are.
 
@@ -1061,13 +1204,13 @@ Effort L: the full LEV writer, the GameMap resize, re-baking a chunk of a new si
    - Register the widgets `list_world_sees` and `btn_world_sees_remove_<i>` for automation.
    - Also add a small count on the Selected map card: "seen by N regions". Compute it by scanning world_.regions through worldSees(r, box->name). This mirrors UpdateVisListBox 0x028e6b60, which lists the edited map's region's GetVisMaps.
 
-2) Add an "Add seen map…" button to the new card that sets a new member, `std::string worldSeesPickRegion_ = mine`.
+2) Add an "Add seen mapâ€¦" button to the new card that sets a new member, `std::string worldSeesPickRegion_ = mine`.
    - In the canvas click handler (gui/world.cpp:331), check this before the drag branch. While worldSeesPickRegion_ is set and worldHover_ is non-empty:
      - Refuse with a log line if the region owns the map (worldOwnerOf(worldHover_) == region) or already sees it (worldSees). This is the vanilla AddVisibleMap 0x028e6cc0 rule.
      - Otherwise call worldSetSees(region, worldHover_, true).
      - Clear the pick mode and do not start a drag or change the selection.
    - Esc or right-click cancels.
-   - Show a legend hint while picking: "click a map for <region> to see — Esc cancels".
+   - Show a legend hint while picking: "click a map for <region> to see â€” Esc cancels".
    - Optionally add a "Remove by click" mode that calls worldSetSees(region, hover, false). This matches vanilla Visibility mode, which both adds and removes.
 
 3) Canvas overlay, in the draw loop at lines 371-409. When a map is selected and its owner is known, draw every map that worldSees(owner, b->name) with a dashed outline (short AddLine segments) in regionColour(ownerSlot, 0.9f). Draw it under the neighbour, pending and selection outlines so those still win. Add "dashed = seen from <region>" to the legend at line 432.
@@ -1125,7 +1268,7 @@ Effort S (about 80-120 lines, all in gui/editor.cpp plus a few members in gui/ap
 #### View menu lacks per-type show/hide (Creatures / Buildings / Objects / Holy Sites / Villages)
 *gap, effort S, value med*
 
-**Vanilla:** View > Show &Creatures/&Buildings/&Objects/&Holy Sites/&Villages → SetThingDrawing(type,on) 0x02036ee0. Not saved to the level ('This hiding or showing of Things won't be saved out.'). The state persists in editor settings (ShowingCreatures … ShowingVillages, SaveSettings 0x0203d9c0).
+**Vanilla:** View > Show &Creatures/&Buildings/&Objects/&Holy Sites/&Villages â†’ SetThingDrawing(type,on) 0x02036ee0. Not saved to the level ('This hiding or showing of Things won't be saved out.'). The state persists in editor settings (ShowingCreatures â€¦ ShowingVillages, SaveSettings 0x0203d9c0).
 
 **Fix:** 1. Settings (gui/app.hpp settings struct and its load/save code): add `unsigned hiddenThingKinds = 0;` as a bitmask. Bits: Creature=1, Building=2, Object=4, HolySite=8, Village=16. It persists like showExplorer and is never written to the level, matching vanilla's ShowingCreatures..ShowingVillages behaviour.
 
@@ -1190,7 +1333,7 @@ Do not restore the edit mode if the document fails to open. setEditTab already f
 #### File > New World
 *gap, effort M, value low*
 
-**Vanilla:** File > &New World → SaveAllIfChanged, then NewWorld 0x020454d0: an empty world to place levels into (then saved as a new .wld).
+**Vanilla:** File > &New World â†’ SaveAllIfChanged, then NewWorld 0x020454d0: an empty world to place levels into (then saved as a new .wld).
 
 **Fix:** 1. forgecore: add `static File forge::wld::File::makeEmpty(int mapUidCount = 0, int thingUidCount = 0)` in libs/forgecore/src/wld.cpp. It returns parseText() of a minimal template: `MapUIDCount 0;`, `ThingManagerUIDCount 0;`, `START_INITIAL_QUESTS` / `END_INITIAL_QUESTS`, and no maps or regions. Before writing it, check the exact header lines and ordering against FinalAlbion.wld, and against what NewWorld 0x020454d0 resets (disassemble it with capstone from FableWin.exe to confirm the defaults it zeroes). Add a round-trip test in tests/test_export.cpp: makeEmpty().serialize() must re-parse, and addMap followed by addRegion must work on it.
 2. GUI: add "New world..." at the top of the File menu (gui/app.cpp:1488). First run the existing unsaved-edits prompt (the SaveAllIfChanged equivalent). Then open a save dialog for <folder>/<Name>.wld, refusing the install's data/Levels/FinalAlbion.wld. Write makeEmpty().serialize() to that path and call openWorld on it. Tooltip: "For total conversions / dev: the game only loads FinalAlbion.wld".
@@ -1209,7 +1352,7 @@ Effort M (steps 1-3 are S; the new-level target plumbing makes it M). Value low.
 #### Options > Snap To Grid (cell-centre placement) has no equivalent
 *gap, effort S, value low*
 
-**Vanilla:** Options > &Snap To Grid → SetSnapToGridFlag 0x0203d5d0. GetCurrentPointedAtPos 0x0204b3f8 then calls FindNearestSnappedPos 0x02049280: x,y are truncated to int (_ftol), +0.5 is added (constant 0x401de04 = 0.5), and z = GetGroundSizeZAt. The pointer is snapped to the centre of the 1-unit cell, on the ground, for placement and pointer-driven edits. Persisted as SnapToGridFlag in editor settings.
+**Vanilla:** Options > &Snap To Grid â†’ SetSnapToGridFlag 0x0203d5d0. GetCurrentPointedAtPos 0x0204b3f8 then calls FindNearestSnappedPos 0x02049280: x,y are truncated to int (_ftol), +0.5 is added (constant 0x401de04 = 0.5), and z = GetGroundSizeZAt. The pointer is snapped to the centre of the 1-unit cell, on the ground, for placement and pointer-driven edits. Persisted as SnapToGridFlag in editor settings.
 
 **Fix:** 1. forgecore helper (libs/forgecore/include/forge/thingplacer.hpp and src/thingplacer.cpp, next to constantPlacementHeight): add `Vec3 snapToCellCentre(float x, float y)`. It returns {float(int(x)) + 0.5f, float(int(y)) + 0.5f}. Use C-style truncation to match _ftol; this differs from floor only for negative coordinates, which Fable maps do not use. The caller fills in z. Add a unit test in the thingplacer tests covering 3.7 -> 3.5, 0.0 -> 0.5 and 12.99 -> 12.5.
 
@@ -1226,7 +1369,7 @@ Effort S, value low.
 #### Initial quests (START_INITIAL_QUESTS) not exposed
 *gap, effort S, value low*
 
-**Vanilla:** The CInitialQuestsDialog panel (ctor 0x028c1910, shown live on entry) chooses the quests active at world start. CEditWorld::SaveInitialActiveQuests 0x0207ed60 writes 'START_INITIAL_QUESTS;' … 'END_INITIAL_QUESTS;' into the .wld. Retail lists Q_SunnyvaleMaster, PersonalScriptMain, PersonalScript_GlobalThings, HeroBoasts, V_HeroDolls, CS_PlayCutscene. The compiled BWD carries no quest list (forge::bwd has no such field), so the retail runtime effect comes from the .qst AddQuest(...,TRUE) flag.
+**Vanilla:** The CInitialQuestsDialog panel (ctor 0x028c1910, shown live on entry) chooses the quests active at world start. CEditWorld::SaveInitialActiveQuests 0x0207ed60 writes 'START_INITIAL_QUESTS;' â€¦ 'END_INITIAL_QUESTS;' into the .wld. Retail lists Q_SunnyvaleMaster, PersonalScriptMain, PersonalScript_GlobalThings, HeroBoasts, V_HeroDolls, CS_PlayCutscene. The compiled BWD carries no quest list (forge::bwd has no such field), so the retail runtime effect comes from the .qst AddQuest(...,TRUE) flag.
 
 **Fix:** 1) forgecore, libs/forgecore/include/forge/wld.hpp + src/wld.cpp: add `void setInitialQuests(std::vector<std::string>)`. It rewrites only the lines between the START_INITIAL_QUESTS; and END_INITIAL_QUESTS; rawLines_, one `<Name>;` per line with the file's line terminator, and keeps every other byte, the same way relocateMap does. Add a round-trip test to tests/test_export.cpp next to the existing START_INITIAL_QUESTS fixture at l.1388. This mirrors vanilla SaveInitialActiveQuests 0x0207ed60, which writes the block at the top of the .wld.
 
@@ -1305,6 +1448,12 @@ Effort M (about a day). Value high.
 #### Deleting, duplicating or pasting track nodes breaks the chains (the engine asserts)
 *weakness, effort S, value high*
 
+**Status 2026-09-30:** Resolved for the supported edit paths. Delete repairs
+the chain; edit-brush copy and paste reject native non-copyable types including
+CTCCreatedEntity (PDB TCI_CREATED_ENTITY = 50), and direct TrackNode
+duplication makes an unlinked node. Village verbatim duplication is refused.
+Core copy, clone, paste, terrain-brush and undo checks pass.
+
 **Vanilla:** DeleteSelectedTrackNode 0x020305a0 calls DeleteLinksFromSelectedTrackNode before PaintInputDeleteSelectedThing, so the neighbours are re-linked or ended. Copy and paste refuses these things: CThingFilter_IsEditBrushCopyable::operator() 0x02957910 rejects thing types 4, 8, 9, 10 and 11 (villages, switches, markers, track nodes; inventory 5.8) and anything with TC 0x32. Vanilla also says 'Track nodes cannot be pasted'.
 
 **Fix:** 1. Deleting a track node, as vanilla 0x020305a0 does. In Document::remove (src/leveledit.cpp:2172), add `if (isTrackNode(index)) unlinkTrackNode(index);` before file_.removeThing. The existing unlinkTrackNode re-links the pieces before and after the node, fixes their Start/End flags, and names them INVALID or TrackTempName<n>, which matches DeleteLinksFromSelectedTrackNode 0x020305e0. Removing the node does not shift any indices before the unlink runs. Multi-delete is safe: deleteSelected already removes things highest index first inside a beginBatch, so each unlink sees the current chain and pushUndo folds into the batch. Check that pushUndo inside unlinkTrackNode really is a no-op inside a batch, as it already is for remove.
@@ -1329,11 +1478,11 @@ Effort S, value high: saved maps currently get dangling or asymmetric track link
 
 **Fix:** 1. Camera (gui/renderer.hpp:20).
    - Add `bool ortho=false; float orthoHalfH=100;`.
-   - Add `void setTop(float cx,float cz,float halfH)`. It sets yaw=0 and pitch=π/2 exactly, putting the eye high above the map: posY = maxHeight + 1000, focus distance = eye height minus the ground.
-   - Leave the ±1.55 clamp in look/orbit alone; setTop writes pitch directly.
+   - Add `void setTop(float cx,float cz,float halfH)`. It sets yaw=0 and pitch=Ï€/2 exactly, putting the eye high above the map: posY = maxHeight + 1000, focus distance = eye height minus the ground.
+   - Leave the Â±1.55 clamp in look/orbit alone; setTop writes pitch directly.
 
 2. Renderer::render (renderer.cpp:~985-993).
-   - When camera.ortho is set, build the view with a fixed up vector of (0,0,-1) render-space, so Fable +Y points up the screen and matches the minimap's north-up. Do not use lookAtRH's Y-up, which degenerates at pitch π/2.
+   - When camera.ortho is set, build the view with a fixed up vector of (0,0,-1) render-space, so Fable +Y points up the screen and matches the minimap's north-up. Do not use lookAtRH's Y-up, which degenerates at pitch Ï€/2.
    - Build an orthoRH(w=halfH*aspect, h=halfH, zn=0.1, zf=eyeHeight+maxHeight+2000) matrix. Store it in lastProj_ so project() keeps working unchanged, since w=1 in ortho.
 
 3. Renderer::screenRay (renderer.cpp:738).
@@ -1341,11 +1490,11 @@ Effort S, value high: saved maps currently get dangling or asymmetric track link
    - This is the single place that feeds the brush, the copy rectangle, track clicks and pickAt, so those tools need no other change.
 
 4. Input, in App::handleViewportInput (gui/app.cpp:1737). When camera_.ortho is set, port the CEditInputProcessView2D 0x0294bc10 grammar before the perspective branch:
-   - RMB-drag or MMB-drag pans the eye by dx,dy × (2*halfH/size.y) world units.
+   - RMB-drag or MMB-drag pans the eye by dx,dy Ã— (2*halfH/size.y) world units.
    - The wheel zooms orthoHalfH by 1.25^-wheel about the cursor: keep the world point under the cursor fixed by shifting the eye by the delta of the ortho ray origin.
    - Held arrow keys pan at moveSpeed*halfH*dt, and PgUp/PgDn zoom.
    - Shift multiplies by 10, as in SetMoveSpeed 0x0294bb40. Ctrl can give the "fine" 0.01/0.4 factor.
-   - RMB does not look or fly in this view, since rotation is disabled. F calls frameMap / frameSelected, which set the ortho centre and halfH (≈ span*0.55) instead of calling lookAt.
+   - RMB does not look or fly in this view, since rotation is disabled. F calls frameMap / frameSelected, which set the ortho centre and halfH (â‰ˆ span*0.55) instead of calling lookAt.
    - Leaving the view restores the previous perspective camera, saved in `Camera perspSaved_`.
 
 5. UI. Add a "Top" / "3D" chip next to the ViewMode chips in the viewport toolbar (gui/app.cpp drawViewport). Add the hotkey T, or Numpad 7 to match Unreal. Keep the shading modes orthogonal: Height shading plus Top view reproduces vanilla's relief look. Show a cursor readout of X/Y and height from the brush hit.
@@ -1358,6 +1507,10 @@ Effort M, about 150-250 lines across renderer.hpp/.cpp, app.cpp and editor.cpp. 
 
 #### New tracks all end up named INVALID after linking (vanilla gives each a unique TrackTempName<n>)
 *weakness, effort S, value med*
+
+**Status 2026-09-30:** Resolved for link and unlink. Loaded temp names advance
+the counter; new names are checked against all track nodes. Core tests cover
+fresh, named and preexisting tracks; track_preview.txt passes.
 
 **Vanilla:** FinishLinkingTracks 0x020302d0 reads the name of the chain's start node (PeekTrackStartNode, then PeekTrackName). If that name is empty, is "INVALID" or starts with "TrackTempName" (13-char compare), it sets "TrackTempName" + counter (counter at this+0xb08, incremented) with SetTrackName. Every new track therefore gets a unique name, and tracks are looked up by name (inventory 10).
 
@@ -1407,7 +1560,7 @@ Effort: S. Value: med.
 
 4. **Preview (drawBrushCursor, editor.cpp:1828-1831).**
    - In Top or Bottom mode, keep the ground rectangle.
-   - Also project and draw the rectangle's four corners at world Z equal to `clipRelTo_` and at `clipRelTo_ ∓ heightSpan()`. Use span below the altitude for Top and above it for Bottom.
+   - Also project and draw the rectangle's four corners at world Z equal to `clipRelTo_` and at `clipRelTo_ âˆ“ heightSpan()`. Use span below the altitude for Top and above it for Bottom.
    - Connect the two levels with vertical edges to form a wire box, as vanilla Draw3DCopyPasteBrush 0x0204a620 does. Use the same projection helper as drawGroundRect with an explicit Z.
 
 5. **Test.** Add a forgecore/leveledit test where a clip with heights {10, 30} is pasted:
@@ -1440,7 +1593,7 @@ Effort S. Value med.
 
 **Vanilla:** The console commands ConsoleEditRaiseZ 0x0204cc40, ConsoleEditResizeZPercent 0x0204c980 and ConsoleEditSetZ 0x0204cae0 call CEditWorldMap ops over every editable map (0x02973c50...). CEditMap::EditRaiseZ 0x029a8d10 does h += dz and EditResizeZPercent 0x029a8ac0 does h *= p / 100, each clamped to [0, 2048 - 1e-4] through SetGroundSizeZAt. There is also a Backup first.
 
-**Fix:** 1) src/leveledit.hpp/.cpp: add `size_t Document::transformHeights(float scale, float offset, std::optional<float> setTo, bool moveThings)`. For each vertex, compute v = setTo ? *setTo : h*scale + offset and clamp it with std::clamp(v, 0.f, 2047.9999f), the same constant applyFractal uses. Collect the changed vertices and apply them through setVertexHeights so the change is one undo step. This follows the pattern of applyFractal (leveledit.cpp:~715). If moveThings is set, i.e. only for Raise (matching CEditWorldMap::EditRaiseZ 0x02973e20 → CEditRaiseZOnThing 0x02974000), add offset to every thing's z inside the same undo step, either by folding it into a combined edit or by pushing one undo before both changes. Do not move things for Scale or Set, matching 0x02973c50 and 0x02973d40; the existing "Re-seat objects on the new ground" button at gui/editor.cpp:3176 stays available for those. 2) gui/editor.cpp Terrain tab: add a collapsible "Whole map" group next to the Fractal and Fit-to-neighbours panels (around editor.cpp:3700), with three rows: Raise by [m] (negative lowers), Scale [%] and Set to [m]. Each row gets an Apply button and a confirm popup that shows how many vertices change and says whether objects follow. Register widgets btn_whole_raise, btn_whole_scale and btn_whole_set. 3) Automation (the runner behind docs/AUTOMATION.md): add `raise_z <dz>`, `resize_z_percent <p>` (scale = p/100) and `set_z <h>` and document them there. Add a UI test using snapshot_heights / assert_height. Effort S, value med (an older map re-leveled in one step, e.g. lifting a map to meet a neighbour's seam).
+**Fix:** 1) src/leveledit.hpp/.cpp: add `size_t Document::transformHeights(float scale, float offset, std::optional<float> setTo, bool moveThings)`. For each vertex, compute v = setTo ? *setTo : h*scale + offset and clamp it with std::clamp(v, 0.f, 2047.9999f), the same constant applyFractal uses. Collect the changed vertices and apply them through setVertexHeights so the change is one undo step. This follows the pattern of applyFractal (leveledit.cpp:~715). If moveThings is set, i.e. only for Raise (matching CEditWorldMap::EditRaiseZ 0x02973e20 â†’ CEditRaiseZOnThing 0x02974000), add offset to every thing's z inside the same undo step, either by folding it into a combined edit or by pushing one undo before both changes. Do not move things for Scale or Set, matching 0x02973c50 and 0x02973d40; the existing "Re-seat objects on the new ground" button at gui/editor.cpp:3176 stays available for those. 2) gui/editor.cpp Terrain tab: add a collapsible "Whole map" group next to the Fractal and Fit-to-neighbours panels (around editor.cpp:3700), with three rows: Raise by [m] (negative lowers), Scale [%] and Set to [m]. Each row gets an Apply button and a confirm popup that shows how many vertices change and says whether objects follow. Register widgets btn_whole_raise, btn_whole_scale and btn_whole_set. 3) Automation (the runner behind docs/AUTOMATION.md): add `raise_z <dz>`, `resize_z_percent <p>` (scale = p/100) and `set_z <h>` and document them there. Add a UI test using snapshot_heights / assert_height. Effort S, value med (an older map re-leveled in one step, e.g. lifting a map to meet a neighbour's seam).
 
 #### Orbit and zoom do not pivot on the point under the cursor; no 'fly to pointed spot'
 *weakness, effort S, value med*
@@ -1493,7 +1646,7 @@ Effort: S (1-2) + S (3-4). Value: low to medium.
    - Read graphics.big MBANK entries of types 6, 7 and 9: a u32 decompSize, then one raw LZO1X stream. Reuse the fableLzo helper already in meshpreview.cpp.
    - Parse the chunks ANRT, AOBJ, XSEQ, HLPR, MVEC, TMEV, AMSK and XALO, plus the 24-byte TOC Info record.
    - Port EgoCore AnimParser.h AnimTrack, with EvaluateFrame for stepped playback and the smooth lerp/nlerp run evaluator.
-   - Validate against FableTLC tools/parse_anim_xseq.py over all 3,435 entries, using the ANIM.md §9.3 counts.
+   - Validate against FableTLC tools/parse_anim_xseq.py over all 3,435 entries, using the ANIM.md Â§9.3 counts.
    - Add a CLI verb, `forge anim list|info|dump <entry>`.
 
 2. **Skinned-mesh loader (forgecore).** Extend meshpreview.cpp:172-173 so it keeps the bone data it currently skips: the bone name CRCs, parent indices, the 48-byte local transforms and the 64-byte inverse-bind matrices.
@@ -1501,7 +1654,7 @@ Effort: S (1-2) + S (3-4). Value: low to medium.
    - Expose it as a SkinnedMesh struct next to MeshPreview.
 
 3. **Pose evaluation.** Map tracks to bones by name CRC, using the AOBJ rig name and the AMSK mask.
-   - Compose local → model → skin matrices.
+   - Compose local â†’ model â†’ skin matrices.
    - Skin on the CPU first. Move to a bone-palette vertex shader in gui/renderer only if CPU skinning is too slow.
 
 4. **Assets > Animations page (gui).**
@@ -1566,7 +1719,7 @@ Overall effort is L and user value is high. Suggested order: read-only viewer fi
 **Vanilla:** CAnimationDialog ctor 0x02929200. The 'Select Animation' section has a 'Normal Animations' tree (NORMAL_ANIM_TREE, xref 0x292bf38 and 0x292ee3a) grouped by the current thing's appearance def (GetSubDef(&pappearance_def) 0x292f072, 'no group' 0x292f38d). It also has 'Full Name' / 'In Game' name radios and 'Save Names' (0x2929844-0x2929953), which writes 'Anims.txt' (0x292be7f), plus a NUMBER_OF_FRAMES_TEXT readout (0x292e517).
 
 **Fix:** 1) Reader library. Add libs/forgecore/include/forge/animbank.hpp and src/animbank.cpp.
-- listAnims(graphicsBig): reuse forge::big, which meshpreview.cpp:256 already uses to find banks. Filter TOC entries of types 6, 7 and 9, and parse the 24-byte Info into 6×f32.
+- listAnims(graphicsBig): reuse forge::big, which meshpreview.cpp:256 already uses to find banks. Filter TOC entries of types 6, 7 and 9, and parse the 24-byte Info into 6Ã—f32.
 - loadAnim(entry): if the first u32 is 0x3E3E3E3E, take the payload as raw. Otherwise run forge::lzo::decompress(payload+4, decompSize). Check first that lzo.hpp handles a bare stream with no [u16 clen] framing, and test it on all 3,435 entries.
 - Walk the [fourcc][u32 size] chunks, recursing into ANRT, AOBJ and MVEC. Decode each XSEQ track (the quaternion key pool + palette, the i16 position pool + palette, SamplesPerSecond, PositionFactor), plus TMEV (name, time), AMSK and the cyclic flag. Port this from FableTLC tools/parse_anim_xseq.py, cross-checked against EgoCore Animations/AnimParser.h.
 - Unit test: parse every graphics.big anim and assert the ANIM.md census (3DAF 3435, XSEQ 3419, TMEV 624, AMSK 34). Also check that the Info duration matches ANRT on about 95% of entries.
@@ -1574,7 +1727,7 @@ Overall effort is L and user value is high. Suggested order: read-only viewer fi
 2) Animations page. Make 'Animations' the fourth segment in gui/textures.cpp:109 (assetsTab_==3), backed by a lazily built cache like texRows_. It should have:
 - A list with search.
 - Grouping by AOBJ rig name, plus a 'By creature' mode built from CAnimationSet defs in game.bin. This mirrors the vanilla appearance-def grouping, with 'no group' as the fallback.
-- A detail pane showing duration, frame count (duration × SamplesPerSecond, like vanilla's NUMBER_OF_FRAMES_TEXT), fps, cyclic flag, bone count, movement vector and rotation, the TMEV list, the AMSK/partial flag and a lipsync/pose tag.
+- A detail pane showing duration, frame count (duration Ã— SamplesPerSecond, like vanilla's NUMBER_OF_FRAMES_TEXT), fps, cyclic flag, bone count, movement vector and rotation, the TMEV list, the AMSK/partial flag and a lipsync/pose tag.
 - Name display toggle: internal ANIM_ name vs friendly name. Take the friendly name from the CAnimationSet slot/enum name or the text.big ANIM: keys, not from Anims.txt, which FableForge never writes.
 
 3) CLI. Add 'forge anim list [--type 6|7|9] [--rig X]' and 'forge anim info <ANIM_X> [--json]' to tools/forge-cli/main.cpp.
@@ -1592,7 +1745,7 @@ This covers read-only browsing only. The 3D skinned preview (which needs the mod
    - for each bone: nameCrc, parentLocal (i32, -1 = root), originalChildren and localization[12] (block 3, 60 B)
    - bindTrs[11] for each bone: quat xyzw, translation, scale (block 4, 48 B)
    - inverseBind[16] for each bone (block 5, 64 B), with row 4 forced to (0,0,0,1)
-   - derived world bind W_i = inverse(IBM_i) and local bind L_i = inverse(W_parent) * W_i, as in MESH.md §8
+   - derived world bind W_i = inverse(IBM_i) and local bind L_i = inverse(W_parent) * W_i, as in MESH.md Â§8
    Also add a parallel `std::vector<SkinWeights>` of `{uint8_t bone[4]; float w[4];}` records, sized to match vertices only when some primitive has animatedBlocks. The Vertex struct stays unchanged, so the static path, thumbnails and existing callers are untouched.
 2. In meshpreview.cpp at lines 172-173, keep the buffers the code already reads: `c.skip(bones*2)` becomes a read, and the three fableLzo results are stored and decoded instead of dropped.
 3. Around line 202, store the animated block's Groups[] (gc bytes) and its vertexCount instead of `c.skip(gc)`.
@@ -1600,7 +1753,7 @@ This covers read-only browsing only. The 3D skinned preview (which needs the mod
    - pID = ind[k]/3
    - localBone = block.Groups[pID], clamped below boneCount with 0 as the fallback
    - w = wgt/255, renormalized, falling back to [1,0,0,0] when the sum is 0.001 or less
-   - each block owns its next vertexCount vertices, walked in file order, as in MESH.md §9
+   - each block owns its next vertexCount vertices, walked in file order, as in MESH.md Â§9
 5. Test this in libs/forgecore tests against retail graphics.big:
    - every skinned vertex's weights sum to about 1
    - every localBone is less than boneCount
@@ -1686,11 +1839,11 @@ Effort M, value high. This is the prerequisite for ANIM 3DAF playback (docs/form
 #### Edit embedded TMEV timing events inside an ANIM entry
 *gap, effort M, value med*
 
-**Vanilla:** 3DAF chunk TMEV (C3DAnimFileTimingEventChunk: cstr eventName, f32 time) in 624 retail anims (FableTLC ANIM.md §3). The engine chooses embedded or DB events through the 'UseEmbeddedEvents' switch (0x23f9c60, NAnimationEvents code).
+**Vanilla:** 3DAF chunk TMEV (C3DAnimFileTimingEventChunk: cstr eventName, f32 time) in 624 retail anims (FableTLC ANIM.md Â§3). The engine chooses embedded or DB events through the 'UseEmbeddedEvents' switch (0x23f9c60, NAnimationEvents code).
 
 **Fix:** Do this in two steps, and only after the animation reader (Assets > Animations page) exists.
 
-(a) Read-only first, effort S. When the animpreview reader parses an ANIM entry (graphics.big MBANK, u32 decompSize + LZO1X → 3DAF ANRT ⊃ HLPR ⊃ TMEV), decode every TMEV leaf as {cstr eventName, f32 time}. Show those markers on the timeline strip beside the DB events from Data\Misc\game_animation_events.txt/.bin and sound_animation_events.txt/.bin. Label each one "embedded (TMEV)" or "DB". Add a tooltip saying the engine chooses the source through CManager::UseEmbeddedEvents (PDB member at offset 76, per struct_layouts_egor.tsv), not through a vanilla dialog.
+(a) Read-only first, effort S. When the animpreview reader parses an ANIM entry (graphics.big MBANK, u32 decompSize + LZO1X â†’ 3DAF ANRT âŠƒ HLPR âŠƒ TMEV), decode every TMEV leaf as {cstr eventName, f32 time}. Show those markers on the timeline strip beside the DB events from Data\Misc\game_animation_events.txt/.bin and sound_animation_events.txt/.bin. Label each one "embedded (TMEV)" or "DB". Add a tooltip saying the engine chooses the source through CManager::UseEmbeddedEvents (PDB member at offset 76, per struct_layouts_egor.tsv), not through a vanilla dialog.
 
 (b) Editing later, effort M, value low-med. Neither FableForge nor anim_build.py can write TMEV today; anim_build keeps TMEV as a raw leaf (tools/anim_build.py:21).
 - Add a TMEV codec to libs/forgecore (a new anim module ported from FableTLC tools/anim_build.py, checked against EgoCore AnimParser.h/AnimCompiler.h): chunk tag 'TMEV', payload cstr + f32, and when nothing is edited, emit the original raw bytes unchanged.
@@ -1707,11 +1860,11 @@ Do not call this vanilla parity. The vanilla CAnimationEventsDialog writes only 
 **Fix:** Prerequisite: extend forgecore meshpreview (meshpreview.cpp:172) so it keeps the skeleton instead of skipping it. Keep the bone names (the CRC-matched name block), the 60-byte bone records (parent index plus local transform), and the 48-byte and 64-byte matrix arrays (bind and inverse-bind). Also keep the per-vertex bone indices and weights from the AnimatedBlocks groups. Base the layout on EgoCore Meshes (C3DMeshContent) and GltfExporter.h:329-410. This is the same skeleton the viewer/player row needs.
 
 Then:
-(1) Add forgecore/anim.{hpp,cpp}. It reads the graphics.big MBANK entries of types 6, 7 and 9: a u32 decompSize, then one LZO1X stream decoded with the existing fableLzo, then the chunks ANRT, AOBJ, XSEQ (the pooled/palettized quaternion and position tracks with positionFactor, per FableTLC docs/formats/ANIM.md §9), HLPR, MVEC, TMEV, AMSK and XALO. Port it from FableTLC tools/parse_anim_xseq.py and EgoCore Animations/AnimParser.h, and add a regression test that parses all 3,435 retail entries.
+(1) Add forgecore/anim.{hpp,cpp}. It reads the graphics.big MBANK entries of types 6, 7 and 9: a u32 decompSize, then one LZO1X stream decoded with the existing fableLzo, then the chunks ANRT, AOBJ, XSEQ (the pooled/palettized quaternion and position tracks with positionFactor, per FableTLC docs/formats/ANIM.md Â§9), HLPR, MVEC, TMEV, AMSK and XALO. Port it from FableTLC tools/parse_anim_xseq.py and EgoCore Animations/AnimParser.h, and add a regression test that parses all 3,435 retail entries.
 (2) Extend src/glbwriter with skins/joints/inverseBindMatrices, the JOINTS_0/WEIGHTS_0 attributes, and animation channels. Write keys at the source frame rate (the track frame palette) instead of resampling to 30 fps like EgoCore. Sign-align the quaternions and use LINEAR interpolation; offer an optional --bake-fps.
-(3) Add 'forge anim export <ANIM_NAME|index> --mesh <MESH_NAME> [--anim more ...] out.glb' in tools/forge-cli, plus 'forge anim list'. Put Duration, NonLoopingDuration, MovementVector, the raw MVEC, TMEV events and the game/sound_animation_events.txt entries for that anim into the glTF clip under extras.fable, like EgoCore's FableAnimData. Put AMSK in extras too. Keep the coordinate conventions from ANIM.md §5, including the movement_dummy 180-degree rotation; EgoCore GltfExporter.h:183-194 shows the pitfall.
+(3) Add 'forge anim export <ANIM_NAME|index> --mesh <MESH_NAME> [--anim more ...] out.glb' in tools/forge-cli, plus 'forge anim list'. Put Duration, NonLoopingDuration, MovementVector, the raw MVEC, TMEV events and the game/sound_animation_events.txt entries for that anim into the glTF clip under extras.fable, like EgoCore's FableAnimData. Put AMSK in extras too. Keep the coordinate conventions from ANIM.md Â§5, including the movement_dummy 180-degree rotation; EgoCore GltfExporter.h:183-194 shows the pitfall.
 (4) GUI: an Export... button on the Assets > Animations page, reusing the file dialog from gui/textures.cpp.
-(5) Round-trip test: export to glTF, run it through the existing FableTLC anim_build donor-clone path or a later forge anim import, re-parse, and compare per frame with the ANIM.md §11 tolerances. Validate the file with the Khronos glTF validator.
+(5) Round-trip test: export to glTF, run it through the existing FableTLC anim_build donor-clone path or a later forge anim import, re-parse, and compare per frame with the ANIM.md Â§11 tolerances. Validate the file with the Khronos glTF validator.
 
 Effort is M-L, not M, because FableForge has neither an ANIM parser nor skeleton retention yet; S-M once the Animations viewer row has landed. Value: med.
 
@@ -1727,12 +1880,12 @@ Effort is M-L, not M, because FableForge has neither an ANIM parser nor skeleton
 2. For the selected carrier creature, read CCarryingDef.AvailableCarrySlots. That is a vector of CCarrySlotDef indices; its offsets are donor-only, so confirm them against EgoCore or a retail record first. Use CCarryingDef.OverriddenDummyObject if it is set.
 3. Default the slot to the object's ActiveCarrySlot, then offer SecondaryActiveCarrySlot, PassiveCarrySlot and the rest of the carrier's slots. This mirrors vanilla's "<Object's Default Slot>" entry in OnCarryObjectSelected at 0x0292f890.
 4. Resolve the slot's CCarrySlotDef.DummyPosName, or SecondaryDummyPosName for the secondary position, to the carrier mesh's Helper by name or CRC. Helpers come from meshpreview::Geometry::helpers, which is already decoded. Use DummyPosIndex to pick between helpers that share a name.
-5. Draw the carried object's LOD0 mesh (meshpreview::readLod0) with the transform helper.matrix × translate(OffsetCoordRelativeToAttachToDummy). For the passive slot, also scale by PassiveCarrySlotScale.
+5. Draw the carried object's LOD0 mesh (meshpreview::readLod0) with the transform helper.matrix Ã— translate(OffsetCoordRelativeToAttachToDummy). For the passive slot, also scale by PassiveCarrySlotScale.
 
 **Phase 2: attach to the animated bone (M, only after the ANIM player lands).**
 1. Add skeleton/bone-hierarchy decoding to meshpreview. It currently only counts bones. EgoCore's mesh parser is the reference.
 2. Evaluate the pose from the ANIM (3DAF) XSEQ tracks. The format is decoded in FableTLC docs/formats/ANIM.md; EgoCore AnimParser.h is the reference parser.
-3. Each frame, compose boneWorld[helper.bone] × helper.matrix × offset, so the carried object follows the animation, matching vanilla CAnimationDialog carry mode.
+3. Each frame, compose boneWorld[helper.bone] Ã— helper.matrix Ã— offset, so the carried object follows the animation, matching vanilla CAnimationDialog carry mode.
 
 **Data read** (no writes; this is preview-only, as in vanilla): game.bin defs CCarryableDef, CCarryingDef and CCarrySlotDef, plus the carrier and carried object's OBJECT/CREATURE graphics defs; graphics.big MBANK meshes (FableForge already reads these); and, for phase 2, graphics.big ANIM entries (FableForge has no reader yet).
 
@@ -1747,7 +1900,7 @@ Effort is M-L, not M, because FableForge has neither an ANIM parser nor skeleton
 
 1) Document (src/leveledit.cpp/.h): add `std::vector<IncomingLink> linksInto(size_t target) const`. Back it with a lazily built map from target UID to (sourceIndex, ctc, field, label), cached against revision_ and rebuilt when the revision changes. Also add `std::vector<AttachMode> viableAttachModes(size_t target)`, the port of GetViableAttachModesForThing 0x020342f0. It returns {field, ctc, caption}, using the vanilla captions: Village gives "Attach things to village" (VillageUID). A building gives "Attach people who live here" (HomeBuildingUID) and "Attach people who work here" (WorkBuildingUID). An activation receptor gives "Attach triggers to this receptor" (ReceptorUID). Any thing gives "Attach objects" (OwnerUID). A region entrance gives the exit-to-entrance mode. A buyable house gives the wife mode. Also add `bool canAttach(size_t source, const AttachMode&)`: the source must carry the kLinkKinds ctc (or accept its field), and the target must pass linkTargetFits. Before hard-coding the per-type rules, decompile 0x020342f0 and 0x0203fc90 (with capstone, or with DecompAt.java if Ghidra is not locked) so the rules match vanilla exactly.
 
-2) GUI (gui/editor.cpp, selected-thing card after the Links block at about :2977): add an "Attached here" section. List linksInto grouped by field (Residents / Workers / Members / Triggers / Owned objects / Routes to). Clicking a row selects that source, and an x button clears it with setLink(src, ctc, field, 0). Each viable mode gets an "Attach…" button that sets `attachMode_ = {targetIndex, field, ctc, caption}`.
+2) GUI (gui/editor.cpp, selected-thing card after the Links block at about :2977): add an "Attached here" section. List linksInto grouped by field (Residents / Workers / Members / Triggers / Owned objects / Routes to). Clicking a row selects that source, and an x button clears it with setLink(src, ctc, field, 0). Each viable mode gets an "Attachâ€¦" button that sets `attachMode_ = {targetIndex, field, ctc, caption}`.
 
 3) Attach mode (pickAt, editor.cpp:859): when attachMode_ is active, each click on thing T toggles the link: if T's field already equals the target UID, set it to 0; otherwise set it to the target UID. Make each click one undo step, and leave the mode active until Esc or a Stop button. Show a small overlay banner "<target> attaching to: <caption>  [Stop attaching objects]", mirroring CAttachingThingsDialog 0x0290c590. While hovering, tint things that fail canAttach grey and ignore clicks on them. That tinting is the CThingFilter_IsSelectableBasedOnEditorMode behaviour.
 
@@ -1759,6 +1912,14 @@ Effort M, value high: villages, houses and workplaces are among the most common 
 
 #### Cannot link a creature to a home/work building, spouse or parents when the field is absent
 *weakness, effort S, value high*
+
+**Status 2026-09-30:** Home, Work, Father, Mother and Spouse are offered on
+AICreatures and saved in native order. Spouse edits are reciprocal and reject
+an already-linked target. Optional fields disappear on clear or target
+deletion. The GUI checks decoded parent sex when available and warns when
+unknown. Document::setLink also rejects known mismatches when a definition
+lookup is attached; the editor supplies one on map open. Core and retail
+male/female UI tests pass.
 
 **Vanilla:** ATTACH_THINGS modes 'Attach people who live here' / 'who work here', 'Select creature's spouse' and 'Select creature's parents' (captions at 0x0415e958..0x0415fc50; 'Set as father/mother to selected creature', spouse assert at 0x0415f9f8) write the CThingAICreature fields. The persisted order (strings at 0x040d8f04) is HomeBuildingUID, WorkBuildingUID, FatherCreatureUID, MotherCreatureUID, SpouseCreatureUID, OverridingBrainName. They are only written when set: of 1168 retail creature blocks only 4 have HomeBuildingUID and 6 have WorkBuildingUID.
 
@@ -1943,6 +2104,15 @@ Plan:
 Effort: L overall (decoder S, skinned preview M, import L). Value: high.
 
 #### Mesh browser with 3D preview (Assets > Meshes)
+
+**2026-09-29: browsing implemented in Assets > Models.** Lazy render-mesh index,
+case-insensitive name/exact-id search, textured/wireframe orbit preview, geometry
+counts and primitive layout, material texture links, helper names/bones/positions,
+and object/creature/building definition references. Existing imports remain behind
+Import model. Collision, helper-axis overlays, animations, export/place actions and
+replacement remain open. `tests/ui/model_browser.txt` exercises the browser; the
+existing scratch mesh-import test still passes.
+
 *gap, effort M, value high*
 
 **Vanilla:** Thing Properties main tab: 'Find BBM name' (FIND_BBM_NAME_BUTTON, GetBBMFromMeshName 0x02921bf0) maps a mesh to its source .bbm. 'Mesh From File' (*.bbm) swaps a raw .bbm onto a thing with no bank rebuild (CEnginePrimitiveAnimatingMeshFromFile ctor 0x01e0abd0). Engine survey reports triangles, vertices and texture memory per primitive (editor_engine_stats.csv). Debug draw toggles: ConsoleSetDrawRenderMeshes 0x018cd870, ...PhysicsMeshes 0x018cd990, ...CameraPhysicsMeshes 0x018cd9f0, ...NavigationMeshes 0x018cda20.
@@ -1954,7 +2124,7 @@ Effort: L overall (decoder S, skinned preview M, import L). Value: high.
 
 2) **Orbit preview.**
    - Generalise Renderer::thumbnail (renderer.cpp:510) into an offscreen preview target that is not cached by key and is re-rendered each frame. It takes a yaw/pitch/distance camera and a mode flag: textured, wireframe (an RS with D3D11_FILL_WIREFRAME) or helpers overlay (a small axis gizmo per meshpreview::Helper matrix).
-   - Feed it meshpreview::readLod0 → the same Mesh/Image conversion editor.cpp:3450 uses, then show it with ImGui::Image and drag-to-orbit.
+   - Feed it meshpreview::readLod0 â†’ the same Mesh/Image conversion editor.cpp:3450 uses, then show it with ImGui::Image and drag-to-orbit.
    - Collision-hull mode is a follow-up. First extend meshpreview with a hull decode, taking the layout from the writer in src/meshimport* and cross-checking it against EgoCore Meshes/MeshParser.h.
 
 3) **Info panel** (all from meshpreview::Geometry):
@@ -1966,7 +2136,7 @@ Effort: L overall (decoder S, skinned preview M, import L). Value: high.
 4) **Actions:**
    - "Export .glb" reuses glbwriter (as foliageexport/terrainexport do).
    - "Place in map" picks a def from "Used by" and enters the existing Add-object placement.
-   - "Replace mesh…" runs the meshimport pipeline targeting an existing id instead of a new MESH_<NAME>, with a one-time .forge-orig backup.
+   - "Replace meshâ€¦" runs the meshimport pipeline targeting an existing id instead of a new MESH_<NAME>, with a one-time .forge-orig backup.
 
 5) **Vanilla parity mapping.**
    - Draw-mode toggles correspond to ConsoleSetDrawRenderMeshes/PhysicsMeshes/CameraPhysicsMeshes/NavigationMeshes (0x018cd870/990/9f0/a20). Physics/camera-physics are the hull follow-up; navigation belongs to the map viewport, not this page.
@@ -2001,7 +2171,7 @@ Effort: L overall (decoder S, skinned preview M, import L). Value: high.
 - Ingame.lug carries an event-tag map.
 - Port them from EgoCore Audio/LugParser.h and MetParser.h, cross-checked against tools/parse_lug.py.
 
-(2) Add an Xbox IMA ADPCM (0x0069) to PCM16 decoder, a small pure function, ported from tools/xbadpcm.py or the EgoCore helpers. Add a WAV export. For the .ogg music, vendor stb_vorbis.
+(2) Xbox IMA ADPCM (0x0069) to PCM16 decoding is implemented in `forge/xboxadpcm.hpp`; fixed mono/stereo fixtures and retail samples from all four dialogue banks match FableTLC's independent Python decoder by sample count and PCM CRC32. `File::wavPcm16` wraps a selected clip in standard PCM WAV. For the .ogg music, vendor stb_vorbis.
 
 (3) Vendor miniaudio, as EgoCore AudioBackend.h does, and feed it decoded PCM buffers with play, stop and loop controls.
 
@@ -2081,10 +2251,15 @@ Effort M; value high.
 
 Phase 2 (M, med value): "Play line". This mirrors CThingPropertyDialog::PlayCurrentSpeech at 0x029203b0.
 - Port a speech-bank reader from EgoCore Audio/LugParser.h and MetParser.h, resolving the entry's SpeechBank/Identifier to a sample.
-- Play it through a small miniaudio backend (EgoCore AudioBackend.h).
+- Assets > Dialogue now plays a chosen decoded .lut clip through the Windows waveform output device; keep the native PlayCurrentSpeech jump from a selected thing on the backlog.
 - Flag lines with no lipsync entry in dialogue.big, like the runtime's "No lipsync bank entry for speech index" warning. EgoCore Lipsync/* has the parser.
 
-Neither .lut/.lug/.met nor dialogue.big lipsync is parsed in FableForge today, so Phase 1 should ship without playback.
+The four dialogue .lut banks have a lazy read/index path and all 20,214 English
+clip IDs join a nonempty lipsync entry in the paired sub-bank. .lug/.met and
+Assets > Dialogue now plays a selected Xbox ADPCM line and shows its paired
+lip sync and resolves the linked subtitle through `*snds.bin` and `text.big`.
+The planned Sounds/Text pages still need indexed browsing,
+editing and a jump from the selected thing.
 
 #### Model import is static-only and cannot replace an existing mesh
 *weakness, effort L, value med*
@@ -2100,9 +2275,9 @@ Neither .lut/.lug/.met nor dialogue.big lipsync is parsed in FableForge today, s
   - Set LODCount=1 and LODSizes from the new payload.
   - Keep the texture ids unless a new texture is given.
 - Refuse this path for type 2/4/5 (animated) entries until step 2 exists.
-- Reuse the existing backupOnce, the gameRunningIn guard and the baseRoot→outRoot modpack recipe path, so it works as a forge_pack.json step.
+- Reuse the existing backupOnce, the gameRunningIn guard and the baseRootâ†’outRoot modpack recipe path, so it works as a forge_pack.json step.
 - Leave the defs alone: every OBJECT whose Graphic.modelId points at the id picks up the new mesh.
-- GUI: a "Replace…" button on the Models page, with the mesh chosen from a searchable MESH_ list. Show a before/after preview with meshpreview readLod0 in the existing viewport.
+- GUI: a "Replaceâ€¦" button on the Models page, with the mesh chosen from a searchable MESH_ list. Show a before/after preview with meshpreview readLod0 in the existing viewport.
 - Verify: readLod0 round-trip in tests/test_export.cpp, then one in-game probe via tools/ingame/release_probes.py (replace MESH_BARREL-type prop).
 
 2) **Skinned or animated import (effort L, value med).** This is needed for retail animations to keep working on a remodelled creature or hero.
@@ -2121,23 +2296,30 @@ Skip LOD authoring. Retail-compatible LODCount=1 plus the ghost LOD already work
 #### Lipsync for new or edited voice lines
 *gap, effort L, value med*
 
-**Vanilla:** The runtime looks up a lipsync entry per speech index ('No lipsync bank entry for speech index'). dialogue.big type 1 entries are Lipsync Entries (12,134 entries).
+**Vanilla:** The runtime looks up a lipsync entry per speech index ('No lipsync bank entry for speech index'). The retail English dialogue.big contains 20,214 nonempty type-1 LIPSYNC entries across four banks (plus 291 empty/non-type-1 records), measured by the Forge and FableTLC roundtrip readers on 2026-09-30.
 
-**Fix:** 1. Add forgecore/lipsync.hpp to parse and write the grammar documented in FableTLC tools/lipsync_build.py:
+**Fix:** 1. `forge/lipsync.hpp` and `lipsync.cpp` now parse and write the grammar documented in FableTLC tools/lipsync_build.py:
    - u32 visemeCount, then {u8 id; cstr mnemonic} per viseme
    - u32 fps (43)
    - u32 frameCount, then per frame: u8 keyCount, then {u8 visemeId; u8 weight} per key
    - Info block: f32 duration, where frameCount == ceil(duration * fps)
-   - Validate it by porting lipsync_build.py --roundtrip as a ctest: it must re-encode every retail entry in dialogue.big byte-exact. Reuse the existing BIG container writer in big.hpp.
+   - `fableforge_lipsync_tests` checks a fixed byte fixture and malformed boundaries under CTest. Against the installed English dialogue.big it re-encodes all 20,214 nonempty type-1 entries byte-exact, including their four-byte Info duration. `tools/check_all.py` runs this retail pass when the bank is available. FableTLC's independent Python reader reports the same 20,214/20,214 result. An exact-sub-bank upsert now edits or adds a type-1 entry in memory and round-trips through the BIG writer. A scratch retail rebuild preserved 20,504 untouched records and the independent Python reader parsed all 20,215 resulting nonempty entries byte-exact. Assets > Dialogue exports scratch archives and stores selected lines as Forge pack recipes; wire this API into the planned Sounds page too.
 2. Port EgoCore Lipsync/SpeechAnalyzer.h (LoadWav and AnalyzeWav into CLipSyncData) as forgecore/speechanalyze.hpp. This generates viseme curves from a 22050 Hz WAV.
-3. This needs .lut dialogue-bank support first (a clip's Index is the LIPSYNC ID). Port EgoCore Audio/LugParser.h and MetParser.h, plus the FableTLC tools/dialogue_pipeline.py / xbadpcm.py logic.
+3. The `forge/lut.hpp` read path now indexes clips by their exact paired-bank Index. Retail English validates 20,214/20,214 audio/lipsync IDs, with maximum duration delta under 0.000233 s. `File::pcm16(index)` decodes a selected Xbox ADPCM clip and matches the independent FableTLC decoder on samples from all four banks; `wavPcm16` exports PCM WAV bytes. Assets > Dialogue plays that PCM through a Windows waveform device and follows its sample position. Add the write path using FableTLC tools/dialogue_pipeline.py / xbadpcm.py; .lug/.met support remains separate for effects and ambient sounds.
+   Bind audio lookup to the selected language and paired .lut bank as well as Sound ID. EgoCore's September 2026 `EnsureDialogueAudioLoaded` caches by Sound ID alone and falls back across all four dialogue .lut names and every installed language; that can preview a different line when IDs overlap or the selected language is missing. A failed lookup should show "audio unavailable" while keeping the viseme preview usable.
 4. Add a "New voiced line" flow to the planned Sounds/Text pages:
    - Append the WAV to the .lut and take the next Index N.
    - Add the TEXT_ entry with a speech ref to that bank and index, through textbig.hpp.
-   - Add LIPSYNC entry Dialogue_<N> to the paired sub-bank. For example, Dialogue.lut pairs with LIPSYNC_ENGLISH_MAIN.
+   - Add LIPSYNC entry Dialogue_<N> to the paired sub-bank. For example, Dialogue.lut pairs with LIPSYNC_ENGLISH_MAIN. Forge pack recipes now compose these entries by language, bank and Sound ID in load order.
    - Let the user edit the generated curves.
-   - Emit all three files as mod-pack overrides, never over retail.
-5. Preview comes later. It needs skinned animation preview plus the ANIM_*_PHONEME_* pose anims (docs/engine/DEMON_DOOR_FACE.md). Until then, preview is audio playback with a viseme timeline.
+   - Emit the audio and text files as pack overrides and the lip sync entry as a record recipe, never over retail.
+5. Preview after the codec, audio lookup, skeleton and animation readers. EgoCore's 2026-09-30 `300f949` commit is a working reference (`EgoCore/Lipsync/LipSyncProperties.h`, `UpdateLipSyncBones` and `DrawLipSyncProperties`): a resizable head viewport beside editable frames; play/pause, stop, loop, mute and a scrubber; five retail head presets (bandit lieutenant, female/male villager, Demon Door, male child); frame-to-frame viseme interpolation; and a closed-mouth MM pose for the unused weight. Forge has `lipsync::sample` for interpolation and resting weight, checked with two-frame and silent fixtures. Assets > Dialogue has a scrubbed viseme timeline with exact language/bank/ID selection, exercised by a retail GUI test. `lipsync_preset.hpp` resolves and audits all five head presets against retail graphics.big, including the Demon Door's AH-to-AI and SZ-to-ST mappings; the UI shows missing assets without losing the timeline. `meshpreview::Geometry` decodes their skeletons and per-vertex skin weights, independently matched across all five retail heads. `forge/animation.hpp` decodes 3DAF/XSEQ pools and palettes; 30 phoneme assets match FableTLC by field CRC and all 3,435 retail animations parse with matching track totals. `forge/headpose.hpp` blends first-frame phoneme tracks over the bind skeleton and skins vertices and normals on the CPU. The Dialogue viewport renders the textured head in its own orbitable target above the viseme timeline; the audio device clock drives both. All five retail heads load in the GUI script, and the pose test checks neutral identity, first-phoneme movement and framing of all 30 retail phoneme tracks across the five heads. The page now edits byte weights and frame/key rows, stages edits across Sound IDs and banks, and exports a new verified `dialogue.big` without overwriting existing files. `tools/test_dialogue_edit.py` proves a two-bank staged export against retail English and checks pack authoring. `fableforge_lipsync_pack_tests` checks two-pack record composition. Audio-bank writing remains a follow-up; subtitle lookup now joins 20,088 English voiced strings through the bank-specific `*snds.bin` tables, with a retail Demon Door check.
+
+   The retail dialogue edit harness invokes `forge-tools mods build` with two differing record recipes and with a recipe pack plus a whole-file archive pack in both orders. It verifies the winning weight/frame count, same-line conflict report and skipped-recipe report; the GUI test opens Mods > Check conflicts and finds the lip sync row.
+
+   Playback parity matters: derive the preview time from the audio player's actual position while audio is playing, then use that time for pose and frame highlighting. Forge's Dialogue browser now does this with `waveOutGetPosition`, and its transport seeks in audio sample time. EgoCore currently advances the pose with UI `DeltaTime` and seeks audio using `lipSyncTime / lipSyncDuration`; those can drift when the clip duration differs from the lipsync Info duration. Validate silence, a partially weighted frame, missing MM pose, a missing phoneme animation, a different-length WAV, loop boundaries and each head preset against retail data.
+
+   Source: https://github.com/eeeeeAeoN/EgoCore/blob/300f949/EgoCore/Lipsync/LipSyncProperties.h (reviewed 2026-09-30). This source is a behavior reference; Forge's own codecs and renderer need retail roundtrip and image checks.
 
 Effort L. Value med.
 
@@ -2212,7 +2394,7 @@ Nothing touches binary banks, so the risk is low, and the output takes effect in
 2) Thumbnail grid (M). Add a List/Grid toggle. The grid uses ImGuiListClipper over rows of N cells, and only visible cells are decoded. A new renderer_.thumb(key=(file,id)) resamples mip0 down to about 96px, keeps an LRU of about 512 SRVs, and decodes on a worker thread. swatch() is keyed only by id and never evicts, so it cannot be reused directly.
 3) Preview toggles (S). Add RGB/A/RGBA channel buttons: swizzle alpha into gray on the CPU, and draw RGBA on a checkerboard. Add a mip slider that decodes mip k. This needs a decodeMip(k) next to forge::terraintex::decodeMip0, walking the per-mip sizes that the subheader already carries (mips are counted at texturebrowse.cpp:104).
 4) Frames (S-M). Where the entry sub-header frameCount > 1 (the sprite sheets and sequences that terraintex already reads frameHeight for), add a frame stepper or play button that decodes frame k at offset k*frameBytes.
-5) "Use in UI element…" (S). Selecting a texture opens a CUIDef picker (search game.bin CUIDef names plus a state index). It calls the forge::uidef::setStateGraphicIndex path already used by uiSetGraphic (main.cpp:7113), moved into a shared lib function, and writes CompiledDefs to the out-root. Describe this as editing game.bin, not frontend.big.
+5) "Use in UI elementâ€¦" (S). Selecting a texture opens a CUIDef picker (search game.bin CUIDef names plus a state index). It calls the forge::uidef::setStateGraphicIndex path already used by uiSetGraphic (main.cpp:7113), moved into a shared lib function, and writes CompiledDefs to the out-root. Describe this as editing game.bin, not frontend.big.
 Every format involved is already parsed: forgecore BIG, terraintex, the DXT1/DXT3/ARGB decoders, and uidef/defschema. No new format RE is needed. Value: medium (UI and quest-card art modding).
 
 #### Asset reference graph / where-used
@@ -2236,6 +2418,21 @@ Every format involved is already parsed: forgecore BIG, terraintex, the DXT1/DXT
 
 #### Particle effects are read-only
 *weakness, effort M, value low*
+
+2026-09-29: the Assets > Effects inspector described in (1) below is implemented
+and UI-tested, including name/id search, sprites and texture links, mesh links,
+light details and partial-decode status. Install-root isolation and owning decoded
+effect handles cover switching/refresh without stale readers. Selected-effect
+sprite playback in (2) now supports deterministic normal emission/motion, sprite
+animation, Play/Pause/Restart/Step and a dedicated orbitable viewport. Unsupported
+active components are reported. Bounded mesh playback now shares populations with
+sprites and renders textured geometry with size/tint fades; FL10 WARP and native
+mesh-only pause/restart/pixel checks pass. Authored bounds and fixed XYZ/axis
+rotation are supported; random initial and spin-axis rotations now use a
+separate deterministic preview RNG. Direction/game orientation remains
+unsupported. Light rendering, placed-emitter animation
+and editing/writing in (4) remain open. This is a scoped implementation informed
+by EgoCore, not full engine or upstream feature parity.
 
 **Vanilla:** ConsoleDumpParticleInfo exists in the console. Things get particles through the CTC property tabs.
 

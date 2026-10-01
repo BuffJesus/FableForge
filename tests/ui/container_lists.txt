@@ -1,0 +1,83 @@
+# In-memory edits only; actual list combos/buttons, no install writes.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+frames 3
+assert_state doc_changes 0
+assert_list CTCContainerRewardHero ContainerContents 0
+click btn_selection_properties
+frames 4
+reveal list_add_CTCContainerRewardHero
+frames 3
+screenshot build/ui/container_empty.png
+click list_add_CTCContainerRewardHero
+frames 3
+text_input OBJECT_APPLE_GREEN_01
+frames 3
+assert_widget list_choice_OBJECT_APPLE_GREEN_01
+screenshot build/ui/container_picker.png
+click list_choice_OBJECT_APPLE_GREEN_01
+frames 3
+assert_list CTCContainerRewardHero ContainerContents 1 0 OBJECT_APPLE_GREEN_01
+reveal list_add_CTCContainerRewardHero
+click list_add_CTCContainerRewardHero
+frames 3
+text_input OBJECT_APPLE_RED_01
+frames 3
+click list_choice_OBJECT_APPLE_RED_01
+frames 3
+assert_list CTCContainerRewardHero ContainerContents 2 1 OBJECT_APPLE_RED_01
+reveal list_entry_0_CTCContainerRewardHero
+click list_entry_0_CTCContainerRewardHero
+frames 3
+text_input OBJECT_APPLEPIE
+frames 3
+click list_choice_OBJECT_APPLEPIE
+frames 3
+assert_list CTCContainerRewardHero ContainerContents 2 0 OBJECT_APPLEPIE
+clear_toasts
+screenshot build/ui/container_filled.png
+reveal list_remove_CTCContainerRewardHero_0
+click list_remove_CTCContainerRewardHero_0
+frames 3
+assert_list CTCContainerRewardHero ContainerContents 1 0 OBJECT_APPLE_RED_01
+undo
+assert_list CTCContainerRewardHero ContainerContents 2 0 OBJECT_APPLEPIE
+undo
+assert_list CTCContainerRewardHero ContainerContents 2 0 OBJECT_APPLE_GREEN_01
+undo
+assert_list CTCContainerRewardHero ContainerContents 1 0 OBJECT_APPLE_GREEN_01
+undo
+assert_list CTCContainerRewardHero ContainerContents 0
+assert_state doc_changes 0
+reveal btn_selection_inspector_close
+click btn_selection_inspector_close
+# Existing creature-family editing remains usable after removing the final entry.
+place_spawner 10 2 BEETLES_02 ForgeListTest
+frames 4
+click btn_selection_properties
+frames 3
+reveal list_remove_CTCCreatureGenerator_0
+click list_remove_CTCCreatureGenerator_0
+frames 3
+assert_list CTCCreatureGenerator CreatureFamilies 0
+reveal list_add_CTCCreatureGenerator
+click list_add_CTCCreatureGenerator
+frames 3
+text_input HOBBES_02_A
+frames 3
+click list_choice_HOBBES_02_A
+frames 3
+assert_list CTCCreatureGenerator CreatureFamilies 1 0 HOBBES_02_A
+screenshot build/ui/container_family.png
+undo
+undo
+undo
+assert_state doc_changes 0
+quit

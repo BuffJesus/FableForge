@@ -1,0 +1,33 @@
+# Compact 800x600 / UI scale 1.5: all panes fit and their menus remain operable.
+wait_maps
+wait_ready
+set uiscale 1.5
+select StartOakValeWest
+wait_loaded
+frames 3
+assert_widget combo_view_mode
+assert_widget btn_view_layers
+assert_widget seg_panel
+screenshot build/ui/compact_layout_main.png
+click combo_view_mode
+frames 2
+assert_widget mode_view_Wireframe
+click mode_view_Wireframe
+assert_state mode Wireframe
+click btn_view_layers
+frames 2
+assert_widget check_view_foliage
+screenshot build/ui/compact_layout_layers.png
+click check_view_foliage
+frames 2
+assert_state preview_foliage 0
+click seg_panel
+frames 2
+click seg_panel
+frames 2
+assert_widget mode_panel_Edit
+screenshot build/ui/compact_layout_modes.png
+click mode_panel_Edit
+frames 2
+assert_state edit_mode 1
+quit

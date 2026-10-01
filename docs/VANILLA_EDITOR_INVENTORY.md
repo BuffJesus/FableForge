@@ -620,3 +620,44 @@ the view; the unlock-to-load step is hidden behind a backwards label; mouse-whee
 on the view, not the cursor; three modes report "Unknown"; theme fields are raw text with
 nonsense defaults; the nav overlay hides the terrain shape; there are unlabelled buttons; the
 boot takes ~4 minutes and three asserts.
+
+## 2026-09-30 live editor retry
+
+With retail Fable closed, the debug `FableWin.exe` launched and accepted profile
+`A` and editor option `4`. Before a usable editor view appeared, it stopped on
+`lib_threaded_file.cpp:720` ("highest priority objects cannot fail to allocate").
+Windows marked the window Not Responding and placed a ghost window over it;
+automated keys, clicks and posted messages did not advance the assertion. The
+user closed the stuck editor. This was a failed *retry*: the 2026-09-28 runs in
+sections 11 and 11b did enter and explore the editor, including its 2D map view
+and dialogs. No new live UI or behavior evidence came from the 2026-09-30 run;
+the earlier observations and native analysis remain valid.
+
+## 2026-09-29 creature InitialPos follow-up
+
+Read-only pefile/capstone inspection of `debug_build/FableWin.exe`, SHA256
+`a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`:
+`PaintInputDragCarriedThingTo`02997650 assigns position at02997805, checks type1/2
+at029979c7/029979e1 and calls thunk017ff38c at02997a07. Thunk targets
+`SetInitialPos`02997b50, which copies XYZ into creature+0x138. No equality guard
+surrounds the call. `DropCarriedThingAt`02996e10 through ret0299749e has no direct
+call to that thunk/setter (not a proof about arbitrary indirect callees).
+Evidence: `build/creature-initialpos-native.txt`.
+
+Forge now synchronizes existing saved InitialPos fields for actual position
+changes and rebases pasted creatures with the destination map origin. Pure
+rotation/scale preserves separately authored initial values; absent keys remain
+absent. These preservation choices are explicit, not claims that every native
+editing path has identical behavior.
+
+### Surface cycling disassembly follow-up (2026-09-29)
+
+FableWin.exe SHA256:
+`a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845`.
+PaintInputCycleThingZOverSurfaces `0x02998ce0`: lock check `0x02998f09`,
+ground-height comparison `0x029990d0` (tolerance0.0001), search starts at
+terrain+150 (`0x029990df`) when on terrain and Z-0.1 otherwise (`0x029990ed`).
+GetHeightZBelowAt call `0x0299916a` uses physics radius/CIsNotThing. Owned-child
+movement hook `0x02999344` is not implemented by Forge's ordinary group gizmo;
+render-instance child attachment is a different mechanism. Forge's H action uses
+visible triangles and reports this narrower support contract; End remains terrain.

@@ -2,8 +2,10 @@
 #include <fstream>
 #include "backups.hpp"
 #include "leveledit.hpp"
+#include "vanilla_props.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -12,6 +14,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <limits>
 #include <set>
 #include <unordered_map>
 #include <stdexcept>
@@ -39,6 +42,25 @@ constexpr size_t kUndoDepth = 128;
 
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(uint8_t(c))); return s; }
 
+bool placeholderTrackName(const std::string& name) {
+    return name.empty() || name == "INVALID" || name == "NULL" ||
+           name.rfind("TrackTempName", 0) == 0;
+}
+
+std::string trackNameOf(const forge::tng::Thing& thing) {
+    std::string name;
+    for (const auto& property:thing.properties)
+        if (lower(property.key)=="scriptname") name=property.value;
+    return name;
+}
+
+bool editBrushCopyable(const forge::tng::Thing& thing) {
+    const std::string type = lower(thing.type);
+    // CThingFilter_IsEditBrushCopyable rejects these five physical thing types.
+    return type != "village" && type != "switch" && type != "physicalswitch" &&
+           type != "marker" && type != "tracknode" && !thing.findCtc("CTCCreatedEntity");
+}
+
 std::string unquote(std::string v) {
     if (v.size() >= 2 && v.front() == '"' && v.back() == '"') v = v.substr(1, v.size() - 2);
     return v;
@@ -60,10 +82,20 @@ namespace {
 // Every tng::File edit re-indexes the whole file, so a frame is ~12 re-indexes: fine on one
 // thing, slow when pasting dozens into a big map (Document::paste stages each block in its own
 // one-thing file and inserts the finished text once).
-void writeFrame(forge::tng::File& file, size_t index, const Frame& frame) {
+void writeInitialPosition(forge::tng::File& file,size_t index,const float local[3],int worldX,int worldY) {
+    // Preserve absent keys and synchronize existing copies only. Creature placement
+    // serializes world-space XY, unlike the map-local physics frame.
+    const char* keys[]={"InitialPosX","InitialPosY","InitialPosZ"};
+    const float world[]={local[0]+float(worldX),local[1]+float(worldY),local[2]};
+    for (int axis=0;axis<3;++axis)
+        if (file.things()[index].find(keys[axis])) file.setThingPropertyAll(index,keys[axis],formatFloat(world[axis]));
+}
+
+void writeFrame(forge::tng::File& file, size_t index, const Frame& frame,int worldX,int worldY,bool rebaseInitial=false) {
     const auto* phys = physicsOf(file.things()[index]);
     if (!phys) throw std::runtime_error("setFrame: thing has no physics block");
     const std::string ctc = phys->name;
+    const bool moved=propF(*phys,"PositionX",0)!=frame.pos[0] || propF(*phys,"PositionY",0)!=frame.pos[1] || propF(*phys,"PositionZ",0)!=frame.pos[2];
     file.setCtcProperty(index, ctc, "PositionX", formatFloat(frame.pos[0]));
     file.setCtcProperty(index, ctc, "PositionY", formatFloat(frame.pos[1]));
     file.setCtcProperty(index, ctc, "PositionZ", formatFloat(frame.pos[2]));
@@ -76,6 +108,9 @@ void writeFrame(forge::tng::File& file, size_t index, const Frame& frame) {
     const bool hasScale = file.things()[index].find("ObjectScale").has_value();
     if (std::fabs(frame.scale - 1.0f) > 1e-6f) file.setThingProperty(index, "ObjectScale", formatFloat(frame.scale));
     else if (hasScale) file.removeThingProperty(index, "ObjectScale");
+    // FableWin drag02997650 calls SetInitialPos02997b50. Pure orientation/scale
+    // edits preserve separately authored initial positions; pasted blocks rebase.
+    if (moved || rebaseInitial) writeInitialPosition(file,index,frame.pos,worldX,worldY);
 }
 } // namespace
 
@@ -252,10 +287,22 @@ bool Document::openText(const std::string& mapName, std::string tngText, std::st
     try { file_ = forge::tng::File::parseText(std::move(tngText), mapName + ".tng"); }
     catch (const std::exception& e) { error = std::string("cannot parse .tng: ") + e.what(); return false; }
     mapName_ = mapName;
+    worldX_=worldY_=worldSlot_=0; // open() resolves the new world's origin afterward
     original_ = file_.serialize();
     undo_.clear(); redo_.clear();
     placementSection_ = "NULL";   // per document: a quest section chosen on another map must not carry over
     trackTempCounter_ = 0;
+    for (const auto& thing:file_.things()) {
+        if (lower(thing.type)!="tracknode") continue;
+        const std::string name=trackNameOf(thing);
+        constexpr std::string_view prefix="TrackTempName";
+        if (name.rfind("TrackTempName",0)!=0 || name.size()==prefix.size()) continue;
+        uint64_t number=0;
+        const char* first=name.data()+prefix.size();
+        const auto parsed=std::from_chars(first,name.data()+name.size(),number);
+        if (parsed.ec==std::errc{} && parsed.ptr==name.data()+name.size() && number<UINT64_MAX)
+            trackTempCounter_=std::max(trackTempCounter_,number+1);
+    }
     soundListGrew_ = false;
     ++revision_;
     return true;
@@ -268,7 +315,7 @@ ThingSummary Document::summary(size_t index) const {
     const auto& t = file_.things()[index];
     s.type = t.type;
     s.definition = t.definitionType();
-    s.scriptName = t.scriptName();
+    s.scriptName = lower(t.type)=="tracknode" ? trackNameOf(t) : t.scriptName();
     if (s.scriptName == "NULL") s.scriptName.clear();
     s.uid = uidOf(index);
     s.hasFrame = physicsOf(t) != nullptr;
@@ -286,6 +333,100 @@ std::optional<size_t> Document::indexOfUid(uint64_t uid) const {
     for (size_t i = 0; i < file_.things().size(); ++i)
         if (uidOf(i) == uid) return i;
     return std::nullopt;
+}
+
+namespace {
+std::vector<std::optional<size_t>> validOwnedParents(const std::vector<forge::tng::Thing>& things) {
+    auto strictUid=[](const std::string& raw)->std::optional<uint64_t> {
+        const std::string value=unquote(raw);
+        if (value.empty() || value.front()<'0' || value.front()>'9') return std::nullopt;
+        uint64_t uid=0;
+        const auto parsed=std::from_chars(value.data(),value.data()+value.size(),uid);
+        if (parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size() || !uid) return std::nullopt;
+        return uid;
+    };
+    std::vector<std::optional<uint64_t>> ids(things.size());
+    std::map<uint64_t,size_t> declarations;
+    for (size_t i=0;i<things.size();++i) {
+        size_t count=0;
+        for (const auto& property:things[i].properties) if (lower(property.key)=="uid") {
+            ++count;
+            ids[i]=strictUid(property.value);
+            if (ids[i]) ++declarations[*ids[i]];
+        }
+        if (count!=1) ids[i].reset();
+    }
+    std::map<uint64_t,size_t> owners;
+    for (size_t i=0;i<ids.size();++i) {
+        if (ids[i] && declarations[*ids[i]]==1) owners[*ids[i]]=i;
+        else ids[i].reset();
+    }
+    std::vector<std::optional<size_t>> parents(things.size());
+    for (size_t i=0;i<things.size();++i) {
+        if (!ids[i]) continue;
+        size_t blocks=0,fields=0;
+        std::optional<uint64_t> owner;
+        for (const auto& block:things[i].ctcBlocks) if (lower(block.name)=="ctcownedentity") {
+            ++blocks;
+            for (const auto& property:block.properties) if (lower(property.key)=="owneruid") {
+                ++fields; owner=strictUid(property.value);
+            }
+        }
+        if (blocks!=1 || fields!=1 || !owner) continue;
+        const auto found=owners.find(*owner);
+        if (found!=owners.end()) parents[i]=found->second;
+    }
+    return parents;
+}
+} // namespace
+
+std::vector<std::pair<size_t,size_t>> Document::ownedTree(const std::vector<size_t>& roots) const {
+    const auto& things=file_.things();
+    std::vector<std::vector<size_t>> children(things.size());
+    const auto parents=validOwnedParents(things);
+    for (size_t i=0;i<parents.size();++i) if (parents[i]) children[*parents[i]].push_back(i);
+    std::vector<size_t> queue;
+    std::vector<std::pair<size_t,size_t>> result;
+    std::vector<bool> visited(things.size(),false);
+    for (size_t root:roots) if (root<things.size() && !visited[root]) {
+        visited[root]=true; queue.push_back(root);
+    }
+    for (size_t next=0;next<queue.size();++next) for (size_t child:children[queue[next]])
+        if (!visited[child]) { visited[child]=true; queue.push_back(child); result.push_back({child,queue[next]}); }
+    return result;
+}
+
+std::vector<size_t> Document::ownedDescendants(const std::vector<size_t>& roots) const {
+    std::vector<size_t> result;
+    for (const auto& [child,parent]:ownedTree(roots)) result.push_back(child);
+    return result;
+}
+
+std::vector<std::pair<size_t,Frame>> Document::ownedFramesAfter(const std::vector<std::pair<size_t,Frame>>& roots) const {
+    std::vector<size_t> indices;
+    std::map<size_t,Frame> moved;
+    for (const auto& [index,frame]:roots) if (index<thingCount() && !moved.count(index)) {
+        Frame before;
+        if (frameOf(index,before)) { indices.push_back(index); moved[index]=frame; }
+    }
+    std::vector<std::pair<size_t,Frame>> result;
+    for (const auto& [child,parent]:ownedTree(indices)) {
+        const auto now=moved.find(parent);
+        Frame oldParent, oldChild;
+        if (now==moved.end() || !frameOf(parent,oldParent) || !frameOf(child,oldChild)) continue;
+        Frame a=oldParent,b=now->second,c=oldChild,after;
+        a.scale=b.scale=c.scale=1.0f;
+        float ma[16],mb[16],mc[16],inv[16],delta[16],matrix[16];
+        frameToMatrix(a,ma); frameToMatrix(b,mb); frameToMatrix(c,mc);
+        if (!invert(ma,inv)) continue;
+        multiply(inv,mb,delta);
+        multiply(mc,delta,matrix);
+        if (!matrixToFrame(matrix,after)) continue;
+        after.scale=oldChild.scale;
+        moved[child]=after;
+        result.push_back({child,after});
+    }
+    return result;
 }
 
 bool Document::frameOf(size_t index, Frame& out) const {
@@ -340,7 +481,7 @@ Document::Fragment Document::extract(const std::vector<size_t>& indices) const {
     Fragment f;
     int n = 0;
     for (size_t i : indices) {
-        if (i >= file_.things().size()) continue;
+        if (!isEditBrushCopyable(i)) continue;
         Fragment::Item item;
         item.block = file_.thingBlockText(i);
         item.hasFrame = frameOf(i, item.frame);
@@ -351,18 +492,22 @@ Document::Fragment Document::extract(const std::vector<size_t>& indices) const {
     return f;
 }
 
+bool Document::isEditBrushCopyable(size_t index) const {
+    return index < file_.things().size() && editBrushCopyable(file_.things()[index]);
+}
+
 std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3], bool dropToGround) {
     std::vector<size_t> out;
     if (fragment.empty()) return out;
     beginBatch();
-    pushUndo();
     try {
         // each block is edited in a one-thing staging file (cheap re-index) and inserted into the
         // map once: editing it in place re-indexed the whole .tng a dozen times per thing
         uint64_t uid = forge::thingplacer::nextUid(file_);
         for (const auto& item : fragment.items) {
             auto stage = forge::tng::File::parseText("Version 2;\r\n" + item.block, "paste");
-            if (stage.things().empty()) continue;
+            if (stage.things().empty() || !editBrushCopyable(stage.things()[0])) continue;
+            if (out.empty()) pushUndo();
             while (!forge::thingplacer::uidIsFree(file_, uid)) ++uid;
             stage.setThingProperty(0, "UID", std::to_string(uid++));
             if (stage.things()[0].find("ScriptName")) stage.setThingProperty(0, "ScriptName", "NULL");
@@ -370,7 +515,7 @@ std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3],
                 Frame nf = item.frame;
                 for (int k = 0; k < 3; ++k) nf.pos[k] = at[k] + (item.frame.pos[k] - fragment.centre[k]);
                 if (dropToGround) if (const auto h = groundHeight(nf.pos[0], nf.pos[1])) nf.pos[2] = *h + (item.frame.pos[2] - fragment.centre[2]);
-                writeFrame(stage, 0, nf);
+                writeFrame(stage, 0, nf,worldX_,worldY_,true);
             }
             const std::string block = stage.thingBlockText(0);
             const size_t idx = file_.sectionNames().empty() ? file_.insertThingBlockBefore(file_.things().size(), block)
@@ -579,9 +724,11 @@ void Document::endStroke() {
         return;
     }
     const bool themes = working_->themeIndex != terrain_->themeIndex || working_->themeStrength != terrain_->themeStrength;
+    const auto before = terrain_;
     terrain_ = std::shared_ptr<const TerrainState>(working_.release());
     hf_.reset();
     writeTerrainToLevel();
+    if (before->heights != terrain_->heights) reseatGroundedThings(*before, 1.0f, false);
     ++revision_;
     ++terrainRev_;
     if (themes) ++themeRev_;
@@ -599,9 +746,11 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
     }
     if (!changed) return true;
     pushUndo();
+    const auto before = terrain_;
     terrain_ = std::shared_ptr<const TerrainState>(next.release());
     hf_.reset();
     writeTerrainToLevel();
+    reseatGroundedThings(*before, 1.0f, false);
     ++revision_;
     ++terrainRev_;
     return true;
@@ -785,10 +934,9 @@ TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1, bool withThing
             c.themeStrength.push_back(terrain_->themeStrength[i]);
         }
     if (withThings)
-        for (size_t i = 0; i < file_.things().size(); ++i) {
+        for (size_t i : thingsInRect(x0, y0, x1, y1)) {
             Frame f;
-            if (!frameOf(i, f)) continue;
-            if (f.pos[0] < float(x0) || f.pos[0] > float(x1) || f.pos[1] < float(y0) || f.pos[1] > float(y1)) continue;
+            if (!isEditBrushCopyable(i) || !frameOf(i, f)) continue;
             TerrainClip::Thing t;
             t.block = file_.thingBlockText(i);
             t.dx = f.pos[0] - float(x0);
@@ -798,6 +946,36 @@ TerrainClip Document::copyTerrain(int x0, int y0, int x1, int y1, bool withThing
             c.things.push_back(std::move(t));
         }
     return c;
+}
+
+std::vector<size_t> Document::thingsInRect(int x0, int y0, int x1, int y1) const {
+    std::vector<size_t> out;
+    if (x0 > x1) std::swap(x0, x1);
+    if (y0 > y1) std::swap(y0, y1);
+    if (hasTerrain()) {
+        const int cx = level_->cellsX(), cy = level_->cellsY();
+        x0 = std::clamp(x0, 0, cx - 1); x1 = std::clamp(x1, 0, cx - 1);
+        y0 = std::clamp(y0, 0, cy - 1); y1 = std::clamp(y1, 0, cy - 1);
+    }
+    for (size_t i = 0; i < file_.things().size(); ++i) {
+        Frame f;
+        if (!frameOf(i, f)) continue;
+        if (f.pos[0] >= float(x0) && f.pos[0] <= float(x1) &&
+            f.pos[1] >= float(y0) && f.pos[1] <= float(y1)) out.push_back(i);
+    }
+    return out;
+}
+
+size_t Document::removeThingsInRect(int x0, int y0, int x1, int y1,
+                                    size_t* skipped, size_t* clearedLinks) {
+    if (skipped) *skipped = 0;
+    const auto inside = thingsInRect(x0, y0, x1, y1);
+    std::vector<size_t> removable;
+    for (size_t index : inside) {
+        if (isLocked(index)) { if (skipped) ++*skipped; }
+        else removable.push_back(index);
+    }
+    return removeWithOwned(removable, false, clearedLinks);
 }
 
 size_t Document::pasteTerrain(const TerrainClip& clip, int x, int y, int quarterTurns, bool heights, bool themes, bool relative,
@@ -997,24 +1175,70 @@ int Document::addGroundTheme(const std::string& name, uint32_t defIndex) {
 }
 
 size_t Document::reseatThings(const TerrainState& before, float tolerance) {
+    return reseatGroundedThings(before, tolerance, true);
+}
+
+size_t Document::reseatGroundedThings(const TerrainState& before, float tolerance, bool recordUndo) {
     if (!hasTerrain() || stroke_) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     if (before.heights.size() != terrain_->heights.size()) return 0;
     struct Move { size_t index; std::string ctc; float z; };
     std::vector<Move> moves;
-    for (size_t i = 0; i < file_.things().size(); ++i) {
+    const auto& things=file_.things();
+    std::vector<std::optional<float>> groundedDelta(things.size());
+    for (size_t i = 0; i < things.size(); ++i) {
+        if (isLocked(i)) continue;
         Frame f;
         if (!frameOf(i, f)) continue;
         const auto was = sampleHeight(before, cx, cy, f.pos[0], f.pos[1]);
         const auto now = sampleHeight(*terrain_, cx, cy, f.pos[0], f.pos[1]);
         if (!was || !now || std::fabs(*was - *now) < 1e-4f) continue;
         if (std::fabs(f.pos[2] - *was) > tolerance) continue;   // was floating / sunk on purpose
-        const auto* phys = physicsOf(file_.things()[i]);
-        moves.push_back({i, phys->name, f.pos[2] + (*now - *was)});
+        if (recordUndo && std::fabs(f.pos[2] - *now) <= std::fabs(f.pos[2] - *was)) continue;
+        groundedDelta[i]=*now-*was;
     }
+    // Ownership is a rigid placement relationship: a floating or locked child
+    // follows its grounded parent, and a grounded child does not move twice.
+    const auto parents=validOwnedParents(things);
+    std::vector<std::vector<size_t>> children(things.size());
+    for (size_t i=0;i<parents.size();++i) if (parents[i]) children[*parents[i]].push_back(i);
+    std::vector<bool> visited(things.size(),false);
+    auto moveTree=[&](size_t root) {
+        const float delta=*groundedDelta[root];
+        std::vector<size_t> queue{root};
+        visited[root]=true;
+        for (size_t next=0;next<queue.size();++next) {
+            const size_t i=queue[next];
+            Frame f;
+            if (frameOf(i,f)) {
+                const auto* phys=physicsOf(things[i]);
+                moves.push_back({i,phys->name,f.pos[2]+delta});
+            }
+            for (size_t child:children[i]) if (!visited[child]) {
+                visited[child]=true;
+                queue.push_back(child);
+            }
+        }
+    };
+    std::vector<size_t> ancestorVisit(things.size(),0);
+    size_t visitEpoch=0;
+    for (size_t i=0;i<things.size();++i) if (groundedDelta[i]) {
+        bool hasGroundedAncestor=false;
+        ++visitEpoch;
+        for (auto parent=parents[i];parent && ancestorVisit[*parent]!=visitEpoch;parent=parents[*parent]) {
+            if (groundedDelta[*parent]) { hasGroundedAncestor=true; break; }
+            ancestorVisit[*parent]=visitEpoch;
+        }
+        if (!hasGroundedAncestor && !visited[i]) moveTree(i);
+    }
+    for (size_t i=0;i<things.size();++i) if (groundedDelta[i] && !visited[i]) moveTree(i);
     if (moves.empty()) return 0;
-    pushUndo();
-    for (const auto& m : moves) file_.setCtcProperty(m.index, m.ctc, "PositionZ", formatFloat(m.z));
+    if (recordUndo) pushUndo();
+    for (const auto& m : moves) {
+        file_.setCtcProperty(m.index, m.ctc, "PositionZ", formatFloat(m.z));
+        Frame frame;
+        if (frameOf(m.index,frame)) writeInitialPosition(file_,m.index,frame.pos,worldX_,worldY_);
+    }
     ++revision_;
     return moves.size();
 }
@@ -1127,7 +1351,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         savedTerrain_ = oldSaved;
         soundListGrew_ = oldSoundGrew;
     } catch (const std::exception& e) { rollback = e.what(); }
-    error += rollback.empty() ? " (the .lev was put back; nothing changed on disk)"
+    error += rollback.empty() ? " (level data was put back)"
                               : " (and putting the .lev back failed: " + rollback + "; restore it from the .forge-orig backup)";
     return false;
 }
@@ -1140,6 +1364,7 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
     const bool themesChanged = themesDirty();
     if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
     const std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
+    fs::path stbTemp;
     try {
         // 1. loose .lev (also the bytes for the WAD)
         stage("writing the .lev (navigation patch)");
@@ -1325,52 +1550,110 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             return true;
         }
         if (outChunk.size() == chunk.size()) {
-            std::fstream io(stb, std::ios::binary | std::ios::in | std::ios::out);
-            if (!io) { error = "cannot open " + stb.string() + " for writing"; return false; }
+            // Patch a copy, then replace the bank in one step. A failed or
+            // interrupted write must not leave a half-updated retail STB.
+            const fs::path tmp = stb.string() + ".atlas-tmp";
+            stbTemp = tmp;
+            fs::copy_file(stb, tmp, fs::copy_options::overwrite_existing);
+            std::fstream io(tmp, std::ios::binary | std::ios::in | std::ios::out);
+            if (!io) { error = "cannot open " + tmp.string() + " for writing"; std::error_code ec; fs::remove(tmp,ec); return false; }
             io.seekp(std::streamoff(entry->offset));
             io.write(reinterpret_cast<const char*>(outChunk.data()), std::streamsize(outChunk.size()));
             io.seekp(std::streamoff(map->absoluteOffset));
             io.write(reinterpret_cast<const char*>(outRecord.data()), std::streamsize(outRecord.size()));
-            if (!io) { error = "write to " + stb.string() + " failed"; return false; }
+            io.close();
+            if (!io) { error = "write to " + tmp.string() + " failed"; std::error_code ec; fs::remove(tmp,ec); return false; }
+            fs::rename(tmp, stb);
+            stbTemp.clear();
         } else {
             std::vector<forge::stb::StaticMapAppend> batch;
             batch.push_back({map->levelName, entry->name, outChunk, outRecord});
             const fs::path tmp = stb.string() + ".atlas-tmp";
+            stbTemp = tmp;
             forge::stb::replaceStaticMapsRelayout(stb, tmp, batch);
             fs::rename(tmp, stb);
+            stbTemp.clear();
         }
         notes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb" + (outChunk.size() == chunk.size() ? "" : " (chunk re-laid)"));
         (void)foliageRode;
         return true;
-    } catch (const std::exception& e) { error = e.what(); return false; }
+    } catch (const std::exception& e) {
+        if (!stbTemp.empty()) { std::error_code ec; fs::remove(stbTemp,ec); }
+        error = e.what(); return false;
+    }
 }
 
 
+bool Document::isLocked(size_t index) const {
+    if (index>=file_.things().size()) return false;
+    const auto* editor=file_.things()[index].findCtc("CTCEditor");
+    if (!editor) return false;
+    for (const auto& property:editor->properties)
+        if (lower(property.key)=="lockedinplace") return lower(property.value)=="true" || property.value=="1";
+    return false;
+}
+
+bool Document::setLocked(size_t index,bool locked) {
+    if (index>=file_.things().size() || !file_.things()[index].findCtc("CTCEditor")) return false;
+    if (isLocked(index)==locked) return true;
+    pushUndo();
+    file_.setCtcProperty(index,"CTCEditor","LockedInPlace",locked?"TRUE":"FALSE");
+    ++revision_;
+    return true;
+}
+
 void Document::setFrame(size_t index, const Frame& frame) {
     if (index >= file_.things().size()) throw std::out_of_range("setFrame: bad thing index");
+    if (isLocked(index)) return;
     if (!physicsOf(file_.things()[index])) throw std::runtime_error("setFrame: thing has no physics block");
     pushUndo();
-    writeFrame(file_, index, frame);
+    writeFrame(file_, index, frame,worldX_,worldY_);
     ++revision_;
+}
+
+void Document::setOwnedFrame(size_t index, const Frame& frame) {
+    if (index >= file_.things().size()) throw std::out_of_range("setOwnedFrame: bad thing index");
+    if (!physicsOf(file_.things()[index])) throw std::runtime_error("setOwnedFrame: thing has no physics block");
+    pushUndo();
+    writeFrame(file_, index, frame,worldX_,worldY_);
+    ++revision_;
+}
+
+bool Document::setHeight(size_t index, float height) {
+    Frame frame;
+    if (!std::isfinite(height) || isLocked(index) || !frameOf(index,frame)) return false;
+    if (!std::isfinite(frame.pos[0]) || !std::isfinite(frame.pos[1]) || !std::isfinite(frame.pos[2])) return false;
+    const auto ground=groundHeight(frame.pos[0],frame.pos[1]);
+    if (!ground || !std::isfinite(*ground)) return false;
+    height=std::max(height,*ground);
+    if (frame.pos[2]==height) return true;
+    frame.pos[2]=height;
+    setFrame(index,frame);
+    return true;
 }
 
 void Document::setProperty(size_t index, const std::string& key, const std::string& value) {
     if (index >= file_.things().size()) throw std::out_of_range("setProperty: bad thing index");
+    if (isLocked(index) && lower(key)=="objectscale") return;
     pushUndo();
     file_.setThingProperty(index, key, value);
     ++revision_;
 }
 
 namespace {
-struct LinkKind { const char* ctc; const char* field; const char* label; const char* wants; };
+struct LinkKind { const char* ctc; const char* field; const char* label; const char* wants; const char* offeredOn = nullptr; };
 // the UID links retail .tng files use (counted over the dev tree's FinalAlbion: OwnerUID 2434,
 // VillageUID 2347, EntranceConnectedToUID 200, ReceptorUID 76, route 46, home/work/wife 4-6)
 constexpr LinkKind kLinkKinds[] = {
     {"CTCVillageMember", "VillageUID", "Village", "a village"},
     {"CTCOwnedEntity", "OwnerUID", "Owned by", "any thing"},
-    {"", "HomeBuildingUID", "Lives in", "a building"},
-    {"", "WorkBuildingUID", "Works in", "a building"},
+    {"", "HomeBuildingUID", "Lives in", "a building", "aicreature"},
+    {"", "WorkBuildingUID", "Works in", "a building", "aicreature"},
+    {"", "FatherCreatureUID", "Father", "a creature", "aicreature"},
+    {"", "MotherCreatureUID", "Mother", "a creature", "aicreature"},
+    {"", "SpouseCreatureUID", "Spouse", "a creature", "aicreature"},
     {"CTCBuyableHouse", "WifeLivingHereUID", "Wife living here", "a creature"},
+    {"CTCDRegionExit", "EntranceConnectedToUID", "Region exit to entrance", "a region entrance"},
     {"CTCActionUseScriptedHook", "EntranceConnectedToUID", "Region exit to entrance", "a region entrance"},
     {"CTCActivationTrigger", "ReceptorUID", "Activates", "an activation receptor"},
     {"CTCPreCalculatedNavigationRoute", "ThingToCalculateRouteToUID", "Route to", "any thing"},
@@ -1431,8 +1714,89 @@ std::vector<Document::PropertyRow> Document::propertiesOf(size_t index) const {
     return out;
 }
 
+std::vector<Document::KnownProperty> Document::knownComponentProperties(size_t index) const {
+    std::vector<KnownProperty> result;
+    if(index>=file_.things().size()) return result;
+    const auto& thing=file_.things()[index];
+    // These fields have direct OnSerialise evidence in vanilla_property_fields.tsv.
+    // Do not broaden from widget metadata alone: some rows are coordinated UI actions.
+    static const std::set<std::string> components={"CTCDoor","CTCSearchableContainer","CTCDRegionExit",
+        "CTCCreatureGenerator","CTCExplodingObject","CTCStockItem","CTCInfoDisplay"};
+    for(const auto& field:vanillaFields()) {
+        if(!components.contains(field.ctc) || std::string_view(field.confidence)!="H" || hiddenProperty(field.ctc,field.key)) continue;
+        PropertyRow::Kind kind;
+        const std::string_view type=field.kind;
+        if(type=="bool") kind=PropertyRow::Kind::Bool;
+        else if(type=="int") kind=PropertyRow::Kind::Int;
+        else if(type=="float") kind=PropertyRow::Kind::Float;
+        else continue;
+        // The vanilla dialog used integer widgets for these fields, but their
+        // OnSerialise transfers are float (TSV evidence 02514ffc/02515010/025a52fc).
+        // Validate the serialized type so fractional authored values remain valid.
+        if((std::string_view(field.ctc)=="CTCCreatureGenerator" &&
+            (std::string_view(field.key)=="GenerationRadius" || std::string_view(field.key)=="SelfTriggerRadius")) ||
+           (std::string_view(field.ctc)=="CTCExplodingObject" && std::string_view(field.key)=="Radius")) kind=PropertyRow::Kind::Float;
+        const forge::tng::CtcBlock* block=nullptr; size_t blocks=0;
+        for(const auto& candidate:thing.ctcBlocks) if(lower(candidate.name)==lower(field.ctc)) {block=&candidate;++blocks;}
+        if(blocks!=1 || block->name!=field.ctc) continue;
+        const forge::tng::Property* property=nullptr; size_t copies=0;
+        for(const auto& candidate:block->properties) if(lower(candidate.key)==lower(field.key)) {property=&candidate;++copies;}
+        if(copies>1) continue;
+        if(std::any_of(result.begin(),result.end(),[&](const KnownProperty& row){return row.row.ctc==field.ctc && lower(row.row.key)==lower(field.key);})) continue;
+        result.push_back({{field.ctc,field.key,property?property->value:std::string(),kind},property!=nullptr});
+    }
+    return result;
+}
+
+bool Document::setComponentOverride(size_t index,const std::string& ctc,const std::string& key,const std::string& value) {
+    const auto rows=knownComponentProperties(index);
+    const auto row=std::find_if(rows.begin(),rows.end(),[&](const KnownProperty& item){return item.row.ctc==ctc && lower(item.row.key)==lower(key);});
+    if(row==rows.end() || value.empty()) return false;
+    const auto* metadata=vanillaField(ctc,row->row.key);
+    if(!metadata) return false;
+    double number=0;
+    std::string stored=value;
+    if(row->row.kind==PropertyRow::Kind::Bool) {
+        if(lower(value)!="true" && lower(value)!="false") return false;
+        stored=lower(value)=="true"?"TRUE":"FALSE";
+    } else if(row->row.kind==PropertyRow::Kind::Int) {
+        int32_t parsed=0;
+        const auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),parsed);
+        if(error!=std::errc() || end!=value.data()+value.size()) return false;
+        number=parsed;
+    } else {
+        const auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),number);
+        if(error!=std::errc() || end!=value.data()+value.size() || !std::isfinite(number) || std::abs(number)>std::numeric_limits<float>::max()) return false;
+    }
+    if(metadata->hasRange && (number<metadata->min || number>metadata->max)) return false;
+    if(row->present && row->row.value==stored) return true;
+    pushUndo();
+    file_.setCtcProperty(index,ctc,row->row.key,stored);
+    ++revision_;
+    return true;
+}
+
+bool Document::resetComponentOverride(size_t index,const std::string& ctc,const std::string& key) {
+    const auto rows=knownComponentProperties(index);
+    const auto row=std::find_if(rows.begin(),rows.end(),[&](const KnownProperty& item){return item.row.ctc==ctc && lower(item.row.key)==lower(key);});
+    if(row==rows.end()) return false;
+    if(!row->present) return true;
+    pushUndo();
+    file_.removeCtcProperty(index,ctc,row->row.key);
+    ++revision_;
+    return true;
+}
+
 bool Document::setPropertyValue(size_t index, const std::string& ctc, const std::string& key, const std::string& value) {
     if (index >= file_.things().size() || hiddenProperty(ctc, key)) return false;
+    if (isLocked(index)) {
+        const auto block=lower(ctc),field=lower(key);
+        if (block.empty() && field=="objectscale") return false;
+        if ((block=="ctcphysicsstandard" || block=="ctcphysicsnavigator") &&
+            (field=="positionx" || field=="positiony" || field=="positionz" ||
+             field=="rhsetforwardx" || field=="rhsetforwardy" || field=="rhsetforwardz" ||
+             field=="rhsetupx" || field=="rhsetupy" || field=="rhsetupz")) return false;
+    }
     std::optional<PropertyRow> row;
     for (const auto& r : propertiesOf(index))
         if (r.ctc == ctc && lower(r.key) == lower(key)) row = r;
@@ -1448,7 +1812,15 @@ bool Document::setPropertyValue(size_t index, const std::string& ctc, const std:
     if (!fits) return false;
     pushUndo();
     if (ctc.empty()) { if (!file_.setThingPropertyAll(index, key, value)) file_.setThingProperty(index, key, value); }   // every copy of a doubled key
-    else file_.setCtcProperty(index, ctc, key, value);
+    else {
+        file_.setCtcProperty(index, ctc, key, value);
+        const std::string name=lower(key);
+        if ((lower(ctc)=="ctcphysicsnavigator" || lower(ctc)=="ctcphysicsstandard") &&
+            (name=="positionx" || name=="positiony" || name=="positionz") && float(std::atof(row->value.c_str()))!=float(std::atof(value.c_str()))) {
+            Frame frame;
+            if (frameOf(index,frame)) writeInitialPosition(file_,index,frame.pos,worldX_,worldY_);
+        }
+    }
     ++revision_;
     return true;
 }
@@ -1506,6 +1878,16 @@ void Document::nameChain(const std::vector<size_t>& chain, const std::string& na
     for (const size_t n : chain) setTrackField(n, "ScriptName", name);
 }
 
+std::string Document::nextTrackTempName() {
+    for (;;) {
+        const std::string candidate="TrackTempName"+std::to_string(trackTempCounter_++);
+        bool used=false;
+        for (const auto& thing:file_.things())
+            if (lower(thing.type)=="tracknode" && trackNameOf(thing)==candidate) { used=true; break; }
+        if (!used) return candidate;
+    }
+}
+
 std::vector<Document::Track> Document::tracks() const {
     std::vector<Track> out;
     std::set<size_t> done;
@@ -1516,7 +1898,7 @@ std::vector<Document::Track> Document::tracks() const {
         Track t;
         t.nodes = trackChain(i, &uidIndex);
         for (const size_t n : t.nodes) done.insert(n);
-        t.name = file_.things()[t.nodes.front()].scriptName();
+        t.name = trackNameOf(file_.things()[t.nodes.front()]);
         Frame a, b;
         for (size_t k = 0; k + 1 < t.nodes.size(); ++k)
             if (frameOf(t.nodes[k], a) && frameOf(t.nodes[k + 1], b))
@@ -1557,16 +1939,17 @@ bool Document::linkTrackNodes(size_t a, size_t b, std::string& error) {
     if (chainB.front() != b && chainB.back() == b) std::reverse(chainB.begin(), chainB.end());
     if (chainA.back() != a || chainB.front() != b) { error = "a node inside a track already has two links"; return false; }
     pushUndo();
-    const std::string name = file_.things()[a].scriptName();
     std::vector<size_t> joined = chainA;
     joined.insert(joined.end(), chainB.begin(), chainB.end());
+    std::string name=trackNameOf(file_.things()[joined.front()]);
+    if (placeholderTrackName(name)) name=nextTrackTempName();
     // re-link the whole joined chain in order (a flipped part gets its links swapped)
     for (size_t i = 0; i < joined.size(); ++i) {
         setTrackField(joined[i], "LinkedToUID1", std::to_string(i ? uidOf(joined[i - 1]) : 0));
         setTrackField(joined[i], "LinkedToUID2", std::to_string(i + 1 < joined.size() ? uidOf(joined[i + 1]) : 0));
     }
     fixTrackEnds(joined);
-    nameChain(joined, name.empty() ? std::string("INVALID") : name);
+    nameChain(joined, name);
     ++revision_;
     return true;
 }
@@ -1617,9 +2000,16 @@ bool Document::unlinkTrackNode(size_t node) {
     nameChain({node}, "NULL");
     if (before.size() == 1) nameChain(before, "INVALID");
     if (after.size() == 1) nameChain(after, "INVALID");
-    else if (after.size() > 1) nameChain(after, "TrackTempName" + std::to_string(++trackTempCounter_));
+    else if (after.size() > 1) nameChain(after, nextTrackTempName());
     ++revision_;
     return true;
+}
+
+std::vector<std::string> Document::ctcBlocksOf(size_t index) const {
+    std::vector<std::string> out;
+    if (index < file_.things().size())
+        for (const auto& block : file_.things()[index].ctcBlocks) out.push_back(block.name);
+    return out;
 }
 
 std::vector<std::string> Document::listEntries(size_t index, const std::string& ctc, const std::string& base) const {
@@ -1636,8 +2026,27 @@ std::vector<std::string> Document::listEntries(size_t index, const std::string& 
     return out;
 }
 
+bool Document::listEditable(size_t index, const std::string& ctc, const std::string& base) const {
+    if (index>=file_.things().size()) return false;
+    const auto& thing=file_.things()[index];
+    if (std::count_if(thing.ctcBlocks.begin(),thing.ctcBlocks.end(),[&](const auto& block) { return lower(block.name)==lower(ctc); })!=1) return false;
+    const auto* block=thing.findCtc(ctc);
+    const auto entries=listEntries(index,ctc,base);
+    std::set<std::string> seen;
+    const std::string prefix=lower(base)+"[";
+    for (const auto& property:block->properties) {
+        const std::string key=lower(property.key);
+        if (key.rfind(prefix,0)!=0) continue;
+        if (!seen.insert(key).second || kindOf(property.value)!=PropertyRow::Kind::String) return false;
+        bool canonical=false;
+        for (size_t i=0;i<entries.size();++i) if (key==prefix+std::to_string(i)+"]") { canonical=true; break; }
+        if (!canonical) return false;
+    }
+    return seen.size()==entries.size();
+}
+
 bool Document::addListEntry(size_t index, const std::string& ctc, const std::string& base, const std::string& value) {
-    if (index >= file_.things().size() || !file_.things()[index].findCtc(ctc) || value.empty() || value.find(';') != std::string::npos) return false;
+    if (!listEditable(index,ctc,base) || kindOf(value)!=PropertyRow::Kind::String || value.find_first_of(";\r\n")!=std::string::npos) return false;
     const auto cur = listEntries(index, ctc, base);
     pushUndo();
     const std::string after = cur.empty() ? std::string() : base + "[" + std::to_string(cur.size() - 1) + "]";
@@ -1648,6 +2057,7 @@ bool Document::addListEntry(size_t index, const std::string& ctc, const std::str
 }
 
 bool Document::removeListEntry(size_t index, const std::string& ctc, const std::string& base, int i) {
+    if (!listEditable(index,ctc,base)) return false;
     const auto cur = listEntries(index, ctc, base);
     if (i < 0 || size_t(i) >= cur.size()) return false;
     pushUndo();
@@ -1714,6 +2124,10 @@ std::vector<Document::Link> Document::linksOf(size_t index) const {
     if (index >= file_.things().size()) return out;
     const auto& t = file_.things()[index];
     for (const auto& k : kLinkKinds) {
+        // A region exit can carry both components; show one control and use the
+        // dedicated region-exit value as the editor's source of truth.
+        if (std::string_view(k.ctc) == "CTCActionUseScriptedHook" &&
+            std::string_view(k.field) == "EntranceConnectedToUID" && t.findCtc("CTCDRegionExit")) continue;
         std::optional<std::string> value;
         if (k.ctc[0]) {
             const auto* block = t.findCtc(k.ctc);
@@ -1723,6 +2137,7 @@ std::vector<Document::Link> Document::linksOf(size_t index) const {
                 if (lower(p.key) == lower(k.field)) { value = p.value; break; }
         } else {
             value = t.find(k.field);
+            if (!value && k.offeredOn && lower(t.type)==k.offeredOn) value=std::string("0");
             if (!value) continue;
         }
         Link l{k.ctc, k.field, k.label, k.wants, 0, std::nullopt};
@@ -1740,6 +2155,15 @@ bool Document::linkTargetFits(const Link& link, size_t target) const {
     if (link.field == "EntranceConnectedToUID") return t.findCtc("CTCDRegionEntrance") != nullptr;
     if (link.field == "ReceptorUID") return hasCtcPrefix(t, "CTCActivationReceptor");
     if (link.field == "HomeBuildingUID" || link.field == "WorkBuildingUID") return lower(t.type) == "building";
+    if (link.field == "FatherCreatureUID" || link.field == "MotherCreatureUID") {
+        if (lower(t.type)!="aicreature") return false;
+        if (creatureSexLookup_) {
+            const auto sex=creatureSexLookup_(t.definitionType());
+            if (sex && *sex!=(link.field=="FatherCreatureUID" ? 1 : 2)) return false;
+        }
+        return true;
+    }
+    if (link.field == "SpouseCreatureUID") return lower(t.type) == "aicreature";
     if (link.field == "WifeLivingHereUID") return lower(t.type) == "aicreature" || lower(t.type) == "creature";
     return true;
 }
@@ -1749,11 +2173,205 @@ bool Document::setLink(size_t index, const std::string& ctc, const std::string& 
     const auto links = linksOf(index);
     const auto hit = std::find_if(links.begin(), links.end(), [&](const Link& l) { return l.ctc == ctc && l.field == field; });
     if (hit == links.end()) return false;
+    constexpr std::array<std::string_view,5> creatureFields={
+        "HomeBuildingUID","WorkBuildingUID","FatherCreatureUID","MotherCreatureUID","SpouseCreatureUID"};
+    const auto creatureField=std::find(creatureFields.begin(),creatureFields.end(),field);
+    if (ctc.empty() && creatureField!=creatureFields.end()) {
+        const auto target=targetUid ? indexOfUid(targetUid) : std::nullopt;
+        if (targetUid && (!target || *target==index || !linkTargetFits(*hit,*target))) return false;
+        const uint64_t sourceUid=uidOf(index);
+        const bool spouse=field=="SpouseCreatureUID";
+        const auto mate=spouse && hit->target ? indexOfUid(hit->target) : std::nullopt;
+        if (spouse && targetUid) {
+            if (hit->target && hit->target!=targetUid) return false;
+            const auto theirField=file_.things()[*target].find(field);
+            uint64_t theirUid=0;
+            if (theirField && !parseUid(*theirField,theirUid)) return false;
+            if (theirUid && theirUid!=sourceUid) return false;
+        }
+        const bool present=file_.things()[index].find(field).has_value();
+        bool mateLinked=false, targetLinked=false;
+        if (mate) {
+            if (const auto v=file_.things()[*mate].find(field)) {
+                uint64_t u=0;
+                mateLinked=parseUid(*v,u) && u==sourceUid;
+            }
+        }
+        if (spouse && target) {
+            if (const auto v=file_.things()[*target].find(field)) {
+                uint64_t u=0;
+                targetLinked=parseUid(*v,u) && u==sourceUid;
+            }
+        }
+        if (targetUid==hit->target && ((targetUid && (!spouse || targetLinked)) || (!targetUid && !present))) return true;
+        pushUndo();
+        auto writeCreatureField=[&](size_t thingIndex,std::string_view key,uint64_t uid) {
+            if (!uid) { file_.removeThingProperty(thingIndex,key); return; }
+            if (file_.things()[thingIndex].find(key)) {
+                file_.setThingProperty(thingIndex,key,std::to_string(uid));
+                return;
+            }
+            const auto fieldPos=std::find(creatureFields.begin(),creatureFields.end(),key);
+            std::string_view anchor="OverridingBrainName";
+            for (auto next=fieldPos+1;next!=creatureFields.end();++next)
+                if (file_.things()[thingIndex].find(*next)) { anchor=*next; break; }
+            file_.insertThingPropertyBefore(thingIndex,key,std::to_string(uid),anchor);
+        };
+        writeCreatureField(index,field,targetUid);
+        if (spouse) {
+            if (mateLinked && (!target || *target!=*mate)) writeCreatureField(*mate,field,0);
+            if (target && !targetLinked) writeCreatureField(*target,field,sourceUid);
+        }
+        ++revision_;
+        return true;
+    }
+    if (field == "EntranceConnectedToUID") {
+        const auto& thing = file_.things()[index];
+        const bool hasExit = thing.findCtc("CTCDRegionExit") != nullptr;
+        const bool hasHook = thing.findCtc("CTCActionUseScriptedHook") != nullptr;
+        const std::string value = std::to_string(targetUid);
+        auto matches = [&](const char* name) {
+            const auto* block = thing.findCtc(name);
+            if (!block) return true;
+            for (const auto& property : block->properties)
+                if (lower(property.key) == lower(field)) return property.value == value;
+            return targetUid == 0;
+        };
+        if (matches("CTCDRegionExit") && matches("CTCActionUseScriptedHook")) return true;
+        pushUndo();
+        if (hasExit) file_.setCtcProperty(index, "CTCDRegionExit", field, value);
+        if (hasHook) file_.setCtcProperty(index, "CTCActionUseScriptedHook", field, value);
+        ++revision_;
+        return true;
+    }
     if (hit->target == targetUid) return true;
     pushUndo();
     if (ctc.empty()) file_.setThingProperty(index, field, std::to_string(targetUid));
     else file_.setCtcProperty(index, ctc, field, std::to_string(targetUid));
     ++revision_;
+    return true;
+}
+
+std::vector<Document::IncomingLink> Document::linksInto(size_t target) const {
+    if (target>=file_.things().size()) return {};
+    const uint64_t uid=uidOf(target);
+    if (!uid) return {};
+    size_t matches=0;
+    for (size_t i=0;i<file_.things().size();++i) matches+=uidOf(i)==uid;
+    if (matches!=1) return {}; // ambiguous target UID
+    if (incomingCacheRevision_!=revision_) {
+        incomingCache_.clear();
+        for (size_t i=0;i<file_.things().size();++i)
+            for (auto link:linksOf(i))
+                if (link.target) incomingCache_[link.target].push_back({i,std::move(link)});
+        incomingCacheRevision_=revision_;
+    }
+    const auto it=incomingCache_.find(uid);
+    return it==incomingCache_.end() ? std::vector<IncomingLink>{} : it->second;
+}
+
+std::vector<Document::AttachOption> Document::viableAttachModes(size_t anchor) const {
+    std::vector<AttachOption> out;
+    if (anchor>=file_.things().size()) return out;
+    const auto& thing=file_.things()[anchor];
+    const std::string type=lower(thing.type);
+    auto add=[&](AttachMode mode,const char* ctc,const char* field,const char* caption) {
+        out.push_back({mode,field,ctc,caption});
+    };
+    if (type=="object" || type=="building" || thing.findCtc("CTCThingOwner"))
+        add(AttachMode::Owned,"CTCOwnedEntity","OwnerUID","Attach objects");
+    if (type=="building") {
+        add(AttachMode::LivesIn,"","HomeBuildingUID","Attach people who live here");
+        add(AttachMode::WorksIn,"","WorkBuildingUID","Attach people who work here");
+    }
+    if (type=="village" && thing.findCtc("CTCVillage"))
+        add(AttachMode::Village,"CTCVillageMember","VillageUID","Attach things to village");
+    if (type=="aicreature" && thing.findCtc("CTCVillageMember")) {
+        add(AttachMode::Spouse,"","SpouseCreatureUID","Select creature's spouse");
+        add(AttachMode::Father,"","FatherCreatureUID","Select creature's father");
+        add(AttachMode::Mother,"","MotherCreatureUID","Select creature's mother");
+    }
+    if (hasCtcPrefix(thing,"CTCActivationReceptor"))
+        add(AttachMode::Receptor,"CTCActivationTrigger","ReceptorUID","Attach triggers to this receptor");
+    const auto anchorLinks=linksOf(anchor);
+    if (std::any_of(anchorLinks.begin(),anchorLinks.end(),
+                    [](const Link& link){return link.field=="EntranceConnectedToUID";}))
+        add(AttachMode::RegionEntrance,"CTCDRegionExit","EntranceConnectedToUID","Select region entrance to connect to");
+    if (thing.findCtc("CTCPreCalculatedNavigationRoute"))
+        add(AttachMode::RouteTarget,"CTCPreCalculatedNavigationRoute","ThingToCalculateRouteToUID","Select target to calculate route to");
+    return out;
+}
+
+bool Document::canAttach(size_t anchor, AttachMode mode, size_t clicked, std::string* reason) const {
+    auto reject=[&](const char* message){if(reason)*reason=message;return false;};
+    if (anchor>=file_.things().size() || clicked>=file_.things().size() || anchor==clicked)
+        return reject("pick a different thing");
+    const auto modes=viableAttachModes(anchor);
+    const auto option=std::find_if(modes.begin(),modes.end(),
+                                   [&](const AttachOption& item){return item.mode==mode;});
+    if (option==modes.end()) return reject("this attachment mode is unavailable");
+    const bool anchorSource=mode==AttachMode::RegionEntrance || mode==AttachMode::RouteTarget ||
+                            mode==AttachMode::Spouse || mode==AttachMode::Father || mode==AttachMode::Mother;
+    const size_t source=anchorSource?anchor:clicked, target=anchorSource?clicked:anchor;
+    if (mode==AttachMode::Owned) {
+        const std::string type=lower(file_.things()[clicked].type);
+        if (type=="building" || type=="tracknode") return reject("buildings and track nodes cannot be owned this way");
+        for (size_t child:ownedDescendants({clicked}))
+            if (child==anchor) return reject("an owner link cannot form a cycle");
+        if (!file_.things()[clicked].findCtc("CTCOwnedEntity")) return true;
+    }
+    if (mode==AttachMode::Village && isTrackNode(clicked) &&
+        file_.things()[clicked].find("Start").value_or("")!="TRUE")
+        return reject("only a track's start node can join a village");
+    const auto links=linksOf(source);
+    const auto link=std::find_if(links.begin(),links.end(),
+                                 [&](const Link& item){return item.field==option->field &&
+                                     (mode==AttachMode::RegionEntrance || item.ctc==option->ctc);});
+    if (link==links.end()) return reject("the clicked thing lacks the required component");
+    if (!linkTargetFits(*link,target)) return reject("the clicked thing has the wrong type");
+    if ((mode==AttachMode::LivesIn || mode==AttachMode::WorksIn ||
+         mode==AttachMode::Village || mode==AttachMode::Receptor ||
+         mode==AttachMode::Owned) && link->target && link->target!=uidOf(target))
+        return reject("the clicked thing is already attached elsewhere");
+    if (mode==AttachMode::Spouse) {
+        if (link->target && link->target!=uidOf(target)) return reject("the selected creature already has a spouse");
+        for (const auto& reciprocal:linksOf(target))
+            if (reciprocal.field=="SpouseCreatureUID" && reciprocal.target &&
+                reciprocal.target!=uidOf(source)) return reject("the clicked creature already has a spouse");
+    }
+    return true;
+}
+
+bool Document::toggleAttachment(size_t anchor, AttachMode mode, size_t clicked, std::string& error) {
+    if (!canAttach(anchor,mode,clicked,&error)) return false;
+    if (mode==AttachMode::Owned && !file_.things()[clicked].findCtc("CTCOwnedEntity")) {
+        pushUndo();
+        file_.addCtcBlock(clicked,"CTCOwnedEntity",{{"VersionNumber","1"},{"OwnerUID",std::to_string(uidOf(anchor))}});
+        ++revision_;
+        return true;
+    }
+    const bool anchorSource=mode==AttachMode::RegionEntrance || mode==AttachMode::RouteTarget ||
+                            mode==AttachMode::Spouse || mode==AttachMode::Father || mode==AttachMode::Mother;
+    const size_t source=anchorSource?anchor:clicked, target=anchorSource?clicked:anchor;
+    const auto options=viableAttachModes(anchor);
+    const auto found=std::find_if(options.begin(),options.end(),
+                                  [&](const AttachOption& item){return item.mode==mode;});
+    if (found==options.end()) {error="attachment mode disappeared";return false;}
+    const auto links=linksOf(source);
+    const auto link=std::find_if(links.begin(),links.end(),
+                                 [&](const Link& item){return item.field==found->field &&
+                                     (mode==AttachMode::RegionEntrance || item.ctc==found->ctc);});
+    if (link==links.end()) {error="attachment link disappeared";return false;}
+    if (mode==AttachMode::Owned && link->target==uidOf(anchor)) {
+        pushUndo();
+        file_.removeCtcBlock(clicked,"CTCOwnedEntity");
+        ++revision_;
+        return true;
+    }
+    if (!setLink(source,link->ctc,link->field,link->target==uidOf(target)?0:uidOf(target))) {
+        error="the attachment could not be changed";
+        return false;
+    }
     return true;
 }
 
@@ -1830,24 +2448,145 @@ std::optional<size_t> Document::moveToSection(size_t index, const std::string& n
     for (const auto& n : file_.sectionNames())
         if (lower(n) == lower(name)) target = n;
     if (target.empty()) return std::nullopt;
-    if (lower(file_.sectionOf(index)) == lower(target)) return index;
-    pushUndo();
-    const std::string block = file_.thingBlockText(index);
-    file_.removeThing(index);
-    const size_t n = file_.insertThingBlock(target, block);
-    ++revision_;
-    return n;
+    // The native owner component assigns its children the owner's serialization
+    // section. Snapshot strict UID edges before any block relocation changes indices.
+    const uint64_t rootUid=uidOf(index);
+    std::vector<uint64_t> childUids;
+    for (size_t child:ownedDescendants({index})) childUids.push_back(uidOf(child));
+    const auto moveOne=[&](size_t i) {
+        if (lower(file_.sectionOf(i)) == lower(target)) return i;
+        pushUndo();
+        const std::string block=file_.thingBlockText(i);
+        file_.removeThing(i);
+        const size_t moved=file_.insertThingBlock(target,block);
+        ++revision_;
+        return moved;
+    };
+    beginBatch();
+    try {
+        const size_t movedRoot=moveOne(index);
+        for (uint64_t uid:childUids)
+            if (const auto child=indexOfUid(uid)) moveOne(*child);
+        const auto result=childUids.empty()?std::optional<size_t>(movedRoot):indexOfUid(rootUid);
+        endBatch();
+        return result;
+    } catch (...) { endBatch(); throw; }
 }
 
 size_t Document::duplicate(size_t index) {
     if (index >= file_.things().size()) throw std::out_of_range("duplicate: bad thing index");
+    if (lower(file_.things()[index].type) == "village")
+        throw std::invalid_argument("duplicate: villages cannot be copied as verbatim blocks");
+    bool hasOwnerLink=false;
+    if (const auto* owned=file_.things()[index].findCtc("CTCOwnedEntity"))
+        for (const auto& property:owned->properties)
+            if (lower(property.key)=="owneruid") hasOwnerLink=true;
     pushUndo();
     std::string block = file_.thingBlockText(index);
     const size_t newIndex = file_.insertThingBlockBefore(index + 1, block);
     file_.setThingProperty(newIndex, "UID", std::to_string(forge::thingplacer::nextUid(file_)));
     if (file_.things()[newIndex].find("ScriptName")) file_.setThingProperty(newIndex, "ScriptName", "NULL");
+    if (hasOwnerLink) file_.setCtcProperty(newIndex,"CTCOwnedEntity","OwnerUID","0");
+    if (isTrackNode(newIndex)) {
+        // Native clone placement creates a new track node; copied links would
+        // make the original chain asymmetric and can assert in the engine.
+        setTrackField(newIndex,"LinkedToUID1","0");
+        setTrackField(newIndex,"LinkedToUID2","0");
+        setTrackField(newIndex,"Start","TRUE");
+        setTrackField(newIndex,"End","TRUE");
+        setTrackField(newIndex,"ScriptName","NULL");
+    }
     ++revision_;
     return newIndex;
+}
+
+std::vector<size_t> Document::duplicateGroup(const std::vector<size_t>& indices) {
+    std::vector<size_t> sources;
+    std::set<size_t> selected;
+    for (size_t index:indices)
+        if (index<file_.things().size() && selected.insert(index).second) sources.push_back(index);
+    if (sources.empty()) return {};
+    for (size_t source:sources)
+        if (lower(file_.things()[source].type) == "village")
+            throw std::invalid_argument("duplicate: villages cannot be copied as verbatim blocks");
+    // Only a unique source UID can identify which selected thing a saved link
+    // meant. Snapshot the links before insertion shifts thing indices.
+    std::map<uint64_t,size_t> uidCounts, selectedUids;
+    for (size_t i=0;i<file_.things().size();++i)
+        if (const uint64_t uid=uidOf(i)) ++uidCounts[uid];
+    for (size_t source:sources)
+        if (const uint64_t uid=uidOf(source); uid && uidCounts[uid]==1)
+            selectedUids[uid]=source;
+    struct CopyLink { size_t source, target; std::string ctc, field; };
+    std::vector<CopyLink> internalLinks;
+    for (size_t source:sources) {
+        const auto& thing=file_.things()[source];
+        for (const auto& link:linksOf(source)) {
+            if (!link.target || link.field=="OwnerUID") continue;
+            const auto target=selectedUids.find(link.target);
+            if (target==selectedUids.end()) continue;
+            // Duplicate declarations are ambiguous even when their first
+            // values agree; leave the copied text alone in that case.
+            const auto matches=[&](const auto& properties) {
+                return std::count_if(properties.begin(),properties.end(),
+                    [&](const auto& p){return lower(p.key)==lower(link.field);});
+            };
+            size_t declarations=0;
+            if (link.ctc.empty()) declarations=matches(thing.properties);
+            else for (const auto& block:thing.ctcBlocks)
+                if (lower(block.name)==lower(link.ctc)) declarations+=matches(block.properties);
+            if (declarations!=1) continue;
+            internalLinks.push_back({source,target->second,link.ctc,link.field});
+        }
+    }
+    // Only strict serialized ownership edges within the selected set are
+    // reconnected. Each single copy starts detached from its source's owner.
+    std::map<size_t,size_t> selectedParents;
+    for (size_t parent:sources)
+        for (const auto& [child,directParent]:ownedTree({parent}))
+            if (directParent==parent && selected.count(child)) selectedParents[child]=parent;
+    std::vector<size_t> descending=sources;
+    std::sort(descending.begin(),descending.end(),std::greater<size_t>());
+    std::map<size_t,uint64_t> copyUids;
+    beginBatch();
+    try {
+        for (size_t source:descending) copyUids[source]=uidOf(duplicate(source));
+        for (const auto& [child,parent]:selectedParents) {
+            const auto copy=indexOfUid(copyUids.at(child));
+            if (!copy || !setLink(*copy,"CTCOwnedEntity","OwnerUID",copyUids.at(parent)))
+                throw std::runtime_error("duplicateGroup: failed to link copied owner");
+        }
+        for (const auto& link:internalLinks) {
+            if (link.field=="SpouseCreatureUID") continue;
+            const auto copy=indexOfUid(copyUids.at(link.source));
+            if (!copy || !setLink(*copy,link.ctc,link.field,copyUids.at(link.target)))
+                throw std::runtime_error("duplicateGroup: failed to remap copied link");
+        }
+        // Spouse links are reciprocal. Clear only paired copies first; otherwise
+        // setLink would see the copied partner's old target and refuse the new
+        // pair. Originals remain untouched because neither points at a copy.
+        for (const auto& link:internalLinks) {
+            if (link.field!="SpouseCreatureUID" || link.source>=link.target) continue;
+            const bool reciprocal=std::any_of(internalLinks.begin(),internalLinks.end(),
+                [&](const CopyLink& other){return other.field==link.field &&
+                    other.source==link.target && other.target==link.source;});
+            if (!reciprocal) continue;
+            const auto a=indexOfUid(copyUids.at(link.source));
+            const auto b=indexOfUid(copyUids.at(link.target));
+            if (!a || !b || !setLink(*a,"",link.field,0) ||
+                !setLink(*b,"",link.field,0) ||
+                !setLink(*a,"",link.field,copyUids.at(link.target)))
+                throw std::runtime_error("duplicateGroup: failed to remap copied spouses");
+        }
+        std::vector<size_t> result;
+        for (size_t source:sources) {
+            const auto copy=indexOfUid(copyUids.at(source));
+            if (!copy) throw std::runtime_error("duplicateGroup: copied UID missing");
+            result.push_back(*copy);
+        }
+        endBatch();
+        return result;
+    } catch (...) { endBatch(); throw; }
 }
 
 size_t Document::place(forge::thingplacer::Placement placement) {
@@ -2169,11 +2908,98 @@ std::vector<std::string> creatureFamilies(const fs::path& gameRoot, std::string&
     return out;
 }
 
-void Document::remove(size_t index) {
-    if (index >= file_.things().size()) throw std::out_of_range("remove: bad thing index");
+size_t Document::clearLinksTo(uint64_t uid, size_t except, const std::set<size_t>* pending) {
+    if (!uid) return 0;
+    size_t declarations=0;
+    for (size_t i=0;i<file_.things().size();++i) declarations+=uidOf(i)==uid;
+    if (declarations!=1) return 0; // a duplicate UID still has a surviving target
+    auto exactUid=[&](const std::string& raw) {
+        const std::string value=unquote(raw);
+        uint64_t parsed=0;
+        const auto result=std::from_chars(value.data(),value.data()+value.size(),parsed);
+        return result.ec==std::errc{} && result.ptr==value.data()+value.size() && parsed==uid;
+    };
+    size_t cleared=0;
+    for (size_t i=0;i<file_.things().size();++i) {
+        if (i==except || (pending && pending->count(i))) continue;
+        std::vector<const LinkKind*> hits;
+        for (const auto& kind:kLinkKinds) {
+            const auto& thing=file_.things()[i];
+            size_t fields=0,blocks=0;
+            std::string value;
+            if (kind.ctc[0]) {
+                for (const auto& block:thing.ctcBlocks) if (lower(block.name)==lower(kind.ctc)) {
+                    ++blocks;
+                    for (const auto& property:block.properties) if (lower(property.key)==lower(kind.field)) {
+                        ++fields; value=property.value;
+                    }
+                }
+            } else {
+                blocks=1;
+                for (const auto& property:thing.properties) if (lower(property.key)==lower(kind.field)) {
+                    ++fields; value=property.value;
+                }
+            }
+            if (blocks==1 && fields==1 && exactUid(value)) hits.push_back(&kind);
+        }
+        for (const auto* kind:hits) {
+            if (kind->ctc[0]) file_.setCtcProperty(i,kind->ctc,kind->field,"0");
+            else if (kind->offeredOn) file_.removeThingProperty(i,kind->field);
+            else file_.setThingProperty(i,kind->field,"0");
+            ++cleared;
+        }
+    }
+    return cleared;
+}
+
+size_t Document::removeOne(size_t index, const std::set<size_t>* pending) {
     pushUndo();
+    if (isTrackNode(index)) unlinkTrackNode(index);
+    const size_t cleared=clearLinksTo(uidOf(index),index,pending);
     file_.removeThing(index);
     ++revision_;
+    return cleared;
+}
+
+size_t Document::remove(size_t index) {
+    if (index >= file_.things().size()) throw std::out_of_range("remove: bad thing index");
+    if (isLocked(index)) return 0;
+    beginBatch();
+    try { const size_t cleared=removeOne(index); endBatch(); return cleared; }
+    catch (...) { endBatch(); throw; }
+}
+
+size_t Document::removeWithOwned(const std::vector<size_t>& roots, bool includeOwned,
+                                  size_t* clearedLinks) {
+    if (clearedLinks) *clearedLinks=0;
+    std::set<size_t> selected;
+    for (size_t index:roots)
+        if (index<file_.things().size() && !isLocked(index)) selected.insert(index);
+    if (selected.empty()) return 0;
+    const std::vector<size_t> validRoots(selected.begin(),selected.end());
+    const auto tree=ownedTree(validRoots);
+    std::vector<size_t> detach;
+    if (includeOwned) {
+        for (const auto& [child,parent]:tree) selected.insert(child);
+    } else {
+        for (const auto& [child,parent]:tree)
+            if (selected.count(parent) && !selected.count(child)) detach.push_back(child);
+    }
+    beginBatch();
+    try {
+        for (size_t child:detach)
+            if (!setLink(child,"CTCOwnedEntity","OwnerUID",0))
+                throw std::runtime_error("removeWithOwned: failed to detach child");
+        size_t cleared=0;
+        std::set<size_t> pending=selected;
+        for (auto it=selected.rbegin();it!=selected.rend();++it) {
+            pending.erase(*it); // only lower indices still await removal
+            cleared+=removeOne(*it,&pending);
+        }
+        endBatch();
+        if (clearedLinks) *clearedLinks=cleared;
+        return selected.size();
+    } catch (...) { endBatch(); throw; }
 }
 
 bool Document::undo() {
@@ -2268,10 +3094,36 @@ bool Document::saveToPack(const fs::path& pack, std::string& error) {
 bool Document::deployTerrainToPack(const fs::path& gameRoot, const fs::path& pack, std::vector<std::string>& notes, std::string& error,
                                    const forge::terraintex::ThemeLibrary* library, const std::function<void(const std::string&)>& progress) {
     if (external()) { error = "a map of another world cannot go into a FinalAlbion pack"; return false; }
+    struct OriginalFile { fs::path path; std::optional<std::string> bytes; };
+    std::vector<OriginalFile> originals;
+    const fs::path lev = pack / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+    const fs::path chunk = pack / "stb" / (mapName_ + ".chunk");
+    const fs::path record = pack / "stb" / (mapName_ + ".record");
+    try {
+        for (const auto& path : {lev, chunk, record})
+            originals.push_back({path, fs::exists(path) ? std::optional<std::string>(readFile(path)) : std::nullopt});
+    } catch (const std::exception& e) { error = "cannot snapshot pack terrain before writing: " + std::string(e.what()); return false; }
+    const auto oldSaved = savedTerrain_;
+    const bool oldSoundGrew = soundListGrew_;
     packOut_ = pack;
     const bool ok = deployTerrainSteps(gameRoot, notes, error, library, progress);
     packOut_.clear();
-    return ok;
+    if (ok) return true;
+    std::string rollback;
+    for (const auto& file : originals) try {
+        if (file.bytes) {
+            fs::create_directories(file.path.parent_path());
+            std::ofstream out(file.path, std::ios::binary | std::ios::trunc);
+            out.write(file.bytes->data(), std::streamsize(file.bytes->size()));
+            if (!out) throw std::runtime_error("cannot restore " + file.path.string());
+        } else { std::error_code ec; fs::remove(file.path, ec); if (ec) throw fs::filesystem_error("cannot remove failed output",file.path,ec); }
+    } catch (const std::exception& e) { rollback += (rollback.empty() ? "" : "; ") + std::string(e.what()); }
+    savedTerrain_ = oldSaved;
+    soundListGrew_ = oldSoundGrew;
+    notes.clear();
+    if (rollback.empty()) notes.push_back("failed terrain write rolled back from the pack");
+    else error += " (pack rollback also failed: " + rollback + ")";
+    return false;
 }
 
 bool Document::deployWad(const fs::path& gameRoot, std::string& error) {

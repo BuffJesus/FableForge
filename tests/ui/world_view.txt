@@ -27,8 +27,9 @@ frames 10
 assert_state world_3d 1
 clear_toasts
 screenshot build/ui/world_3d_overview.png
-# low over Greatwood, looking across it (historical screenshot filename)
-world_camera 3400 3500 40 2.4 0.35 500
+# Explicit eye pose: residency follows the eye, not the orbit target.
+# The old target+500m orbit pose has only one nearby map at the current radius.
+world_pose 3398.75 3612.5 130 0.46365 0.5
 frames 10
 wait_world_detail
 assert_state world_detail_maps 6

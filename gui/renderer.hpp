@@ -1,4 +1,5 @@
 #pragma once
+#include "terrainlod.hpp"
 // Minimal D3D11 terrain renderer: one mesh + one albedo texture drawn into an
 // offscreen render target that ImGui shows as an image. Orbit camera, simple
 // directional light, optional wireframe / walkability overlay. Feature level
@@ -13,6 +14,10 @@
 
 #include "foliageexport.hpp"
 #include "terrainexport.hpp"
+#include "texturepool.hpp"
+#include "cutoutmips.hpp"
+#include "worldaa.hpp"
+#include "deferredrelease.hpp"
 
 namespace albion::gui {
 
@@ -31,6 +36,7 @@ struct Camera {
     void up(float out[3]) const;
     void eye(float out[3]) const { out[0] = posX; out[1] = posY; out[2] = posZ; }
     void focus(float out[3]) const;        // pos + dir * distance
+    void view(float out[16]) const;        // eye/direction, independent of orbit distance
     void lookAt(float tx, float ty, float tz, float yaw, float pitch, float dist);
 
     void look(float dYaw, float dPitch);   // RMB: rotate in place
@@ -53,6 +59,25 @@ public:
     bool init(ID3D11Device* device, ID3D11DeviceContext* context);
     struct VideoMemoryInfo { bool valid = false; uint64_t budget = 0, usage = 0; };
     VideoMemoryInfo queryVideoMemory() const;
+    int worldAaMode = 0; // 0 automatic, 1 off, 2/4 fixed upper bound
+    unsigned worldAaTestLimit = 4; // automation: fail multisample allocations above this count
+    unsigned aaSamples() const { return targetSamples_; }
+    unsigned aaSupport() const { return aaSupport_; }
+    size_t aaRebuilds() const { return aaRebuilds_; }
+    size_t aaFallbacks() const { return aaFallbacks_; }
+    uint64_t renderTargetBytes() const { return worldview::targetBytes(width_, height_, targetSamples_); }
+    void observeWorldAa(float dt, bool eligible) { aaBudget_.observe(dt, eligible && worldAaMode == 0); }
+    void sampleWorldAaMemory(VideoMemoryInfo info) { aaMemory_ = info; aaSampledTargetBytes_ = renderTargetBytes(); }
+    bool worldCutoutMask = false; // automation: white cutout coverage, no opaque geometry
+    bool worldCutoutMips = true; // prepared off-thread; coverage-preserving partial chains
+    bool worldCutoutAa = true; // smooth alpha-test edges when multisampling is active
+    bool worldTextureMips = true; // opaque layer textures; cutouts preserve authored coverage
+    bool worldTextureSharing = true; // automation comparison; set before loading
+    using LayerTexturePool = TexturePool<ID3D11ShaderResourceView>;
+    LayerTexturePool::Stats texturePoolStats() const { return texturePool_.stats(); }
+    void pollTextureCleanup(); // CPU-only retirement, including frames without a viewport
+    size_t retiredTextureBytes() const { return retiredTextureBytes_ + (texturePixelsRelease_.idle() ? 0 : texturePixelsInFlight_); }
+    bool worldNormalBlend = true;
     bool worldMaterialBlend = true; // automation A/B diagnostic
     // Upload a scene (positions/normals/uv already in the scene's up-axis
     // space; the renderer expects Y-up). Frames the camera on the map.
@@ -61,14 +86,29 @@ public:
     bool hasMesh() const { return indexCount_ > 0; }
     // Instance layers (0 = foliage, 1 = placed things): every instance baked
     // into world-space triangle batches, one batch per texture.
-    static constexpr int kLayers = 5;   // 0 foliage, 1 placed things, 2 neighbouring maps, 3 the whole world, 4 world detail
+    static constexpr int kLayers = 6;   // editor layers, world ground, near detail, distant scenery
     static constexpr int kWorldLayer = 3;         // World tab 3D: one low-res tile per map
     static constexpr int kWorldDetailLayer = 4;   // World tab 3D: full terrain + foliage + things of the maps near the camera
+    static constexpr int kWorldSceneryLayer = 5;  // objects across visible maps, independent of near terrain slots
     bool uploadLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up);
     // Adds the scene's batches to the layer without clearing it (the world view streams map tiles in).
     bool appendLayer(int layer, const foliageexport::Scene& scene, terrainexport::UpAxis up, int tag = -1);
-    struct LayerVertex { float px, py, pz, nx, ny, nz, u, v, walk; };
+    struct LayerVertex { float px, py, pz, nx, ny, nz, u, v, walk; uint32_t coarseNormal = 0; };
+    // R10G10B10A2_UNORM input, signed normal mapped into [0,1]. Four extra bytes
+    // per vertex; no duplicate geometry, textures or render pass for normal morphs.
+    static uint32_t packNormal(float x, float y, float z);
+    // Basis images of local axes. Inverse transpose up to a common positive
+    // scale; avoids overflow for tiny transforms and preserves reflections.
+    static void normalBasis(const float basis[3][3], float result[3][3]);
+    struct ObjectRange {
+        uint32_t first = 0, count = 0;
+        float center[3] = {}, radius = 0;
+        float nearPixels = 0, farPixels = 0; // zero means unbounded
+        uint32_t lod = 0;
+    };
     struct PreparedBatch {
+        std::vector<terrainlod::Patch> terrainPatches;
+        std::vector<ObjectRange> objects;
         std::vector<LayerVertex> vertices;
         std::vector<uint32_t> indices;
         int image = -1;
@@ -76,22 +116,29 @@ public:
         float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
     };
     // CPU only: safe on a streaming worker. GPU creation stays on the render thread.
-    static std::vector<PreparedBatch> prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up);
+    static std::vector<PreparedBatch> prepareLayer(const foliageexport::Scene& scene, terrainexport::UpAxis up, bool objectLods = false, bool coarseOnly = false);
     static PreparedBatch prepareWater(const terrainexport::WaterMesh& water);
-    bool appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible = true);
+    bool appendPreparedBatch(int layer, const PreparedBatch& batch, const std::vector<terrainexport::Image>& images, int tag, bool visible = true, const cutoutmips::Chain* cutout = nullptr);
     bool appendWorldWater(const terrainexport::WaterMesh& water, int tag, float worldX, float worldY);
     size_t worldWaterBatches() const;
     size_t layerTagBytes(int layer, int tag) const;
+    size_t layerSetBytes(int layer, const std::vector<int>& tags, bool exclusiveTextures) const;
     // Overview water stays visible during terrain detail transitions; dropping a tag removes both.
     void removeLayerTag(int layer, int tag);
     void setLayerTagVisible(int layer, int tag, bool visible);
-    void setLayerTagFade(int layer, int tag, float coverage, bool inverse = false);
+    void setLayerTagFade(int layer, int tag, float coverage, bool inverse = false, float objectCoverage = -1.0f);
     void clearLayer(int layer);
     bool hasLayer(int layer) const { return !layers_[layer].empty(); }
-    bool showLayer[kLayers] = {true, true, true, true, true};
+    bool showLayer[kLayers] = {true, true, true, true, true, true};
     // The World tab's 3D view draws world tiles, persistent water and streamed detail.
     bool worldOnly = false;
     bool worldCulling = true;
+    bool worldObjectLods = true;
+    bool worldTerrainLods = true;
+    size_t worldTerrainTriangles = 0, worldTerrainFullTriangles = 0, worldTerrainCoarsePatches = 0;
+    float worldObjectDistance = 650;
+    size_t worldDrawnObjects = 0, worldCulledObjects = 0, worldLodObjects = 0, worldObjectDrawCalls = 0;
+    size_t worldSceneryDrawnParts = 0;
     size_t worldDrawnBatches = 0, worldCulledBatches = 0;
     bool& showFoliage = showLayer[0];
     bool& showThings = showLayer[1];
@@ -125,6 +172,10 @@ public:
     // Ray (render space) against every visible instance's mesh; returns the
     // instance index or -1, with `t` the hit distance.
     int pick(const float origin[3], const float dir[3], float& t) const;
+    // Support queries may exclude owning things (including their child meshes)
+    // and ignore visual-only instances with no placed thing owner.
+    int pick(const float origin[3], const float dir[3], float& t,
+             const std::vector<int>& excludedThings, bool placedOnly) const;
     // Ray through viewport-relative (u, v) in [0,1] for the last rendered frame.
     void screenRay(float u, float v, float origin[3], float dir[3]) const;
     // Matrices of the last rendered frame (row-vector layout, translation at 12..14).
@@ -142,6 +193,7 @@ public:
     bool rayTerrain(const float origin[3], const float dir[3], float hit[3]) const;
     // Project a render-space point to viewport-relative (u, v) in [0,1]; false when behind the eye.
     bool project(const float p[3], float& u, float& v) const;
+    bool projectVisible(const float p[3], float& u, float& v) const;
     int terrainCellsX() const { return cellsX_; }
     int terrainCellsY() const { return cellsY_; }
 
@@ -153,7 +205,8 @@ public:
     const char* error() const { return error_; }
 
 private:
-    bool ensureTarget(uint32_t w, uint32_t h);
+    bool ensureTarget(uint32_t w, uint32_t h, unsigned samples);
+    void resolveTarget();
     void releaseTarget();
     void releaseMesh();
 
@@ -171,6 +224,7 @@ private:
     ID3D11RasterizerState* wire_ = nullptr;
     ID3D11DepthStencilState* depth_ = nullptr;
     ID3D11BlendState* blend_ = nullptr;
+    ID3D11BlendState* cutoutBlend_ = nullptr;
     ID3D11BlendState* alphaBlend_ = nullptr;
     ID3D11DepthStencilState* depthNoWrite_ = nullptr;
     ID3D11Buffer* waterVb_ = nullptr;
@@ -178,11 +232,16 @@ private:
     uint32_t waterIndexCount_ = 0;
     ID3D11ShaderResourceView* albedo_ = nullptr;
     struct FoliageBatch {
+        std::vector<terrainlod::Patch> terrainPatches;
+        std::vector<ObjectRange> objects;
+        ID3D11ShaderResourceView* objectBounds = nullptr;
         ID3D11Buffer* vb = nullptr; uint32_t count = 0; ID3D11ShaderResourceView* srv = nullptr;
+        std::vector<uint32_t> sourceIndices; // populated for the animated head preview
         ID3D11Buffer* ib = nullptr;
         ID3D11ShaderResourceView* coarseSrv = nullptr; // retained shared overview albedo; no duplicate allocation
+        std::shared_ptr<LayerTexturePool::Entry> texture, coarseTexture;
         bool alpha = false; int tag = -1; bool visible = true; bool water = false;
-        size_t resourceBytes = 0; // VB/IB and RGBA mip-0 payload, excluding driver overhead
+        size_t resourceBytes = 0; // VB/IB payload; pooled textures counted separately
         bool terrainMorph = false;
         float coverage = 1.0f;
         bool inverseFade = false;
@@ -192,6 +251,13 @@ private:
             for (int i = 0; i < 3; ++i) { lo[i] = std::min(lo[i], p[i]); hi[i] = std::max(hi[i], p[i]); }
         }
     };
+    LayerTexturePool texturePool_;
+    void releaseBatch(FoliageBatch& batch);
+    using TexturePixelPayload = std::vector<std::vector<uint8_t>>;
+    std::optional<TexturePixelPayload> retiredTexturePixels_;
+    DeferredRelease<TexturePixelPayload> texturePixelsRelease_;
+    size_t retiredTextureBytes_ = 0, texturePixelsInFlight_ = 0;
+    void retireTexturePixels(std::vector<uint8_t>& pixels);
     std::vector<FoliageBatch> layers_[kLayers];
     void drawBatch(const FoliageBatch& batch);
     struct GpuMesh {
@@ -208,7 +274,8 @@ private:
     float lastView_[16] = {}, lastProj_[16] = {};
     Camera lastCamera_;
     float lastAspect_ = 1.0f;
-    ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img);
+    ID3D11ShaderResourceView* makeTexture(const terrainexport::Image& img, bool mipmaps = false);
+    ID3D11ShaderResourceView* makeCutoutTexture(const terrainexport::Image& img, const cutoutmips::Chain& chain);
 public:
     // Small UI swatch of a decoded texture, cached by textures.big id (the theme picker);
     // owned by the renderer, freed with it. Downsampled to 64x64 so 200 themes cost ~3 MB.
@@ -222,16 +289,42 @@ public:
     // the renderer. Null when the mesh has no drawable part.
     ID3D11ShaderResourceView* thumbnail(const std::string& key, const foliageexport::Mesh& mesh,
                                         const std::vector<terrainexport::Image>& images, uint32_t size);
+    void clearModelPreview();
+    bool setModelPreview(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images);
+    ID3D11ShaderResourceView* modelPreview(uint32_t size, float yaw, float pitch, float zoom, bool wire);
+    void clearHeadPreview();
+    bool setHeadPreview(const foliageexport::Mesh& mesh, const std::vector<terrainexport::Image>& images);
+    bool updateHeadPreview(const foliageexport::Mesh& posed);
+    ID3D11ShaderResourceView* headPreview(uint32_t size, float yaw, float pitch, float zoom, bool wire);
 private:
+    GpuMesh modelMesh_;
+    ID3D11ShaderResourceView* modelSrv_ = nullptr;
+    uint32_t modelSize_ = 0;
+    float modelYaw_ = 0, modelPitch_ = 0, modelZoom_ = 0;
+    bool modelWire_ = false;
+    GpuMesh headMesh_;
+    ID3D11ShaderResourceView* headSrv_ = nullptr;
+    uint32_t headSize_ = 0;
+    float headYaw_ = 0, headPitch_ = 0, headZoom_ = 0;
+    bool headWire_ = false;
+    ID3D11ShaderResourceView* renderMeshPreview(const GpuMesh& g, uint32_t size,
+                                               float yaw, float pitch, float zoom, bool wire);
     std::map<uint32_t, ID3D11ShaderResourceView*> swatches_;
     std::map<std::string, ID3D11ShaderResourceView*> uiTextures_;
     ID3D11ShaderResourceView* preview_ = nullptr;
     std::map<std::string, ID3D11ShaderResourceView*> thumbs_;
     void uploadMesh(const foliageexport::Mesh& m, const std::vector<terrainexport::Image>& images,
-                    std::map<int, ID3D11ShaderResourceView*>& imageSrv, GpuMesh& g);
+                    std::map<int, ID3D11ShaderResourceView*>& imageSrv, GpuMesh& g,
+                    bool dynamic = false);
     void releaseMesh(GpuMesh& g);
     ID3D11ShaderResourceView* white_ = nullptr;
     ID3D11Texture2D* target_ = nullptr;
+    ID3D11Texture2D* multisampleTarget_ = nullptr;
+    unsigned targetSamples_ = 1, targetRequestedSamples_ = 1, targetTestLimit_ = 4, aaSupport_ = 1;
+    size_t aaRebuilds_ = 0, aaFallbacks_ = 0;
+    VideoMemoryInfo aaMemory_;
+    uint64_t aaSampledTargetBytes_ = 0;
+    worldview::AaBudget aaBudget_;
     ID3D11RenderTargetView* rtv_ = nullptr;
     ID3D11ShaderResourceView* srv_ = nullptr;
     ID3D11Texture2D* depthTex_ = nullptr;

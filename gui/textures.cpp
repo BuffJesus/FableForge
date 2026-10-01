@@ -7,6 +7,7 @@
 
 #include "theme.hpp"
 #include "texturebrowse.hpp"
+#include "forge/big.hpp"
 
 namespace albion::gui {
 using theme::S;
@@ -106,11 +107,13 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     // Assets: textures.big, your own models, your own ground themes -- everything that writes the
     // game's shared banks, apart from the map editor (a modder's review: keep imports out of it)
     ImGui::SetCursorPosX(pad);
-    theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes"}, inner);
+    theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes", "Effects", "Dialogue"}, inner);
     auto_.registerWidget("seg_assets_tab");
     ImGui::Dummy(ImVec2(0, theme::S(8)));
-    if (assetsTab_ == 1) { drawModelImportCard(pad, inner, cardInner); return; }
+    if (assetsTab_ == 1) { drawModelBrowser(pad, inner, cardInner); return; }
     if (assetsTab_ == 2) { drawGroundThemeCard(pad, inner, cardInner); return; }
+    if (assetsTab_ == 3) { drawEffectBrowser(pad, inner, cardInner); return; }
+    if (assetsTab_ == 4) { drawDialogueBrowser(pad, inner, cardInner); return; }
     if (!texturesLoaded_) refreshTextures();
 
     // ---- the selected object's textures
@@ -257,6 +260,167 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     }
     auto_.registerWidget("btn_tex_add");
     theme::endCard();
+}
+
+
+void App::refreshModels() {
+    modelsLoaded_ = true;
+    modelRows_.clear(); modelUsers_.clear(); modelUsersLoaded_ = false;
+    modelGeometry_ = {}; modelReady_ = false; modelId_ = 0;
+    modelName_.clear(); modelError_.clear(); renderer_.clearModelPreview();
+    try {
+        const auto root = std::filesystem::path(modelRoot_.empty() ? installPath_ : modelRoot_);
+        auto path = root / "data/graphics/graphics.big";
+        if (!std::filesystem::exists(path)) path = root / "data/graphics/pc/graphics.big";
+        modelBankPath_ = path.string();
+        const auto file = forge::big::File::open(path);
+        const auto* bank = file.findBank("MBANK_ALLMESHES");
+        if (!bank) throw std::runtime_error("MBANK_ALLMESHES is missing from graphics.big");
+        for (const auto& entry : bank->entries)
+            if (entry.type == 1 || entry.type == 2 || entry.type == 4 || entry.type == 5)
+                modelRows_.push_back({entry.id, entry.type, entry.length, entry.name});
+        std::sort(modelRows_.begin(), modelRows_.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
+    } catch (const std::exception& e) { modelError_ = e.what(); }
+}
+
+bool App::selectModel(const std::string& nameOrId) {
+    if (!modelsLoaded_) refreshModels();
+    const auto it = std::find_if(modelRows_.begin(), modelRows_.end(), [&](const auto& row) {
+        return row.name == nameOrId || std::to_string(row.id) == nameOrId;
+    });
+    if (it == modelRows_.end()) { pushLog("models: no mesh named " + nameOrId, 1); return false; }
+    if (!ctx_.ready() || ctxFuture_.valid()) { pushLog("models: wait for assets to finish loading", 1); return false; }
+    modelReady_ = false; modelGeometry_ = {}; renderer_.clearModelPreview();
+    modelId_ = it->id; modelName_ = it->name; modelError_.clear();
+    modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1;
+    try {
+        modelGeometry_ = forge::meshpreview::readLod0(modelBankPath_, modelId_);
+        std::vector<terrainexport::Image> images;
+        std::map<uint32_t, int> textureIds;
+        std::vector<std::string> warnings;
+        const auto mesh = foliageexport::makeMesh(modelId_, modelName_, modelName_, modelGeometry_, true, ctx_, images, textureIds, warnings);
+        modelReady_ = renderer_.setModelPreview(mesh, images);
+        if (!modelReady_) modelError_ = "This model has no drawable geometry.";
+        for (const auto& warning : warnings) pushLog("models: " + warning, 1);
+    } catch (const std::exception& e) { modelError_ = e.what(); }
+    if (!modelError_.empty()) pushLog("models: " + modelError_, 1);
+    return modelReady_;
+}
+
+void App::drawModelBrowser(float pad, float inner, float cardInner) {
+    if (!modelsLoaded_) refreshModels();
+    if (!modelUsersLoaded_ && ctx_.ready() && !ctxFuture_.valid()) {
+        for (const auto& [name, type] : ctx_.definitions({"OBJECT", "CREATURE", "BUILDING"})) {
+            uint32_t id = 0;
+            if (ctx_.graphicModelId(name, id) > 0 && id) modelUsers_[id].push_back(name);
+        }
+        modelUsersLoaded_ = true;
+    }
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##modelbrowser", inner);
+    theme::label("Models");
+    if (theme::ghostButton("Import model...", ImVec2((cardInner-S(6))*0.65f, S(28)))) modelImportOpen_ = !modelImportOpen_;
+    auto_.registerWidget("btn_model_import");
+    ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("Refresh", ImVec2((cardInner-S(6))*0.35f, S(28)))) refreshModels();
+    auto_.registerWidget("btn_model_refresh");
+    ImGui::SetNextItemWidth(cardInner);
+    ImGui::InputTextWithHint("##modelsearch", "Search models (name, id)", modelSearch_, sizeof modelSearch_);
+    auto_.registerWidget("input_modelsearch");
+    const std::string needle = modelSearch_;
+    std::vector<size_t> rows;
+    for (size_t i = 0; i < modelRows_.size(); ++i) {
+        const auto& row = modelRows_[i];
+        const bool matches = std::search(row.name.begin(), row.name.end(), needle.begin(), needle.end(), [](char a, char b) {
+            return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+        }) != row.name.end();
+        if (needle.empty() || matches || needle == std::to_string(row.id)) rows.push_back(i);
+    }
+    modelFiltered_ = rows.size();
+    ImGui::TextColored(theme::vec(theme::Faint), "%zu of %zu models", rows.size(), modelRows_.size());
+    ImGui::BeginChild("##modellist", ImVec2(cardInner, S(200)));
+    ImGuiListClipper clipper; clipper.Begin(int(rows.size()));
+    while (clipper.Step()) for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
+        const auto& row = modelRows_[rows[size_t(k)]];
+        ImGui::PushID(int(row.id));
+        if (ImGui::Selectable(row.name.c_str(), row.id == modelId_ && !modelName_.empty())) selectModel(std::to_string(row.id));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nid %u | type %u | %u bytes", row.name.c_str(), row.id, row.type, row.bytes);
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    if (rows.empty()) theme::hint("No matching models.");
+    theme::endCard();
+    ImGui::Dummy(ImVec2(0, S(8)));
+    if (modelImportOpen_) { drawModelImportCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
+    if (!modelError_.empty()) { ImGui::SetCursorPosX(pad); ImGui::TextWrapped("%s", modelError_.c_str()); }
+    if (modelName_.empty()) return;
+    ImGui::SetCursorPosX(pad);
+    theme::beginCard("##modelinfo", inner);
+    ImGui::TextWrapped("%s", modelName_.c_str());
+    ImGui::Text("id %u | LOD 0", modelId_);
+    ImGui::Text("%zu vertices | %zu triangles", modelGeometry_.vertices.size(), modelGeometry_.triangles.size());
+    ImGui::Text("%u primitives | %u bones", modelGeometry_.primitiveCount, modelGeometry_.boneCount);
+    if (modelGeometry_.boneCount) theme::hint("Static pose; animation playback is not available yet.");
+    ImGui::Checkbox("Wireframe", &modelWire_); auto_.registerWidget("check_model_wire");
+    ImGui::SameLine();
+    if (theme::ghostButton("Reset view", ImVec2(S(100), S(26)))) { modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1; }
+    auto_.registerWidget("btn_model_reset");
+    theme::hint("Drag the preview to orbit. Scroll to zoom.");
+    if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (size_t i = 0; i < modelGeometry_.materials.size(); ++i) {
+            const auto& mat = modelGeometry_.materials[i];
+            ImGui::PushID(int(i));
+            ImGui::Text("Material %d", mat.id);
+            auto link = [&](const char* label, int32_t id) {
+                if (id <= 0) return;
+                const auto row = std::find_if(texRows_.begin(), texRows_.end(), [&](const auto& t) { return t.id == uint32_t(id) && t.bank == "GBANK_MAIN_PC"; });
+                const std::string caption = std::string(label) + " " + std::to_string(id);
+                ImGui::BeginDisabled(row == texRows_.end());
+                if (ImGui::SmallButton(caption.c_str()) && row != texRows_.end()) { texSelected_ = row->name; assetsTab_ = 0; }
+                auto_.registerWidget(("model_texture_" + std::to_string(i) + "_" + label).c_str());
+                ImGui::EndDisabled();
+                if (row != texRows_.end() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", row->label.c_str());
+            };
+            link("Diffuse", mat.diffuseTexture); link("Bump", mat.bumpTexture);
+            link("Reflection", mat.reflectionTexture); link("Alpha", mat.alphaMapTexture);
+            ImGui::PopID();
+        }
+    }
+    if (ImGui::CollapsingHeader("Primitives")) {
+        for (const auto& p : modelGeometry_.primitives)
+            ImGui::Text("%u vertices | stride %u | format 0x%X", p.vertexCount, p.vertexStride, p.vertexFormat);
+    }
+    if (ImGui::CollapsingHeader("Helper points")) {
+        if (modelGeometry_.helpers.empty()) theme::hint("No helper points.");
+        for (const auto& h : modelGeometry_.helpers) {
+            ImGui::TextWrapped("%s (bone %u)", h.name.c_str(), h.bone);
+            ImGui::Text("  %.2f, %.2f, %.2f", h.matrix[9], h.matrix[10], h.matrix[11]);
+        }
+    }
+    if (ImGui::CollapsingHeader("Used by", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const auto it = modelUsers_.find(modelId_);
+        if (it == modelUsers_.end()) theme::hint("No object, creature or building definitions reference this model.");
+        else for (const auto& name : it->second) ImGui::TextWrapped("%s", name.c_str());
+    }
+    theme::endCard();
+}
+
+void App::drawModelViewport(const ImVec2& origin, const ImVec2& size) {
+    const float side = std::max(8.0f, std::min(size.x, size.y));
+    const ImVec2 pos(origin.x + (size.x-side)*0.5f, origin.y + (size.y-side)*0.5f);
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::InvisibleButton("##modelorbit", ImVec2(side, side), ImGuiButtonFlags_MouseButtonLeft);
+    auto_.registerWidget("model_viewport");
+    const auto& io = ImGui::GetIO();
+    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+        modelYaw_ -= io.MouseDelta.x * 0.01f;
+        modelPitch_ = std::clamp(modelPitch_ + io.MouseDelta.y * 0.01f, -1.5f, 1.5f);
+    }
+    if (ImGui::IsItemHovered() && io.MouseWheel != 0)
+        modelZoom_ = std::clamp(modelZoom_ * std::exp(-io.MouseWheel * 0.12f), 0.5f, 8.0f);
+    auto* srv = modelReady_ ? renderer_.modelPreview(uint32_t(side), modelYaw_, modelPitch_, modelZoom_, modelWire_) : nullptr;
+    if (srv) ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)srv, pos, ImVec2(pos.x+side, pos.y+side));
+    else ImGui::GetWindowDrawList()->AddText(ImVec2(origin.x+S(24), origin.y+S(24)), theme::col(theme::Muted), "Select a model to preview it here.");
 }
 
 }  // namespace albion::gui

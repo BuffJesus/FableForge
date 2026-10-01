@@ -1,0 +1,43 @@
+# Read-only expanded range, stable eye/focus residency, and synthetic GPU pressure.
+wait_maps
+wait_ready
+set world_auto_detail 0
+set world_detail_limit 18
+set world_detail_radius 500
+world_tab 1
+wait_world_tiles
+set world_3d 1
+world_camera 3398.75 3612.5 130 0.46365 0.5 200
+world_pose 3398.75 3612.5 130 0.46365 0.5
+wait_world_detail
+assert_state world_detail_maps 18
+assert_state world_detail_loads 18
+assert_state world_detail_radius 500.000000
+clear_toasts
+screenshot build/ui/world_extended.png
+dump_state
+# Change the stored orbit distance, then restore precisely the same eye and view.
+world_camera 3398.75 3612.5 130 0.46365 0.5 8000
+world_pose 3398.75 3612.5 130 0.46365 0.5
+wait_world_detail
+assert_state world_detail_maps 18
+assert_state world_detail_loads 18
+dump_state
+screenshot build/ui/world_extended_focus.png
+set world_detail_limit 24
+# Ample simulated headroom includes independently resident distant scenery.
+world_memory_sample 17179869184 2147483648
+set world_auto_detail 1
+frames 8
+assert_state world_detail_memory_ceiling 24
+world_memory_sample 1073741824 4294967296
+frames 8
+assert_state world_detail_memory_ceiling 1
+assert_state world_detail_budget 1
+wait_world_detail
+assert_state world_detail_maps 1
+assert_state world_water_batches 178
+world_memory_sample unavailable
+frames 8
+assert_state world_detail_memory_ceiling 6
+quit

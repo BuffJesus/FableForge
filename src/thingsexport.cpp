@@ -135,7 +135,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         if (known != meshIndexById.end()) return known->second;
         std::string merr;
         const auto g0 = std::chrono::steady_clock::now();
-        const auto* geo = fe::cachedMesh(modelId, merr);
+        const auto geo = fe::cachedMesh(modelId, merr);
         geoSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - g0).count();
         if (!geo) { meshIndexById[modelId] = -1; if (!defWarned[def]++) warn(def + ": " + merr); return -1; }
         std::vector<std::string> mw;
@@ -211,7 +211,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     auto placeParticle = [&](const std::string& fxName, float x, float y, float z) {
         ++st.particles;
         if (!options.particles) return;
-        const effects::Effect* fx = effects::byName(fxName);
+        const auto fx = effects::byName(options.gameRoot,fxName);
         if (!fx) { ++st.particlesUnknown; if (!defWarned["fx:" + fxName]++) warn("particle effect " + fxName + " is not in effects.big"); return; }
         bool any = false;
         for (const auto& sp : fx->sprites) {
@@ -275,7 +275,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
     spawnChildren = [&](uint32_t parentModel, const fe::Instance& parent, float objectScale, int depth) {
         if (depth > 4) return;
         std::string merr;
-        const auto* geo = fe::cachedMesh(parentModel, merr);
+        const auto geo = fe::cachedMesh(parentModel, merr);
         if (!geo) return;
         for (const auto& h : geo->helpers) {
             if (h.name.empty()) continue;
@@ -325,6 +325,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         const std::string type = lower(thing.type);
         if (type == "marker") { ++st.noGraphic; continue; }
         if (type == "aicreature" && !options.creatures) { ++st.skippedCreatures; continue; }
+        if (type != "aicreature" && !options.objects) { ++st.skippedObjects; continue; }
         const auto* phys = thing.findCtc("CTCPhysicsStandard");
         if (!phys) phys = thing.findCtc("CTCPhysicsNavigator");
         if (!phys) { ++st.noPosition; continue; }
@@ -379,6 +380,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
         scene.meshes[size_t(meshIndex)].instanceCount++;
         scene.instances.push_back(inst);
         ++st.placed;
+        if (type == "aicreature") ++st.rootCreaturesPlaced; else ++st.rootObjectsPlaced;
         spawnChildren(modelId, inst, objectScale, 0);
     }
     scene.treeInstances = st.placed;

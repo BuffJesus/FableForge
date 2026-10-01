@@ -1,0 +1,148 @@
+# Actual fixed-height popup, keyboard, terrain clamp, locks and exact undo.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+tour -1
+gizmo 0
+select_def OBJECT_BARREL_BREAKABLE
+frames 3
+snapshot_document
+gizmo 1
+frame_selected
+frames 3
+mouse_move viewport
+key_down Ctrl
+key_down H
+frames 2
+key_up H
+key_up Ctrl
+frames 3
+assert_state selection_height_popup 1
+mouse_move selected_pivot
+mouse_down left
+frames 3
+mouse_delta 24 0
+frames 3
+assert_state gizmo_using 0
+mouse_up left
+assert_document_same
+click input_selection_height
+key_down Ctrl
+key_down A
+frames 2
+key_up A
+key_up Ctrl
+text_input 30
+clear_toasts
+screenshot build/ui/selection_height.png
+click btn_selection_height_apply
+frames 3
+assert_state selection_height_popup 0
+assert_selected_height 30
+undo
+frames 3
+assert_document_same
+assert_state doc_changes 0
+# Menu entry, negative request clamps to terrain.
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+assert_state selection_height_popup 1
+click input_selection_height
+key_down Ctrl
+key_down A
+frames 2
+key_up A
+key_up Ctrl
+text_input -100
+click btn_selection_height_apply
+frames 3
+assert_selected_ground
+undo
+frames 3
+assert_document_same
+# Cancel makes no edit.
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+click btn_selection_height_cancel
+frames 3
+assert_document_same
+assert_state doc_changes 0
+# Applying the unchanged value creates no undo entry.
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+click btn_selection_height_apply
+frames 3
+assert_document_same
+assert_state doc_changes 0
+# Selection mutation while modal is open disables Apply.
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+select_def OBJECT_CUPBOARD_TALL
+frames 3
+click btn_selection_height_apply
+frames 3
+assert_state selection_height_popup 1
+assert_document_same
+click btn_selection_height_cancel
+frames 3
+select_def OBJECT_BARREL_BREAKABLE
+# Mixed selection: unlocked cupboard moves; locked barrel remains exact.
+selection_lock 1
+snapshot_selected
+select_def OBJECT_CUPBOARD_TALL
+select_toggle_def OBJECT_BARREL_BREAKABLE
+frames 3
+snapshot_document
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+click input_selection_height
+key_down Ctrl
+key_down A
+frames 2
+key_up A
+key_up Ctrl
+text_input 40
+click btn_selection_height_apply
+frames 3
+assert_snapshot_thing_same
+select_def OBJECT_CUPBOARD_TALL
+assert_selected_height 40
+undo
+assert_document_same
+undo
+assert_state doc_changes 0
+# Creature saved InitialPos follows height, with exact undo.
+select_def CREATURE_NEW_CHICKEN_01
+snapshot_document
+click btn_selection_actions
+frames 3
+click menu_selection_height
+frames 3
+click input_selection_height
+key_down Ctrl
+key_down A
+frames 2
+key_up A
+key_up Ctrl
+text_input 25
+click btn_selection_height_apply
+frames 3
+assert_selected_height 25
+assert_initial_position
+undo
+assert_document_same
+assert_state doc_changes 0
+quit

@@ -1,0 +1,12 @@
+# Definition-backed sex lookup used by Father/Mother link validation.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+set saveroot build/ui_creature_sex
+edit 1
+place CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED SexProbeMale
+assert_state selected_creature_sex 1
+place CREATURE_OAKVALE_VILLAGER_FEMALE_UNEMPLOYED SexProbeFemale
+assert_state selected_creature_sex 2
+quit

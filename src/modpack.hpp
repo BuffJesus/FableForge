@@ -17,8 +17,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <span>
+#include <set>
 #include <string>
 #include <vector>
+
+#include "forge/lipsync.hpp"
 
 namespace albion::modpack {
 
@@ -31,11 +35,17 @@ struct ModelRecipe {
 struct GroundThemeRecipe {
     std::string name, png, cliffPng, donor = "GROUND_GRASS";
 };
+struct LipSyncRecipe {
+    std::string language,bank;
+    uint32_t soundId=0;
+    forge::lipsync::Entry value;
+};
 struct Pack {
     int version = 1;
     std::string name;
     std::vector<ModelRecipe> models;
     std::vector<GroundThemeRecipe> groundThemes;
+    std::vector<LipSyncRecipe> lipSync;
     // masters: the names (load-order names or pack names) of the mods this one builds on --
     // a level pack painting another pack's ground theme, a quest pack using a pack's level.
     // They must be in the order, enabled, and load before it.
@@ -58,6 +68,10 @@ bool create(const std::filesystem::path& folder, const std::string& name, std::s
 // has is replaced. The caller adds the folder to the load order.
 bool addModel(const std::filesystem::path& folder, ModelRecipe recipe, std::string& error);
 bool addGroundTheme(const std::filesystem::path& folder, GroundThemeRecipe recipe, std::string& error);
+// Stage one language's edited records as manifest recipes. Later packs overlay
+// only their named bank/ID records during composition, so unrelated lines mix.
+bool addLipSync(const std::filesystem::path& folder,const std::string& language,
+                std::span<const forge::lipsync::ArchiveEdit> edits,std::string& error);
 
 // The composer's recipe step: every recipe of the pack into outRoot (reading outRoot's
 // copy of a bank / game.bin when an earlier layer wrote one, else baseRoot's). A failing
@@ -67,7 +81,9 @@ struct ApplyReport {
     std::vector<std::string> notes;
     std::vector<std::string> errors;
 };
-ApplyReport apply(const std::filesystem::path& folder, const std::filesystem::path& baseRoot, const std::filesystem::path& outRoot);
+ApplyReport apply(const std::filesystem::path& folder, const std::filesystem::path& baseRoot,
+                  const std::filesystem::path& outRoot,
+                  const std::set<std::string>& skipLipLanguages = {});
 
 // The static-map layer: every <pack>/stb/<map>.chunk (+ .record) the editor baked replaces
 // that map's chunk + record in outRoot's FinalAlbion_RT.stb (copied from baseRoot first

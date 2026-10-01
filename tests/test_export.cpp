@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -16,8 +17,10 @@
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
 #include "worldtiles.hpp"
+#include "effects.hpp"
 #include "worldvisibility.hpp"
 #include "detailcache.hpp"
+#include "detailretry.hpp"
 #include "dxt1.hpp"
 #include "forge/minimapframe.hpp"
 #include "forge/budget.hpp"
@@ -40,6 +43,7 @@
 #include "gtg.hpp"
 #include "forge/meshcompose.hpp"
 #include "forge/meshpreview.hpp"
+#include "forge/big.hpp"
 
 namespace fs = std::filesystem;
 namespace te = albion::terrainexport;
@@ -56,6 +60,238 @@ int g_failures = 0;
         }                                                                              \
     } while (0)
 
+void testDisabledEffects() {
+    std::vector<uint8_t> payload;
+    auto u32 = [&](uint32_t n) { for(int i=0;i<4;++i) payload.push_back(uint8_t(n>>(8*i))); };
+    auto str = [&](const char* s) { do { payload.push_back(uint8_t(*s)); } while(*s++); };
+    u32(100); str("Enabled fixture");
+    payload.insert(payload.end(), 7+5*4+4+5, 0);
+    u32(3);
+    auto system = [&](bool enabled, bool componentEnabled, int texture, bool extraDisabled) {
+        str("system"); payload.push_back(enabled); payload.push_back(0);
+        u32(0); u32(0); u32(0); u32(extraDisabled ? 2 : 1);
+        auto sprite = [&](bool active, int id) {
+            str("CPSCRenderSprite"); u32(0); payload.push_back(active);
+            u32(id); u32(0); u32(0xffffffff); u32(0); u32(0);
+            // Blend mode + ten renderer flags, eight quantized/raw values, seven bools.
+            for(int i=0;i<19;++i) u32(0);
+            payload.insert(payload.end(),7,0); payload.push_back(0x7b);
+        };
+        sprite(componentEnabled,texture);
+        if(extraDisabled) sprite(false,999);
+        payload.push_back(0x26);
+    };
+    system(false,true,10,false);
+    system(true,false,20,false);
+    system(true,true,30,true);
+    auto effect=albion::effects::decode(payload);
+    CHECK(effect.parsedFully && effect.systems==3);
+    CHECK(effect.sprites.size()==1);
+    if(effect.sprites.size()==1) CHECK(effect.sprites[0].sprite==30);
+    payload.pop_back();
+    CHECK(!albion::effects::decode(payload).parsedFully);
+}
+
+void testParticlePreviewParameters() {
+    std::vector<uint8_t> payload;
+    size_t systemCountOffset=0,systemOffset=0;
+    auto u32=[&](uint32_t value) { for(int i=0;i<4;++i) payload.push_back(uint8_t(value>>(i*8))); };
+    auto f32=[&](float value) { uint32_t bits; std::memcpy(&bits,&value,4); u32(bits); };
+    auto str=[&](const char* value) { do { payload.push_back(uint8_t(*value)); } while(*value++); };
+    auto boolean=[&](bool value) { payload.push_back(uint8_t(value)); };
+    auto header=[&](uint32_t components) {
+        u32(100); str("Preview fields");
+        for(int i=0;i<7;++i) boolean(i==4);
+        for(int i=0;i<5;++i) f32(float(i+1));
+        u32(7); for(int i=0;i<5;++i) boolean(i==1);
+        systemCountOffset=payload.size();u32(1);systemOffset=payload.size();str("system"); boolean(true); boolean(true);
+        f32(2); f32(3); f32(4); u32(components);
+    };
+    auto component=[&](const char* name,bool enabled=true) { str(name);u32(0);boolean(enabled); };
+    auto endComponent=[&] { payload.push_back(0x7b); };
+    auto emitter=[&](bool enabled,uint32_t burst) {
+        component("CPSCEmitterGeneric",enabled);
+        u32(11);u32(12);u32(burst);u32(14);u32(2);
+        for(int i=0;i<10;++i) boolean(i%2==0);
+        u32(27);u32(511);u32(16383);u32(1023);u32(0);u32(1023);
+        boolean(true);boolean(false);u32(0);u32(128);u32(32767);boolean(true);
+        u32(32767);u32(16384);u32(0);u32(0);u32(2047);u32(1024);boolean(false);
+        endComponent();
+    };
+    auto mesh=[&](bool enabled,int id) {
+        component("CPSCRenderMesh",enabled);u32(uint32_t(id));u32(88);
+        for(int i=0;i<6;++i)u32(0x44332211u+uint32_t(i));
+        for(uint32_t n:{3u,4u,2u,1u,10u,900u,7u,8u,9u})u32(n);
+        u32(2047);u32(1024);u32(0);boolean(true);boolean(true);
+        u32(0);u32(2047);u32(2047);
+        for(int i=0;i<6;++i)boolean(i%2==0);
+        u32(255);u32(4095);u32(127);boolean(true);u32(127);boolean(true);u32(1023);boolean(true);u32(123);
+        endComponent();
+    };
+    header(8);mesh(true,42);emitter(true,13);
+    component("CPSCUpdateNormal");u32(5);u32(250);
+    for(int i=0;i<18;++i) boolean(i%3==0);
+    str("DECAL");for(int i=0;i<30;++i) f32(float(11+i));
+    u32(123);u32(456);endComponent();
+    component("CPSCRenderSprite");u32(77);u32(88);
+    u32(0x44332211);u32(0x88776655);u32(0xccbbaa99);
+    for(uint32_t n:{3u,4u,2u,1u,0x123u,5u,250u,9u,80u,90u,2u}) u32(n);
+    for(uint32_t n:{2047u,127u,0u,255u,16383u,127u,1023u,4095u}) u32(n);
+    for(int i=0;i<7;++i) boolean(i%2==0);
+    endComponent();
+    emitter(false,999); // newly retained state also respects component Enabled
+    mesh(false,999);
+    for(bool enabled:{false,true}) {
+        component("CPSCSpline",enabled);boolean(false);boolean(false);f32(1);
+        u32(0);boolean(false);boolean(false);endComponent();
+    }
+    payload.push_back(0x26);
+    const auto effect=albion::effects::decode(payload);
+    CHECK(effect.parsedFully && effect.continuous && !effect.emitter2D && effect.offscreenUpdate);
+    CHECK(effect.maxSpawnDistance==1 && effect.fadeInStart==5 && effect.priority==7);
+    CHECK(effect.sprites.size()==1 && effect.previewUnsupported.size()==1);
+    CHECK(effect.meshes.size()==1);
+    if(effect.meshes.size()==1) {
+        const auto& m=effect.meshes[0];
+        CHECK(m.mesh==42 && m.size[0]==20 && m.size[2]==0 && m.colour[0]==0x33 && m.colour[2]==0x14);
+        CHECK(m.systemIndex==0 && m.config.systemIndex==0 && m.config.emitter.startCount==13 && m.config.lifeSecs==12);
+        CHECK(m.config.orbits.empty() && m.config.previewUnsupported==std::vector<std::string>{"CPSCSpline"});
+        CHECK(m.config.systemScale[0]==2 && m.render.blendOp==2 && m.blendMode==3 && m.endSize[1]==20);
+        CHECK(m.centredOnPosition && m.render.alphaFade && m.render.sizeFade && !m.render.flicker);
+        CHECK(m.render.trailLength==7 && m.render.fadeOutBegin==900 && m.render.alphaMinimum==1 && m.render.sizeMinimum==1);
+        CHECK(m.render.flickerBias==1 && m.render.flickerSpeed==30 && m.render.trailWidth==10 && m.renderSizeParam==123);
+    }
+    if(effect.sprites.size()==1) {
+        const auto& p=effect.sprites[0];const auto& e=p.emitter;const auto& u=p.update;const auto& r=p.render;
+        CHECK(p.startSize==40 && p.endSize==0 && p.perSecond==100 && p.lifeSecs==12);
+        CHECK(p.hasAuthoredSizes && p.authoredStartSize==20 && p.authoredEndSize==0);
+        CHECK(p.scaleParticles && p.systemScale[0]==2 && p.systemScale[2]==4);
+        CHECK(p.colour[0]==0x33 && p.colour[1]==0x22 && p.colour[2]==0x11 && p.colour[3]==0x44);
+        CHECK(e.present && e.positionParam==11 && e.directionParam==12 && e.startCount==13 && e.startCountRandom==14 && e.type==2);
+        CHECK(e.solid && !e.useLife && e.useTimeline && e.useCustomDirection && !e.oppositeDirection);
+        CHECK(e.angularPerturbation==27 && e.customDirection[0]==1 && e.customDirection[1]==-1);
+        CHECK(std::abs(e.customDirection[2]-1.f/255)<1e-6f);
+        CHECK(e.size==10 && e.radialBias==-5 && e.minSpeed==10 && e.maxSpeed==0 && e.timelineSecs==30 && e.lifeSecs==300);
+        CHECK(std::abs(e.startTime-16384.f/32767*300)<0.001f && e.nonUniformScale[0]==-10 && e.nonUniformScale[1]==10);
+        CHECK(e.useForwardDirection && !e.useRandom2DDirection && e.useRandom3DDirection && !e.hasSpline);
+        CHECK(u.present && u.fadeInEnd==5 && u.fadeOutBegin==250 && u.useParticleLife && u.useAccelerationParam && u.systemAlphaFade);
+        CHECK(!u.randomRotationAxis && u.collideAnything && u.randomisePosition && u.setOrientationGame && !u.createDecal);
+        CHECK(u.decalEmitter=="DECAL" && u.systemLife==11 && u.wind==13 && u.gravity==14 && u.drag==15 && u.accelerationScale==16);
+        CHECK(u.initialRotation[0]==17 && u.rotationMinSpeed==20 && u.bounce==22 && u.emissionMinimum==25);
+        CHECK(p.offset[0]==26 && p.offset[2]==28 && u.acceleration[0]==29 && u.randomiseScale[2]==40);
+        CHECK(u.accelerationParam==123 && u.orientationParam==456);
+        CHECK(r.midColour[0]==0x77 && r.endColour[3]==0xcc && r.trailTexture==88 && r.blendOp==2 && r.flags==0x123);
+        CHECK(r.fadeOutBegin==250 && r.trailLength==9 && r.flickerMinAlpha==80 && r.crossedSprites==2);
+        CHECK(r.alphaMinimum==1 && r.animationSecs==100 && r.sizeMinimum==1 && r.trailWidth==10 && r.flickerSpeed==30);
+        CHECK(r.useStartColour && !r.useMidColour && r.useEndColour && !r.alphaFade && r.sizeFade && !r.flicker && r.forceAnimation);
+        CHECK(p.previewUnsupported==std::vector<std::string>{"CPSCSpline"});
+    }
+    const std::vector<uint8_t> repeatedSystem(payload.begin()+systemOffset,payload.end());
+    payload[systemCountOffset]=2;payload.insert(payload.end(),repeatedSystem.begin(),repeatedSystem.end());
+    const auto repeated=albion::effects::decode(payload);
+    CHECK(repeated.parsedFully && repeated.meshes.size()==2 && repeated.sprites.size()==2);
+    if(repeated.meshes.size()==2 && repeated.sprites.size()==2)
+        CHECK(repeated.meshes[0].system==repeated.meshes[1].system && repeated.meshes[1].systemIndex==1 && repeated.sprites[1].systemIndex==1);
+    payload.clear();header(1);mesh(true,42);payload.resize(payload.size()-10);
+    CHECK(!albion::effects::decode(payload).parsedFully);
+    payload.clear();header(1);component("CPSCSingleSprite");u32(91);
+    u32(0x44332211);u32(0x88776655);u32(0xccbbaa99);
+    f32(2);f32(3);f32(5);u32(7);u32(2);f32(.5f);u32(20);u32(230);
+    f32(.2f);f32(.3f);u32(99);u32(3);u32(2);u32(4);u32(1);u32(92);f32(.4f);u32(8);u32(9);
+    for(int i=0;i<14;++i) boolean(i%2==0);
+    u32(0);boolean(false);boolean(false);endComponent();payload.push_back(0x26);
+    const auto single=albion::effects::decode(payload);
+    CHECK(single.parsedFully && single.sprites.size()==1);
+    if(single.sprites.size()==1) {
+        const auto& p=single.sprites[0];const auto& r=p.render;
+        CHECK(p.single && p.sprite==91 && p.startSize==6 && p.endSize==10 && !p.emitter.present);
+        CHECK(p.hasAuthoredSizes && p.authoredStartSize==3 && p.authoredEndSize==5);
+        CHECK(r.animationSecs==2 && r.alignment==7 && r.initialAngle==.5f && r.fadeInEnd==20 && r.fadeOutBegin==230);
+        CHECK(r.alphaMinimum==.2f && r.sizeMinimum==.3f && r.positionParam==99 && r.blendOp==2);
+        CHECK(r.trailTexture==92 && r.trailWidth==.4f && r.trailLength==8 && r.stayWithEmitterFactor==9);
+        CHECK(r.faceMe2D && !r.faceMe3D && r.crossed && r.forceAnimation && r.usePosition && !r.useSplinePoints);
+    }
+    payload.pop_back();const auto truncated=albion::effects::decode(payload);
+    CHECK(!truncated.parsedFully && !truncated.previewUnsupported.empty());
+}
+
+void testParticleOrbitAttractorParameters() {
+    std::vector<uint8_t> bytes;
+    auto u32=[&](uint32_t n) { for(int i=0;i<4;++i) bytes.push_back(uint8_t(n>>(i*8))); };
+    auto f32=[&](float n) { uint32_t bits;std::memcpy(&bits,&n,4);u32(bits); };
+    auto str=[&](const char* s) { do {bytes.push_back(uint8_t(*s));} while(*s++); };
+    auto header=[&](bool systemEnabled) {
+        bytes.clear();u32(100);str("Orbit attractor fixture");
+        bytes.insert(bytes.end(),7+20+4+5,0);u32(1);str("system");
+        bytes.push_back(systemEnabled);bytes.push_back(0);f32(1);f32(1);f32(1);u32(5);
+    };
+    auto component=[&](const char* name,bool enabled) {str(name);u32(0);bytes.push_back(enabled);};
+    auto orbit=[&](bool enabled,uint32_t centre) {
+        component("CPSCOrbit",enabled);u32(centre);
+        for(int i=0;i<3;++i) {
+            u32(uint32_t(i-1));u32(i==1?0:7);f32(float(i+1));f32(float(-i));u32(i==2?9:0);
+            for(int j=0;j<7;++j) f32(float(i*10+j)+.25f);
+        }
+        bytes.push_back(0x7b);
+    };
+    size_t pointCountOffset=0,attractorEnabledOffset=0,componentEnabledOffset=0;
+    auto attractor=[&](bool enabled,uint32_t param) {
+        component("CPSCAttractor",enabled);componentEnabledOffset=bytes.size()-1;
+        attractorEnabledOffset=bytes.size();bytes.push_back(1);bytes.push_back(1);
+        u32(2);u32(param);u32(87);f32(12.5f);f32(-3.25f);
+        pointCountOffset=bytes.size();u32(2);
+        for(int i=0;i<6;++i) f32(float(i)-2.5f);
+        bytes.push_back(0x7b);
+    };
+    auto fixture=[&](bool enabled) {
+        header(enabled);component("CPSCRenderSprite",true);
+        u32(73);u32(0);u32(0xff112233);u32(0);u32(0);
+        for(int i=0;i<19;++i)u32(0);
+        bytes.insert(bytes.end(),7,0);bytes.push_back(0x7b);
+        orbit(true,42);orbit(false,999);attractor(false,999);attractor(true,86);bytes.push_back(0x26);
+    };
+    fixture(true);
+    const auto fx=albion::effects::decode(bytes);
+    CHECK(fx.parsedFully && fx.sprites.size()==1 && fx.previewUnsupported.empty());
+    if(fx.sprites.size()==1) {
+        const auto& p=fx.sprites[0];
+        CHECK(p.sprite==73 && p.colour[0]==0x11 && p.startSize==0 && p.perSecond==0);
+        CHECK(p.orbits.size()==1 && p.attractors.size()==1 && p.previewUnsupported.empty());
+        if(p.orbits.size()==1) {
+            const auto& o=p.orbits[0];CHECK(o.centreParam==42);
+            for(int i=0;i<3;++i) {
+                const auto& a=o.axes[i];CHECK(a.type==i-1 && a.enabled==(i!=1) && a.cycle==(i==2));
+                CHECK(a.radius==i+1 && a.expand==-i && a.cycleTime==i*10+.25f);
+                CHECK(a.squeezeScale==i*10+1.25f && a.squeezeAngle==i*10+2.25f);
+                CHECK(a.rotateSpeed==i*10+3.25f && a.rotateStart==i*10+4.25f);
+                CHECK(a.rotateSpeedRandom==i*10+5.25f && a.rotateStartRandom==i*10+6.25f);
+            }
+        }
+        if(p.attractors.size()==1) {
+            const auto& a=p.attractors[0];
+            CHECK(a.enabled && a.useParamPosition && a.falloff==2 && a.positionParam==86 && a.positionParamName==87);
+            CHECK(a.radius==12.5f && a.force==-3.25f && a.points.size()==2);
+            if(a.points.size()==2) CHECK(a.points[0][0]==-2.5f && a.points[1][2]==2.5f);
+        }
+    }
+    // A hostile point count is rejected before allocation, including disabled payloads.
+    auto malformed=bytes;for(int i=0;i<4;++i)malformed[pointCountOffset+i]=255;
+    CHECK(!albion::effects::decode(malformed).parsedFully);
+    malformed[componentEnabledOffset]=0;CHECK(!albion::effects::decode(malformed).parsedFully);
+    auto internallyDisabled=bytes;internallyDisabled[attractorEnabledOffset]=0;
+    const auto inactive=albion::effects::decode(internallyDisabled);
+    CHECK(inactive.parsedFully && inactive.sprites.size()==1);
+    if(inactive.sprites.size()==1 && inactive.sprites[0].attractors.size()==1)
+        CHECK(!inactive.sprites[0].attractors[0].enabled);
+    bytes.resize(pointCountOffset+4+5);CHECK(!albion::effects::decode(bytes).parsedFully);
+    fixture(false);const auto disabled=albion::effects::decode(bytes);
+    CHECK(disabled.parsedFully && disabled.sprites.empty() && disabled.previewUnsupported.empty());
+    // Orbit truncation fails inside the third axis instead of yielding a partial record.
+    header(true);bytes[bytes.size()-4]=1;orbit(true,42);bytes.resize(bytes.size()-8);
+    const auto truncated=albion::effects::decode(bytes);
+    CHECK(!truncated.parsedFully && !truncated.previewUnsupported.empty());
+}
+
 void testDistantTexturePalette() {
     uint8_t pixels[64] = {};
     for (int i = 0; i < 16; ++i) {
@@ -71,6 +307,26 @@ void testDistantTexturePalette() {
 
 void testWorldVisibility() {
     using namespace albion::worldview;
+    // Ten equally sized objects share one projected-size policy regardless of
+    // which map owns them. Adjacent authored LOD coverage is complementary.
+    for (int i=1;i<=10;++i) {
+        const float distance=float(i)*10;
+        const float a=objectCoverage(distance,2,600,0,180,1000);
+        const float b=objectCoverage(distance,2,600,180,0,1000);
+        CHECK(std::fabs(a+b-1)<1e-5f);
+    }
+    CHECK(objectCoverage(5,2,600,0,180,1000)==1);
+    CHECK(objectCoverage(100,2,600,0,180,1000)==0);
+    CHECK(objectCoverage(100,2,600,180,1.5f,1000)==1);
+    CHECK(objectCoverage(1002,2,600,0,0,1000)==0);
+    CHECK(objectCoverage(900,100,600,0,0,1000)==1);
+    CHECK(objectCoverage(20,2,600,0,180,1000)==objectCoverage(40,4,600,0,180,2000));
+    CHECK(detailUploadMilliseconds(1.0f/60)==4);
+    CHECK(detailUploadMilliseconds(1.0f/120)==4);
+    CHECK(detailUploadMilliseconds(1.0f/30)==2);
+    CHECK(detailUploadMilliseconds(0)==2 && detailUploadMilliseconds(-1)==2);
+    CHECK(detailUploadMilliseconds(std::numeric_limits<float>::infinity())==2);
+    CHECK(detailUploadMilliseconds(std::numeric_limits<float>::quiet_NaN())==2);
     CHECK(nearPlane(5) == .1f && nearPlane(-5) == .1f);
     CHECK(nearPlane(1000) == 2 && nearPlane(50000) == 20);
     const float worldLo[3] = {0, 0, -8000}, worldHi[3] = {5200, 500, -640};
@@ -100,6 +356,41 @@ void testWorldVisibility() {
     CHECK(visible(m, crossingLo, crossingHi));  // camera/clip volume inside a large map
     m[12] = 1.5f;
     CHECK(visible(m, lo, hi));                 // touching the boundary must not pop out
+    constexpr uint64_t MiB = 1024u * 1024u;
+    CHECK(memoryMapCeiling(false, 0, 0, 0, 0, 24) == 6);
+    CHECK(memoryMapCeiling(true, 8*1024*MiB, 2*1024*MiB, 0, 64*MiB, 24) == 24);
+    CHECK(memoryMapCeiling(true, 512*MiB, 400*MiB, 0, 64*MiB, 24) == 1);
+    CHECK(memoryMapCeiling(true, 1024*MiB, 2*1024*MiB, 128*MiB, 64*MiB, 24) == 1);
+    CHECK(memoryMapCeiling(true, 8*1024*MiB, 2*1024*MiB, 0, 64*MiB, 3) == 3);
+    CHECK(memoryMapCeiling(true, 8*1024*MiB, 2*1024*MiB, 0, 1024*MiB, 24) == 2);
+    CHECK(detailPriority(0,250,false,true) < detailPriority(0,250,true,false));
+    CHECK(detailPriority(1,250,true,false) < detailPriority(0,250,false,false));
+    CHECK(detailPriority(20,250,false,false) < detailPriority(30,250,false,false));
+    DetailRetry retry;
+    CHECK(retry.ready("broken",0));
+    CHECK(retry.fail("broken",10)==2);
+    CHECK(!retry.ready("broken",11.99) && retry.ready("broken",12));
+    CHECK(retry.ready("healthy",10));
+    CHECK(retry.fail("broken",12)==4);
+    CHECK(retry.fail("broken",16)==8);
+    CHECK(retry.fail("broken",24)==16);
+    for(int i=0;i<100;++i) CHECK(retry.fail("broken",40)==30);
+    retry.success("broken");
+    CHECK(retry.ready("broken",40) && retry.fail("broken",40)==2);
+    retry.clear();
+    CHECK(retry.ready("broken",40));
+    CHECK(DetailFade::terrain(0) == 0 && DetailFade::objects(0) == 0);
+    CHECK(DetailFade::terrain(1) == 1 && DetailFade::objects(1) == 1);
+    CHECK(DetailFade::terrain(.25f / DetailFade::seconds) == 1);
+    CHECK(DetailFade::objects(-1) == 0 && DetailFade::objects(2) == 1);
+    float previous = 0;
+    for (int step = 1; step <= 60; ++step) {
+        const float value = DetailFade::objects(float(step) / 60);
+        CHECK(value >= previous && value - previous < .026f);
+        // Reversing progress retraces the same opacity without a jump.
+        CHECK(std::abs(DetailFade::objects(1 - float(step) / 60) - (1 - value)) < 1e-6f);
+        previous = value;
+    }
     DetailBudget budget;
     for (int i = 0; i < 65; ++i) budget.observe(1.0f / 30, 6, true);
     CHECK(budget.maps == 5);
@@ -111,6 +402,15 @@ void testWorldVisibility() {
     CHECK(budget.maps == 6);                   // a single long stall
     budget.observe(0.01f, 2, false);
     CHECK(budget.maps == 2);                   // a lower user ceiling takes effect immediately
+    // A capable machine can grow beyond the former six-map cap, but memory
+    // pressure clamps it immediately even during loading or focus loss.
+    for (int i = 0; i < 620; ++i) budget.observe(1.0f / 60, 24, true);
+    CHECK(budget.maps == 4);
+    budget.maps = 6;
+    for (int i = 0; i < 310; ++i) budget.observe(1.0f / 60, 24, true);
+    CHECK(budget.maps == 7);
+    budget.observe(0.01f, 1, false);
+    CHECK(budget.maps == 1);
     DetailCache cache(100, 2);
     CHECK(cache.retain("a", 40).empty() && cache.retain("b", 40).empty());
     CHECK(cache.bytes() == 80 && cache.size() == 2);
@@ -660,18 +960,18 @@ void testLevelDocument() {
     {
         const fs::path dir = fs::temp_directory_path() / "atlas_preset_test";
         std::error_code ec; fs::remove_all(dir, ec); fs::create_directories(dir, ec);
-        const auto frag = doc.extract({0, 1});
+        const auto frag = doc.extract({0, 1}); // marker 0 is excluded
         std::string err;
-        CHECK(albion::editor::savePreset(dir / (albion::editor::presetSlug("My camp!") + ".preset.tng"), "My camp!", "two things", frag, err));
+        CHECK(albion::editor::savePreset(dir / (albion::editor::presetSlug("My camp!") + ".preset.tng"), "My camp!", "one thing", frag, err));
         const auto list = albion::editor::listPresets({dir / "nope", dir});
-        CHECK(list.size() == 1 && list[0].name == "My camp!" && list[0].description == "two things" && list[0].things == 2 && list[0].user);
+        CHECK(list.size() == 1 && list[0].name == "My camp!" && list[0].description == "one thing" && list[0].things == 1 && list[0].user);
         albion::editor::Document::Fragment back;
         CHECK(albion::editor::loadPreset(list[0].file, back, err));
-        CHECK(back.items.size() == 2 && near(back.centre[0], frag.centre[0]) && near(back.centre[1], frag.centre[1]));
+        CHECK(back.items.size() == 1 && near(back.centre[0], frag.centre[0]) && near(back.centre[1], frag.centre[1]));
         const size_t count = doc.thingCount();
         const float at[3] = {50.0f, 60.0f, 1.0f};
         const auto pasted = doc.paste(back, at, false);
-        CHECK(pasted.size() == 2 && doc.thingCount() == count + 2);
+        CHECK(pasted.size() == 1 && doc.thingCount() == count + 1);
         bool framed = false;
         for (size_t k = 0; k < pasted.size(); ++k) {
             albion::editor::Frame q;
@@ -888,15 +1188,65 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
 // between kept samples, and the disk cache refuses another source's key.
 void testWorldTiles(const fs::path& dir) {
     namespace wt = albion::worldtiles;
-    CHECK(wt::strideFor(129, 225) == 6 && wt::strideFor(33, 33) == 1);
+    CHECK(wt::strideFor(129, 225) == 3 && wt::strideFor(33, 33) == 1);
     CHECK(wt::sampleIndex(0, 22, 129, 6) == 0 && wt::sampleIndex(20, 22, 129, 6) == 120 && wt::sampleIndex(21, 22, 129, 6) == 128);
     wt::Tile saddle;
     saddle.cellsX = saddle.cellsY = saddle.gw = saddle.gh = 2;
     saddle.heights = {0, 0, 0, 10};
+    saddle.maxH = 10;
+    auto pick = [&](const wt::Tile& tile, std::array<float,3> origin, std::array<float,3> direction, float limit=100) {
+        float distance=limit;
+        return wt::rayHit(tile,origin.data(),direction.data(),distance) ? distance : -1.0f;
+    };
+    CHECK(pick(saddle,{.5f,.5f,20},{0,0,-1})==20); // triangle diagonal, not bilinear 2.5
+    CHECK(pick(saddle,{.75f,.75f,20},{0,0,-1})==15);
+    CHECK(pick(saddle,{.75f,.75f,20},{0,0,-1},14)==-1);
+    CHECK(pick(saddle,{-2,.5f,-1},{1,0,0})==-1); // void ray passing underneath
+    CHECK(pick(saddle,{-2,.5f,20},{1,0,0})==-1); // sky
+    CHECK(std::abs(pick(saddle,{-2,.75f,2.5f},{1,0,0})-2.5f)<1e-6f); // real side-on slope hit
+    CHECK(pick(saddle,{.5f,.5f,-2},{0,0,1})==2); // renderer draws both faces
+    CHECK(pick(saddle,{2,2,20},{0,0,-1})==-1);
+    CHECK(pick(saddle,{.5f,.5f,20},{0,0,0})==-1);
     CHECK(wt::meshHeightAt(saddle, .5f, .5f) == 0); // on a-c-b / b-c-d diagonal, not bilinear height 2.5
     CHECK(wt::meshHeightAt(saddle, .75f, .75f) == 5);
     CHECK(wt::meshHeightAt(saddle, 1, 1) == 10);
     CHECK(wt::meshHeightAt(saddle, -5, -5) == 0);
+    // The overview uses smooth vertex normals interpolated on a-c-b / b-c-d.
+    // A bilinear normal or normalization at the sample changes publication lighting.
+    const auto n0 = wt::meshNormalAt(saddle, .25f, .25f);
+    const float inv101 = 1.0f / std::sqrt(101.0f), inv201 = 1.0f / std::sqrt(201.0f);
+    CHECK(std::fabs(n0[0] + 2.5f * inv101) < 1e-6f);
+    CHECK(std::fabs(n0[1] + 2.5f * inv101) < 1e-6f);
+    CHECK(std::fabs(n0[2] - (.5f + .5f * inv101)) < 1e-6f);
+    const auto n1 = wt::meshNormalAt(saddle, .75f, .75f);
+    CHECK(std::fabs(n1[0] + 5.0f * inv201 + 2.5f * inv101) < 1e-6f);
+    CHECK(std::fabs(n1[2] - (.5f * inv201 + .5f * inv101)) < 1e-6f);
+    CHECK(wt::meshNormalAt(saddle, -1, -1) == (std::array<float,3>{0,0,1}));
+    CHECK(wt::meshNormalAt(wt::Tile{}, 0, 0) == (std::array<float,3>{0,0,1}));
+    wt::Tile slope;
+    slope.cellsX = slope.cellsY = 6; slope.gw = slope.gh = 3; slope.stride = 3;
+    for (int y : {0,3,5}) for (int x : {0,3,5}) slope.heights.push_back(float(2*x + 3*y));
+    slope.maxH=25;
+    CHECK(std::abs(pick(slope,{-1,4,15},{1,0,0})-2.5f)<1e-6f);
+    CHECK(std::abs(pick(slope,{6,4,15},{-1,0,0})-4.5f)<1e-6f);
+    CHECK(pick(slope,{5,5,30},{0,0,-1})==5); // shortened far-edge cells
+    CHECK(pick(slope,{3,3,30},{0,0,-1})==15); // exact grid boundary
+    // Independent plane oracle across entry faces, direction signs, grid lines
+    // and the shortened last row/column. Traversal must find the same plane hit.
+    for (int i=0;i<200;++i) {
+        const float x=float(i%11)*.5f, y=float((i*7)%11)*.5f;
+        // Binary fractions keep the intended boundary hit exact in float input.
+        const std::array<float,3> direction={float(i%7-3)*.5f,float(i%9-4)*.25f,-1.0f};
+        if (std::abs(direction[2]-2*direction[0]-3*direction[1])<.01f) continue;
+        const std::array<float,3> origin={x-7*direction[0],y-7*direction[1],2*x+3*y-7*direction[2]};
+        CHECK(std::abs(pick(slope,origin,direction)-7)<.0001f);
+    }
+    for (const auto p : {std::array<float,2>{1,1}, std::array<float,2>{4,4}, std::array<float,2>{5,5}}) {
+        const auto normal = wt::meshNormalAt(slope, p[0], p[1]);
+        CHECK(std::fabs(normal[0] + 2.0f / std::sqrt(14.0f)) < 1e-6f);
+        CHECK(std::fabs(normal[1] + 3.0f / std::sqrt(14.0f)) < 1e-6f);
+        CHECK(std::fabs(normal[2] - 1.0f / std::sqrt(14.0f)) < 1e-6f);
+    }
     wt::Tile t;
     t.cellsX = 5; t.cellsY = 5; t.stride = 2; t.gw = 3; t.gh = 3;
     t.heights = {0, 2, 4, 0, 2, 4, 10, 12, 14};   // rows y = 0, 2, 4
@@ -1138,6 +1488,7 @@ void testBrushLibrary(const fs::path& dir) {
     doc.place(p);
     p.position = {9.0f, 9.0f, 18.0f};                        // outside the copied rectangle
     doc.place(p);
+    doc.placeTrackNode(2.0f, 1.0f, 3.0f);
     const size_t before = doc.thingCount();
     const auto clip = doc.copyTerrain(0, 0, 3, 2, true);     // 4 x 3 vertices
     CHECK(clip.w == 4 && clip.h == 3 && clip.things.size() == 1);
@@ -1262,6 +1613,38 @@ void testTracks() {
     CHECK(tr.size() == 3 && valid());
     CHECK(doc.summary(1).scriptName.empty() && doc.summary(c).scriptName == "INVALID" && doc.summary(0).scriptName == "INVALID");
     CHECK(doc.undo() && doc.tracks().size() == 1);
+    const size_t d = doc.placeTrackNode(10.0f, 0.0f, 0.0f);
+    const size_t e = doc.placeTrackNode(11.0f, 0.0f, 0.0f);
+    CHECK(doc.linkTrackNodes(d, e, err));
+    const std::string firstName = doc.tracks().back().name;
+    CHECK(firstName.rfind("TrackTempName", 0) == 0 && firstName != "TrackTempName");
+    const size_t f = doc.placeTrackNode(12.0f, 0.0f, 0.0f);
+    const size_t g = doc.placeTrackNode(13.0f, 0.0f, 0.0f);
+    CHECK(doc.linkTrackNodes(f, g, err));
+    const std::string secondName = doc.tracks().back().name;
+    CHECK(secondName.rfind("TrackTempName", 0) == 0 && secondName != firstName && valid());
+    // A placeholder head gets a fresh name even when joined to a named chain.
+    const size_t placeholder = doc.placeTrackNode(-1.0f, 0.0f, 0.0f, "INVALID");
+    CHECK(doc.linkTrackNodes(placeholder, 0, err));
+    const std::string joinedName = doc.tracks().front().name;
+    CHECK(joinedName.rfind("TrackTempName", 0) == 0 && joinedName != firstName &&
+          joinedName != secondName && valid());
+    // A loaded retail temp name advances the session counter past its suffix.
+    std::string oldNode = node("150", "0", "0", true, true, 0.0f);
+    const size_t firstAt = oldNode.find("GuardTrack");
+    CHECK(firstAt != std::string::npos);
+    oldNode.replace(firstAt, 10, "WrongName");
+    const size_t lastAt = oldNode.find("GuardTrack", firstAt + 9);
+    CHECK(lastAt != std::string::npos);
+    oldNode.replace(lastAt, 10, "TrackTempName30");
+    ed::Document loaded;
+    CHECK(loaded.openText("TrackNames", "Version 2;\r\nXXXSectionStart NULL;\r\n" + oldNode + "XXXSectionEnd;\r\n", err));
+    CHECK(loaded.tracks().front().name == "TrackTempName30");
+    CHECK(loaded.summary(0).scriptName == "TrackTempName30");
+    const size_t h = loaded.placeTrackNode(1.0f, 0.0f, 0.0f);
+    const size_t i = loaded.placeTrackNode(2.0f, 0.0f, 0.0f);
+    CHECK(loaded.linkTrackNodes(h, i, err));
+    CHECK(loaded.tracks().back().name == "TrackTempName31");
 }
 
 // A spawner's CreatureFamilies[n] list: append after the last entry, remove with
@@ -1521,7 +1904,7 @@ void testThingLinks() {
     std::string err;
     CHECK(doc.openText("Links", tng, err));
     auto links = doc.linksOf(0);
-    CHECK(links.size() == 3);   // (a scripted hook would add Region exit + Camera track)
+    CHECK(links.size() == 7);   // five creature links are offered even when absent
     CHECK(links[0].field == "VillageUID" && links[0].target == 0 && !links[0].targetIndex);
     CHECK(links[1].field == "OwnerUID" && links[1].target == 0);   // component present, field absent = 0
     CHECK(links[2].field == "HomeBuildingUID" && links[2].ctc.empty());
@@ -1539,6 +1922,87 @@ void testThingLinks() {
     CHECK(!doc.setLink(2, "CTCVillageMember", "VillageUID", 200));   // the building has no such link
     CHECK(doc.undo() && doc.linksOf(0)[2].target == 0);
     CHECK(doc.setLink(0, "CTCVillageMember", "VillageUID", 0) && doc.linksOf(0)[0].target == 0);
+    // Missing creature fields insert in the native save order; clearing removes
+    // optional lines, and spouse links are reciprocal in one undo step.
+    ed::Document family;
+    const std::string familyTng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\n"
+        "NewThing AICreature;\r\nUID 10;\r\nDefinitionType \"CREATURE_CHILD\";\r\nHealth 1.0;\r\nOverridingBrainName NULL;\r\nEndThing;\r\n"
+        "NewThing AICreature;\r\nUID 11;\r\nDefinitionType \"CREATURE_PARTNER\";\r\nEndThing;\r\n"
+        "NewThing AICreature;\r\nUID 12;\r\nDefinitionType \"CREATURE_PARENT\";\r\nEndThing;\r\n"
+        "NewThing Building;\r\nUID 20;\r\nDefinitionType \"BUILDING_HOME\";\r\nEndThing;\r\n"
+        "NewThing Building;\r\nUID 21;\r\nDefinitionType \"BUILDING_WORK\";\r\nEndThing;\r\n"
+        "XXXSectionEnd;\r\n";
+    CHECK(family.openText("Family",familyTng,err));
+    family.setCreatureSexLookup([](const std::string& definition)->std::optional<int32_t> {
+        if(definition=="CREATURE_PARTNER") return 1;
+        if(definition=="CREATURE_PARENT") return 2;
+        return std::nullopt;
+    });
+    CHECK(family.linksOf(0).size()==5 && family.linksOf(0)[0].field=="HomeBuildingUID" &&
+          family.linksOf(0)[4].field=="SpouseCreatureUID");
+    CHECK(family.linkTargetFits(family.linksOf(0)[2],1) &&
+          !family.linkTargetFits(family.linksOf(0)[2],2) &&
+          family.linkTargetFits(family.linksOf(0)[3],2) &&
+          !family.linkTargetFits(family.linksOf(0)[3],1));
+    CHECK(!family.setLink(0,"","FatherCreatureUID",12) &&
+          !family.setLink(0,"","MotherCreatureUID",11) &&
+          family.text()==familyTng);
+    CHECK(family.setLink(0,"","HomeBuildingUID",20));
+    CHECK(family.file().thingBlockText(0).find("Health 1.0;\r\nHomeBuildingUID 20;\r\nOverridingBrainName NULL;")!=std::string::npos);
+    CHECK(family.undo()&&family.text()==familyTng);
+    CHECK(family.setLink(0,"","SpouseCreatureUID",11));
+    CHECK(family.linksOf(0)[4].target==11 && family.linksOf(1)[4].target==10);
+    CHECK(family.undo()&&family.text()==familyTng);
+    CHECK(family.setLink(0,"","SpouseCreatureUID",11));
+    CHECK(!family.setLink(2,"","SpouseCreatureUID",11)); // already married
+    CHECK(family.setLink(0,"","SpouseCreatureUID",0));
+    CHECK(family.file().thingBlockText(0).find("SpouseCreatureUID")==std::string::npos &&
+          family.file().thingBlockText(1).find("SpouseCreatureUID")==std::string::npos);
+    CHECK(family.setLink(0,"","WorkBuildingUID",21) &&
+          family.setLink(0,"","HomeBuildingUID",20) &&
+          family.setLink(0,"","MotherCreatureUID",12) &&
+          family.setLink(0,"","FatherCreatureUID",11) &&
+          family.setLink(0,"","SpouseCreatureUID",11));
+    const std::string creatureBlock=family.file().thingBlockText(0);
+    size_t previous=creatureBlock.find("Health 1.0;");
+    for(const char* key:{"HomeBuildingUID","WorkBuildingUID","FatherCreatureUID","MotherCreatureUID","SpouseCreatureUID","OverridingBrainName"}) {
+        const size_t pos=creatureBlock.find(key);
+        CHECK(pos!=std::string::npos&&pos>previous);
+        previous=pos;
+    }
+    CHECK(!family.setLink(0,"","FatherCreatureUID",10) &&
+          !family.setLink(0,"","HomeBuildingUID",11));
+    CHECK(family.setLink(0,"","HomeBuildingUID",0));
+    CHECK(family.file().thingBlockText(0).find("HomeBuildingUID")==std::string::npos);
+    const std::string beforePartnerDelete=family.text();
+    CHECK(family.remove(1)==2);
+    CHECK(family.file().thingBlockText(0).find("SpouseCreatureUID")==std::string::npos &&
+          family.file().thingBlockText(0).find("FatherCreatureUID")==std::string::npos);
+    CHECK(family.undo()&&family.text()==beforePartnerDelete);
+    using Attach=ed::Document::AttachMode;
+    CHECK(family.linksInto(4).size()==1 && family.linksInto(4)[0].source==0 &&
+          family.linksInto(4)[0].link.field=="WorkBuildingUID");
+    const std::string attachBaseline=family.text();
+    CHECK(family.canAttach(3,Attach::LivesIn,0) &&
+          family.toggleAttachment(3,Attach::LivesIn,0,err));
+    CHECK(family.linksInto(3).size()==1 && family.linksInto(3)[0].link.field=="HomeBuildingUID");
+    CHECK(family.toggleAttachment(3,Attach::LivesIn,0,err) &&
+          family.file().thingBlockText(0).find("HomeBuildingUID")==std::string::npos);
+    CHECK(family.undo()&&family.linksInto(3).size()==1);
+    CHECK(family.undo()&&family.text()==attachBaseline);
+    CHECK(family.toggleAttachment(3,Attach::Owned,0,err));
+    CHECK(family.file().thingBlockText(0).find("StartCTCOwnedEntity;\r\nVersionNumber 1;\r\nOwnerUID 20;")!=std::string::npos);
+    CHECK(family.linksInto(3).size()==1 && family.linksInto(3)[0].link.field=="OwnerUID");
+    CHECK(family.toggleAttachment(3,Attach::Owned,0,err) &&
+          family.file().thingBlockText(0).find("CTCOwnedEntity")==std::string::npos);
+    CHECK(family.undo()&&family.file().thingBlockText(0).find("CTCOwnedEntity")!=std::string::npos);
+    CHECK(family.undo()&&family.text()==attachBaseline);
+    CHECK(doc.canAttach(1,Attach::Village,0) &&
+          doc.toggleAttachment(1,Attach::Village,0,err) &&
+          doc.linksInto(1).size()==1);
+    CHECK(doc.toggleAttachment(1,Attach::Village,0,err) &&
+          doc.linksInto(1).empty());
     // a region exit's scripted hook: exit -> entrance and its camera track
     ed::Document hook;
     const std::string hookTng =
@@ -1547,6 +2011,31 @@ void testThingLinks() {
     CHECK(hook.openText("Hook", hookTng, err));
     const auto hl = hook.linksOf(0);
     CHECK(hl.size() == 2 && hl[0].field == "EntranceConnectedToUID" && hl[0].target == 5 && hl[1].field == "CameraTrackUID" && hl[1].target == 9 && !hl[1].targetIndex);
+    // Native editor writes both link-bearing components when they coexist.
+    ed::Document exit;
+    const std::string exitTng =
+        "Version 2;\r\nXXXSectionStart NULL;\r\nNewThing Marker;\r\nUID 1;\r\nDefinitionType \"REGION_EXIT_POINT\";\r\nScriptName NULL;\r\n"
+        "StartCTCDRegionExit;\r\nEntranceConnectedToUID 5;\r\nRadius 1.5;\r\nEndCTCDRegionExit;\r\n"
+        "StartCTCActionUseScriptedHook;\r\nEntranceConnectedToUID 9;\r\nEndCTCActionUseScriptedHook;\r\nEndThing;\r\n\r\n"
+        "NewThing Marker;\r\nUID 7;\r\nDefinitionType \"REGION_ENTRANCE_POINT\";\r\nScriptName NULL;\r\n"
+        "StartCTCDRegionEntrance;\r\nEndCTCDRegionEntrance;\r\nEndThing;\r\n\r\nXXXSectionEnd;\r\n";
+    CHECK(exit.openText("Exit", exitTng, err));
+    const auto el = exit.linksOf(0);
+    CHECK(el.size() == 2 && el[0].ctc == "CTCDRegionExit" && el[0].target == 5 && el[1].field == "CameraTrackUID");
+    CHECK(exit.linkTargetFits(el[0], 1));
+    CHECK(exit.setLink(0, "CTCDRegionExit", "EntranceConnectedToUID", 7));
+    CHECK(exit.linksOf(0)[0].targetIndex == std::optional<size_t>(1));
+    CHECK(exit.text().find("StartCTCDRegionExit;\r\nEntranceConnectedToUID 7;\r\nRadius 1.5;") != std::string::npos);
+    CHECK(exit.text().find("StartCTCActionUseScriptedHook;\r\nEntranceConnectedToUID 7;") != std::string::npos);
+    CHECK(exit.undo() && exit.text() == exitTng);
+    // The dedicated component alone also exposes a Pick control and accepts the link.
+    ed::Document exitOnly;
+    const auto hookPos = exitTng.find("StartCTCActionUseScriptedHook;");
+    const auto hookEnd = exitTng.find("EndCTCActionUseScriptedHook;", hookPos) + std::strlen("EndCTCActionUseScriptedHook;\r\n");
+    std::string onlyTng = exitTng;
+    onlyTng.erase(hookPos, hookEnd - hookPos);
+    CHECK(exitOnly.openText("ExitOnly", onlyTng, err));
+    CHECK(exitOnly.linksOf(0).size() == 1 && exitOnly.setLink(0, "CTCDRegionExit", "EntranceConnectedToUID", 7));
 }
 
 // A map of another world (vanilla File > Load World): the document reads the .tng
@@ -1920,7 +2409,7 @@ void testMinimapFraming() {
 void testWorldMerge() {
     namespace wm = forge::worldmerge;
     auto mapOf = [](const std::string& n, int x, uint64_t uid) {
-        forge::bwd::MapInfo m; m.levelName = "Data\Levels\FinalAlbion\\" + n + ".lev"; m.scriptName = n;
+        forge::bwd::MapInfo m; m.levelName = "Data\\Levels\\FinalAlbion\\" + n + ".lev"; m.scriptName = n;
         m.left = x; m.right = x + 64; m.top = 0; m.bottom = 64; m.mapUid = uid; return m;
     };
     forge::bwd::File base;
@@ -1972,6 +2461,24 @@ void testMeshCompose() {
         uint32_t lodCount = 0, lodSize = 0, texCount = 0; int32_t tex = 0;
         std::memcpy(&lodCount, c.info.data() + 44, 4); std::memcpy(&lodSize, c.info.data() + 48, 4); std::memcpy(&texCount, c.info.data() + 56, 4); std::memcpy(&tex, c.info.data() + 60, 4);
         CHECK(lodCount == 1 && lodSize < c.payload.size() && texCount == 1 && tex == 1234);
+        const auto one = forge::meshpreview::decodeLods(c.payload,c.info,1);
+        CHECK(one.size()==1 && one[0].triangles.size()==6); // trailing ghost excluded
+        auto info=c.info;
+        uint32_t two=2;
+        std::memcpy(info.data()+44,&two,4);
+        info.insert(info.begin()+52,c.info.begin()+48,c.info.begin()+52);
+        auto payload=c.payload;
+        payload.insert(payload.begin()+lodSize,c.payload.begin(),c.payload.begin()+lodSize);
+        const auto chain=forge::meshpreview::decodeLods(payload,info,1);
+        CHECK(chain.size()==2 && chain[1].triangles.size()==6);
+        for (int malformed=0;malformed<4;++malformed) {
+            auto bad=info;
+            if (malformed==0) bad.resize(46);
+            else { const uint32_t value=malformed==1?0:UINT32_MAX; std::memcpy(bad.data()+(malformed==3?48:44),&value,4); }
+            bool rejected=false;
+            try { forge::meshpreview::decodeLods(payload,bad,1); } catch (const std::exception&) { rejected=true; }
+            CHECK(rejected);
+        }
         const auto g = forge::meshpreview::decodeLod0(c.payload, 1);
         CHECK(g.vertices.size() == 5 && g.triangles.size() == 6);
         CHECK(g.materials.size() >= 1 && g.materials.front().diffuseTexture == 1234);
@@ -1989,6 +2496,113 @@ void testMeshCompose() {
     bool threw = false;
     try { composeStatic("NOTMESH", {p}, {m}); } catch (const std::invalid_argument&) { threw = true; }
     CHECK(threw);
+}
+
+void testMeshCacheLifetime(const fs::path& dir) {
+    namespace fe = albion::foliageexport;
+    auto writeBank = [&](const fs::path& path, float height) {
+        forge::meshcompose::Primitive primitive;
+        primitive.verts = {{0,0,0},{1,0,0},{0,1,height}};
+        primitive.faces = {{0,1,2}};
+        const auto mesh = forge::meshcompose::composeStatic("MESH_CACHE_LIFETIME", {primitive}, {{}}, false);
+        forge::big::File file;
+        auto& bank = file.addBank("MBANK_ALLMESHES", 0);
+        forge::big::Entry entry;
+        entry.id = 77; entry.type = 1; entry.name = "MESH_CACHE_LIFETIME";
+        entry.data = mesh.payload; entry.subHeader = mesh.info;
+        bank.entries.push_back(std::move(entry));
+        const auto bytes = file.serialize();
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    };
+    const auto first = dir / "mesh_cache_first.big", second = dir / "mesh_cache_second.big";
+    writeBank(first, 2); writeBank(second, 9);
+    std::string error;
+    CHECK(fe::openMeshBank(first, error));
+    auto old = fe::cachedMesh(77, error);
+    CHECK(old && old->vertices.size() == 3);
+    if (!old) return;
+    CHECK(fe::cachedMesh(77, error) == old);
+    std::weak_ptr<const forge::meshpreview::Geometry> lifetime = old;
+    std::promise<void> entered, resume;
+    auto resumed = resume.get_future().share();
+    auto reader = std::async(std::launch::async, [held = old, &entered, resumed] {
+        entered.set_value();
+        resumed.wait();
+        return held->vertices.size() == 3 && held->triangles.size() == 1 && held->vertices[2].z == 2;
+    });
+    entered.get_future().wait();
+    old.reset();
+    // Both explicit invalidation and opening another bank must preserve the
+    // snapshot held by an exporter, including when the replacement reuses IDs.
+    fe::closeMeshBank();
+    CHECK(!lifetime.expired());
+    CHECK(fe::openMeshBank(second, error));
+    auto replacement = fe::cachedMesh(77, error);
+    CHECK(replacement && replacement->vertices[2].z == 9);
+    CHECK(!lifetime.expired());
+    fe::closeMeshBank();
+    CHECK(replacement && replacement->vertices[2].z == 9);
+    resume.set_value();
+    CHECK(reader.get());
+    CHECK(lifetime.expired()); // no retired-bank leak after the last reader exits
+}
+
+void testEffectsBankLifetime(const fs::path& dir) {
+    namespace fx=albion::effects;
+    auto writeBank=[&](const fs::path& root,const std::string& display) {
+        std::vector<uint8_t> payload;
+        auto u32=[&](uint32_t n) { for(int i=0;i<4;++i) payload.push_back(uint8_t(n>>(8*i))); };
+        u32(100); payload.insert(payload.end(),display.begin(),display.end()); payload.push_back(0);
+        payload.insert(payload.end(),7+5*4+4+5,0); u32(0);
+        forge::big::File file;
+        auto& bank=file.addBank("PARTICLE_MAIN_PC",0);
+        forge::big::Entry entry; entry.name="SAME_EFFECT"; entry.id=42; entry.data=std::move(payload);
+        bank.entries.push_back(std::move(entry));
+        const auto path=root/"data/Misc/pc/effects.big";
+        fs::create_directories(path.parent_path());
+        const auto bytes=file.serialize();
+        std::ofstream output(path,std::ios::binary);
+        output.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));
+    };
+    const auto first=dir/"effects-first",second=dir/"effects-second",missing=dir/"effects-missing";
+    writeBank(first,"First"); writeBank(second,"Other");
+    std::string error;
+    CHECK(fx::openBank(first,error));
+    auto held=fx::byName(first,"same_effect");
+    CHECK(held && held->parsedFully && held->displayName=="First");
+    CHECK(fx::openBank(second,error));
+    const auto other=fx::byName(second,"SAME_EFFECT");
+    CHECK(other && other!=held && other->displayName=="Other");
+    CHECK(fx::byName(first,"SAME_EFFECT")==held);
+    CHECK(fx::entryNames(first)==std::vector<std::string>{"SAME_EFFECT"});
+    CHECK(!fx::bankOpen(missing) && fx::entryNames(missing).empty() && !fx::byName(missing,"SAME_EFFECT"));
+    CHECK(!fx::openBank(missing,error));
+    // Concurrent lookups keep their explicit root while another client changes
+    // the legacy default bank and an explicit Refresh replaces the first file.
+    auto reader=std::async(std::launch::async,[&] {
+        for(int i=0;i<100;++i) {
+            const auto value=fx::byName(second,"same_effect");
+            if (!value || value->displayName!="Other" || (held && held->displayName!="First")) return false;
+        }
+        return true;
+    });
+    const auto path=first/"data/Misc/pc/effects.big";
+    const auto originalTime=fs::last_write_time(path);
+    writeBank(first,"Fresh"); fs::last_write_time(path,originalTime);
+    CHECK(fx::openBank(first,error,true)); // same size/time still refreshed
+    auto fresh=fx::byName(first,"SAME_EFFECT");
+    CHECK(fresh && fresh!=held && fresh->displayName=="Fresh");
+    CHECK(held && held->displayName=="First" && other && other->displayName=="Other");
+    CHECK(reader.get());
+    writeBank(first,"Changed size automatically invalidates");
+    CHECK(fx::openBank(first,error));
+    const auto changed=fx::byName(first,"SAME_EFFECT");
+    CHECK(changed && changed->displayName=="Changed size automatically invalidates");
+    CHECK(fresh && fresh->displayName=="Fresh");
+    std::weak_ptr<const fx::Effect> originalLifetime=held, refreshedLifetime=fresh;
+    held.reset(); fresh.reset();
+    CHECK(originalLifetime.expired() && refreshedLifetime.expired());
 }
 
 void testNavigationDetail() {
@@ -2168,6 +2782,10 @@ int main() {
     testWorldTiles(dir);
     testWorldVisibility();
     testDistantTexturePalette();
+    testDisabledEffects();
+    testParticlePreviewParameters();
+    testParticleOrbitAttractorParameters();
+    testEffectsBankLifetime(dir);
     testThingLinks();
     testQuestSections();
     testDayNightSections();
@@ -2188,6 +2806,7 @@ int main() {
     testNavPatch(dir);
     testGtg(dir);
     testMeshCompose();
+    testMeshCacheLifetime(dir);
     testWorldMerge();
     testFillerFit();
     testVanillaPlacement();

@@ -1,0 +1,239 @@
+# Pointer placement and selected-thing ground carry, all edits in memory.
+wait_maps
+wait_ready
+select StartOakValeWest
+wait_loaded
+wait_foliage
+edit 1
+wait_foliage
+tour -1
+gizmo 0
+set place_def OBJECT_BARREL_BREAKABLE
+place_at 0.5 0.5
+wait_foliage
+assert_state doc_changes 1
+assert_selected_ground
+undo
+wait_foliage
+assert_state doc_changes 0
+# Real Shift+click goes through the viewport input path.
+mouse_move viewport
+key_down Shift
+frames 2
+mouse_down left
+frames 2
+mouse_up left
+key_up Shift
+wait_foliage
+assert_state doc_changes 1
+assert_selected_ground
+undo
+wait_foliage
+assert_state doc_changes 0
+# Pick the existing barrel, carry it with a plain left drag and undo exactly.
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+gizmo 0
+frames 5
+snapshot_frame
+mouse_move selected_pivot
+mouse_down left
+mouse_delta 70 35
+frames 3
+assert_state carrying 1
+mouse_up left
+wait_foliage
+assert_selected_moved_xy
+assert_ground_offset_same
+undo
+wait_foliage
+assert_selected_frame_same
+assert_state doc_changes 0
+# Ctrl+D copies immediately, follows the cursor, and the next click drops it.
+snapshot_document
+mouse_move viewport
+key_down Ctrl
+key_down D
+frames 2
+key_up D
+key_up Ctrl
+frames 2
+assert_state carry_armed 1
+mouse_delta 70 25
+frames 3
+assert_state carrying 1
+mouse_down left
+mouse_up left
+wait_foliage
+assert_state carrying 0
+assert_state doc_changes 1
+undo
+wait_foliage
+assert_document_same
+assert_state doc_changes 0
+# Escape from cursor carry removes the provisional copy.
+select_def OBJECT_BARREL_BREAKABLE
+mouse_move viewport
+key_down Ctrl
+key_down D
+frames 2
+key_up D
+key_up Ctrl
+frames 2
+assert_state carry_armed 1
+key_down Escape
+key_up Escape
+frames 2
+assert_state carry_armed 0
+wait_foliage
+assert_document_same
+assert_state doc_changes 0
+# Ctrl+Shift drag clones the picked thing and carries the copy in one undo step.
+snapshot_document
+mouse_move selected_pivot
+key_down Ctrl
+key_down Shift
+mouse_down left
+mouse_delta 70 -35
+frames 3
+assert_state carrying 1
+mouse_up left
+key_up Shift
+key_up Ctrl
+wait_foliage
+assert_selected_moved_xy
+assert_state doc_changes 1
+undo
+wait_foliage
+assert_document_same
+assert_state doc_changes 0
+# Escape removes the clone and restores the original selection.
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+frames 5
+snapshot_frame
+mouse_move selected_pivot
+key_down Ctrl
+key_down Shift
+mouse_down left
+mouse_delta -70 35
+frames 3
+assert_state carrying 1
+key_down Escape
+key_up Escape
+frames 2
+assert_state carrying 0
+mouse_up left
+key_up Shift
+key_up Ctrl
+wait_foliage
+assert_selected_frame_same
+assert_document_same
+assert_state doc_changes 0
+# Crossing the drag threshold and returning to the start is not an edit.
+mouse_move selected_pivot
+mouse_down left
+mouse_delta 60 25
+frames 3
+assert_state carrying 1
+mouse_delta -60 -25
+frames 3
+mouse_up left
+frames 2
+assert_selected_frame_same
+assert_state doc_changes 0
+# Locked things cannot enter ground carry.
+selection_lock 1
+snapshot_document
+mouse_move selected_pivot
+mouse_down left
+mouse_delta 55 20
+frames 3
+assert_state carrying 0
+mouse_up left
+assert_document_same
+undo
+assert_state doc_changes 0
+# A second selected object follows the same XY move in one undo batch.
+select_def OBJECT_CUPBOARD_TALL
+snapshot_frame
+select_def OBJECT_BARREL_BREAKABLE
+select_toggle_def OBJECT_CUPBOARD_TALL
+assert_state selection_count 2
+snapshot_document
+frame_selected
+frames 5
+mouse_move selected_pivot
+mouse_down left
+mouse_delta 65 -30
+frames 3
+assert_state carrying 1
+mouse_up left
+wait_foliage
+select_def OBJECT_CUPBOARD_TALL
+assert_selected_moved_xy
+assert_ground_offset_same
+undo
+wait_foliage
+assert_document_same
+assert_state doc_changes 0
+# Ctrl+Shift drag clones the whole selection and undoes both copies together.
+select_def OBJECT_BARREL_BREAKABLE
+select_toggle_def OBJECT_CUPBOARD_TALL
+assert_state selection_count 2
+snapshot_frame
+snapshot_document
+frame_selected
+frames 5
+mouse_move selected_pivot
+key_down Ctrl
+key_down Shift
+mouse_down left
+mouse_delta 65 30
+frames 3
+assert_state carrying 1
+mouse_up left
+key_up Shift
+key_up Ctrl
+wait_foliage
+assert_state selection_count 2
+assert_selected_moved_xy
+assert_state doc_changes 2
+undo
+wait_foliage
+assert_document_same
+assert_state doc_changes 0
+# A requested fixed height applies to the carried primary.
+select_def OBJECT_BARREL_BREAKABLE
+frame_selected
+frames 5
+snapshot_frame
+set place_height 30
+mouse_move selected_pivot
+mouse_down left
+mouse_delta -55 25
+frames 3
+assert_state carrying 1
+mouse_up left
+wait_foliage
+assert_selected_moved_xy
+assert_selected_height 30
+undo
+wait_foliage
+assert_selected_frame_same
+assert_state doc_changes 0
+set place_height off
+# Escape cancels a preview while the mouse is still held.
+mouse_move selected_pivot
+mouse_down left
+mouse_delta -65 35
+frames 3
+assert_state carrying 1
+key_down Escape
+key_up Escape
+frames 2
+assert_state carrying 0
+mouse_up left
+frames 2
+assert_selected_frame_same
+assert_state doc_changes 0

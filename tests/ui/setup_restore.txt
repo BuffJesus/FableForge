@@ -1,0 +1,23 @@
+# Restore from Setup on a tiny loose-level scratch install.
+wait_maps
+select RestoreTest
+wait_loaded
+assert_state doc_loaded 1
+assert_state terrain_center_height 9.000
+setup 1
+frames 4
+assert_state backups_differ 1
+reveal btn_restore_all
+screenshot build/ui/setup_restore_before.png
+click btn_restore_all
+frames 2
+reveal btn_restore_confirm
+screenshot build/ui/setup_restore_confirm.png
+click btn_restore_confirm
+frames 12
+assert_state doc_loaded 1
+assert_state terrain_center_height 4.000
+assert_state backups_differ 0
+assert_log returned to their backups
+screenshot build/ui/setup_restore_after.png
+quit

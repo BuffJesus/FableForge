@@ -1,0 +1,18 @@
+# A moving retail effect should be easier to inspect at the selected tick.
+wait_maps
+wait_ready
+assets_tab 3
+effect_preview_play 0
+effect_select ACTIVATE_SKILL_01
+click btn_effect_bg_dark
+effect_preview_restart
+effect_preview_step 1
+frames 3
+click btn_effect_frame
+frames 2
+assert_widget btn_effect_frame_current
+screenshot build/ui/effect_frame_all.png
+click btn_effect_frame_current
+frames 3
+screenshot build/ui/effect_frame_current.png
+quit
