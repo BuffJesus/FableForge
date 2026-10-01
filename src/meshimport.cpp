@@ -9,6 +9,7 @@
 #include <map>
 #include <sstream>
 #include <tuple>
+#include <type_traits>
 #include <stdexcept>
 
 #include "nlohmann/json.hpp"
@@ -130,21 +131,26 @@ GltfBuffers openGltf(const fs::path& path) {
     return g;
 }
 
-// one accessor as floats (any component type, normalised or not), `comps` per element
-std::vector<float> readAccessor(const GltfBuffers& g, int index, int& comps) {
+// Attributes use floats; triangle indices retain their unsigned integer values.
+template<typename Value = float>
+std::vector<Value> readAccessor(const GltfBuffers& g, size_t index, int& comps) {
     const auto& acc = g.doc["accessors"].at(size_t(index));
     const std::string type = acc.value("type", "SCALAR");
     comps = type == "SCALAR" ? 1 : type == "VEC2" ? 2 : type == "VEC3" ? 3 : type == "VEC4" ? 4 : 0;
     if (!comps) throw std::runtime_error("unsupported accessor type " + type);
     const size_t count = gltfSize(acc, "count");
-    const int ct = acc.value("componentType", 5126);
+    const size_t ct = gltfSize(acc, "componentType", 5126);
     const bool norm = acc.value("normalized", false);
-    if (!count || count > std::vector<float>().max_size() / size_t(comps))
+    if constexpr (std::is_same_v<Value, uint32_t>) {
+        if (comps != 1 || norm || (ct != 5121 && ct != 5123 && ct != 5125))
+            throw std::runtime_error("triangle indices must be unnormalized unsigned SCALAR values");
+    }
+    if (!count || count > std::vector<Value>().max_size() / size_t(comps))
         throw std::runtime_error("invalid accessor count");
     if (ct != 5120 && ct != 5121 && ct != 5122 && ct != 5123 && ct != 5125 && ct != 5126)
         throw std::runtime_error("unsupported componentType " + std::to_string(ct));
     if (acc.contains("sparse")) throw std::runtime_error("sparse glTF accessors are not supported");
-    if (!acc.contains("bufferView")) return std::vector<float>(count * size_t(comps), 0.0f);
+    if (!acc.contains("bufferView")) return std::vector<Value>(count * size_t(comps), Value{});
     const auto& bv = g.doc["bufferViews"].at(gltfSize(acc, "bufferView"));
     const auto& buf = g.buffers.at(gltfSize(bv, "buffer"));
     const size_t csize = ct == 5126 || ct == 5125 ? 4 : ct == 5123 || ct == 5122 ? 2 : 1;
@@ -162,22 +168,26 @@ std::vector<float> readAccessor(const GltfBuffers& g, int index, int& comps) {
         count - 1 > (viewLength - accessorOffset - element) / stride)
         throw std::runtime_error("accessor reads past its buffer view");
     const size_t base = viewOffset + accessorOffset;
-    std::vector<float> out(count * size_t(comps), 0.0f);
+    std::vector<Value> out(count * size_t(comps), Value{});
     for (size_t i = 0; i < count; ++i) {
         for (int c = 0; c < comps; ++c) {
             const size_t o = base + i * stride + size_t(c) * csize;
             if (o + csize > buf.size()) throw std::runtime_error("accessor reads past its buffer");
-            float v = 0;
+            double v = 0; // All uint32 values are exact here; never route indices through float.
             switch (ct) {
                 case 5126: { float f; std::memcpy(&f, buf.data() + o, 4); v = f; break; }
-                case 5125: { uint32_t u; std::memcpy(&u, buf.data() + o, 4); v = float(u); break; }
+                case 5125: { uint32_t u; std::memcpy(&u, buf.data() + o, 4); v = u; break; }
                 case 5123: { uint16_t u; std::memcpy(&u, buf.data() + o, 2); v = norm ? u / 65535.0f : float(u); break; }
                 case 5122: { int16_t s; std::memcpy(&s, buf.data() + o, 2); v = norm ? std::max(s / 32767.0f, -1.0f) : float(s); break; }
                 case 5121: { v = norm ? buf[o] / 255.0f : float(buf[o]); break; }
                 case 5120: { const int8_t s = int8_t(buf[o]); v = norm ? std::max(s / 127.0f, -1.0f) : float(s); break; }
                 default: throw std::runtime_error("unsupported componentType " + std::to_string(ct));
             }
-            out[i * size_t(comps) + size_t(c)] = v;
+            if constexpr (std::is_same_v<Value, uint32_t>) {
+                const uint32_t maximum = ct == 5121 ? 255u : ct == 5123 ? 65535u : 0xffffffffu;
+                if (v == maximum) throw std::runtime_error("triangle index uses the reserved maximum value");
+            }
+            out[i * size_t(comps) + size_t(c)] = Value(v);
         }
     }
     return out;
@@ -277,7 +287,7 @@ Model loadGltf(const fs::path& path) {
             const auto& attrs = prim["attributes"];
             if (!attrs.contains("POSITION")) continue;
             int comps = 0;
-            const auto pos = readAccessor(g, attrs["POSITION"].get<int>(), comps);
+            const auto pos = readAccessor(g, gltfSize(attrs, "POSITION"), comps);
             if (comps != 3) throw std::runtime_error("POSITION is not VEC3");
             const size_t nv = pos.size() / 3;
             Primitive p;
@@ -289,21 +299,25 @@ Model loadGltf(const fs::path& path) {
                 p.verts.push_back(toFable(x, y, z));
             }
             if (attrs.contains("NORMAL")) {
-                const auto nrm = readAccessor(g, attrs["NORMAL"].get<int>(), comps);
+                const auto nrm = readAccessor(g, gltfSize(attrs, "NORMAL"), comps);
                 if (comps == 3 && nrm.size() / 3 == nv) {
                     p.normals.reserve(nv);
                     for (size_t i = 0; i < nv; ++i) { float x = nrm[i * 3], y = nrm[i * 3 + 1], z = nrm[i * 3 + 2]; transformPoint(world, x, y, z, true); p.normals.push_back(toFableDir(x, y, z)); }
                 }
             }
             if (attrs.contains("TEXCOORD_0")) {
-                const auto uv = readAccessor(g, attrs["TEXCOORD_0"].get<int>(), comps);
+                const auto uv = readAccessor(g, gltfSize(attrs, "TEXCOORD_0"), comps);
                 if (comps == 2 && uv.size() / 2 == nv) { p.uvs.reserve(nv); for (size_t i = 0; i < nv; ++i) p.uvs.push_back({uv[i * 2], uv[i * 2 + 1]}); }
             }
             if (prim.contains("indices")) {
-                const auto idx = readAccessor(g, prim["indices"].get<int>(), comps);
-                for (size_t i = 0; i + 2 < idx.size(); i += 3) p.faces.push_back({uint32_t(idx[i]), uint32_t(idx[i + 1]), uint32_t(idx[i + 2])});
+                const auto idx = readAccessor<uint32_t>(g, gltfSize(prim, "indices"), comps);
+                if (idx.size() % 3) throw std::runtime_error("incomplete indexed triangle");
+                for (const auto value : idx)
+                    if (value >= nv) throw std::runtime_error("glTF index " + std::to_string(value) + " references a missing vertex");
+                for (size_t i = 0; i < idx.size(); i += 3) p.faces.push_back({idx[i], idx[i + 1], idx[i + 2]});
             } else {
-                for (uint32_t i = 0; i + 2 < nv; i += 3) p.faces.push_back({i, i + 1, i + 2});
+                if (nv % 3 || nv > std::numeric_limits<uint32_t>::max()) throw std::runtime_error("invalid non-indexed triangle count");
+                for (size_t i = 0; i < nv; i += 3) p.faces.push_back({uint32_t(i), uint32_t(i + 1), uint32_t(i + 2)});
             }
             // a mirrored node transform flips the winding
             const float det = world[0] * (world[5] * world[10] - world[9] * world[6]) - world[4] * (world[1] * world[10] - world[9] * world[2]) + world[8] * (world[1] * world[6] - world[5] * world[2]);

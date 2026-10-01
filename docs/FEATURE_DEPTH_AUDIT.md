@@ -261,6 +261,13 @@ producing altered geometry. Normal/ASan runs pass 371 model-input checks,
 including supported relative indices, comments and optional texture coordinates.
 The scratch OBJ/GLB import and GUI placement/undo regression passes.
 
+## 2026-10-01 glTF triangle validation
+
+Indices retain integer precision and reject invalid type, count and vertex
+references. Normal/ASan runs pass 384 model-input checks. A full relink passes
+all 27 CTest suites; the OBJ/GLB scratch integration passes with both CLI
+executables refreshed. Full glTF conformance remains outside this check.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

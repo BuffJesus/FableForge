@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: integer glTF triangle indices
+
+Triangle indices now retain unsigned integer precision instead of passing through
+float storage. Following the [glTF mesh contract](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#meshes),
+the reader rejects normalized, signed or non-scalar index accessors, reserved
+maximum indices, incomplete triangles and references outside the vertex array.
+Attribute/accessor references also require nonnegative integers before lookup.
+The regression covers all three unsigned widths and an exact `16777217` error.
+
+All 384 model-input checks pass in normal and local ASan builds; all 27 CTest
+suites pass after a full relink. The import integration's CLI uses `forge.exe`
+in addition to `forge-tools.exe`; it was rerun after relinking both, passing
+OBJ/GLB bank import, collision, definitions, failure preservation and GUI
+placement/undo. Earlier targeted rebuilds covered the new parser via the unit
+target and GUI but had left that CLI alias stale; use both CLI targets for future
+iterations. This is bounded input validation, not full glTF conformance.
+
 ## 2026-10-01 continuation: malformed OBJ input
 
 A short vertex record was accepted with an unread coordinate. OBJ coordinate

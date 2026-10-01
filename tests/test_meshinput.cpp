@@ -76,6 +76,49 @@ int main() {
             return result;
         };
         auto changed = document;
+        auto indexedDoc = document;
+        auto indexedBytes = positions;
+        for (uint32_t value : {0u, 1u, 2u}) put32(indexedBytes, value);
+        indexedDoc["buffers"][0]["byteLength"] = indexedBytes.size();
+        indexedDoc["bufferViews"].push_back({{"buffer", 0}, {"byteOffset", 36}, {"byteLength", 12}});
+        indexedDoc["accessors"].push_back({{"bufferView", 1}, {"componentType", 5125}, {"count", 3}, {"type", "SCALAR"}});
+        indexedDoc["meshes"][0]["primitives"][0]["indices"] = 1;
+        triangle(withDocument(indexedDoc, indexedBytes), "uint32 indexed triangle");
+        for (const auto component : {5121, 5123}) {
+            changed = indexedDoc; changed["accessors"][1]["componentType"] = component;
+            auto packedIndices = positions;
+            for (uint8_t value : {0, 1, 2}) {
+                packedIndices.push_back(value);
+                if (component == 5123) packedIndices.push_back(0);
+            }
+            changed["bufferViews"][1]["byteLength"] = packedIndices.size() - 36;
+            changed["buffers"][0]["byteLength"] = packedIndices.size();
+            while (packedIndices.size() % 4) packedIndices.push_back(0);
+            triangle(withDocument(changed, packedIndices), "packed unsigned indexed triangle");
+            packedIndices[36] = 255;
+            if (component == 5123) packedIndices[37] = 255;
+            rejects(withDocument(changed, packedIndices), "reserved maximum index");
+        }
+        changed = indexedDoc; changed["accessors"][1]["componentType"] = 5126;
+        rejects(withDocument(changed, indexedBytes), "float triangle indices");
+        changed = indexedDoc; changed["accessors"][1]["normalized"] = true;
+        rejects(withDocument(changed, indexedBytes), "normalized triangle indices");
+        changed = indexedDoc; changed["accessors"][1]["componentType"] = 5122;
+        rejects(withDocument(changed, indexedBytes), "signed triangle indices");
+        changed = indexedDoc; changed["accessors"][1]["count"] = 1; changed["accessors"][1]["type"] = "VEC3";
+        rejects(withDocument(changed, indexedBytes), "vector triangle indices");
+        changed = indexedDoc; changed["accessors"][1]["count"] = 2;
+        rejects(withDocument(changed, indexedBytes), "incomplete indexed triangle");
+        auto badIndices = indexedBytes; set32(badIndices, 44, 3);
+        rejects(withDocument(indexedDoc, badIndices), "index beyond vertex array");
+        badIndices = indexedBytes; set32(badIndices, 44, 16777217);
+        try { load(withDocument(indexedDoc, badIndices)); require(false, "accepted large index"); }
+        catch (const std::exception& e) {
+            require(std::string(e.what()).find("16777217") != std::string::npos, "index lost integer precision"); ++checks;
+        }
+        changed = document; changed["meshes"][0]["primitives"][0]["attributes"]["POSITION"] = 0.5;
+        rejects(withDocument(changed, positions), "fractional attribute accessor reference");
+        changed = document;
         changed["bufferViews"][0]["byteLength"] = 12;
         rejects(withDocument(changed, positions), "accessor outside its declared buffer view");
         auto invalidField = [&](const char* collection, const char* key, nlohmann::json value, const char* label) {
