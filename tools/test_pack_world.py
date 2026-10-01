@@ -151,6 +151,24 @@ def main() -> int:
     blk = wld[max(0, i - 120):i]
     if "MapX 2048;" not in blk or "MapY 8064;" not in blk: print("the build lacks the TeleporterGreatwood move:", blk); ok = False
 
+    # Capturing the base again must remove old overrides for reverted world and
+    # static-map content, while unrelated recipe assets remain untouched.
+    reverted = os.path.join(work, "PackRevert")
+    os.makedirs(os.path.join(reverted, "assets"))
+    shutil.copyfile(os.path.join(pg, "forge_pack.json"), os.path.join(reverted, "forge_pack.json"))
+    marker = os.path.join(reverted, "assets", "keep.txt")
+    with open(marker, "wb") as f: f.write(b"unrelated asset")
+    overrides = ["data/Levels/FinalAlbion.wld", "stb/TeleporterGreatwood.chunk", "stb/TeleporterGreatwood.record"]
+    for rel in overrides:
+        dst = os.path.join(reverted, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(os.path.join(pg, rel), dst)
+    result = run(tools, "mods", "capture", base, base, reverted)
+    if any(os.path.exists(os.path.join(reverted, rel)) for rel in overrides) or result.stdout.count("removed override ") != 3:
+        print("capture kept reverted world/static-map overrides:", result.stdout); ok = False
+    with open(marker, "rb") as f:
+        if f.read() != b"unrelated asset": print("capture changed unrelated assets"); ok = False
+
     if not a.keep: shutil.rmtree(work, ignore_errors=True)
     print("pack world test", "OK" if ok else "FAILED")
     return 0 if ok else 1

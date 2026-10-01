@@ -28,6 +28,11 @@ World/level capture also stages all changed world files, loose levels and static
 map chunk/record pairs before replacing pack files. Read failures and reported
 commit failures preserve the previous pack; failed reports list no applied
 layers. This uses the same rollback boundary, excluding abrupt termination.
+When a captured world file, level or static-map chunk matches the base again,
+its previous pack override is removed in that commit. The capture report names
+removed overrides. Files absent from the shadow leave existing pack entries alone;
+unrelated recipe assets stay in place. The destination must differ from both
+source directories.
 
 ## Lip sync recipes in Forge packs
 

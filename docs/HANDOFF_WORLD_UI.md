@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: reverting captured overrides
+
+The CLI reproduced a stale layer: capturing changed world bytes, then capturing
+the original bytes, left the changed override in the pack. Capture now stages
+removal of represented world/level/static-map overrides that match the base.
+The transaction helper retains removed files for rollback until commit succeeds.
+Reports name removals and clear them on failure. Capturing onto the base or
+shadow directory itself is refused before writes. Absent shadow files still
+leave existing pack entries alone; this is reversion of represented content.
+
+Normal and local ASan pack tests pass world/level reversion, unrelated recipe
+preservation, source/destination alias refusal, and rollback after a world
+override was removed before a later locked-file failure. The CLI probe now
+reports/removes its stale world layer. The expanded world-pack integration
+passes real world + static-map chunk/record removal with an unrelated asset
+preserved, alongside its existing merged builds and GUI captures. The custom
+theme transaction regression also passes valid creation and both failure paths.
+The final full build and all 27 CTest suites pass (28.06 seconds).
+
 ## 2026-10-01 continuation: isolated pack workspaces
 
 A nested-operation fixture reproduced the fixed `pack_shadow` directory being

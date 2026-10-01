@@ -529,6 +529,7 @@ bool intoPack(const fs::path& gameRoot, const fs::path& pack, const std::functio
     std::string what;
     for (const auto& f : rep.files) what += (what.empty() ? "" : ", ") + fs::path(f).filename().string();
     for (const auto& m : rep.maps) what += (what.empty() ? "" : ", ") + ("static map " + m);
+    for (const auto& f : rep.removed) what += (what.empty() ? "" : ", ") + ("removed override " + fs::path(f).filename().string());
     notes.push_back("into pack " + pack.filename().string() + ": " + (what.empty() ? std::string("no difference from the game") : what));
     return true;
 } catch (const std::exception& e) {
@@ -540,13 +541,22 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
     const fs::path lv = fs::path("data") / "Levels";
     std::error_code ec;
     try {
+        if (!fs::is_directory(baseRoot) || !fs::is_directory(shadowRoot))
+            throw std::runtime_error("capture needs existing base and shadow directories");
+        if (fs::exists(pack) && (fs::equivalent(pack, baseRoot) || fs::equivalent(pack, shadowRoot)))
+            throw std::runtime_error("capture destination must differ from its base and shadow");
         detail::PendingBanks pending(pack, ".forge-pack-capture-");
+        auto removeOverride = [&](const fs::path& relative) {
+            if (!fs::exists(pack / relative)) return;
+            pending.remove(relative);
+            rep.removed.push_back(relative.generic_string());
+        };
         // world files
         for (const char* f : {"FinalAlbion.wld", "FinalAlbion.bwd", "FinalAlbion.gtg"}) {   // gtg: region entrances (a whole-file layer)
             const fs::path a = shadowRoot / lv / f, b = baseRoot / lv / f;
             if (!fs::exists(a)) continue;
             const auto bytes = slurpFile(a);
-            if (fs::exists(b) && slurpFile(b) == bytes) continue;
+            if (fs::exists(b) && slurpFile(b) == bytes) { removeOverride(lv / f); continue; }
             putFile(pending.prepare(lv / f), bytes);
             rep.files.push_back((lv / f).generic_string());
         }
@@ -580,7 +590,7 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
         collect(shadowRoot, shadowLevels, &spelling);
         for (const auto& [k, bytes] : shadowLevels) {
             const auto it = baseLevels.find(k);
-            if (it != baseLevels.end() && it->second == bytes) continue;
+            if (it != baseLevels.end() && it->second == bytes) { removeOverride(lv / "FinalAlbion" / spelling[k]); continue; }
             putFile(pending.prepare(lv / "FinalAlbion" / spelling[k]), bytes);
             rep.files.push_back((lv / "FinalAlbion" / spelling[k]).generic_string());
         }
@@ -589,14 +599,22 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
         const fs::path shadowStb = shadowRoot / lv / "FinalAlbion_RT.stb", baseStb = baseRoot / lv / "FinalAlbion_RT.stb";
         if (fs::exists(shadowStb) && fs::exists(baseStb)) {
             const auto baseMaps = staticMapsOf(baseStb);
+            auto mapName = [&](const std::string& key) {
+                const auto it = spelling.find(key + ".lev");
+                return it == spelling.end() ? key : fs::path(it->second).stem().string();
+            };
             std::vector<std::string> changed;
             for (const auto& [k, mb] : staticMapsOf(shadowStb)) {
                 const auto it = baseMaps.find(k);
                 if (it == baseMaps.end() || it->second.hash != mb.hash) changed.push_back(k);
+                else {
+                    const auto name = mapName(k);
+                    removeOverride(fs::path("stb") / (name + ".chunk"));
+                    removeOverride(fs::path("stb") / (name + ".record"));
+                }
             }
             for (const auto& [k, cr] : staticMapsOf(shadowStb, &changed)) {
-                std::string name = k;
-                for (const auto& [lk, sp] : spelling) if (lk == k + ".lev") name = fs::path(sp).stem().string();
+                const auto name = mapName(k);
                 putFile(pending.prepare(fs::path("stb") / (name + ".chunk")), cr.chunk);
                 putFile(pending.prepare(fs::path("stb") / (name + ".record")), cr.record);
                 rep.maps.push_back(name);
@@ -605,7 +623,7 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
         std::string error;
         if (!pending.install(false, error)) throw std::runtime_error(error);
     } catch (const std::exception& e) {
-        rep.files.clear(); rep.maps.clear(); rep.errors.push_back(e.what());
+        rep.files.clear(); rep.maps.clear(); rep.removed.clear(); rep.errors.push_back(e.what());
     }
     return rep;
 }

@@ -12342,6 +12342,7 @@ int main(int argc, char** argv) {
             const auto r = albion::modpack::capture(args[2], args[3], args[4]);
             for (const auto& f : r.files) std::printf("file %s\n", f.c_str());
             for (const auto& m : r.maps) std::printf("static map %s\n", m.c_str());
+            for (const auto& f : r.removed) std::printf("removed override %s\n", f.c_str());
             for (const auto& e : r.errors) std::fprintf(stderr, "capture: %s\n", e.c_str());
             return r.errors.empty() ? 0 : 1;
         }

@@ -12,12 +12,12 @@
 namespace albion::detail {
 namespace fs = std::filesystem;
 
-// Build all changed banks before replacing any of them. The temporary directory is
+// Stage changed banks and removals before committing any of them. The temporary directory is
 // on the destination filesystem so installation and rollback use renames.
 class PendingBanks {
     struct Bank {
         fs::path target, prepared, previous;
-        bool saved = false, installed = false;
+        bool saved = false, installed = false, erase = false;
     };
     fs::path root_, staging_;
     std::vector<Bank> banks_;
@@ -47,11 +47,16 @@ public:
         banks_.push_back(bank);
         return bank.prepared;
     }
+    void remove(const fs::path& relative) {
+        Bank bank{root_ / relative, staging_ / "new" / relative, staging_ / "previous" / relative};
+        bank.erase = true;
+        banks_.push_back(std::move(bank));
+    }
     bool install(bool makeBackups, std::string& error) {
         try {
             // Complete the preflight and original backups before the first rename.
             for (const auto& bank : banks_) {
-                if (!fs::is_regular_file(bank.prepared)) throw std::runtime_error("prepared bank is missing: " + bank.prepared.string());
+                if (!bank.erase && !fs::is_regular_file(bank.prepared)) throw std::runtime_error("prepared bank is missing: " + bank.prepared.string());
                 if (fs::exists(bank.target) && !fs::is_regular_file(bank.target))
                     throw std::runtime_error("bank destination is not a file: " + bank.target.string());
                 fs::create_directories(bank.target.parent_path());
@@ -60,8 +65,10 @@ public:
             }
             for (auto& bank : banks_) {
                 if (fs::exists(bank.target)) { fs::rename(bank.target, bank.previous); bank.saved = true; }
-                fs::rename(bank.prepared, bank.target);
-                bank.installed = true;
+                if (!bank.erase) {
+                    fs::rename(bank.prepared, bank.target);
+                    bank.installed = true;
+                }
             }
             return true;
         } catch (const std::exception& e) {

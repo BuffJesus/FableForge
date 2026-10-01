@@ -137,6 +137,7 @@ int main() {
                 "missing sidecar was accepted or changed pack files");
         const auto captureBase = root / "capture_base", captureShadow = root / "capture_shadow";
         write(captureBase / "data/Levels/FinalAlbion.wld", "base world");
+        write(captureBase / "data/Levels/FinalAlbion/CaptureMap.tng", "base map data");
         write(captureShadow / "data/Levels/FinalAlbion.wld", "new world");
         write(folder / "data/Levels/FinalAlbion.wld", "previous packed world");
         write(captureShadow / "data/Levels/FinalAlbion.wad", "invalid archive");
@@ -160,12 +161,29 @@ int main() {
                                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         require(mapHandle != INVALID_HANDLE_VALUE, "cannot lock captured map fixture");
         pack::CaptureReport lockedCapture;
-        try { lockedCapture = pack::capture(captureShadow, captureBase, folder); }
+        try {
+            lockedCapture = pack::capture(captureShadow, captureBase, folder);
+            require(!lockedCapture.errors.empty() && snapshot(folder) == beforeLockedCapture,
+                    "late capture replacement did not roll back");
+            write(captureShadow / "data/Levels/FinalAlbion.wld", "base world");
+            lockedCapture = pack::capture(captureShadow, captureBase, folder);
+        }
         catch (...) { CloseHandle(mapHandle); throw; }
         CloseHandle(mapHandle);
-        require(!lockedCapture.errors.empty() && lockedCapture.files.empty() && lockedCapture.maps.empty() &&
-                snapshot(folder) == beforeLockedCapture, "late capture failure left changed layers or reported success");
+        require(!lockedCapture.errors.empty() && lockedCapture.files.empty() && lockedCapture.maps.empty() && lockedCapture.removed.empty() &&
+                snapshot(folder) == beforeLockedCapture, "late capture failure left changed/removed layers or reported success");
 #endif
+        write(captureShadow / "data/Levels/FinalAlbion.wld", "base world");
+        write(captureShadow / "data/Levels/FinalAlbion/CaptureMap.tng", "base map data");
+        const auto reverted = pack::capture(captureShadow, captureBase, folder);
+        require(reverted.errors.empty() && reverted.files.empty() && reverted.removed.size() == 2 &&
+                snapshot(folder) == withSidecar, "capture retained reverted overrides or changed unrelated recipes");
+        const auto baseBeforeAlias = snapshot(captureBase);
+        const auto shadowBeforeAlias = snapshot(captureShadow);
+        require(!pack::capture(captureShadow, captureBase, captureBase).errors.empty() && snapshot(captureBase) == baseBeforeAlias,
+                "capture into base was accepted or changed files");
+        require(!pack::capture(captureShadow, captureBase, captureShadow).errors.empty() && snapshot(captureShadow) == shadowBeforeAlias,
+                "capture into shadow was accepted or changed files");
         const auto missingRecordPack = root / "missing_record_pack";
         write(missingRecordPack / "stb/Map.chunk", "chunk without record");
         require(!pack::prepareShadow(captureBase, missingRecordPack, root / "prepared_shadow", false, error) &&

@@ -300,6 +300,14 @@ Owned edit/process-view folders pass normal/ASan cleanup checks and the complete
 world-pack integration. Concurrent commits to the same destination remain
 outside this workspace-isolation guarantee.
 
+## 2026-10-01 captured override reversion
+
+Capturing original content now removes the stale world/level/static-map override
+instead of leaving the previous edit active. Normal/ASan tests cover removals,
+rollback and unrelated recipes; the real-bank world-pack test covers removal of
+a world file plus both static-map files. Missing shadow content remains unchanged
+in the destination; capture is not a general deletion manifest.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

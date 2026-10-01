@@ -1,6 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-2026-10-01 input/failure depth: GLB container, accessor and scene checks pass 356
+2026-10-01 workflow depth: new-level creation preserves edits made while the job
+runs, compact origins remain readable, and Restore clears removed-map previews.
+Scratch creation/restore, extracted layouts and world-pack composition pass;
+see HANDOFF_WORLD_UI for the evidence and remaining game/deployment checks.
+
+2026-10-01 input/failure depth: OBJ/GLB container, accessor, scene and index checks pass 384
 synthetic cases in normal and AddressSanitizer builds. Custom theme imports now
 stage/roll back banks like model imports; invalid cliff images and late file-lock
 failures preserve scratch files. Full map palettes are refused before creation.

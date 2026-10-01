@@ -107,7 +107,9 @@ bool writeStaticMapChunk(const std::filesystem::path& stb, const std::string& ma
 // static map whose chunk is new or changed (stb/<map>.chunk + .record). The editor runs a
 // world edit (new level, map move, region edit) against a shadow copy of the containers
 // and captures it this way; `forge-tools mods capture` is the same step.
-struct CaptureReport { std::vector<std::string> files, maps, errors; };
+// Existing overrides represented in the shadow but matching the base are removed;
+// absent shadow files leave the corresponding pack entries alone.
+struct CaptureReport { std::vector<std::string> files, maps, errors, removed; };
 // The shadow a world edit into `pack` runs against: gameRoot's world containers (and
 // defs) copied to `shadow`, with the pack's current world files, level files and static
 // maps laid over them -- so edits into one pack accumulate. `viewOnly` copies just the
