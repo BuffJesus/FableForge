@@ -5,8 +5,12 @@
 EgoCore text compilation uses a separate temporary workspace per normalization,
 including concurrent builds of the same mod into different outputs. Workspaces
 are cleaned on success and compiler failure. This does not enable concurrent
-writes to the same output or install. Compiler failure still reports that the
-text overrides were not applied; a DLL-only result can still be produced.
+writes to the same output or install. If a mod contains Data/Defs, unavailable
+text sources or compiler failure stop build, deploy and conflict checks with an
+error before emitting the incomplete mod. Existing build output stays untouched.
+Mods without Data/Defs can still supply a DLL-only layer. Redeploy continues to
+revert the earlier stage before building; failure can therefore leave the install
+at its baseline with the previous mod removed.
 
 ## Recipe asset storage and failed edits
 

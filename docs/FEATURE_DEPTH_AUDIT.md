@@ -594,6 +594,26 @@ GUI palette and exact Restore pass (`build/newlevel-workspace-84p9xln8`). Full
 build and all 30 core suites pass (27.34 seconds). This adds recovery tracking,
 not rollback of every already-committed bank or power-loss atomicity.
 
+## 2026-10-01 continuation: fail incomplete EgoCore text builds
+
+A deliberately failing compiler still produced a successful DLL-only build
+(`build/egocore-workspace-srzlriok`). Mod merge now returns failure when a mod
+contains Data/Defs but its text layer cannot be normalized. It stops before
+writing output banks or staging its DLL; diagnostics retain the compiler reason.
+Mods without Data/Defs can still build their DLL-only layer.
+
+Normal real concurrent Controller Support compiles pass
+(`build/egocore-workspace-dcoqiri5`): 14 changed records, 43 fields, one added
+record, identical output banks and preserved source banks. The failure-only
+probe (`build/egocore-workspace-_jw0wtg5`) verifies nonzero build/conflicts/deploy
+status, no partial new output or stage, unchanged existing output, missing-text
+refusal and DLL-only compatibility. ASan host runs all these cases plus real
+concurrent compiles (`build/egocore-workspace-pahpvari`); the external Rust compiler
+itself is not instrumented. Owned workspaces clean up on every exercised exit.
+Both forge-tools builds pass. Existing redeploy ordering is unchanged: it reverts
+an earlier stage before building, so a failed redeploy can leave the baseline
+install with the previous mod already removed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

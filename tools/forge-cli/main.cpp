@@ -8417,6 +8417,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 std::fprintf(stderr, "egocore %s: its .def overrides were NOT applied", fs::path(s).filename().string().c_str());
                 for (const auto& n : erep.notes) std::fprintf(stderr, " -- %s", n.c_str());
                 std::fprintf(stderr, "\n");
+                // A DLL without its requested definition layer is an incomplete
+                // mod. Stop before creating output banks or staging that DLL.
+                return 1;
             }
             for (const auto& n : erep.notes) if (erep.recordsSkipped) std::fprintf(stderr, "  %s\n", n.c_str());
         } else if (fs::is_directory(fs::path(s) / "data") || fs::is_directory(fs::path(s) / "Data") || fs::is_directory(fs::path(s) / "FSE")) {
