@@ -8174,12 +8174,40 @@ json collectMissingMesh(const std::filesystem::path& root,
                         const std::filesystem::path& schemaPath,
                         std::filesystem::path graphicsPath);
 
+// Manifest syntax and recipe source availability do not depend on the composed
+// banks. Check them before touching an existing deployment or build directory.
+void preflightModRecipes(const std::vector<std::string>& sources) {
+    namespace fs = std::filesystem;
+    for (const auto& source : sources) {
+        if (!albion::modpack::isPack(source)) continue;
+        try {
+            const auto pack = albion::modpack::load(source);
+            auto requireAsset = [&](const std::string& relative) {
+                const fs::path path = fs::path(source) / relative;
+                if (!fs::is_regular_file(path) || !std::ifstream(path, std::ios::binary))
+                    throw std::runtime_error("recipe source is missing or unreadable: " + path.string());
+            };
+            for (const auto& model : pack.models) {
+                requireAsset(model.model);
+                if (!model.texture.empty()) requireAsset(model.texture);
+            }
+            for (const auto& theme : pack.groundThemes) {
+                requireAsset(theme.png);
+                if (!theme.cliffPng.empty()) requireAsset(theme.cliffPng);
+            }
+        } catch (const std::exception& error) {
+            throw std::runtime_error("pack " + source + ": " + error.what());
+        }
+    }
+}
+
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sources,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath,
               const std::map<std::string, std::string>* loadedPicks = nullptr) {
     namespace fs = std::filesystem;
+    preflightModRecipes(sources);
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -8722,6 +8750,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         std::vector<uint8_t> payload, info;
     };
     std::map<std::tuple<std::string,std::string,uint32_t>,std::vector<LipVersion>> lipVersions;
+    size_t recipeFailures = 0;
     for (const size_t pi : forgePacks) {
         std::set<std::string> skipLipLanguages;
         try {
@@ -8750,6 +8779,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (const auto& e : prep.errors) std::fprintf(stderr, "pack %s: %s\n", srcLabel(pi).c_str(), e.c_str());
         // the pack's terrain edits: re-baked static-map chunks into the STB being built
         const auto srep = albion::modpack::applyStaticMaps(sources[pi], baseRoot, outDir);
+        recipeFailures += prep.errors.size() + srep.errors.size();
         for (const auto& e : srep.errors) std::fprintf(stderr, "pack %s: static map: %s\n", srcLabel(pi).c_str(), e.c_str());
         for (const auto& m : srep.maps) {
             if (stbOwner.count(m)) stbContested.push_back(m + ": " + stbOwner[m] + " -> " + srcLabel(pi));
@@ -8764,6 +8794,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             for (const auto& a : prep.added) std::printf("  + %s\n", a.c_str());
             for (const auto& note : prep.notes) std::printf("  %s\n", note.c_str());
         }
+    }
+    if (recipeFailures) {
+        if (jsonOutput) {
+            rep["error"] = "pack recipes failed; incomplete build was not staged";
+            rep["recipe_failures"] = recipeFailures;
+            std::puts(rep.dump(2).c_str());
+        }
+        std::fprintf(stderr, "mods: %zu pack recipe error(s); incomplete build was not staged\n", recipeFailures);
+        return 1;
     }
     json lipRows=json::array();
     for(const auto& [key,versions]:lipVersions) {
@@ -12276,6 +12315,7 @@ int main(int argc, char** argv) {
                         sources = mo::buildSources(order, root);
                         picksPath = picksOverride.value_or(modsPicksDefault(root));
                         loadedPicks = loadPicks(picksPath);
+                        preflightModRecipes(sources);
                     }
                     // deploy = the install rebuilt from the order: a previous stage is reverted first (its
                     // .forgebak originals come back), the order is built into a scratch folder and staged;

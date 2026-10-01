@@ -118,6 +118,28 @@ def main():
         assert snapshot() == missing_source
         assert [item.name for item in out.iterdir()] == ['sentinel']
     order.write_bytes(saved)
+    manifest = packs['B'] / 'forge_pack.json'
+    valid_manifest = manifest.read_bytes()
+    manifest.write_bytes(b'{malformed pack')
+    refused('malformed_pack', picks)
+    manifest.write_bytes(valid_manifest)
+    for category, recipe in (
+        ('models', {'name': 'MISSING_MODEL', 'model': 'assets/missing.glb'}),
+        ('models', {'name': 'MISSING_TEXTURE', 'model': 'data/Misc/shared.txt', 'texture': 'assets/missing.png'}),
+        ('groundThemes', {'name': 'MISSING_THEME', 'png': 'assets/missing.png'}),
+        ('groundThemes', {'name': 'MISSING_CLIFF', 'png': 'data/Misc/shared.txt', 'cliffPng': 'assets/missing.png'}),
+    ):
+        malformed_pack = json.loads(valid_manifest)
+        malformed_pack[category] = [recipe]
+        manifest.write_text(json.dumps(malformed_pack), encoding='utf-8')
+        refused(recipe['name'].lower(), picks)
+        manifest.write_bytes(valid_manifest)
+    handle = kernel.CreateFileW(str(manifest), 0x80000000, 0, None, 3, 0x80, None)
+    assert handle != wintypes.HANDLE(-1).value
+    try:
+        refused('locked_manifest', picks)
+    finally:
+        kernel.CloseHandle(handle)
     run('retry', 'deploy', ['--picks', picks])
     assert shared.read_text() == 'from pack A'
     run('undeploy', 'undeploy', [])
@@ -126,6 +148,27 @@ def main():
     assert shared.read_text() == 'from pack B'
     run('final_undeploy', 'undeploy', [])
     assert snapshot() == original
+    # Existing but invalid assets fail during composition. Partial output may be
+    # retained in an explicit build folder, but must not be staged or report success.
+    bad_model = packs['B'] / 'invalid.obj'
+    bad_model.write_text('not an OBJ model', encoding='utf-8')
+    malformed_pack = json.loads(valid_manifest)
+    malformed_pack['models'] = [{'name': 'INVALID_MODEL', 'model': bad_model.name}]
+    manifest.write_text(json.dumps(malformed_pack), encoding='utf-8')
+    for verb in ('deploy', 'conflicts', 'build'):
+        options = ([work/'incomplete-output', '--stage'] if verb == 'build' else []) + ['--json']
+        report = json.loads(run('invalid_asset_' + verb, verb, options, 1))
+        assert report['recipe_failures'] == 1 and 'not staged' in report['error']
+        assert 'stage' not in report
+        assert snapshot() == original
+    manifest.write_bytes(valid_manifest)
+    chunks = packs['B']/'stb'
+    chunks.mkdir()
+    (chunks/'missing-record.chunk').write_bytes(b'invalid chunk')
+    report = json.loads(run('invalid_static_map', 'deploy', ['--json'], 1))
+    assert report['recipe_failures'] == 1 and report['forge_stb'][0]['errors']
+    assert snapshot() == original
+    (chunks/'missing-record.chunk').unlink()
     # The shared reader also serves the direct definition and quest merge commands.
     quest_out = work / 'merged.qst'
     quest_out.write_bytes(b'previous quest output')
@@ -140,7 +183,7 @@ def main():
         assert quest_out.read_bytes() == b'previous quest output'
         assert [item.name for item in out.iterdir()] == ['sentinel']
         assert snapshot() == original
-    print('Unreadable picks, malformed order, deployed-stage preservation and valid retry: PASS')
+    print('Input/recipe preflight preserves deployed files; later recipe errors refuse staging; valid retry: PASS')
 
 
 if __name__ == '__main__':

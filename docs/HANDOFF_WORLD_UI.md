@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: reject incomplete recipe deployments
+
+A malformed Forge pack previously printed a recipe error but returned success and
+staged the partial build. Reproduced at `build/mod-picks-inputs-9h3c5h1x`.
+Pack manifests and required model/theme image sources are now checked before
+reverting an existing deployment or writing build output. Missing and locked
+inputs leave that deployment byte-identical. Later recipe or static-map failures
+return nonzero, include errors in JSON, and never stage the incomplete output.
+
+`tools/test_mod_picks_inputs.py` passes at `build/mod-picks-inputs-tpvdeycb`:
+malformed/locked manifests, missing model/texture/theme/cliff files, prior picks
+and load-order failures preserve the entire deployed tree and build sentinel.
+A malformed existing OBJ and missing static-map record report failure without
+staging; valid retry and undeploy restore exact original bytes. Later build
+failures can still leave a previously deployed install at its restored baseline;
+this is earlier validation and refusal of partial output, not transactional
+replacement of the entire previous deployment. Explicit build folders may retain
+incomplete output for diagnosis. No live install writes.
+
 ## 2026-10-01 continuation: conflict winner refresh and Dialogue delivery
 
 Clearing a saved Mods winner now immediately displays the last contributor in
