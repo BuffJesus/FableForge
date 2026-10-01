@@ -204,7 +204,10 @@ item and info display components; absent components are not added.
   in-game; saved games cache region entities, so start a new game or enter the
   region fresh to see them. `Save draft` keeps the loose
   `data/Levels/FinalAlbion/<map>.tng` as the editor's working copy (the engine
-  never reads it; FableForge lists it under *Loose files*).
+  does not use it while that WAD is active; FableForge lists it under *Loose files*).
+  On extracted installs and external worlds, Save draft writes the active loose
+  TNG, so it uses the same running-game guard as Deploy and retains the dirty
+  draft when refused.
 
 ## What works now (terrain)
 

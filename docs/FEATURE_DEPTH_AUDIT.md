@@ -676,6 +676,24 @@ own/nested Restore refuses without changing target or backup, uppercase/forward
 slash/trailing-separator aliases remain blocked, and retry after helper exit
 restores/forgets exactly. All three normal writer targets and the ASan CLI build.
 
+## 2026-10-01 continuation: guard active loose TNG draft saves
+
+On an extracted install, Save draft wrote the active TNG and cleared its dirty
+state while Deploy correctly refused the same running-install write
+(`build/loose-save-guard-c1kr3ou9`). Save now applies the shared game-write guard
+when the destination uses loose levels or the document is an external world.
+Stock installs keep their separate loose draft behavior.
+
+Normal loose GUI (`build/loose-save-guard-bf5bbo95`) and ASan GUI/CLI
+(`build/loose-save-guard-p_ave4uw`) pass: both save/deploy refuse while a scratch
+helper named Fable.exe runs, dirty state and the complete install remain intact,
+save succeeds after that helper exits, and Restore returns exact original hashes
+and inventory without recreating the WAD. Normal stock GUI
+(`build/loose-save-guard-plyn_8fn`) permits the loose draft while still refusing
+WAD deploy and also restores exactly. The initial stock retry reused an existing
+ScriptName; the fixture now uses distinct names per run. No real game was started,
+stopped or written. Normal and ASan GUI builds pass.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

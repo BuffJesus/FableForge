@@ -2490,6 +2490,8 @@ bool App::saveDocument() {
     if (!documentLoaded()) return false;
     if (fileWriteBlocked("save")) return false;
     if (doc_.external() && saveRoot() != installPath_) { pushLog("save: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
+    // Without a WAD, a loose "draft" is the same active game file as deploy.
+    if ((doc_.external() || forge::levelstore::detect(saveRoot()).looseOnly()) && gameWriteBlocked("save")) return false;
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
     pushLog("saved " + doc_.loosePath().string(), 3);
