@@ -1750,15 +1750,13 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
     theme::beginCard("##importmodel", inner);
     theme::label("Import model");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_);
-    auto_.registerWidget("input_mesh_model");
+    drawPathInput("meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_,
+                  cardInner, PathField::Model, "input_mesh_model");
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##meshname", "Name (becomes OBJECT_<NAME>)", meshName_, sizeof meshName_);
     auto_.registerWidget("input_mesh_name");
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##meshtex", "Diffuse texture PNG (optional)", meshTexturePng_, sizeof meshTexturePng_);
-    auto_.registerWidget("input_mesh_texture");
+    drawPathInput("meshtex", "Diffuse texture PNG (optional)", meshTexturePng_, sizeof meshTexturePng_,
+                  cardInner, PathField::Png, "input_mesh_texture");
     ImGui::PopStyleVar();
     const bool meshBusy = meshImportFuture_.valid();
     const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
@@ -1787,9 +1785,8 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
     theme::beginCard("##groundtheme", inner);
     theme::label("New ground theme");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##custompng", "PNG file path", customPng_, sizeof customPng_);
-    auto_.registerWidget("input_custom_png");
+    drawPathInput("custompng", "PNG file path", customPng_, sizeof customPng_,
+                  cardInner, PathField::Png, "input_custom_png");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Use a square power-of-two PNG, such as 512x512.\n%s", customPng_);
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##customname", "Theme name", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);

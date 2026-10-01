@@ -739,9 +739,8 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::beginCard("##modadd", inner);
     theme::label("Add a mod");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##modpath", "A .fmp, a bsdiff .patch, a .qst, a folder with Data/, or an EgoCore Mods/<Name>/ folder", modAddPath_, sizeof modAddPath_);
-    auto_.registerWidget("input_mod_path");
+    drawPathInput("modpath", "Mod file or folder", modAddPath_, sizeof modAddPath_,
+                  cardInner, PathField::ModSource, "input_mod_path");
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##modname", "Name (optional; the file or folder name otherwise)", modAddName_, sizeof modAddName_);
     auto_.registerWidget("input_mod_name");

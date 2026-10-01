@@ -61,16 +61,27 @@ std::string fmtBytes(uint64_t b) {
 }
 
 // A folder (types == nullptr) or a file of the given types, e.g. {L"Fable level", L"*.lev"}.
-std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0) {
+std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTERSPEC* types = nullptr, UINT typeCount = 0, bool save = false) {
     std::string result;
     IFileDialog* dlg = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
+    if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg)))) return result;
     DWORD opts = 0;
     dlg->GetOptions(&opts);
-    dlg->SetOptions(opts | (types ? 0 : FOS_PICKFOLDERS) | FOS_FORCEFILESYSTEM);
+    dlg->SetOptions(opts | (types ? 0 : FOS_PICKFOLDERS) | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST | (types && !save ? FOS_FILEMUSTEXIST : 0));
     if (types) dlg->SetFileTypes(typeCount, types);
+    if (save) dlg->SetDefaultExtension(L"big");
     if (!initial.empty()) {
-        std::wstring w(initial.begin(), initial.end());
+        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, initial.data(), int(initial.size()), nullptr, 0);
+        std::wstring w(size_t(std::max(count,0)),L'\0');
+        if(count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, initial.data(), int(initial.size()), w.data(),count);
+        const auto attr = GetFileAttributesW(w.c_str());
+        if(attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            const auto at=w.find_last_of(L"\\/");
+            if(at!=std::wstring::npos) {
+                if(types) dlg->SetFileName(w.substr(at+1).c_str());
+                w.resize(at+1);
+            }
+        }
         IShellItem* item = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(w.c_str(), nullptr, IID_PPV_ARGS(&item)))) {
             dlg->SetFolder(item);
@@ -83,8 +94,8 @@ std::string pickPath(HWND owner, const std::string& initial, const COMDLG_FILTER
             PWSTR path = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
                 const int n = WideCharToMultiByte(CP_UTF8, 0, path, -1, nullptr, 0, nullptr, nullptr);
-                std::string s(size_t(std::max(n - 1, 0)), '\0');
-                WideCharToMultiByte(CP_UTF8, 0, path, -1, s.data(), n, nullptr, nullptr);
+                std::string s(size_t(std::max(n, 0)), '\0');
+                if(n) { WideCharToMultiByte(CP_UTF8, 0, path, -1, s.data(), n, nullptr, nullptr); s.pop_back(); }
                 result = s;
                 CoTaskMemFree(path);
             }
@@ -132,6 +143,50 @@ void App::buildFonts(float scale) {
 }
 
 void App::rebuildFonts() { buildFonts(wantScale_); }
+
+bool App::drawPathInput(const char* id,const char* hint,char* value,size_t capacity,
+                        float width,PathField kind,const char* widget) {
+    using theme::S;
+    const float browseWidth=S(78),gap=ImGui::GetStyle().ItemSpacing.x;
+    const bool stacked=width<S(215);
+    ImGui::PushID(id);
+    ImGui::SetNextItemWidth(stacked?width:std::max(S(40),width-browseWidth-gap));
+    bool changed=ImGui::InputTextWithHint("##path",hint,value,capacity);
+    auto_.registerWidget(widget);
+    if(ImGui::IsItemHovered() && value[0]) ImGui::SetTooltip("%s",value);
+    if(!stacked) ImGui::SameLine();
+    const bool browse=theme::ghostButton("Browse...",ImVec2(stacked?width:browseWidth,ImGui::GetFrameHeight()));
+    auto_.registerWidget((std::string(widget)+"_browse").c_str());
+    bool chooseFile=browse,chooseFolder=false;
+    if(kind==PathField::ModSource) {
+        chooseFile=false;
+        if(browse) ImGui::OpenPopup("##browse_kind");
+        if(ImGui::BeginPopup("##browse_kind")) {
+            chooseFile=ImGui::Selectable("Choose mod file...");
+            auto_.registerWidget((std::string(widget)+"_file").c_str());
+            chooseFolder=ImGui::Selectable("Choose mod folder...");
+            auto_.registerWidget((std::string(widget)+"_folder").c_str());
+            ImGui::EndPopup();
+        }
+    }
+    if(chooseFile || chooseFolder) {
+        static const COMDLG_FILTERSPEC mods[]={{L"Mod files",L"*.fmp;*.patch;*.qst"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC images[]={{L"Images",L"*.png;*.jpg;*.jpeg;*.tga;*.bmp"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC png[]={{L"PNG image",L"*.png"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC models[]={{L"3D models",L"*.glb;*.gltf;*.obj"},{L"All files",L"*.*"}};
+        static const COMDLG_FILTERSPEC dialogue[]={{L"Dialogue archive",L"*.big"},{L"All files",L"*.*"}};
+        const auto* filter=kind==PathField::ModSource?mods:kind==PathField::Model?models:
+            kind==PathField::Image?images:kind==PathField::Png?png:dialogue;
+        const std::string picked=pickPath(hwnd_,value,chooseFolder?nullptr:filter,
+                                         chooseFolder?0:2,kind==PathField::DialogueExport);
+        if(!picked.empty()) {
+            if(picked.size()>=capacity) pushLog("The selected path is too long for this field.",2);
+            else { std::memcpy(value,picked.c_str(),picked.size()+1);changed=true; }
+        }
+    }
+    ImGui::PopID();
+    return changed;
+}
 
 App::App() = default;
 App::~App() {

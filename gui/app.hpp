@@ -860,6 +860,9 @@ public:
     void drawEffectViewport(const ImVec2& origin, const ImVec2& size);
     // Dialogue and lip sync preview/editor (gui/dialoguebrowser.cpp).
     void drawDialogueBrowser(float pad, float inner, float cardInner);
+    enum class PathField { ModSource, Image, Png, Model, DialogueExport };
+    bool drawPathInput(const char* id, const char* hint, char* value, size_t capacity,
+                       float width, PathField kind, const char* widget);
     void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);
     void frameDialoguePlayback();
     std::string dialogueLanguage_ = "English";

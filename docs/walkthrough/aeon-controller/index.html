@@ -3,6 +3,7 @@
 <title>Aeon Edition + Controller Support — FableForge</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#11121a;color:#e9e8ef;font:17px/1.65 system-ui,sans-serif}main{max-width:960px;margin:auto;padding:48px 24px 80px}h1{font-size:42px;line-height:1.15;letter-spacing:-1.5px}h2{font-size:24px;margin:0 0 12px}p{margin:12px 0}a{color:#bcb0ff}small,figcaption{color:#b1adbf}section{margin:28px 0;padding:26px;background:#1b1d29;border:1px solid #343044;border-radius:16px}b,strong{color:#fff}code{font-size:.9em;overflow-wrap:anywhere;background:#292637;padding:2px 5px;border-radius:4px}pre{overflow:auto;background:#11121a;padding:18px;border-radius:10px;line-height:1.6}pre code{background:none;padding:0}figure{margin:22px 0 0}img{width:100%;height:auto;border:1px solid #403951;border-radius:8px}figcaption{font-size:14px;margin-top:8px}.eyebrow{color:#bdacf3;font-weight:650;letter-spacing:1px}.note{border-left:3px solid #bda6ff;padding-left:16px}.step{color:#bda6ff;margin-right:10px}@media print{body{background:white;color:#222;font-size:11pt}main{padding:0}h1,h2,b,strong{color:#111}section{background:white;border-color:#ccc;break-inside:avoid}code,pre{background:#eee}a,small,figcaption{color:#444}img{max-height:350px;object-fit:contain}}
+.sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:22px 0}.source{padding:20px;background:#13141d;border:1px solid #3e354f;border-radius:12px}.source h3{font-size:18px;margin:12px 0 10px;line-height:1.3}.source p{font-size:15px;color:#bdb8cd;line-height:1.5}.source .tag{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#c4b0ff}.source .path{display:block;font:14px/1.6 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:#eee7ff;background:#242032;padding:12px;border-radius:8px}.source .contains{display:block;color:#a7a0b7;font:13px/1.5 system-ui;margin:8px 0}.source strong{display:block;margin-top:12px;font-size:14px}.source-num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#8e63e8;color:white;font-size:14px;font-weight:700;margin-right:8px}@media(max-width:720px){.sources{grid-template-columns:1fr}h1{font-size:34px}main{padding:28px 16px}section{padding:20px}}@media print{.sources{grid-template-columns:repeat(3,1fr)}.source{background:white}.source .path{color:#222;background:#eee}.source p,.source .tag{color:#444}}
 </style>
 <main>
 <p class="eyebrow">FABLEFORGE · A GUIDE FOR PERODIS</p>
@@ -20,12 +21,11 @@
 <p>Download <a href="https://www.nexusmods.com/fablethelostchapters/mods/454">Aeon Edition</a> and <a href="https://www.nexusmods.com/fablethelostchapters/mods/596?tab=files">Controller Support’s legacy FMP download</a> from their authors. The file check used Aeon 5.03 and Controller Support version 1. Extract the archives outside the game folder.</p>
 <p>Keep the complete Aeon extraction, including its graphics, textures, levels and Bones files. Choose the folder directly containing <code>Data</code>, not the <code>Data</code> folder itself.</p>
 <p>Put <strong>only</strong> <code>FableControllerSupport.dll</code> in a separate folder named exactly <code>FableControllerSupport</code>. Keep the FMP separately:</p>
-<pre><code>My mod sources/
-  AeonEdition/
-    Data/                     ← complete Aeon data
-  ControllerSupport.fmp
-  FableControllerSupport/
-    FableControllerSupport.dll</code></pre>
+<div id="sources" class="sources" aria-label="The three sources to select in Forge">
+<article class="source"><span class="tag"><span class="source-num">1</span>Choose a folder</span><h3>Aeon Edition</h3><span class="path">AeonEdition</span><span class="contains">Contains the complete <code>Data</code> folder</span><p>The overhaul: its game data, graphics, textures and levels.</p><strong>Select the parent folder, not Data itself.</strong></article>
+<article class="source"><span class="tag"><span class="source-num">2</span>Choose a file</span><h3>Controller game data</h3><span class="path">ControllerSupport.fmp</span><p>Installs the game-data changes that controller support needs.</p><strong>Forge applies this package.</strong></article>
+<article class="source"><span class="tag"><span class="source-num">3</span>Choose a folder</span><h3>Controller runtime</h3><span class="path">FableControllerSupport</span><span class="contains">Contains only <code>FableControllerSupport.dll</code></span><p>Runs alongside Fable to provide the controller functionality.</p><strong>EgoCore loads this DLL when you play.</strong></article>
+</div>
 <p>Do not include the controller mod’s <code>Data</code> folder in the DLL folder. The FMP supplies the asset changes in this recipe; the DLL supplies the running-game controller support.</p></section>
 
 <section><h2><span class="step">3</span>Open Forge and choose the game copy</h2>
@@ -33,11 +33,11 @@
 <p>In <strong>Setup → Choose the install folder…</strong>, select your clean game folder containing <code>Fable.exe</code>. Setup also opens from the install status in the header. Confirm the selected path is your intended game copy, then open the <strong>Mods</strong> tab.</p></section>
 
 <section><h2><span class="step">4</span>Add the mods in this order</h2>
-<p>In <strong>Add a mod</strong>, paste each source’s full path, give it the name below, and click <strong>Add to the order</strong>. Scroll the right panel if needed. Add these from top to bottom:</p>
+<p>In <strong>Add a mod</strong>, click <strong>Browse… → Choose mod file…</strong> or <strong>Choose mod folder…</strong>. Select the source, give it the name below, and click <strong>Add to the order</strong>. You can still type or paste a path. Scroll the right panel if needed. Add these from top to bottom:</p>
 <ol><li><strong>Aeon Edition</strong> — the folder containing its complete <code>Data</code> tree.</li><li><strong>Controller Support FMP</strong> — <code>ControllerSupport.fmp</code>.</li><li><strong>Controller Support DLL</strong> — your DLL-only <code>FableControllerSupport</code> folder.</li></ol>
 <p>All three must be enabled. Drag a row to correct its position. Keep those source folders in place; Forge uses them again when rebuilding.</p>
 <figure><a href="01-order.png"><img src="01-order.png" alt="Actual Forge Mods panel showing Aeon Edition, Controller Support FMP and Controller Support DLL in order"></a><figcaption>The tested three-layer order. Screenshots use a disposable test game folder; your paths will differ. Click an image to enlarge it.</figcaption></figure>
-<figure><a href="02-add.png"><img src="02-add.png" alt="Forge Add a mod path, name and Add to the order controls"></a><figcaption>Use the path field and optional name for each source.</figcaption></figure></section>
+<figure><a href="02-add.png"><img src="02-add.png" alt="Forge Add a mod path, name and Add to the order controls"></a><figcaption>Use Browse to select a file or folder. Typing and pasting paths still work.</figcaption></figure></section>
 
 <section><h2><span class="step">5</span>Check, then build and deploy</h2>
 <p>Click <strong>Check conflicts</strong> and wait for it to finish. Review the report and Activity log. The checked versions produced zero definition field conflicts and no missing direct model references. A different result deserves investigation before deploying.</p>

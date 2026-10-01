@@ -5,6 +5,15 @@ used the leaked Lionhead debug build for, on retail data, with undo, and without
 the crashes. The engine formats are written by FableForge's `forgecore`
 (vendored; `tools/sync_forgecore.py` keeps it byte-identical with the upstream).
 
+## Choosing files and folders
+
+Mod sources, model imports, texture images, ground-theme PNGs and dialogue
+exports have **Browse...** beside their editable path fields. For mods, choose
+**Choose mod file...** or **Choose mod folder...**. Selection fills the field;
+use the separate Add, Import or Export action to apply it. Cancel keeps the
+previous path. Dialogue export uses a Save As dialog for a new `.big` file;
+existing archives remain protected by the exporter.
+
 ## Setup (first run)
 
 A *Setup* panel opens on the first run (and from the install status in the

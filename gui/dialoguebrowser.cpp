@@ -469,10 +469,9 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     ImGui::Text("%zu staged line%s in %s",stagedCount,stagedCount==1?"":"s",
                 dialogueLanguage_.c_str());
     theme::hint("Choose a new file path; existing archives are never overwritten.");
-    ImGui::SetNextItemWidth(cardInner);
-    if(ImGui::InputText("##dialogue_scratch_path",dialogueScratchPath_.data(),
-                        dialogueScratchPath_.size())) dialogueExportMessage_.clear();
-    auto_.registerWidget("input_dialogue_scratch_path");
+    if(drawPathInput("dialogue_scratch_path", "New dialogue archive", dialogueScratchPath_.data(),
+                     dialogueScratchPath_.size(),cardInner,PathField::DialogueExport,
+                     "input_dialogue_scratch_path")) dialogueExportMessage_.clear();
     ImGui::BeginDisabled(!stagedCount);
     if(ImGui::Button("Export scratch dialogue.big##dialogue")) {
         dialogueExportMessage_.clear();

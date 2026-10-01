@@ -1825,6 +1825,39 @@ definitions, retail exports, GUI pixels and literal-path mod deployment.
 This supersedes the first Perodis ZIP, whose guide only named WAD extraction.
 
 
+## 2026-10-01 continuation: native Browse fields and clearer mod guide
+
+Path fields now pair editable text with Browse: mod sources offer file/folder
+choices; model and image imports filter their formats; dialogue export uses
+Save As. Narrow fields stack the button. Cancel preserves the typed/selected
+path, selection alone never applies a mod or writes an export, and overlong
+paths are refused instead of truncated. The common picker now decodes UTF-8
+initial paths and opens their parent folder; its returned UTF-8 buffer includes
+space for the terminator. Other filesystem paths retain their existing narrow
+Windows behavior; this is not a claim of end-to-end Unicode support.
+
+`tools/test_path_browse.py` drives real Windows dialogs in only its own hidden
+GUI process. File/folder selection with spaces, percent and ampersand paths,
+Cancel preserving the source, and Save As followed by explicit BIG export pass
+at 1280x900 (`build/path-browse-cu0mxe6s`) and 800x600 / 1.5x
+(`build/path-browse-3zvavjpk`). The compact script first reveals the path field
+then its button, since offscreen auto-sized cards do not lay out every item.
+Actual Aeon GUI conflict/deploy capture reran successfully in 96 seconds; key
+outputs still match the independent build. No live install writes or runtime
+game checks. All three normal binaries rebuilt against the committed core.
+
+The Perodis guide replaces its plain folder tree with three responsive source
+cards explaining the folder/file distinction and FMP vs DLL roles. Step 4 uses
+Browse; screenshots show current controls. Browser rendering inspected at
+`build/guide-cdp-vw7ZTJ/sources.png` (subsequent wording change adds Browse).
+
+Dialogue redesign remains in progress, temporarily preserved in
+`build/dialogue-wip-1q844bsq/changes.patch` plus full file copies, based on
+7a611e7. It is intentionally absent from the Browse delivery while its compact
+layout is unfinished. Reapply that owned patch after this checkpoint, preserving
+the new path fields. Earlier dialogue captures/tests are in
+`build/dialogue-workspace-p8ecdp2k`.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -260,10 +260,9 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         auto_.registerWidget("btn_tex_replace_toggle");
         if (texReplaceOpen_) {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
-            ImGui::SetNextItemWidth(cardInner);
-            ImGui::InputTextWithHint("##texreplacepath", "Path to a PNG / JPG / TGA (resampled to the slot's size)", texImagePath_, sizeof texImagePath_);
+            drawPathInput("texreplacepath", "Image file", texImagePath_, sizeof texImagePath_,
+                          cardInner, PathField::Image, "input_tex_image");
             ImGui::PopStyleVar();
-            auto_.registerWidget("input_tex_image");
             ImGui::PushFont(fontSmall_);
             theme::hintMore("Replaces the texture everywhere it is used (backed up once).", "Same slot, same pixel format, mips rebuilt; every object using this texture changes. One-time textures.big.forge-orig backup; refused while the game runs.");
             ImGui::PopFont();
@@ -282,9 +281,8 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     ImGui::SetNextItemWidth(cardInner);
     ImGui::InputTextWithHint("##texaddname", "Name, e.g. MY_BARREL_01", texAddName_, sizeof texAddName_, ImGuiInputTextFlags_CharsUppercase);
     auto_.registerWidget("input_tex_add_name");
-    ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##texaddpath", "Path to a PNG / JPG / TGA", texAddPath_, sizeof texAddPath_);
-    auto_.registerWidget("input_tex_add_image");
+    drawPathInput("texaddpath", "Path to a PNG / JPG / TGA", texAddPath_, sizeof texAddPath_,
+                  cardInner, PathField::Image, "input_tex_add_image");
     ImGui::PopStyleVar();
     theme::segmented("##texaddfmt", texAddFormat_, {"DXT1", "DXT3 (alpha)", "ARGB8888"}, cardInner);
     ImGui::PushFont(fontSmall_);
