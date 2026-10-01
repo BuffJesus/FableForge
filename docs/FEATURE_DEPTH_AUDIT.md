@@ -934,6 +934,27 @@ update/Restore path. Final normal `build/entrance-preserve-gdmnu978` and ASan CL
 `build/entrance-preserve-56724y6j` pass. This change is limited to entrance argument
 parsing; other CLI numeric options retain their existing parsers.
 
+## 2026-10-01 continuation: recover diagnostic STB writes
+
+`build/chunk-write-recovery-mky8mf52/write_report.json` records all three baseline
+facts: chunk-zcheck --write changed STB, created no original backup, and consumed
+an unrelated `<bank>.atlas-tmp` file. The command now prepares output in an owned
+PendingBanks workspace, reparses and verifies the intended chunk/record before
+commit, rechecks the running-game guard, and installs with the original-backup
+preflight. Missing prepared map/entry or mismatched bytes/audit failure reports
+an error without publishing the prepared bank. Locked replacement keeps the prior
+bank and cleans only owned temporary files.
+
+`tools/test_chunk_write_recovery.py` uses real copied game.bin/STB plus an unowned
+temporary-file sentinel. Greatwood_1's one-unit foliage ride exercises relayout
+(3,357,180 -> 3,359,217 chunk bytes), with exact chunk/record readback and zero
+audit issues. It checks the backup, byte-exact Restore, locked refusal, retry and
+second exact Restore, including file inventory and owned-workspace cleanup.
+Normal `build/chunk-write-recovery-kl161ie8` and ASan CLI
+`build/chunk-write-recovery-q4mt3nq1` pass. No relocation, compression or
+foliage algorithm changed; no live game data was written. Same-size replacement
+remains on the existing core writer path and was not separately forced here.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

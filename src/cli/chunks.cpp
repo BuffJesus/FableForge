@@ -38,6 +38,7 @@
 #include "stbrelocate.hpp"
 #include "stitch.hpp"
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "lodbake.hpp"
 #include "dxt1.hpp"
 #include "forge/stbinfo.hpp"
@@ -340,27 +341,36 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
                 if (!albion::editor::auditChunk(chunk, record, info.worldX, info.worldY, info.mapWidth, info.mapHeight, da, err)) { std::fprintf(stderr, "audit failed: %s\n", err.c_str()); return 1; }
                 if (!albion::editor::auditChunk(back, backRecord, info.worldX, info.worldY, info.mapWidth, info.mapHeight, db, err)) { std::fprintf(stderr, "audit of the round-tripped chunk failed: %s\n", err.c_str()); return 1; }
                 std::printf("round trip: %s (digest %016llx vs %016llx)\n", da.digest == db.digest ? "byte-equal data" : "DIFFERS (expected for float z within rounding)", (unsigned long long)da.digest, (unsigned long long)db.digest);
-                for (size_t i = 3; i < args.size(); ++i) if (args[i] == "--write") {   // write the ridden chunk back (same-size in place / relayout) and audit it from the file
+                if (std::find(args.begin(), args.end(), "--write") != args.end()) {
                     const fs::path stbPath = install.root / "data" / "Levels" / "FinalAlbion_RT.stb";
                     std::vector<forge::stb::StaticMapAppend> batch;
                     batch.push_back({m.levelName, entry->name, moved, movedRecord});
-                    const fs::path tmp = stbPath.string() + ".atlas-tmp";
+                    albion::detail::PendingBanks pending(install.root, ".forge-chunk-write-");
+                    const fs::path tmp = pending.prepare("data/Levels/FinalAlbion_RT.stb");
                     if (moved.size() == chunk.size()) forge::stb::replaceStaticMaps(stbPath, tmp, batch);
                     else forge::stb::replaceStaticMapsRelayout(stbPath, tmp, batch);
-                    fs::rename(tmp, stbPath);
-                    const auto a2 = forge::stb::Archive::open(stbPath);
+                    const auto a2 = forge::stb::Archive::open(tmp);
+                    bool verified = false;
                     for (const auto& m2 : a2.staticMaps()) {
                         if (lower(fs::path(m2.levelName).stem().string()) != lower(args[1])) continue;
                         const auto r2 = a2.readStaticMapRecord(m2);
                         const auto i2 = forge::stbinfo::readInfoBlock(r2.data());
                         const forge::stb::Entry* e2 = nullptr;
                         for (const auto& e : a2.entries()) if (int32_t(e.id) == i2.bankFileIndex) { e2 = &e; break; }
+                        if (!e2) { std::fprintf(stderr, "prepared static map has no bank entry\n"); return 1; }
                         const auto c2 = a2.read(*e2);
                         albion::editor::RelocateReport wa;
                         const bool ok = albion::editor::auditChunk(c2, r2, i2.worldX, i2.worldY, i2.mapWidth, i2.mapHeight, wa, err);
+                        if (!ok || r2 != movedRecord || c2 != moved) {
+                            std::fprintf(stderr, "prepared STB did not verify: %s\n", ok ? "chunk or record differs" : err.c_str()); return 1;
+                        }
+                        if (!allowInstallWrite(install)) return 1;
+                        if (!pending.install(true, err)) { std::fprintf(stderr, "cannot replace STB: %s\n", err.c_str()); return 1; }
+                        verified = true;
                         std::printf("written (%s): %zu bytes, record equal %d, chunk equal %d, audit %s (%zu issues)\n", moved.size() == chunk.size() ? "in place" : "relayout", c2.size(), int(r2 == movedRecord), int(c2 == moved), ok ? "ok" : err.c_str(), wa.issues.size());
-                        if (r2 != movedRecord) { for (size_t k = 0; k < r2.size() && k < movedRecord.size(); ++k) if (r2[k] != movedRecord[k]) { std::printf("  first record diff at 0x%zx\n", k); break; } }
+                        break;
                     }
+                    if (!verified) { std::fprintf(stderr, "prepared STB is missing the changed static map\n"); return 1; }
                 }
                 return 0;
             }
