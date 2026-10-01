@@ -298,6 +298,7 @@ std::optional<int> runChunks(const std::string& cmd, const Args& args) {
         for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (std::find(args.begin(), args.end(), "--write") != args.end() && !allowInstallWrite(install)) return 1;
         const float dz = float(std::atof(args[2].c_str()));
         try {
             const auto archive = forge::stb::Archive::open(install.root / "data" / "Levels" / "FinalAlbion_RT.stb");

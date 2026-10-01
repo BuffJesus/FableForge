@@ -69,6 +69,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         albion::editor::DonorInfo info; std::string err;
         if (req.templateLevel.empty()) {
             std::string serr;
@@ -122,6 +123,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         albion::editor::DonorInfo info; std::string err;
         if (!albion::editor::donorInfo(install.root, req.donor, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         req.worldX = info.suggestedX; req.worldY = info.suggestedY;
@@ -145,6 +147,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (xyz.size() >= 2 && !allowInstallWrite(install)) return 1;
         albion::editor::WorldLayout layout; std::string err;
         if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         const auto* box = layout.find(args[1]);

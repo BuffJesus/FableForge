@@ -66,6 +66,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if ((cmd == "texture-replace" || cmd == "texture-add") && !allowInstallWrite(install)) return 1;
         const fs::path big = install.root / "data" / "graphics" / "pc" / "textures.big";
         std::string err;
         if (cmd == "textures") {
@@ -143,6 +144,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         albion::editor::CustomThemeResult out; std::string err;
         if (!albion::editor::createCustomTheme(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());
@@ -164,6 +166,7 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         albion::meshimport::ImportResult out; std::string err;
         if (!albion::meshimport::importModel(install.root, req, out, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : out.notes) std::printf("  %s\n", n.c_str());

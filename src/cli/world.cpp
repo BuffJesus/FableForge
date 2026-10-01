@@ -61,6 +61,7 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         std::vector<std::string> notes; std::string err;
         if (!albion::editor::setRegionProperties(install.root, args[1], props, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());
@@ -77,6 +78,7 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
         if (maps.empty() || maps.size() > 2) { std::fprintf(stderr, "usage: forge world-stitch <map> [<map2>] [--feather <cells>] [--dry-run] [--install <root>]\n"); return 2; }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (so.deploy && !allowInstallWrite(install)) return 1;
         albion::editor::WorldLayout layout; std::string err; std::vector<std::string> notes; std::vector<albion::editor::StitchReport> reports;
         if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         bool ok;
@@ -108,6 +110,7 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
         if (cmd == "world-owner" || cmd == "world-sees") {
             const Install install = findInstall(installArg);
             if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+            if (!allowInstallWrite(install)) return 1;
             std::vector<std::string> notes; std::string err;
             if (!albion::editor::applyWorldEdits(install.root, {}, owners, sees, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
             for (const auto& n : notes) std::printf("  %s\n", n.c_str());
@@ -115,6 +118,7 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (cmd == "world-move" && !allowInstallWrite(install)) return 1;
         albion::editor::WorldLayout layout; std::string err;
         if (!albion::editor::loadWorldLayout(install.root, layout, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         if (cmd == "world" && regionsList) {
@@ -167,6 +171,7 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
         for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
+        if (!allowInstallWrite(install)) return 1;
         std::vector<std::string> notes; std::string err;
         if (!albion::editor::registerMinimapGraphic(install.root, args[1], uint32_t(std::strtoul(args[2].c_str(), nullptr, 0)), notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());

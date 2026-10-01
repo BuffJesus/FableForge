@@ -85,6 +85,7 @@ std::optional<int> runInstall(const std::string& cmd, const Args& args) {
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)" "\n"); return 2; }
+        if (!dryRun && !allowInstallWrite(install)) return 1;
         try {
             const auto before = albion::stbcompact::measure(install.root);
             std::printf("%s: %u entries, %.1f MB, %.1f MB reclaimable" "\n", albion::stbcompact::bankPath(install.root).string().c_str(), before.entries,

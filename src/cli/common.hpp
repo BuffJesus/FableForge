@@ -20,6 +20,8 @@ struct Install {
 };
 
 Install findInstall(const std::string& override);
+// Report refusal before an install-writing command prepares backups or output.
+bool allowInstallWrite(const Install& install);
 
 // Resolve the user's level argument to a .lev path on disk. WAD-resident maps are extracted
 // to an owned workspace (the LEV reader is path-based). Keep the workspace alive

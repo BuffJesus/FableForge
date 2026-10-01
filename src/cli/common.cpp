@@ -114,6 +114,12 @@ std::string lower(std::string s) {
     return s;
 }
 
+bool allowInstallWrite(const Install& install) {
+    if (!albion::backups::gameRunningIn(install.root)) return true;
+    std::fprintf(stderr, "error: Fable.exe is running from this install; quit the game before writing its files\n");
+    return false;
+}
+
 Install findInstall(const std::string& override) {
     Install i;
     if (!override.empty()) {

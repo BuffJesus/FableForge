@@ -625,6 +625,12 @@ Scripts: `place_village <VILLAGE_DEF> [scriptname]`, `village_member
 <uid|scriptname|0>`, state `villages` / `selected_village`; live probe
 `tests/ui/village_live.txt`.
 
+High-level `forge` install-writing commands also check for a `Fable.exe` process
+from the selected install before preparing changes. Read-only commands and
+`compact-stb` / `world-stitch --dry-run` remain usable while it runs. A process
+from a sibling install does not block these writes. This preflight does not lock
+out a game launched later during a long operation.
+
 ## Live link to the running game (ForgeFSE)
 
 The *Live link* card (2026-09-17, in-game verified) talks to the running game

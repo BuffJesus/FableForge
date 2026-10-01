@@ -897,6 +897,27 @@ and file inventory. Normal `build/entrance-preserve-b5vw_pve` and ASan CLI
 `build/entrance-preserve-pdyjkzue` pass. Normal writer targets build. No live game
 files were changed and no runtime entrance behavior is claimed.
 
+## 2026-10-01 continuation: guard high-level CLI install writes
+
+`build/cli-write-guard-isjj_or9/failure.json` records `forge entrance` returning
+success and changing GTG while a synthetic Fable.exe from that scratch root ran.
+The CLI now shares an explicit install-specific process preflight before writes:
+blank/new level, entrance set, region properties, world move/owner/sees/stitch,
+minimap registration, STB compaction, chunk-zcheck --write, and asset imports.
+Existing lower-level asset/Restore guards remain in place. Entrance/world/backups
+reads and compact/stitch dry runs remain available.
+
+`tools/test_cli_write_guard.py` builds a hidden inert helper, launches only its own
+scratch Fable.exe, checks all 15 command refusals and unchanged hashes/inventory,
+then exercises five read/dry-run paths. After its own helper exits, entrance write
+and exact Restore succeed. A similarly named sibling install process allows both
+write and Restore. Final normal `build/cli-write-guard-7konlyo7` and ASan CLI
+`build/cli-write-guard-wvas9mvu` pass; the initial own-root-only check also passed
+at `build/cli-write-guard-6w0c4hdo`. The real game process is never stopped.
+
+This is command preflight, not synchronization against a game launched during a
+long operation. Explicit-path forge-tools container commands were not changed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
