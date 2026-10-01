@@ -774,8 +774,12 @@ entries (live probe, 2026-08), so a dedicated region past that is never
 reachable. The card therefore always attaches to an existing region; the CLI's
 `--dedicated` keeps the old behaviour and warns. Refusals (duplicate name,
 off-grid origin, overlapping box) happen before any file is touched; the four
-containers get one-time `.forge-orig` backups and are replaced with staged
-temp files in one commit. `tools/test_newlevel.py` (in `check_all`) runs the
+containers get one-time `.forge-orig` backups. The core installer prepares
+WLD, BWD and its existing mirrors, WAD (or new loose LEV/TNG files), and STB
+in an owned directory, then rolls back earlier replacements if a later file
+cannot be installed. A failed rollback reports the retained recovery directory.
+Minimap preparation and later region/entrance edits remain separate creation
+stages, so failures outside this group can still require Restore. `tools/test_newlevel.py` (in `check_all`) runs the
 CLI and the card against a scratch copy of the install.
 
 ## Assets tab

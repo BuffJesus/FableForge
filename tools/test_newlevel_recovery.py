@@ -78,7 +78,9 @@ def main():
         after_failure = snapshot()
         assert all(after_failure[name] == value for name, value in original.items()), 'marker failure changed an original'
     else:
-        assert all(p.exists() for p in created), 'did not reach late failure after loose-file commit'
+        assert not any(p.exists() for p in created), 'late failure did not roll back new loose files'
+        after_failure = snapshot()
+        assert all(after_failure.get(name) == value for name, value in original.items()), 'late failure changed an original'
     markers = [Path(str(p) + '.forge-created').is_file() for p in created]
     result = subprocess.run([str(args.exe.resolve()), 'restore', '--install', str(root), '--forget'],
         cwd=repo, capture_output=True, text=True, timeout=120)

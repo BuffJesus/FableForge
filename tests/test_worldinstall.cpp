@@ -8,8 +8,19 @@
 #include <stdexcept>
 
 static void check(bool ok, const char* message) { if (!ok) throw std::runtime_error(message); }
-int main() {
+int main(int argc, char** argv) {
     try {
+        // Scratch integration runner for the core's default .bak policy.
+        if (argc == 2) {
+            forge::worldinstall::Request request;
+            request.gameRoot=argv[1]; request.donorLevelName="TeleporterGreatwood";
+            request.newLevelName="CoreInstallProbe"; request.hostRegion="Greatwood";
+            request.worldX=request.worldY=6400;
+            (void)forge::worldinstall::installLevel(request);
+            std::cout << "Core installation completed\n";
+            return 0;
+        }
+        check(argc==1,"usage: worldinstall_tests [scratch-install-root]");
         namespace fs = std::filesystem;
         forge::TemporaryDirectory scratch(fs::temp_directory_path(), "FableForgeWorldInstall-");
         const auto root = scratch.path();

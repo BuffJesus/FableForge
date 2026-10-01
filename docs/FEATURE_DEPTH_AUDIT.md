@@ -1167,6 +1167,39 @@ CLI and tools builds pass. This is placement preflight, not a transaction coveri
 all creation stages; later failures can still need Restore. No live-game boundary
 transition was attempted.
 
+## 2026-10-01 continuation: rollback for the core level installer
+
+`build/worldinstall-recovery-nx0wdl36` reproduced changed world files and lost
+fixed staging-file sentinels when the final STB replacement failed. The core
+installer now prepares WLD, primary BWD and existing mirrors, WAD or new loose
+LEV/TNG files, and STB in an exclusively owned directory. Candidates are checked
+before replacement; requested backups must succeed and existing backup paths
+must be regular files. A failed commit rolls back preceding replacements. If
+rollback itself fails, the error reports a retained recovery directory.
+TemporaryDirectory's explicit retention behavior has a focused unit check.
+
+`tools/test_worldinstall_recovery.py` checks a locked final STB, original hashes,
+unrelated staging occupants, successful retry, BWD mirror equality and exact
+Restore. Packed normal `build/worldinstall-recovery-szqxx52z` and ASan
+`build/worldinstall-recovery-ri5q6fju` pass, including refusal of a directory at a
+backup path and byte-exact recovery from all six core `.bak` files. Those `.bak`
+files are restored explicitly by the test; editor Restore does not consume them.
+
+Loose normal `build/worldinstall-recovery-ooso6fax` also passes, preserving the
+renamed WAD and checking both new loose files on retry. Existing blank-level
+late-failure and marker-refusal checks pass in `build/newlevel-recovery-dpkcvfkp`
+and `build/newlevel-recovery-lci3a6my`; the late-failure assertion now requires
+new loose files to be rolled back, with exact Restore clearing their markers.
+
+Normal editor/CLI/tools builds and all 35 regression suites pass (18.88s).
+The focused worldinstall and temporary-directory suites also pass under ASan.
+
+This groups the core world installation only: earlier minimap and later region
+or entrance work remain separate stages. Failed rollback retention is unit
+checked, but an actual rollback failure was not injected. No power-loss or
+concurrent-writer guarantee is claimed. The standalone legacy forge-tools
+installer still has its duplicated writer and is the next follow-up.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

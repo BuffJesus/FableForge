@@ -9,6 +9,7 @@
 #include "forge/stbinfo.hpp"
 #include "forge/wad.hpp"
 #include "forge/wld.hpp"
+#include "forge/temporarydirectory.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -291,24 +292,53 @@ Result installLevel(const Request& req) {
         if (slots.regionSlot > 141) result.notes.push_back("region slot " + std::to_string(slots.regionSlot) + " is past the engine's 141-region cap: the level will not be reachable; attach it to a host region instead");
     }
 
-    // ---- staged writes beside the originals (same volume: the commit renames are atomic)
-    const fs::path bwdTmp = bwdPath.string() + ".forge-tmp";
-    const fs::path wldTmp = wldPath.string() + ".forge-tmp";
-    const fs::path wadTmp = wadPath.string() + ".forge-tmp";
-    const fs::path wadTmp2 = wadPath.string() + ".forge-tmp2";
-    const fs::path stbTmp = stbPath.string() + ".forge-tmp";
-    const fs::path levTmp = looseLev.string() + ".forge-tmp";
-    const fs::path tngTmp = looseTng.string() + ".forge-tmp";
-    auto cleanup = [&]() { std::error_code ec; for (const auto& t : {bwdTmp, wldTmp, wadTmp, wadTmp2, stbTmp, levTmp, tngTmp}) fs::remove(t, ec); };
-    fs::path wadFinal;
+    // ---- prepare all replacements inside an exclusively owned directory.
+    TemporaryDirectory scratch(req.gameRoot, ".forge-world-install-");
+    struct PreparedFile { fs::path target, prepared, previous; bool saved=false, installed=false; };
+    std::vector<PreparedFile> files;
+    const auto root = fs::absolute(req.gameRoot).lexically_normal();
+    const auto prepare = [&](const fs::path& target) {
+        const auto relative = fs::absolute(target).lexically_normal().lexically_relative(root);
+        if (relative.empty() || relative.is_absolute() || *relative.begin() == "..")
+            throw std::runtime_error("worldinstall: target escaped install root: " + target.string());
+        PreparedFile file{target, scratch.path() / "new" / relative, scratch.path() / "previous" / relative};
+        fs::create_directories(file.prepared.parent_path());
+        fs::create_directories(file.previous.parent_path());
+        files.push_back(file);
+        return file.prepared;
+    };
+    const fs::path bwdTmp = prepare(bwdPath);
+    std::vector<fs::path> mirrors;
+    for (const fs::path mirror : {req.gameRoot / "FinalAlbion.bwd", levelsDir / "FinalAlbion" / "FinalAlbion.bwd"})
+        if (fs::exists(mirror)) mirrors.push_back(mirror);
+    const fs::path wldTmp = prepare(wldPath);
+    const fs::path wadTmp = scratch.path() / "cloned.wad";
+    const fs::path wadTmp2 = loose ? fs::path{} : prepare(wadPath);
+    const fs::path levTmp = loose ? prepare(looseLev) : fs::path{};
+    const fs::path tngTmp = loose ? prepare(looseTng) : fs::path{};
+    // Mirrors follow the main world files, with the STB last so a late failure
+    // exercises rollback across both new loose files and all BWD copies.
+    std::vector<fs::path> mirrorTemps;
+    for (const auto& mirror : mirrors) mirrorTemps.push_back(prepare(mirror));
+    const fs::path stbTmp = prepare(stbPath);
     try {
-        bwd.write(bwdTmp);
+        const auto binary = bwd.serialize();
+        {
+            std::ofstream out(bwdTmp, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(binary.data()), static_cast<std::streamsize>(binary.size()));
+            out.close();
+            if (!out || bwd::File::parse(bwdTmp).serialize() != binary)
+                throw std::runtime_error("prepared BWD failed read-back verification");
+        }
+        for (const auto& mirrorTmp : mirrorTemps) fs::copy_file(bwdTmp, mirrorTmp);
         {
             const std::string text = wld.serialize();
             std::ofstream out(wldTmp, std::ios::binary);
             if (!out) throw std::runtime_error("cannot write " + wldTmp.string());
             out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            if (!out) throw std::runtime_error("write failed for " + wldTmp.string());
+            out.close();
+            if (!out || wld::File::parse(wldTmp).serialize() != text)
+                throw std::runtime_error("prepared WLD failed read-back verification");
         }
         if (loose) {
             auto writeLoose = [&](const fs::path& tmp, const std::vector<uint8_t>& custom, const char* ext) {
@@ -316,6 +346,7 @@ Result installLevel(const Request& req) {
                 std::ofstream out(tmp, std::ios::binary);
                 if (!out) throw std::runtime_error("cannot write " + tmp.string());
                 out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                out.close();
                 if (!out) throw std::runtime_error("write failed for " + tmp.string());
             };
             writeLoose(levTmp, req.levBytes, ".lev");
@@ -325,8 +356,8 @@ Result installLevel(const Request& req) {
             std::map<std::string, std::vector<uint8_t>> repl;
             if (!req.levBytes.empty()) repl[newLev] = req.levBytes;
             if (!req.tngBytes.empty()) repl[newTng] = req.tngBytes;
-            if (!repl.empty()) { wad::repack(wadTmp, repl, wadTmp2); wadFinal = wadTmp2; }
-            else wadFinal = wadTmp;
+            if (!repl.empty()) wad::repack(wadTmp, repl, wadTmp2);
+            else fs::rename(wadTmp, wadTmp2);
         }
 
         auto ib = stbinfo::readInfoBlock(commonRecord.data());
@@ -340,55 +371,61 @@ Result installLevel(const Request& req) {
         std::copy(patched.begin(), patched.end(), record.begin());
         result.chunkRetargeted = !req.chunkBytes.empty();
         stb::appendStaticMap(stbPath, stbTmp, newLev, newLev, result.chunkRetargeted ? req.chunkBytes : donorChunk, record);
+        const auto verifiedStb = stb::Archive::open(stbTmp);
+        const auto* savedChunk = verifiedStb.findEntry(newLev);
+        if (!savedChunk || verifiedStb.read(*savedChunk) != (result.chunkRetargeted ? req.chunkBytes : donorChunk))
+            throw std::runtime_error("prepared STB chunk failed read-back verification");
+        if (!loose) {
+            const auto verifiedWad = wad::Archive::open(wadTmp2);
+            for (const auto& item : {std::pair{newLev, &req.levBytes}, std::pair{newTng, &req.tngBytes}}) {
+                const auto found = std::find_if(verifiedWad.entries().begin(), verifiedWad.entries().end(),
+                    [&](const wad::Entry& entry) { return iequalsName(entry.name, item.first); });
+                if (found == verifiedWad.entries().end() || (!item.second->empty() && verifiedWad.read(*found) != *item.second))
+                    throw std::runtime_error("prepared WAD entry failed read-back verification: " + item.first);
+            }
+        }
+        for (const auto& file : files) {
+            if (!fs::is_regular_file(file.prepared)) throw std::runtime_error("prepared file missing: " + file.prepared.string());
+            if (fs::exists(file.target) && !fs::is_regular_file(file.target))
+                throw std::runtime_error("destination is not a file: " + file.target.string());
+            if (!req.backupSuffix.empty() && fs::exists(file.target)) {
+                const fs::path backup = file.target.string() + req.backupSuffix;
+                if (fs::exists(backup)) {
+                    if (!fs::is_regular_file(backup)) throw std::runtime_error("backup is not a file: " + backup.string());
+                } else fs::copy_file(file.target, backup);
+            }
+        }
         if (loose && req.prepareCreatedFile) {
             req.prepareCreatedFile(looseLev);
             req.prepareCreatedFile(looseTng);
         }
     } catch (const std::exception& e) {
-        cleanup();
-        throw std::runtime_error(std::string("worldinstall: staging failed, install untouched: ") + e.what());
+        throw std::runtime_error(std::string("worldinstall: preparation failed, target files untouched: ") + e.what());
     }
 
-    // ---- commit
+    // ---- commit, keeping exact previous files available until the group succeeds.
     try {
-        if (!req.backupSuffix.empty())
-            for (const auto& p : {bwdPath, wldPath, wadPath, stbPath}) {
-                const fs::path bak = p.string() + req.backupSuffix;
-                std::error_code ec;
-                if (!fs::exists(p, ec)) continue;   // no WAD in a loose-level install
-                if (!fs::exists(bak)) fs::copy_file(p, bak, ec);
-            }
-        auto commit = [](const fs::path& tmp, const fs::path& orig) {
-            std::error_code ec;
-            fs::rename(tmp, orig, ec);
-            if (ec) {
-                fs::remove(orig, ec);
-                fs::rename(tmp, orig, ec);
-                if (ec) throw std::runtime_error("commit rename failed for " + orig.string() + ": " + ec.message());
-            }
-        };
-        commit(bwdTmp, bwdPath);
-        // The engine reads the compiled world from more than one place (the
-        // retail install carries FinalAlbion.bwd at the root and under
-        // data/Levels/FinalAlbion as well; the region name of a repurposed
-        // slot came back stale when only data/Levels was updated). Mirror.
-        for (const fs::path mirror : {req.gameRoot / "FinalAlbion.bwd", levelsDir / "FinalAlbion" / "FinalAlbion.bwd"}) {
-            std::error_code ec;
-            if (!fs::exists(mirror, ec)) continue;
-            if (!req.backupSuffix.empty()) { const fs::path bak = mirror.string() + req.backupSuffix; if (!fs::exists(bak)) fs::copy_file(mirror, bak, ec); }
-            fs::copy_file(bwdPath, mirror, fs::copy_options::overwrite_existing, ec);
-            if (ec) throw std::runtime_error("cannot mirror the BWD to " + mirror.string() + ": " + ec.message());
-            result.notes.push_back("BWD mirrored to " + mirror.string());
+        for (auto& file : files) {
+            if (fs::exists(file.target)) { fs::rename(file.target, file.previous); file.saved=true; }
+            fs::rename(file.prepared, file.target); file.installed=true;
         }
-        commit(wldTmp, wldPath);
-        if (loose) { commit(levTmp, looseLev); commit(tngTmp, looseTng); }
-        else commit(wadFinal, wadPath);
-        commit(stbTmp, stbPath);
-        cleanup();
     } catch (const std::exception& e) {
-        cleanup();
-        throw std::runtime_error(std::string("worldinstall: commit failed after staging (restore from the ") + req.backupSuffix + " files): " + e.what());
+        std::string error = std::string("worldinstall: commit failed: ") + e.what();
+        bool failedRollback=false;
+        for (auto it=files.rbegin(); it!=files.rend(); ++it) {
+            try {
+                if (it->installed) fs::rename(it->target, it->prepared);
+                if (it->saved) fs::rename(it->previous, it->target);
+            } catch (const std::exception& restore) {
+                failedRollback=true;
+                error += "; rollback failed: " + std::string(restore.what());
+            }
+        }
+        if (failedRollback) { scratch.retain(); error += "; recovery files retained in " + scratch.path().string(); }
+        else error += "; target files rolled back";
+        throw std::runtime_error(error);
     }
+    for (const auto& mirror : mirrors) result.notes.push_back("BWD mirrored to " + mirror.string());
     result.notes.push_back(std::string(loose ? "loose FinalAlbion\\ files (no FinalAlbion.wad in this install)" : "WAD") + ": cloned " + req.donorLevelName + ".lev/.tng as " + req.newLevelName + (req.levBytes.empty() && req.tngBytes.empty() ? " (donor bytes)" : " (custom bytes)"));
     if (loose) { result.createdFiles.push_back(looseLev); result.createdFiles.push_back(looseTng); }
     result.notes.push_back(std::string("STB: chunk appended ") + (!req.commonRecord.empty() ? "(authored from scratch)" : result.chunkRetargeted ? "(re-baked for the new origin)" : "(DONOR geometry: re-bake it for the new origin before playing)"));

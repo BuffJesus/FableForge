@@ -12,6 +12,7 @@ namespace forge {
 // Exclusively created scratch child; only that child is removed on scope exit.
 class TemporaryDirectory {
     std::filesystem::path parent_, path_;
+    bool retained_ = false;
 public:
     TemporaryDirectory(const std::filesystem::path& parent, const std::string& prefix) {
         namespace fs = std::filesystem;
@@ -30,12 +31,14 @@ public:
     TemporaryDirectory(const TemporaryDirectory&) = delete;
     TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
     ~TemporaryDirectory() {
-        if (!path_.empty() && path_.parent_path() == parent_) {
+        if (!retained_ && !path_.empty() && path_.parent_path() == parent_) {
             std::error_code error;
             std::filesystem::remove_all(path_, error);
         }
     }
     const std::filesystem::path& path() const { return path_; }
+    // Keep this owned directory when a failed rollback needs manual recovery.
+    void retain() noexcept { retained_ = true; }
 };
 
 } // namespace forge

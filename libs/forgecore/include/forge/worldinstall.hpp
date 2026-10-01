@@ -77,9 +77,10 @@ struct Result {
     std::vector<std::string> notes;
 };
 
-// Throws std::runtime_error with the install untouched on any validation or
-// staging failure; a failure during the final commit is reported with the
-// backup paths in the message.
+// Prepares files in an owned workspace, checks backups before replacement and
+// rolls back earlier replacements on a reported commit failure. Throws with
+// the retained recovery path if rollback itself fails. Validation/preparation
+// failures leave target files untouched (recovery metadata may be prepared).
 Result installLevel(const Request& request);
 
 // Free 32-aligned origin for a donor-sized box: the first slot scanning right

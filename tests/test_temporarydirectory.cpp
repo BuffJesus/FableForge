@@ -36,6 +36,15 @@ int main() {
             catch (const std::invalid_argument&) { rejected = true; }
             check(rejected, "unsafe prefix accepted");
         }
+        {
+            forge::TemporaryDirectory retained(suite.path(), "recovery-");
+            first=retained.path();
+            std::ofstream(first / "previous") << "recovery";
+            retained.retain();
+        }
+        check(fs::is_regular_file(first / "previous"), "retained recovery workspace was removed");
+        check(first.parent_path()==suite.path(), "recovery workspace escaped suite");
+        fs::remove(first / "previous"); fs::remove(first);
         std::ifstream in(marker); std::string value; in >> value;
         check(value == "unowned", "cleanup changed unowned sibling");
         check(std::distance(fs::directory_iterator(suite.path()), fs::directory_iterator()) == 1, "unexpected scratch entries remain");
