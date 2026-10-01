@@ -77,9 +77,11 @@ payloads only through the table and the common header names entries by id, so
 `forge::stb::compactBank` rewrites the bank as `[header][live payloads in table order,
 aligned][one table]` -- ids, names, sizes, payload bytes and the table metadata verbatim,
 only offsets and the table pointer change; compacting a compact bank reproduces it byte
-for byte (unit test). `src/stbcompact` wraps it: one-time `.forge-orig` backup, write to
-`.compact-tmp`, re-parse and compare every payload, then swap (a running game holds the
-bank open and the swap fails cleanly). CLI `forge compact-stb [--dry-run]`; the Setup panel
+for byte (unit test). `src/stbcompact` writes into an owned temporary workspace,
+re-parses and compares every payload, prepares the one-time `.forge-orig` backup,
+then replaces the bank. Unrelated temporary files are preserved. A running-game
+check runs before preparation and before replacement; failed replacement retains
+the original bank. CLI `forge compact-stb [--dry-run]`; the Setup panel
 shows *Static-map bank: N MB, M MB reclaimable* with *Compact the bank* (background job,
 ~4 s for 574 MB). Scripts: `compact_stb`, `wait_compact`. Measured on the install:
 574.4 -> 571.2 MB, 425 payloads verified, `chunk-audit` clean through the result. *In-game

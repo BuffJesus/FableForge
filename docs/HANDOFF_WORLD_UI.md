@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned STB compaction output
+
+`build/compact-workspace-before.log` reproduced compaction consuming an unrelated
+`<bank>.compact-tmp`. The install wrapper now prepares its compacted bank inside an
+owned PendingBanks workspace, keeps the existing full payload comparison, prepares
+the original backup only after verification, and replaces with rollback-aware file
+operations. It checks for a game from that install both before work and before
+replacement. The compaction algorithm and table/payload layout are unchanged.
+
+The synthetic core test verifies exact compacted bytes, the original backup,
+unowned-file preservation and a second already-compact result. All 34 normal CTest
+suites pass (16.93s), and the core suite passes under clang-cl ASan. Normal editor
+and CLI builds pass. `tools/test_chunk_write_recovery.py --compact` exercises real
+copied-bank compaction, locked replacement refusal, retry and two exact Restores,
+including inventory and owned-workspace cleanup. Normal evidence is
+`build/chunk-write-recovery-8l_8ihxw`: 426 payloads verified, 578.1 -> 574.5 MiB.
+The same real-bank check passes under ASan at
+`build/chunk-write-recovery-xnv7iwgc`.
+The source install is untouched; live runtime on the compacted bank was not tested.
+
 ## 2026-10-01 continuation: recover diagnostic STB writes
 
 `build/chunk-write-recovery-mky8mf52/write_report.json` records all three baseline

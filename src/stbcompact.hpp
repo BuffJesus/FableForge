@@ -4,7 +4,8 @@
 // bytes ship in the retail bank). This rewrites the bank as live payloads +
 // one table, takes the one-time .forge-orig backup like a deploy, verifies
 // every payload byte-identical through a fresh parse, and swaps the file in.
-// A running game holds the bank open, so the swap fails there and nothing is lost.
+// Checks for a game running from this install before preparation and replacement.
+// Only an owned temporary workspace is cleaned; failed replacement retains the bank.
 #pragma once
 
 #include <filesystem>

@@ -42,6 +42,7 @@
 #include "vanilla_props.hpp"
 #include "presets.hpp"
 #include "gtg.hpp"
+#include "stbcompact.hpp"
 #include "forge/meshcompose.hpp"
 #include "forge/meshpreview.hpp"
 #include "forge/big.hpp"
@@ -2327,6 +2328,20 @@ static void testStbCompaction(const fs::path& dir) {
     std::ifstream f1(compact1, std::ios::binary), f2(compact2, std::ios::binary);
     const std::vector<uint8_t> b1((std::istreambuf_iterator<char>(f1)), {}), b2((std::istreambuf_iterator<char>(f2)), {});
     CHECK(b1 == b2);
+    // The install wrapper must not consume a pre-existing shared temporary path.
+    forge::TemporaryDirectory install(dir, "compact-install-");
+    const auto target = albion::stbcompact::bankPath(install.path());
+    fs::create_directories(target.parent_path());
+    fs::copy_file(grown, target);
+    const fs::path unowned = target.string() + ".compact-tmp";
+    { std::ofstream(unowned, std::ios::binary) << "unrelated compaction output"; }
+    const auto sentinel = readAll(unowned);
+    const auto installed = albion::stbcompact::compact(install.path());
+    CHECK(installed.ok && !installed.alreadyCompact);
+    CHECK(readAll(target) == readAll(compact1));
+    CHECK(readAll(target.string() + ".forge-orig") == readAll(grown));
+    CHECK(fs::exists(unowned) && readAll(unowned) == sentinel);
+    CHECK(albion::stbcompact::compact(install.path()).alreadyCompact);
 }
 
 // composeStatic writes what meshpreview reads back: positions exact, winding preserved, normals

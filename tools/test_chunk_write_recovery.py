@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnostic STB writes need recoverable backups and an owned temporary output."""
+"""Diagnostic/compaction STB writes need backups and an owned temporary output."""
 import argparse
 import ctypes
 from ctypes import wintypes
@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--root', type=Path, default=Path(os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters')))
     parser.add_argument('--exe', type=Path, default=repo / 'build/forge.exe')
+    parser.add_argument('--compact', action='store_true', help='exercise bank compaction instead of chunk-zcheck')
     args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='chunk-write-recovery-', dir=repo / 'build')).resolve()
     assert work.parent == (repo / 'build').resolve()
@@ -30,7 +31,7 @@ def main():
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(args.root / name, target)
     bank = root / 'data/Levels/FinalAlbion_RT.stb'
-    unowned = Path(str(bank) + '.atlas-tmp')
+    unowned = Path(str(bank) + ('.compact-tmp' if args.compact else '.atlas-tmp'))
     unowned.write_bytes(b'unrelated temporary output')
     def digest(path):
         with path.open('rb') as stream:
@@ -44,7 +45,7 @@ def main():
         (work / (label + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
         assert (result.returncode == 0) == (expected == 0), result.stdout + result.stderr
         return result.stdout
-    command = ['chunk-zcheck', 'Greatwood_1', '1', '--write']
+    command = ['compact-stb'] if args.compact else ['chunk-zcheck', 'Greatwood_1', '1', '--write']
     output = run('write', command)
     backup = Path(str(bank) + '.forge-orig')
     report = {'bank_changed': digest(bank) != original['data/Levels/FinalAlbion_RT.stb'],
@@ -52,7 +53,8 @@ def main():
         'unowned_preserved': unowned.is_file() and unowned.read_bytes() == b'unrelated temporary output'}
     (work / 'write_report.json').write_text(json.dumps(report, indent=2))
     assert all(report.values()), report
-    assert 'record equal 1, chunk equal 1, audit ok (0 issues)' in output, output
+    expected_output = 'entries verified byte-identical)' if args.compact else 'record equal 1, chunk equal 1, audit ok (0 issues)'
+    assert expected_output in output, output
     run('restore', ['restore', '--forget'])
     assert snapshot() == original
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -72,8 +74,8 @@ def main():
     run('retry', command)
     run('restore_retry', ['restore', '--forget'])
     assert snapshot() == original
-    assert not list(root.rglob('.forge-chunk-write-*'))
-    print('Diagnostic STB write, locked refusal/retry and exact Restore: PASS')
+    assert not list(root.rglob('.forge-stb-compact-*' if args.compact else '.forge-chunk-write-*'))
+    print(('STB compaction' if args.compact else 'Diagnostic STB write') + ', locked refusal/retry and exact Restore: PASS')
 
 
 if __name__ == '__main__':

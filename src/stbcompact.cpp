@@ -1,5 +1,6 @@
 #include "backups.hpp"
 #include "stbcompact.hpp"
+#include "pendingbanks.hpp"
 
 #include <stdexcept>
 #include <system_error>
@@ -20,12 +21,12 @@ Result compact(const fs::path& installRoot) {
     Result r;
     const fs::path stb = bankPath(installRoot);
     try {
+        if (backups::gameRunningIn(installRoot)) throw std::runtime_error("Fable.exe is running from this install; quit the game before compacting");
         const auto before = forge::stb::compactMeasure(stb);
         if (before.deadBytes() == 0) { r.ok = true; r.alreadyCompact = true; r.report = before; return r; }
-        std::string berr;
-        if (!albion::backups::backupOnce(stb, berr)) throw std::runtime_error(berr);   // the one-time retail backup, like every deploy
         // write beside the bank, verify every payload survived, then swap in
-        const fs::path tmp = stb.string() + ".compact-tmp";
+        detail::PendingBanks pending(installRoot, ".forge-stb-compact-");
+        const fs::path tmp = pending.prepare("data/Levels/FinalAlbion_RT.stb");
         r.report = forge::stb::compactBank(stb, tmp);
         const auto a = forge::stb::Archive::open(stb), b = forge::stb::Archive::open(tmp);
         if (a.entries().size() != b.entries().size() || a.staticMaps().size() != b.staticMaps().size())
@@ -36,9 +37,8 @@ Result compact(const fs::path& installRoot) {
             if (x.id != y.id || x.name != y.name || x.size != y.size || a.read(x) != b.read(y))
                 throw std::runtime_error("compacted payload differs: " + x.name);
         }
-        std::error_code ec;
-        fs::rename(tmp, stb, ec);
-        if (ec) { fs::remove(tmp, ec); throw std::runtime_error("cannot replace the bank (is Fable.exe running?)"); }
+        if (backups::gameRunningIn(installRoot)) throw std::runtime_error("Fable.exe started during compaction; quit the game before replacing the bank");
+        if (!pending.install(true, r.error)) return r;
         r.ok = true;
     } catch (const std::exception& e) {
         r.error = e.what();
