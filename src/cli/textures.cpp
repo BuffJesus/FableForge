@@ -59,10 +59,27 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
         std::string installArg, bankArg, formatArg;
         std::vector<std::string> pos;
         for (size_t i = 1; i < args.size(); ++i) {
-            if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else if (args[i] == "--bank" && i + 1 < args.size()) bankArg = args[++i];
-            else if (args[i] == "--format" && i + 1 < args.size()) formatArg = args[++i];
-            else pos.push_back(args[i]);
+            const auto& option = args[i];
+            if (option == "--install" || option == "--bank" || option == "--format") {
+                if (i + 1 == args.size() || args[i + 1].empty() || args[i + 1].rfind("--", 0) == 0) {
+                    std::fprintf(stderr, "%s needs a value\n", option.c_str()); return 2;
+                }
+                if ((option == "--bank" && cmd != "textures" && cmd != "texture-add") ||
+                    (option == "--format" && cmd != "texture-add")) {
+                    std::fprintf(stderr, "%s does not support %s\n", cmd.c_str(), option.c_str()); return 2;
+                }
+                if (option == "--install") installArg = args[++i];
+                else if (option == "--bank") bankArg = args[++i];
+                else formatArg = args[++i];
+            } else if (option.rfind("--", 0) == 0) {
+                std::fprintf(stderr, "unknown option %s\n", option.c_str()); return 2;
+            } else pos.push_back(option);
+        }
+        if (cmd == "textures" ? pos.size() > 1 :
+            (pos.size() != 2 || pos[0].empty() || pos[1].empty())) {
+            std::fprintf(stderr, "%s expects %s\n", cmd.c_str(),
+                         cmd == "textures" ? "at most one filter" : "exactly one texture name and one file path");
+            return 2;
         }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
@@ -83,7 +100,6 @@ std::optional<int> runTextures(const std::string& cmd, const Args& args) {
             std::printf("%zu of %zu textures\n", shown, rows.size());
             return 0;
         }
-        if (pos.size() < 2) { std::fprintf(stderr, "usage: FableForge %s <name> <file> [--install <root>]\n", cmd.c_str()); return 2; }
         std::vector<std::string> notes;
         bool ok = false;
         if (cmd == "texture-export") ok = albion::texbrowse::exportPng(big, pos[0], pos[1], err);

@@ -1315,6 +1315,26 @@ Normal `build/image-exports-2soa519w` and ASan CLI
 normal suites pass (20.50s). The GUI uses the same texture-export function;
 its file picker was not exercised in this pass.
 
+## 2026-10-01 continuation: strict texture-command options
+
+`build/texture-cli-inputs-di0nm4pm/0.json` reproduced texture-add silently
+accepting `--typo`, returning success and changing textures.big. The texture
+list/add/replace/export parser now refuses unknown options, missing or empty
+values, extra positional arguments and empty required names/paths before install
+lookup or writes. `--bank` is accepted only for list/add, and `--format` only for
+add, matching their documented behavior; they no longer silently do nothing for
+replace/export.
+
+`tools/test_texture_cli_inputs.py` checks 43 rejected argument combinations,
+requiring unchanged source hashes, file inventory and a prior export file. It
+then exercises valid add, replace, export and bank-filtered listing, followed by
+exact Restore. The core texture writer and GUI behavior are unchanged.
+
+Normal `build/texture-cli-inputs-lw16wal2` and ASan CLI
+`build/texture-cli-inputs-hyhj07cu` pass. Both CLI builds pass. The preceding
+35-suite export gate (20.50s) covers the unchanged core; it was not repeated
+for this CLI-only argument change.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
