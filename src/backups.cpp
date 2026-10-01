@@ -197,6 +197,9 @@ bool gameRunningIn(const fs::path& gameRoot) {
     if (ec) root = gameRoot;
     std::wstring rootW = root.wstring();
     for (auto& c : rootW) { if (c == L'/') c = L'\\'; c = wchar_t(towlower(c)); }
+    // Match a directory boundary: install-other/Fable.exe is not running from
+    // install, while install/Fable.exe and install/bin/Fable.exe both are.
+    if (!rootW.empty() && rootW.back() != L'\\') rootW += L'\\';
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe; pe.dwSize = sizeof pe;

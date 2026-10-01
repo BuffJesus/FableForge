@@ -660,6 +660,22 @@ normally (`build/egocore-workspace-51bydlfr`) and under the ASan host
 Successful game.bin/names.bin hashes match the prior implementation
 (`51bydlfr/baseline_comparison.json`).
 
+## 2026-10-01 continuation: running-install directory boundaries
+
+The process guard compared raw path prefixes, so `install-other/Fable.exe`
+blocked Restore for `install` (`build/install-guard-tn1n417_`). It now includes
+the directory separator in the normalized install prefix. Own-install and
+nested processes remain blocked; the conservative fallback when a process path
+cannot be queried is unchanged.
+
+`tools/test_install_guard.py` builds a small waiting helper in scratch, names
+only those helper copies Fable.exe, and stops only its own process handles.
+No real game process is launched or stopped. Normal (`build/install-guard-x1dnohu8`)
+and ASan CLI (`build/install-guard-xcaxtmpe`) pass: sibling Restore succeeds,
+own/nested Restore refuses without changing target or backup, uppercase/forward
+slash/trailing-separator aliases remain blocked, and retry after helper exit
+restores/forgets exactly. All three normal writer targets and the ASan CLI build.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
