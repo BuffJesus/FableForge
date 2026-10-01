@@ -1,5 +1,6 @@
 #include "modpack.hpp"
 #include "meshimport.hpp"
+#include "forge/modorder.hpp"
 
 #include <bit>
 #include <chrono>
@@ -47,6 +48,42 @@ int main() {
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         require(fs::create_directory(root), "fixture directory already exists");
+        const auto orderRoot = root / "order";
+        fs::create_directory(orderRoot);
+        forge::modorder::Order order;
+        forge::modorder::Entry entry;
+        entry.name = "Original mod";
+        entry.source = "mods/original";
+        entry.kind = forge::modorder::Kind::Tree;
+        order.mods.push_back(entry);
+        forge::modorder::save(orderRoot, order);
+        write(orderRoot / "forge_mods.json.tmp", "unrelated order output");
+        const auto originalOrder = snapshot(orderRoot);
+        auto invalidOrder = order;
+        invalidOrder.mods[0].note = std::string(1, char(0xff));
+        bool orderRejected = false;
+        try { forge::modorder::save(orderRoot, invalidOrder); }
+        catch (const std::exception&) { orderRejected = true; }
+        require(orderRejected, "invalid UTF-8 mod order was accepted");
+        require(snapshot(orderRoot) == originalOrder, "serialization failure damaged the previous mod order");
+#ifdef _WIN32
+        const HANDLE orderLock = CreateFileW(forge::modorder::orderPath(orderRoot).c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(orderLock != INVALID_HANDLE_VALUE, "cannot lock mod order for replacement");
+        auto changedOrder = order;
+        changedOrder.mods[0].enabled = false;
+        orderRejected = false;
+        try { forge::modorder::save(orderRoot, changedOrder); }
+        catch (const std::exception&) { orderRejected = true; }
+        CloseHandle(orderLock);
+        require(orderRejected && snapshot(orderRoot) == originalOrder, "blocked replacement changed the mod order");
+#endif
+        order.mods[0].enabled = false;
+        forge::modorder::save(orderRoot, order);
+        require(!forge::modorder::load(orderRoot).mods[0].enabled, "valid mod order retry was not saved");
+        require(read(orderRoot / "forge_mods.json.tmp") == "unrelated order output", "unowned order output changed");
+        require(std::distance(fs::directory_iterator(orderRoot), fs::directory_iterator{}) == 2, "order staging workspace leaked");
+
         const auto folder = root / "pack";
         std::string error;
         require(pack::create(folder, "test", error), error);

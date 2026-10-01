@@ -1,4 +1,5 @@
 #include "forge/modorder.hpp"
+#include "forge/temporarydirectory.hpp"
 
 #include <algorithm>
 #include <array>
@@ -155,9 +156,35 @@ void save(const fs::path& gameRoot, const Order& order) {
     json mods = json::array();
     for (const auto& e : order.mods)
         mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
-    std::ofstream out(orderPath(gameRoot), std::ios::binary | std::ios::trunc);
-    if (!out) throw std::runtime_error("cannot write " + orderPath(gameRoot).string());
-    out << json{{"version", order.version}, {"mods", mods}}.dump(2) << "\n";
+    // Serialization can reject invalid text; finish it before touching the old order.
+    const std::string bytes = json{{"version", order.version}, {"mods", mods}}.dump(2) + "\n";
+    const fs::path target = fs::absolute(orderPath(gameRoot)).lexically_normal();
+    if (fs::exists(target) && !fs::is_regular_file(target))
+        throw std::runtime_error("mod order destination is not a file: " + target.string());
+    forge::TemporaryDirectory workspace(target.parent_path(), ".forge-mod-order-");
+    const fs::path prepared = workspace.path() / "new.json";
+    const fs::path previous = workspace.path() / "previous.json";
+    std::ofstream out;
+    out.exceptions(std::ios::failbit | std::ios::badbit);
+    out.open(prepared, std::ios::binary);
+    out.write(bytes.data(), std::streamsize(bytes.size()));
+    out.close();
+    bool saved = false;
+    try {
+        if (fs::exists(target)) { fs::rename(target, previous); saved = true; }
+        fs::rename(prepared, target);
+    } catch (const std::exception& e) {
+        std::string error = "cannot save mod order: " + std::string(e.what());
+        if (saved) {
+            try { fs::rename(previous, target); }
+            catch (const std::exception& rollback) {
+                workspace.retain();
+                error += "; rollback failed: " + std::string(rollback.what()) +
+                         "; recovery files retained in " + workspace.path().string();
+            }
+        }
+        throw std::runtime_error(error);
+    }
 }
 
 std::string sha256Of(const fs::path& p) {

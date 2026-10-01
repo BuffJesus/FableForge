@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: preserve the mod order on save failure
+
+The new synthetic mod-order check reproduced JSON serialization failure erasing
+the prior forge_mods.json. `build/mod-order-baseline-l46acp_i/test.log` retains
+the failure. Core modorder::save now serializes before filesystem mutation,
+closes a complete candidate in an owned .forge-mod-order-* directory, then
+replaces the target. If replacement fails after saving the old file, it restores
+that file; failed rollback retains and reports recovery files. Directory targets
+are refused, and unrelated temporary filenames are never reused.
+
+The mod-pack unit suite passes invalid UTF-8 refusal, a replacement lock that
+still permits in-place writes, unchanged file inventories and valid retry,
+normally and under ASan. `tools/test_mod_order_recovery.py` passes locked CLI
+add/remove/move/disable and retry: normal `build/mod-order-recovery-6laonr4q`,
+ASan CLI `build/mod-order-recovery-kvfmupsv`. The normal run also clicks the GUI
+enable and reorder controls while locked, then retries after unlocking. The
+failure screenshot was visually checked: both original enabled rows remain in
+order with visible save errors. All copied metadata bytes and the unrelated
+.tmp file survive refused edits. Normal writer builds and all 35 suites pass
+(19.08 seconds). No game banks or live runtime were changed.
+
 ## 2026-10-01 continuation: Mods diagnostics fit narrow cards
 
 The mod-pick failure screenshot exposed an unwrapped model-health warning
