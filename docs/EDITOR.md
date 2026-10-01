@@ -918,6 +918,9 @@ slot* (default; needs a new game / a save made afterwards) or *Take over a
 filler* (existing saves see it at once). CLI: `--own-region new`. The
 `region-props` command sets a region's RegionDef / minimap / display name /
 world-map flag in the WLD and all three BWD copies.
+Region text refuses unsupported quotes, newlines and NUL before writes; minimap
+names must be bare tokens without whitespace, quotes or semicolons. Apostrophes
+and semicolons within quoted display names are preserved.
 
 **2026-09-17:** the minimap texture is now *appended* to `textures.big` under its own
 name `MINIMAP_<LEVEL>` and registered in the `PLAYER_GUI_PC` /

@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: region text uses the core WLD writer
+
+`build/region-text-inputs-96l54dcy/invalid_0.json` reproduced region-props
+accepting an embedded quote and changing the world banks. Region display names,
+definitions and minimap graphics now go through wld::File::setRegionText before
+staging. The existing quoted-text rejection is reused, with NUL also refused.
+Bare region values reject whitespace, quotes, semicolons and NUL; empty values
+retain the core clear-field contract. Prepared WLD read-back also checks the
+requested field values, beyond preserving its serialized text. Flag/framing
+line edits and the rollback group remain unchanged.
+
+The core worldinstall suite checks rejected strings leave the in-memory WLD
+unchanged, including embedded NUL, and verifies apostrophes/quoted semicolons and
+empty minimap clearing round-trip. It passes normally and under ASan.
+`tools/test_region_text_inputs.py` passes twelve invalid cases, valid punctuation
+and exact Restore: normal `build/region-text-inputs-by1qrual`, ASan
+`build/region-text-inputs-6e9zbya0`. Existing region rollback, unrelated-WLD-byte,
+optional-mirror and exact-Restore checks pass in normal
+`build/region-recovery-sdeav56f` and ASan `build/region-recovery-u9ivee17`.
+All 35 rebuilt normal suites pass (26.61s); editor/CLI/tools builds pass.
+
+The full own-region blank workflow passes in
+`build/newlevel-workspace-3u29cnrk`, including filler takeover, minimap and
+entrance generation, hidden GUI palette loading and exact Restore. This
+exercises empty minimap preflight followed by the populated minimap token.
+
 ## 2026-10-01 continuation: reject malformed minimap framing
 
 `build/minimap-inputs-4fnkjjv4/0.json` reproduced minimap-bake accepting

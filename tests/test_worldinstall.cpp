@@ -1,5 +1,6 @@
 #include "forge/worldinstall.hpp"
 #include "forge/bwd.hpp"
+#include "forge/wld.hpp"
 #include "forge/temporarydirectory.hpp"
 #include <filesystem>
 #include <limits>
@@ -21,6 +22,26 @@ int main(int argc, char** argv) {
             return 0;
         }
         check(argc==1,"usage: worldinstall_tests [scratch-install-root]");
+        const std::string regionText = "NewRegion 1;\r\nRegionName \"Region\";\r\nNewDisplayName \"Safe\";\r\nRegionDef \"\";\r\nMiniMapGraphic MINI_SAFE;\r\nEndRegion;\r\n";
+        auto textWorld = forge::wld::File::parseText(regionText);
+        for (const auto* key : {"NewDisplayName", "RegionDef", "MiniMapGraphic"}) {
+            for (const auto& value : {std::string("Bad\"Name"), std::string("Bad\nName"),
+                    std::string("Bad\rName"), std::string("Bad\0Name",8)}) {
+                bool refused=false;
+                try { textWorld.setRegionText("Region", key, value); } catch (const std::exception&) { refused=true; }
+                check(refused && textWorld.serialize()==regionText, "invalid region text modified the world");
+            }
+        }
+        for (const auto* value : {"MINI MAP", "MINI;MAP", "MINI\tMAP"}) {
+            bool refused=false;
+            try { textWorld.setRegionText("Region", "MiniMapGraphic", value); } catch (const std::exception&) { refused=true; }
+            check(refused && textWorld.serialize()==regionText, "invalid bare minimap token modified the world");
+        }
+        textWorld.setRegionText("Region", "NewDisplayName", "Tester's Cove; North");
+        textWorld.setRegionText("Region", "MiniMapGraphic", ""); // existing clear-field contract
+        const auto reread = forge::wld::File::parseText(textWorld.serialize());
+        check(reread.findRegion("Region")->displayName=="Tester's Cove; North" &&
+              reread.findRegion("Region")->minimapGraphic.empty(), "valid region punctuation or clear changed meaning");
         namespace fs = std::filesystem;
         forge::TemporaryDirectory scratch(fs::temp_directory_path(), "FableForgeWorldInstall-");
         const auto root = scratch.path();

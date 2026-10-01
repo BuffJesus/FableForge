@@ -279,9 +279,13 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
         if (!r) { error = "unknown region " + region; return false; }
         auto bwd = forge::bwd::File::parse(bwdPath);
         if (r->index < 1 || size_t(r->index) > bwd.regions().size()) { error = region + ": BWD has no region slot " + std::to_string(r->index); return false; }
+        // Use the core's quoted-string and bare-token checks before preparing files.
+        if (!props.displayName.empty()) wld.setRegionText(region, "NewDisplayName", props.displayName);
+        if (!props.regionDef.empty()) wld.setRegionText(region, "RegionDef", props.regionDef);
+        if (!props.minimapGraphic.empty()) wld.setRegionText(region, "MiniMapGraphic", props.minimapGraphic);
         // WLD: replace/insert the lines inside this region's block (retail order:
         // RegionName, NewDisplayName, RegionDef, [AppearOnWorldMap;], [MiniMapGraphic X;], MiniMapScale ...)
-        const auto raw = readFile(wldPath); std::string text(raw.begin(), raw.end());
+        const std::string text = wld.serialize();
         const std::string eol = text.find("\r\n") != std::string::npos ? "\r\n" : "\n";
         std::vector<std::string> lines;
         for (size_t q = 0, e; q < text.size(); q = e + 1) { e = text.find('\n', q); if (e == std::string::npos) e = text.size() - 1; lines.push_back(text.substr(q, e - q + 1)); }
@@ -308,8 +312,8 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
             ++blockEnd;
         };
         auto& br = bwd.regions()[size_t(r->index - 1)];
-        if (!props.displayName.empty()) { setLine("NewDisplayName", "NewDisplayName \"" + props.displayName + "\";", "RegionName"); br.displayName = props.displayName; preparedNotes.push_back(region + ": display name " + props.displayName); }
-        if (!props.regionDef.empty()) { setLine("RegionDef", "RegionDef \"" + props.regionDef + "\";", "NewDisplayName"); br.regionDef = props.regionDef; preparedNotes.push_back(region + ": RegionDef " + props.regionDef); }
+        if (!props.displayName.empty()) { br.displayName = props.displayName; preparedNotes.push_back(region + ": display name " + props.displayName); }
+        if (!props.regionDef.empty()) { br.regionDef = props.regionDef; preparedNotes.push_back(region + ": RegionDef " + props.regionDef); }
         if (props.onWorldMap >= 0) { setLine("AppearOnWorldMap", props.onWorldMap ? "AppearOnWorldMap;" : "", "RegionDef"); br.onWorldMap = uint8_t(props.onWorldMap); preparedNotes.push_back(region + (props.onWorldMap ? ": appears on the world map" : ": hidden from the world map")); }
         if (props.setFraming) {
             char sc[32], ox[32], oy[32];
@@ -327,14 +331,18 @@ bool setRegionProperties(const fs::path& gameRoot, const std::string& region, co
                           double(props.minimapScale), std::lround(props.minimapOffsetX), std::lround(props.minimapOffsetY));
             preparedNotes.push_back(region + note);
         }
-        if (!props.minimapGraphic.empty()) { setLine("MiniMapGraphic", "MiniMapGraphic " + props.minimapGraphic + ";", props.onWorldMap > 0 || r->appearOnWorldMap ? "AppearOnWorldMap" : "RegionDef"); br.minimapGraphic = props.minimapGraphic; preparedNotes.push_back(region + ": minimap " + props.minimapGraphic); }
+        if (!props.minimapGraphic.empty()) { br.minimapGraphic = props.minimapGraphic; preparedNotes.push_back(region + ": minimap " + props.minimapGraphic); }
         std::string out;
         for (const auto& l : lines) out += l;
         detail::PendingBanks pending(gameRoot, ".forge-region-props-");
         const auto wldOut = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wld");
         writeFile(wldOut, out.data(), out.size());
         const auto verifiedWld = forge::wld::File::parse(wldOut);
-        if (verifiedWld.serialize() != out || !verifiedWld.findRegion(region))
+        const auto* verifiedRegion = verifiedWld.findRegion(region);
+        if (verifiedWld.serialize() != out || !verifiedRegion ||
+            (!props.displayName.empty() && verifiedRegion->displayName != props.displayName) ||
+            (!props.regionDef.empty() && verifiedRegion->regionDef != props.regionDef) ||
+            (!props.minimapGraphic.empty() && verifiedRegion->minimapGraphic != props.minimapGraphic))
             throw std::runtime_error("prepared region WLD failed read-back verification");
         const auto binary = bwd.serialize();
         const auto prepareBwd = [&](const fs::path& relative) {

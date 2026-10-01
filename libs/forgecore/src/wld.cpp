@@ -28,8 +28,9 @@ bool iequals(std::string_view a, std::string_view b) {
 std::string quoteWld(std::string_view value) {
     if (value.find('"') != std::string_view::npos ||
         value.find('\n') != std::string_view::npos ||
-        value.find('\r') != std::string_view::npos) {
-        throw std::runtime_error("wld: value contains an unsupported quote/newline");
+        value.find('\r') != std::string_view::npos ||
+        value.find('\0') != std::string_view::npos) {
+        throw std::runtime_error("wld: value contains an unsupported quote/newline/NUL");
     }
     return "\"" + std::string(value) + "\"";
 }
@@ -422,6 +423,9 @@ void File::setRegionText(std::string_view regionName, std::string_view key, std:
     // the graphic is a bare token in retail, and so are the minimap scale / offsets (numbers)
     const bool quoted = !(tf::equalsIgnoreCase(key, "MiniMapGraphic") || tf::equalsIgnoreCase(key, "MiniMapScale") ||
                           tf::equalsIgnoreCase(key, "MiniMapOffsetX") || tf::equalsIgnoreCase(key, "MiniMapOffsetY"));
+    if (!quoted && std::any_of(value.begin(), value.end(), [](unsigned char c) {
+            return c == 0 || c == '"' || c == ';' || std::isspace(c);
+        })) throw std::runtime_error("wld: bare region value contains whitespace, quote, semicolon or NUL");
     std::string eol = "\r\n";
     int activeRegion = -1;
     size_t nameLine = rawLines_.size();
