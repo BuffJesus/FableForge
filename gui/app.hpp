@@ -101,6 +101,7 @@ public:
     // script asked to quit.
     bool tick(class App& app);
     void registerWidget(const char* id);   // records the last item's rect
+    void registerRect(const char* id, const ImVec4& rect) { if (active_) widgets_[id] = rect; }
     bool takeScreenshot(std::string& path); // host polls this after rendering
     // The scripted mouse position, re-applied by the host every frame so the
     // Win32 backend's real-cursor fallback cannot override it.

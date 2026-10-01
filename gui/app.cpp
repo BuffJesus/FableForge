@@ -1376,29 +1376,24 @@ void App::drawViewportOverlays(const ImVec2& origin, const ImVec2& size) {
         dl->AddRectFilled(p0, ImVec2(p0.x + ts.x + S(16), p0.y + ts.y + S(10)), theme::col(theme::Bg1) | 0xD0000000, S(6));
         dl->AddText(ImVec2(p0.x + S(8), p0.y + S(5)), theme::col(theme::Muted), buf);
     }
-    // compass: where Fable north (+y, rendered as -z) points on screen, from two projected
-    // points around the camera focus; the needle keeps its length whatever the pitch
+    // Heading compass: Fable north is +y (render -z), and camera yaw 0 faces it.
+    // A projected ground vector collapses at the horizon and flips when looking
+    // up; subtracting distant projected points also loses precision. Heading is
+    // independent of pitch, eye position, focus distance and projection.
     {
-        float f[3]; camera_.focus(f);
-        const float a[3] = {f[0], f[1], f[2]}, b[3] = {f[0], f[1], f[2] - 1.0f};
-        float au, av, bu, bv;
-        if (renderer_.project(a, au, av) && renderer_.project(b, bu, bv)) {
-            float dx = (bu - au) * size.x, dy = (bv - av) * size.y;
-            const float len = std::sqrt(dx * dx + dy * dy);
-            if (len > 1e-3f) {
-                dx /= len; dy /= len;
-                const float r = S(16);
-                const ImVec2 c(origin.x + size.x - S(14) - r, yChips - r - S(26));
-                dl->AddCircleFilled(c, r + S(4), theme::col(theme::Bg1) | 0xD0000000, 32);
-                dl->AddCircle(c, r + S(4), theme::col(theme::Border), 32, 1.0f);
-                const ImVec2 tip(c.x + dx * r, c.y + dy * r), tail(c.x - dx * r * 0.6f, c.y - dy * r * 0.6f);
-                const ImVec2 side(-dy * S(4), dx * S(4));
-                dl->AddTriangleFilled(tip, ImVec2(c.x + side.x, c.y + side.y), ImVec2(c.x - side.x, c.y - side.y), theme::col(theme::Accent));
-                dl->AddTriangleFilled(tail, ImVec2(c.x - side.x, c.y - side.y), ImVec2(c.x + side.x, c.y + side.y), theme::col(theme::Muted));
-                const ImVec2 ns = ImGui::CalcTextSize("N");
-                dl->AddText(ImVec2(c.x + dx * (r + S(11)) - ns.x * 0.5f, c.y + dy * (r + S(11)) - ns.y * 0.5f), theme::col(theme::Text), "N");
-            }
-        }
+        const float dx = std::sin(camera_.yaw), dy = -std::cos(camera_.yaw);
+        const float r = S(16), extent = S(34);
+        const ImVec2 c(origin.x + size.x - S(14) - extent,
+                       yChips - viewportControlsLift() - S(12) - extent);
+        auto_.registerRect("viewport_compass", ImVec4(c.x-extent,c.y-extent,c.x+extent,c.y+extent));
+        dl->AddCircleFilled(c, r + S(4), theme::col(theme::Bg1) | 0xD0000000, 32);
+        dl->AddCircle(c, r + S(4), theme::col(theme::Border), 32, 1.0f);
+        const ImVec2 tip(c.x + dx * r, c.y + dy * r), tail(c.x - dx * r * 0.6f, c.y - dy * r * 0.6f);
+        const ImVec2 side(-dy * S(4), dx * S(4));
+        dl->AddTriangleFilled(tip, ImVec2(c.x + side.x, c.y + side.y), ImVec2(c.x - side.x, c.y - side.y), theme::col(theme::Accent));
+        dl->AddTriangleFilled(tail, ImVec2(c.x - side.x, c.y - side.y), ImVec2(c.x + side.x, c.y + side.y), theme::col(theme::Muted));
+        const ImVec2 ns = ImGui::CalcTextSize("N");
+        dl->AddText(ImVec2(c.x + dx * (r + S(11)) - ns.x * 0.5f, c.y + dy * (r + S(11)) - ns.y * 0.5f), theme::col(theme::Text), "N");
     }
     ImGui::PopFont();
 }

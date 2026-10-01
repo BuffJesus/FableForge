@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: stable heading compass
+
+The user reported wrong directions and loss of orientation while moving the
+camera. `build/compass-before-ke8gzxpz` reproduces the old compass disappearing
+at a level north-facing view and reversing when looking upward. It projected two
+nearby ground points, so pitch could collapse/flip the vector and distant eye
+positions could lose precision during subtraction.
+
+The compass now derives north from horizontal camera yaw (yaw zero looks along
+render -z, which is Fable +y). Pitch, eye coordinates, focus distance and zoom no
+longer affect its heading. Its complete label bounds stay inside the viewport and
+above the view controls, including the two-row layout. Camera navigation and game
+coordinates are unchanged. Automation can register the drawn overlay rectangle
+without adding an interactive item.
+
+`tools/test_compass.py` passes at `build/compass-e_blqnzu`: 40 poses each at
+1440x900 and 800x600 / 1.5 scale. Rendered pixels verify cardinal/diagonal needle
+directions, pitch through both near-vertical limits and the horizon, distant
+positions, travel, extreme zoom, twenty full turns, and contained overlay bounds.
+The map/export regression also passes at `build/ui-smoke-4a3cdn2a` with checked
+GLB geometry and rendered pixels. No game writes. This correction is after the
+published rc.3 tag and is not included in that ZIP.
+
 ## 2026-10-01 release handoff: rc.3 and Discord-sized walkthrough
 
 Prepared `v0.18.0-rc.3` at 711eeec from this lane, with the user's explicit GitHub

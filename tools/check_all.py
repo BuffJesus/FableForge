@@ -66,6 +66,8 @@ def main():
     ok &= run("ui smoke", [sys.executable, "tools/ui_smoke.py"], capture_output=True)
     gui = os.path.join("build", "FableForge.exe")
     if dialogue:
+        ok &= run("map compass heading through pitch, travel, zoom and turns",
+                  [sys.executable, "tools/test_compass.py", "--install", install_root], capture_output=True)
         ok &= run("ui dialogue lip sync browser", [gui, "--auto", "tests/ui/dialogue_browser.txt"])
         ok &= run("ui dialogue head layouts, eyes and posed pixels",
                   [sys.executable, "tools/test_dialogue_layout.py", "--install", install_root], capture_output=True)

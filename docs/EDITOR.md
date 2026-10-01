@@ -97,6 +97,12 @@ shows *Static-map bank: N MB, M MB reclaimable* with *Compact the bank* (backgro
 run on a compacted bank: not yet done (the user's next probe list).* The chunk-level
 compaction (dead sections inside a chunk after a re-layout) is still open.
 
+## Map compass
+
+The compass shows north relative to your horizontal camera heading. Looking up
+or down, moving, orbiting and zooming preserve that heading; the needle rotates
+when you turn. It stays above the viewport controls in compact layouts.
+
 ## The Edit panel
 
 Under the *Tool* card the panel is split into four sub-tabs so a card is never
