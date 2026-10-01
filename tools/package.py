@@ -7,8 +7,13 @@ README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 import argparse, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
 
-def package_guide(root, version):
+def package_guide(root):
     guide_dir = root / "docs/walkthrough/aeon-controller"
+    # A development ZIP name need not have a GitHub tag. Keep the standalone
+    # README aligned with the tested application download in the walkthrough.
+    guide = (guide_dir / "index.html").read_text(encoding="utf-8")
+    link = re.search(r'https://github\.com/BuffJesus/FableForge/releases/tag/[^"\s]+', guide)
+    download = link.group(0) if link else "https://github.com/BuffJesus/FableForge/releases"
     guide_zip = root / "dist/FableForge-Aeon-Controller-Guide.zip"
     with zipfile.ZipFile(guide_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(guide_dir / "index.html", "AEON_CONTROLLER.html")
@@ -17,7 +22,7 @@ def package_guide(root, version):
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
             "Download FableForge separately from:\n"
-            f"https://github.com/BuffJesus/FableForge/releases/tag/v{version}\n\n"
+            f"{download}\n\n"
             "This ZIP contains only the illustrated guide, not the application or mods.\n")
     print(f"wrote {guide_zip.name} ({guide_zip.stat().st_size/1e6:.2f} MB; guide only)")
 
@@ -37,7 +42,7 @@ def main():
         ap.error("version must be a semantic version, optionally with a prerelease suffix")
     if a.guide_only:
         (root / "dist").mkdir(exist_ok=True)
-        package_guide(root, a.version)
+        package_guide(root)
         return 0
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:
         print("checks failed; not packaging"); return 1
@@ -107,7 +112,7 @@ def main():
                 z.write(p, os.path.join(name, os.path.relpath(p, stage)))
     print(f"wrote {zpath} ({os.path.getsize(zpath)/1e6:.1f} MB)")
     for f in sorted(os.listdir(stage)): print(f"  {f:28s} {os.path.getsize(os.path.join(stage, f))/1e6:6.2f} MB")
-    package_guide(Path(__file__).resolve().parents[1], a.version)
+    package_guide(Path(__file__).resolve().parents[1])
     return 0
 
 if __name__ == "__main__":

@@ -2021,6 +2021,15 @@ placed object, resolved theme palette and untouched scratch source files.
 Later content/decode failures still refuse staging but may leave the previous
 installation at its restored baseline; this is not transactional replacement.
 
+## 2026-10-01 continuation: standalone guide download link
+
+Guide packaging now takes the application release link from the walkthrough,
+rather than constructing a GitHub tag from the current development version.
+This keeps the attachment README usable after returning the checkout to `-dev`.
+An isolated guide package at `build/guide-dev-link-ohsvlosg` passes ZIP CRC and
+README link checks against the published rc.3 URL. The delivered ZIP and its
+published checksum were not replaced.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

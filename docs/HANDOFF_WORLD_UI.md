@@ -1,5 +1,14 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: standalone guide download link
+
+Guide packaging now takes the application release link from the walkthrough,
+rather than constructing a GitHub tag from the current development version.
+This keeps the attachment README usable after returning the checkout to `-dev`.
+An isolated guide package at `build/guide-dev-link-ohsvlosg` passes ZIP CRC and
+README link checks against the published rc.3 URL. The delivered ZIP and its
+published checksum were not replaced.
+
 ## 2026-10-01 continuation: terrain recipe input preflight
 
 A missing terrain `.record` companion previously failed after the old deployment
