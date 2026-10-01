@@ -409,6 +409,15 @@ workspace. A separate ASan CLI move and restore preserve all seven source-bank
 hashes; only a byte-identical, unchanged WAD backup remains. The 29-suite core
 gate passes. Other fixed extraction paths and same-install writers remain open.
 
+## Restore comparison and cleanup, 2026-10-01
+
+Unreadable files no longer compare equal, locked-target errors retain their
+real cause, and failed backup/marker cleanup is reported and retryable.
+`--forget` removes verified unchanged originals while retaining orphaned staged
+backups. Windows lock fixtures pass with normal and ASan CLI builds; the real
+unchanged WAD backup from the World move probe is removed with all seven bank
+hashes preserved. Full build and core gate pass. No new GUI or in-game probe.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -41,7 +41,7 @@ struct Entry {
     std::filesystem::path backup;    // the original copy, the created marker, the .forgebak or the .ovrbak
     Kind kind = Kind::Original;
     bool created = false;            // true = FableForge created `file`; restore deletes it
-    bool differs = false;            // the live file differs from the backup (or exists, for created)
+    bool differs = false;            // different or comparison failed (or live file exists, for created)
     uintmax_t size = 0;              // live file size
     std::string when;                // backup / marker mtime, "YYYY-MM-DD HH:MM"
 };
@@ -59,11 +59,14 @@ bool gameRunningIn(const std::filesystem::path& gameRoot);
 
 // Put one entry back. `keepBackup` = leave the original in place (default;
 // it stays the baseline for the next edit); false removes it after restoring.
+// Cleanup failures return false even if the target was already restored/removed.
 // A staged (.forgebak) entry is always copied back with its backup kept: the
 // stage manifest still refers to it (restoreAll reverts the whole stage instead).
 bool restore(const Entry& e, bool keepBackup, std::string& error);
 // Everything scan() found: a staged deploy is reverted through forge::stage first
 // (its manifest), then every original goes back. Returns the number restored.
+// keepBackup=false also removes verified unchanged originals. Orphaned staged
+// backups are retained. Missing created targets still have their markers cleaned.
 size_t restoreAll(const std::filesystem::path& gameRoot, bool keepBackup, std::vector<std::string>& notes, std::string& error);
 
 } // namespace albion::backups

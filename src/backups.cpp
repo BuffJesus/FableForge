@@ -33,16 +33,20 @@ bool endsWith(const std::string& s, const char* suffix) {
 bool sameBytes(const fs::path& a, const fs::path& b) {
     std::error_code ec;
     if (!fs::exists(a, ec) || !fs::exists(b, ec)) return false;
-    if (fs::file_size(a, ec) != fs::file_size(b, ec)) return false;
+    const auto sizeA = fs::file_size(a, ec);
+    if (ec) return false;
+    const auto sizeB = fs::file_size(b, ec);
+    if (ec || sizeA != sizeB) return false;
     std::ifstream fa(a, std::ios::binary), fb(b, std::ios::binary);
+    if (!fa || !fb) return false;
     std::vector<char> ba(1 << 20), bb(1 << 20);
-    while (fa && fb) {
+    for (;;) {
         fa.read(ba.data(), std::streamsize(ba.size()));
         fb.read(bb.data(), std::streamsize(bb.size()));
+        if (fa.bad() || fb.bad()) return false;
         if (fa.gcount() != fb.gcount() || !std::equal(ba.begin(), ba.begin() + fa.gcount(), bb.begin())) return false;
-        if (fa.gcount() == 0) break;
+        if (fa.gcount() == 0) return fa.eof() && fb.eof();
     }
-    return true;
 }
 
 std::string stamp(const fs::path& p) {
@@ -197,6 +201,7 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
         fs::remove(e.file, ec);
         if (ec) { error = "cannot delete " + e.file.string() + ": " + ec.message(); return false; }
         fs::remove(e.backup, ec);
+        if (ec) { error = "file removed, but cannot remove creation marker " + e.backup.string() + ": " + ec.message(); return false; }
         return true;
     }
     if (!fs::exists(e.backup, ec)) { error = "backup missing: " + e.backup.string(); return false; }
@@ -206,8 +211,17 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
     fs::copy_file(e.backup, tmp, fs::copy_options::overwrite_existing, ec);
     if (ec) { error = "cannot copy " + e.backup.string() + ": " + ec.message(); return false; }
     fs::rename(tmp, e.file, ec);
-    if (ec) { fs::remove(tmp, ec); error = "cannot replace " + e.file.string() + ": " + ec.message(); return false; }
-    if (!keepBackup) fs::remove(e.backup, ec);
+    if (ec) {
+        error = "cannot replace " + e.file.string() + ": " + ec.message();
+        std::error_code cleanup;
+        fs::remove(tmp, cleanup);
+        if (cleanup) error += "; cannot remove temporary file " + tmp.string() + ": " + cleanup.message();
+        return false;
+    }
+    if (!keepBackup) {
+        fs::remove(e.backup, ec);
+        if (ec) { error = "file restored, but cannot remove backup " + e.backup.string() + ": " + ec.message(); return false; }
+    }
     return true;
 }
 
@@ -241,8 +255,18 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
         } catch (const std::exception& ex) { error = ex.what(); notes.push_back(std::string("failed: ") + ex.what()); rebase.clear(); }
     } else rebase.clear();
     for (const auto& e : scan(gameRoot)) {
-        if (!e.differs) continue;
-        if (e.kind == Kind::Staged) { notes.push_back("left " + e.file.string() + " (a .forgebak outside any stage manifest; undeploy or remove it by hand)"); continue; }
+        if (e.kind == Kind::Staged) {
+            if (e.differs) notes.push_back("left " + e.file.string() + " (a .forgebak outside any stage manifest; undeploy or remove it by hand)");
+            continue;
+        }
+        if (!e.differs && !e.created) {
+            if (!keepBackup) {
+                fs::remove(e.backup, ec);
+                if (ec) { error = "cannot remove unchanged backup " + e.backup.string() + ": " + ec.message(); notes.push_back("failed: " + error); }
+                else notes.push_back("removed unchanged backup " + e.backup.string());
+            }
+            continue;
+        }
         std::string err;
         if (!restore(e, keepBackup, err)) { error = err; notes.push_back("failed: " + err); continue; }
         notes.push_back((e.created ? "removed " : "restored ") + e.file.string());

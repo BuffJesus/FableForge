@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: Restore comparison and cleanup
+
+Restore now treats failed file reads as differing, preserves the actual replacement
+error across temporary-file cleanup, and reports failed backup/creation-marker
+deletion. `--forget` also removes verified unchanged backups; ordinary Restore
+retries orphaned creation-marker cleanup. Unowned staged backups remain intact.
+
+Windows lock fixtures pass in normal and ASan CLI builds:
+`build/restore-failures-poc6_dkw` and `build/restore-failures-lw0xojgl`.
+They cover unreadable equal-size files, locked targets, locked backups, locked
+creation markers, retry, unchanged originals and orphaned staged backups.
+The earlier real WAD backup is now removed with all seven source-bank hashes
+preserved (`build/world-asan-jh8pspe2/forget_cleanup.json`). This supersedes the
+retained-backup limitation recorded below. Full build and all 29 core suites
+pass (24.05 seconds).
+Live-game data was not written. Concurrent same-install writers and interrupted
+stage recovery remain separate concerns.
+
 ## 2026-10-01 continuation: owned World LEV extraction
 
 The World-save regression reproduced overwriting an unrelated LEV in the shared

@@ -35,6 +35,12 @@ Refused while Fable.exe runs *from this install* (`backups::gameRunningIn`: the 
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
+`--forget` removes originals after restoring, including backups verified identical
+to their current files. Unreadable files are treated as differing. Failed target
+replacement or backup/creation-marker cleanup is reported as an error; release
+the file lock and retry to finish cleanup. Staged backups without a manifest are
+left in place for manual recovery.
+
 ### Compacting the static-map bank (2026-09-19, 1.0-rc #4)
 
 Every deploy that changes a chunk's size appends the new payload and a cloned table to
