@@ -3,6 +3,9 @@
 Resume in `D:\Code\FableForge`. The release candidate is `v0.18.0-rc.2` and
 the preview download is at
 <https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.2>.
+It was published as a GitHub prerelease with the Windows zip and SHA-256 file.
+Both Windows CI runs for the tagged commit `d0651f9` passed. The branch moves
+back to the `-dev` version suffix after the tag; build the tag for release work.
 Read [release notes](releases/0.18.0-rc.2.md),
 [feature depth audit](FEATURE_DEPTH_AUDIT.md), and
 [Aeon's feedback check](AEON_EDITOR_FEEDBACK.md) before adding editor features.
