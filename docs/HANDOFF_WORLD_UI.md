@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: readable import failures
+
+At 800x600 / 1.5 scale, a failed model pack add only exposed a truncated footer
+line while its empty preview showed no toast. Model/theme cards now retain a
+wrapped last-attempt error below the action. Pack failures, direct asynchronous
+model failures and theme preflight failures populate it; retry clears it and
+install/save-root changes clear prior errors. The activity log retains its
+existing details. Automation exposes `mesh_import_failed`, `custom_theme_failed`
+and the conditional `mesh_import_error` / `custom_theme_error` widgets.
+
+Actual compact UI clicks reproduce missing-file failures and then successful
+retries for both cards. Screenshots `build/import_failure_small.png` and
+`build/theme_failure_small.png` were inspected: complete paths fit within the
+card. `build/import_error_reset_probe.py` verifies direct error completion and
+install-switch reset with unchanged fixture bytes. Existing full-palette and
+two-root install-switch UI checks pass. No live install writes occurred.
+
 ## 2026-10-01 continuation: integer glTF triangle indices
 
 Triangle indices now retain unsigned integer precision instead of passing through

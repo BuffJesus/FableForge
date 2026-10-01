@@ -268,6 +268,13 @@ references. Normal/ASan runs pass 384 model-input checks. A full relink passes
 all 27 CTest suites; the OBJ/GLB scratch integration passes with both CLI
 executables refreshed. Full glTF conformance remains outside this check.
 
+## 2026-10-01 import error visibility
+
+Model/theme import errors now stay beside the action and wrap at compact widths.
+Actual missing-input clicks, successful retries and screenshots pass at 800x600
+/ 1.5 scale. Direct asynchronous errors and install-switch reset preserve the
+scratch fixture's bytes. Full-palette and install-switch regressions pass.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

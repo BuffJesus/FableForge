@@ -1716,6 +1716,8 @@ void App::drawPackDestination(float cardInner) {
 
 // Import into the chosen pack (a recipe) or directly (the in-place import). model: the Models page.
 bool App::addToPackOrGame(bool model) {
+    auto& lastError = model ? meshImportError_ : customThemeError_;
+    lastError.clear();
     auto upper = [](std::string nm) { for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; } return nm; };
     if (packDest_.empty()) {
         if (model) return importMesh(meshModelPath_, upper(meshName_), meshTexturePng_);
@@ -1732,7 +1734,7 @@ bool App::addToPackOrGame(bool model) {
         ok = modpack::addGroundTheme(packDest_, r, err);
         if (ok) { pushLog("pack: ground theme " + r.name + " added (paintable after the next Mods > Deploy)", 3); customPng_[0] = 0; customName_[0] = 0; }
     }
-    if (!ok) pushLog("pack: " + err, 2);
+    if (!ok) { lastError = err; pushLog("pack: " + err, 2); }
     return ok;
 }
 
@@ -1760,6 +1762,12 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
     if (theme::primaryButton(meshBusy ? "Importing..." : packDest_.empty() ? "Import into the game" : "Add to the pack", ImVec2(cardInner, S(30)), meshCan))
         addToPackOrGame(true);
     auto_.registerWidget("btn_mesh_import");
+    if (!meshImportError_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Error));
+        ImGui::TextWrapped("Last attempt failed: %s", meshImportError_.c_str());
+        auto_.registerWidget("mesh_import_error");
+        ImGui::PopStyleColor();
+    }
     ImGui::PushFont(fontSmall_);
     theme::hint(packDest_.empty()
         ? "The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh), with a collision hull from the model's own triangles; nothing retail is replaced, one-time backups. It then shows under Add an object."
@@ -1806,28 +1814,38 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
     if (theme::primaryButton(ctxFuture_.valid() ? "Textures reloading..." : packDest_.empty() ? "Create ground theme" : "Add to the pack", ImVec2(cardInner, S(32)), can))
         addToPackOrGame(false);
     auto_.registerWidget("btn_custom_theme_create");
+    if (!customThemeError_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Error));
+        ImGui::TextWrapped("Last attempt failed: %s", customThemeError_.c_str());
+        auto_.registerWidget("custom_theme_error");
+        ImGui::PopStyleColor();
+    }
     theme::endCard();
 }
 
 bool App::createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng) {
-    if (ctxFuture_.valid()) { pushLog("editor: textures are still loading, try again in a moment", 1); return false; }
-    if (!installValid_) { pushLog("editor: a custom theme needs a Fable install", 1); return false; }
+    customThemeError_.clear();
+    auto fail = [&](const std::string& message, int level) {
+        customThemeError_ = message; pushLog("editor: " + message, level); return false;
+    };
+    if (ctxFuture_.valid()) return fail("textures are still loading, try again in a moment", 1);
+    if (!installValid_) return fail("a custom theme needs a Fable install", 1);
     if (documentLoaded() && doc_.hasTerrain() && doc_.paletteSlotOf(name) < 0) {
         const auto& palette = doc_.level()->groundThemes();
         bool available = false;
         for (size_t i = 2; i < palette.size(); ++i) available |= palette[i].name.empty();
-        if (!available) { pushLog("editor: the map's ground-theme palette is full; open a map with a free slot before creating a theme", 1); return false; }
+        if (!available) return fail("the map's ground-theme palette is full; open a map with a free slot before creating a theme", 1);
     }
     editor::CustomThemeRequest req;
     req.png = png; req.name = name; req.donor = donor.empty() ? "GROUND_GRASS" : donor;
     if (!cliffPng.empty()) req.cliffPng = cliffPng;
     editor::CustomThemeResult out; std::string err;
     pushLog("custom theme " + name + ": importing " + png + " into textures.big and appending the ENGINE_THEME...", 0);
-    if (!editor::createCustomTheme(saveRoot(), req, out, err)) { pushLog("editor: custom theme failed: " + err, 2); return false; }
+    if (!editor::createCustomTheme(saveRoot(), req, out, err)) return fail("custom theme failed: " + err, 2);
     for (const auto& n : out.notes) pushLog("custom theme: " + n, 0);
     if (documentLoaded() && doc_.hasTerrain()) {
         const int slot = doc_.addGroundTheme(name, out.defIndex);
-        if (slot < 0) { pushLog("editor: the palette has no free slot for " + name, 1); return false; }
+        if (slot < 0) return fail("the palette has no free slot for " + name, 1);
         paintTheme_ = slot;
         pushLog("ground theme " + name + " in palette slot " + std::to_string(slot) + " (def " + std::to_string(out.defIndex) + ", texture " + std::to_string(out.baseTexture) + "); reloading textures", 3);
     } else {
@@ -1841,8 +1859,12 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
 }
 
 bool App::importMesh(const std::string& model, const std::string& name, const std::string& texturePng) {
-    if (meshImportFuture_.valid()) { pushLog("import model: still busy", 1); return false; }
-    if (ctxFuture_.valid()) { pushLog("import model: textures are still loading, try again in a moment", 1); return false; }
+    meshImportError_.clear();
+    auto fail = [&](const std::string& message) {
+        meshImportError_ = message; pushLog("import model: " + message, 1); return false;
+    };
+    if (meshImportFuture_.valid()) return fail("still busy");
+    if (ctxFuture_.valid()) return fail("textures are still loading, try again in a moment");
     meshimport::ImportRequest req;
     req.model = model; req.name = name; req.texturePng = texturePng;
     pushLog("import model " + name + ": composing " + model + " into graphics.big (a copy of the bank is rewritten; a few seconds)...", 0);
@@ -1860,6 +1882,7 @@ bool App::importMesh(const std::string& model, const std::string& name, const st
 void App::pollMeshImport() {
     if (!meshImportFuture_.valid() || meshImportFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const MeshImportJob job = meshImportFuture_.get();
+    meshImportError_ = job.ok ? std::string{} : job.error;
     if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
