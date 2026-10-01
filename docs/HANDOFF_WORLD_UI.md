@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: scene traversal
+
+glTF scene traversal now uses an explicit stack and rejects cycles/repeated nodes
+and missing node references. It preserves depth-first instance order and inherited
+transforms without recursive stack growth. Node transform arrays are checked for
+shape and finite values; overflowing world matrices are rejected. An explicitly
+empty or meshless scene no longer falls back to every unused mesh in the file.
+Assets without scenes retain the existing mesh-library import behavior.
+The model-input suite passes 356 checks in normal and AddressSanitizer builds,
+including a 12,001-node chain, sibling mesh instances, inherited transforms,
+mirrored winding and malformed scenes. The sanitizer initially crashed in the
+JSON library's nested out-of-range exception path for a missing child; checking
+the node index explicitly now produces the importer error and passes that case.
+The full scratch OBJ/GLB import and reported-failure recovery suite also passes.
+
 ## 2026-10-01 continuation: accessor ranges
 
 A triangle with a 12-byte buffer view and 36 bytes of POSITION data reproduced

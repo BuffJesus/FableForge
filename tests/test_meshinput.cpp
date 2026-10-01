@@ -115,6 +115,65 @@ int main() {
         auto padded = positions; padded.insert(padded.end(), 4, 0);
         triangle(withDocument(document, padded), "extra binary bytes outside the logical buffer");
 
+        auto sceneDoc = document;
+        sceneDoc["scenes"] = {{{"nodes", {0}}}};
+        sceneDoc["nodes"] = {{{"mesh", 0}}};
+        triangle(withDocument(sceneDoc, positions), "single-node scene");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {0};
+        rejects(withDocument(changed, positions), "self-cycle");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {1};
+        changed["nodes"].push_back({{"children", {0}}});
+        rejects(withDocument(changed, positions), "two-node cycle");
+        changed = sceneDoc; changed["scenes"][0]["nodes"] = {0, 0};
+        rejects(withDocument(changed, positions), "repeated scene root");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {1, 1};
+        changed["nodes"].push_back({{"mesh", 0}});
+        rejects(withDocument(changed, positions), "repeated child");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {-1};
+        rejects(withDocument(changed, positions), "negative child index");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {0.5};
+        rejects(withDocument(changed, positions), "fractional child index");
+        changed = sceneDoc; changed["nodes"][0]["children"] = {7};
+        rejects(withDocument(changed, positions), "missing child");
+        for (const auto* key : {"matrix", "translation", "rotation", "scale"}) {
+            changed = sceneDoc; changed["nodes"][0][key] = {1, 2};
+            rejects(withDocument(changed, positions), std::string("short node ") + key);
+        }
+        changed = sceneDoc; changed["nodes"][0]["translation"] = {1e300, 0, 0};
+        rejects(withDocument(changed, positions), "non-finite converted transform");
+        changed = sceneDoc;
+        changed["nodes"][0]["matrix"] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        triangle(withDocument(changed, positions), "matrix node");
+        changed["nodes"][0]["translation"] = {0, 0, 0};
+        rejects(withDocument(changed, positions), "mixed matrix and TRS node");
+        changed = sceneDoc;
+        changed["nodes"] = {{{"scale", {1e30, 1e30, 1e30}}, {"children", {1}}}, {{"scale", {1e30, 1e30, 1e30}}, {"mesh", 0}}};
+        rejects(withDocument(changed, positions), "overflowing inherited transform");
+        changed = sceneDoc;
+        changed["nodes"] = {{{"translation", {1, 0, 0}}, {"children", {1}}}, {{"scale", {2, 2, 2}}, {"mesh", 0}}};
+        auto transformed = load(withDocument(changed, positions));
+        require(transformed.prims.size() == 1 && transformed.prims[0].verts[0].x == 100 &&
+                transformed.prims[0].verts[1].x == 300 && transformed.prims[0].verts[2].z == 200,
+                "lost inherited scene transform"); ++checks;
+        changed = sceneDoc;
+        changed["nodes"] = {{{"children", {1, 2}}}, {{"mesh", 0}, {"translation", {1, 0, 0}}}, {{"mesh", 0}, {"translation", {2, 0, 0}}}};
+        transformed = load(withDocument(changed, positions));
+        require(transformed.prims.size() == 2 && transformed.prims[0].verts[0].x == 100 &&
+                transformed.prims[1].verts[0].x == 200, "lost instance order or duplicate mesh instance"); ++checks;
+        changed = sceneDoc; changed["nodes"][0]["scale"] = {-1, 1, 1};
+        transformed = load(withDocument(changed, positions));
+        require(transformed.prims.size() == 1 && transformed.prims[0].verts[1].x == -100 &&
+                transformed.prims[0].faces[0][1] == 2 && transformed.prims[0].faces[0][2] == 1,
+                "lost mirrored-node winding"); ++checks;
+        changed = sceneDoc; changed["nodes"] = nlohmann::json::array();
+        for (size_t i = 0; i < 12000; ++i) changed["nodes"].push_back({{"children", {i + 1}}});
+        changed["nodes"].push_back({{"mesh", 0}});
+        triangle(withDocument(changed, positions), "12001-node hierarchy");
+        changed = sceneDoc; changed["nodes"][0].erase("mesh");
+        require(load(withDocument(changed, positions)).prims.empty(), "meshless scene imported unused library mesh"); ++checks;
+        changed = sceneDoc; changed["scenes"][0].erase("nodes");
+        require(load(withDocument(changed, positions)).prims.empty(), "empty scene imported unused library mesh"); ++checks;
+
         auto bad = good; set32(bad, 4, 1); rejects(bad, "GLB version 1");
         bad = good; set32(bad, 8, uint32_t(good.size() - 4)); rejects(bad, "short declared length");
         bad = good; set32(bad, 8, uint32_t(good.size() + 4)); rejects(bad, "long declared length");

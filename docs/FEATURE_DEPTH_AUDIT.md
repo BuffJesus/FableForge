@@ -211,6 +211,11 @@ before decoding. Sparse data now reports unsupported instead of being ignored.
 The suite now passes 334 checks in normal and AddressSanitizer builds, including
 interleaved data and both view/accessor offsets. Scene traversal remains open.
 
+Scene traversal now rejects cycles/repeated nodes and missing references, handles
+a 12,001-node chain iteratively, preserves instance order/transforms/winding and
+keeps an empty selected scene empty. Normal and AddressSanitizer runs pass all
+356 input checks. This is targeted importer coverage, not full glTF conformance.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

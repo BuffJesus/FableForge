@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <functional>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -118,14 +117,15 @@ Vec3 toFableDir(float x, float y, float z) { return {x, -z, y}; }
 
 struct GltfBuffers { json doc; std::vector<std::vector<uint8_t>> buffers; };
 
-size_t gltfSize(const json& object, const char* key, size_t fallback = 0) {
-    if (!object.contains(key)) return fallback;
-    const auto& value = object.at(key);
+size_t gltfInteger(const json& value, const char* key) {
     if (!value.is_number_integer() || (!value.is_number_unsigned() && value.get<int64_t>() < 0))
         throw std::runtime_error(std::string("invalid nonnegative integer: ") + key);
     const auto number = value.get<uint64_t>();
     if (number > std::numeric_limits<size_t>::max()) throw std::runtime_error(std::string("size overflow: ") + key);
     return size_t(number);
+}
+size_t gltfSize(const json& object, const char* key, size_t fallback = 0) {
+    return object.contains(key) ? gltfInteger(object.at(key), key) : fallback;
 }
 
 GltfBuffers openGltf(const fs::path& path) {
@@ -260,6 +260,15 @@ Mat4 mul(const Mat4& a, const Mat4& b) {
     return r;
 }
 Mat4 nodeMatrix(const json& n) {
+    for (const auto& [key, count] : {std::pair{"matrix", 16u}, {"translation", 3u}, {"scale", 3u}, {"rotation", 4u}}) {
+        if (!n.contains(key)) continue;
+        const auto& values = n.at(key);
+        if (!values.is_array() || values.size() != count) throw std::runtime_error(std::string("invalid node ") + key);
+        for (const auto& value : values)
+            if (!value.is_number() || !std::isfinite(value.get<float>())) throw std::runtime_error(std::string("invalid node ") + key);
+    }
+    if (n.contains("matrix") && (n.contains("translation") || n.contains("scale") || n.contains("rotation")))
+        throw std::runtime_error("node combines matrix and TRS transforms");
     if (n.contains("matrix")) { Mat4 m; for (size_t i = 0; i < 16; ++i) m[i] = n["matrix"][i].get<float>(); return m; }
     Mat4 t = identity(), r = identity(), s = identity();
     if (n.contains("translation")) { t[12] = n["translation"][0]; t[13] = n["translation"][1]; t[14] = n["translation"][2]; }
@@ -294,19 +303,40 @@ Model loadGltf(const fs::path& path) {
         model.materialNames.push_back(name); slotOf[name] = slot;
         return slot;
     };
-    // every mesh instance in the default scene (else every node), with its world transform
-    std::vector<std::pair<int, Mat4>> instances;
-    std::function<void(int, const Mat4&)> visit = [&](int ni, const Mat4& parent) {
-        const auto& n = g.doc["nodes"].at(size_t(ni));
-        const Mat4 world = mul(parent, nodeMatrix(n));
-        if (n.contains("mesh")) instances.push_back({n["mesh"].get<int>(), world});
-        for (const auto& c : n.value("children", json::array())) visit(c.get<int>(), world);
-    };
+    // Traverse the selected scene iteratively: malformed cycles and deep valid
+    // hierarchies must not exhaust the process stack. Preserve depth-first order.
+    std::vector<std::pair<size_t, Mat4>> instances;
     if (g.doc.contains("scenes") && !g.doc["scenes"].empty()) {
-        const auto& scene = g.doc["scenes"].at(size_t(g.doc.value("scene", 0)));
-        for (const auto& r : scene.value("nodes", json::array())) visit(r.get<int>(), identity());
+        const size_t sceneIndex = gltfSize(g.doc, "scene");
+        if (!g.doc["scenes"].is_array() || sceneIndex >= g.doc["scenes"].size())
+            throw std::runtime_error("invalid default scene index");
+        const auto& scene = g.doc["scenes"][sceneIndex];
+        const auto nodes = g.doc.value("nodes", json::array());
+        if (!nodes.is_array()) throw std::runtime_error("nodes is not an array");
+        std::vector<bool> visited(nodes.size(), false);
+        std::vector<std::pair<size_t, Mat4>> pending;
+        auto enqueue = [&](const json& children, const Mat4& parent) {
+            if (!children.is_array()) throw std::runtime_error("node list is not an array");
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+                pending.emplace_back(gltfInteger(*it, "node index"), parent);
+        };
+        enqueue(scene.value("nodes", json::array()), identity());
+        while (!pending.empty()) {
+            const auto [ni, parent] = pending.back(); pending.pop_back();
+            if (ni >= nodes.size()) throw std::runtime_error("scene references a missing node");
+            const auto& n = nodes[ni];
+            if (visited[ni]) throw std::runtime_error("scene contains a cycle or repeated node");
+            visited[ni] = true;
+            const Mat4 world = mul(parent, nodeMatrix(n));
+            if (!std::all_of(world.begin(), world.end(), [](float v) { return std::isfinite(v); }))
+                throw std::runtime_error("node world transform is not finite");
+            if (n.contains("mesh")) instances.emplace_back(gltfSize(n, "mesh"), world);
+            enqueue(n.value("children", json::array()), world);
+        }
+    } else {
+        // With no scenes, import the asset as a mesh library.
+        for (size_t mi = 0; mi < g.doc["meshes"].size(); ++mi) instances.emplace_back(mi, identity());
     }
-    if (instances.empty()) for (size_t mi = 0; mi < g.doc["meshes"].size(); ++mi) instances.push_back({int(mi), identity()});
 
     for (const auto& [mi, world] : instances) {
         const auto& mesh = g.doc["meshes"].at(size_t(mi));
