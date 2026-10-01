@@ -254,6 +254,13 @@ failure preserves the previous pack. Normal/ASan pack checks and two-order
 scratch recipe build/deploy/byte-exact undeploy pass. External images, GLB
 external buffers and percent-encoded file URIs remain outside this step.
 
+## 2026-10-01 OBJ input validation
+
+Malformed coordinates and missing UV/normal references are refused instead of
+producing altered geometry. Normal/ASan runs pass 371 model-input checks,
+including supported relative indices, comments and optional texture coordinates.
+The scratch OBJ/GLB import and GUI placement/undo regression passes.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

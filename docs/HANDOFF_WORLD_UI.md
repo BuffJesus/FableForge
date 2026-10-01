@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: malformed OBJ input
+
+A short vertex record was accepted with an unread coordinate. OBJ coordinate
+reads now require complete finite values, including finite positions after unit
+conversion. Face indices must consume the full token, be nonzero and reference
+existing positions/UVs/normals; invalid optional references no longer silently
+become missing attributes. Faces need at least three vertices. Relative indices,
+inline comments and one-coordinate texture entries remain supported. Attribute
+index resolution avoids signed narrowing of the available element count.
+
+All 371 model-input checks pass in normal and local ASan builds. The scratch
+OBJ/GLB import integration also passes geometry, collision, definition references,
+backup/failure preservation and GUI placement/undo. No live game check was run.
+
 ## 2026-10-01 continuation: glTF pack geometry buffers
 
 A `.gltf` recipe previously copied only its JSON, leaving relative binary

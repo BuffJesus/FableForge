@@ -191,7 +191,29 @@ int main() {
             if (length >= 12) set32(bad, 8, uint32_t(length));
             rejects(bad, "prefix of length " + std::to_string(length));
         }
-        fs::remove(path); fs::remove(dir);
+        const auto objPath = dir / "triangle.obj";
+        auto loadObj = [&](const std::string& text) {
+            { std::ofstream f(objPath); f << text; }
+            return albion::meshimport::loadModel(objPath);
+        };
+        const std::string objVertices = "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        auto rejectsObj = [&](const std::string& text, const std::string& label) {
+            bool rejected = false;
+            try { loadObj(text); } catch (const std::exception&) { rejected = true; }
+            require(rejected, "accepted OBJ " + label); ++checks;
+        };
+        rejectsObj("v 0 0\n" + objVertices + "f 1 2 3\n", "short position");
+        rejectsObj("vn 0 0\n" + objVertices + "f 1//1 2//1 3//1\n", "short normal");
+        rejectsObj("vt\n" + objVertices + "f 1/1 2/1 3/1\n", "empty UV");
+        rejectsObj("v 1e38 0 0\n" + objVertices + "f 1 2 3\n", "overflowing converted position");
+        for (const auto* face : {"1x 2 3", "0 2 3", "-4 2 3", "4 2 3", "1/1 2/1 3/1",
+                                 "1//1 2//1 3//1", "1/0 2 3", "1//0 2 3", "1/1/1/1 2 3", "1 2"})
+            rejectsObj(objVertices + "f " + face + "\n", std::string("invalid face ") + face);
+        const auto obj = loadObj(objVertices + "vt 0.25\nvn 0 0 1\nf -3/1/1 -2/1/1 -1/1/1 # triangle\n");
+        require(obj.prims.size() == 1 && obj.prims[0].faces.size() == 1 && obj.prims[0].verts[1].x == 100 &&
+                obj.prims[0].uvs[0].u == 0.25f && obj.prims[0].uvs[0].v == 1 &&
+                obj.prims[0].normals[0].y == -1, "lost OBJ relative indices, optional UV or comment"); ++checks;
+        fs::remove(objPath); fs::remove(path); fs::remove(dir);
         std::cout << "mesh input: " << checks << " checks passed\n";
         return 0;
     } catch (const std::exception& e) {

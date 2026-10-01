@@ -322,7 +322,20 @@ Model loadObj(const fs::path& path) {
     std::ifstream in(path);
     if (!in) throw std::runtime_error("cannot read " + path.string());
     std::vector<Vec3> v, vn; std::vector<Vec2> vt;
-    struct Key { int p, t, n; bool operator<(const Key& o) const { return std::tie(p, t, n) < std::tie(o.p, o.t, o.n); } };
+    struct Key { size_t p, t, n; bool operator<(const Key& o) const { return std::tie(p, t, n) < std::tie(o.p, o.t, o.n); } };
+    constexpr size_t absent = std::numeric_limits<size_t>::max();
+    auto index = [](const std::string& text, size_t count) -> size_t {
+        size_t used = 0;
+        const int value = std::stoi(text, &used);
+        if (used != text.size() || value == 0)
+            throw std::runtime_error("invalid OBJ face index: " + text);
+        const size_t magnitude = size_t(value < 0 ? -int64_t(value) : value);
+        if (magnitude > count) throw std::runtime_error("OBJ face references a missing attribute: " + text);
+        return value < 0 ? count - magnitude : magnitude - 1;
+    };
+    auto finite3 = [](const Vec3& value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
     std::map<std::string, int> slotOf;
     std::map<int, Primitive> prims;          // slot -> primitive
     std::map<int, std::map<Key, uint32_t>> dedupe;
@@ -338,39 +351,50 @@ Model loadObj(const fs::path& path) {
     std::string line;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (const auto comment = line.find('#'); comment != std::string::npos) line.resize(comment);
         std::istringstream ls(line);
         std::string tag; ls >> tag;
-        if (tag == "v") { float x, y, z; ls >> x >> y >> z; v.push_back(toFable(x, y, z)); }
-        else if (tag == "vt") { float u, w; ls >> u >> w; vt.push_back({u, 1.0f - w}); }   // OBJ v is bottom-up; glTF/Blender convention is top-down
-        else if (tag == "vn") { float x, y, z; ls >> x >> y >> z; vn.push_back(toFableDir(x, y, z)); }
+        if (tag == "v" || tag == "vn") {
+            float x = 0, y = 0, z = 0;
+            if (!(ls >> x >> y >> z)) throw std::runtime_error("incomplete or invalid OBJ " + tag);
+            const auto converted = tag == "v" ? toFable(x, y, z) : toFableDir(x, y, z);
+            if (!finite3(converted)) throw std::runtime_error("non-finite OBJ " + tag);
+            (tag == "v" ? v : vn).push_back(converted);
+        }
+        else if (tag == "vt") {
+            float u = 0, w = 0;
+            if (!(ls >> u)) throw std::runtime_error("incomplete or invalid OBJ vt");
+            ls >> std::ws;
+            if (!ls.eof() && !(ls >> w)) throw std::runtime_error("invalid OBJ vt");
+            if (!std::isfinite(u) || !std::isfinite(w)) throw std::runtime_error("non-finite OBJ vt");
+            vt.push_back({u, 1.0f - w}); // OBJ v is bottom-up; glTF/Blender convention is top-down
+        }
         else if (tag == "usemtl") { std::string n; ls >> n; slot = ensureSlot(n.empty() ? "default" : n); }
         else if (tag == "f") {
             std::vector<uint32_t> poly;
             std::string tok;
             while (ls >> tok) {
-                int p = 0, t = 0, n = 0;
+                Key k{absent, absent, absent};
                 const size_t s1 = tok.find('/');
-                p = std::stoi(tok.substr(0, s1));
+                k.p = index(tok.substr(0, s1), v.size());
                 if (s1 != std::string::npos) {
                     const size_t s2 = tok.find('/', s1 + 1);
                     const std::string ts = tok.substr(s1 + 1, s2 == std::string::npos ? std::string::npos : s2 - s1 - 1);
-                    if (!ts.empty()) t = std::stoi(ts);
-                    if (s2 != std::string::npos && s2 + 1 < tok.size()) n = std::stoi(tok.substr(s2 + 1));
+                    if (!ts.empty()) k.t = index(ts, vt.size());
+                    if (s2 != std::string::npos && s2 + 1 < tok.size()) k.n = index(tok.substr(s2 + 1), vn.size());
                 }
-                auto fix = [](int i, size_t count) { return i < 0 ? int(count) + i : i - 1; };
-                const Key k{fix(p, v.size()), t ? fix(t, vt.size()) : -1, n ? fix(n, vn.size()) : -1};
-                if (k.p < 0 || size_t(k.p) >= v.size()) throw std::runtime_error("OBJ face references a missing vertex");
                 auto& prim = prims[slot];
                 auto& dd = dedupe[slot];
                 auto it = dd.find(k);
                 if (it == dd.end()) {
                     it = dd.emplace(k, uint32_t(prim.verts.size())).first;
                     prim.verts.push_back(v[size_t(k.p)]);
-                    prim.uvs.push_back(k.t >= 0 && size_t(k.t) < vt.size() ? vt[size_t(k.t)] : Vec2{});
-                    if (k.n >= 0 && size_t(k.n) < vn.size()) prim.normals.push_back(vn[size_t(k.n)]);
+                    prim.uvs.push_back(k.t != absent ? vt[k.t] : Vec2{});
+                    if (k.n != absent) prim.normals.push_back(vn[k.n]);
                 }
                 poly.push_back(it->second);
             }
+            if (poly.size() < 3) throw std::runtime_error("OBJ face has fewer than three vertices");
             auto& prim = prims[slot];
             for (size_t i = 1; i + 1 < poly.size(); ++i) prim.faces.push_back({poly[0], poly[i], poly[i + 1]});   // fan
         }
