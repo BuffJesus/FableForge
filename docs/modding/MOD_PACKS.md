@@ -12,6 +12,12 @@ Mods without Data/Defs can still supply a DLL-only layer. Redeploy continues to
 revert the earlier stage before building; failure can therefore leave the install
 at its baseline with the previous mod removed.
 
+EgoCore file copies, resource/header reads and output writes report I/O failures.
+An unreadable existing source bank also fails the build. A failed explicit build
+may retain files emitted before the error; deploy does not stage that incomplete
+result. Missing target banks and unsupported resource locations still report
+skipped overrides.
+
 ## Recipe asset storage and failed edits
 
 New model and ground-theme recipes keep their input files under

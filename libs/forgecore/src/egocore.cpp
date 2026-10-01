@@ -31,7 +31,9 @@ namespace {
 std::string readText(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
     if (!in) throw std::runtime_error("cannot read " + p.string());
-    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (in.bad()) throw std::runtime_error("read failed for " + p.string());
+    return text;
 }
 
 void writeText(const fs::path& p, const std::string& s) {
@@ -39,6 +41,8 @@ void writeText(const fs::path& p, const std::string& s) {
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     if (!out) throw std::runtime_error("cannot write " + p.string());
     out << s;
+    out.close();
+    if (!out) throw std::runtime_error("write failed for " + p.string());
 }
 
 // Comments (// and /* */) blanked so a "#definition" inside one is not a block start.
@@ -95,16 +99,15 @@ bool runDefc(const fs::path& defc, const fs::path& in, const fs::path& out, std:
 }
 
 void copyTree(const fs::path& from, const fs::path& to, const std::vector<std::string>& skipTop = {}) {
-    std::error_code ec;
-    fs::create_directories(to, ec);
-    for (const auto& de : fs::recursive_directory_iterator(from, ec)) {
-        if (!de.is_regular_file(ec)) continue;
-        const fs::path rel = fs::relative(de.path(), from, ec);
+    fs::create_directories(to);
+    for (const auto& de : fs::recursive_directory_iterator(from)) {
+        if (!de.is_regular_file()) continue;
+        const fs::path rel = fs::relative(de.path(), from);
         bool skip = false;
         for (const auto& s : skipTop) { std::string first = rel.begin()->string(); std::transform(first.begin(), first.end(), first.begin(), ::tolower); if (first == s) skip = true; }
         if (skip) continue;
-        fs::create_directories((to / rel).parent_path(), ec);
-        fs::copy_file(de.path(), to / rel, fs::copy_options::overwrite_existing, ec);
+        fs::create_directories((to / rel).parent_path());
+        fs::copy_file(de.path(), to / rel, fs::copy_options::overwrite_existing);
     }
 }
 
@@ -178,9 +181,9 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
     auto noteAdded = [&](const std::string& blockText) {
         for (const Block& b : blocks(maskComments(blockText))) addedNames.insert(b.name);
     };
-    for (const auto& de : fs::recursive_directory_iterator(modDefs, ec)) {
-        if (!de.is_regular_file(ec)) continue;
-        const fs::path rel = fs::relative(de.path(), modDefs, ec);
+    for (const auto& de : fs::recursive_directory_iterator(modDefs)) {
+        if (!de.is_regular_file()) continue;
+        const fs::path rel = fs::relative(de.path(), modDefs);
         std::string ext = de.path().extension().string(); std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         const fs::path target = treeMod / rel, targetBase = treeBase / rel;
         if (ext == ".def" && fs::exists(target, ec)) {
@@ -194,10 +197,10 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
             }
         } else {
             if (ext == ".def") noteAdded(readText(de.path()));
-            fs::create_directories(target.parent_path(), ec);
-            fs::copy_file(de.path(), target, fs::copy_options::overwrite_existing, ec);
-            fs::create_directories(targetBase.parent_path(), ec);
-            fs::copy_file(de.path(), targetBase, fs::copy_options::overwrite_existing, ec);   // a whole new file: added everywhere
+            fs::create_directories(target.parent_path());
+            fs::copy_file(de.path(), target, fs::copy_options::overwrite_existing);
+            fs::create_directories(targetBase.parent_path());
+            fs::copy_file(de.path(), targetBase, fs::copy_options::overwrite_existing);   // a whole new file: added everywhere
             if (ext == ".def") ++report.blocksAdded;
         }
         if (ext == ".def") ++report.defFiles;
@@ -352,7 +355,10 @@ std::string lowerCopy(std::string s) {
 
 std::vector<uint8_t> readBytes(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
-    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in) throw std::runtime_error("cannot read " + p.string());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (in.bad()) throw std::runtime_error("read failed for " + p.string());
+    return bytes;
 }
 
 } // namespace
@@ -367,8 +373,8 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
     // any), the entry name, and the files
     struct Override { std::string bankRel, subBank, entry; fs::path resource, header; };
     std::map<std::string, std::vector<Override>> byBank;   // lower bankRel -> overrides, in directory order
-    for (const auto& de : fs::recursive_directory_iterator(modData, ec)) {
-        if (!de.is_regular_file(ec) || lowerCopy(de.path().extension().string()) != ".resource") continue;
+    for (const auto& de : fs::recursive_directory_iterator(modData)) {
+        if (!de.is_regular_file() || lowerCopy(de.path().extension().string()) != ".resource") continue;
         // the nearest ancestor named like a bank (x.big / x.lut / x.lug) is the target
         fs::path bankDir;
         for (fs::path parent = de.path().parent_path(); parent != modData && !parent.empty(); parent = parent.parent_path()) {
@@ -377,12 +383,12 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
         }
         if (bankDir.empty()) { report.notes.push_back(de.path().filename().string() + ": not under a <bank>.big folder; skipped"); continue; }
         Override o;
-        o.bankRel = fs::relative(bankDir, modData, ec).generic_string();
+        o.bankRel = fs::relative(bankDir, modData).generic_string();
         o.subBank = de.path().parent_path() != bankDir ? de.path().parent_path().filename().string() : "";
         o.entry = de.path().stem().string();
         o.resource = de.path();
         const fs::path hdr = de.path().parent_path() / (o.entry + ".header");
-        if (fs::exists(hdr, ec)) o.header = hdr;
+        if (fs::exists(hdr)) o.header = hdr;
         byBank[lowerCopy(o.bankRel)].push_back(std::move(o));
     }
 
@@ -394,9 +400,7 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
         if (!fs::exists(srcBank, ec)) srcBank = gameRoot / "data" / rel;   // else the install's bank
         if (!fs::exists(srcBank, ec)) srcBank = gameRoot / "Data" / rel;
         if (!fs::exists(srcBank, ec)) { report.notes.push_back(rel + ": no such bank in the install; " + std::to_string(overrides.size()) + " override(s) skipped"); continue; }
-        big::File file;
-        try { file = big::File::open(srcBank); }
-        catch (const std::exception& e) { report.notes.push_back(rel + ": " + e.what()); continue; }
+        auto file = big::File::open(srcBank);
         const bool graphics = lowerRel.find("graphics.big") != std::string::npos;
         for (const auto& o : overrides) {
             const std::string want = lowerCopy(o.entry);
@@ -440,9 +444,12 @@ size_t applyResourceOverrides(const fs::path& modFolder, const fs::path& gameRoo
             ++applied;
         }
         const auto bytes = file.serialize();
-        fs::create_directories(outBank.parent_path(), ec);
+        fs::create_directories(outBank.parent_path());
         std::ofstream out(outBank, std::ios::binary | std::ios::trunc);
+        if (!out) throw std::runtime_error("cannot write " + outBank.string());
         out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        out.close();
+        if (!out) throw std::runtime_error("write failed for " + outBank.string());
         report.resourceBanks.push_back(rel);
     }
     return applied;

@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: report EgoCore copy and resource I/O failures
+
+EgoCore's tree copier discarded copy errors, allowing a locked DLL to be reported
+as copied and registered (`build/egocore-io-before.log`). Resource reads could
+silently become empty payloads; an unreadable source bank was also downgraded to
+a warning (`build/egocore-bank-io-before.log`). Tree iteration/copies now throw on
+I/O errors, resource/header reads check open/read status, and text/bank writes
+check open and close/flush. An existing bank that cannot be opened fails the build.
+Missing target banks and unsupported resource placements retain their existing
+reported-skip behavior.
+
+The new `fableforge_egocore_io_tests` passes normally and under ASan: locked DLL,
+Mods.ini, source bank, resource, header and output-bank failures; successful retry;
+correct replacement payload/header; preserved unrelated entry and source bank.
+Full build and all 31 suites pass (23.59 seconds). Real concurrent text compiles,
+failure refusal and DLL-only compatibility pass normally
+(`build/egocore-workspace-v143znqa`) and with the ASan host
+(`build/egocore-workspace-7nypzgv9`). Both output bank pairs match the pre-I/O-change
+hashes (`v143znqa/baseline_comparison.json`). No native resource layout changed.
+A failed build may leave already-written files in an explicit build output;
+this is error reporting and deploy prevention, not transactional output rollback.
+
 ## 2026-10-01 continuation: fail incomplete EgoCore text builds
 
 A deliberately failing compiler still produced a successful DLL-only build
