@@ -47,6 +47,22 @@ namespace te = albion::terrainexport;
 #include "cli/common.hpp"
 
 namespace albion::cli {
+namespace {
+template<class T> bool completeNumber(std::string_view value, T& out) {
+    if (!value.empty() && value.front() == '+') {
+        value.remove_prefix(1);
+        if (!value.empty() && value.front() == '-') return false;
+    }
+    if (value.empty()) return false;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), out);
+    return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && std::isfinite(out);
+}
+bool integerPair(std::string_view value, char separator, int& first, int& second) {
+    const auto split = value.find(separator);
+    return split != std::string_view::npos && completeNumber(value.substr(0, split), first) &&
+           completeNumber(value.substr(split + 1), second);
+}
+} // namespace
 
 // forge CLI: new levels and region entrances
 std::optional<int> runLevels(const std::string& cmd, const Args& args) {
@@ -54,15 +70,29 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         if (args.size() < 2) { std::fprintf(stderr, "usage: forge blank-level <name> [--size WxH] [--at x,y] [--region <hostRegion>] [--template <map>] [--theme <slot|name>] [--height <h>] [--install <root>]\n"); return 2; }
         albion::editor::BlankLevelRequest req;
         req.name = args[1];
-        std::string installArg, at, theme;
+        std::string installArg, theme; bool hasOrigin = false;
         for (size_t i = 2; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else if (args[i] == "--at" && i + 1 < args.size()) at = args[++i];
+            else if (args[i] == "--at" && i + 1 < args.size()) {
+                if (!integerPair(args[++i], ',', req.worldX, req.worldY)) { std::fprintf(stderr, "bad --at %s (expected complete decimal x,y)\n", args[i].c_str()); return 2; }
+                hasOrigin = true;
+            }
             else if (args[i] == "--region" && i + 1 < args.size()) req.hostRegion = args[++i];
             else if (args[i] == "--template" && i + 1 < args.size()) req.templateLevel = args[++i];
-            else if (args[i] == "--theme" && i + 1 < args.size()) theme = args[++i];
-            else if (args[i] == "--height" && i + 1 < args.size()) req.groundHeight = float(std::atof(args[++i].c_str()));
-            else if (args[i] == "--size" && i + 1 < args.size()) { if (std::sscanf(args[++i].c_str(), "%dx%d", &req.width, &req.height) != 2) { std::fprintf(stderr, "bad --size %s (WxH)\n", args[i].c_str()); return 2; } }
+            else if (args[i] == "--theme" && i + 1 < args.size()) {
+                theme = args[++i];
+                if (theme.empty()) { std::fprintf(stderr, "--theme needs a palette slot or theme name\n"); return 2; }
+                if (std::isdigit(static_cast<unsigned char>(theme.front())) || theme.front() == '+' || theme.front() == '-') {
+                    if (!completeNumber(theme, req.themeSlot) || req.themeSlot < 0 || req.themeSlot > 255) {
+                        std::fprintf(stderr, "bad --theme %s (expected palette slot 0..255 or theme name)\n", theme.c_str()); return 2;
+                    }
+                    theme.clear();
+                } else req.themeSlot = -1;
+            }
+            else if (args[i] == "--height" && i + 1 < args.size()) {
+                if (!completeNumber(args[++i], req.groundHeight)) { std::fprintf(stderr, "bad --height %s (expected a complete finite number)\n", args[i].c_str()); return 2; }
+            }
+            else if (args[i] == "--size" && i + 1 < args.size()) { if (!integerPair(args[++i], 'x', req.width, req.height)) { std::fprintf(stderr, "bad --size %s (WxH)\n", args[i].c_str()); return 2; } }
             else if (args[i] == "--own-region") { req.ownRegion.wanted = true; if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) { req.ownRegion.takeOver = args[++i]; if (req.ownRegion.takeOver == "new") { req.ownRegion.dedicated = true; req.ownRegion.takeOver.clear(); } } }
             else if (args[i] == "--merge-into" && i + 1 < args.size()) req.ownRegion.mergeInto = args[++i];
             else if (args[i] == "--display" && i + 1 < args.size()) req.ownRegion.displayName = args[++i];
@@ -80,8 +110,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
             if (req.templateLevel.empty()) { std::fprintf(stderr, "no retail map is %dx%d; sizes available:", req.width, req.height); for (const auto& s : albion::editor::retailMapSizes(install.root, serr)) std::fprintf(stderr, " %dx%d", s.width, s.height); std::fprintf(stderr, "\n"); return 2; }
         }
         if (!albion::editor::donorInfo(install.root, req.templateLevel, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
-        req.worldX = info.suggestedX; req.worldY = info.suggestedY;
-        if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }
+        if (!hasOrigin) { req.worldX = info.suggestedX; req.worldY = info.suggestedY; }
         if (req.hostRegion.empty()) req.hostRegion = info.owningRegion;
         if (req.ownRegion.wanted && !req.ownRegion.dedicated) {
             std::string rerr;
@@ -89,13 +118,10 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
             std::printf("reusable filler regions:"); for (const auto& r : rr) std::printf(" %s(slot %d, %d maps)", r.name.c_str(), r.slot, r.maps); std::printf("\n");
         }
         if (!theme.empty()) {
-            if (std::isdigit(static_cast<unsigned char>(theme[0]))) req.themeSlot = std::atoi(theme.c_str());
-            else {
-                LevelWorkspace temp;
-                const auto tl = forge::lev::File::open(resolveLevel(req.templateLevel, install, temp));
-                for (size_t i = 0; i < tl.groundThemes().size(); ++i) if (tl.groundThemes()[i].name == theme) req.themeSlot = int(i);
-                if (req.themeSlot < 0) { std::fprintf(stderr, "theme %s is not in %s's palette\n", theme.c_str(), req.templateLevel.c_str()); return 2; }
-            }
+            LevelWorkspace temp;
+            const auto tl = forge::lev::File::open(resolveLevel(req.templateLevel, install, temp));
+            for (size_t i = 0; i < tl.groundThemes().size(); ++i) if (tl.groundThemes()[i].name == theme) req.themeSlot = int(i);
+            if (req.themeSlot < 0) { std::fprintf(stderr, "--theme %s is not in %s's palette\n", theme.c_str(), req.templateLevel.c_str()); return 2; }
         }
         albion::terrainexport::Context ctx;
         if (!ctx.loadDefs(install.root, err) || !ctx.themeLibrary()) { std::fprintf(stderr, "cannot load the ENGINE_THEME library: %s\n", err.c_str()); return 1; }
@@ -110,10 +136,13 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         if (args.size() < 3) { std::fprintf(stderr, "usage: forge new-level <donor> <name> [--at x,y] [--region <hostRegion>] [--dedicated] [--no-rebake] [--install <root>]\n"); return 2; }
         albion::editor::NewLevelRequest req;
         req.donor = args[1]; req.name = args[2];
-        std::string installArg, at; bool dedicated = false;
+        std::string installArg; bool dedicated = false, hasOrigin = false;
         for (size_t i = 3; i < args.size(); ++i) {
             if (args[i] == "--install" && i + 1 < args.size()) installArg = args[++i];
-            else if (args[i] == "--at" && i + 1 < args.size()) at = args[++i];
+            else if (args[i] == "--at" && i + 1 < args.size()) {
+                if (!integerPair(args[++i], ',', req.worldX, req.worldY)) { std::fprintf(stderr, "bad --at %s (expected complete decimal x,y)\n", args[i].c_str()); return 2; }
+                hasOrigin = true;
+            }
             else if (args[i] == "--region" && i + 1 < args.size()) req.hostRegion = args[++i];
             else if (args[i] == "--dedicated") dedicated = true;
             else if (args[i] == "--no-rebake") req.rebakeChunk = false;
@@ -128,8 +157,7 @@ std::optional<int> runLevels(const std::string& cmd, const Args& args) {
         if (!allowInstallWrite(install)) return 1;
         albion::editor::DonorInfo info; std::string err;
         if (!albion::editor::donorInfo(install.root, req.donor, info, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
-        req.worldX = info.suggestedX; req.worldY = info.suggestedY;
-        if (!at.empty() && std::sscanf(at.c_str(), "%d,%d", &req.worldX, &req.worldY) != 2) { std::fprintf(stderr, "bad --at %s\n", at.c_str()); return 2; }
+        if (!hasOrigin) { req.worldX = info.suggestedX; req.worldY = info.suggestedY; }
         if (req.hostRegion.empty() && !dedicated) req.hostRegion = info.owningRegion;
         std::printf("donor %s: %dx%d at (%d,%d), region %s\n", req.donor.c_str(), info.width, info.height, info.worldX, info.worldY, info.owningRegion.c_str());
         std::printf("new level %s at (%d,%d)%s%s\n", req.name.c_str(), req.worldX, req.worldY,

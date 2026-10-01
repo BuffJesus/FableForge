@@ -783,6 +783,10 @@ stages, so failures outside this group can still require Restore.
 `tools/test_newlevel.py` (in `check_all`) runs the CLI and the card against a
 scratch copy of the install.
 
+Creation CLI options require complete numeric values: `--at x,y`, `--size WxH`,
+a finite `--height`, and a numeric `--theme` slot in 0..255 (or a theme name).
+Malformed values are refused before file writes.
+
 The legacy `forge-tools world install-level` command now uses this same core
 installer, including loose-level routing, existing BWD mirrors and placement
 checks. It keeps its default `.bak` backup policy (`--no-backup` disables it);

@@ -1241,6 +1241,29 @@ GUI world move and new-level export, source preservation, and reverted-override
 cleanup. Its GUI script reports PASS; the retained `pack_world_view.png` was
 visually checked for the selected (2048,8064) map and PackG destination.
 
+## 2026-10-01 continuation: strict new-level numeric options
+
+`build/newlevel-inputs-e3p6bfxh/0.json` reproduced `new-level --at
+6400,6400tail` succeeding and changing the copied install. The two creation
+commands now parse complete decimal origin pairs before install lookup. Blank
+creation also parses complete size pairs, finite heights and bounded numeric
+palette slots. Trailing text, overflow, whitespace, incomplete pairs and empty
+explicit values are refused; leading plus signs and leading decimal zeroes
+remain valid. Named themes retain the existing palette lookup.
+
+The editor creation API separately refuses non-finite heights and theme slots
+outside -1 (automatic) or 0..255 before template work. The worlddraft suite
+checks those API refusals with an empty owned scratch root and no theme library,
+requiring no files or success notes. Normal and ASan focused suites pass.
+`tools/test_newlevel_inputs.py` checks 43 malformed options against file hashes
+and inventory, then creates a valid signed/scientific-height blank level and
+requires exact Restore. No terrain serialization or bake algorithm changed.
+
+Normal `build/newlevel-inputs-swqn1qvb` and ASan
+`build/newlevel-inputs-6mblu59s` pass all 43 refusals, valid creation at
+(+6400,06400) with size +64x064 and height +1.25e1, and exact Restore. Normal
+editor/CLI/tools builds and all 35 regression suites pass (27.98s).
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

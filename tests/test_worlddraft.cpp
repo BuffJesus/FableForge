@@ -1,4 +1,7 @@
 #include "worlddraft.hpp"
+#include "worldedit.hpp"
+#include "forge/terraintex.hpp"
+#include "forge/temporarydirectory.hpp"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -7,6 +10,25 @@ static void check(bool ok, const char* message) { if (!ok) throw std::runtime_er
 static bool empty(const WorldDraft& draft) { return draft.moves.empty() && draft.owners.empty() && draft.sees.empty(); }
 int main() {
     try {
+        // The editor API must reject invalid creation values before loading a
+        // template or creating any workspace, even without CLI validation.
+        forge::TemporaryDirectory scratch(std::filesystem::temp_directory_path(), "ForgeBlankPreflight-");
+        forge::terraintex::ThemeLibrary themes;
+        for (const float height : {std::numeric_limits<float>::quiet_NaN(),
+                                   std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+            BlankLevelRequest request; request.name="InvalidHeight"; request.groundHeight=height;
+            NewLevelResult result; std::string error;
+            check(!createBlankLevel(scratch.path(), request, themes, result, error) &&
+                  error.find("height must be finite") != std::string::npos, "non-finite blank height reached template work");
+            check(result.notes.empty() && std::filesystem::is_empty(scratch.path()), "invalid blank height created files or success notes");
+        }
+        for (const int slot : {-2, 256, std::numeric_limits<int>::max()}) {
+            BlankLevelRequest request; request.name="InvalidTheme"; request.themeSlot=slot;
+            NewLevelResult result; std::string error;
+            check(!createBlankLevel(scratch.path(), request, themes, result, error) &&
+                  error.find("theme slot") != std::string::npos, "invalid theme slot reached template work");
+            check(result.notes.empty() && std::filesystem::is_empty(scratch.path()), "invalid theme slot created files or success notes");
+        }
         WorldLayout before;
         WorldMapBox map; map.name="Map"; map.x=32; map.y=64; map.region="Old";
         before.maps.push_back(map);

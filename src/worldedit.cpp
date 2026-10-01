@@ -575,6 +575,8 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
                       const forge::terraintex::ThemeLibrary& library, NewLevelResult& out, std::string& error) {
     try {
         const fs::path levels = gameRoot / "data" / "Levels";
+        if (!std::isfinite(req.groundHeight)) { error = "blank level height must be finite"; return false; }
+        if (req.themeSlot < -1 || req.themeSlot > 255) { error = "blank level theme slot must be -1 (automatic) or 0..255"; return false; }
         if (req.width < 16 || req.height < 16 || req.width % 16 || req.height % 16) { error = "level sides must be multiples of 16"; return false; }
         forge::worldinstall::validatePlacement(req.worldX, req.worldY, req.width, req.height);
         std::string templateLevel = req.templateLevel;
