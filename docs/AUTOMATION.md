@@ -32,6 +32,13 @@ single-child copy and exact undo. It uses `toggle_snapshotted_owned`,
 It also verifies the `+N owned` hint as the selection changes, through
 `selected_owned_count` and `text_owned_count`.
 
+`tools/test_mods.py --keep` runs the local mod corpus and an adapted
+`tests/ui/mods.txt` in a unique `build/mods-corpus-*` workspace. It records every
+CLI command and verifies the complete scratch-file inventory after undeploy.
+`tools/test_mods_masters.py --keep` uses `build/mods-masters-*` for dependency,
+reorder and enable controls. Both capture hidden GUI output and screenshots;
+shared `build/ui` screenshots and checked-in scripts are not overwritten.
+
 The GUI can drive itself from a plain-text script. It is how the UI is tested:
 real widgets get real synthetic clicks, state is asserted through the same
 accessors the UI uses, and the backbuffer is saved as PNG for pixel checks.

@@ -3,12 +3,13 @@
 A (forge_pack.json "requires", set through the GUI) -- fine while A loads first, flagged
 once B is moved above it, and `mods build` reports it too; both packs ship the same
 file, so Check conflicts gives the later one "wins" and the earlier one "loses".
-Screenshots under build/ui/. Needs the Fable install for the GUI's context (skips
+Screenshots and logs under an owned build/mods-masters-* workspace. Needs the Fable install for the GUI's context (skips
 cleanly without one); nothing is written outside build/.
 
   python tools/test_mods_masters.py [--root <fable-root>] [--keep]
 """
-import argparse, json, os, shutil, subprocess, sys
+import argparse, json, os, shutil, subprocess, sys, tempfile
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_INSTALL = r"C:\Programs\Steam\steamapps\common\Fable The Lost Chapters"
@@ -26,10 +27,10 @@ def main() -> int:
         return 0
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     tools = os.path.join(ROOT, "build", "forge-tools.exe")
-    work = os.path.join(ROOT, "build", "mods_masters")
+    work = os.path.realpath(tempfile.mkdtemp(prefix="mods-masters-", dir=os.path.join(ROOT, "build")))
     if os.path.dirname(os.path.realpath(work)) != os.path.realpath(os.path.join(ROOT, "build")):
         raise RuntimeError("unexpected mod test scratch root")
-    shutil.rmtree(work, ignore_errors=True)
+    print("evidence retained at", work, flush=True)
     scratch = os.path.join(work, "install")
     os.makedirs(os.path.join(scratch, "data", "CompiledDefs"))
     for f in ("game.bin", "names.bin"):
@@ -42,7 +43,6 @@ def main() -> int:
         open(os.path.join(p, "data", "Misc", "shared.txt"), "w").write("from pack " + tag + "\n")
         packs[tag] = p
     ok = True
-    os.makedirs(os.path.join(ROOT, "build", "ui"), exist_ok=True)
     script = os.path.join(work, "gui.txt")
     def reveal(widget):
         return [f"reveal {widget}", "frames 3", f"reveal {widget}", "frames 3"]
@@ -55,11 +55,11 @@ def main() -> int:
         "frames 2", "assert_mod_problems -",
         "mods_conflicts", "wait_mods", "frames 3"]
     commands += reveal("mod_row_0") + ["clear_toasts", "mouse_move viewport", "frames 3",
-        "screenshot build/ui/mods_badges.png"]
+        f"screenshot {Path(work).as_posix()}/mods_badges.png"]
     commands += reveal("mod_up_1") + [
         "click mod_up_1", "frames 3", "assert_mod_problems needs PackA loaded before it"]
     commands += reveal("mod_row_0") + ["clear_toasts", "mouse_move viewport", "frames 3",
-        "screenshot build/ui/mods_masters.png"]
+        f"screenshot {Path(work).as_posix()}/mods_masters.png"]
     commands += reveal("mod_enabled_1") + [
         "click mod_enabled_1", "frames 2", "assert_mod_problems which is disabled",
         "click mod_enabled_1", "frames 2", "click mod_up_1", "frames 2", "assert_mod_problems -"]
@@ -69,7 +69,9 @@ def main() -> int:
         "assert_mod_problems needs PackA loaded before it"]
     commands += reveal("mod_up_1") + ["click mod_up_1", "frames 2", "assert_mod_problems -", "dump_log", "quit"]
     open(script, "w").write("\n".join(commands) + "\n")
-    r = subprocess.run([gui, "--auto", script, "--install", a.root, "--size", a.size], capture_output=True, text=True, timeout=120)
+    r = subprocess.run([gui, "--auto", script, "--install", a.root, "--size", a.size], capture_output=True, text=True, timeout=120,
+        cwd=ROOT, env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1'))
+    (Path(work) / 'gui_output.log').write_text(r.stdout + r.stderr, encoding='utf-8')
     log = open(script + ".log", encoding="utf-8", errors="replace").read() if os.path.exists(script + ".log") else ""
     if r.returncode != 0 or "RESULT PASS" not in log: print("GUI:"); print(log[-2000:]); ok = False
     pj = json.load(open(os.path.join(packs["B"], "forge_pack.json")))
@@ -83,7 +85,12 @@ def main() -> int:
     try: rep = json.loads(rr.stdout[rr.stdout.index("{"):])
     except Exception: rep = {}; print("no JSON report:", rr.stdout[-600:], rr.stderr[-600:])
     if not any("loaded before" in m.get("problem", "") for m in rep.get("masters", [])): print("mods build masters:", rep.get("masters")); ok = False
-    if not a.keep: shutil.rmtree(work, ignore_errors=True)
+    (Path(work) / 'build_output.log').write_text(rr.stdout + rr.stderr, encoding='utf-8')
+    if not a.keep and ok:
+        target = Path(work).resolve()
+        if target.parent != (Path(ROOT) / 'build').resolve() or not target.name.startswith('mods-masters-'):
+            raise RuntimeError('unexpected cleanup target')
+        shutil.rmtree(target)
     print("mods masters test", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

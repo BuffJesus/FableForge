@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: complete mod corpus in owned workspaces
+
+The broader corpus and dependency UI checks now use unique owned workspaces,
+validated cleanup paths, adapted GUI scripts, hidden windows and retained logs.
+The corpus harness propagates its discovered EgoCore compiler/text-tree settings
+to later conflict/build calls; its first owned run at
+`build/mods-corpus-2luay9wl` exposed that old test-environment omission. Undeploy
+now checks the whole scratch file inventory, not only game.bin.
+
+`build/mods-corpus-ulepfym_` passes all 46 CLI commands and the full GUI script:
+Unofficial Fable Patch, Special Melee, F2 Melee definitions/levels, Controller
+Support and WaterWader, resource replacement/addition, TNG winner/vanilla picks,
+FSE quest union/id clashes, partial TNG deletion, repeat deploy and byte-exact
+undeploy. The EgoCore compiler and text sources were present and exercised.
+The GUI verifies provenance for 212 ArenaHallOfHeroes things, conflict choices,
+reordering, enabling and removal. Its minimal graphics fixture limits visual
+coverage: workflow state passes, but texture/model rendering is not asserted.
+
+Dependency context-menu, enable, reorder and drag controls pass at 1280x720/1.0
+(`build/mods-masters-i969gloy`) and 800x600/1.5
+(`build/mods-masters-lalb0ime`). Both warning screenshots were visually checked;
+the warning and reorder controls fit the card. Production code is unchanged by
+this harness pass, so the preceding normal/ASan core gates are reused.
+
 ## 2026-10-01 continuation: preflight enabled mod sources
 
 `build/mod-picks-inputs-lsfiuld_` reproduced a missing source error occurring

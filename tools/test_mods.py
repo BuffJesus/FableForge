@@ -3,10 +3,12 @@
 disable / build over three corpus packs of three shapes (a bsdiff .patch that needs the pristine
 game.bin, a Fable Explorer v459 .fmp, a ChocolateBox v510 .fmp + its loose-TNG tree). Skips when
 the corpus (work/nexus_mods/_peek) or the install is missing. Nothing touches the install.
+Each run owns build/mods-corpus-*; command logs remain there, and --keep retains fixtures.
 
   python tools/test_mods.py [--root <fable install>] [--keep]
 """
-import argparse, json, os, shutil, subprocess, sys
+import argparse, json, os, shutil, subprocess, sys, tempfile
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PEEK = os.path.join(ROOT, "work", "nexus_mods", "_peek")
@@ -39,10 +41,20 @@ def main() -> int:
     root = find_root(a.root)
     if not root or not all(os.path.exists(p) for p in (UFP, SPECIAL, F2FMP)):
         print("mods test skipped (no install or no corpus under work/nexus_mods/_peek)"); return 0
+    root = os.path.abspath(root)
     os.chdir(ROOT)
     tool = os.path.join(ROOT, "build", "forge-tools.exe")
-    scratch = os.path.join(ROOT, "build", "ui_mods_root")
-    shutil.rmtree(scratch, ignore_errors=True)
+    work = os.path.realpath(tempfile.mkdtemp(prefix="mods-corpus-", dir=os.path.join(ROOT, "build")))
+    if os.path.dirname(work) != os.path.realpath(os.path.join(ROOT, "build")):
+        raise RuntimeError("unexpected corpus workspace")
+    print("evidence retained at", work, flush=True)
+    def remove_owned(path):
+        target = Path(path).resolve()
+        if target == Path(work) or not target.is_relative_to(Path(work)):
+            raise RuntimeError("refusing cleanup outside owned workspace: " + str(target))
+        if target.exists(): shutil.rmtree(target)
+    scratch = os.path.join(work, "ui_mods_root")
+    remove_owned(scratch)
     defs = os.path.join(scratch, "data", "CompiledDefs"); levels = os.path.join(scratch, "data", "Levels", "FinalAlbion")
     os.makedirs(defs); os.makedirs(levels)
     for f in ["game.bin", "names.bin", "script.bin", "frontend.bin", "game.bin.retail-bak", "names.bin.retail-bak"]:
@@ -60,8 +72,19 @@ def main() -> int:
         shutil.copyfile(text_src, os.path.join(scratch, "data", "lang", "English", "text.big"))
     ok = True
 
+    command_index = 0
+    command_env = dict(os.environ)
+    def execute(*args, env=None):
+        nonlocal command_index
+        command_index += 1
+        result = subprocess.run([tool, *args], capture_output=True, text=True, env=env if env is not None else command_env, timeout=300)
+        prefix = Path(work) / ("command_%03d" % command_index)
+        prefix.with_suffix('.json').write_text(json.dumps({'args': list(args), 'returncode': result.returncode}, indent=2), encoding='utf-8')
+        prefix.with_suffix('.stdout').write_text(result.stdout, encoding='utf-8')
+        prefix.with_suffix('.stderr').write_text(result.stderr, encoding='utf-8')
+        return result
     def run(*args, expect=0):
-        r = subprocess.run([tool, *args], capture_output=True, text=True)
+        r = execute(*args)
         if (r.returncode == 0) != (expect == 0):
             nonlocal ok; ok = False
             print("unexpected rc", r.returncode, "for", " ".join(args)); print(r.stdout[-600:], r.stderr[-600:])
@@ -84,8 +107,8 @@ def main() -> int:
     if order[0]["name"] != "F2 Melee (levels)" or order[1]["enabled"]:
         print("move/disable wrong:", [(m["name"], m["enabled"]) for m in order]); ok = False
     run("mods", "enable", scratch, "1")
-    out = os.path.join(ROOT, "build", "ui_mods_out")
-    shutil.rmtree(out, ignore_errors=True)
+    out = os.path.join(work, "ui_mods_out")
+    remove_owned(out)
     r = run("mods", "build", scratch, out)
     import re as _re
     m = _re.search(r"(\d+) changes applied \((\d+) new records\)", r.stdout)
@@ -125,12 +148,13 @@ def main() -> int:
         have_defc = os.path.exists(defc) and os.path.isdir(text)
         if have_defc:
             env["FORGE_DEFC"] = defc; env["FORGE_DEFS_TEXT"] = text
+            command_env.update(env)
         if os.path.exists(os.path.join(root, "Mods.ini")):
             shutil.copyfile(os.path.join(root, "Mods.ini"), os.path.join(scratch, "Mods.ini"))
         run("mods", "add", scratch, CONTROLLER, "--name", "Controller Support")
         run("mods", "add", scratch, WADER)
-        shutil.rmtree(out, ignore_errors=True)
-        r = subprocess.run([tool, "mods", "build", scratch, out], capture_output=True, text=True, env=env)
+        remove_owned(out)
+        r = execute("mods", "build", scratch, out, env=env)
         if r.returncode != 0: print("egocore build failed:", r.stdout[-800:], r.stderr[-400:]); ok = False
         ini_path = os.path.join(out, "Mods.ini")
         ini = open(ini_path, encoding="utf-8").read() if os.path.exists(ini_path) else ""
@@ -141,7 +165,7 @@ def main() -> int:
         if have_defc:
             if "egocore FableControllerSupport: 3 .def file(s), 4 block(s) replaced, 1 added -> 14 record(s) changed (43 field(s)), 1 new, 0 skipped" not in r.stdout:
                 print("egocore def layer unexpected:", [l for l in r.stdout.splitlines() if "egocore" in l]); ok = False
-            r2 = subprocess.run([tool, "defs", "decode", out, "docs/re_reference/def_schema.json", "FABLE_XBOX_CONTROL_SCHEME_BASE"], capture_output=True, text=True)
+            r2 = execute("defs", "decode", out, "docs/re_reference/def_schema.json", "FABLE_XBOX_CONTROL_SCHEME_BASE")
             if "count=71" not in r2.stdout: print("the controller mod's extra binding is missing from the merged scheme"); ok = False
         else:
             print("(defc / text defs not found: the EgoCore def layer part is skipped)")
@@ -150,21 +174,25 @@ def main() -> int:
     # deploy = revert + rebuild + stage; undeploy = revert: the root comes back byte-identical
     def digest(p):
         import hashlib
-        return hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.exists(p) else None
+        if not os.path.exists(p): return None
+        with open(p, "rb") as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
+    def inventory():
+        return {p.relative_to(scratch).as_posix(): digest(p) for p in Path(scratch).rglob('*') if p.is_file()}
+    before_files = inventory()
     before = digest(os.path.join(defs, "game.bin"))
-    r = subprocess.run([tool, "mods", "deploy", scratch], capture_output=True, text=True, env=env if os.path.isdir(CONTROLLER) else None)
+    r = execute("mods", "deploy", scratch, env=env if os.path.isdir(CONTROLLER) else None)
     if r.returncode != 0 or "staged" not in r.stdout: print("deploy failed:", r.stdout[-600:], r.stderr[-400:]); ok = False
     if digest(os.path.join(defs, "game.bin")) == before: print("deploy did not change game.bin"); ok = False
-    r = subprocess.run([tool, "mods", "deploy", scratch], capture_output=True, text=True, env=env if os.path.isdir(CONTROLLER) else None)
+    r = execute("mods", "deploy", scratch, env=env if os.path.isdir(CONTROLLER) else None)
     if "reverted the previous stage" not in r.stdout: print("second deploy did not revert first:", r.stdout[-400:]); ok = False
     r = run("mods", "undeploy", scratch)
-    if digest(os.path.join(defs, "game.bin")) != before: print("undeploy did not restore game.bin"); ok = False
+    if inventory() != before_files: print("undeploy did not restore the complete file inventory"); ok = False
     if os.path.isdir(os.path.join(scratch, "Mods")) and any(os.scandir(os.path.join(scratch, "Mods"))): print("undeploy left Mods/ content"); ok = False
     run("mods", "remove", scratch, "F2 Melee (defs)")
     if "F2 Melee (defs)" in [m["name"] for m in json.loads(run("mods", "list", scratch, "--json").stdout)["mods"]]: print("remove failed"); ok = False
     # one JSON report over the whole order + picks: a second tree that moves one thing F2 also moves
     # is the only real conflict (agreeing edits are not one); a pick names the loser, a vanilla pick keeps retail
-    treeb = os.path.join(ROOT, "build", "ui_mods_root_treeB"); shutil.rmtree(treeb, ignore_errors=True)
+    treeb = os.path.join(work, "ui_mods_root_treeB"); remove_owned(treeb)
     f2tng = os.path.join(F2, "Data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng")
     if os.path.exists(f2tng):
         import re
@@ -201,11 +229,11 @@ def main() -> int:
     # EgoCore .resource bank overrides (ModBankPatcher's layout): a synthetic asset mod replaces one
     # frontend.big entry with another's payload and appends a new entry with a .header
     fb = os.path.join(root, "data", "graphics", "pc", "frontend.big")
-    ego = os.path.join(ROOT, "build", "ui_mods_root_ego"); shutil.rmtree(ego, ignore_errors=True)
+    ego = os.path.join(work, "ui_mods_root_ego"); remove_owned(ego)
     if os.path.exists(fb):
         os.makedirs(os.path.join(scratch, "data", "graphics", "pc"), exist_ok=True)
         shutil.copyfile(fb, os.path.join(scratch, "data", "graphics", "pc", "frontend.big"))
-        x = os.path.join(ROOT, "build", "ui_mods_bigx"); shutil.rmtree(x, ignore_errors=True)
+        x = os.path.join(work, "ui_mods_bigx"); remove_owned(x)
         run("big", "extract", fb, x, "GBANK_FRONT_END_PC")
         bank = os.path.join(x, "GBANK_FRONT_END_PC")
         modbank = os.path.join(ego, "Mods", "ResTest", "Data", "graphics", "pc", "frontend.big", "GBANK_FRONT_END_PC")
@@ -222,7 +250,7 @@ def main() -> int:
         if not egorows or egorows[0].get("resource_replaced") != 1 or egorows[0].get("resource_added") != 1:
             print("resource overrides not reported:", egorows); ok = False
         outbank = os.path.join(out, "data", "graphics", "pc", "frontend.big")
-        y = os.path.join(ROOT, "build", "ui_mods_bigy"); shutil.rmtree(y, ignore_errors=True)
+        y = os.path.join(work, "ui_mods_bigy"); remove_owned(y)
         run("big", "extract", outbank, y, "GBANK_FRONT_END_PC")
         got1 = os.path.join(y, "GBANK_FRONT_END_PC", "FRONTEND_KEYBOARD_BG_01_SPRITE.bin")
         gotn = os.path.join(y, "GBANK_FRONT_END_PC", "FORGE_RES_TEST.bin")
@@ -233,14 +261,14 @@ def main() -> int:
         run("mods", "remove", scratch, "ResTest")
         os.remove(os.path.join(scratch, "data", "graphics", "pc", "frontend.big"))
         if not a.keep:
-            for d in (x, y, ego): shutil.rmtree(d, ignore_errors=True)
+            for d in (x, y, ego): remove_owned(d)
     # FSE quest-registry union: two packs that each add a quest to FSE/quests.lua (whole-file layers
     # would have kept only the last), one key both define differently, and an id two quests share
     base_lua = os.path.join(scratch, "FSE", "quests.lua")
     os.makedirs(os.path.dirname(base_lua), exist_ok=True)
     open(base_lua, "w", newline="\n").write('Quests = {\n    Retail = { name="Retail", file="Retail/Retail", id=9001, entity_scripts={} },\n}\n')
     def fse_pack(name, entries):
-        d = os.path.join(ROOT, "build", "ui_mods_fse_" + name); shutil.rmtree(d, ignore_errors=True)
+        d = os.path.join(work, "ui_mods_fse_" + name); remove_owned(d)
         os.makedirs(os.path.join(d, "FSE"))
         body = "".join("    %s = { name=\"%s\", file=\"%s/%s\", id=%d, entity_scripts={} },\n" % (k, k, k, k, i) for k, i in entries)
         open(os.path.join(d, "FSE", "quests.lua"), "w", newline="\n").write("Quests = {\n    Retail = { name=\"Retail\", file=\"Retail/Retail\", id=9001, entity_scripts={} },\n" + body + "}\n")
@@ -267,9 +295,9 @@ def main() -> int:
     if "id=60001" not in open(os.path.join(out, "FSE", "quests.lua")).read(): print("fse pick not honoured"); ok = False
     os.remove(os.path.join(scratch, "forge_mods_picks.txt"))
     for n in ("FseA", "FseB", "FseC"): run("mods", "remove", scratch, n)
-    shutil.rmtree(os.path.join(scratch, "FSE"), ignore_errors=True)
+    remove_owned(os.path.join(scratch, "FSE"))
     if not a.keep:
-        for d in (pa, pb, pc): shutil.rmtree(d, ignore_errors=True)
+        for d in (pa, pb, pc): remove_owned(d)
     # an EgoCore-style partial TNG mod (TngMerger.h): a [Settings] header with DeleteUIDs, then ONE
     # thing to replace; alone in its level it must merge into the level, not replace it
     if os.path.exists(f2tng):
@@ -281,7 +309,7 @@ def main() -> int:
         uid1 = _re2.search(r"UID (\d+);", first).group(1); uid2 = _re2.search(r"UID (\d+);", second).group(1)
         moved = _re2.sub(r"PositionX (-?[0-9.]+);", lambda m: "PositionX %s;" % round(float(m.group(1)) + 7.25, 5), first, count=1)
         sec = _re2.search(r"XXXSectionStart (\S+);", base_txt).group(1)
-        part = os.path.join(ROOT, "build", "ui_mods_partial"); shutil.rmtree(part, ignore_errors=True)
+        part = os.path.join(work, "ui_mods_partial"); remove_owned(part)
         os.makedirs(os.path.join(part, "Data", "Levels", "FinalAlbion"))
         open(os.path.join(part, "Data", "Levels", "FinalAlbion", "ArenaHallOfHeroes.tng"), "w", encoding="latin-1", newline="\n").write(
             "[Settings]\nDeleteUIDs: %s\n\nVersion 2;\nXXXSectionStart %s;\n%s\nXXXSectionEnd;\n" % (uid2, sec, moved))
@@ -298,18 +326,26 @@ def main() -> int:
         if ("UID %s;" % uid2) in merged_txt: print("DeleteUIDs not applied"); ok = False
         if _re2.search(r"PositionX (-?[0-9.]+);", moved).group(1) not in merged_txt: print("moved thing not in the merged level"); ok = False
         run("mods", "remove", scratch, "PartialTng")
-        if not a.keep: shutil.rmtree(part, ignore_errors=True)
+        if not a.keep: remove_owned(part)
     # the Mods tab over the same scratch root: add / reorder / enable, deploy + undeploy through forge-tools.exe
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):
         if os.path.exists(os.path.join(scratch, 'forge_mods.json')): os.remove(os.path.join(scratch, 'forge_mods.json'))   # the tab starts from an empty order
-        r = subprocess.run([gui, "--auto", "tests/ui/mods.txt"], capture_output=True, text=True)
-        log = os.path.join(ROOT, "tests", "ui", "mods.txt.log")
+        script = Path(work) / "mods.txt"
+        commands = (Path(ROOT) / "tests/ui/mods.txt").read_text(encoding='utf-8')
+        commands = commands.replace("build/ui_mods_root", (Path(work) / "ui_mods_root").as_posix())
+        commands = commands.replace("build/ui/", (Path(work) / "ui").as_posix() + "/")
+        script.write_text(commands, encoding='utf-8')
+        r = subprocess.run([gui, "--auto", str(script), "--install", root], capture_output=True, text=True,
+            timeout=300, env=dict(command_env, FABLEFORGE_AUTOMATION_HIDDEN='1'))
+        (Path(work) / "gui_output.log").write_text(r.stdout + r.stderr, encoding='utf-8')
+        log = str(script) + ".log"
         tail = open(log, encoding="utf-8", errors="replace").read().strip().splitlines() if os.path.exists(log) else []
         if r.returncode != 0 or not tail or "RESULT PASS" not in tail[-1]:
             print("ui mods failed:", " | ".join(tail[-8:])); ok = False
-    if not a.keep:
-        shutil.rmtree(scratch, ignore_errors=True); shutil.rmtree(out, ignore_errors=True); shutil.rmtree(treeb, ignore_errors=True)
+    (Path(work) / 'result.json').write_text(json.dumps({'passed': ok, 'commands': command_index}, indent=2), encoding='utf-8')
+    if not a.keep and ok:
+        remove_owned(scratch); remove_owned(out); remove_owned(treeb)
     print("mods test", "OK" if ok else "FAILED")
     return 0 if ok else 1
 
