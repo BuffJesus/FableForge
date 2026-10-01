@@ -1524,6 +1524,25 @@ normals, 728 water-only positions, 123550 appended faces and 17 loaded geometrie
 Both writer builds and all 35 normal suites pass (28.72 seconds). Tests read the
 retail source and write only owned build outputs; no live-game check was run.
 
+## 2026-10-01 continuation: explicit origins move foliage with the map
+
+`build/export-origins-y7i1xnng` reproduced --origin 16,-32 leaving OrchardFarm
+foliage at its baked world coordinates while terrain and placed things used the
+requested offset. The first Y-up foliage translation changed from
+(73.2373,46.9174,-6.0686) to (3273.2373,46.9174,-3174.0686), rather than the
+requested (16,0,32) delta. Explicit-origin exports now load map-local foliage
+and add the same Fable-space offset used for terrain and things. The loader
+comment distinguishes baked world coordinates from arbitrary export offsets.
+Default local and --world behavior retain their existing branches.
+
+`tools/test_export_origins.py` compares every terrain vertex and every foliage/
+thing node translation in both Y-up and Z-up GLBs, preserving rotations/scales.
+It also checks --origin retains precedence when --world is supplied. Normal
+`build/export-origins-gv80waea` and ASan `build/export-origins-7q3g796s` pass:
+17148 foliage nodes and 227 placed-thing nodes per axis. These are read-only
+retail exports into owned build directories. This CLI-only behavioral change
+reuses the preceding full core gate; both CLI builds pass.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -402,9 +402,13 @@ int runExport(const std::string& cmd, const Args& args) {
             fo.gameRoot = install.root;
             fo.textures = textures;
             fo.up = o.up;
-            fo.mapLocal = originArg.empty() && !world;
+            fo.mapLocal = !world || !originArg.empty();
             fo.log = o.log;
             fol = albion::foliageexport::load(lev.stem().string(), fo, ctx);
+            if (!originArg.empty()) {
+                for (auto& instance : fol.instances) { instance.x += o.originX; instance.y += o.originY; }
+                for (auto& light : fol.lights) { light.x += o.originX; light.y += o.originY; }
+            }
         }
         albion::foliageexport::Scene thg;
         albion::thingsexport::Stats thingStats;

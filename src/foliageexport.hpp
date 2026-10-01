@@ -42,7 +42,8 @@ struct Options {
     terrainexport::UpAxis up = terrainexport::UpAxis::Y;
     // Instances are stored in WORLD coordinates. By default they are shifted by
     // the map's own STB origin so they land on a map-local terrain export; pass
-    // false to keep world coordinates (when the terrain was exported with --origin).
+    // false to keep the baked world coordinates. Explicit export offsets are
+    // applied by the caller after loading map-local instances.
     bool mapLocal = true;
     std::function<void(const std::string&)> log;
     std::filesystem::path graphicsBig; // optional asset-bank override; STB still comes from gameRoot

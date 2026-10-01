@@ -123,6 +123,8 @@ Numeric export options require complete values: decimal integers for `--texels`
 and `--max-texture`, finite numbers for `--tile` and `--gain`, and two finite
 coordinates for `--origin`. `--up` accepts `y` or `z`. Malformed or missing
 values are refused before exporting; existing numeric clamps still apply.
+An explicit `--origin` moves terrain, foliage and placed objects together and
+takes precedence over `--world` when both are supplied.
 
 Each GLB/OBJ export prepares its model, material files and theme/image sidecars
 before replacing outputs. A failed replacement restores the earlier files in
