@@ -99,6 +99,15 @@ def main():
     run('malformed_order', 'deploy', ['--picks', picks], 1)
     assert snapshot() == malformed
     order.write_bytes(saved)
+    for verb, options in [('deploy', ['--picks', picks]), ('list', ['--json']),
+                          ('add', [packs['C'], '--name', 'PackC'])]:
+        handle = kernel.CreateFileW(str(order), 0x80000000, 6, None, 3, 0x80, None)
+        assert handle != wintypes.HANDLE(-1).value
+        try:
+            run('unreadable_order_' + verb, verb, options, 1)
+        finally:
+            kernel.CloseHandle(handle)
+        assert snapshot() == deployed
     run('retry', 'deploy', ['--picks', picks])
     assert shared.read_text() == 'from pack A'
     run('undeploy', 'undeploy', [])

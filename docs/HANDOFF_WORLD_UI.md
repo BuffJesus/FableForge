@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: unreadable orders are errors, not empty orders
+
+`build/mod-picks-inputs-3ndk7ij5` reproduced deploy treating a read-locked
+forge_mods.json as an empty order and reverting all staged files. Core load now
+returns an empty order only when the file is absent; non-files, failed opens and
+read failures throw. Existing callers surface the error before saving or deploy
+stage reversal.
+
+The mod-pack unit suite covers missing, directory and read-locked orders with
+unchanged bytes, normally and under ASan. The extended decision-input scratch
+check refuses locked-order deploy/list/add without changing the deployed root:
+normal `build/mod-picks-inputs-fi7sdg_9`, ASan `build/mod-picks-inputs-xxt7n_om`.
+Normal all-target rebuild and all 35 suites pass (20.41 seconds). Sanitizer CLI
+and focused mod-pack builds/checks pass. The absent-file first-use behavior is
+unchanged; no live game files were touched.
+
 ## 2026-10-01 continuation: preserve externally edited conflict choices
 
 `build/mod-pick-refresh-3k185jt1` reproduced the GUI overwriting a choice added

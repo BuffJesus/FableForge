@@ -50,6 +50,13 @@ int main() {
         require(fs::create_directory(root), "fixture directory already exists");
         const auto orderRoot = root / "order";
         fs::create_directory(orderRoot);
+        require(forge::modorder::load(orderRoot).mods.empty(), "absent mod order was not empty");
+        fs::create_directory(forge::modorder::orderPath(orderRoot));
+        bool loadRejected = false;
+        try { (void)forge::modorder::load(orderRoot); }
+        catch (const std::exception&) { loadRejected = true; }
+        require(loadRejected, "directory mod order was treated as empty");
+        fs::remove(forge::modorder::orderPath(orderRoot));
         forge::modorder::Order order;
         forge::modorder::Entry entry;
         entry.name = "Original mod";
@@ -59,6 +66,16 @@ int main() {
         forge::modorder::save(orderRoot, order);
         write(orderRoot / "forge_mods.json.tmp", "unrelated order output");
         const auto originalOrder = snapshot(orderRoot);
+#ifdef _WIN32
+        const HANDLE readLock = CreateFileW(forge::modorder::orderPath(orderRoot).c_str(), GENERIC_READ,
+            FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(readLock != INVALID_HANDLE_VALUE, "cannot lock mod order for reading");
+        loadRejected = false;
+        try { (void)forge::modorder::load(orderRoot); }
+        catch (const std::exception&) { loadRejected = true; }
+        CloseHandle(readLock);
+        require(loadRejected && snapshot(orderRoot) == originalOrder, "unreadable mod order was treated as empty");
+#endif
         auto invalidOrder = order;
         invalidOrder.mods[0].note = std::string(1, char(0xff));
         bool orderRejected = false;

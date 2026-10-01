@@ -137,9 +137,13 @@ fs::path orderPath(const fs::path& gameRoot) { return gameRoot / kFileName; }
 
 Order load(const fs::path& gameRoot) {
     Order order;
-    std::ifstream in(orderPath(gameRoot));
-    if (!in) return order;
+    const auto path = orderPath(gameRoot);
+    if (!fs::exists(path)) return order;
+    if (!fs::is_regular_file(path)) throw std::runtime_error("mod order is not a regular file: " + path.string());
+    std::ifstream in(path);
+    if (!in) throw std::runtime_error("cannot read mod order: " + path.string());
     json j; in >> j;
+    if (in.bad()) throw std::runtime_error("cannot finish reading mod order: " + path.string());
     order.version = j.value("version", 1);
     for (const auto& m : j.value("mods", json::array())) {
         Entry e;
