@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "modpack.hpp"
+#include "temporarydirectory.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
 #include "forge/worldmerge.hpp"
@@ -8272,8 +8273,9 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
         auto result = forge::bspatch::apply(oldFile, patch);
         if (isBin) {
             // a defs bin must open; garbage means the patch was made against other bytes
-            const fs::path probeDir = fs::temp_directory_path() / "forge_patch_probe";
-            fs::remove_all(probeDir); fs::create_directories(probeDir / "data" / "CompiledDefs");
+            const albion::detail::TemporaryDirectory probeWorkspace("patch-probe-");
+            const fs::path& probeDir = probeWorkspace.path();
+            fs::create_directories(probeDir / "data" / "CompiledDefs");
             writeAllBytes((probeDir / "data" / "CompiledDefs" / leaf).string(), result);
             const fs::path names = target.parent_path() / "names.bin";
             const fs::path namesBak = fs::path(names.string() + ".retail-bak");
@@ -8354,9 +8356,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath) {
     namespace fs = std::filesystem;
-    const fs::path tmp = fs::temp_directory_path() / "forge_mods_merge";
-    fs::remove_all(tmp);
-    fs::create_directories(tmp);
+    const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
+    const fs::path& tmp = mergeWorkspace.path();
 
     // the label a source carries through every report row: the order's name, else the file / folder name
     auto srcLabel = [&](size_t i) {
@@ -12413,11 +12414,10 @@ int main(int argc, char** argv) {
                     if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
                     std::string picksPath = modsPicksDefault(root);
                     for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
-                    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_deploy";
-                    std::filesystem::remove_all(scratch);
+                    const albion::detail::TemporaryDirectory workspace("mods-deploy-");
+                    const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
                     const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath);
-                    std::filesystem::remove_all(scratch);
                     return rc;
                 }
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
@@ -12426,11 +12426,10 @@ int main(int argc, char** argv) {
                     if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
                     std::string picksPath = modsPicksDefault(root);
                     for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--picks") picksPath = args[i + 1];
-                    const std::filesystem::path scratch = std::filesystem::temp_directory_path() / "forge_mods_conflicts";
-                    std::filesystem::remove_all(scratch);
+                    const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
+                    const auto& scratch = workspace.path();
                     if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
                     const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath);
-                    std::filesystem::remove_all(scratch);
                     return rc;
                 }
                 if (args[1] == "build") {

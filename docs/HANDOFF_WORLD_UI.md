@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: CLI mod workspace ownership
+
+Two concurrent `mods conflicts` calls on separate scratch installs reproduced
+one process deleting the other's fixed output folder. After isolating merge/
+conflict/deploy folders, a valid no-op binary patch reproduced the same race in
+`forge_patch_probe`. All four paths now use the existing exclusively owned
+TemporaryDirectory helper, with cleanup on both return and exception.
+
+`tools/test_mod_workspaces.py` passes concurrent conflict reports, deployments
+with distinct payloads and byte-exact undeploys on two roots. A no-op game.bin
+BSDIFF40 exercises BIN probes; malformed-patch and invalid-result-BIN cases
+exercise failure cleanup. Sentinels in all four old shared folders remain intact,
+and no owned workspace survives completion. Evidence: `build/mod-workspaces-kg3u29we`.
+The affected forge-tools build passes; core code is unchanged from the preceding
+28-suite/ASan gate. Concurrent writes to the same install/output remain outside
+this isolation guarantee. The separate defs-roundtrip diagnostic still has a
+fixed temporary folder and was not part of these mod command paths.
+
 ## 2026-10-01 continuation: failed staging and redeploy refresh
 
 A locked target reproduced stage/apply changing earlier files without publishing

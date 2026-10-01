@@ -436,3 +436,8 @@ files are removed. Stage prepares all original backups and checks the recovery m
 changing targets. If a target copy fails, use undeploy to restore that attempt
 before retrying. An unowned backup is refused rather than reused. This does not
 provide power-loss durability or coordination between competing processes.
+
+Mod merge, deploy, conflict checks and binary-patch validation use individually
+owned temporary directories. Separate commands on different installs can build
+without deleting each other's scratch files. Commands that write the same
+install or explicit build output must still run one at a time.

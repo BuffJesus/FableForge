@@ -365,6 +365,15 @@ restored map list and clears the removed preview; all source-bank hashes match.
 The successful clean/World/draft cycles still pass. These are reported-failure
 recovery checks, not power-loss durability or cross-process serialization.
 
+## Concurrent CLI workspace isolation, 2026-10-01
+
+Concurrent conflict/deploy commands on different installs no longer delete one
+another's scratch trees. Merge, output and binary-patch probe directories are
+owned separately and removed on success/failure. A real-definition-bank test
+checks distinct payloads, exact restoration, two failure paths, preserved
+unowned sentinels and no leaked owned workspace. This does not permit concurrent
+writers to the same install or output destination.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
