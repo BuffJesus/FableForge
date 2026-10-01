@@ -31,7 +31,8 @@ enum class Kind { Original, Created, Staged, Overlay };
 // is what the install already has (so a file never gets two).
 std::filesystem::path originalOf(const std::filesystem::path& file);
 bool hasOriginal(const std::filesystem::path& file);
-// Copy `file` to its original once; a no-op when an original exists or the file does not.
+// Copy `file` to its original once; a no-op when an original or creation marker
+// exists, or the file does not. Later edits must not turn a created file into an original.
 bool backupOnce(const std::filesystem::path& file, std::string& error);
 // Mark `file` as created by FableForge (restore deletes it).
 void markCreated(const std::filesystem::path& file);

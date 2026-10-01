@@ -119,7 +119,9 @@ bool hasOriginal(const fs::path& file) {
 
 bool backupOnce(const fs::path& file, std::string& error) {
     try {
-        if (fs::exists(file) && !hasOriginal(file)) fs::copy_file(file, file.string() + kOrigSuffix);
+        if (fs::exists(file) && !hasOriginal(file) &&
+            !fs::exists(file.string() + kCreatedSuffix) && !fs::exists(file.string() + kLegacyCreatedSuffix))
+            fs::copy_file(file, file.string() + kOrigSuffix);
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }

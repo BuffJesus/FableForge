@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: repeated edits retain created-file baselines
+
+Repeated terrain writes and loose TNG synchronization used to add an original
+backup to files already marked as created. The normal GUI reproduction
+(`build/created-restore-rk2oohdg`) left both files after two Restores. The shared
+backup helper now honors modern and legacy creation markers; TNG save/deploy
+uses that helper too.
+
+Full build and all 30 core suites pass (28.32 seconds). The actual repeated
+terrain/TNG GUI workflow and two exact Restores pass normally
+(`build/created-restore-2zss1uol`) and under ASan
+(`build/created-restore-tyhsj1pp`): all eight original banks match and no created
+files or backup artifacts remain. The first ASan run exceeded the ordinary
+60-second terrain wait; the test now uses the existing 180-second file-job wait.
+Already contradictory metadata from older versions is not repaired by this change.
+
 ## 2026-10-01 continuation: EgoCore compiler workspace ownership
 
 Concurrent real Controller Support builds collided in the shared compiler tree;

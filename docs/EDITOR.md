@@ -36,6 +36,10 @@ Refused while Fable.exe runs *from this install* (`backups::gameRunningIn`: the 
 `restore [--forget]`; GUI: the Setup panel lists them with *Restore the retail
 files* (confirm). Scripts: `restore_all`, state `backups_differ`.
 
+Later edits to a file marked as created retain that marker as their baseline; they
+do not create an original backup. This includes repeated terrain writes and WAD
+TNG deployment synchronizing an existing loose copy.
+
 `--forget` removes originals after restoring, including backups verified identical
 to their current files. Unreadable files are treated as differing. Failed target
 replacement or backup/creation-marker cleanup is reported as an error; release

@@ -3116,7 +3116,7 @@ bool Document::saveLoose(const fs::path& gameRoot, std::string& error) {
     try {
         fs::create_directories(path.parent_path());
         const std::string text = file_.serialize();
-        if (fs::exists(path)) { if (!albion::backups::hasOriginal(path) && !fs::exists(path.string() + ".forge-created") && !fs::exists(path.string() + ".atlas-created")) fs::copy_file(path, path.string() + albion::backups::kOrigSuffix); }
+        if (fs::exists(path)) { if (!backupOnce(path, error)) return false; }
         else albion::backups::markCreated(path);   // the backup manager deletes it on restore
         std::ofstream f(path, std::ios::binary | std::ios::trunc);
         if (!f) { error = "cannot write " + path.string(); return false; }
@@ -3202,7 +3202,7 @@ bool Document::deployWad(const fs::path& gameRoot, std::string& error) {
         // a loose copy (the user's, or ours) would otherwise go stale and shadow the WAD on read
         const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".tng");
         if (fs::exists(loose)) {
-            if (!albion::backups::hasOriginal(loose)) fs::copy_file(loose, loose.string() + albion::backups::kOrigSuffix);
+            if (!backupOnce(loose, error)) return false;
             std::ofstream f(loose, std::ios::binary | std::ios::trunc);
             f.write(text.data(), std::streamsize(text.size()));
         }
