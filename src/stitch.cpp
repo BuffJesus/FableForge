@@ -1,4 +1,5 @@
 #include "stitch.hpp"
+#include "temporarydirectory.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,14 +20,16 @@ namespace {
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(static_cast<unsigned char>(c))); return s; }
 
 // loose .lev wins; otherwise the WAD entry through a temp copy (lev::File is path based)
-fs::path levPathFor(const fs::path& gameRoot, const std::string& stem) {
+fs::path levPathFor(const fs::path& gameRoot, const std::string& stem, const fs::path& scratch) {
     const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (stem + ".lev");
     if (fs::exists(loose)) return loose;
     const auto bytes = forge::levelstore::requireFile(forge::levelstore::detect(gameRoot), stem + ".lev");
-    const fs::path tmp = fs::temp_directory_path() / "FableForge" / "stitch";
-    fs::create_directories(tmp);
-    const fs::path out = tmp / (stem + ".lev");
-    std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    const fs::path out = scratch / (stem + ".lev");
+    std::ofstream stream;
+    stream.exceptions(std::ios::failbit | std::ios::badbit);
+    stream.open(out, std::ios::binary);
+    stream.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+    stream.close();
     return out;
 }
 
@@ -57,9 +60,10 @@ bool stitchEdges(const fs::path& gameRoot, const WorldLayout& layout, const std:
     if (!sharedEdge(*a, *b, horizontal, x0, y0, len)) { error = mapA + " and " + mapB + " do not share an edge"; return false; }
     Document docA, docB;
     try {
+        detail::TemporaryDirectory scratch("stitch-lev-");
         std::string warn;
-        if (!docA.open(gameRoot, a->name, levPathFor(gameRoot, a->name), warn)) { error = mapA + ": " + warn; return false; }
-        if (!docB.open(gameRoot, b->name, levPathFor(gameRoot, b->name), warn)) { error = mapB + ": " + warn; return false; }
+        if (!docA.open(gameRoot, a->name, levPathFor(gameRoot, a->name, scratch.path()), warn)) { error = mapA + ": " + warn; return false; }
+        if (!docB.open(gameRoot, b->name, levPathFor(gameRoot, b->name, scratch.path()), warn)) { error = mapB + ": " + warn; return false; }
     } catch (const std::exception& e) { error = e.what(); return false; }
     if (!docA.hasTerrain()) { error = mapA + " has no terrain (.lev)"; return false; }
     if (!docB.hasTerrain()) { error = mapB + " has no terrain (.lev)"; return false; }

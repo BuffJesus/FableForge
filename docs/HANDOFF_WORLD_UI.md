@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned seam-stitch extraction
+
+A dry-run seam check overwrote both shared stitch LEVs in
+`build/stitch-workspace-9zy3oggh`. Stitch now keeps an owned workspace through
+both Document loads and checks extraction writes; the in-memory documents
+remain usable after cleanup. Seam algorithms and feathering are unchanged.
+
+`tools/test_stitch_workspace.py` passes stock (`build/stitch-workspace-fvp941k4`)
+and loose (`build/stitch-workspace-6lgg752f`) layouts: move TeleporterGreatwood and
+OrchardFarm adjacent, inspect the seam, stitch it, compare six shared heights,
+recheck tightness, and Restore to the exact original file inventory and hashes.
+Old-path markers survive and owned workspaces are removed. Writer builds pass.
+The same stock move/stitch/restore test passes under ASan
+(`build/stitch-workspace-3hklio9s`), including document use after scratch cleanup.
+
 ## 2026-10-01 continuation: owned terrain neighbour extraction
 
 A stock Greatwood_1 terrain save overwrote 11 unrelated LEVs under the shared

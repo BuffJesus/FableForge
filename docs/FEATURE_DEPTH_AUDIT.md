@@ -437,6 +437,14 @@ owned workspaces and preserve source banks. The three-file reference pack is
 byte-identical before/after the ownership change; loose tests retain the renamed
 WAD layout. Writer builds pass. No native bake algorithm or in-game claim changed.
 
+## Seam-stitch scratch ownership, 2026-10-01
+
+Dry-run seam checks no longer overwrite shared LEVs. Stock and loose tests move
+TeleporterGreatwood beside OrchardFarm, stitch, compare six shared heights,
+confirm a tight seam and Restore the exact original inventory/hashes. Markers
+survive and owned workspaces are cleaned. The stock test also passes under ASan.
+Writer builds pass; seam/feather algorithms are unchanged.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
