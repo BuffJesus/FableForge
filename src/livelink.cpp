@@ -2,12 +2,15 @@
 #include "livelink.hpp"
 #include "pendingbanks.hpp"
 
+#include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <locale>
 #include <sstream>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 
@@ -264,46 +267,84 @@ uint64_t sendReload(const fs::path& root, int mapSlot, float x, float y, std::st
 }
 
 Status poll(const fs::path& root) {
-    static std::string lastBeat;
-    static std::chrono::steady_clock::time_point lastBeatAt;
+    struct Observation {
+        std::string beat;
+        std::chrono::steady_clock::time_point seenAt;
+        double initialAge = 0;
+    };
+    static std::unordered_map<std::string, Observation> observations;
     Status s;
     const fs::path log = logPath(root);
     std::error_code ec;
     if (!fs::exists(log, ec)) return s;
     s.logSeen = true;
+    const auto modified = fs::last_write_time(log, ec);
+    if (ec) return s;
+    auto key = fs::absolute(log, ec).lexically_normal().generic_string();
+    if (ec) return s;
+#ifdef _WIN32
+    for (auto& c : key) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+#endif
     std::ifstream in(log, std::ios::binary);
+    if (!in) return s;
     in.seekg(0, std::ios::end);
     const std::streamoff size = in.tellg();
+    if (size < 0) return s;
     const std::streamoff from = size > 65536 ? size - 65536 : 0;
     in.seekg(from);
     std::string tail((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (in.bad()) return s;
+    // A concurrently written final line and the first clipped tail line are incomplete.
+    if (from) {
+        const auto newline = tail.find('\n');
+        if (newline == std::string::npos) return s;
+        tail.erase(0, newline + 1);
+    }
+    const auto lastNewline = tail.rfind('\n');
+    if (lastNewline == std::string::npos) return s;
+    tail.resize(lastNewline + 1);
     std::istringstream lines(tail);
     std::string line, beat;
+    const auto number = [](const std::string& text, auto& result) {
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), result);
+        return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size();
+    };
     while (std::getline(lines, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         const size_t at = line.find("ATLAS_LINK|");
         if (at == std::string::npos) continue;
         const std::string msg = line.substr(at + 11);
-        if (!msg.empty() && msg.back() == '\r') { /* keep as is */ }
         s.recent.push_back(msg);
         if (s.recent.size() > 8) s.recent.erase(s.recent.begin());
-        if (msg.rfind("ready", 0) == 0) s.ready = true;
+        if (msg == "ready") s.ready = true;
         else if (msg.rfind("hero|", 0) == 0) {
+            std::vector<std::string> f; std::string cur;
+            for (char c : msg) { if (c == '|') { f.push_back(cur); cur.clear(); } else cur += c; }
+            f.push_back(cur);
+            uint64_t sequence = 0;
+            float x = 0, y = 0, z = 0;
+            if (f.size() != 6 || !number(f[1], sequence) || !sequence || f[2].empty() ||
+                !number(f[3], x) || !number(f[4], y) || !number(f[5], z) ||
+                !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
             beat = msg;
-            // hero|beat|map|x|y|z
-            std::vector<std::string> f; std::string cur;
-            for (char c : msg) { if (c == '|') { f.push_back(cur); cur.clear(); } else cur += c; }
-            f.push_back(cur);
-            if (f.size() >= 6) { s.heroMap = f[2]; s.heroX = std::strtof(f[3].c_str(), nullptr); s.heroY = std::strtof(f[4].c_str(), nullptr); s.heroZ = std::strtof(f[5].c_str(), nullptr); }
+            s.heroMap = f[2]; s.heroX = x; s.heroY = y; s.heroZ = z;
         } else if (msg.rfind("ack|", 0) == 0) {
-            std::vector<std::string> f; std::string cur;
-            for (char c : msg) { if (c == '|') { f.push_back(cur); cur.clear(); } else cur += c; }
-            f.push_back(cur);
-            if (f.size() >= 4) { s.lastAckId = std::strtoull(f[1].c_str(), nullptr, 10); s.lastAckOk = f[2] == "true"; s.lastAckMessage = f[3]; }
+            const auto idEnd = msg.find('|', 4);
+            if (idEnd == std::string::npos) continue;
+            const auto okEnd = msg.find('|', idEnd + 1);
+            if (okEnd == std::string::npos) continue;
+            uint64_t id = 0;
+            const auto ok = msg.substr(idEnd + 1, okEnd - idEnd - 1);
+            if (!number(msg.substr(4, idEnd - 4), id) || !id || (ok != "true" && ok != "false")) continue;
+            s.lastAckId = id; s.lastAckOk = ok == "true"; s.lastAckMessage = msg.substr(okEnd + 1);
         }
     }
     if (!beat.empty()) {
-        if (beat != lastBeat) { lastBeat = beat; lastBeatAt = std::chrono::steady_clock::now(); }
-        s.heartbeatAge = std::chrono::duration<double>(std::chrono::steady_clock::now() - lastBeatAt).count();
+        const auto now = std::chrono::steady_clock::now();
+        const auto fileAge = std::max(0.0, std::chrono::duration<double>(fs::file_time_type::clock::now() - modified).count());
+        auto& observation = observations[key];
+        if (beat != observation.beat) observation = {beat, now, fileAge};
+        s.heartbeatAge = std::max(fileAge, observation.initialAge + std::chrono::duration<double>(now - observation.seenAt).count());
     }
     return s;
 }

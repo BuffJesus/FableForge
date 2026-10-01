@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: validate live-link log records and freshness
+
+`build/livelink-status-before.log` reproduced a minute-old log initially reported
+as freshly live. Polling now seeds heartbeat age from log modification time and
+keeps observations per normalized install path. Re-reading the same heartbeat,
+including after unrelated log activity, cannot reset its observed age. A changed
+valid heartbeat starts a new observation. This is log-based status, not proof of
+a running game; the process guard remains independent.
+
+Only complete newline-terminated records are parsed. The clipped first line of
+the 64-KiB tail is skipped. Hero records require a valid sequence, map and three
+fully parsed finite coordinates before replacing the prior valid position. Ack
+IDs/booleans are validated; message text retains internal pipes and loses only
+the CRLF terminator. Unreadable logs report no live heartbeat.
+
+Expanded offline tests cover stale/fresh logs, identical beats in separate roots,
+unrelated log activity, NaN/infinity/malformed/partial records, clipped tails,
+full ack messages and locked logs. Normal writer builds, focused checks and
+clang-cl ASan checks pass. Live FSE execution and UI camera-follow were not run.
+
 ## 2026-10-01 continuation: complete live-link commands and owned writes
 
 `build/livelink-command-before.log` reproduced a successful send with truncated

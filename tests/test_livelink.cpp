@@ -137,7 +137,48 @@ int main() {
         check(albion::livelink::sendPing(root, error) != 0 && read(cmd).find("cmd = \"ping\"") != std::string::npos, "send retry failed");
         for (const auto& entry : fs::directory_iterator(root))
             check(entry.path().filename().string().find(".forge-link-") != 0, "owned live-link workspace leaked");
-        std::cout << "Live-link hook and command checks passed\n";
+        const auto log = root / "FSE/FableScriptExtender.log";
+        write(log, "prefix ATLAS_LINK|ready\r\nprefix ATLAS_LINK|hero|2|Greatwood_1|12.5|-7.25|9.0\r\n");
+        fs::last_write_time(log, fs::file_time_type::clock::now() - std::chrono::seconds(60));
+        auto status = albion::livelink::poll(root);
+        check(status.ready && status.heroMap == "Greatwood_1" && status.heroX == 12.5f && status.heroY == -7.25f && status.heroZ == 9,
+              "valid heartbeat parse failed");
+        check(status.heartbeatAge >= 55, "old log was reported freshly live");
+        const auto otherRoot = root / "other-install";
+        write(otherRoot / "FSE/FableScriptExtender.log", read(log));
+        const auto otherStatus = albion::livelink::poll(otherRoot);
+        check(otherStatus.heartbeatAge >= 0 && otherStatus.heartbeatAge < 5, "another install inherited stale heartbeat timing");
+        write(log, read(log) + "unrelated new log line\n");
+        check(albion::livelink::poll(root).heartbeatAge >= 55, "unrelated log activity refreshed an old heartbeat");
+        write(log, "ATLAS_LINK|hero|4|Greatwood_1|12.5|-7.25|9.0\nATLAS_LINK|ack|123|true|message|with|pipes\r\n");
+        status = albion::livelink::poll(root);
+        check(status.heartbeatAge >= 0 && status.heartbeatAge < 5 && status.lastAckId == 123 && status.lastAckOk && status.lastAckMessage == "message|with|pipes",
+              "fresh heartbeat or complete acknowledgement parse failed");
+        for (const std::string& invalid : {
+                "ATLAS_LINK|hero|6|Map|nan|2|3\n", "ATLAS_LINK|hero|6|Map|1|inf|3\n",
+                "ATLAS_LINK|hero|6|Map|1oops|2|3\n", "ATLAS_LINK|hero|6|Map|1|2|",
+                "ATLAS_LINK|hero|oops|Map|1|2|3\n", "ATLAS_LINK|hero|6||1|2|3\n"}) {
+            write(log, invalid);
+            status = albion::livelink::poll(root);
+            check(status.heartbeatAge < 0 && status.heroMap.empty(), "malformed or partial heartbeat accepted");
+        }
+        write(log, "ATLAS_LINK|ack|123oops|true|bad\nATLAS_LINK|ack|124|maybe|bad\nATLAS_LINK|ack|125|true|partial");
+        check(albion::livelink::poll(root).lastAckId == 0, "malformed or partial acknowledgement accepted");
+        write(log, std::string(70000, 'x') + "ATLAS_LINK|hero|6|Clipped|1|2|3\nATLAS_LINK|ack|126|false|failed\n");
+        status = albion::livelink::poll(root);
+        check(status.heartbeatAge < 0 && status.lastAckId == 126 && !status.lastAckOk && status.lastAckMessage == "failed",
+              "clipped first tail line accepted or complete tail line lost");
+        write(log, "ATLAS_LINK|hero|8|Valid|1|2|3\nATLAS_LINK|hero|10|Invalid|nan|2|3\n");
+        status = albion::livelink::poll(root);
+        check(status.heroMap == "Valid" && status.heroX == 1 && status.heroY == 2 && status.heroZ == 3,
+              "invalid heartbeat displaced the last valid position");
+#ifdef _WIN32
+        {
+            Lock lock(log, 0);
+            check(albion::livelink::poll(root).heartbeatAge < 0, "unreadable log reported live");
+        }
+#endif
+        std::cout << "Live-link hook, command and status checks passed\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

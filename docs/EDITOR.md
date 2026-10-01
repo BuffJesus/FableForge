@@ -643,7 +643,9 @@ the FSE log (`ATLAS_LINK|ready`, `ATLAS_LINK|ack|id|ok|msg`, a
 Command strings are written in full with Lua escaping; non-finite coordinates
 are refused. Writes preserve the previous command on replacement failure and
 use an owned temporary workspace. The command file holds the latest request;
-it is not a queue.
+it is not a queue. Status ignores incomplete/malformed log records and non-finite
+hero coordinates. Heartbeat age accounts for old log files and is tracked per
+install; unrelated log messages do not refresh an observed stale heartbeat.
 Commands: **Go here in game** (the camera focus -> `EntityTeleportToPosition`
 when the hero is already in this map, `GoToMapSlotRetailTransition(slot, x, y)`
 otherwise), **Spawn selected creature** (`CreateCreature` at the selected
