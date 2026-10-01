@@ -57,6 +57,10 @@ def main():
     run('deploy', 'deploy', [])
     assert shared.read_text() == 'from pack B'
     deployed = snapshot()
+    redeploy = json.loads(run('redeploy_json', 'deploy', ['--json']))
+    assert redeploy['stage']['staged'] == 3
+    assert shared.read_text() == 'from pack B'
+    deployed = snapshot()
     invalid = [('undeploy', ['--typo']), ('deploy', ['--typo']), ('deploy', ['--picks']),
                ('deploy', ['--picks', '']), ('deploy', ['--picks', '--json']),
                ('undeploy', ['extra']), ('list', ['--typo']), ('list', ['extra']),
@@ -89,6 +93,14 @@ def main():
     assert saved[0]['name'] == 'PackC' and saved[0]['note'] == 'valid note'
     run('move_valid', 'move', ['PackC', '+2'])
     run('remove_valid', 'remove', ['PackC'])
+    assert snapshot() == original
+    run('disable_A', 'disable', ['PackA'])
+    run('disable_B', 'disable', ['PackB'])
+    empty = json.loads(run('empty_deploy_json', 'deploy', ['--json']))
+    assert empty['summary']['sources'] == 0 and empty['stage']['staged'] == 0
+    assert shared.read_bytes() == b'original shared file'
+    run('enable_A', 'enable', ['PackA'])
+    run('enable_B', 'enable', ['PackB'])
     assert snapshot() == original
     print('Mod CLI strict inputs, deployed-stage preservation and valid command retries: PASS', len(invalid))
 

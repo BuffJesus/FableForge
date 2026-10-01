@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: keep deploy JSON parseable
+
+`build/mod-cli-inputs-bz52ybl2` reproduced a successful redeploy whose stdout
+could not be parsed as JSON: the restored-stage message preceded the report.
+JSON mode now sends that diagnostic to stderr and emits a JSON result when no
+mods are enabled. Human-readable commands retain their existing output.
+
+The extended `tools/test_mod_cli_inputs.py` passes at
+`build/mod-cli-inputs-x6wwtlgl`: full stdout JSON parsing for redeploy and empty
+orders, expected stage counts, winner content, byte-exact undeploy, plus all 37
+malformed-input preservation cases. The normal CLI build passes. This output-only
+change reuses the immediately preceding sanitizer/core gates.
+
 ## 2026-10-01 continuation: read mod decisions before reverting a stage
 
 `build/mod-picks-inputs-bak5gyhx` reproduced a missing --picks file silently

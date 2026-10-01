@@ -12282,12 +12282,17 @@ int main(int argc, char** argv) {
                     // undeploy = revert alone. Uninstalling a mod is `mods remove` + `mods deploy`.
                     if (std::filesystem::exists(forge::stage::manifestPath(root))) {
                         const auto r = forge::stage::revert(root);
-                        std::printf("reverted the previous stage: %zu restored, %zu removed\n", r.restored.size(), r.removed.size());
+                        std::fprintf(asJson ? stderr : stdout, "reverted the previous stage: %zu restored, %zu removed\n", r.restored.size(), r.removed.size());
                     } else if (args[1] == "undeploy") {
                         std::printf("nothing staged on %s\n", root.c_str());
                     }
                     if (args[1] == "undeploy") return 0;
-                    if (sources.empty()) { std::printf("the order has no enabled mods; the install is back at its baseline\n"); return 0; }
+                    if (sources.empty()) {
+                        if (asJson) std::puts(json{{"sources", json::array()}, {"summary", {{"sources", 0}}},
+                            {"stage", {{"staged", 0}, {"backed_up", 0}}}, {"baseline", true}}.dump(2).c_str());
+                        else std::printf("the order has no enabled mods; the install is back at its baseline\n");
+                        return 0;
+                    }
                     const albion::detail::TemporaryDirectory workspace("mods-deploy-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
