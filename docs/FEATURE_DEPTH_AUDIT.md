@@ -199,6 +199,12 @@ behavior remains unverified. See HANDOFF_WORLD_UI.
 
 ## Audit rule
 
+GLB container input validation now has 313 retail-independent checks, passing
+both normal and AddressSanitizer builds, plus the full scratch model-import
+suite. Short/overflowing/truncated chunks and invalid ordering are rejected;
+valid triangle geometry and unknown extension chunks are preserved. Accessor
+bounds and scene traversal are not covered by this container-only checkpoint.
+
 For each row, record a concrete behavior, the tested map or asset, the saved
 artifact if applicable, the visual result, undo/restore result, and any known
 gap before treating it as reviewed. New findings go into this file and their

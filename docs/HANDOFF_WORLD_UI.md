@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: GLB container boundaries
+
+The model reader now checks the GLB version, total length, complete chunk headers,
+aligned chunk lengths, JSON-first ordering and duplicate JSON/BIN chunks before
+reading chunk data. Previously short headers could read beyond the file and an
+oversized BIN chunk was silently truncated. Well-formed unknown extension chunks
+remain accepted, following the Khronos glTF 2.0 GLB container specification.
+The new retail-independent `fableforge_meshinput_tests` target passes 313 checks:
+valid triangle geometry, unknown chunks, malformed headers/chunks and every
+truncated prefix of the fixture. Normal and clang AddressSanitizer runs pass;
+the latter needs LLVM's `lib/clang/22/lib/windows` on PATH for its runtime DLL.
+The full scratch `tools/test_meshimport.py` also passes after this change.
+Accessor validation and scene traversal remain separate follow-up work.
+
 ## 2026-10-01 continuation: failed model imports preserve bank files
 
 A scratch import with valid definitions/texture and an invalid graphics bank

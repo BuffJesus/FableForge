@@ -121,16 +121,36 @@ GltfBuffers openGltf(const fs::path& path) {
     GltfBuffers g;
     const auto bytes = readFile(path);
     std::vector<uint8_t> glbBin;
-    bool glb = bytes.size() >= 12 && std::memcmp(bytes.data(), "glTF", 4) == 0;
+    const bool glb = bytes.size() >= 4 && std::memcmp(bytes.data(), "glTF", 4) == 0;
     if (glb) {
-        auto u32 = [&](size_t o) { uint32_t v; std::memcpy(&v, bytes.data() + o, 4); return v; };
-        const uint32_t jl = u32(12);
-        if (20 + jl > bytes.size() || u32(16) != 0x4E4F534A) throw std::runtime_error("malformed .glb (JSON chunk)");
-        g.doc = json::parse(bytes.begin() + 20, bytes.begin() + 20 + jl);
-        const size_t bo = 20 + jl;
-        if (bo + 8 <= bytes.size() && u32(bo + 4) == 0x004E4942) {
-            const uint32_t bl = u32(bo);
-            glbBin.assign(bytes.begin() + bo + 8, bytes.begin() + std::min(bytes.size(), bo + 8 + size_t(bl)));
+        // Khronos GLB 2.0: 12-byte header, JSON first, optional BIN second,
+        // then unknown extension chunks. Validate ranges before reading them.
+        if (bytes.size() < 20) throw std::runtime_error("malformed .glb (incomplete header or JSON chunk header)");
+        auto u32 = [&](size_t o) {
+            return uint32_t(bytes[o]) | (uint32_t(bytes[o + 1]) << 8) |
+                   (uint32_t(bytes[o + 2]) << 16) | (uint32_t(bytes[o + 3]) << 24);
+        };
+        if (u32(4) != 2) throw std::runtime_error("unsupported .glb container version (expected 2)");
+        if (u32(8) != bytes.size()) throw std::runtime_error("malformed .glb (declared length differs from file size)");
+        size_t offset = 12, chunkIndex = 0;
+        while (offset < bytes.size()) {
+            if (bytes.size() - offset < 8) throw std::runtime_error("malformed .glb (incomplete chunk header)");
+            const size_t length = u32(offset);
+            const uint32_t type = u32(offset + 4);
+            offset += 8;
+            if (length % 4 || length > bytes.size() - offset)
+                throw std::runtime_error("malformed .glb (unaligned or truncated chunk)");
+            if (chunkIndex == 0) {
+                if (type != 0x4E4F534A) throw std::runtime_error("malformed .glb (first chunk is not JSON)");
+                g.doc = json::parse(bytes.begin() + offset, bytes.begin() + offset + length);
+            } else if (type == 0x4E4F534A) {
+                throw std::runtime_error("malformed .glb (duplicate JSON chunk)");
+            } else if (type == 0x004E4942) {
+                if (chunkIndex != 1) throw std::runtime_error("malformed .glb (BIN must be the second chunk)");
+                glbBin.assign(bytes.begin() + offset, bytes.begin() + offset + length);
+            }
+            offset += length;
+            ++chunkIndex;
         }
     } else {
         g.doc = json::parse(bytes.begin(), bytes.end());
