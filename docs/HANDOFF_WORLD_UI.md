@@ -1,5 +1,16 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: entrance UID sequencing
+
+The Clang build warned about two increments of `uid` in one concatenation
+expression when creating an entrance/HSP pair. UID allocation now occurs in
+two separate statements before serialization. The entrance receives the first
+new UID and its start the next; existing authored pairs keep their IDs. Clang
+rebuilds this file without the sequencing warning. The existing GTG scratch
+tests cover two fresh IDs, moving without duplication, unrelated section bytes
+and LF/CRLF preservation.
+The full normal build and all 27 registered CTest suites pass after the change.
+
 ## 2026-10-01 continuation: pack edits preserve existing assets
 
 A small file-only fixture reproduced a failed second `model.obj` add overwriting

@@ -174,7 +174,9 @@ bool setRegionEntrance(const fs::path& gameRoot, int slot, const std::string& le
         notes.push_back("FinalAlbion.gtg: moved the region entrance of slot " + std::to_string(slot) + " (" + levelName + ") to (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
     } else {
         const std::string& n = f.eol;
-        things = entranceBlock(++uid, pos, forward, n) + startBlock(++uid, script, pos, forward, n);
+        const uint64_t entranceUid = ++uid;
+        const uint64_t startUid = ++uid;
+        things = entranceBlock(entranceUid, pos, forward, n) + startBlock(startUid, script, pos, forward, n);
         const size_t end = s.body.find("XXXSectionEnd;");
         if (end == std::string::npos) s.body = "Version 2;" + n + n + "XXXSectionStart NULL;" + n + n + things + "XXXSectionEnd;" + n + n + n;
         else s.body.insert(end, things);
