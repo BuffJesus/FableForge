@@ -1748,7 +1748,7 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
     pollMeshImport();
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##importmodel", inner);
-    theme::label("Import model");
+    theme::label("Source files");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
     drawPathInput("meshmodel", "A .glb, .gltf or .obj (Y up, 1 unit = 1 metre)", meshModelPath_, sizeof meshModelPath_,
                   cardInner, PathField::Model, "input_mesh_model");
@@ -1771,7 +1771,7 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
         ImGui::PopStyleColor();
     }
     ImGui::PushFont(fontSmall_);
-    theme::hint(packDest_.empty()
+    theme::hintMore("Adds a new placeable object. Existing models are kept.", packDest_.empty()
         ? "The model becomes MESH_<NAME> in graphics.big, the PNG <NAME>_DIFFUSE in textures.big and OBJECT_<NAME> in game.bin (a copy of the barrel's def with the new mesh), with a collision hull from the model's own triangles; nothing retail is replaced, one-time backups. It then shows under Add an object."
         : "At deploy the pack's recipe makes MESH_<NAME> (graphics.big), <NAME>_DIFFUSE (textures.big) and OBJECT_<NAME> (game.bin, a copy of the barrel's def) with a collision hull from the model's own triangles, taking the ids the other mods leave free. After Mods > Deploy it shows under Add an object.");
     ImGui::PopFont();

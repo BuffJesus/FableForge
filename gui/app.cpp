@@ -1684,6 +1684,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("models_filtered=" + std::to_string(modelFiltered_));
     v.push_back("model_selected=" + modelName_);
     v.push_back("model_ready=" + std::to_string(modelReady_));
+    v.push_back("model_import_open=" + std::to_string(modelImportOpen_));
+    v.push_back("map_list_visible=" + std::to_string(settings_.showExplorer && !standaloneAssetPreview()));
     v.push_back("model_vertices=" + std::to_string(modelGeometry_.vertices.size()));
     v.push_back("model_triangles=" + std::to_string(modelGeometry_.triangles.size()));
     v.push_back("model_wire=" + std::to_string(modelWire_));
@@ -1890,7 +1892,7 @@ void App::frame(float dt) {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) { if (io.KeyShift) openWorldFile(); else openLevelFile(); }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
+        if (!standaloneAssetPreview() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_RightBracket)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_E) && !exportFuture_.valid() && !selectedName_.empty()) startExport();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !filter_.empty() && !ImGui::IsAnyItemActive()) setFilter("");
@@ -1922,8 +1924,9 @@ void App::frame(float dt) {
     const float total = ImGui::GetContentRegionAvail().x;
     const float strip = theme::S(14.0f);
     const bool dialogueWorkspace = texturesMode_ && assetsTab_ == 4;
-    const bool showExplorer = settings_.showExplorer && !dialogueWorkspace;
-    const float leftStrip = dialogueWorkspace ? 0.0f : strip;
+    const bool assetPreview = standaloneAssetPreview();
+    const bool showExplorer = settings_.showExplorer && !assetPreview;
+    const float leftStrip = assetPreview ? 0.0f : strip;
     float left = showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
     float right = settings_.showActions ? std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f)) : 0.0f;
     // On compact windows the nominal panel minimums can exceed the window.
@@ -1937,7 +1940,7 @@ void App::frame(float dt) {
     const float middle = std::max(0.0f, total - left - right - leftStrip - strip);
 
     if (showExplorer) { drawExplorer(left); ImGui::SameLine(0, 0); }
-    if (!dialogueWorkspace) { drawPanelStrip(true); ImGui::SameLine(0, 0); }
+    if (!assetPreview) { drawPanelStrip(true); ImGui::SameLine(0, 0); }
     drawViewport(middle);
     ImGui::SameLine(0, 0);
     drawPanelStrip(false);
@@ -1945,6 +1948,15 @@ void App::frame(float dt) {
     drawUnsavedPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawToolWindows();
+    if (!texturesMode_ || assetsTab_ != 1) modelImportOpen_ = false;
+    if (modelImportOpen_ &&
+        beginToolWindow("##model_import", "Import model", "Choose a model and its destination.",
+                        &modelImportOpen_, theme::S(460))) {
+        const float pad = ImGui::GetCursorPosX();
+        const float inner = ImGui::GetContentRegionAvail().x;
+        drawModelImportCard(pad, inner, inner - theme::S(24));
+        endToolWindow();
+    }
     if (dialogueWorkspace && dialogueToolsOpen_ &&
         beginToolWindow("##dialogue_tools", "Edit lip sync", "Changes stay in this session until exported or added to a pack.",
                         &dialogueToolsOpen_, theme::S(460))) {
@@ -1981,7 +1993,11 @@ void App::drawMenuBar() {
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("View")) {
+        ImGui::BeginDisabled(standaloneAssetPreview());
         if (ImGui::MenuItem("Map list", "Ctrl+[", settings_.showExplorer)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
+        ImGui::EndDisabled();
+        if (standaloneAssetPreview() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("The map list returns when you leave this asset preview.");
         if (ImGui::MenuItem("Tool panel", "Ctrl+]", settings_.showActions)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         ImGui::Separator();
         if (ImGui::BeginMenu("Text size")) {

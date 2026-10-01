@@ -527,6 +527,7 @@ private:
     void drawGroundThemeCard(float pad, float inner, float cardInner);
 public:
     void setAssetsTab(int t) { assetsTab_ = std::clamp(t, 0, 4); }
+    bool standaloneAssetPreview() const { return texturesMode_ && (assetsTab_ == 1 || assetsTab_ == 3 || assetsTab_ == 4); }
 private:
     struct PendingColour { std::string id; float rgba[4] = {}; bool live = false; } pendingColour_;   // a light colour being edited
     void applySectionVisibility();

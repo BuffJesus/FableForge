@@ -2046,6 +2046,25 @@ device is available. The real Dialogue workspace also passes at
 slider past its end stops playback, Play restarts, and subsequent timeline,
 character, staged edit and byte-checked export workflows remain usable.
 
+## 2026-10-01 continuation: model import window and asset preview space
+
+At 800x600 / 1.5, the old Import model toggle revealed a form below the visible
+model list (`build/asset-controls-nvws_h0o`). Import now opens a bounded, scrollable
+tool window with native Browse fields, destination and import controls. Escape
+closes it; leaving Models closes it without clearing entered field values. The
+model-import implementation and write destinations are unchanged. Detailed model
+bank information is available through the existing More hint.
+
+Models and Effects now share Dialogue's standalone preview layout: the map list
+and its strip are temporarily hidden, preserving the user's preference for return
+to Maps. The Map list menu and shortcut cannot silently toggle that preference
+while hidden. Normal and compact interaction checks at
+`build/asset-workspaces-lzbsz58e` pass open/Escape/context closure, model display,
+effect display and both shown/hidden map-list preference restoration. Screenshots
+were inspected. Existing model/material/effect texture/model navigation passes
+at `build/asset-links-t7i91m3j`. Compact Effects still needs its transport layout
+reviewed; no claim that all effect controls fit is made in this milestone.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

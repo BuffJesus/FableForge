@@ -385,7 +385,6 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     if (rows.empty()) theme::hint("No matching models.");
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
-    if (modelImportOpen_) { drawModelImportCard(pad, inner, cardInner); ImGui::Dummy(ImVec2(0, S(8))); }
     if (!modelError_.empty()) { ImGui::SetCursorPosX(pad); ImGui::TextWrapped("%s", modelError_.c_str()); }
     if (modelName_.empty()) return;
     ImGui::SetCursorPosX(pad);
