@@ -2,6 +2,15 @@
 
 ## 2026-10-01 continuation: Restore comparison and cleanup
 
+Follow-up: a missing staged original reproduced ordinary Restore continuing
+after stage recovery failed, overwriting the edited target with staged content
+and deleting its ordinary backup under `--forget`. Restore now stops at that
+failure. The fixture retains target, ordinary backup and manifest, then succeeds
+after the missing staged original is supplied (`build/restore-failures-9g2sxp31`).
+All three writer binaries build; the existing mixed-convention/stage-rebase
+backup regression passes. This does not resolve failures during rebasing after
+a successful stage revert; that path remains under review.
+
 Restore now treats failed file reads as differing, preserves the actual replacement
 error across temporary-file cleanup, and reports failed backup/creation-marker
 deletion. `--forget` also removes verified unchanged backups; ordinary Restore

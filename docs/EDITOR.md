@@ -40,6 +40,8 @@ to their current files. Unreadable files are treated as differing. Failed target
 replacement or backup/creation-marker cleanup is reported as an error; release
 the file lock and retry to finish cleanup. Staged backups without a manifest are
 left in place for manual recovery.
+If staged recovery fails, Restore stops before applying or forgetting ordinary
+backups; correct the reported problem and retry.
 
 ### Compacting the static-map bank (2026-09-19, 1.0-rc #4)
 

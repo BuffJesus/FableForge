@@ -2,6 +2,7 @@
 """Exercise Restore comparison, cleanup and Windows file-lock errors on synthetic files."""
 import ctypes
 import argparse
+import json
 from ctypes import wintypes
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ def main():
     exe = parser.parse_args().exe.resolve()
     work = Path(tempfile.mkdtemp(prefix='restore-failures-', dir=repo / 'build')).resolve()
     assert work.parent == (repo / 'build').resolve()
+    print('evidence retained at', work, flush=True)
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
         wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
@@ -106,7 +108,21 @@ def main():
     assert run(root, 'marker_retry').returncode == 0
     assert not created.exists() and not marker.exists(), 'retry retained the orphaned creation marker'
     assert bank.read_bytes() == backup.read_bytes() == b'original'
-    print('evidence retained at', work)
+    root, bank, backup = fixture('failed_stage', b'edited after stage', b'staged content')
+    manifest = root / 'forge_stage_manifest.json'
+    manifest.write_text(json.dumps({'files': [{'path': 'data/CompiledDefs/game.bin', 'had_original': True}]}))
+    # Missing staged original must stop before an ordinary backup can be applied.
+    result = run(root, 'failed_stage', forget=True)
+    assert result.returncode != 0 and manifest.exists()
+    assert bank.read_bytes() == b'edited after stage', 'failed stage continued into ordinary restore'
+    assert backup.read_bytes() == b'staged content', 'failed stage consumed an ordinary backup'
+    staged_backup = Path(str(bank) + '.forgebak')
+    staged_backup.write_bytes(b'retail content')
+    # Ensure the ordinary baseline is recognizably newer than the staged one.
+    os.utime(staged_backup, (1_700_000_000, 1_700_000_000))
+    assert run(root, 'failed_stage_retry', forget=True).returncode == 0
+    assert bank.read_bytes() == b'retail content'
+    assert not backup.exists() and not staged_backup.exists() and not manifest.exists()
     assert not failures, '; '.join(failures)
     print('Restore comparison, failure diagnostics, retry and forget: PASS')
 

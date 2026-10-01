@@ -252,7 +252,14 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
                 fs::copy_file(f, orig, fs::copy_options::overwrite_existing, ec);
                 notes.push_back((ec ? "could not rebase " : "rebased ") + orig.filename().string() + " onto the reverted file (it was taken on top of the stage)");
             }
-        } catch (const std::exception& ex) { error = ex.what(); notes.push_back(std::string("failed: ") + ex.what()); rebase.clear(); }
+        } catch (const std::exception& ex) {
+            error = ex.what();
+            notes.push_back(std::string("failed: ") + ex.what());
+            // The manifest and its backups still describe a pending recovery.
+            // Applying/forgetting other originals now could overwrite staged
+            // targets and discard the state needed for a safe retry.
+            return n;
+        }
     } else rebase.clear();
     for (const auto& e : scan(gameRoot)) {
         if (e.kind == Kind::Staged) {

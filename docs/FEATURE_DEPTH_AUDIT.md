@@ -411,6 +411,12 @@ gate passes. Other fixed extraction paths and same-install writers remain open.
 
 ## Restore comparison and cleanup, 2026-10-01
 
+Failed staged recovery now stops ordinary Restore. A missing staged original
+fixture preserves the edited target, ordinary backup and manifest, then restores
+retail bytes on retry after supplying the missing original. The existing mixed
+backup-convention/stage-rebase regression also passes. Rebase failures after a
+successful stage revert remain under review.
+
 Unreadable files no longer compare equal, locked-target errors retain their
 real cause, and failed backup/marker cleanup is reported and retryable.
 `--forget` removes verified unchanged originals while retaining orphaned staged
