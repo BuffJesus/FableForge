@@ -1,3 +1,4 @@
+#include "exportfiles.hpp"
 #include "profile.hpp"
 #include "terrainexport.hpp"
 #include "pendingbanks.hpp"
@@ -1117,12 +1118,14 @@ std::vector<fs::path> writeLayerSidecars(const Scene& scene, const fs::path& out
         for (char& ch : safe) if (!(std::isalnum((unsigned char)ch) || ch == '_' || ch == '-')) ch = '_';
         const fs::path p = dir / (safe + ".png");
         const auto png = encodePng(img);
-        std::ofstream(p, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
+        detail::writeExportBytes(p, png);
         written.push_back(p);
         pngNames.push_back(fs::relative(p, out.parent_path()).generic_string());
     }
     const fs::path meta = out.parent_path() / (out.stem().string() + ".themes.json");
-    std::ofstream(meta) << themeSummaryJson(scene, pngNames);
+    auto metadata = detail::exportStream(meta);
+    metadata << themeSummaryJson(scene, pngNames);
+    metadata.close();
     written.push_back(meta);
     return written;
 }
@@ -1221,78 +1224,81 @@ std::vector<uint8_t> buildGlb(const Scene& scene) {
 }
 
 std::vector<fs::path> writeGlb(const Scene& scene, const fs::path& out) {
-    const auto glb = buildGlb(scene);
-    if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
-    std::ofstream f(out, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot write " + out.string());
-    f.write(reinterpret_cast<const char*>(glb.data()), std::streamsize(glb.size()));
-    std::vector<fs::path> written{out};
-    for (auto& p : writeLayerSidecars(scene, out)) written.push_back(p);
-    return written;
+    return detail::publishExport(out, [&](const fs::path& out) {
+        const auto glb = buildGlb(scene);
+        if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
+        detail::writeExportBytes(out, glb);
+        std::vector<fs::path> written{out};
+        for (auto& p : writeLayerSidecars(scene, out)) written.push_back(p);
+        return written;
+    });
 }
 
 std::vector<fs::path> writeObj(const Scene& scene, const fs::path& out) {
-    if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
-    const std::string stem = out.stem().string();
-    const fs::path mtlPath = out.parent_path() / (stem + ".mtl");
-    const fs::path pngPath = out.parent_path() / (stem + "_albedo.png");
-    std::vector<fs::path> written;
+    return detail::publishExport(out, [&](const fs::path& out) {
+        if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
+        const std::string stem = out.stem().string();
+        const fs::path mtlPath = out.parent_path() / (stem + ".mtl");
+        const fs::path pngPath = out.parent_path() / (stem + "_albedo.png");
+        std::vector<fs::path> written;
 
-    std::ofstream obj(out);
-    if (!obj) throw std::runtime_error("cannot write " + out.string());
-    obj << "# FableForge export of " << scene.sourceName << "\n"
-        << "# map " << scene.mapWidth << "x" << scene.mapHeight << " cells, 1 unit per cell, up="
-        << (scene.up == UpAxis::Y ? "Y" : "Z") << "\n"
-        << "mtllib " << mtlPath.filename().string() << "\n"
-        << "o " << fs::path(scene.sourceName).stem().string() << "\n";
-    char line[128];
-    for (const auto& v : scene.vertices) {
-        std::snprintf(line, sizeof line, "v %.4f %.4f %.4f\n", v.px, v.py, v.pz); obj << line;
-    }
-    for (const auto& v : scene.vertices) {
-        // OBJ's vt origin is bottom-left; the scene's v is top-down (glTF).
-        std::snprintf(line, sizeof line, "vt %.6f %.6f\n", v.u, 1.0f - v.v); obj << line;
-    }
-    for (const auto& v : scene.vertices) {
-        std::snprintf(line, sizeof line, "vn %.4f %.4f %.4f\n", v.nx, v.ny, v.nz); obj << line;
-    }
-    obj << "usemtl terrain\n";
-    for (size_t i = 0; i + 2 < scene.indices.size(); i += 3) {
-        const uint32_t a = scene.indices[i] + 1, b = scene.indices[i + 1] + 1, c = scene.indices[i + 2] + 1;
-        std::snprintf(line, sizeof line, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, a, a, b, b, b, c, c, c);
-        obj << line;
-    }
-    if (!scene.water.empty()) {
-        const uint32_t base = uint32_t(scene.vertices.size());
-        obj << "o Water\n";
-        for (size_t i = 0; i + 2 < scene.water.positions.size(); i += 3) {
-            std::snprintf(line, sizeof line, "v %.4f %.4f %.4f\n", scene.water.positions[i], scene.water.positions[i + 1], scene.water.positions[i + 2]); obj << line;
+        auto obj = detail::exportStream(out);
+        obj << "# FableForge export of " << scene.sourceName << "\n"
+            << "# map " << scene.mapWidth << "x" << scene.mapHeight << " cells, 1 unit per cell, up="
+            << (scene.up == UpAxis::Y ? "Y" : "Z") << "\n"
+            << "mtllib " << mtlPath.filename().string() << "\n"
+            << "o " << fs::path(scene.sourceName).stem().string() << "\n";
+        char line[128];
+        for (const auto& v : scene.vertices) {
+            std::snprintf(line, sizeof line, "v %.4f %.4f %.4f\n", v.px, v.py, v.pz); obj << line;
         }
-        for (int pass = 0; pass < 2; ++pass) {
-            const auto& tri = pass ? scene.water.iceIndices : scene.water.indices;
-            if (tri.empty()) continue;
-            obj << (pass ? "usemtl ice\n" : "usemtl water\n");
-            for (size_t i = 0; i + 2 < tri.size(); i += 3) {
-                std::snprintf(line, sizeof line, "f %u %u %u\n", base + tri[i] + 1, base + tri[i + 1] + 1, base + tri[i + 2] + 1);
-                obj << line;
+        for (const auto& v : scene.vertices) {
+            // OBJ's vt origin is bottom-left; the scene's v is top-down (glTF).
+            std::snprintf(line, sizeof line, "vt %.6f %.6f\n", v.u, 1.0f - v.v); obj << line;
+        }
+        for (const auto& v : scene.vertices) {
+            std::snprintf(line, sizeof line, "vn %.4f %.4f %.4f\n", v.nx, v.ny, v.nz); obj << line;
+        }
+        obj << "usemtl terrain\n";
+        for (size_t i = 0; i + 2 < scene.indices.size(); i += 3) {
+            const uint32_t a = scene.indices[i] + 1, b = scene.indices[i + 1] + 1, c = scene.indices[i + 2] + 1;
+            std::snprintf(line, sizeof line, "f %u/%u/%u %u/%u/%u %u/%u/%u\n", a, a, a, b, b, b, c, c, c);
+            obj << line;
+        }
+        if (!scene.water.empty()) {
+            const uint32_t base = uint32_t(scene.vertices.size());
+            obj << "o Water\n";
+            for (size_t i = 0; i + 2 < scene.water.positions.size(); i += 3) {
+                std::snprintf(line, sizeof line, "v %.4f %.4f %.4f\n", scene.water.positions[i], scene.water.positions[i + 1], scene.water.positions[i + 2]); obj << line;
+            }
+            for (int pass = 0; pass < 2; ++pass) {
+                const auto& tri = pass ? scene.water.iceIndices : scene.water.indices;
+                if (tri.empty()) continue;
+                obj << (pass ? "usemtl ice\n" : "usemtl water\n");
+                for (size_t i = 0; i + 2 < tri.size(); i += 3) {
+                    std::snprintf(line, sizeof line, "f %u %u %u\n", base + tri[i] + 1, base + tri[i + 1] + 1, base + tri[i + 2] + 1);
+                    obj << line;
+                }
             }
         }
-    }
-    written.push_back(out);
+        written.push_back(out);
 
-    std::ofstream mtl(mtlPath);
-    mtl << "newmtl terrain\nKa 1 1 1\nKd 1 1 1\nKs 0 0 0\nd 1\nillum 1\n";
-    if (!scene.water.empty()) mtl << "newmtl water\nKa 0.16 0.36 0.5\nKd 0.16 0.36 0.5\nKs 0.3 0.3 0.3\nd 0.62\nillum 2\n"
-                                   << "newmtl ice\nKa 0.78 0.86 0.92\nKd 0.78 0.86 0.92\nKs 0.2 0.2 0.2\nd 0.9\nillum 2\n";
-    if (scene.hasAlbedo) {
-        mtl << "map_Kd " << pngPath.filename().string() << "\n";
-        const auto png = encodePng(scene.albedo);
-        std::ofstream(pngPath, std::ios::binary).write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
-        written.push_back(pngPath);
-    }
-    written.push_back(mtlPath);
-    for (auto& p : writeLayerSidecars(scene, out)) written.push_back(p);
-    return written;
+        auto mtl = detail::exportStream(mtlPath);
+        mtl << "newmtl terrain\nKa 1 1 1\nKd 1 1 1\nKs 0 0 0\nd 1\nillum 1\n";
+        if (!scene.water.empty()) mtl << "newmtl water\nKa 0.16 0.36 0.5\nKd 0.16 0.36 0.5\nKs 0.3 0.3 0.3\nd 0.62\nillum 2\n"
+                                       << "newmtl ice\nKa 0.78 0.86 0.92\nKd 0.78 0.86 0.92\nKs 0.2 0.2 0.2\nd 0.9\nillum 2\n";
+        if (scene.hasAlbedo) {
+            mtl << "map_Kd " << pngPath.filename().string() << "\n";
+            const auto png = encodePng(scene.albedo);
+            detail::writeExportBytes(pngPath, png);
+            written.push_back(pngPath);
+        }
+        written.push_back(mtlPath);
+        for (auto& p : writeLayerSidecars(scene, out)) written.push_back(p);
+        obj.close();
+        mtl.close();
+        return written;
+    });
 }
 
 } // namespace albion::terrainexport

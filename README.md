@@ -124,6 +124,11 @@ and `--max-texture`, finite numbers for `--tile` and `--gain`, and two finite
 coordinates for `--origin`. `--up` accepts `y` or `z`. Malformed or missing
 values are refused before exporting; existing numeric clamps still apply.
 
+Each GLB/OBJ export prepares its model, material files and theme/image sidecars
+before replacing outputs. A failed replacement restores the earlier files in
+that export; unrelated files are preserved. Batch exports handle each map
+separately. Standalone exports do not create game-install backups.
+
 ## Known gaps (honest list)
 
 * **Texture tiling** — pinned from the engine: the landscape vertex shader maps

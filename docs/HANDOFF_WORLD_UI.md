@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: model geometry and sidecars publish together
+
+`build/model-export-recovery-_pg0ai4m/glb_locked_metadata.log` reproduced export
+success despite a locked themes.json, after replacing the GLB and writing PNGs.
+Both terrain-only and terrain-plus-layer GLB/OBJ writers now prepare their
+complete declared output set through a shared publishExport helper. It preserves
+basenames and relative material/image references, checks every stream write and
+close, rejects outputs outside its owned workspace, deduplicates declared paths
+and publishes through PendingBanks. Failure rolls back earlier replacements;
+failed rollback retains and reports recovery files. Existing unrelated files
+are preserved. Exports do not create install backups. This is one-map output
+publication; multi-map batches remain separate exports.
+
+`tools/test_model_export_recovery.py` passes blocked metadata for GLB and OBJ,
+exact previous-file/inventory preservation, retry, structural GLB checks,
+independent OBJ loading, deterministic overwrite and copied-source preservation.
+Normal `build/model-export-recovery-mvnw4rgf` and ASan
+`build/model-export-recovery-8wx7oko_` pass, as does the focused export suite in
+both builds (including textured synthetic foliage OBJ append).
+`build/model-export-smoke-bllysgse` passes eight textured retail maps with
+independent trimesh loading. Every GLB is byte-identical to the retained outputs
+from before this publication change.
+
+Hidden GUI export `build/model-export-gui-_dvdkcy2` passes and produces a valid
+Greatwood_1 GLB (18721 vertices, 36864 triangles, 384x768 albedo). Its export
+screenshot was visually checked. A locked-sidecar GUI check in
+`build/model-export-gui-refusal-vze2o3ct` reports export_ok=0 and Export failed,
+retains both prior outputs and leaves no new files; its screenshot shows the
+failure and filename in the activity/toast area. All 35 rebuilt normal suites
+pass in 18.84 seconds. No live-game files or runtime behavior were exercised.
+
 ## 2026-10-01 continuation: complete numeric inputs for map exports
 
 `build/export-inputs-yoisa43h/invalid_0.json` reproduced `--texels oops`

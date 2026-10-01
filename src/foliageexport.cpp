@@ -1,3 +1,4 @@
+#include "exportfiles.hpp"
 #include "profile.hpp"
 #include "foliageexport.hpp"
 
@@ -722,14 +723,14 @@ std::vector<uint8_t> buildGlbWith(const te::Scene& terrain, const std::vector<co
 }
 
 std::vector<fs::path> writeGlbWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {
-    const auto glb = buildGlbWith(terrain, layers);
-    if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
-    std::ofstream f(out, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot write " + out.string());
-    f.write(reinterpret_cast<const char*>(glb.data()), std::streamsize(glb.size()));
-    std::vector<fs::path> written{out};
-    for (auto& p : te::writeLayerSidecars(terrain, out)) written.push_back(p);
-    return written;
+    return detail::publishExport(out, [&](const fs::path& out) {
+        const auto glb = buildGlbWith(terrain, layers);
+        if (!out.parent_path().empty()) fs::create_directories(out.parent_path());
+        detail::writeExportBytes(out, glb);
+        std::vector<fs::path> written{out};
+        for (auto& p : te::writeLayerSidecars(terrain, out)) written.push_back(p);
+        return written;
+    });
 }
 
 std::vector<uint8_t> buildGlbWithFoliage(const te::Scene& terrain, const Scene& foliage) { return buildGlbWith(terrain, {&foliage}); }
@@ -742,7 +743,8 @@ void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::pa
     if (foliage.instances.empty()) return;
     const std::string stem = out.stem().string();
     const fs::path mtlPath = out.parent_path() / (stem + ".mtl");
-    std::ofstream obj(out, std::ios::app), mtl(mtlPath, std::ios::app);
+    auto obj = detail::exportStream(out, std::ios::app);
+    auto mtl = detail::exportStream(mtlPath, std::ios::app);
     obj << "o " << stem << "_" << foliage.rootName << "\n";
     // One material per texture image.
     std::map<int, std::string> imageMaterial;
@@ -753,7 +755,7 @@ void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::pa
             const std::string matName = lower(foliage.rootName) + "_" + std::to_string(part.diffuseTexture);
             const fs::path png = out.parent_path() / (stem + "_" + matName + ".png");
             const auto bytes = te::encodePng(foliage.images[size_t(part.image)]);
-            std::ofstream(png, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+            detail::writeExportBytes(png, bytes);
             written.push_back(png);
             mtl << "newmtl " << matName << "\nKa 1 1 1\nKd 1 1 1\nKs 0 0 0\nd 1\nillum 1\nmap_Kd " << png.filename().string() << "\n";
             if (part.hasAlpha) mtl << "map_d " << png.filename().string() << "\n";
@@ -799,15 +801,19 @@ void appendObjLayer(const te::Scene& terrain, const Scene& foliage, const fs::pa
         }
         base += uint32_t(m.geometry.vertices.size());
     }
+    obj.close();
+    mtl.close();
 }
 
 } // namespace
 
 std::vector<fs::path> writeObjWith(const te::Scene& terrain, const std::vector<const Scene*>& layers, const fs::path& out) {
-    auto written = te::writeObj(terrain, out);
-    uint32_t base = uint32_t(terrain.vertices.size());
-    for (const Scene* layer : layers) if (layer) appendObjLayer(terrain, *layer, out, base, written);
-    return written;
+    return detail::publishExport(out, [&](const fs::path& out) {
+        auto written = te::writeObj(terrain, out);
+        uint32_t base = uint32_t(terrain.vertices.size());
+        for (const Scene* layer : layers) if (layer) appendObjLayer(terrain, *layer, out, base, written);
+        return written;
+    });
 }
 
 std::vector<fs::path> writeObjWithFoliage(const te::Scene& terrain, const Scene& foliage, const fs::path& out) {
