@@ -42,7 +42,7 @@ void App::setWorldMode(bool on) {
     if (on) loadWorld();
 }
 
-void App::loadWorld() {
+void App::loadWorld(bool preserveDraft) {
     if (modFilesBusy()) return;
     // writing into a pack: the view is the game with the pack's world files over it
     std::string root = saveRoot();
@@ -67,13 +67,22 @@ void App::loadWorld() {
             root = view.string();
         } else pushLog("world: the pack view: " + err + " (showing the game)", 1);
     }
-    worldLoaded_ = editor::loadWorldLayout(root, world_, err, stb, records);
+    editor::WorldLayout refreshed;
+    worldLoaded_ = editor::loadWorldLayout(root, refreshed, err, stb, records);
     worldLoadedFrom_ = key;
-    worldPending_.clear();
-    worldOwnerEdits_.clear();
-    worldSeesEdits_.clear();
-    worldSelected_.clear();
-    worldZoom_ = 0;
+    if (worldLoaded_) world_ = std::move(refreshed);
+    if (!preserveDraft) {
+        worldPending_.clear();
+        worldOwnerEdits_.clear();
+        worldSeesEdits_.clear();
+        worldSelected_.clear();
+        worldZoom_ = 0;
+    } else if (worldLoaded_) {
+        // Queued edits and undo snapshots use map/region names and absolute
+        // destinations, so they can remain over the newly read base layout.
+        worldSelect(worldSelected_);
+        if (worldSelected_.empty()) worldEditFor_.clear();
+    }
     if (!worldLoaded_) pushLog("world: " + err, 2);
     else pushLog("world: " + std::to_string(world_.maps.size()) + " maps in " + std::to_string(world_.regions.size()) + " regions", 0);
 }

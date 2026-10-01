@@ -105,6 +105,67 @@ assert_state preview_has_mesh 0
 mod_remove 0''')
         assert original == {rel: digest(root / rel) for rel in files}, 'undeploy changed original banks'
         assert packed == {p.relative_to(pack): digest(p) for p in pack.rglob('*') if p.is_file()}, 'deployment changed the pack'
+    run('world_draft', f'''world_tab 1
+set world_3d 0
+world_move TeleporterGreatwood 2048 8064
+world_owner OrchardFarmEast Greatwood
+world_sees Greatwood OrchardFarm 1
+world_select TeleporterGreatwood
+mod_add {pack} RefreshProbe
+mods_deploy
+wait_file_job
+wait_ready
+assert_log mods deploy: done
+assert_state maps {count + 1}
+assert_state world_maps {count + 1}
+assert_state world_pending 1
+assert_state world_pending_owners 1
+assert_state world_pending_sees 1
+assert_state world_selected_pos 2048,8064
+world_undo
+assert_state world_pending_sees 0
+world_undo
+assert_state world_pending_owners 0
+world_undo
+assert_state world_pending 0
+world_redo
+world_redo
+world_redo
+world_revert
+assert_state world_pending 0
+assert_state world_pending_owners 0
+assert_state world_pending_sees 0
+assert_state world_maps {count + 1}
+world_undo
+assert_state world_pending 1
+assert_state world_pending_owners 1
+assert_state world_pending_sees 1
+world_move RefreshProbe 2112 8064
+mods_undeploy
+wait_file_job
+wait_ready
+assert_log mods undeploy: done
+assert_state maps {count}
+assert_state world_maps {count}
+assert_state world_pending 2
+assert_state world_pending_owners 1
+assert_state world_pending_sees 1
+assert_state world_selected_pos 2048,8064
+world_apply
+wait_world
+assert_state world_ok 0
+assert_log RefreshProbe is not in the world
+assert_state world_pending 2
+world_undo
+world_undo
+world_undo
+world_undo
+assert_state world_pending 0
+assert_state world_pending_owners 0
+assert_state world_pending_sees 0
+mod_remove 0''')
+    assert original == {rel: digest(root / rel) for rel in files}, 'world draft refresh changed original banks'
+    assert packed == {p.relative_to(pack): digest(p) for p in pack.rglob('*') if p.is_file()}, 'world draft refresh changed the pack'
     broken = work / 'game.bin.patch'
     broken.write_bytes(b'not a valid binary patch')
     run('failed_redeploy', f'''mod_add {pack} RefreshProbe

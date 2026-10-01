@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: World drafts across mod refresh
+
+A queued World move reproduced a stale World layout after deploying a new map:
+Maps grew from 400 to 401, but World stayed at 400 even after reverting the draft.
+Mod completion now reloads the base layout independently of pending moves,
+ownership/visibility edits, selection and undo snapshots. Loading uses a
+separate layout value so a failed read does not erase the last loaded model.
+
+The expanded `tools/test_mod_refresh_ui.py` passes all five cases at
+`build/mod-refresh-j86g3qsw`. The new World-draft case verifies map counts,
+pending move/owner/visibility edits and undo/redo/revert across deploy/undeploy.
+It also retains a move for a map removed by undeploy: Apply refuses before
+writes, then undo removes the queued edit. All eight source banks restore
+byte-exactly and the pack remains unchanged. The GUI build passes; core code
+is unchanged from the preceding 28-suite and focused ASan gate. This supersedes
+the earlier requirement to reload World manually after clearing a draft.
+
 ## 2026-10-01 continuation: CLI mod workspace ownership
 
 Two concurrent `mods conflicts` calls on separate scratch installs reproduced

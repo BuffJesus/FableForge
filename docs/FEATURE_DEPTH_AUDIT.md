@@ -374,6 +374,15 @@ checks distinct payloads, exact restoration, two failure paths, preserved
 unowned sentinels and no leaked owned workspace. This does not permit concurrent
 writers to the same install or output destination.
 
+## Pending World edits across mod refresh, 2026-10-01
+
+World refresh now reloads the base layout while retaining queued moves,
+ownership/visibility edits and their undo history. The added-map count changes
+in both views; undo/redo/revert still work. A move for an undeployed map remains
+queued, refuses Apply before bank changes, and can be undone. The complete
+five-case GUI script passes with exact source-bank restoration and an unchanged
+pack. No new in-game evidence is claimed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -989,7 +989,7 @@ public:
     bool worldLastOk() const { return worldLastOk_; }
     void setWorldStitch(bool on, int feather) { worldStitch_ = on; worldStitchFeather_ = feather; }
 private:
-    void loadWorld();
+    void loadWorld(bool preserveDraft = false);
     void drawWorldCanvas(const ImVec2& origin, const ImVec2& size);
     void drawWorldPanel(float pad, float inner, float cardInner);
     void drawWorldFooter(float pad, float inner);

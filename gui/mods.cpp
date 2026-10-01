@@ -375,8 +375,12 @@ void App::refreshAfterMods() {
     dialogueAudio_.reset(); dialogueLoaded_ = false;
     dialogueScratchLanguage_.clear();
     const bool worldDraft = worldPendingCount() != 0;
-    if (!worldDraft) { worldLoaded_ = false; worldLoadedFrom_.clear(); }
-    else pushLog("mods: kept pending world edits; reload the world after saving or discarding them", 1);
+    const bool hadWorld = worldLoaded_ || worldDraft;
+    worldLoaded_ = false; worldLoadedFrom_.clear();
+    if (hadWorld) {
+        loadWorld(true);
+        if (worldDraft) pushLog("mods: kept pending world edits and undo while refreshing the layout", 0);
+    }
     if (fs::path(saveRoot()).lexically_normal() != fs::path(installPath_).lexically_normal()) {
         startContextLoad(saveRoot());
         pushLog("mods: refreshed assets from the save folder; Maps still lists the selected install", 0);

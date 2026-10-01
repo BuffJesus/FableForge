@@ -778,8 +778,9 @@ Deploy and undeploy wait for preview/World readers before replacing banks.
 Assets and maps refresh after completion, including failures, even when another
 tab is open. A failed redeploy may already have undone the previous deployment. Unsaved
 map edits and undo remain intact; a clean map removed by undeploy clears its
-preview. Pending world edits remain; reload the world after saving or discarding
-them to see the new layout.
+preview. The World layout refreshes while preserving queued moves, ownership,
+visibility edits and undo. An edit for a removed map remains queued so it can be
+undone; applying that move is refused because the map is no longer installed.
 
 Refused while Fable runs, and on an install EgoCore has deployed to. The rules of the merge
 are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
