@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: World drafts during level creation
+
+A valid new-level pack creation reproduced loss of an already queued World move
+when completion invalidated and reloaded the layout. Creation now reloads the
+base layout while preserving the World draft, selection and undo, using the
+same separation as mod refresh.
+
+`tools/test_mod_refresh_ui.py --create-only` passes new-map creation with pending
+move/owner/visibility edits and their undo/redo/revert at
+`build/mod-refresh-qdzayuje`. All eight source banks are unchanged. Independent
+WLD checks confirm the created pack excludes all three queued World edits: the
+TeleporterGreatwood map block is byte-identical, OrchardFarmEast retains its
+owner, and Greatwood does not acquire the queued OrchardFarm visibility edge.
+GUI build passes; the preceding five-case deployment test and 28-suite/ASan core
+gate remain applicable. This new probe covers creation into a pack, not a new
+in-game run or a direct-install creation with a World draft.
+
 ## 2026-10-01 continuation: World drafts across mod refresh
 
 A queued World move reproduced a stale World layout after deploying a new map:

@@ -383,6 +383,14 @@ queued, refuses Apply before bank changes, and can be undone. The complete
 five-case GUI script passes with exact source-bank restoration and an unchanged
 pack. No new in-game evidence is claimed.
 
+## World draft preservation during creation, 2026-10-01
+
+Creating a pack level retains pending World moves, ownership/visibility edits,
+selection and undo while refreshing the layout. The focused GUI case verifies
+successful creation and all three undo paths; source-bank hashes remain exact.
+Independent WLD checks confirm queued edits were not captured into the new-level
+pack. Direct-install creation with a World draft remains unexercised.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

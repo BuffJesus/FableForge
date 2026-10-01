@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--root', default=os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters'))
+    ap.add_argument('--create-only', action='store_true', help='check creation with a pending World draft, then stop')
     args = ap.parse_args()
     repo = Path(__file__).resolve().parents[1]
     source = Path(args.root)
@@ -50,16 +52,57 @@ def main():
         log = Path(str(script) + '.log').read_text()
         assert result.returncode == 0 and 'RESULT PASS' in log, log + result.stderr
         print(name + ': PASS', flush=True)
+    listing = subprocess.check_output([str(repo / 'build/forge.exe'), 'list', '--install', str(root)], text=True)
+    count = int(listing.split()[0])
     run('create', f'''pack_dest {pack}
+world_tab 1
+set world_3d 0
+world_move TeleporterGreatwood 2048 8064
+world_owner OrchardFarmEast Greatwood
+world_sees Greatwood OrchardFarm 1
+world_select TeleporterGreatwood
 new_level RefreshProbe 6400 6400 Greatwood
 wait_new_level
 frames 3
-assert_log new level RefreshProbe written into pack''')
+assert_log new level RefreshProbe written into pack
+assert_state world_maps {count + 1}
+assert_state world_pending 1
+assert_state world_pending_owners 1
+assert_state world_pending_sees 1
+assert_state world_selected_pos 2048,8064
+world_undo
+world_undo
+world_undo
+assert_state world_pending 0
+assert_state world_pending_owners 0
+assert_state world_pending_sees 0
+world_redo
+world_redo
+world_redo
+world_revert
+assert_state world_pending 0
+assert_state world_pending_owners 0
+assert_state world_pending_sees 0''')
     assert (pack / 'data/Levels/FinalAlbion.wld').is_file()
     assert (pack / 'stb/RefreshProbe.chunk').is_file()
     packed = {p.relative_to(pack): digest(p) for p in pack.rglob('*') if p.is_file()}
-    listing = subprocess.check_output([str(repo / 'build/forge.exe'), 'list', '--install', str(root)], text=True)
-    count = int(listing.split()[0])
+    assert original == {rel: digest(root / rel) for rel in files}, 'pack creation changed source banks'
+    # The new level is captured; the independent pending World edits are not.
+    base_world = (root / 'data/Levels/FinalAlbion.wld').read_bytes()
+    pack_world = (pack / 'data/Levels/FinalAlbion.wld').read_bytes()
+    def world_block(data, kind, needle):
+        return next(block for block in re.findall(rb'New' + kind + rb'\s+\d+;.*?End' + kind + rb';', data, re.S)
+                    if needle in block)
+    map_key = b'LevelScriptName "TeleporterGreatwood";'
+    assert world_block(base_world, b'Map', map_key) == world_block(pack_world, b'Map', map_key), 'creation captured the pending move'
+    owner_key = b'ContainsMap "FinalAlbion\\OrchardFarmEast.lev";'
+    assert b'RegionName "OrchardFarm";' in world_block(pack_world, b'Region', owner_key), 'creation captured the pending owner'
+    greatwood = world_block(pack_world, b'Region', b'RegionName "Greatwood";')
+    assert b'SeesMap "FinalAlbion\\OrchardFarm.lev";' not in greatwood, 'creation captured pending visibility'
+
+    if args.create_only:
+        print('World draft across new-level creation: PASS; evidence retained at', work)
+        return
     for name, draft, after in [
         ('clean', '', ''),
         ('world', '', ''),

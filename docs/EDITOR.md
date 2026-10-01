@@ -649,7 +649,9 @@ The Edit panel's **New level** card adds a level to the world; a free
 owning region defaults to the selected map's, the name must be a bare stem.
 Save or discard current map edits before starting. If you edit the current map
 while creation runs, Forge keeps it open with its undo history; select the new
-level from Maps when ready. Otherwise the new level opens automatically.
+level from Maps when ready. Otherwise the new level opens automatically. Pending
+World moves, ownership/visibility edits and undo survive the layout refresh;
+creating a level does not write those queued edits.
 Two modes:
 
 * **Blank** (`forge blank-level <name> [--size WxH] [--theme

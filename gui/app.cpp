@@ -1794,12 +1794,10 @@ void App::frame(float dt) {
             pushLog("new level " + r.name + " written into pack " + packLabel(r.pack) + " (map slot " + std::to_string(r.result.mapSlot) + " in the pack's world; Mods > Deploy puts it in the game, then it opens here)", 3);
             if (r.ownRegion) raiseRule("region");
             newLevelDonor_.clear();
-            worldLoaded_ = false; worldLoadedFrom_.clear();
         } else if (r.ok) {
             pushLog("new level " + r.name + " installed (map slot " + std::to_string(r.result.mapSlot) + ", origin " + std::to_string(r.result.worldX) + "," + std::to_string(r.result.worldY) + ")", 3);
             if (r.ownRegion) raiseRule("region");
             newLevelDonor_.clear();
-            worldLoaded_ = false; worldLoadedFrom_.clear();   // the World tab re-reads the layout with the new map
             if (saveRoot_.empty() || saveRoot_ == installPath_) {
                 // Refresh the map list, preserving edits made while creation ran.
                 const std::string root = installPath_;
@@ -1816,6 +1814,11 @@ void App::frame(float dt) {
             }
         } else {
             pushLog("new level failed: " + r.error, 2);
+        }
+        if (r.ok) {
+            const bool hadWorld = worldLoaded_ || worldPendingCount() != 0;
+            worldLoaded_ = false; worldLoadedFrom_.clear();
+            if (hadWorld) loadWorld(true);
         }
     }
     {
