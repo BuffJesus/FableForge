@@ -105,6 +105,11 @@ in-game harness run (`tools/ingame`).
   byte-pure lane (it is small accessor code, the auto-RE crawl handles it).
 
 ### 2. Regions past 141
+**Superseded 2026-09-17:** the binary loader reads all regions; saved games cache
+the table. Fresh-game region 146 was verified. No cap-lifting hook is needed;
+see ENGINE_RULES.md and EDITOR.md. The original investigation below is retained
+as history, not a current engine constraint.
+
 * Live probe (2026-08): the region vector is capped at 141 real entries;
   `CWorldMap::LoadFromFile` 0x00507c30 is the load loop. Two lanes:
   1. **Own region by take-over** (done): repurpose a filler slot.
@@ -137,7 +142,8 @@ in-game harness run (`tools/ingame`).
 ### 4. Script extender as an "append" tool
 * ForgeFSE already gives: quest threads, entity scripts, creature spawn,
   region transition (`GoToMapSlotRetailTransition`), region probes.
-* What only a native hook can add: the region cap (above), per-region
+* Historical hook candidates (the region-cap and fixed-table assumptions were
+  superseded): per-region
   minimap fallbacks (hook `InitialiseMiniMapFileLoading_Region` 0x829d90 to
   load our TGA for any region -- the debug editor's own TGA path), and
   texture symbol resolution if retail turns out to use a fixed table.

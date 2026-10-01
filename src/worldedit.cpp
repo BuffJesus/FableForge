@@ -139,6 +139,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();   // FableForge keeps its own .forge-orig copies
         ir.prepareCreatedFile = albion::backups::markCreated;
+        forge::worldinstall::validateRequest(ir);
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("reading the donor level");
 
@@ -670,6 +671,11 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         ir.backupSuffix.clear();
         ir.prepareCreatedFile = albion::backups::markCreated;
         ir.levBytes = readFile(levTmp);
+        const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
+        ir.tngBytes.assign(tng.begin(), tng.end());
+        ir.chunkBytes = built.chunk;
+        ir.commonRecord = record;
+        forge::worldinstall::validateRequest(ir);
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
             forge::minimapframe::Framing frame;
@@ -677,10 +683,6 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
             ir.minimapGraphic = entry;
             ir.minimapFraming = frame;
         }
-        const std::string tng = "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
-        ir.tngBytes.assign(tng.begin(), tng.end());
-        ir.chunkBytes = built.chunk;
-        ir.commonRecord = record;
         for (const char* f : {"FinalAlbion.bwd", "FinalAlbion.wld", "FinalAlbion.wad", "FinalAlbion_RT.stb"})
             if (!backupOnce(levels / f, error)) return false;
         for (const fs::path mirror : {gameRoot / "FinalAlbion.bwd", levels / "FinalAlbion" / "FinalAlbion.bwd"})

@@ -1264,6 +1264,34 @@ Normal `build/newlevel-inputs-swqn1qvb` and ASan
 (+6400,06400) with size +64x064 and height +1.25e1, and exact Restore. Normal
 editor/CLI/tools builds and all 35 regression suites pass (27.98s).
 
+## 2026-10-01 continuation: validate world registration before minimap writes
+
+`build/newlevel-preflight-e5pjgq27/new-level_0.json` reproduced duplicate-name
+creation returning failure after changing textures.big and creating seven
+backup files. Core `validateRequest` now executes the same read-only container,
+name, bounds, collision and in-memory region-registration checks as installLevel,
+returning before staging, backup creation or creation-marker callbacks. Both
+editor creation routes invoke it before minimap writes. Blank creation supplies
+its authored common record and payloads so validation uses its actual dimensions.
+The installer repeats the checks at write time; this is not a slot reservation
+or a prediction of later filesystem failures.
+
+`tools/test_newlevel_preflight.py` checks duplicate names, invalid stems,
+overlap and missing takeover regions in both donor and blank creation, with
+additional loose-file collisions for extracted installs. Every refusal must
+leave all original hashes and the entire file inventory unchanged, including
+minimap banks. A valid own-region blank creation and exact Restore follow.
+No world-registration or minimap encoding algorithm changed. Later I/O or
+terrain-preparation failures can still require Restore for separate stages.
+
+Normal packed `build/newlevel-preflight-0858ycd3` passes eight refusal cases;
+ASan loose `build/newlevel-preflight-hzmzbfxo` passes ten, including unrelated
+loose-file collisions. Both also pass valid own-region creation and exact
+Restore; the loose run preserves its renamed WAD. All 35 rebuilt normal suites
+pass (23.13s), with editor/CLI/tools builds successful. Remaining stale cap and
+retail-texture-slot workaround paragraphs in EDITOR.md are reconciled with its
+2026-09-17 findings; PLAN.md labels its old cap investigation as superseded.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

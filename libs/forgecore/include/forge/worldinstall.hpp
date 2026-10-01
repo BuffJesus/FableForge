@@ -76,6 +76,12 @@ struct Result {
     std::vector<std::string> notes;
 };
 
+// Runs the installer's container, name, placement and region-registration checks
+// without writing files or creating recovery metadata. Call before related
+// minimap writes; installLevel repeats the checks against its current inputs.
+// This does not reserve names/slots or predict later filesystem failures.
+void validateRequest(const Request& request);
+
 // Prepares files in an owned workspace, checks backups before replacement and
 // rolls back earlier replacements on a reported commit failure. Throws with
 // the retained recovery path if rollback itself fails. Validation/preparation

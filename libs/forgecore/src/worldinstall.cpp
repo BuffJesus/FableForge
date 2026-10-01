@@ -93,7 +93,7 @@ Origin suggestOrigin(const fs::path& gameRoot, const std::string& donorLevelName
     throw std::runtime_error("worldinstall: no free 32-aligned placement inside the world grid");
 }
 
-Result installLevel(const Request& req) {
+static Result installLevelImpl(const Request& req, bool validationOnly) {
     Result result;
     if (!validStem(req.newLevelName))
         throw std::runtime_error("worldinstall: level name must be letters, digits or '_' (got '" + req.newLevelName + "')");
@@ -290,6 +290,8 @@ Result installLevel(const Request& req) {
         result.notes.push_back("new dedicated regions need a new game or a save made after installation to display correctly");
     }
 
+    if (validationOnly) return result;
+
     // ---- prepare all replacements inside an exclusively owned directory.
     TemporaryDirectory scratch(req.gameRoot, ".forge-world-install-");
     struct PreparedFile { fs::path target, prepared, previous; bool saved=false, installed=false; };
@@ -429,5 +431,8 @@ Result installLevel(const Request& req) {
     result.notes.push_back(std::string("STB: chunk appended ") + (!req.commonRecord.empty() ? "(authored from scratch)" : result.chunkRetargeted ? "(re-baked for the new origin)" : "(DONOR geometry: re-bake it for the new origin before playing)"));
     return result;
 }
+
+void validateRequest(const Request& request) { (void)installLevelImpl(request, true); }
+Result installLevel(const Request& request) { return installLevelImpl(request, false); }
 
 } // namespace forge::worldinstall

@@ -773,7 +773,8 @@ Saves cache the region table: a newly added dedicated region needs a new game
 or a save made after installation to display correctly. The New level card
 also offers existing-region ownership and filler takeover. There is no
 141-region loading cap (see the 2026-09-17 findings below). Core name, placement
-and overlap validation runs before target replacement; editor creation's
+and overlap validation runs before minimap writes and repeats during installation;
+editor creation's
 containers get one-time `.forge-orig` backups. The core installer prepares
 WLD, BWD and its existing mirrors, WAD (or new loose LEV/TNG files), and STB
 in an owned directory, then rolls back earlier replacements if a later file
@@ -926,11 +927,11 @@ standalone registration uses the same handling for the definition pair. Other
 stages of new-level creation remain separate operations, so Restore can still be
 needed after a later failure.
 
-The in-game minimap is per *region*, and the engine keeps only the first 141
-regions (live probe, 2026-08), so a level that wants its own name on the map
-screen and its own minimap takes over a retail **filler** region slot ("Own
-region + minimap" toggle / `--own-region [<filler>] [--merge-into <filler>]
-[--display <name>] [--no-minimap]`):
+The in-game minimap is per *region*. As an alternative to a new dedicated
+region, a level can take over a retail **filler** slot already present in older
+saves (`--own-region [<filler>] [--merge-into <filler>] [--display <name>]
+[--no-minimap]`). The old 141-region-cap explanation was superseded by the
+save-cache findings above. Filler takeover works as follows:
 
 1. the filler's decorative maps are re-owned by another filler (their `sees`
    references elsewhere are untouched), the slot is renamed and re-labelled
@@ -944,12 +945,10 @@ region + minimap" toggle / `--own-region [<filler>] [--merge-into <filler>]
    its aspect ratio, and the region gets `MiniMapScale 1.0` plus the
    `MiniMapOffsetX/Y` that centre it, so the hero marker lands on the art.
    (Until 2026-09-28 the box was stretched onto the square, which put the
-   marker off the art on every non-square map.) It
-   **replaces an unreferenced retail `MINIMAP_*` slot** (retail ships a few
-   that no region uses, e.g. `MINIMAP_PRISONCOURTYARD2`): an entry *appended*
-   past the retail ids crashed the game at start-up (the engine indexes
-   `GBANK_MAIN_PC` by a fixed-size table; superseded 2026-09-17: appended
-   entries work once the mip-0 chunk header uses the escape form). Since
+   marker off the art on every non-square map.) The texture is appended under
+   `MINIMAP_<LEVEL>` and registered in the PLAYER_GUI definitions. Replacing an
+   unreferenced retail minimap slot was the earlier workaround; appended entries
+   work with the corrected mip-0 chunk header (2026-09-17). Since
    2026-09-17 the encoder is forgecore's own `texturewrite` (DXT1/DXT3/ARGB,
    mips, chunked LZO, Info, bank splice) -- no Python or FableTLC checkout is
    needed any more; stb_image reads the PNG.
