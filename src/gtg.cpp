@@ -52,6 +52,19 @@ std::string physics(const float pos[3], const float forward[2], const std::strin
            "RHSetForwardX " + fmt(fx) + ";" + n + "RHSetForwardY " + fmt(fy) + ";" + n + "RHSetForwardZ 0.0;" + n + "RHSetUpX 0.0;" + n + "RHSetUpY 0.0;" + n + "RHSetUpZ 1.0;" + n + "EndCTCPhysicsStandard;" + n;
 }
 
+void movePhysics(forge::tng::File& body, size_t index, const float pos[3], const float forward[2]) {
+    if (!body.things()[index].findCtc("CTCPhysicsStandard")) body.addCtcBlock(index, "CTCPhysicsStandard", {});
+    const double length = std::hypot(double(forward[0]), double(forward[1]));
+    const float fx = length > 1e-6 ? float(forward[0] / length) : 0.0f;
+    const float fy = length > 1e-6 ? float(forward[1] / length) : 1.0f;
+    const std::pair<const char*, float> fields[] = {
+        {"PositionX", pos[0]}, {"PositionY", pos[1]}, {"PositionZ", pos[2]},
+        {"RHSetForwardX", fx}, {"RHSetForwardY", fy}, {"RHSetForwardZ", 0},
+        {"RHSetUpX", 0}, {"RHSetUpY", 0}, {"RHSetUpZ", 1}
+    };
+    for (const auto& [key, value] : fields) body.setCtcProperty(index, "CTCPhysicsStandard", key, fmt(value));
+}
+
 std::string entranceBlock(uint64_t uid, const float pos[3], const float forward[2], const std::string& n) {
     return "NewThing Thing;" + n + "Player 4;" + n + "UID " + std::to_string(uid) + ";" + n + "DefinitionType \"REGION_ENTRANCE_POINT\";" + n + "ScriptName NULL;" + n + "ScriptData \"NULL\";" + n +
            "ThingGamePersistent FALSE;" + n + "ThingLevelPersistent FALSE;" + n + physics(pos, forward, n) +
@@ -215,20 +228,32 @@ bool setRegionEntrance(const fs::path& gameRoot, int slot, const std::string& le
         const std::string script = levelName + "HSP";
         uint64_t uid = f.maxUid();
         std::string things;
-        // an entrance FableForge wrote before (its HSP carries our script name): replace both blocks
-        const size_t mine = s.body.find("ScriptName " + script + ";");
-        if (mine != std::string::npos) {
-            const auto [h0, h1] = blockAround(s.body, mine);
-            if (h0 == std::string::npos) { error = "entrance script name is outside a complete thing"; return false; }
-            const size_t ent = s.body.rfind("DefinitionType \"REGION_ENTRANCE_POINT\"", h0);
-            size_t e0 = std::string::npos, e1 = std::string::npos;
-            if (ent != std::string::npos) { const auto be = blockAround(s.body, ent); if (be.second == h0) { e0 = be.first; e1 = be.second; } }
-            const size_t cut0 = e0 != std::string::npos ? e0 : h0;
-            auto uidIn = [&](size_t a, size_t b) { const size_t u = s.body.find("\nUID ", a); return u != std::string::npos && u < b ? std::strtoull(s.body.c_str() + u + 5, nullptr, 10) : 0ull; };
-            if (e0 == std::string::npos && uid == std::numeric_limits<uint64_t>::max()) { error = "no free entrance UID"; return false; }
-            const uint64_t uidE = e0 != std::string::npos ? uidIn(e0, e1) : ++uid, uidH = uidIn(h0, h1);
-            things = entranceBlock(uidE, pos, forward, f.eol) + startBlock(uidH, script, pos, forward, f.eol);
-            s.body.replace(cut0, h1 - cut0, things);
+        auto body = forge::tng::File::parseText(s.body);
+        std::optional<size_t> hsp;
+        for (size_t i = 0; i < body.things().size(); ++i) {
+            const auto& thing = body.things()[i];
+            auto name = thing.scriptName();
+            if (name.size() >= 2 && name.front() == '"' && name.back() == '"') name = name.substr(1, name.size() - 2);
+            if (name != script) continue;
+            if (hsp || thing.definitionType() != "HOLY_SITE_PLAYER_START") {
+                error = "entrance script name is ambiguous or belongs to another definition"; return false;
+            }
+            hsp = i;
+        }
+        if (hsp) {
+            // Only the adjacent preceding entrance belongs to this authored pair.
+            // Move its physics fields through the TNG editor, keeping custom data/UIDs.
+            const size_t h0 = s.body.find(body.thingBlockText(*hsp));
+            bool paired = false;
+            if (*hsp > 0 && body.things()[*hsp - 1].definitionType() == "REGION_ENTRANCE_POINT") {
+                const size_t e0 = s.body.find(body.thingBlockText(*hsp - 1));
+                paired = blockAround(s.body, e0).second == h0;
+            }
+            if (!paired && uid == std::numeric_limits<uint64_t>::max()) { error = "no free entrance UID"; return false; }
+            movePhysics(body, *hsp, pos, forward);
+            if (paired) movePhysics(body, *hsp - 1, pos, forward);
+            s.body = body.serialize();
+            if (!paired) s.body.insert(s.body.find(body.thingBlockText(*hsp)), entranceBlock(++uid, pos, forward, f.eol));
             note = ("FinalAlbion.gtg: moved the region entrance of slot " + std::to_string(slot) + " (" + levelName + ") to (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
         } else {
             const std::string& n = f.eol;

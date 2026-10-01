@@ -876,6 +876,27 @@ CLI builds pass. `tools/test_newlevel_workspace.py --loose` also passes at
 entrance, minimap, GUI palette, renamed-WAD preservation and byte-exact Restore.
 The source install was not changed; runtime region travel remains untested.
 
+## 2026-10-01 continuation: preserve entrance object customizations
+
+`build/gtg-preserve-before.log` reproduced custom fields disappearing when an
+existing entrance moved. The writer now identifies the player-start by parsed
+ScriptName plus HOLY_SITE_PLAYER_START definition, then edits only position and
+orientation fields through forgecore's TNG editor. The adjacent preceding entrance
+is updated with it. Other properties, components, UIDs, comments and formatting
+remain intact. An unpaired player-start receives a new entrance and retains its
+own data; missing physics is added. Quoted names are matched without reformatting.
+Duplicate names or the same name on another definition are refused. Incidental
+ScriptName text inside ScriptData no longer selects an unrelated object.
+
+Expanded GTG core tests pass normal/ASan, including byte-exact expected deltas,
+quoted names, unpaired starts, duplicate names and unrelated script text. The core
+export suite also passes. `tools/test_entrance_preserve.py` copies real WLD/BWD/GTG
+and game.bin, creates/moves an entrance with custom fields, checks that only the
+requested position bytes change, repeats idempotently, and Restores exact bytes
+and file inventory. Normal `build/entrance-preserve-b5vw_pve` and ASan CLI
+`build/entrance-preserve-pdyjkzue` pass. Normal writer targets build. No live game
+files were changed and no runtime entrance behavior is claimed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

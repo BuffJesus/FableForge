@@ -849,8 +849,11 @@ are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
 and a `HOLY_SITE_PLAYER_START` named `<Map>HSP`. A level installed with its own
 region gets both at its centre; the Level tab's *Region entrance* card (and
 `forge entrance <map> [x y [z]]`) shows and moves them. Retail entrances
-are never edited; FableForge's own (recognised by the `<Map>HSP` name) are replaced
-in place. The file is CRLF and is re-serialised byte-exact around the edit.
+are left alone when adding a new pair. An existing player-start with the
+`<Map>HSP` name and `HOLY_SITE_PLAYER_START` definition is moved with its adjacent
+preceding entrance. Only physics fields change; custom properties, components
+and UIDs are preserved. Duplicate names or a matching name on another definition
+are refused. The file is CRLF and is re-serialised byte-exact around the edit.
 Entrance writes refuse incomplete map/thing sections, duplicate or unordered map
 slots, non-finite coordinates and exhausted UID allocation before creating a backup.
 Staged replacement preserves the old GTG when a file operation fails; comments

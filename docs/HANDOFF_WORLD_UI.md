@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: preserve entrance object customizations
+
+`build/gtg-preserve-before.log` reproduced custom fields disappearing when an
+existing entrance moved. The writer now identifies the player-start by parsed
+ScriptName plus HOLY_SITE_PLAYER_START definition, then edits only position and
+orientation fields through forgecore's TNG editor. The adjacent preceding entrance
+is updated with it. Other properties, components, UIDs, comments and formatting
+remain intact. An unpaired player-start receives a new entrance and retains its
+own data; missing physics is added. Quoted names are matched without reformatting.
+Duplicate names or the same name on another definition are refused. Incidental
+ScriptName text inside ScriptData no longer selects an unrelated object.
+
+Expanded GTG core tests pass normal/ASan, including byte-exact expected deltas,
+quoted names, unpaired starts, duplicate names and unrelated script text. The core
+export suite also passes. `tools/test_entrance_preserve.py` copies real WLD/BWD/GTG
+and game.bin, creates/moves an entrance with custom fields, checks that only the
+requested position bytes change, repeats idempotently, and Restores exact bytes
+and file inventory. Normal `build/entrance-preserve-b5vw_pve` and ASan CLI
+`build/entrance-preserve-pdyjkzue` pass. Normal writer targets build. No live game
+files were changed and no runtime entrance behavior is claimed.
+
 ## 2026-10-01 continuation: refuse incomplete region-entrance inputs
 
 `build/gtg-before.log` reproduced an unterminated GTG map accepted for editing.

@@ -80,6 +80,50 @@ int main() {
         const auto entrance = albion::editor::entranceOf(root, 2, error);
         check(entrance && std::abs(entrance->forward[0] - 0.707107f) < 0.00001f && std::abs(entrance->forward[1] - 0.707107f) < 0.00001f,
               "large finite direction did not normalize");
+        auto customized = once;
+        const auto firstEnd = customized.find("EndThing;");
+        customized.insert(firstEnd, "CustomEntrance 77;\n");
+        const auto lastEnd = customized.rfind("EndThing;");
+        customized.insert(lastEnd, "CustomStart 88;\n");
+        write(file, customized);
+        auto expected = customized;
+        const auto replaceAll = [](std::string& text, const std::string& before, const std::string& after) {
+            size_t at = 0;
+            while ((at = text.find(before, at)) != std::string::npos) { text.replace(at, before.size(), after); at += after.size(); }
+        };
+        replaceAll(expected, "PositionX 1.0;", "PositionX 4.0;");
+        replaceAll(expected, "PositionY 2.0;", "PositionY 5.0;");
+        replaceAll(expected, "PositionZ 3.0;", "PositionZ 6.0;");
+        const float moved[3] = {4, 5, 6};
+        check(albion::editor::setRegionEntrance(root, 1, "Probe", moved, forward, notes, error), "custom entrance move failed");
+        check(read(file) == expected, "moving entrance discarded unrelated object bytes");
+        const std::string collision = "NEWMAP 1\nVersion 2;\nXXXSectionStart NULL;\nNewThing Object;\nUID 42;\nDefinitionType \"OBJECT_BARREL_BREAKABLE\";\nScriptName ProbeHSP;\nEndThing;\nXXXSectionEnd;\nENDMAP\n";
+        write(file, collision); notes.clear();
+        check(!albion::editor::setRegionEntrance(root, 1, "Probe", pos, forward, notes, error) && read(file) == collision && notes.empty(),
+              "unrelated object with matching script name was replaced");
+        auto quoted = customized;
+        replaceAll(quoted, "ScriptName ProbeHSP;", "ScriptName \"ProbeHSP\";");
+        auto quotedExpected = expected;
+        replaceAll(quotedExpected, "ScriptName ProbeHSP;", "ScriptName \"ProbeHSP\";");
+        write(file, quoted);
+        check(albion::editor::setRegionEntrance(root, 1, "Probe", moved, forward, notes, error) && read(file) == quotedExpected,
+              "quoted script identity was duplicated or reformatted");
+        const std::string loneStart = "NewThing Holy Site;\nUID 42;\nDefinitionType \"HOLY_SITE_PLAYER_START\";\nScriptName ProbeHSP;\nCustomStart 99;\nEndThing;\n";
+        const auto wrap = [](const std::string& body) { return "NEWMAP 1\nVersion 2;\nXXXSectionStart NULL;\n" + body + "XXXSectionEnd;\nENDMAP\n"; };
+        write(file, wrap(loneStart));
+        check(albion::editor::setRegionEntrance(root, 1, "Probe", pos, forward, notes, error), "lone start could not acquire entrance/physics");
+        const auto paired = read(file);
+        check(paired.find("UID 42;\n") != std::string::npos && paired.find("UID 43;\n") != std::string::npos && paired.find("CustomStart 99;\n") != std::string::npos,
+              "pair completion lost start data or reused UID");
+        check(albion::editor::setRegionEntrance(root, 1, "Probe", pos, forward, notes, error) && read(file) == paired, "completed pair was duplicated");
+        const auto duplicate = wrap(loneStart + loneStart);
+        write(file, duplicate); notes.clear();
+        check(!albion::editor::setRegionEntrance(root, 1, "Probe", pos, forward, notes, error) && read(file) == duplicate && notes.empty(),
+              "duplicate start identity accepted");
+        const std::string incidental = "NewThing Object;\nUID 42;\nDefinitionType \"OBJECT_BARREL_BREAKABLE\";\nScriptData \"ScriptName ProbeHSP;\";\nCustomObject 123;\nEndThing;\n";
+        write(file, wrap(incidental));
+        check(albion::editor::setRegionEntrance(root, 1, "Probe", pos, forward, notes, error) && read(file).find(incidental) != std::string::npos,
+              "incidental script-name text changed an unrelated object");
         std::cout << "GTG entrance failure checks passed\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
