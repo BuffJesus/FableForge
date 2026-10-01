@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: GUI smoke owns its output evidence
+
+`tools/ui_smoke.py` now copies its automation script into a unique build/ui-smoke-*
+workspace and redirects screenshots/GLB there. It no longer deletes files in
+shared build/ui or rewrites the checked-in script log. Source install and binary
+paths can be explicit; the hidden GUI's captured output and a JSON report stay
+with its evidence.
+
+`build/ui-smoke-cl6q3jru` passes the complete button-driven smoke, all screenshot
+pixel assertions and structural Greatwood_1 GLB checks (18721 vertices, 36864
+triangles, 384x768 albedo). Hashes/inventory of all 326 pre-existing shared UI
+files remain unchanged. The normal GUI/tools rebuild also passes. No production
+behavior changed in this test-harness pass.
+
 ## 2026-10-01 continuation: explicit origins move foliage with the map
 
 `build/export-origins-y7i1xnng` reproduced --origin 16,-32 leaving OrchardFarm

@@ -246,7 +246,8 @@ and streaming state. Automation does not persist settings or modify the install.
   clean, place, delete, a real gizmo drag, save into `build/ui_editor_install`.
 * `tests/ui/smoke.txt` — happy path: install detected, textured preview, all view modes,
   orbit, filter, export via button. `tools/ui_smoke.py` runs it and adds GLB validation
-  and screenshot pixel assertions.
+  and screenshot pixel assertions. It keeps its script, screenshots, export and
+  report in an owned `build/ui-smoke-*` directory; `--install` selects the source.
 * `tests/ui/paths.txt` — tree/row/toggle clicks, OBJ + untextured export, loose file, batch.
 * `tests/ui/controls.txt` — Unreal-style camera through injected input: RMB+W flies, RMB drag looks, MMB pans, F frames, Alt+LMB orbits.
 * `tests/ui/foliage.txt` — two-stage foliage load, chip toggle, export with the Foliage node.

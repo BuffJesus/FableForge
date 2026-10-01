@@ -7,7 +7,8 @@ filter narrows the list).
 
   python tools/ui_smoke.py [--exe build/FableForge.exe] [--script tests/ui/smoke.txt]
 """
-import argparse, os, subprocess, sys, time
+import argparse, json, os, subprocess, sys, tempfile, time
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 from retail_smoke import parse_glb, validate  # noqa: E402
@@ -46,26 +47,35 @@ def diff_fraction(a, b, box):
     return sum(1 for x, y in zip(pa, pb) if sum(abs(x[i] - y[i]) for i in range(3)) > 30) / len(pa)
 
 def main():
+    repo = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exe", default=os.path.join("build", "FableForge.exe"))
-    ap.add_argument("--script", default=os.path.join("tests", "ui", "smoke.txt"))
+    ap.add_argument("--exe", type=Path, default=repo / "build/FableForge.exe")
+    ap.add_argument("--script", type=Path, default=repo / "tests/ui/smoke.txt")
+    ap.add_argument("--install", type=Path, help="explicit read-only source install")
     a = ap.parse_args()
-    os.makedirs(os.path.join("build", "ui"), exist_ok=True)
-    for f in os.listdir(os.path.join("build", "ui")):
-        path = os.path.join("build", "ui", f)
-        if os.path.isfile(path):
-            os.remove(path)  # Keep other suites' nested evidence directories.
-
+    work = Path(tempfile.mkdtemp(prefix="ui-smoke-", dir=repo / "build")).resolve()
+    assert work.parent == (repo / "build").resolve()
+    print("evidence retained at", work, flush=True)
+    output = work / "ui"
+    output.mkdir()
+    script = work / a.script.name
+    script.write_text(a.script.read_text(encoding="utf-8").replace("build/ui", output.as_posix()), encoding="utf-8")
+    command = [str(a.exe.resolve()), "--auto", str(script)]
+    if a.install:
+        command += ["--install", str(a.install.resolve())]
     t0 = time.time()
-    r = subprocess.run([a.exe, "--auto", a.script], timeout=600)
+    r = subprocess.run(command, cwd=repo, capture_output=True, text=True, timeout=600,
+                       env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN="1"))
     dt = time.time() - t0
-    log = open(a.script + ".log", encoding="utf-8", errors="replace").read()
+    (work / "gui_output.log").write_text(r.stdout + r.stderr, encoding="utf-8")
+    log_path = Path(str(script) + ".log")
+    log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else "automation log missing"
     fails = []
     if r.returncode != 0 or "RESULT PASS" not in log:
         fails.append(f"script exit {r.returncode}; log tail:\n" + "\n".join(log.splitlines()[-12:]))
     print(f"script ran in {dt:.1f}s, exit {r.returncode}")
 
-    glb = os.path.join("build", "ui", "Greatwood_1.glb")
+    glb = output / "Greatwood_1.glb"
     try:
         doc, bin_ = parse_glb(glb)
         n, tris, tex = validate(doc, bin_, True)
@@ -76,7 +86,7 @@ def main():
     if Image is None:
         print("PIL not installed; skipping pixel assertions")
     else:
-        shots = {k: os.path.join("build", "ui", k) for k in
+        shots = {k: output / k for k in
                  ["01_empty.png", "02_textured.png", "03_wireframe.png", "04_walkable.png",
                   "05_height.png", "06_orbited.png", "07_filtered.png", "08_exported.png"]}
         imgs = {}
@@ -113,6 +123,8 @@ def main():
             if not has_accent(imgs["08_exported.png"]): fails.append("08 accent colour not found")
             print("pixel assertions evaluated")
 
+    (work / "report.json").write_text(json.dumps({"passed": not fails, "failures": fails,
+        "pixel_checks": Image is not None, "seconds": dt}, indent=2), encoding="utf-8")
     if fails:
         print("UI SMOKE FAIL"); [print("  -", f) for f in fails]; return 1
     print("UI SMOKE PASS"); return 0
