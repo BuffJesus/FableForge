@@ -1092,6 +1092,38 @@ All 34 rebuilt normal suites pass (24.88s); editor/CLI builds pass. The CLI test
 uses copied WLD/BWD without terrain banks; packed/loose movement and the World tab
 were exercised in the preceding transaction milestone.
 
+## 2026-10-01 continuation: prepare complete terrain deployments
+
+`build/terrain-deploy-recovery-1u13l9lp/failure_report.json` reproduced a locked
+STB consuming unrelated WAD/STB .atlas-tmp files despite the old LEV rollback.
+Terrain deployment now prepares the loose LEV, optional WAD entry and STB together
+in PendingBanks. The navigation serialization helper leaves the live document
+state alone; saved terrain, navigation baseline, sound-list state and success
+notes publish only after installation. WAD entry and STB chunk read-back checks
+precede replacement. New loose files keep creation-marker semantics, and game
+process checks bracket preparation. Pack writes use the same rollback group for
+LEV/chunk/record, replacing their manual rewrite-based undo. Terrain/nav/bake
+algorithms are unchanged; external-world loose saves retain their existing route.
+
+`tools/test_terrain_deploy_recovery.py` verifies locked-STB refusal, dirty draft,
+original hashes, unowned temporary files, packed/loose LEV agreement, retry and
+exact Restore. Normal new-loose `build/terrain-deploy-recovery-p1i_bhsh`, normal
+extracted `build/terrain-deploy-recovery-ez6vkno6`, and ASan existing-loose
+`build/terrain-deploy-recovery-bqdemjek` pass. Pack last-record rollback/retry and
+unchanged source hashes pass in `build/terrain-pack-recovery-1uxy_4fk` and ASan
+`build/terrain-pack-recovery-qfaipla1` via `tools/test_terrain_pack_recovery.py`.
+
+All nine background terrain cases pass (`build/terrain-async-ff8_n56e`): later
+strokes, map switches, competing writes, repeated saves, separate sculpt saves,
+and painted theme output agree with references. Repeated game terrain/TNG saves
+and two exact Restores pass (`build/created-restore-oy65n_v6`). All 34 rebuilt
+normal suites pass (20.95s); core and locked-things suites pass under ASan. The
+locked-things unit expectation now checks untouched caller notes/error/dirty
+state instead of requiring the removed unconditional pack rollback message.
+Normal and ASan editor/CLI builds pass. These are offline/hidden-editor checks;
+no new live-game terrain or navigation validation was performed. Multi-map seam
+stitching remains a sequence of separate terrain deployments.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

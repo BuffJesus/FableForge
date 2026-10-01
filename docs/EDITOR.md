@@ -238,11 +238,14 @@ item and info display components; absent components are not added.
   the draft remains editable while it runs.
 * **Deploy** (`Write terrain into the game`) writes the terrain as it was when
   clicked. You can keep editing while it runs; later strokes remain unsaved,
-  and switching maps does not change the pending write. It writes in this order:
+  and switching maps does not change the pending write. It prepares the files
+  before replacing any of them, then installs them with rollback on file errors.
+  A failed deployment keeps the terrain draft unsaved. Pack writes group the LEV,
+  chunk and record in the same way. The prepared game files are:
   1. loose `data/Levels/FinalAlbion/<map>.lev` (`lev::File::save`, only the
      cell bytes change);
-  2. the `.lev` entry in `FinalAlbion.wad` (`wad::repack`, same size so it is
-     patched in place);
+  2. the `.lev` entry in `FinalAlbion.wad`, when present (`wad::repack`;
+     unchanged-size entries retain their slot);
   3. the map's terrain chunk in `FinalAlbion_RT.stb`: `stbbake::bakeHeightfield`
      resamples every composed background patch and foreground layer mesh from
      the LEV (heights, normals, direction masks), re-encodes the vertex blocks

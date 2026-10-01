@@ -1251,43 +1251,50 @@ namespace {
 bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
 } // namespace
 
+void Document::prepareTerrainLoose(const fs::path& prepared, std::shared_ptr<forge::lev::File>& nextLevel,
+                                   bool& patchedNavigation, std::vector<std::string>& notes) const {
+    level_->save(prepared);
+    nextLevel = level_;
+    patchedNavigation = false;
+
+    // navigation: patch the retail quadtree for the cells whose walkable byte changed
+    std::vector<std::pair<int, int>> changed;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    if (navWalkable_.size() == terrain_->walkable.size())
+        for (int y = 0; y < cy; ++y)
+            for (int x = 0; x < cx; ++x)
+                if (navWalkable_[size_t(y) * cx + x] != terrain_->walkable[size_t(y) * cx + x]) changed.push_back({x, y});
+    if (!changed.empty() && !level_->navSections().empty()) {
+        const auto saved = forge::lev::File::open(prepared);
+        auto nav = forge::navmesh::parseNavigation(saved);
+        const auto st = forge::navmesh::patchWalkability(nav, saved, changed);
+        const auto bytes = forge::navmesh::emitNavigation(saved, nav);
+        std::ofstream out(prepared, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        out.close();
+        if (!out) throw std::runtime_error("cannot write " + prepared.string());
+        nextLevel = std::make_shared<forge::lev::File>(forge::lev::File::open(prepared));
+        patchedNavigation = true;
+        {
+            char line[256];
+            std::snprintf(line, sizeof line, "navigation: %zu cell(s) changed -> %zu leaves removed, %zu added, %zu split, %zu region(s) added, %zu merged (%zu section(s))",
+                          changed.size(), st.leavesRemoved, st.leavesAdded, st.nodesSplit, st.regionsAdded, st.regionsMerged, nav.sections.size());
+            notes.push_back(line);
+            if (st.cellsSkipped) notes.push_back("navigation: " + std::to_string(st.cellsSkipped) + " opened cell(s) already had nav coverage");
+        }
+    }
+}
+
 bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const fs::path path = external() && packOut_.empty() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
     try {
         albion::detail::PendingBanks pending(path.parent_path(), ".forge-lev-save-");
         const auto prepared = pending.prepare(path.filename());
-        level_->save(prepared);
-        auto nextLevel = level_;
+        std::shared_ptr<forge::lev::File> nextLevel;
         bool patchedNavigation = false;
         std::vector<std::string> preparedNotes;
-
-        // navigation: patch the retail quadtree for the cells whose walkable byte changed
-        std::vector<std::pair<int, int>> changed;
-        const int cx = level_->cellsX(), cy = level_->cellsY();
-        if (navWalkable_.size() == terrain_->walkable.size())
-            for (int y = 0; y < cy; ++y)
-                for (int x = 0; x < cx; ++x)
-                    if (navWalkable_[size_t(y) * cx + x] != terrain_->walkable[size_t(y) * cx + x]) changed.push_back({x, y});
-        if (!changed.empty() && !level_->navSections().empty()) {
-            const auto saved = forge::lev::File::open(prepared);
-            auto nav = forge::navmesh::parseNavigation(saved);
-            const auto st = forge::navmesh::patchWalkability(nav, saved, changed);
-            const auto bytes = forge::navmesh::emitNavigation(saved, nav);
-            std::ofstream out(prepared, std::ios::binary | std::ios::trunc);
-            out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-            out.close();
-            if (!out) throw std::runtime_error("cannot write " + prepared.string());
-            nextLevel = std::make_shared<forge::lev::File>(forge::lev::File::open(prepared));
-            patchedNavigation = true;
-            if (notes) {
-                char line[256];
-                std::snprintf(line, sizeof line, "navigation: %zu cell(s) changed -> %zu leaves removed, %zu added, %zu split, %zu region(s) added, %zu merged (%zu section(s))",
-                              changed.size(), st.leavesRemoved, st.leavesAdded, st.nodesSplit, st.regionsAdded, st.regionsMerged, nav.sections.size());
-                preparedNotes.push_back(line);
-                if (st.cellsSkipped) preparedNotes.push_back("navigation: " + std::to_string(st.cellsSkipped) + " opened cell(s) already had nav coverage");
-            }
-        }
+        prepareTerrainLoose(prepared, nextLevel, patchedNavigation, preparedNotes);
         // Recovery metadata and document state follow successful serialization.
         if (packOut_.empty()) {
             if (!backupOnce(path, error)) return false;
@@ -1339,57 +1346,7 @@ bool Document::deployTerrain(const fs::path& gameRoot, std::vector<std::string>&
         notes.push_back("wrote " + externalLev_.string() + "; the world's own .stb was not re-baked");
         return true;
     }
-    // what the .lev was before: the loose file (or its absence) and the WAD entry
-    const fs::path loose = gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
-    const fs::path wad = gameRoot / "data" / "Levels" / "FinalAlbion.wad";
-    const bool hadLoose = fs::exists(loose);
-    std::string oldLoose, wadEntry;
-    std::vector<uint8_t> oldWad;
-    const auto oldSaved = savedTerrain_;
-    const bool oldSoundGrew = soundListGrew_;
-    try {
-        if (hadLoose) oldLoose = readFile(loose);
-        if (fs::exists(wad)) {
-            const auto archive = forge::wad::Archive::open(wad);
-            const std::string want = lower(mapName_) + ".lev";
-            for (const auto& e : archive.entries())
-                if (lower(fs::path(e.name).filename().string()) == want) { wadEntry = e.name; oldWad = archive.read(e); break; }
-        }
-    } catch (const std::exception& e) { error = e.what(); return false; }
-
-    if (deployTerrainSteps(gameRoot, notes, error, library, progress)) return true;
-
-    // roll the .lev back; the STB is only written as the last step
-    std::string rollback;
-    try {
-        if (hadLoose) {
-            std::ofstream out(loose, std::ios::binary | std::ios::trunc);
-            out.write(oldLoose.data(), std::streamsize(oldLoose.size()));
-            if (!out) throw std::runtime_error("cannot restore " + loose.string());
-        } else if (fs::exists(loose)) {
-            fs::remove(loose);
-            std::error_code ec;
-            fs::remove(loose.string() + albion::backups::kCreatedSuffix, ec);
-        }
-        if (!wadEntry.empty()) {
-            const auto archive = forge::wad::Archive::open(wad);
-            for (const auto& e : archive.entries())
-                if (e.name == wadEntry && archive.read(e) != oldWad) {
-                    std::map<std::string, std::vector<uint8_t>> rep{{wadEntry, oldWad}};
-                    const fs::path temp = wad.string() + ".atlas-tmp";
-                    forge::wad::repack(wad, rep, temp);
-                    fs::rename(temp, wad);
-                    break;
-                }
-        }
-        // the edit is unsaved again. navWalkable_ stays: the in-memory level
-        // already carries the patched navigation the next save writes out
-        savedTerrain_ = oldSaved;
-        soundListGrew_ = oldSoundGrew;
-    } catch (const std::exception& e) { rollback = e.what(); }
-    error += rollback.empty() ? " (level data was put back)"
-                              : " (and putting the .lev back failed: " + rollback + "; restore it from the .forge-orig backup)";
-    return false;
+    return deployTerrainSteps(gameRoot, notes, error, library, progress);
 }
 
 bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::string>& notes, std::string& error,
@@ -1399,8 +1356,12 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     bool themesChanged = themesDirty();
     std::shared_ptr<const TerrainState> before = savedTerrain_;   // the ground the chunk's foliage sits on
-    fs::path stbTemp;
+    std::vector<std::string> preparedNotes;
     try {
+        const bool inPlace = packOut_.empty();
+        if (inPlace && backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+        const fs::path outputRoot = inPlace ? gameRoot : packOut_;
+        detail::PendingBanks pending(outputRoot, ".forge-terrain-deploy-");
         if (!packOut_.empty()) {
             // Each pack bake starts from gameRoot's STB, not the previous pack
             // chunk. Its height/theme baseline must come from that same root.
@@ -1424,13 +1385,31 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                                 terrain_->palette[i].value != before->palette[i].value;
         }
         if (themesChanged && !library) { error = "ground themes were painted but the ENGINE_THEME library is not loaded (textures not ready)"; return false; }
-        // 1. loose .lev (also the bytes for the WAD)
-        stage("writing the .lev (navigation patch)");
-        const fs::path levRoot = packOut_.empty() ? gameRoot : packOut_;
-        if (!saveTerrainLoose(levRoot, error, &notes)) return false;
-        const fs::path loose = levRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
-        const std::string levBytes = readFile(loose);
-        notes.push_back("wrote " + loose.string());
+        // 1. prepare the loose .lev (also the bytes for the WAD).
+        stage("preparing the .lev (navigation patch)");
+        const fs::path levRelative = fs::path("data") / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
+        const fs::path loose = outputRoot / levRelative;
+        const auto levPrepared = pending.prepare(levRelative);
+        std::shared_ptr<forge::lev::File> nextLevel;
+        bool patchedNavigation = false;
+        prepareTerrainLoose(levPrepared, nextLevel, patchedNavigation, preparedNotes);
+        const std::string levBytes = readFile(levPrepared);
+        preparedNotes.push_back("wrote " + loose.string());
+        const auto finish = [&]() {
+            if (inPlace && backups::gameRunningIn(gameRoot)) { error = "Fable started during terrain deployment; quit to the desktop first"; return false; }
+            if (inPlace && !fs::exists(loose)) {
+                fs::create_directories(loose.parent_path());
+                backups::markCreated(loose);
+            }
+            stage("installing prepared terrain files");
+            if (!pending.install(inPlace, error)) return false;
+            level_ = std::move(nextLevel);
+            if (patchedNavigation) navWalkable_ = terrain_->walkable;
+            savedTerrain_ = terrain_;
+            soundListGrew_ = false;
+            notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
+            return true;
+        };
 
         // 2. FinalAlbion.wad entry (patched in place when the size is unchanged,
         //    relocated to the end of the payload after a navigation patch)
@@ -1442,13 +1421,16 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             for (const auto& e : archive.entries())
                 if (lower(fs::path(e.name).filename().string()) == want) { entryName = e.name; break; }
             if (entryName.empty()) { error = mapName_ + ".lev is not in FinalAlbion.wad"; return false; }
-            if (!backupOnce(wad, error)) return false;
             std::map<std::string, std::vector<uint8_t>> rep;
             rep[entryName] = std::vector<uint8_t>(levBytes.begin(), levBytes.end());
-            const fs::path temp = wad.string() + ".atlas-tmp";
+            const auto temp = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion.wad");
             forge::wad::repack(wad, rep, temp);
-            fs::rename(temp, wad);
-            notes.push_back("replaced " + entryName + " in FinalAlbion.wad");
+            const auto verified = forge::wad::Archive::open(temp);
+            const auto found = std::find_if(verified.entries().begin(), verified.entries().end(),
+                [&](const forge::wad::Entry& e) { return e.name == entryName; });
+            if (found == verified.entries().end() || verified.read(*found) != rep.at(entryName))
+                throw std::runtime_error("prepared terrain WAD failed read-back verification");
+            preparedNotes.push_back("replaced " + entryName + " in FinalAlbion.wad");
         }
 
         // 3. the terrain chunk in FinalAlbion_RT.stb, re-baked from the edited heights
@@ -1489,7 +1471,7 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             // ones they replace; retail chunks keep theirs where sizes differ)
             lodAlbedo = std::make_shared<LodAlbedo>(bakeLodAlbedo(gameRoot, *level_));
             opt.backgroundTextures = lodTextureProvider(*lodAlbedo);
-            notes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette, distant-LOD textures re-baked");
+            preparedNotes.push_back("ground themes painted: layer meshes rebuilt from the LEV palette, distant-LOD textures re-baked");
         }
         // Neighbouring maps (every map a region owning this one contains or
         // sees, whose placement touches ours) supply the shared-edge samples,
@@ -1538,14 +1520,14 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                     if (right < wm->mapX - 1 || nm->mapX > wm->mapX + level_->width() || bottom < wm->mapY - 1 || nm->mapY > wm->mapY + level_->height()) continue;
                     opt.neighbors.push_back({nf.get(), nm->mapX, nm->mapY});
                     neighbourFiles.push_back(std::move(nf));
-                    notes.push_back("neighbour " + leaf + " at (" + std::to_string(nm->mapX) + "," + std::to_string(nm->mapY) + ")");
+                    preparedNotes.push_back("neighbour " + leaf + " at (" + std::to_string(nm->mapX) + "," + std::to_string(nm->mapY) + ")");
                 } catch (const std::exception&) {}
             }
         }
         opt.deferOversizedPatches = true;   // tall edits: those patches grow below instead of failing the bake
         opt.rebakeLodPatches = true;        // and the distant-view LOD patches follow the new ground
         const auto baked = forge::stbbake::bakeHeightfield(chunk, *level_, wm->mapX, wm->mapY, opt);
-        for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) notes.push_back(n);
+        for (const auto& n : baked.notes) if (n.rfind("foreground frame", 0) != 0) preparedNotes.push_back(n);
         if (baked.chunk.size() != chunk.size()) { error = "baked chunk changed size (" + std::to_string(baked.chunk.size()) + " vs " + std::to_string(chunk.size()) + ")"; return false; }
         // camera height bounds in the common record
         float minH = 1e30f, maxH = -1e30f;
@@ -1553,7 +1535,6 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
         auto info = forge::stbinfo::readInfoBlock(record.data());
         forge::stbbake::setRetailCameraHeightBounds(info, minH, maxH);
         const auto encoded = forge::stbinfo::writeInfoBlock(info);
-        if (packOut_.empty() && !backupOnce(stb, error)) return false;
         std::vector<uint8_t> outChunk = baked.chunk, outRecord = record;
         std::copy(encoded.begin(), encoded.end(), outRecord.begin());
         // patches whose new heights outgrew their fixed slot: written here, where
@@ -1565,9 +1546,9 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             RelocateReport check; std::string cerr;
             if (!auditChunk(outChunk, outRecord, wm->mapX, wm->mapY, level_->width(), level_->height(), check, cerr)) { error = "grown terrain patches produced a chunk that does not parse (" + cerr + ")"; return false; }
             const size_t grown = baked.deferred.size() - baked.lodPatches;
-            if (baked.lodPatches) notes.push_back(std::to_string(baked.lodPatches) + " distant-view LOD patch(es) re-sampled from the new ground");
-            if (grown) notes.push_back(std::to_string(grown) + " terrain patch(es) outgrew their slot and were re-laid");
-            if (!rr.notes.empty()) notes.push_back(rr.notes.back());
+            if (baked.lodPatches) preparedNotes.push_back(std::to_string(baked.lodPatches) + " distant-view LOD patch(es) re-sampled from the new ground");
+            if (grown) preparedNotes.push_back(std::to_string(grown) + " terrain patch(es) outgrew their slot and were re-laid");
+            if (!rr.notes.empty()) preparedNotes.push_back(rr.notes.back());
         }
         // the chunk's trees and grass ride the ground change (bounds grow by the
         // largest change); a re-laid foliage section can grow the chunk
@@ -1590,28 +1571,28 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
                 RelocateReport check; std::string cerr;
                 if (!auditChunk(outChunk, outRecord, wm->mapX, wm->mapY, level_->width(), level_->height(), check, cerr)) { error = "foliage re-seat produced a chunk that does not parse (" + cerr + ")"; return false; }
                 foliageRode = true;
-                notes.push_back("foliage re-seated on the new ground (" + std::to_string(rr.groupFrames) + " cache groups, bounds grown by " + std::to_string(slack) + ")");
+                preparedNotes.push_back("foliage re-seated on the new ground (" + std::to_string(rr.groupFrames) + " cache groups, bounds grown by " + std::to_string(slack) + ")");
             }
         }
         if (!packOut_.empty()) {
             // the pack keeps the map's chunk + record; the composer writes them into the STB it builds
-            const fs::path dir = packOut_ / "stb";
-            fs::create_directories(dir);
+            const fs::path dir = "stb";
             auto put = [&](const fs::path& f, const std::vector<uint8_t>& b) {
-                std::ofstream o(f, std::ios::binary | std::ios::trunc);
+                const auto prepared = pending.prepare(f);
+                std::ofstream o(prepared, std::ios::binary | std::ios::trunc);
                 o.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
-                if (!o) throw std::runtime_error("cannot write " + f.string());
+                o.close();
+                if (!o) throw std::runtime_error("cannot write " + prepared.string());
             };
             put(dir / (mapName_ + ".chunk"), outChunk);
             put(dir / (mapName_ + ".record"), outRecord);
-            notes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes into the pack (stb/" + mapName_ + ".chunk + .record)");
-            return true;
+            preparedNotes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes into the pack (stb/" + mapName_ + ".chunk + .record)");
+            return finish();
         }
+        const auto tmp = pending.prepare(fs::path("data") / "Levels" / "FinalAlbion_RT.stb");
         if (outChunk.size() == chunk.size()) {
             // Patch a copy, then replace the bank in one step. A failed or
             // interrupted write must not leave a half-updated retail STB.
-            const fs::path tmp = stb.string() + ".atlas-tmp";
-            stbTemp = tmp;
             fs::copy_file(stb, tmp, fs::copy_options::overwrite_existing);
             std::fstream io(tmp, std::ios::binary | std::ios::in | std::ios::out);
             if (!io) { error = "cannot open " + tmp.string() + " for writing"; std::error_code ec; fs::remove(tmp,ec); return false; }
@@ -1621,22 +1602,19 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             io.write(reinterpret_cast<const char*>(outRecord.data()), std::streamsize(outRecord.size()));
             io.close();
             if (!io) { error = "write to " + tmp.string() + " failed"; std::error_code ec; fs::remove(tmp,ec); return false; }
-            fs::rename(tmp, stb);
-            stbTemp.clear();
         } else {
             std::vector<forge::stb::StaticMapAppend> batch;
             batch.push_back({map->levelName, entry->name, outChunk, outRecord});
-            const fs::path tmp = stb.string() + ".atlas-tmp";
-            stbTemp = tmp;
             forge::stb::replaceStaticMapsRelayout(stb, tmp, batch);
-            fs::rename(tmp, stb);
-            stbTemp.clear();
         }
-        notes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb" + (outChunk.size() == chunk.size() ? "" : " (chunk re-laid)"));
+        preparedNotes.push_back("re-baked terrain chunk " + std::to_string(outChunk.size()) + " bytes (" + std::to_string(baked.patches) + " patches, " + std::to_string(baked.foregroundFrames) + " layer frames) into FinalAlbion_RT.stb" + (outChunk.size() == chunk.size() ? "" : " (chunk re-laid)"));
+        const auto verified = forge::stb::Archive::open(tmp);
+        const auto* savedEntry = verified.findEntry(entry->name);
+        if (!savedEntry || verified.read(*savedEntry) != outChunk)
+            throw std::runtime_error("prepared terrain STB failed read-back verification");
         (void)foliageRode;
-        return true;
+        return finish();
     } catch (const std::exception& e) {
-        if (!stbTemp.empty()) { std::error_code ec; fs::remove(stbTemp,ec); }
         error = e.what(); return false;
     }
 }
@@ -3152,36 +3130,10 @@ bool Document::saveToPack(const fs::path& pack, std::string& error) {
 bool Document::deployTerrainToPack(const fs::path& gameRoot, const fs::path& pack, std::vector<std::string>& notes, std::string& error,
                                    const forge::terraintex::ThemeLibrary* library, const std::function<void(const std::string&)>& progress) {
     if (external()) { error = "a map of another world cannot go into a FinalAlbion pack"; return false; }
-    struct OriginalFile { fs::path path; std::optional<std::string> bytes; };
-    std::vector<OriginalFile> originals;
-    const fs::path lev = pack / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
-    const fs::path chunk = pack / "stb" / (mapName_ + ".chunk");
-    const fs::path record = pack / "stb" / (mapName_ + ".record");
-    try {
-        for (const auto& path : {lev, chunk, record})
-            originals.push_back({path, fs::exists(path) ? std::optional<std::string>(readFile(path)) : std::nullopt});
-    } catch (const std::exception& e) { error = "cannot snapshot pack terrain before writing: " + std::string(e.what()); return false; }
-    const auto oldSaved = savedTerrain_;
-    const bool oldSoundGrew = soundListGrew_;
     packOut_ = pack;
     const bool ok = deployTerrainSteps(gameRoot, notes, error, library, progress);
     packOut_.clear();
-    if (ok) return true;
-    std::string rollback;
-    for (const auto& file : originals) try {
-        if (file.bytes) {
-            fs::create_directories(file.path.parent_path());
-            std::ofstream out(file.path, std::ios::binary | std::ios::trunc);
-            out.write(file.bytes->data(), std::streamsize(file.bytes->size()));
-            if (!out) throw std::runtime_error("cannot restore " + file.path.string());
-        } else { std::error_code ec; fs::remove(file.path, ec); if (ec) throw fs::filesystem_error("cannot remove failed output",file.path,ec); }
-    } catch (const std::exception& e) { rollback += (rollback.empty() ? "" : "; ") + std::string(e.what()); }
-    savedTerrain_ = oldSaved;
-    soundListGrew_ = oldSoundGrew;
-    notes.clear();
-    if (rollback.empty()) notes.push_back("failed terrain write rolled back from the pack");
-    else error += " (pack rollback also failed: " + rollback + ")";
-    return false;
+    return ok;
 }
 
 bool Document::deployWad(const fs::path& gameRoot, std::string& error) {

@@ -551,9 +551,11 @@ public:
                              const std::function<void(const std::string&)>& progress = {});
 
 private:
-    // deployTerrain's three steps; deployTerrain puts the .lev (loose file and
-    // WAD entry) back when a later step fails, so the level never disagrees
-    // with its STB chunk (in a loose-level install the game reads that .lev)
+    // Serialize terrain/navigation into an owned candidate without publishing saved state.
+    void prepareTerrainLoose(const std::filesystem::path& prepared, std::shared_ptr<forge::lev::File>& nextLevel,
+                             bool& patchedNavigation, std::vector<std::string>& notes) const;
+    // Prepare the LEV and its WAD/STB (or pack) companions, then install as one
+    // rollback group. Publish saved state only after the file group succeeds.
     bool deployTerrainSteps(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                             const forge::terraintex::ThemeLibrary* library,
                             const std::function<void(const std::string&)>& progress);
