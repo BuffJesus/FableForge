@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: illustrated Aeon/controller handoff
+
+Added `docs/walkthrough/aeon-controller/index.html`, a Windows preparation guide
+for Perodis with four real GUI screenshots. Packages expose it at
+`AEON_CONTROLLER.html`. It explains clean Steam TLC input, complete Aeon data,
+FMP then DLL-only order, skipping EgoCore WAD extraction, runtime loading and
+Retroid handoff. Windows PC access is assumed; Pocket 5 runtime remains untested.
+No game/mod payloads are bundled and nothing was sent externally.
+
+`python tools/test_aeon_controller.py --keep` passed at
+`build/aeon_controller_bxensofm`: 70 -> 141 bindings, 843 Aeon level payloads
+compared against effective output, 547 WAD replacements / 47 appends, no missing
+direct model references. `tools/capture_aeon_guide.py` then used actual GUI
+Check conflicts and Deploy buttons on that owned scratch root; the deployed
+BIN, WAD, DLL and Mods.ini match the independent build. Four captures reviewed.
+The first capture attempt exposed the ordinary automation 60-second limit;
+whole-install `wait_mods` now allows 600 seconds. Final run passed in 74 seconds.
+The scratch fixture includes retail graphics/textures so its base asset audit
+is available. Package tests now require the guide and all four linked images.
+No live-game or Retroid validation, no live install writes, no push.
+
 ## 2026-10-01 continuation: bounded, literal dependency labels
 
 `build/mod-master-labels-2se7x78k/popup.png` showed a long dependency-popup

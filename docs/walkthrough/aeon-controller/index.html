@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aeon Edition + Controller Support — FableForge</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#11121a;color:#e9e8ef;font:17px/1.65 system-ui,sans-serif}main{max-width:960px;margin:auto;padding:48px 24px 80px}h1{font-size:42px;line-height:1.15;letter-spacing:-1.5px}h2{font-size:24px;margin:0 0 12px}p{margin:12px 0}a{color:#bcb0ff}small,figcaption{color:#b1adbf}section{margin:28px 0;padding:26px;background:#1b1d29;border:1px solid #343044;border-radius:16px}b,strong{color:#fff}code{font-size:.9em;overflow-wrap:anywhere;background:#292637;padding:2px 5px;border-radius:4px}pre{overflow:auto;background:#11121a;padding:18px;border-radius:10px;line-height:1.6}pre code{background:none;padding:0}figure{margin:22px 0 0}img{width:100%;height:auto;border:1px solid #403951;border-radius:8px}figcaption{font-size:14px;margin-top:8px}.eyebrow{color:#bdacf3;font-weight:650;letter-spacing:1px}.note{border-left:3px solid #bda6ff;padding-left:16px}.step{color:#bda6ff;margin-right:10px}@media print{body{background:white;color:#222;font-size:11pt}main{padding:0}h1,h2,b,strong{color:#111}section{background:white;border-color:#ccc;break-inside:avoid}code,pre{background:#eee}a,small,figcaption{color:#444}img{max-height:350px;object-fit:contain}}
+</style>
+<main>
+<p class="eyebrow">FABLEFORGE · A GUIDE FOR PERODIS</p>
+<h1>Aeon Edition + Controller Support</h1>
+<p>Prepare the modded game on a <strong>Windows PC</strong>, then copy it to your Retroid setup. Forge applies the controller FMP, so you do not need Chocolate Box or Fable Explorer for this route.</p>
+<p class="note">This guide assumes you have access to a Windows PC. Forge’s composed files have been checked offline; this is <strong>not a verified fix for a Retroid crash</strong>. Forge is a Windows x64 application. This build has not been tested on the Pocket 5 or its Windows compatibility environment.</p>
+
+<section><h2><span class="step">1</span>Start with a clean game copy</h2>
+<p>Use a separate, clean copy of <strong>Fable: The Lost Chapters (2005)</strong> that launches successfully. Keep your working game and saves backed up. Close Fable and EgoCore while Forge writes files.</p>
+<p>The controller author specifies the <strong>Steam version of Fable.exe</strong>. Anniversary is a different game. A reinstall over leftover mod files may still leave a modified folder; use a genuinely clean target folder.</p>
+<p>For this recipe, keep the original <code>data/Levels/FinalAlbion.wad</code> in that clean copy. <strong>Do not run a WAD decompiler or rename/delete the WAD.</strong> Forge rebuilds it with the composed level files. If your previous attempt already removed it, restart with the clean copy.</p></section>
+
+<section><h2><span class="step">2</span>Prepare three mod sources</h2>
+<p>Download <a href="https://www.nexusmods.com/fablethelostchapters/mods/454">Aeon Edition</a> and <a href="https://www.nexusmods.com/fablethelostchapters/mods/596?tab=files">Controller Support’s legacy FMP download</a> from their authors. The file check used Aeon 5.03 and Controller Support version 1. Extract the archives outside the game folder.</p>
+<p>Keep the complete Aeon extraction, including its graphics, textures, levels and Bones files. Choose the folder directly containing <code>Data</code>, not the <code>Data</code> folder itself.</p>
+<p>Put <strong>only</strong> <code>FableControllerSupport.dll</code> in a separate folder named exactly <code>FableControllerSupport</code>. Keep the FMP separately:</p>
+<pre><code>My mod sources/
+  AeonEdition/
+    Data/                     ← complete Aeon data
+  ControllerSupport.fmp
+  FableControllerSupport/
+    FableControllerSupport.dll</code></pre>
+<p>Do not include the controller mod’s <code>Data</code> folder in the DLL folder. The FMP supplies the asset changes in this recipe; the DLL supplies the running-game controller support.</p></section>
+
+<section><h2><span class="step">3</span>Open Forge and choose the game copy</h2>
+<p>Extract the supplied Forge ZIP completely and open <code>FableForge.exe</code>. Keep its companion files and folders together.</p>
+<p>In <strong>Setup → Choose the install folder…</strong>, select your clean game folder containing <code>Fable.exe</code>. Setup also opens from the install status in the header. Confirm the selected path is your intended game copy, then open the <strong>Mods</strong> tab.</p></section>
+
+<section><h2><span class="step">4</span>Add the mods in this order</h2>
+<p>In <strong>Add a mod</strong>, paste each source’s full path, give it the name below, and click <strong>Add to the order</strong>. Scroll the right panel if needed. Add these from top to bottom:</p>
+<ol><li><strong>Aeon Edition</strong> — the folder containing its complete <code>Data</code> tree.</li><li><strong>Controller Support FMP</strong> — <code>ControllerSupport.fmp</code>.</li><li><strong>Controller Support DLL</strong> — your DLL-only <code>FableControllerSupport</code> folder.</li></ol>
+<p>All three must be enabled. Drag a row to correct its position. Keep those source folders in place; Forge uses them again when rebuilding.</p>
+<figure><a href="01-order.png"><img src="01-order.png" alt="Actual Forge Mods panel showing Aeon Edition, Controller Support FMP and Controller Support DLL in order"></a><figcaption>The tested three-layer order. Screenshots use a disposable test game folder; your paths will differ. Click an image to enlarge it.</figcaption></figure>
+<figure><a href="02-add.png"><img src="02-add.png" alt="Forge Add a mod path, name and Add to the order controls"></a><figcaption>Use the path field and optional name for each source.</figcaption></figure></section>
+
+<section><h2><span class="step">5</span>Check, then build and deploy</h2>
+<p>Click <strong>Check conflicts</strong> and wait for it to finish. Review the report and Activity log. The checked versions produced zero definition field conflicts and no missing direct model references. A different result deserves investigation before deploying.</p>
+<p>Click <strong>Build and deploy into the game</strong>. Wait for the Activity log to report <code>mods deploy: done</code>. If it reports an error, stop at that error; do not proceed as though installation succeeded.</p>
+<figure><a href="03-check.png"><img src="03-check.png" alt="Forge Mods install controls after checking conflicts"></a><figcaption>Check conflicts first, then use Build and deploy.</figcaption></figure>
+<p>Forge writes the composed <code>FinalAlbion.wad</code>, applies the FMP changes, copies the DLL to <code>Mods/FableControllerSupport/</code>, and enables that DLL in <code>Mods.ini</code>. Originals are retained for Forge’s <strong>Undeploy</strong> action.</p>
+<figure><a href="04-deploy.png"><img src="04-deploy.png" alt="Forge after successful deployment to the scratch game folder"></a><figcaption>Actual GUI deployment, checked against the independently built output.</figcaption></figure></section>
+
+<section><h2><span class="step">6</span>Use EgoCore to load the DLL</h2>
+<p>Set up <a href="https://www.nexusmods.com/fablethelostchapters/mods/596">EgoCore using the controller author’s linked instructions</a> for this game copy. Forge does not bundle or replace the runtime DLL loader.</p>
+<p>In EgoCore, enable Controller Support and launch through EgoCore. If it offers to decompile the WAD, <strong>skip that step</strong>, following Aeon’s advice for this combination. Do not install the controller’s full EgoCore Data package over the Forge result.</p>
+<p>Before launching, verify <code>Mods/FableControllerSupport/</code> contains the DLL and <strong>no Data folder</strong>. Otherwise EgoCore may compile another set of controller definitions over Aeon’s changes.</p>
+<p>Test on the PC first if possible. Use a mouse to get through the main menu and load a game: the mod does not add controller navigation to that menu or the save/load settings.</p></section>
+
+<section><h2><span class="step">7</span>Transfer and test on the Retroid</h2>
+<p>Copy the <strong>complete prepared game folder</strong> to a separate location in the Retroid Windows environment you already use, including <code>Mods</code>, <code>Mods.ini</code> and the EgoCore runtime files. Keep your previous working copy available. Launch through the same DLL-loading route; launching plain <code>Fable.exe</code> may omit controller support.</p>
+<p>If it crashes, record the exact point: before the menu, while loading, or in a particular area. Check the unmodified game, Aeon alone, and then this combination in separate copies. Share the Windows environment/version, game executable version, and available EgoCore/crash logs. A controller mapping problem and a game launch crash need different troubleshooting.</p></section>
+
+<p><strong>What was checked:</strong> Forge composed the three sources over retail files, verified controller bindings changed from 70 to 141, compared all 843 Aeon level payloads with the effective composed output, and found no missing direct model references. The rebuilt WAD and GUI deployment were checked. These are file checks, not a gameplay or Retroid compatibility test.</p>
+<p><small>Prepared 1 October 2026. Install order and DLL-only advice: Aeon’s Discord replies supplied with this request. Executable requirement, legacy FMP and runtime loading: <a href="https://www.nexusmods.com/fablethelostchapters/mods/596">Controller Support author’s page</a>. Game files and third-party mods are not included in the Forge package.</small></p>
+</main></html>

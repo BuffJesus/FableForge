@@ -55,6 +55,13 @@ def main():
             elif target.suffix == '.md': pending.append(target)
     (work / 'doc-links.json').write_text(json.dumps({'checked': links, 'broken': broken}, indent=2), encoding='utf-8')
     assert not broken, broken
+    guide = package / 'AEON_CONTROLLER.html'
+    assert guide.is_file()
+    pictures = re.findall(r'<img[^>]+src="([^"]+)"', guide.read_text(encoding='utf-8'))
+    assert len(pictures) == 4
+    for picture in pictures:
+        target = (package / picture).resolve()
+        assert target.is_relative_to(package) and target.is_file(), picture
     print('packaged documentation links: PASS', links, flush=True)
     cwd = work / 'unrelated working directory'
     cwd.mkdir()

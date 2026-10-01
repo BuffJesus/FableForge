@@ -37,6 +37,7 @@ def main():
         readme = readme.replace("docs/" + doc, doc)
     readme = readme.replace("vendor/EgoCore-LICENSE.txt", "EgoCore-LICENSE.txt")
     readme = readme.replace("vendor/VENDORED.md", "THIRD_PARTY.md")
+    readme += "\nIllustrated Aeon Edition + Controller Support setup: open [AEON_CONTROLLER.html](AEON_CONTROLLER.html) in your browser.\n"
     with open(os.path.join(stage, "README.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write(readme)
     shutil.copy("LICENSE", stage)
@@ -59,6 +60,10 @@ def main():
     subprocess.run([sys.executable, "tools/gen_cli_reference.py"], check=False)
     shutil.copy(os.path.join("docs", "CLI.md"), stage)
     shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
+    guide = (root / "docs/walkthrough/aeon-controller/index.html").read_text(encoding="utf-8")
+    for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+        guide = guide.replace('"' + shot + '"', '"walkthrough/aeon-controller/' + shot + '"')
+    (Path(stage) / "AEON_CONTROLLER.html").write_text(guide, encoding="utf-8")
     shutil.copytree("presets", os.path.join(stage, "presets"))
     shutil.copytree(os.path.join("docs", "re_reference"), os.path.join(stage, "docs", "re_reference"))   # forge-tools reads def_schema.json etc.
     shutil.copytree(os.path.join("docs", "modding"), os.path.join(stage, "docs", "modding"))   # the mod-pack / .fmp / load-order design the forge-tools mods family implements
