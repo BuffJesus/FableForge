@@ -321,6 +321,10 @@ Result installLevel(const Request& req) {
         std::copy(patched.begin(), patched.end(), record.begin());
         result.chunkRetargeted = !req.chunkBytes.empty();
         stb::appendStaticMap(stbPath, stbTmp, newLev, newLev, result.chunkRetargeted ? req.chunkBytes : donorChunk, record);
+        if (loose && req.prepareCreatedFile) {
+            req.prepareCreatedFile(looseLev);
+            req.prepareCreatedFile(looseTng);
+        }
     } catch (const std::exception& e) {
         cleanup();
         throw std::runtime_error(std::string("worldinstall: staging failed, install untouched: ") + e.what());

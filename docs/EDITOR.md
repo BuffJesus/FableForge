@@ -50,6 +50,11 @@ to their current files. Unreadable files are treated as differing. Failed target
 replacement or backup/creation-marker cleanup is reported as an error; release
 the file lock and retry to finish cleanup. Staged backups without a manifest are
 left in place for manual recovery.
+Loose copied/blank level creation prepares both creation markers after staging
+and before replacing any target. A marker failure prevents those replacements;
+a later commit failure leaves the markers available for Restore to remove any
+new loose files alongside restoring the world banks.
+
 A creation marker paired with an original or overlay backup for the same target
 is ambiguous. Restore reports both records and stops before changing any files
 or consuming a stage, including when the target is missing. Preserve those

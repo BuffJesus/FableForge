@@ -572,6 +572,28 @@ and unchanged eight-bank hashes/inventory. All normal writer targets and ASan
 CLI/GUI build. New-level installation currently adds markers after its core
 commit; late commit failures are being investigated separately.
 
+## 2026-10-01 continuation: recovery metadata before loose-level commit
+
+A locked STB at the last commit step left the newly committed loose LEV/TNG
+without creation markers; Restore retained both files
+(`build/newlevel-recovery-axfje_04`). The core installer now offers a preparation
+callback after staging and before target replacements. Both copied and blank
+editor-level creation use it to prepare checked markers, so even a late failure
+leaves enough metadata for Restore. The core API no longer describes its
+multi-file commit as atomic; failure still requires Restore.
+
+Normal late-failure recovery passes (`build/newlevel-recovery-t9z5fuvu`) and ASan
+passes (`build/newlevel-recovery-sdfg42zu`), with exact original file inventory
+and hashes after Restore. A directory blocking the second marker refuses the
+commit, preserves originals and the occupant, and cleans the first marker via
+Restore: normal `build/newlevel-recovery-4ylvpwmf`, ASan
+`build/newlevel-recovery-ci_bz431`. The first marker-test runs redundantly hashed
+the whole install inside a per-file loop and were stopped; the corrected test
+hashes it once. Successful own-region loose blank creation, entrance, minimap,
+GUI palette and exact Restore pass (`build/newlevel-workspace-84p9xln8`). Full
+build and all 30 core suites pass (27.34 seconds). This adds recovery tracking,
+not rollback of every already-committed bank or power-loss atomicity.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

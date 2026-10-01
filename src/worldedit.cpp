@@ -130,6 +130,7 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();   // FableForge keeps its own .forge-orig copies
+        ir.prepareCreatedFile = albion::backups::markCreated;
         const auto stage = [&](const std::string& s) { if (req.progress) req.progress(s); };
         stage("reading the donor level");
 
@@ -185,7 +186,6 @@ bool createLevelFromDonor(const fs::path& gameRoot, const NewLevelRequest& req, 
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
         stage(forge::levelstore::detect(gameRoot).looseOnly() ? "installing: loose .lev/.tng + .wld / .bwd / _RT.stb" : "installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
-        for (const auto& f : r.createdFiles) albion::backups::markCreated(f);   // loose install: restore deletes them
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);
@@ -623,6 +623,7 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
         ir.worldX = req.worldX; ir.worldY = req.worldY;
         if (!applyOwnRegion(gameRoot, req.ownRegion, req.name, req.hostRegion, ir, error)) return false;
         ir.backupSuffix.clear();
+        ir.prepareCreatedFile = albion::backups::markCreated;
         ir.levBytes = readFile(levTmp);
         if (req.ownRegion.wanted && req.ownRegion.minimap) {
             std::string entry;
@@ -641,7 +642,6 @@ bool createBlankLevel(const fs::path& gameRoot, const BlankLevelRequest& req,
             if (fs::exists(mirror) && !backupOnce(mirror, error)) return false;
         stage(forge::levelstore::detect(gameRoot).looseOnly() ? "installing: loose .lev/.tng + .wld / .bwd / _RT.stb" : "installing: FinalAlbion.wad / .wld / .bwd / _RT.stb");
         const auto r = forge::worldinstall::installLevel(ir);
-        for (const auto& f : r.createdFiles) albion::backups::markCreated(f);   // loose install: restore deletes them
         out.mapSlot = r.mapSlot;
         out.worldX = r.left; out.worldY = r.top; out.width = r.right - r.left; out.height = r.bottom - r.top;
         for (const auto& n : r.notes) if (n.find("141-region cap") == std::string::npos) out.notes.push_back(n);

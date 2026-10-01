@@ -1,7 +1,7 @@
 #pragma once
 // Install a new level into a Fable install IN PLACE, from a donor: the library
 // form of `forge world install-level`. All four world containers are wired in
-// one staged, atomic step -- BWD + WLD (map slot, and either a dedicated new
+// one staged operation -- BWD + WLD (map slot, and either a dedicated new
 // region or membership in an existing host region), WAD (the donor's .lev/.tng
 // entries cloned under the new name, optionally with custom bytes; in a
 // loose-level install with no FinalAlbion.wad, loose FinalAlbion\<new>.lev/.tng
@@ -22,6 +22,7 @@
 #include <optional>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,9 @@ struct Request {
     std::vector<uint8_t> commonRecord;  // empty = the donor's static-map record; a from-scratch chunk
                                         // (stbbake::buildTerrainChunk64 + buildTerrainCommonRecord) passes its own
     std::string backupSuffix = ".bak";  // one-time copies of the four containers; "" = none
+    // Optional owner recovery metadata for new loose files. Called after all
+    // staging succeeds, before any target replacement. Throw to abort commit.
+    std::function<void(const std::filesystem::path&)> prepareCreatedFile;
 };
 
 struct Result {
