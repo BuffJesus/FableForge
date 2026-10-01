@@ -126,6 +126,8 @@ def main():
     ok &= run("Expanded Chapters (content + graphics archives; skips without both)",
               [sys.executable, "tools/test_expanded_chapters.py"], capture_output=True)
     ok &= run("custom mesh import (.obj + .glb cube into scratch banks)", [sys.executable, "tools/test_meshimport.py"], capture_output=True)
+    ok &= run("custom theme import (base/cliff textures, failure rollback)", [sys.executable, "tools/test_custom_theme.py"], capture_output=True)
+    ok &= run("custom theme full-palette refusal (synthetic GUI fixture)", [sys.executable, "tools/test_custom_theme_ui.py"], capture_output=True)
     ok &= run("recipe packs (forge_pack.json models + themes composed at build, order swap, deploy/undeploy)", [sys.executable, "tools/test_recipe_packs.py"], capture_output=True)
     ok &= run("loose-level install (extracted levels, no FinalAlbion.wad)", [sys.executable, "tools/test_loose_install.py"], capture_output=True)
     ok &= run("tall terrain edit (grown patches re-laid, LOD patches re-sampled)", [sys.executable, "tools/test_tall_terrain.py"], capture_output=True)

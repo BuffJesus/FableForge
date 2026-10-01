@@ -218,6 +218,15 @@ a 12,001-node chain iteratively, preserves instance order/transforms/winding and
 keeps an empty selected scene empty. Normal and AddressSanitizer runs pass all
 356 input checks. This is targeted importer coverage, not full glTF conformance.
 
+## 2026-10-01 custom ground-theme failures
+
+Theme creation now stages its texture/definition banks using the model import
+transaction helper. A bad cliff PNG and a late locked-bank failure preserve every
+scratch file; a valid two-texture theme has correct references and backups.
+The GUI refuses a full map palette before bank I/O. Model-import and recipe-pack
+order/deploy/byte-exact undeploy regressions pass. Recovery after abrupt process
+termination remains outside this guarantee; no new live-game probe was run.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-01 input/failure depth: GLB container, accessor and scene checks pass 356
+synthetic cases in normal and AddressSanitizer builds. Custom theme imports now
+stage/roll back banks like model imports; invalid cliff images and late file-lock
+failures preserve scratch files. Full map palettes are refused before creation.
+Model and recipe-pack regressions pass; see HANDOFF_WORLD_UI for boundaries.
+
 2026-10-01 import depth: model imports prepare their banks before replacement
 and restore prior bank files after a reported commit failure. Invalid-input,
 late file-lock, ordinary import and recipe-pack checks pass. Redirected-root

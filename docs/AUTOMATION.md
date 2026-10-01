@@ -134,6 +134,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `scan_install <root>` | exercise a folder change without a native picker; use only scratch roots in automation. `tools/test_install_switch_ui.py` checks the unsaved-edit guard, invalid path and stale-preview cleanup. |
 | `mesh_import <model> <NAME> [png]`, `wait_mesh_import` | the Assets tab's Models page (`assets_tab 1`): a .glb/.gltf/.obj into graphics.big + textures.big + game.bin (off the UI thread; state `mesh_import_busy`; widgets `input_mesh_model`, `input_mesh_name`, `input_mesh_texture`, `btn_mesh_import`); the context reloads after (`wait_ready`), then `place OBJECT_<NAME>` |
 | `custom_theme <png> <NAME> [donor] [cliffPng]` | a ground theme from a PNG (textures.big + game.bin append), added to the palette and selected; the texture/def context reloads (`wait_ready`) |
+| `custom_theme_refused <png> <NAME> [donor] [cliffPng]` | requires theme creation to fail; pair with `assert_log` to check the reason, e.g. a full map palette |
 | `drag_gizmo <dx> <dy>` | press on the selected pivot and drag by (dx, dy) window pixels through the real gizmo |
 | `frame_selected` | frame the camera on the selection |
 | `terrain_mode <0-5>` | terrain tool: 0 raise, 1 lower, 2 flatten, 3 smooth, 4 walkable, 5 blocked (also selects the tool) |

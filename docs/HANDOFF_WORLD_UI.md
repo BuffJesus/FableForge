@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: custom ground-theme failure recovery
+
+The existing writer installed the base texture before attempting an optional
+cliff image and definition save. A malformed cliff PNG reproduced a partial
+write. Theme creation now uses the model importer's shared `PendingBanks`
+replacement/rollback helper, prepares textures and definitions first, and reads
+the definitions back before commit. Successful output still appends texture and
+definition entries, changes only the donor's texture/bump fields, and retains
+existing indices and one-time backups. In-place theme writes now check the
+target install's running-game guard before preparation and before commit.
+Recovery applies to reported failures, not process termination or power loss.
+
+The new `tools/test_custom_theme.py` verifies a two-texture theme's definition
+references and backups, then unchanged file hashes for a malformed cliff PNG
+and a late Windows rename failure on game.bin. Both cases failed against the
+old writer and pass with staging. The GUI checks for a free map palette slot
+before creating the asset; `tools/test_custom_theme_ui.py` passes on a synthetic
+full 256-slot palette with no file changes. Texture failures now include the
+native image decoder's diagnostic instead of an empty external-tool message.
+The full model-import suite still passes through the shared helper. Recipe-pack
+checks pass both load orders, model/theme references, deployment and byte-exact
+undeployment. Core export and all 356 model-input checks pass.
+The 800x600 / 1.5-scale form review found a clipped heading and pack-name input.
+The theme heading/placeholders are shorter, examples are available on hover,
+and pack creation stacks its field/button when their labels cannot fit inline.
+The selected direct destination reads `Game files (direct)` and hovering reveals
+the write path. Inspected compact captures show complete labels and controls;
+the install-switch and full-palette GUI checks still pass.
+The 1280x720 / 1.5-scale capture also fits with inline pack controls. The final
+full build succeeds and all 26 registered CTest suites pass (19.81 seconds).
+
 ## 2026-10-01 continuation: explicit save-root destinations
 
 Changing the automation save root reproduced stale mod count, conflict picks and

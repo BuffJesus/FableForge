@@ -1,9 +1,7 @@
 #include "meshimport.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
-#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -17,6 +15,7 @@
 
 #include "../vendor/embedded_schema.hpp"
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "forge/big.hpp"
 #include "forge/bin.hpp"
 #include "forge/defedit.hpp"
@@ -33,73 +32,6 @@ using forge::meshcompose::Vec3;
 namespace albion::meshimport {
 
 namespace {
-
-// Build all four banks before replacing any of them. The temporary directory is
-// on the destination filesystem so installation and rollback use renames.
-class PendingBanks {
-    struct Bank {
-        fs::path target, prepared, previous;
-        bool saved = false, installed = false;
-    };
-    fs::path root_, staging_;
-    std::vector<Bank> banks_;
-    bool keepRecovery_ = false;
-public:
-    explicit PendingBanks(const fs::path& root) : root_(fs::absolute(root).lexically_normal()) {
-        fs::create_directories(root_);
-        static std::atomic<uint64_t> serial{0};
-        for (;;) {
-            const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
-            const fs::path candidate = root_ / (".forge-model-import-" + std::to_string(tick) + "-" + std::to_string(serial++));
-            if (fs::create_directory(candidate)) { staging_ = candidate; break; }
-        }
-    }
-    ~PendingBanks() {
-        // A failed rollback retains its previous banks and reports this path.
-        if (!keepRecovery_ && !staging_.empty() && staging_.parent_path() == root_) {
-            std::error_code ec;
-            fs::remove_all(staging_, ec);
-        }
-    }
-    fs::path prepare(const fs::path& relative) {
-        Bank bank{root_ / relative, staging_ / "new" / relative, staging_ / "previous" / relative};
-        fs::create_directories(bank.prepared.parent_path());
-        banks_.push_back(bank);
-        return bank.prepared;
-    }
-    bool install(bool makeBackups, std::string& error) {
-        try {
-            // Complete the preflight and original backups before the first rename.
-            for (const auto& bank : banks_) {
-                if (!fs::is_regular_file(bank.prepared)) throw std::runtime_error("prepared bank is missing: " + bank.prepared.string());
-                if (fs::exists(bank.target) && !fs::is_regular_file(bank.target))
-                    throw std::runtime_error("bank destination is not a file: " + bank.target.string());
-                fs::create_directories(bank.target.parent_path());
-                fs::create_directories(bank.previous.parent_path());
-                if (makeBackups && !backups::backupOnce(bank.target, error)) return false;
-            }
-            for (auto& bank : banks_) {
-                if (fs::exists(bank.target)) { fs::rename(bank.target, bank.previous); bank.saved = true; }
-                fs::rename(bank.prepared, bank.target);
-                bank.installed = true;
-            }
-            return true;
-        } catch (const std::exception& e) {
-            error = e.what();
-            for (auto it = banks_.rbegin(); it != banks_.rend(); ++it) {
-                try {
-                    if (it->installed) fs::rename(it->target, it->prepared);
-                    if (it->saved) fs::rename(it->previous, it->target);
-                } catch (const std::exception& restore) {
-                    keepRecovery_ = true;
-                    error += "; rollback failed: " + std::string(restore.what());
-                }
-            }
-            if (keepRecovery_) error += "; recovery files retained in " + staging_.string();
-            return false;
-        }
-    }
-};
 
 std::vector<uint8_t> readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
@@ -504,7 +436,7 @@ bool importModel(const fs::path& baseRoot, const fs::path& outRoot, const Import
         Model model = loadModel(req.model);
         if (model.prims.empty()) { error = "the model has no triangles"; return false; }
         for (const auto& n : model.notes) out.notes.push_back(n);
-        PendingBanks pending(outRoot);
+        detail::PendingBanks pending(outRoot, ".forge-model-import-");
 
         // 2. the texture: an appended GBANK_MAIN_PC entry, or the id the caller names
         out.textureId = req.textureId;
@@ -520,7 +452,12 @@ bool importModel(const fs::path& baseRoot, const fs::path& outRoot, const Import
             ir.png = req.texturePng; ir.srcBig = texIn; ir.outBig = pending.prepare(texRel);
             ir.entryName = symbol; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt1"; ir.add = true;
             const auto r = forge::terraintex::importPng(ir);
-            if (!r.ok) { error = "texture import failed: " + r.output; fs::remove(ir.outBig, ec); return false; }
+            if (!r.ok) {
+                error = "texture import failed for " + req.texturePng.string();
+                for (const auto& issue : r.validation.errors) error += ": " + issue;
+                if (!r.output.empty()) error += ": " + r.output;
+                return false;
+            }
             out.textureId = uint32_t(r.entryId);
             out.notes.push_back("textures.big: appended " + symbol + " (id " + std::to_string(out.textureId) + ", DXT1) from " + req.texturePng.string());
         }

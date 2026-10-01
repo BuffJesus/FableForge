@@ -138,6 +138,8 @@ bool registerMinimapGraphic(const std::filesystem::path& gameRoot, const std::st
 // `donor` with its base/background (and cliff) textures pointed at the new
 // entry (bump maps cleared). Existing def indices are untouched (append only).
 // One-time .forge-orig backups of textures.big, names.bin and game.bin.
+// Banks are prepared and definitions read back before replacement. Reported
+// commit failures restore earlier banks; rollback failures retain recovery files.
 struct CustomThemeRequest {
     std::filesystem::path png;        // the ground texture (power-of-two square, e.g. 512x512)
     std::filesystem::path cliffPng;   // optional: a different texture for steep faces (default: the same)

@@ -1680,7 +1680,7 @@ void App::drawPackPicker(float width) {
 void App::drawPackDestination(float cardInner) {
     using theme::S;
     const auto packs = packChoices();
-    std::string cur = packDest_.empty() ? "Directly into the game (advanced)" : "Mod pack: " + packLabel(packDest_);
+    std::string cur = packDest_.empty() ? "Game files (direct)" : "Mod pack: " + packLabel(packDest_);
     for (const auto& [l, f] : packs) if (f == packDest_) cur = "Mod pack: " + l;
     theme::label("Goes into");
     ImGui::SetNextItemWidth(cardInner);
@@ -1691,11 +1691,14 @@ void App::drawPackDestination(float cardInner) {
         ImGui::EndCombo();
     }
     auto_.registerWidget("combo_pack_dest");
-    ImGui::SetNextItemWidth(cardInner - S(96));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", packDest_.empty() ? saveRoot().c_str() : packDest_.c_str());
+    const float packButtonWidth = std::max(S(90), ImGui::CalcTextSize("New pack").x + ImGui::GetStyle().FramePadding.x * 2);
+    const bool stackPack = cardInner < packButtonWidth + S(6) + ImGui::CalcTextSize("New pack name").x + ImGui::GetStyle().FramePadding.x * 2;
+    ImGui::SetNextItemWidth(stackPack ? cardInner : cardInner - packButtonWidth - S(6));
     ImGui::InputTextWithHint("##newpack", "New pack name", newPackName_, sizeof newPackName_);
     auto_.registerWidget("input_new_pack");
-    ImGui::SameLine(0, S(6));
-    if (theme::ghostButton("New pack", ImVec2(S(90), S(26))) && newPackName_[0]) {
+    if (!stackPack) ImGui::SameLine(0, S(6));
+    if (theme::ghostButton("New pack", ImVec2(stackPack ? cardInner : packButtonWidth, S(26))) && newPackName_[0]) {
         std::string leaf = newPackName_;
         for (auto& c : leaf) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-')) c = '_';
         const fs::path folder = fs::path(saveRoot()) / "FableForgeMods" / leaf;
@@ -1770,14 +1773,16 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
     using theme::S;
     ImGui::SetCursorPosX(pad);
     theme::beginCard("##groundtheme", inner);
-    theme::label("New ground theme from a PNG");
+    theme::label("New ground theme");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
     ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##custompng", "Path to a square power-of-two PNG (512x512 like retail)", customPng_, sizeof customPng_);
+    ImGui::InputTextWithHint("##custompng", "PNG file path", customPng_, sizeof customPng_);
     auto_.registerWidget("input_custom_png");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Use a square power-of-two PNG, such as 512x512.\n%s", customPng_);
     ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##customname", "Theme name, e.g. GROUND_MY_MOSS", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);
+    ImGui::InputTextWithHint("##customname", "Theme name", customName_, sizeof customName_, ImGuiInputTextFlags_CharsUppercase);
     auto_.registerWidget("input_custom_name");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("For example, GROUND_MY_MOSS. Use A-Z, 0-9 and underscores.");
     ImGui::PopStyleVar();
     // the donor: the theme being painted when a map is open, else one picked here
     const forge::lev::File* lev = documentLoaded() ? doc_.level() : nullptr;
@@ -1807,6 +1812,12 @@ void App::drawGroundThemeCard(float pad, float inner, float cardInner) {
 bool App::createCustomTheme(const std::string& png, const std::string& name, const std::string& donor, const std::string& cliffPng) {
     if (ctxFuture_.valid()) { pushLog("editor: textures are still loading, try again in a moment", 1); return false; }
     if (!installValid_) { pushLog("editor: a custom theme needs a Fable install", 1); return false; }
+    if (documentLoaded() && doc_.hasTerrain() && doc_.paletteSlotOf(name) < 0) {
+        const auto& palette = doc_.level()->groundThemes();
+        bool available = false;
+        for (size_t i = 2; i < palette.size(); ++i) available |= palette[i].name.empty();
+        if (!available) { pushLog("editor: the map's ground-theme palette is full; open a map with a free slot before creating a theme", 1); return false; }
+    }
     editor::CustomThemeRequest req;
     req.png = png; req.name = name; req.donor = donor.empty() ? "GROUND_GRASS" : donor;
     if (!cliffPng.empty()) req.cliffPng = cliffPng;

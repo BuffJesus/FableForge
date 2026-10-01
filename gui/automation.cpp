@@ -1090,9 +1090,10 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "reseat_things") { app.reseatThings(); note("ok   " + line); ++pc_; }
     else if (cmd == "add_theme") { if (!app.addPaintTheme(rest)) fail("add_theme failed: " + rest); else note("ok   " + line); ++pc_; }
-    else if (cmd == "custom_theme") {   // custom_theme <png> <NAME> [donor] [cliffPng]
+    else if (cmd == "custom_theme" || cmd == "custom_theme_refused") {   // custom_theme <png> <NAME> [donor] [cliffPng]
         std::istringstream rs(rest); std::string png, nm, donor, cliff; rs >> png >> nm >> donor >> cliff;
-        if (!app.createCustomTheme(png, nm, donor, cliff)) fail("custom_theme failed: " + rest); else note("ok   " + line);
+        const bool okay = app.createCustomTheme(png, nm, donor, cliff);
+        if (okay != (cmd == "custom_theme")) fail(cmd + " returned an unexpected result: " + rest); else note("ok   " + line);
         ++pc_;
     }
     else if (cmd == "text_input") {

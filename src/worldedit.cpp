@@ -1,4 +1,5 @@
 #include "backups.hpp"
+#include "pendingbanks.hpp"
 #include "worldedit.hpp"
 #include "gtg.hpp"
 
@@ -389,8 +390,7 @@ bool createCustomTheme(const fs::path& baseRoot, const fs::path& outRoot, const 
     std::error_code rec;
     const bool inPlace = fs::equivalent(baseRoot, outRoot, rec) || baseRoot == outRoot;
     auto readPath = [&](const fs::path& rel) { const fs::path o = outRoot / rel; return fs::exists(o, rec) ? o : baseRoot / rel; };
-    auto writePath = [&](const fs::path& rel) { const fs::path o = outRoot / rel; fs::create_directories(o.parent_path(), rec); return o; };
-    auto backupOnce = [&](const fs::path& p, std::string& err) { return !inPlace || ::albion::editor::backupOnce(p, err); };
+    if (inPlace && backups::gameRunningIn(baseRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
     if (req.name.empty() || req.name.size() >= 100) { error = "theme name missing or too long"; return false; }
     for (char c : req.name)
         if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) { error = "theme name must be A-Z, 0-9 and _ (got '" + req.name + "')"; return false; }
@@ -406,6 +406,8 @@ bool createCustomTheme(const fs::path& baseRoot, const fs::path& outRoot, const 
         const auto* donor = file.find(req.donor);
         if (!donor) { error = "no ENGINE_THEME named " + req.donor + " to copy from"; return false; }
         if (donor->definition != "ENGINE_THEME") { error = req.donor + " is a " + donor->definition + ", not an ENGINE_THEME"; return false; }
+        detail::PendingBanks pending(outRoot, ".forge-theme-import-");
+        const fs::path bigOut = pending.prepare(bigRel);
         // 1. the texture(s): appended GBANK_MAIN_PC entries (the layer mesh
         //    references the global id; retail chunks resolve ids directly)
         auto addTexture = [&](const fs::path& png, const std::string& symbol, uint32_t& id) {
@@ -415,13 +417,16 @@ bool createCustomTheme(const fs::path& baseRoot, const fs::path& outRoot, const 
                 if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
                 for (const auto& e : bank->entries) if (e.name == symbol) { error = "textures.big already has an entry named " + symbol; return false; }
             }
-            const fs::path bigOut = writePath(bigRel);
-            if (!backupOnce(bigOut, error)) return false;
             forge::terraintex::ImportRequest ir;
             ir.png = png; ir.srcBig = big; ir.outBig = bigOut.string() + ".atlas-tmp";
             ir.entryName = symbol; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt1"; ir.add = true;
             const auto r = forge::terraintex::importPng(ir);
-            if (!r.ok) { error = "texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
+            if (!r.ok) {
+                error = "texture import failed for " + png.string();
+                for (const auto& issue : r.validation.errors) error += ": " + issue;
+                if (!r.output.empty()) error += ": " + r.output;
+                return false;
+            }
             fs::rename(ir.outBig, bigOut);
             big = bigOut;
             id = uint32_t(r.entryId);
@@ -442,9 +447,14 @@ bool createCustomTheme(const fs::path& baseRoot, const fs::path& outRoot, const 
         if (!set("BaseTexture", out.baseTexture) || !set("BackgroundTexture", out.baseTexture) ||
             !set("CliffBaseTexture", out.cliffTexture) || !set("CliffBackgroundTexture", out.cliffTexture) ||
             !set("BaseBumpMap", 0) || !set("CliffBumpMap", 0)) return false;
-        const fs::path namesOut = writePath(defsRel / "names.bin"), gameOut = writePath(defsRel / "game.bin");
-        if (!backupOnce(namesOut, error) || !backupOnce(gameOut, error)) return false;
+        const fs::path namesOut = pending.prepare(defsRel / "names.bin"), gameOut = pending.prepare(defsRel / "game.bin");
         file.save(namesOut, gameOut);
+        const auto verified = forge::bin::File::open(namesOut, gameOut);
+        const auto* saved = verified.find(req.name);
+        if (!saved || saved->data != file.entries()[index].data || verified.entries().size() != file.entries().size())
+            throw std::runtime_error("prepared theme definitions failed read-back verification");
+        if (inPlace && backups::gameRunningIn(baseRoot)) { error = "Fable started during import; quit to the desktop first"; return false; }
+        if (!pending.install(inPlace, error)) return false;
         out.defIndex = uint32_t(index);
         out.notes.push_back("game.bin: appended ENGINE_THEME " + req.name + " (def index " + std::to_string(index) + ", a copy of " + req.donor + " with textures " + std::to_string(out.baseTexture) + "/" + std::to_string(out.cliffTexture) + ")");
         return true;
