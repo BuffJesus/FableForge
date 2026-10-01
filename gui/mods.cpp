@@ -42,6 +42,21 @@ fs::path exeDir() {
     return fs::current_path();
 }
 
+// Quote one Windows argv value, including a trailing backslash. No shell expansion.
+std::string processArgument(const std::string& value) {
+    std::string out = "\"";
+    size_t slashes = 0;
+    for (const char c : value) {
+        if (c == '\\') { ++slashes; continue; }
+        out.append(c == '"' ? slashes * 2 + 1 : slashes, '\\');
+        slashes = 0;
+        out += c;
+    }
+    out.append(slashes * 2, '\\');
+    out += '"';
+    return out;
+}
+
 // forge-tools.exe next to the GUI (the zip), else the build tree's
 fs::path findForgeTools() {
     std::error_code ec;
@@ -170,7 +185,8 @@ bool App::runModsTool(const std::string& verb) {
         return false;
     }
     // conflicts: one JSON report over the whole order; deploy/undeploy: the text report, streamed
-    const std::string cmd = "\"\"" + tool.string() + "\" mods " + verb + " \"" + saveRoot() + "\"" + (verb == "conflicts" ? " --json" : "") + " 2>&1\"";
+    const std::string cmd = processArgument(tool.string()) + " mods " + verb + " " +
+        processArgument(saveRoot()) + (verb == "conflicts" ? " --json" : "");
     modsVerb_ = verb;
     pushLog("mods: " + verb + " ...", 0);
     if (verb != "conflicts") {
@@ -184,15 +200,66 @@ bool App::runModsTool(const std::string& verb) {
 void App::launchModsCommand(const std::string& cmd) {
     modsFuture_ = std::async(std::launch::async, [cmd]() {
         ModsToolResult r;
-        FILE* p = _popen(cmd.c_str(), "r");
-        if (!p) { r.lines.push_back("cannot start forge-tools.exe"); r.rc = -1; return r; }
-        char line[2048];
-        while (std::fgets(line, sizeof line, p)) {
-            std::string l = line;
-            while (!l.empty() && (l.back() == '\n' || l.back() == '\r')) l.pop_back();
-            if (!l.empty()) r.lines.push_back(l);
+#ifdef _WIN32
+        struct Handle {
+            HANDLE value = nullptr;
+            ~Handle() { if (value && value != INVALID_HANDLE_VALUE) CloseHandle(value); }
+            void close() { if (value && value != INVALID_HANDLE_VALUE) CloseHandle(value); value = nullptr; }
+        };
+        Handle read, write, input, process, thread;
+        SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+        auto failed = [&](const char* operation) {
+            const DWORD error = GetLastError();
+            r.lines.push_back(std::string(operation) + " (Windows error " + std::to_string(error) + ")");
+            r.rc = -1;
+        };
+        if (!CreatePipe(&read.value, &write.value, &security, 0) ||
+            !SetHandleInformation(read.value, HANDLE_FLAG_INHERIT, 0)) {
+            failed("cannot create mod command output pipe"); return r;
         }
-        r.rc = _pclose(p);
+        input.value = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (input.value == INVALID_HANDLE_VALUE) { failed("cannot open mod command input"); return r; }
+        STARTUPINFOA startup{};
+        startup.cb = sizeof(startup);
+        startup.dwFlags = STARTF_USESTDHANDLES;
+        startup.hStdInput = input.value;
+        startup.hStdOutput = startup.hStdError = write.value;
+        PROCESS_INFORMATION child{};
+        std::string command = cmd;
+        if (!CreateProcessA(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                nullptr, nullptr, &startup, &child)) {
+            failed("cannot start forge-tools.exe"); return r;
+        }
+        process.value = child.hProcess; thread.value = child.hThread;
+        write.close(); input.close();
+        std::string output;
+        char buffer[4096]; DWORD count = 0;
+        DWORD readError = ERROR_SUCCESS;
+        for (;;) {
+            if (!ReadFile(read.value, buffer, sizeof(buffer), &count, nullptr)) { readError = GetLastError(); break; }
+            if (!count) break;
+            output.append(buffer, count);
+        }
+        read.close();
+        WaitForSingleObject(process.value, INFINITE);
+        DWORD code = 1;
+        if (!GetExitCodeProcess(process.value, &code)) { failed("cannot read mod command status"); return r; }
+        r.rc = static_cast<int>(code);
+        std::istringstream lines(output);
+        std::string line;
+        while (std::getline(lines, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (!line.empty()) r.lines.push_back(std::move(line));
+        }
+        if (readError != ERROR_BROKEN_PIPE && readError != ERROR_SUCCESS) {
+            r.lines.push_back("cannot read mod command output (Windows error " + std::to_string(readError) + ")");
+            r.rc = -1;
+        }
+#else
+        r.lines.push_back("mod commands require Windows process support");
+        r.rc = -1;
+#endif
         return r;
     });
 }

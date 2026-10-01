@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: launch mod commands with literal paths
+
+`build/mod-gui-paths-c9sz4pvk` reproduced shell expansion of a percent-delimited
+folder component: the GUI displayed one save root while the mod tool received
+a different scratch root. Mod commands now use a direct hidden Windows process,
+quoted argv values (including trailing backslashes), inherited stdout/stderr
+capture and the child's exit code. No command shell interprets the selected path.
+Output is read as complete lines without inserting breaks at the old 2048-byte
+read-buffer boundary.
+
+`tools/test_mod_gui_paths.py` passes at `build/mod-gui-paths-5xmh8jfh` with spaces,
+percent signs, ampersand and a trailing native backslash: conflict inspection,
+chosen-winner deployment, exact undeploy, unchanged decoy install and a captured
+stderr/exit-1 failure. The deployment screenshot was visually checked. Existing
+choice-write recovery passes at `build/mod-pick-recovery-k8ihai2a`; dependency UI
+passes at `build/mods-masters-vbjh4fui`. The normal GUI build passes. This launch
+change reuses unchanged core/CLI sanitizer and 35-suite gates; it does not claim
+new non-ASCII path support beyond the existing Windows narrow-path convention.
+
 ## 2026-10-01 continuation: complete mod corpus in owned workspaces
 
 The broader corpus and dependency UI checks now use unique owned workspaces,
