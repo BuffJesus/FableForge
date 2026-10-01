@@ -11,6 +11,13 @@ images use `base` and `cliff`. Files with the same basename can therefore belong
 to different recipes or roles without replacing one another. Existing flat
 `assets/` paths remain supported, and replacing a recipe preserves other recipes.
 
+For `.gltf` models, recipe creation also copies external geometry buffers into
+`model/buffers/<index>/` and adjusts their URIs in the packed JSON. Buffer bytes
+and unrelated JSON fields are preserved; the source JSON is untouched. Embedded
+data buffers remain embedded. External material images are not collected: use
+the recipe's separate diffuse texture input. External buffers in `.glb` files
+and percent-encoded file URIs are not covered by this packaging step.
+
 Recipe adds stage their asset copies and manifest before replacing files. Missing
 inputs and reported commit failures preserve the previous pack files; if rollback
 itself fails, the error names retained recovery files. Manifest saves report write

@@ -14,7 +14,7 @@ import argparse, hashlib, json, os, shutil, struct, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
-from test_meshimport import find_root, pristine, write_obj, write_png   # the shared cube + texture
+from test_meshimport import find_root, pristine, write_obj, write_glb, write_png   # the shared cube + texture
 
 
 def sha(path):
@@ -52,9 +52,19 @@ def main() -> int:
     pa, pb = os.path.join(packs, "PackA"), os.path.join(packs, "PackB")
     for p in (pa, pb): os.makedirs(os.path.join(p, "assets"))
     write_obj(os.path.join(pa, "assets", "cube.obj")); write_png(os.path.join(pa, "assets", "wood.png"))
-    model_b = "assets/models/CUBE_B/model/cube.obj"
+    model_b = "assets/models/CUBE_B/model/cube.gltf"
     os.makedirs(os.path.dirname(os.path.join(pb, model_b)))
-    write_obj(os.path.join(pb, model_b))
+    # Exercise external geometry buffers in the nested recipe layout.
+    glb_path = os.path.join(pb, "assets", "source.glb")
+    write_glb(glb_path)
+    with open(glb_path, "rb") as f: glb = f.read()
+    json_size = struct.unpack_from("<I", glb, 12)[0]
+    document = json.loads(glb[20:20 + json_size])
+    document["buffers"][0]["uri"] = "buffers/0/geometry.bin"
+    buffer_path = os.path.join(pb, os.path.dirname(model_b), "buffers", "0", "geometry.bin")
+    os.makedirs(os.path.dirname(buffer_path))
+    with open(buffer_path, "wb") as f: f.write(glb[28 + json_size:])
+    with open(os.path.join(pb, model_b), "w") as f: json.dump(document, f)
     json.dump({"version": 1, "name": "Pack A",
                "models": [{"name": "CUBE_A", "model": "assets/cube.obj", "texture": "assets/wood.png", "donor": "OBJECT_BARREL_UNBREAKABLE", "collision": True}],
                "groundThemes": [{"name": "GROUND_RECIPE_A", "png": "assets/wood.png", "cliffPng": "", "donor": "GROUND_GRASS"}]},

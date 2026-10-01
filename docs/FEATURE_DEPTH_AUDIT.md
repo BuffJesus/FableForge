@@ -246,6 +246,14 @@ ASan runs pass. Mixed old/new asset paths build/deploy/undeploy correctly, and
 actual UI adds preserve source bytes. The local ASan build disables its broken
 stack-use-after-return instrumentation per LLVM #215376; see HANDOFF_WORLD_UI.
 
+## 2026-10-01 glTF recipe portability
+
+External geometry buffers are now copied with `.gltf` recipes and their packed
+URIs relocated. Same-basename buffers retain distinct geometry; missing-buffer
+failure preserves the previous pack. Normal/ASan pack checks and two-order
+scratch recipe build/deploy/byte-exact undeploy pass. External images, GLB
+external buffers and percent-encoded file URIs remain outside this step.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

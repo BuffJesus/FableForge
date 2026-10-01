@@ -1,5 +1,7 @@
 #include "modpack.hpp"
+#include "meshimport.hpp"
 
+#include <bit>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -105,6 +107,34 @@ int main() {
         for (const auto& model : saved.models)
             require(read(folder / model.model) == (model.name == "MODEL_A" ? "replacement model" : "second model"),
                     "recipe replacement changed the wrong model");
+        const std::string gltf = R"({"asset":{"version":"2.0"},"buffers":[{"uri":"first/geometry.bin","byteLength":36},{"uri":"second/geometry.bin","byteLength":36}],"bufferViews":[{"buffer":1,"byteLength":36}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"extras":{"note":"keep this metadata"}})";
+        auto positions = [](float extent) {
+            std::string bytes;
+            for (float value : {0.f, 0.f, 0.f, extent, 0.f, 0.f, 0.f, extent, 0.f}) {
+                const auto bits = std::bit_cast<uint32_t>(value);
+                for (unsigned shift = 0; shift < 32; shift += 8) bytes += char(bits >> shift);
+            }
+            return bytes;
+        };
+        write(root / "gltf/model.gltf", gltf);
+        write(root / "gltf/first/geometry.bin", positions(1));
+        write(root / "gltf/second/geometry.bin", positions(2));
+        pack::ModelRecipe sidecar; sidecar.name = "SIDECAR"; sidecar.model = (root / "gltf/model.gltf").string();
+        require(pack::addModel(folder, sidecar, error), error);
+        saved = pack::load(folder);
+        const auto modelPath = folder / saved.models.back().model;
+        const auto geometry = albion::meshimport::loadModel(modelPath);
+        require(geometry.prims.size() == 1 && geometry.prims[0].verts.size() == 3 &&
+                geometry.prims[0].verts[1].x == 200, "packed glTF sidecar geometry changed");
+        require(read(root / "gltf/model.gltf") == gltf && read(modelPath).find("keep this metadata") != std::string::npos,
+                "packaging changed source JSON or lost metadata");
+        const auto withSidecar = snapshot(folder);
+        auto brokenGltf = gltf;
+        brokenGltf.replace(brokenGltf.find("second/geometry.bin"), std::string("second/geometry.bin").size(), "missing.bin");
+        write(root / "gltf/broken.gltf", brokenGltf);
+        sidecar.name = "MISSING_SIDECAR"; sidecar.model = (root / "gltf/broken.gltf").string();
+        require(!pack::addModel(folder, sidecar, error) && snapshot(folder) == withSidecar,
+                "missing sidecar was accepted or changed pack files");
         for (const auto& item : fs::directory_iterator(folder))
             require(!item.path().filename().string().starts_with(".forge-"), "staging directory leaked");
         require(fs::equivalent(fs::canonical(root).parent_path(), fs::temp_directory_path()) && root.filename().string().starts_with("FableForgeModPack-"),

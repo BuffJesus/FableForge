@@ -131,7 +131,8 @@ bool create(const fs::path& folder, const std::string& name, std::string& error)
 namespace {
 // Each recipe and input role owns its files. Basename collisions must not alter
 // another recipe (or turn a theme's base and cliff into the same image).
-bool intoAssets(detail::PendingBanks& pending, const fs::path& relativeRoot, std::string& path, std::string& error) {
+bool intoAssets(detail::PendingBanks& pending, const fs::path& relativeRoot, std::string& path, std::string& error,
+                fs::path* prepared = nullptr) {
     if (path.empty()) return true;
     std::error_code ec;
     const fs::path src(path);
@@ -141,6 +142,37 @@ bool intoAssets(detail::PendingBanks& pending, const fs::path& relativeRoot, std
     fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
     if (ec) { error = "cannot copy " + path + ": " + ec.message(); return false; }
     path = relative.generic_string();
+    if (prepared) *prepared = dst;
+    return true;
+}
+
+bool stageGltfBuffers(detail::PendingBanks& pending, const fs::path& source, const fs::path& prepared,
+                      const fs::path& modelFolder, std::string& error) {
+    std::string extension = source.extension().string();
+    for (auto& c : extension) c = char(std::tolower(static_cast<unsigned char>(c)));
+    if (extension != ".gltf") return true;
+    json document;
+    { std::ifstream in(prepared, std::ios::binary); in >> document; }
+    if (!document.contains("buffers")) return true;
+    auto& buffers = document.at("buffers");
+    if (!buffers.is_array()) { error = "glTF buffers must be an array"; return false; }
+    bool changed = false;
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        auto& buffer = buffers[i];
+        if (!buffer.contains("uri")) { error = "a .gltf buffer is missing its URI"; return false; }
+        const auto uri = buffer.at("uri").get<std::string>();
+        if (uri.starts_with("data:")) continue;
+        std::string path = (source.parent_path() / uri).string();
+        if (!intoAssets(pending, modelFolder / "buffers" / std::to_string(i), path, error)) return false;
+        buffer["uri"] = fs::path(path).lexically_relative(modelFolder).generic_string();
+        changed = true;
+    }
+    if (changed) {
+        std::ofstream out(prepared, std::ios::binary);
+        out << document.dump(2);
+        out.close();
+        if (!out) { error = "cannot write staged glTF buffer references"; return false; }
+    }
     return true;
 }
 bool validName(const std::string& n) {
@@ -183,7 +215,10 @@ bool addModel(const fs::path& folder, ModelRecipe recipe, std::string& error) {
         Pack p = load(folder);
         detail::PendingBanks pending(folder, ".forge-pack-edit-");
         const fs::path assets = fs::path("assets") / "models" / recipe.name;
-        if (!intoAssets(pending, assets / "model", recipe.model, error) ||
+        const fs::path modelSource = recipe.model;
+        fs::path preparedModel;
+        if (!intoAssets(pending, assets / "model", recipe.model, error, &preparedModel) ||
+            !stageGltfBuffers(pending, modelSource, preparedModel, assets / "model", error) ||
             !intoAssets(pending, assets / "texture", recipe.texture, error)) return false;
         std::erase_if(p.models, [&](const ModelRecipe& m) { return m.name == recipe.name; });
         p.models.push_back(std::move(recipe));

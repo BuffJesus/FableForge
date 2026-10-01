@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: glTF pack geometry buffers
+
+A `.gltf` recipe previously copied only its JSON, leaving relative binary
+buffers behind. Recipe creation now stages every external buffer in an indexed
+subfolder and rewrites only its URI in the packed JSON. Source JSON and binary
+bytes are unchanged; other JSON fields survive. A two-buffer fixture with
+matching basenames reproduces the old failure and now loads the expected
+geometry from the pack. A missing second buffer leaves all pack files unchanged.
+Normal and ASan pack checks pass (using the documented local ASan workaround).
+The recipe integration test now builds a separate-buffer glTF cube alongside a
+legacy OBJ pack; both orders, deployment and byte-exact undeployment pass on
+scratch copies. The initial explicit root was the source checkout and lacked
+banks; the successful run used the script's detected Steam install as its copy
+source. No live install writes or in-game checks occurred.
+
+This step collects `.gltf` geometry buffers, not external material images or
+external buffers in GLB containers. Percent-encoded paths retain the direct
+importer's existing limitation. Embedded data URIs need no relocation.
+
 ## 2026-10-01 continuation: entrance UID sequencing
 
 The Clang build warned about two increments of `uid` in one concatenation
