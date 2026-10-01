@@ -895,6 +895,12 @@ GetMiniMapGraphic`). No retail slot is taken any more; `forge minimap-register
 `textures.big`, `game.bin` and `names.bin`. (The paragraphs below describe the
 earlier slot-replacement approach and why it was needed.)
 
+The minimap texture and both definition files are prepared and checked before
+replacement. A reported install failure rolls back the banks already replaced;
+standalone registration uses the same handling for the definition pair. Other
+stages of new-level creation remain separate operations, so Restore can still be
+needed after a later failure.
+
 The in-game minimap is per *region*, and the engine keeps only the first 141
 regions (live probe, 2026-08), so a level that wants its own name on the map
 screen and its own minimap takes over a retail **filler** region slot ("Own

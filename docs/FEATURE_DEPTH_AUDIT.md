@@ -994,6 +994,26 @@ and Restores the full bank and inventory exactly. Normal
 Normal editor/CLI targets build. This tests the shared file workflow; no new GUI
 visual inspection or live-game texture rendering was performed.
 
+## 2026-10-01 continuation: minimap texture/registry rollback
+
+`build/minimap-recovery-932ujh3_/failure_report.json` reproduced a locked game.bin
+leaving a new texture installed and consuming an unrelated textures.big.atlas-tmp.
+Minimap baking now prepares the texture and both definition banks together. The
+registry helper writes and reads back only prepared files; PendingBanks backs up
+all originals before replacement and rolls back prior replacements if a later
+bank fails. Standalone registration stages the definition pair the same way.
+Success notes are published after installation, and the game process is checked
+before committing. Minimap pixels, framing and registry serialization are unchanged.
+
+`tools/test_minimap_recovery.py` locks the last bank, checks original hashes and
+unowned-file preservation, retries full stock new-level creation, and verifies
+exact Restore; it also exercises standalone registration refusal/retry/Restore.
+Normal `build/minimap-recovery-d3f9nosd` and ASan CLI
+`build/minimap-recovery-qshtarhw` pass. All 34 rebuilt normal suites pass (28.92s),
+and the editor/CLI build passes. This is a three-bank minimap transaction, not a
+transaction for all new-level stages; later failures can still require Restore.
+No new GUI visual or in-game minimap rendering check was performed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -70,6 +70,9 @@ std::vector<uint8_t> levelBytes(const forge::levelstore::Layout& levels, const s
     return forge::levelstore::requireFile(levels, stem + ext);
 }
 
+bool prepareMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
+                           const fs::path& namesOut, const fs::path& gameOut,
+                           std::vector<std::string>& notes, std::string& error);
 bool applyOwnRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& hostRegion,
                     forge::worldinstall::Request& ir, std::string& error);
 bool finishDedicatedRegion(const fs::path& gameRoot, const OwnRegion& own, const std::string& levelName, const std::string& minimap,
@@ -374,15 +377,21 @@ bool bakeMinimapTexture(const fs::path& gameRoot, const std::string& levelName, 
             if (!bank) { error = "textures.big has no GBANK_MAIN_PC"; return false; }
             for (const auto& e : bank->entries) exists = exists || e.name == entryName;
         }
-        if (!backupOnce(big, error)) return false;
+        detail::PendingBanks pending(gameRoot, ".forge-minimap-import-");
+        const auto bigOut = pending.prepare(fs::path("data") / "graphics" / "pc" / "textures.big");
+        const auto namesOut = pending.prepare(fs::path("data") / "CompiledDefs" / "names.bin");
+        const auto gameOut = pending.prepare(fs::path("data") / "CompiledDefs" / "game.bin");
         forge::terraintex::ImportRequest ir;
-        ir.png = png; ir.srcBig = big; ir.outBig = big.string() + ".atlas-tmp";
+        ir.png = png; ir.srcBig = big; ir.outBig = bigOut;
         ir.entryName = entryName; ir.subBank = "GBANK_MAIN_PC"; ir.format = "dxt3"; ir.add = !exists;
         const auto r = forge::terraintex::importPng(ir);
-        if (!r.ok) { error = "minimap texture import failed: " + r.output + " (" + r.command + ")"; std::error_code ec; fs::remove(ir.outBig, ec); return false; }
-        fs::rename(ir.outBig, big);
-        notes.push_back(std::string("minimap: ") + (exists ? "replaced " : "appended ") + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3) in textures.big from " + png.string());
-        if (!registerMinimapGraphic(gameRoot, entryName, uint32_t(r.entryId), notes, error)) return false;
+        if (!r.ok) { error = "minimap texture import failed: " + r.output + " (" + r.command + ")"; return false; }
+        std::vector<std::string> preparedNotes;
+        preparedNotes.push_back(std::string("minimap: ") + (exists ? "replaced " : "appended ") + entryName + " (id " + std::to_string(r.entryId) + ", 256x256 DXT3) in textures.big from " + png.string());
+        if (!prepareMinimapGraphic(gameRoot, entryName, uint32_t(r.entryId), namesOut, gameOut, preparedNotes, error)) return false;
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+        if (!pending.install(true, error)) return false;
+        notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
@@ -467,8 +476,10 @@ bool createCustomTheme(const fs::path& baseRoot, const fs::path& outRoot, const 
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
-bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
-                            std::vector<std::string>& notes, std::string& error) {
+namespace {
+bool prepareMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
+                           const fs::path& namesOut, const fs::path& gameOut,
+                           std::vector<std::string>& notes, std::string& error) {
     try {
         const fs::path defs = gameRoot / "data" / "CompiledDefs";
         const fs::path namesBin = defs / "names.bin", gameBin = defs / "game.bin";
@@ -510,8 +521,34 @@ bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, u
             ++edited;
         }
         if (!edited) { error = "game.bin has no PLAYER_GUI_PC / PLAYER_GUI_DEFAULT entry"; return false; }
-        if (!backupOnce(namesBin, error) || !backupOnce(gameBin, error)) return false;
-        file.save(namesBin, gameBin);
+        file.save(namesOut, gameOut);
+        const auto verified = forge::bin::File::open(namesOut, gameOut);
+        for (const char* entryName : {"PLAYER_GUI_PC", "PLAYER_GUI_DEFAULT"}) {
+            const auto* expected = file.find(entryName);
+            if (!expected) continue;
+            const auto* saved = verified.find(entryName);
+            if (!saved || saved->data != expected->data)
+                throw std::runtime_error("prepared minimap definitions failed read-back verification");
+        }
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+
+} // namespace
+
+bool registerMinimapGraphic(const fs::path& gameRoot, const std::string& name, uint32_t id,
+                            std::vector<std::string>& notes, std::string& error) {
+    try {
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable is running from this install; quit to the desktop first"; return false; }
+        detail::PendingBanks pending(gameRoot, ".forge-minimap-register-");
+        const auto namesOut = pending.prepare(fs::path("data") / "CompiledDefs" / "names.bin");
+        const auto gameOut = pending.prepare(fs::path("data") / "CompiledDefs" / "game.bin");
+        std::vector<std::string> preparedNotes;
+        if (!prepareMinimapGraphic(gameRoot, name, id, namesOut, gameOut, preparedNotes, error)) return false;
+        if (backups::gameRunningIn(gameRoot)) { error = "Fable started during registration; quit to the desktop first"; return false; }
+        if (!pending.install(true, error)) return false;
+        notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
         return true;
     } catch (const std::exception& e) { error = e.what(); return false; }
 }
