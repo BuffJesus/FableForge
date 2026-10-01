@@ -78,18 +78,8 @@ std::optional<int> runNav(const std::string& cmd, const Args& args) {
 
         // the shipped nav, layer 0, as a 0.5-unit raster of navigable cells
         const auto levels = forge::levelstore::detect(install.root);
-        const auto levBytes = forge::levelstore::requireFile(levels, map + ".lev");
-        const fs::path tmp = fs::temp_directory_path() / "FableForge" / "navlines";
-        fs::create_directories(tmp);
-        const fs::path levPath = tmp / (map + ".lev");
-        {
-            std::ofstream out;
-            out.exceptions(std::ios::failbit | std::ios::badbit);
-            out.open(levPath, std::ios::binary);
-            out.write(reinterpret_cast<const char*>(levBytes.data()), std::streamsize(levBytes.size()));
-            out.close();
-        }
-        const auto lev = forge::lev::File::open(levPath);
+        LevelWorkspace scratch;
+        const auto lev = forge::lev::File::open(resolveLevel(map, install, scratch));
         const auto nav = forge::navmesh::parseNavigation(lev);
         if (nav.sections.empty()) { std::fprintf(stderr, "%s has no navigation\n", map.c_str()); return 1; }
         if (compare && nav.sections[0].name != "NULL") {

@@ -454,6 +454,14 @@ file info, preserve the old shared marker and verify no owned workspace remains.
 Missing-theme validation exercises early-return cleanup without writing a level.
 Other fixed extraction paths remain separate work.
 
+## Navigation diagnostic extraction, 2026-10-01
+
+nav-lines/nav-compare use owned CLI extraction. Normal/ASan tests preserve shared
+markers and all eight bank hashes; TeleporterGreatwood diagnostics match across
+WAD and loose layouts, and nav-lines output matches the prior implementation.
+This map has no placed hull lines. Only file ownership changed; navigation
+parity remains experimental.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

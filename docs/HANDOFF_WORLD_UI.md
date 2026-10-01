@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: navigation diagnostic extraction
+
+`nav-lines` reproduced overwriting the shared navlines LEV
+(`build/cli-level-workspace-nqpfvgzo`). Both navigation diagnostics now use the
+owned CLI resolver. `tools/test_cli_level_workspace.py --navigation` passes on
+normal and ASan builds (`build/cli-level-workspace-qy2xs88c`,
+`build/cli-level-workspace-7blfphln`): nav-lines/nav-compare on TeleporterGreatwood
+agree between WAD and loose layouts, old-path markers survive and owned folders
+are removed. The nav-lines output is byte-identical before/after this change.
+All eight source-bank hashes are checked after diagnostics; no navigation
+algorithm or parity claim changed. This small map has no placed hull lines.
+The initial loose fixture lacked the separately named GreatwoodTeleport TNG;
+extracting the related script files corrected the fixture.
+
 ## 2026-10-01 continuation: owned CLI level resolution
 
 Two concurrent `forge info TeleporterGreatwood` calls reproduced a truncated
