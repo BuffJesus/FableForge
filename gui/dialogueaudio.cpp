@@ -110,13 +110,18 @@ void DialogueAudioPlayer::stop() {
 }
 
 bool DialogueAudioPlayer::seek(double seconds,std::string& error) {
+    error.clear();
     if(!available()) return false;
     const bool resume=playing_;
     closeDevice();
-    offsetFrames_=uint64_t(std::clamp(std::isfinite(seconds)?seconds:0.0,
-                                     0.0,duration())*rate_);
+    const double target=std::clamp(std::isfinite(seconds)?seconds:0.0,0.0,duration());
+    const uint64_t frameCount=pcm_.size()/channels_;
+    offsetFrames_=target>=duration()?frameCount:uint64_t(target*rate_);
     playing_=false;
     paused_=!resume;
+    // A seek to the end parks the playhead there. Only an explicit Play may
+    // restart the clip; resuming here would pass through play()'s rewind path.
+    if(offsetFrames_==frameCount) {paused_=true;return true;}
     return !resume || play(error);
 }
 

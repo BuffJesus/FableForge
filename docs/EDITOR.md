@@ -840,6 +840,7 @@ scroll to zoom, or use **Reset view**. Play/Pause, Stop, Loop, Mute and the time
 slider sit below the preview. Audio uses the matching LUT clip when available;
 muted or audio-free lines can still animate. **Show lip sync timeline** opens
 one scrollable set of phoneme tracks; drag a track to seek.
+Seeking to the end stops there; press **Play** to start the line again.
 
 The fixed **Edit & save lip sync...** action opens a separate tool window.
 Pause playback to change frame weights, add/remove phonemes, or insert/delete

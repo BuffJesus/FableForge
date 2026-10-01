@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: dialogue seek-to-end playback
+
+A new silent PCM transport check reproduced seeking to the end restarting the
+line while playing, even with Loop disabled. `DialogueAudioPlayer::seek` now
+parks at the final sample without calling Play's explicit rewind path. Explicit
+Play still restarts, mid-clip seeking continues playback, paused seeking stays
+paused, and Stop clears the position. Exact end seeks avoid floating-point
+round-down of the final frame; successful seeks clear stale output errors.
+
+All 36 CTest suites pass (21.41 seconds), including actual Windows audio output
+with silent samples. The audio test explicitly skips with code 77 if no output
+device is available. The real Dialogue workspace also passes at
+`build/dialogue-workspace-fyz13zm8` (1440x900 and 800x600 / 1.5): dragging the
+slider past its end stops playback, Play restarts, and subsequent timeline,
+character, staged edit and byte-checked export workflows remain usable.
+
 ## 2026-10-01 continuation: standalone guide download link
 
 Guide packaging now takes the application release link from the walkthrough,
