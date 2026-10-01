@@ -630,7 +630,11 @@ Scripts: `place_village <VILLAGE_DEF> [scriptname]`, `village_member
 The *Live link* card (2026-09-17, in-game verified) talks to the running game
 with no native code: *Install into ForgeFSE* writes `FSE/AtlasLink/atlas_link.lua`
 and appends a tagged `Main()` hook to `FSE/PartyMode/PartyMode.lua` (one-time
-`.forge-orig`; *Remove the hook* takes it out again, byte-exact). The hook
+`.forge-orig`; *Remove the hook* removes only the generated block, preserving
+script content before and after it). Modified or duplicate hooks are refused;
+LF/CRLF hooks and old embedded install paths are recognized. Host/worker writes
+and hook/command removal use staged replacements with rollback on file errors.
+The worker script remains after removal. The hook
 starts an `AtlasLink` quest thread that polls `FSE/AtlasLink/cmd.lua` with
 `loadfile()` every 0.5 s -- the FSE Lua state has no `io` library, so the command
 is a Lua chunk returning a table -- runs it through the quest API and answers in

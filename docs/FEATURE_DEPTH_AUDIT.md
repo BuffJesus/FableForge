@@ -763,6 +763,28 @@ all banks byte-exactly with no extra files. Normal standard graphics path
 its collision hull, texture and OBJECT definition. All three normal writer targets
 and the ASan CLI build; source install files remain untouched.
 
+## 2026-10-01 continuation: preserve user script around live-link hooks
+
+Offline regression `build/livelink-before.log` reproduced removal truncating all
+Lua appended after the hook. Removal now validates and removes only the complete
+generated hook, preserving surrounding bytes. LF/CRLF and old embedded install
+paths are recognized; modified or duplicate hooks are refused without writes.
+Host paths must stay beneath FSE and cannot target the AtlasLink worker directory.
+
+Install checks host reads and the original backup result, then stages worker/host
+replacements through PendingBanks. Removal stages the host edit and command-file
+deletion together. Failed commits roll back earlier replacements; checked close
+errors are reported. Existing backup and retained-worker behavior is unchanged.
+Same-install concurrent writers and power-loss atomicity remain unsupported.
+
+New `fableforge_livelink_tests` uses an owned synthetic FSE tree. It covers exact
+tail preservation, CRLF, old paths, reinstall, duplicate/modified hooks, invalid
+backup/command paths, unreadable hosts, and Windows locks forcing rollback after
+worker or host replacement. Successful retries restore the expected bytes. Normal
+writer builds and the 33-suite core gate pass (16.31s); final added lock/path checks
+also pass, as does the complete focused test under clang-cl AddressSanitizer
+(existing nested-catch workaround). No live game or FSE runtime was exercised.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

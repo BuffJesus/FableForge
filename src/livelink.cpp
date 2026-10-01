@@ -1,5 +1,6 @@
 #include "backups.hpp"
 #include "livelink.hpp"
+#include "pendingbanks.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -81,14 +82,19 @@ end
 
 std::string readAll(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
-    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in) throw std::runtime_error("cannot read " + p.string());
+    std::string result((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (in.bad()) throw std::runtime_error("cannot read " + p.string());
+    return result;
 }
 
 bool writeAll(const fs::path& p, const std::string& s, std::string& error) {
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     if (!out) { error = "cannot write " + p.string(); return false; }
     out.write(s.data(), std::streamsize(s.size()));
-    return bool(out);
+    out.close();
+    if (!out) { error = "cannot finish writing " + p.string(); return false; }
+    return true;
 }
 
 fs::path linkDir(const fs::path& root) { return root / "FSE" / "AtlasLink"; }
@@ -107,6 +113,46 @@ std::string hookText(const fs::path& script) {
            "    end)\n"
            "    return _atlasLinkMain(quest)\n"
            "end\n";
+}
+
+// Match the complete generated legacy hook, allowing CRLF and an old install path.
+// Byte offsets preserve all surrounding text without reserializing the user's script.
+bool stripHook(std::string& text) {
+    std::string normalized;
+    std::vector<size_t> offsets;
+    for (size_t i = 0; i < text.size(); ++i) {
+        offsets.push_back(i);
+        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n') ++i;
+        normalized += text[i];
+    }
+    offsets.push_back(text.size());
+    const auto tag = normalized.find(kHookTag);
+    if (tag == std::string::npos) return false;
+    const auto refuse = [] { throw std::runtime_error("live-link hook is modified or ambiguous; host script was not changed"); };
+    if (tag == 0 || normalized[tag - 1] != '\n' || normalized.find(kHookTag, tag + 1) != std::string::npos) refuse();
+    const std::string prefix = "        local f, err = loadfile([[";
+    const auto pathAt = normalized.find(prefix, tag);
+    if (pathAt == std::string::npos) refuse();
+    const auto pathEnd = normalized.find("]])\n", pathAt + prefix.size());
+    if (pathEnd == std::string::npos) refuse();
+    const auto expected = hookText(fs::path(normalized.substr(pathAt + prefix.size(), pathEnd - pathAt - prefix.size())));
+    const auto start = tag - 1;
+    if (normalized.compare(start, expected.size(), expected) != 0) refuse();
+    const auto byteStart = offsets[start];
+    text.erase(byteStart, offsets[start + expected.size()] - byteStart);
+    return true;
+}
+
+fs::path hostRelative(const std::string& host) {
+    const fs::path path(host);
+    if (path.empty() || path.has_root_path()) throw std::runtime_error("host quest script must be relative to FSE");
+    for (const auto& part : path)
+        if (part == "..") throw std::runtime_error("host quest script must stay inside FSE");
+    const auto normalized = path.lexically_normal();
+    auto first = normalized.begin()->string();
+    for (auto& c : first) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+    if (first == "atlaslink") throw std::runtime_error("host quest script cannot be inside the live-link worker directory");
+    return fs::path("FSE") / normalized;
 }
 
 uint64_t nextId() {
@@ -134,41 +180,43 @@ std::string luaString(const std::string& s) {
 } // namespace
 
 bool isInstalled(const fs::path& root, const std::string& host) {
-    const fs::path master = root / "FSE" / host;
-    if (!fs::exists(master)) return false;
-    return readAll(master).find(kHookTag) != std::string::npos;
+    try { return readAll(root / hostRelative(host)).find(kHookTag) != std::string::npos; }
+    catch (const std::exception&) { return false; }
 }
 
 bool install(const fs::path& root, std::string& error, const std::string& host) {
-    const fs::path master = root / "FSE" / host;
-    if (!fs::exists(master)) { error = "no host quest script " + master.string() + " (is ForgeFSE installed?)"; return false; }
-    std::error_code ec;
-    fs::create_directories(linkDir(root), ec);
-    const fs::path script = linkDir(root) / "atlas_link.lua";
-    std::string body = kScript;
-    std::string cmd = cmdPath(root).string();
-    for (char& c : cmd) if (c == '\\') c = '/';
-    const size_t at = body.find("%CMD%");
-    if (at != std::string::npos) body.replace(at, 5, cmd);
-    if (!writeAll(script, body, error)) return false;
-    if (isInstalled(root, host)) return true;
-    std::string berr;
-    albion::backups::backupOnce(master, berr);
-    return writeAll(master, readAll(master) + hookText(script), error);
+    try {
+        const auto relative = hostRelative(host);
+        const auto master = root / relative;
+        const auto original = readAll(master);
+        auto withoutHook = original;
+        const bool installed = stripHook(withoutHook);
+        const fs::path script = linkDir(root) / "atlas_link.lua";
+        std::string body = kScript;
+        std::string cmd = cmdPath(root).generic_string();
+        body.replace(body.find("%CMD%"), 5, cmd);
+        detail::PendingBanks pending(root, ".forge-link-install-");
+        if (!writeAll(pending.prepare("FSE/AtlasLink/atlas_link.lua"), body, error)) return false;
+        if (!installed) {
+            if (!backups::backupOnce(master, error)) return false;
+            if (!writeAll(pending.prepare(relative), original + hookText(script), error)) return false;
+        }
+        return pending.install(false, error);
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 bool remove(const fs::path& root, std::string& error, const std::string& host) {
-    const fs::path master = root / "FSE" / host;
-    if (!fs::exists(master)) return true;
-    std::string text = readAll(master);
-    const size_t at = text.find(std::string("\n") + kHookTag);
-    if (at != std::string::npos) {
-        text.erase(at);
-        if (!writeAll(master, text, error)) return false;
-    }
-    std::error_code ec;
-    fs::remove(cmdPath(root), ec);
-    return true;
+    try {
+        const auto relative = hostRelative(host);
+        const auto master = root / relative;
+        if (!fs::exists(master)) return true;
+        auto text = readAll(master);
+        const bool installed = stripHook(text);
+        detail::PendingBanks pending(root, ".forge-link-remove-");
+        if (installed && !writeAll(pending.prepare(relative), text, error)) return false;
+        pending.remove("FSE/AtlasLink/cmd.lua");
+        return pending.install(false, error);
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 uint64_t sendTeleport(const fs::path& root, int mapSlot, const std::string& mapName, float x, float y, std::string& error) {
