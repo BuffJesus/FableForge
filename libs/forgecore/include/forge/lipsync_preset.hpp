@@ -22,8 +22,9 @@ struct HeadPreset {
     float eyeRenderSize=1; // EyeGraphic.RenderSizeX in the retail creature def.
 };
 
-// Retail presets from EgoCore's lip sync head preview. The Demon Door uses
-// its AI animation for AH, and ST for SZ.
+// Original five presets from EgoCore's lip sync preview, extended with retail
+// villager variants and the Oracle's own pose family. Demon Door uses AI for AH;
+// Demon Door and Oracle use their ST animation for SZ.
 const std::vector<HeadPreset>& headPresets();
 
 struct PresetAssets {

@@ -167,6 +167,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `assert_log <text>` | some app log line contains the text (background job notes, e.g. `1 stitched`) |
 | `world_tab 0\|1`, `world_select <map>`, `world_move <map> <x> <y>`, `world_move_refused ...`, `world_owner <map> <region>`, `world_sees <region> <map> <0\|1>`, `world_stitch <0\|1> [feather]`, `world_revert`, `world_undo`, `world_redo`, `world_apply`, `wait_world` | the World tab: queue moves / region edits, stitch seams after the apply (feather -1 = auto), write them; state keys `world_*` |
 | `dump_state` | write every state key to the log |
+| `dump_widget <widget>` | log the current widget rectangle as x0 y0 x1 y1 for screenshot checks |
 | `close`, `quit` | request the editor's close flow (`close_prompt` state) or force the scripted run to end |
 
 `${TEMP}` and `${USERPROFILE}` expand inside a line. Waits time out after 60 s.

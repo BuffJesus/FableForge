@@ -5,6 +5,8 @@ assets_tab 4
 frames 3
 assert_state assets_tab 4
 assert_widget combo_dialogue_language
+click header_dialogue_lookup
+frames 2
 assert_widget combo_dialogue_bank
 assert_widget combo_dialogue_preset
 assert_state dialogue_preset_ready 1
@@ -29,6 +31,7 @@ frames 3
 assert_state dialogue_preset_ready 1
 assert_state dialogue_head_ready 1
 dialogue_select 0 2
+reveal button_dialogue_load
 click button_dialogue_load
 frames 3
 assert_state dialogue_loaded 1
@@ -71,6 +74,8 @@ click checkbox_dialogue_mute
 frames 2
 assert_state dialogue_audio_muted 0
 assert_widget slider_dialogue_time
+click checkbox_dialogue_timeline
+frames 2
 assert_widget timeline_dialogue
 assert_widget timeline_dialogue_large
 assert_widget dialogue_head_viewport
@@ -90,6 +95,7 @@ click button_dialogue_stop
 frames 2
 assert_state dialogue_scrubbed 0
 dialogue_select 3 3
+reveal button_dialogue_load
 click button_dialogue_load
 frames 3
 assert_state dialogue_loaded 1
@@ -97,17 +103,18 @@ assert_state dialogue_bank 3
 assert_state dialogue_id 3
 assert_state dialogue_audio_available 1
 dialogue_select 3 2
+reveal button_dialogue_load
 click button_dialogue_load
 frames 3
 assert_state dialogue_loaded 0
 dialogue_select 0 2
 dialogue_search beefy
 frames 3
-assert_state dialogue_search_results 0
-dialogue_select 2 1
-frames 3
+assert_state dialogue_search_results 1
 assert_state dialogue_search_results 1
 assert_state dialogue_search_first_id 5080
+click combo_dialogue_line
+frames 2
 assert_widget dialogue_search_result_0
 screenshot build/ui/dialogue_search.png
 click dialogue_search_result_0

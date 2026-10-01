@@ -22,6 +22,7 @@ struct Line {
 struct Match {
     uint32_t soundId = 0;
     Line line;
+    std::string lipsyncBank;
 };
 
 class Index {
@@ -31,6 +32,7 @@ public:
                       const std::string& language);
     const std::vector<Line>* find(const std::string& lipsyncBank,
                                   uint32_t soundId) const;
+    // Empty bank searches all banks; empty query browses lines in bank/ID order.
     std::vector<Match> search(const std::string& lipsyncBank,
                               const std::string& query,size_t limit=100) const;
     size_t resolvedCount() const { return resolvedCount_; }

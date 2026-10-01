@@ -864,6 +864,9 @@ public:
     bool drawPathInput(const char* id, const char* hint, char* value, size_t capacity,
                        float width, PathField kind, const char* widget);
     void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);
+    void drawDialogueTools(float pad, float inner, float cardInner);
+    bool dialogueToolsOpen_ = false;
+    bool dialogueTracksOpen_ = false;
     void frameDialoguePlayback();
     std::string dialogueLanguage_ = "English";
     int dialogueBank_ = 0, dialogueId_ = 1;

@@ -78,6 +78,15 @@ int main(int argc,char** argv) {
                 index.search("LIPSYNC_ENGLISH_MAIN","hello",0).empty(),
                 "bank-scoped dialogue search failed");
         write(defs/"dialoguesnds.bin",{1,0,0});
+        const auto browse=index.search("","",10);
+        const auto byId=index.search("","7",10);
+        require(browse.size()==2 && byId.size()==2 &&
+                browse[0].lipsyncBank=="LIPSYNC_ENGLISH_MAIN" &&
+                browse[1].lipsyncBank=="LIPSYNC_ENGLISH_SCRIPT" &&
+                index.search("","",1).size()==1 &&
+                index.search("LIPSYNC_ENGLISH_MAIN","",10).size()==1 &&
+                index.search("","hello",10).size()==2,
+                "browse/all-bank search lost a line or its bank identity");
         bool rejected=false;
         try { forge::dialoguetext::Index::open(textPath,defs,"English"); }
         catch(const std::exception&) { rejected=true; }

@@ -2,6 +2,8 @@
 """Exercise staged lip sync edits and scratch export through the GUI."""
 
 import argparse
+import contextlib
+import os
 import json
 import pathlib
 import shutil
@@ -83,24 +85,27 @@ def main():
     args = parser.parse_args()
     root = pathlib.Path(__file__).resolve().parent.parent
     source = pathlib.Path(args.install) / "data" / "lang" / "English" / "dialogue.big"
-    with tempfile.TemporaryDirectory(prefix="fableforge_dialogue_edit_") as temp:
+    with contextlib.nullcontext(tempfile.mkdtemp(prefix="dialogue-edit-",dir=root/"build")) as temp:
+        print("evidence retained at",temp,flush=True)
         output = pathlib.Path(temp) / "dialogue.big"
         script = pathlib.Path(temp) / "edit.txt"
         script.write_text("\n".join([
             "wait_maps", "wait_ready", "assets_tab 4", "frames 3",
-            "dialogue_select 0 2", "click button_dialogue_load", "frames 3",
+            "click header_dialogue_lookup", "frames 2",
+            "dialogue_select 0 2", "reveal button_dialogue_load", "click button_dialogue_load", "frames 3",
             "assert_state dialogue_frames 45",
+            "click button_dialogue_tools", "frames 3",
             "reveal slider_dialogue_key_0", "assert_widget slider_dialogue_key_0",
             "click slider_dialogue_key_0", "frames 2",
             "assert_state dialogue_staged 1",
             "reveal button_dialogue_insert_frame", "click button_dialogue_insert_frame",
             "frames 2", "assert_state dialogue_frames 46",
             "assert_state dialogue_staged 1",
-            "screenshot build/ui/dialogue_edit.png",
-            "dialogue_select 3 3", "click button_dialogue_load", "frames 3",
+            f"screenshot {temp}/dialogue_edit.png",
+            "dialogue_select 3 3", "reveal button_dialogue_load", "click button_dialogue_load", "frames 3",
             "reveal button_dialogue_insert_frame", "click button_dialogue_insert_frame",
             "frames 2", "assert_state dialogue_staged 2",
-            "dialogue_select 0 2", "click button_dialogue_load", "frames 3",
+            "dialogue_select 0 2", "reveal button_dialogue_load", "click button_dialogue_load", "frames 3",
             "assert_state dialogue_frames 46",
             f"dialogue_export_path {output}",
             "reveal button_dialogue_export", "click button_dialogue_export",
@@ -108,10 +113,13 @@ def main():
             "reveal button_dialogue_reset_line", "click button_dialogue_reset_line",
             "frames 2", "assert_state dialogue_frames 45",
             "assert_state dialogue_staged 1",
+            "key_down Escape", "key_up Escape", "frames 2",
+            "assert_state dialogue_editor_open 0",
             "close", "frames 2", "assert_state close_prompt 1",
             "click btn_unsaved_save", "frames 2",
             "assert_state close_prompt 0", "assert_state dialogue_staged 1",
             "assert_state assets_tab 4",
+            "assert_state dialogue_editor_open 1",
             "close", "frames 2", "assert_state close_prompt 1",
             "click btn_unsaved_cancel", "frames 2",
             "assert_state close_prompt 0", "assert_state dialogue_staged 1",
@@ -119,7 +127,8 @@ def main():
         ]), encoding="utf-8")
         subprocess.run([str(root / "build" / "FableForge.exe"), "--auto", str(script),
                         "--install", str(args.install), "--size", "1440x860"],
-                       cwd=root, check=True, timeout=90)
+                       cwd=root, check=True, timeout=90,
+                       env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN="1"))
         log = pathlib.Path(str(script) + ".log").read_text(encoding="utf-8")
         if "RESULT PASS" not in log or not output.is_file():
             raise AssertionError(log[-2500:])
@@ -138,7 +147,9 @@ def main():
         pack_script = pathlib.Path(temp) / "pack.txt"
         pack_script.write_text("\n".join([
             "wait_maps", "wait_ready", "assets_tab 4", "frames 3",
-            "dialogue_select 0 2", "click button_dialogue_load", "frames 3",
+            "click header_dialogue_lookup", "frames 2",
+            "dialogue_select 0 2", "reveal button_dialogue_load", "click button_dialogue_load", "frames 3",
+            "click button_dialogue_tools", "frames 3",
             "reveal slider_dialogue_key_0", "click slider_dialogue_key_0",
             "frames 2", "assert_state dialogue_staged 1",
             f"pack_dest {pack}",
@@ -148,7 +159,8 @@ def main():
         ]), encoding="utf-8")
         subprocess.run([str(root / "build" / "FableForge.exe"), "--auto", str(pack_script),
                         "--install", str(args.install), "--size", "1440x860"],
-                       cwd=root, check=True, timeout=90)
+                       cwd=root, check=True, timeout=90,
+                       env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN="1"))
         pack_log = pathlib.Path(str(pack_script) + ".log").read_text(encoding="utf-8")
         if "RESULT PASS" not in pack_log:
             raise AssertionError(pack_log[-2500:])
@@ -211,11 +223,12 @@ def main():
             "wait_maps", "wait_ready", f"set saveroot {base}", "mods_tab 1",
             "frames 2", "mods_conflicts", "wait_mods", "frames 3",
             "assert_state mods_conflicts 1",
-            "screenshot build/ui/dialogue_mod_conflict.png", "quit", "",
+            f"screenshot {temp}/dialogue_mod_conflict.png", "quit", "",
         ]), encoding="utf-8")
         subprocess.run([str(root / "build" / "FableForge.exe"), "--auto",
                         str(conflict_script), "--install", str(args.install)],
-                       cwd=root, check=True, timeout=90)
+                       cwd=root, check=True, timeout=90,
+                       env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN="1"))
         conflict_log = pathlib.Path(str(conflict_script) + ".log").read_text(encoding="utf-8")
         if "RESULT PASS" not in conflict_log:
             raise AssertionError(conflict_log[-2500:])

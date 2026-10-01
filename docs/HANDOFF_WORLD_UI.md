@@ -1,5 +1,46 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: Dialogue workspace and expanded previews
+
+Dialogue now opens with a visible line dropdown, immediate browsing and search
+across all banks by words, speaker, entry name or exact Sound ID. Selecting a
+result selects its bank; advanced bank/ID lookup remains available. The unrelated
+map explorer is hidden without changing its saved preference. Preview character,
+playback and a single optional timeline occupy the main workspace. Edit & save
+stays accessible in the footer and opens a separate tool window; Review dialogue
+from the unsaved prompt reopens that tool. Missing preview assets remain explicit.
+
+Expanded the original five heads to 18 using retail adult villager variants and
+the Oracle's own phoneme assets. Original indices and animation evaluation remain
+unchanged. Adult hierarchy checks match bone names rather than local slot order;
+child variants with different hierarchies were excluded. All 18 presets resolve,
+pass core pose checks and render in the GUI. This is a preview-model selection,
+not a change to the speaker assigned in-game.
+
+Search and preset tests pass in normal and AddressSanitizer builds (existing
+use-after-return workaround); all 35 CTest suites pass. Retail evidence:
+- `build/dialogue-asan-faux9k8s`: targeted search/preset/headpose ASan checks.
+- `build/dialogue-regression-1ii15tpm`: all 18 rendered previews.
+- `build/dialogue-browser-hrvt_qu5`: browser, search and bank/ID fallback.
+- `build/dialogue-edit-_pmalmyk`: multi-bank staging/export/reset, unsaved review,
+  pack recipes and conflict order. Exported records independently checked.
+- `build/path-browse-i6nf72ht`: real native dialogs and explicit scratch export
+  at 800x600 / 1.5 scale.
+- `build/dialogue-workspace-3w3pwww_`: actual picker, character, playback,
+  timeline, frame insert and independently checked export at 1440x900 and
+  800x600 / 1.5 scale.
+- `build/dialogue-layout-57k43pgz`: normal and two compact head layouts, visible
+  phoneme movement and the bandit's covered/uncovered eye. Tests crop the actual
+  registered preview rectangle from their own captures, never stale shared files.
+  Compact timeline review exposed a scroll-origin bug; it is fixed, and opening
+  the timeline retains a useful minimum preview size with scrollable overflow.
+
+The earlier parked Dialogue patch has been reapplied and integrated with Browse.
+The editor guide includes the new workflow and a current screenshot. The Perodis
+walkthrough now explicitly distinguishes Forge copying/enabling the DLL from
+EgoCore loading it; manually installing that DLL is also valid. No live game
+writes or runtime validation, including Retroid, are claimed.
+
 ## 2026-10-01 continuation: native Browse fields and clearer mod guide
 
 Path fields now pair editable text with Browse: mod sources offer file/folder
@@ -26,10 +67,11 @@ cards explaining the folder/file distinction and FMP vs DLL roles. Step 4 uses
 Browse; screenshots show current controls. Browser rendering inspected at
 `build/guide-cdp-vw7ZTJ/sources.png` (subsequent wording change adds Browse).
 
-Dialogue redesign remains in progress, temporarily preserved in
+Historical checkpoint (superseded by the Dialogue milestone above):
+Dialogue redesign was temporarily preserved in
 `build/dialogue-wip-1q844bsq/changes.patch` plus full file copies, based on
 7a611e7. It is intentionally absent from the Browse delivery while its compact
-layout is unfinished. Reapply that owned patch after this checkpoint, preserving
+layout was unfinished. That owned patch has since been reapplied, preserving
 the new path fields. Earlier dialogue captures/tests are in
 `build/dialogue-workspace-p8ecdp2k`.
 

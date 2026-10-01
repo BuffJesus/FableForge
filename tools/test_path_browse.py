@@ -74,8 +74,8 @@ def main():
             'quit', '']
         if mode == 'save':
             commands=['wait_maps','wait_ready','assets_tab 4','frames 3',
-                'dialogue_select 0 2','reveal button_dialogue_load','click button_dialogue_load',
-                'frames 3','reveal slider_dialogue_key_0','click slider_dialogue_key_0',
+                'dialogue_search beefy','frames 2','click combo_dialogue_line','frames 2','click dialogue_search_result_0',
+                'frames 3','click button_dialogue_tools','frames 3','reveal slider_dialogue_key_0','click slider_dialogue_key_0',
                 'frames 2','assert_state dialogue_staged 1',
                 f'dialogue_export_path {work / "before-browse.big"}',
                 'reveal input_dialogue_scratch_path','frames 3',

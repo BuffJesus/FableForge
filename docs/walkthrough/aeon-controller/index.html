@@ -26,7 +26,8 @@
 <article class="source"><span class="tag"><span class="source-num">2</span>Choose a file</span><h3>Controller game data</h3><span class="path">ControllerSupport.fmp</span><p>Installs the game-data changes that controller support needs.</p><strong>Forge applies this package.</strong></article>
 <article class="source"><span class="tag"><span class="source-num">3</span>Choose a folder</span><h3>Controller runtime</h3><span class="path">FableControllerSupport</span><span class="contains">Contains only <code>FableControllerSupport.dll</code></span><p>Runs alongside Fable to provide the controller functionality.</p><strong>EgoCore loads this DLL when you play.</strong></article>
 </div>
-<p>Do not include the controller mod’s <code>Data</code> folder in the DLL folder. The FMP supplies the asset changes in this recipe; the DLL supplies the running-game controller support.</p></section>
+<p>Do not include the controller mod’s <code>Data</code> folder in the DLL folder. The FMP supplies the asset changes in this recipe; the DLL supplies the running-game controller support.</p>
+<p class="note"><strong>Why add the DLL to Forge if EgoCore loads it?</strong> Forge installs the DLL in the right folder and enables it in <code>Mods.ini</code>. EgoCore loads that installed DLL when you play. It is installed once and loaded once. You can instead copy the DLL and enable it manually in EgoCore; in that case, omit the DLL entry from Forge’s order. This walkthrough uses Forge to manage all three installation sources.</p></section>
 
 <section><h2><span class="step">3</span>Open Forge and choose the game copy</h2>
 <p>Extract the supplied Forge ZIP completely and open <code>FableForge.exe</code>. Keep its companion files and folders together.</p>

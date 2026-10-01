@@ -1,6 +1,10 @@
 wait_maps
 wait_ready
 assets_tab 4
+frames 3
+reveal header_dialogue_lookup
+click header_dialogue_lookup
+frames 2
 dialogue_select 0 2
 reveal button_dialogue_load
 click button_dialogue_load
@@ -9,32 +13,48 @@ dialogue_view 0 0.15 0.8
 dialogue_preset 0
 frames 3
 assert_state dialogue_head_ready 1
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_eyes_bandit.png
 dialogue_preset 1
 frames 3
 assert_state dialogue_head_ready 1
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_eyes_female.png
 dialogue_preset 2
 frames 3
 assert_state dialogue_head_ready 1
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_eyes_male.png
 dialogue_preset 4
 frames 3
 assert_state dialogue_head_ready 1
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_eyes_child.png
 dialogue_preset 0
 frames 3
+click checkbox_dialogue_timeline
+frames 2
+reveal dialogue_timeline_panel
+reveal timeline_dialogue_large
 click timeline_dialogue_large
 frames 3
 assert_state dialogue_scrubbed 1
+reveal checkbox_dialogue_timeline
+click checkbox_dialogue_timeline
+reveal combo_dialogue_preset
+frames 3
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_pose_bandit.png
 dialogue_preset 1
 frames 3
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_pose_female.png
 dialogue_preset 2
 frames 3
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_pose_male.png
 dialogue_preset 4
 frames 3
+dump_widget dialogue_head_viewport
 screenshot build/ui/head_pose_child.png
 quit

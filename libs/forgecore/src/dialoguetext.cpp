@@ -102,15 +102,16 @@ const std::vector<Line>* Index::find(const std::string& lipsyncBank,
 std::vector<Match> Index::search(const std::string& lipsyncBank,
                                  const std::string& query,size_t limit) const {
     std::vector<Match> matches;
-    if(query.empty() || !limit) return matches;
+    if(!limit) return matches;
     const std::string needle=asciiLower(query);
-    for(auto it=lines_.lower_bound({lipsyncBank,0});
-        it!=lines_.end() && it->first.first==lipsyncBank;++it) {
+    for(auto it=lipsyncBank.empty()?lines_.begin():lines_.lower_bound({lipsyncBank,0});
+        it!=lines_.end() && (lipsyncBank.empty() || it->first.first==lipsyncBank);++it) {
         for(const auto& line:it->second) {
             if(asciiLower(line.name).find(needle)==std::string::npos &&
                asciiLower(line.content).find(needle)==std::string::npos &&
-               asciiLower(line.speaker).find(needle)==std::string::npos) continue;
-            matches.push_back({it->first.second,line});
+               asciiLower(line.speaker).find(needle)==std::string::npos &&
+               std::to_string(it->first.second)!=needle) continue;
+            matches.push_back({it->first.second,line,it->first.first});
             if(matches.size()==limit) return matches;
         }
     }

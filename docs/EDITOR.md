@@ -817,39 +817,41 @@ supported particle systems but does not edit or save them.
 
 ![Effects browser and sprite systems](walkthrough/w12_effects.png)
 
-**Dialogue** opens a line by language, dialogue bank and Sound ID. The large
-sidebar search finds linked lines by subtitle text, speaker or text entry name
-within the selected language and bank; choose a result to load its Sound ID.
-The large timeline shows its lip sync visemes; drag across it or use the sidebar slider
-to inspect a frame and its blended weights. Audio duration comes from the
-matching `.lut` clip when present. Play/Pause, Stop and Loop use the audio
-device's position to keep the timeline and animated head in sync. Mute keeps
-the mouth animation playing on its own clock, and a line without audio can
-also be played. Drag the textured head to orbit it, scroll to zoom, or use
-Reset view to restore its front-facing framing. The Head preset selector loads
-five retail head meshes and their phoneme animations, and names any missing
-assets in `graphics.big`. Pause playback to edit the selected frame's byte
-weights. A linked subtitle and speaker appear above the transport when the
-selected language's `text.big` and the matching `data/Defs/*snds.bin` table
-resolve that Sound ID; an unlinked line stays usable for audio and lip sync.
-You can also
-add or remove a phoneme, or insert and delete frames. Edits remain
-staged as you switch Sound IDs and banks. Export writes a new, verified
-`dialogue.big` for the selected language at the path shown; it refuses to
-overwrite an existing archive. Reset this line drops its staged edits.
-Select a Forge pack below Export and use *Add staged lines to pack* to save the
-edited Sound IDs as record recipes. Mods > Deploy composes these recipes in load
-order, so edits to different lines and banks can coexist. A later pack wins
-when two packs edit the same line or one ships a whole `dialogue.big`.
-Mods > Check conflicts lists contested lip sync lines and their winning pack;
-reorder the packs to change the winner.
-Adding the recipes clears the staged edits
-for that language; the current preview stays visible until another line loads.
-Closing Forge with staged lip sync edits opens the unsaved changes prompt;
-*Review dialogue* returns to the export panel.
+**Dialogue** opens a workspace for finding, previewing and editing spoken lines.
+The **Choose dialogue...** dropdown lists linked lines immediately. Search by
+words, speaker, entry name or Sound ID across every bank in the selected
+language; the picker selects the matching bank automatically. English retail
+resolves 20,088 linked lines. **Look up by bank & ID** remains available for
+unlinked entries. The map explorer is hidden while using Dialogue.
+
+**Preview character** sits beside the head view, with 18 retail choices:
+the original bandit, villager, Demon Door and child heads, additional female
+and male villager variants, and the Oracle. This selects a preview model; it
+does not change which character speaks the line in the game. Drag to rotate,
+scroll to zoom, or use **Reset view**. Play/Pause, Stop, Loop, Mute and the time
+slider sit below the preview. Audio uses the matching LUT clip when available;
+muted or audio-free lines can still animate. **Show lip sync timeline** opens
+one scrollable set of phoneme tracks; drag a track to seek.
+
+The fixed **Edit & save lip sync...** action opens a separate tool window.
+Pause playback to change frame weights, add/remove phonemes, or insert/delete
+frames. Changes remain staged while switching lines and banks. **Reset this
+line** discards that line's pending changes. **Export dialogue archive** writes
+a new, verified `dialogue.big` for the selected language; Browse opens Save As,
+and existing archives are protected from overwriting.
+
+Choose a Forge pack and use **Save lines to pack** to save edited Sound IDs as
+record recipes. Mods > Deploy composes them in load order: different lines and
+banks coexist, and the later pack wins if two packs edit the same line or one
+ships a whole `dialogue.big`. Mods > Check conflicts identifies the competing
+packs; reorder them to change the winner. Saving recipes clears pending changes
+for that language. Closing with staged edits offers **Review dialogue**, which
+reopens the edit/save window.
+
+![Dialogue workspace with the visible line picker and preview controls](walkthrough/w13_dialogue_workspace.png)
 
 The Assets panel holds *Textures* (below), *Models* (the browser and import above),
-*Effects* (inspection), *Dialogue* (lip sync inspection) and *Ground themes*
+*Effects* (inspection), *Dialogue* (preview and lip sync editing) and *Ground themes*
 (a PNG into `textures.big` + a new `ENGINE_THEME` copied from a donor theme; with a map
 open it joins that map's palette ready to paint). *Textures* browses `data/graphics/pc/textures.big` (every bank, search by
 name or id), previews an entry, exports it as PNG, replaces it from any image (the slot

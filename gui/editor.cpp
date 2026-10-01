@@ -3635,6 +3635,7 @@ void App::drawUnsavedPrompt() {
                 closePending_=false;
                 setTexturesMode(true);
                 setAssetsTab(4);
+                dialogueToolsOpen_=true;
             } else
             if (closePending_) {
                 const bool draftSaved = !doc_.dirty() || saveDocument();

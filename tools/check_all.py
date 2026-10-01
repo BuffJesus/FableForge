@@ -65,10 +65,10 @@ def main():
     gui = os.path.join("build", "FableForge.exe")
     if dialogue:
         ok &= run("ui dialogue lip sync browser", [gui, "--auto", "tests/ui/dialogue_browser.txt"])
-        ok &= run("ui dialogue head eyes", [gui, "--auto", "tests/ui/dialogue_head_eyes.txt"])
-        ok &= run("ui dialogue head compact layouts", [sys.executable, "tools/test_dialogue_layout.py"], capture_output=True)
-        ok &= run("Dialogue head pixels", [sys.executable, "tools/test_dialogue_head_pixels.py"])
-        ok &= run("Dialogue posed head pixels", [sys.executable, "tools/test_dialogue_head_pose_pixels.py"])
+        ok &= run("ui dialogue head layouts, eyes and posed pixels",
+                  [sys.executable, "tools/test_dialogue_layout.py", "--install", install_root], capture_output=True)
+        ok &= run("ui dialogue picker, playback and edit/export workspace",
+                  [sys.executable, "tools/test_dialogue_workspace.py", "--install", install_root], capture_output=True)
         ok &= run("Dialogue retail eye defs", [sys.executable, "tools/test_dialogue_eye_defs.py",
                                                 "--install", install_root], capture_output=True)
         effects = os.path.join(install_root, "data", "Misc", "pc", "effects.big")

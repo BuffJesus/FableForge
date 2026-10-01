@@ -11,7 +11,7 @@ static void require(bool okay,const char* message) {
 int main(int argc,char** argv) {
     try {
         const auto& presets=forge::lipsync::headPresets();
-        require(presets.size()==5 && presets[3].name=="Demon Door" &&
+        require(presets.size()==18 && presets[3].name=="Demon Door" &&
                 presets[0].eyeMesh=="MESH_EYE_BLUE_DARK" &&
                 presets[0].eyeSides==1 && presets[1].eyeSides==3 &&
                 presets[0].eyeRenderSize==1.21f &&

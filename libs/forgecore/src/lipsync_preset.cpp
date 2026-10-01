@@ -1,9 +1,11 @@
 #include "forge/lipsync_preset.hpp"
+#include <utility>
 
 namespace forge::lipsync {
 
 const std::vector<HeadPreset>& headPresets() {
-    static const std::vector<HeadPreset> presets={
+    static const std::vector<HeadPreset> presets=[] {
+      std::vector<HeadPreset> values={
         {"Bandit Lieutenant","MESH_BANDITLIEUTENANT_HEAD_01",{
             {"AH","ANIM_BANDIT_PHONEME_AH"},{"EE","ANIM_BANDIT_PHONEME_EE"},
             {"MM","ANIM_BANDIT_PHONEME_MM"},{"OH","ANIM_BANDIT_PHONEME_OH"},
@@ -25,7 +27,25 @@ const std::vector<HeadPreset>& headPresets() {
             {"AH","ANIM_BIPED_BOY_01_PHONEME_AH"},{"EE","ANIM_BIPED_BOY_01_PHONEME_EE"},
             {"MM","ANIM_BIPED_BOY_01_PHONEME_MM"},{"OH","ANIM_BIPED_BOY_01_PHONEME_OH"},
             {"SZ","ANIM_BIPED_BOY_01_PHONEME_SZ"},{"WW","ANIM_BIPED_BOY_01_PHONEME_WW"}},"MESH_EYE_BLUE_DARK",3,1.30f}
-    };
+      };
+      // Retail villager variants share named bone hierarchies and the same
+      // family phoneme clips. Local bone slot order differs between meshes;
+      // headpose resolves the animation tracks by bone name.
+      for(const auto [base,count]: {std::pair{1,6},std::pair{2,8}}) {
+          for(int variant=2;variant<=count;++variant) {
+              auto preset=values[size_t(base)];
+              preset.name+=" "+std::to_string(variant);
+              preset.mesh.replace(preset.mesh.size()-2,2,"0"+std::to_string(variant));
+              values.push_back(std::move(preset));
+          }
+      }
+      values.push_back({"Oracle","MESH_ORACLE_HEAD_01",{
+          {"AH","ANIM_ORACLE_HEAD_PHONEME_AH"},{"EE","ANIM_ORACLE_HEAD_PHONEME_EE"},
+          {"MM","ANIM_ORACLE_HEAD_PHONEME_MM"},{"OH","ANIM_ORACLE_HEAD_PHONEME_OH"},
+          {"SZ","ANIM_ORACLE_HEAD_PHONEME_ST"},{"ST","ANIM_ORACLE_HEAD_PHONEME_ST"},
+          {"WW","ANIM_ORACLE_HEAD_PHONEME_WW"}}});
+      return values;
+    }();
     return presets;
 }
 

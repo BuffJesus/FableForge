@@ -1625,6 +1625,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("dialogue_search_first_id=" + std::to_string(
         dialogueSearchResults_.empty()?0:dialogueSearchResults_.front().soundId));
     v.push_back("dialogue_staged=" + std::to_string(dialogueStaged_.size()));
+    v.push_back("dialogue_editor_open=" + std::string(dialogueToolsOpen_ ? "1" : "0"));
     v.push_back("dialogue_exported=" + std::to_string(dialogueExportMessage_.rfind("Wrote ",0)==0));
     v.push_back("dialogue_pack_added=" + std::to_string(dialogueExportMessage_.rfind("Added ",0)==0));
     v.push_back("dialogue_audio_available=" + std::to_string(dialogueLoaded_ && dialogueAudioDuration_>0));
@@ -1915,21 +1916,23 @@ void App::frame(float dt) {
 
     const float total = ImGui::GetContentRegionAvail().x;
     const float strip = theme::S(14.0f);
-    float left = settings_.showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
+    const bool dialogueWorkspace = texturesMode_ && assetsTab_ == 4;
+    const bool showExplorer = settings_.showExplorer && !dialogueWorkspace;
+    const float leftStrip = dialogueWorkspace ? 0.0f : strip;
+    float left = showExplorer ? std::clamp(total * 0.22f, theme::S(230.0f), theme::S(320.0f)) : 0.0f;
     float right = settings_.showActions ? std::clamp(total * 0.26f, theme::S(300.0f), theme::S(400.0f)) : 0.0f;
     // On compact windows the nominal panel minimums can exceed the window.
     // Share the available width rather than letting the tool panel run offscreen.
-    const float panelsAvailable = std::max(0.0f, total - strip * 2 - theme::S(200.0f));
+    const float panelsAvailable = std::max(0.0f, total - leftStrip - strip - theme::S(200.0f));
     if (left + right > panelsAvailable && left + right > 0) {
         const float fit = panelsAvailable / (left + right);
         left *= fit;
         right *= fit;
     }
-    const float middle = std::max(0.0f, total - left - right - strip * 2);
+    const float middle = std::max(0.0f, total - left - right - leftStrip - strip);
 
-    if (settings_.showExplorer) { drawExplorer(left); ImGui::SameLine(0, 0); }
-    drawPanelStrip(true);
-    ImGui::SameLine(0, 0);
+    if (showExplorer) { drawExplorer(left); ImGui::SameLine(0, 0); }
+    if (!dialogueWorkspace) { drawPanelStrip(true); ImGui::SameLine(0, 0); }
     drawViewport(middle);
     ImGui::SameLine(0, 0);
     drawPanelStrip(false);
@@ -1937,6 +1940,14 @@ void App::frame(float dt) {
     drawUnsavedPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawToolWindows();
+    if (dialogueWorkspace && dialogueToolsOpen_ &&
+        beginToolWindow("##dialogue_tools", "Edit lip sync", "Changes stay in this session until exported or added to a pack.",
+                        &dialogueToolsOpen_, theme::S(460))) {
+        const float pad = ImGui::GetCursorPosX();
+        const float inner = ImGui::GetContentRegionAvail().x;
+        drawDialogueTools(pad, inner, inner - theme::S(24));
+        endToolWindow();
+    }
     drawSetupPanel();
     drawHelpOverlay();
     drawTour();
@@ -2361,6 +2372,7 @@ void App::drawViewport(float width) {
         return;
     }
     if (texturesMode_ && assetsTab_ == 4) {
+        viewportOrigin_ = origin; viewportSize_ = size;
         viewportHovered_ = viewportCaptured_ = false;
         drawDialogueViewport(origin, size);
         drawViewportEdges();
@@ -2842,7 +2854,13 @@ void App::drawActions(float width) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
         if (assetsTab_ == 3) theme::hint("Effects inspection is read-only.");
-        else if (assetsTab_ == 4) theme::hint("Lip sync edits are staged until you export a new dialogue.big.");
+        else if (assetsTab_ == 4) {
+            ImGui::PopFont();
+            if(theme::primaryButton("Edit & save lip sync...", ImVec2(inner,S(32)),dialogueLoaded_)) dialogueToolsOpen_=true;
+            auto_.registerWidget("button_dialogue_tools");
+            ImGui::PushFont(fontSmall_);
+            if(!dialogueStaged_.empty()) ImGui::Text("%zu unsaved line(s)",dialogueStaged_.size());
+        }
         else theme::hintMore("The asset tools write the game's shared banks; originals are backed up once.", "The asset tools write the game's shared banks (textures.big, graphics.big, game.bin). Each original is backed up once as <file>.forge-orig; Setup > Restore puts them back.");
         ImGui::PopFont();
     } else if (worldMode_) {

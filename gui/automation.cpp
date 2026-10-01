@@ -1281,6 +1281,16 @@ bool Automation::tick(App& app) {
         if (!widgets_.count(rest)) fail("widget not on screen: " + rest); else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "dump_widget") {
+        const auto it = widgets_.find(rest);
+        if (it == widgets_.end()) fail("widget not on screen: " + rest);
+        else {
+            const auto& r = it->second;
+            note("widget_rect " + rest + " " + std::to_string(r.x) + " " +
+                 std::to_string(r.y) + " " + std::to_string(r.z) + " " + std::to_string(r.w));
+        }
+        ++pc_;
+    }
     else if (cmd == "dump_state") { for (const auto& kv : app.stateDump()) note("     " + kv); ++pc_; }
     else if (cmd == "dump_log") { for (const auto& [lvl, ln] : app.log_) note("     log: " + ln); ++pc_; }
     else if (cmd == "close") { app.requestClose(); note("ok   close"); ++pc_; }

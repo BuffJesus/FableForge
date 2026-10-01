@@ -15,7 +15,7 @@ only after checking those paths against the current build.
 | Ground sculpt, paint, copy and Fit/Generate | Does what the preview shows match the terrain and objects the game receives? | Fractal height range is explicit; Fit now reports affected vertices and largest height shift. Fit preview returns to zero changes after Apply, back to pending changes after Undo, and zero after Redo on Greatwood_Filler_04. Grounded things and foliage follow height edits. | Inspect remaining brush modes, Fit/Generate seams and game output on representative maps. |
 | Foliage and scenery | Do baked trees/grass remain seated and visible before and after terrain deployment? | 2,514 StartOakValeWest foliage instances were re-seated in the preview after a raised-ground stroke; undo restored zero offsets. Terrain-triggered foliage refresh avoids re-decoding placed things. | Compare near trees in the preview and game after deployment; test maps with missing/partial STB foliage. |
 | World view and new levels | Are map placement, seams, neighbour preview and level creation understandable and recoverable? | Scratch copied/blank creation, region entrances, minimap framing, compact actual creation and byte-exact restore pass. Existing edits and edits made during creation are preserved; restoring a removed map clears its preview. | Review pack/loose creation, world movement/seams and new game output. |
-| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue's Load line stays with Sound ID, and the head/timeline fit at 1280x720 and 1024x600 / 1.5 scale. Retail head pose checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
+| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue has an all-bank line picker, 18 head previews, compact playback/timeline and a separate edit/export tool. Owned normal/compact workflows, retail pose and scratch recipe/export checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
 | Mods and content packs | Can users combine common TLC mods, see conflicts and undo installs? | Mod-pack and Freeroam/Aeon research exists; integration outcomes vary by install order. | Exercise representative local corpus packs in an isolated install and document exact supported paths. |
 | Live game link and deployment | Does a previewed change appear in TLC, and are failure messages actionable? | Scratch-install terrain, theme and custom-theme writes pass; the resulting Greatwood_1 chunk audits cleanly. Failed pack and missing-STB paths restore files and keep edits dirty. | Verify object/terrain/foliage in a running game, then inspect restore from the GUI. |
 | Popups and small-screen UI | Does every floating tool remain tied to its source and usable at high UI scale? | Context test covers Terrain, Level and Properties window closure; tour captures four tool windows at eight requested sizes. | Review setup, confirmation, import and error dialogs with focus/keyboard and resize. |
@@ -1857,6 +1857,47 @@ Dialogue redesign remains in progress, temporarily preserved in
 layout is unfinished. Reapply that owned patch after this checkpoint, preserving
 the new path fields. Earlier dialogue captures/tests are in
 `build/dialogue-workspace-p8ecdp2k`.
+
+## 2026-10-01 continuation: Dialogue workspace and expanded previews
+
+Dialogue now opens with a visible line dropdown, immediate browsing and search
+across all banks by words, speaker, entry name or exact Sound ID. Selecting a
+result selects its bank; advanced bank/ID lookup remains available. The unrelated
+map explorer is hidden without changing its saved preference. Preview character,
+playback and a single optional timeline occupy the main workspace. Edit & save
+stays accessible in the footer and opens a separate tool window; Review dialogue
+from the unsaved prompt reopens that tool. Missing preview assets remain explicit.
+
+Expanded the original five heads to 18 using retail adult villager variants and
+the Oracle's own phoneme assets. Original indices and animation evaluation remain
+unchanged. Adult hierarchy checks match bone names rather than local slot order;
+child variants with different hierarchies were excluded. All 18 presets resolve,
+pass core pose checks and render in the GUI. This is a preview-model selection,
+not a change to the speaker assigned in-game.
+
+Search and preset tests pass in normal and AddressSanitizer builds (existing
+use-after-return workaround); all 35 CTest suites pass. Retail evidence:
+- `build/dialogue-asan-faux9k8s`: targeted search/preset/headpose ASan checks.
+- `build/dialogue-regression-1ii15tpm`: all 18 rendered previews.
+- `build/dialogue-browser-hrvt_qu5`: browser, search and bank/ID fallback.
+- `build/dialogue-edit-_pmalmyk`: multi-bank staging/export/reset, unsaved review,
+  pack recipes and conflict order. Exported records independently checked.
+- `build/path-browse-i6nf72ht`: real native dialogs and explicit scratch export
+  at 800x600 / 1.5 scale.
+- `build/dialogue-workspace-3w3pwww_`: actual picker, character, playback,
+  timeline, frame insert and independently checked export at 1440x900 and
+  800x600 / 1.5 scale.
+- `build/dialogue-layout-57k43pgz`: normal and two compact head layouts, visible
+  phoneme movement and the bandit's covered/uncovered eye. Tests crop the actual
+  registered preview rectangle from their own captures, never stale shared files.
+  Compact timeline review exposed a scroll-origin bug; it is fixed, and opening
+  the timeline retains a useful minimum preview size with scrollable overflow.
+
+The earlier parked Dialogue patch has been reapplied and integrated with Browse.
+The editor guide includes the new workflow and a current screenshot. The Perodis
+walkthrough now explicitly distinguishes Forge copying/enabling the DLL from
+EgoCore loading it; manually installing that DLL is also valid. No live game
+writes or runtime validation, including Retroid, are claimed.
 
 ## Audit rule
 
