@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: preflight enabled mod sources
+
+`build/mod-picks-inputs-lsfiuld_` reproduced a missing source error occurring
+only after the previous stage had been removed. Resolving enabled sources now
+rechecks their supported shape before returning the build list. Missing and
+unsupported sources fail before deployment reversal. A single-file wrapper must
+still contain one recognized pack; an ambiguous folder no longer picks its first
+file. Disabled missing sources are ignored.
+
+Synthetic checks cover missing/disabled sources and valid/ambiguous wrappers.
+The scratch decision-input regression preserves a deployed winner through
+missing-source deploy, build and conflicts failures: normal
+`build/mod-picks-inputs-k_16gump`, ASan `build/mod-picks-inputs-53acxizb`.
+Both focused sanitizer checks pass; normal all-target rebuild and all 35 suites
+pass (29.98 seconds). This checks source availability/shape, not the validity of
+every contained record; later build failures can still leave baseline files.
+
 ## 2026-10-01 continuation: unreadable orders are errors, not empty orders
 
 `build/mod-picks-inputs-3ndk7ij5` reproduced deploy treating a read-locked

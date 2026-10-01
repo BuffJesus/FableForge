@@ -108,6 +108,16 @@ def main():
         finally:
             kernel.CloseHandle(handle)
         assert snapshot() == deployed
+    changed = json.loads(saved)
+    changed['mods'][1]['source'] = str(work / 'missing-mod')
+    order.write_text(json.dumps(changed), encoding='utf-8')
+    missing_source = snapshot()
+    for verb in ('deploy', 'conflicts', 'build'):
+        options = ([out] if verb == 'build' else []) + ['--picks', picks]
+        run('missing_source_' + verb, verb, options, 1)
+        assert snapshot() == missing_source
+        assert [item.name for item in out.iterdir()] == ['sentinel']
+    order.write_bytes(saved)
     run('retry', 'deploy', ['--picks', picks])
     assert shared.read_text() == 'from pack A'
     run('undeploy', 'undeploy', [])

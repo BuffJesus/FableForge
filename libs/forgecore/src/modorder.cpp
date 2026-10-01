@@ -275,9 +275,12 @@ std::vector<std::string> buildSources(const Order& order, const fs::path& gameRo
     for (const auto& e : order.mods) {
         if (!e.enabled) continue;
         fs::path p = resolveSource(gameRoot, e.source);
+        const auto kind = classify(p);
+        if (kind == Kind::Unknown)
+            throw std::runtime_error("enabled mod source is missing or unsupported: " + e.name + " (" + p.string() + ")");
         std::error_code ec;
-        // a folder that holds one pack file stands for that file
-        if (fs::is_directory(p, ec) && (e.kind == Kind::Fmp || e.kind == Kind::Patch || e.kind == Kind::Qst))
+        // Reclassify current contents: a single-file wrapper must still be unambiguous.
+        if (fs::is_directory(p, ec) && (kind == Kind::Fmp || kind == Kind::Patch || kind == Kind::Qst))
             for (const auto& de : fs::directory_iterator(p, ec)) if (de.is_regular_file(ec)) { p = de.path(); break; }
         out.push_back(p.generic_string());
     }

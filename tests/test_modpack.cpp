@@ -63,6 +63,26 @@ int main() {
         entry.source = "mods/original";
         entry.kind = forge::modorder::Kind::Tree;
         order.mods.push_back(entry);
+        bool sourceRejected = false;
+        try { (void)forge::modorder::buildSources(order, orderRoot); }
+        catch (const std::exception&) { sourceRejected = true; }
+        require(sourceRejected, "missing enabled mod source was accepted");
+        order.mods[0].enabled = false;
+        require(forge::modorder::buildSources(order, orderRoot).empty(), "disabled missing source was not skipped");
+        order.mods[0].enabled = true;
+        const auto wrapper = orderRoot / "mods/original";
+        write(wrapper / "pack.qst", "quest source");
+        const auto sources = forge::modorder::buildSources(order, orderRoot);
+        require(sources.size() == 1 && fs::path(sources[0]) == wrapper / "pack.qst", "single-file source wrapper was not resolved");
+        write(wrapper / "readme.txt", "ambiguous wrapper");
+        sourceRejected = false;
+        try { (void)forge::modorder::buildSources(order, orderRoot); }
+        catch (const std::exception&) { sourceRejected = true; }
+        require(sourceRejected, "ambiguous source wrapper was accepted");
+        fs::remove(wrapper / "readme.txt");
+        fs::remove(wrapper / "pack.qst");
+        fs::remove(wrapper);
+        fs::remove(orderRoot / "mods");
         forge::modorder::save(orderRoot, order);
         write(orderRoot / "forge_mods.json.tmp", "unrelated order output");
         const auto originalOrder = snapshot(orderRoot);
