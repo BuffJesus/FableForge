@@ -407,12 +407,16 @@ StbReport applyStaticMaps(const fs::path& folder, const fs::path& baseRoot, cons
 namespace {
 std::vector<uint8_t> slurpFile(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);
-    return std::vector<uint8_t>(std::istreambuf_iterator<char>(f), {});
+    if (!f) throw std::runtime_error("cannot read " + p.string());
+    std::vector<uint8_t> bytes(std::istreambuf_iterator<char>(f), {});
+    if (f.bad()) throw std::runtime_error("cannot finish reading " + p.string());
+    return bytes;
 }
 void putFile(const fs::path& p, const std::vector<uint8_t>& b) {
     fs::create_directories(p.parent_path());
     std::ofstream o(p, std::ios::binary | std::ios::trunc);
     o.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+    o.close();
     if (!o) throw std::runtime_error("cannot write " + p.string());
 }
 std::string lowerS(std::string v) { for (auto& c : v) c = char(std::tolower(static_cast<unsigned char>(c))); return v; }
@@ -441,7 +445,7 @@ std::map<std::string, MapBytes> staticMapsOf(const fs::path& stb, const std::vec
 }
 } // namespace
 
-bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::path& shadow, bool viewOnly, std::string& error) {
+bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::path& shadow, bool viewOnly, std::string& error) try {
     const fs::path lv = fs::path("data") / "Levels";
     std::error_code ec;
     fs::remove_all(shadow, ec);
@@ -480,12 +484,14 @@ bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::pat
             if (!writeStaticMapChunk(shadow / lv / "FinalAlbion_RT.stb", map, slurpFile(de.path()), slurpFile(stbDir / (map + ".record")), error)) return false;
         }
     return true;
+} catch (const std::exception& e) {
+    error = e.what(); return false;
 }
 
 fs::path viewShadowRoot() { return fs::temp_directory_path() / "FableForge" / "pack_view"; }
 
 bool intoPack(const fs::path& gameRoot, const fs::path& pack, const std::function<bool(const fs::path&, std::string&)>& op,
-              std::vector<std::string>& notes, std::string& error) {
+              std::vector<std::string>& notes, std::string& error) try {
     const fs::path shadow = fs::temp_directory_path() / "FableForge" / "pack_shadow";
     std::error_code ec;
     struct Cleanup { fs::path p; ~Cleanup() { std::error_code e; fs::remove_all(p, e); } } cleanup{shadow};
@@ -498,6 +504,8 @@ bool intoPack(const fs::path& gameRoot, const fs::path& pack, const std::functio
     for (const auto& m : rep.maps) what += (what.empty() ? "" : ", ") + ("static map " + m);
     notes.push_back("into pack " + pack.filename().string() + ": " + (what.empty() ? std::string("no difference from the game") : what));
     return true;
+} catch (const std::exception& e) {
+    error = e.what(); return false;
 }
 
 CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, const fs::path& pack) {
@@ -505,13 +513,14 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
     const fs::path lv = fs::path("data") / "Levels";
     std::error_code ec;
     try {
+        detail::PendingBanks pending(pack, ".forge-pack-capture-");
         // world files
         for (const char* f : {"FinalAlbion.wld", "FinalAlbion.bwd", "FinalAlbion.gtg"}) {   // gtg: region entrances (a whole-file layer)
             const fs::path a = shadowRoot / lv / f, b = baseRoot / lv / f;
             if (!fs::exists(a)) continue;
             const auto bytes = slurpFile(a);
             if (fs::exists(b) && slurpFile(b) == bytes) continue;
-            putFile(pack / lv / f, bytes);
+            putFile(pending.prepare(lv / f), bytes);
             rep.files.push_back((lv / f).generic_string());
         }
         // level files: the shadow's WAD entries + loose files against the base's
@@ -545,7 +554,7 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
         for (const auto& [k, bytes] : shadowLevels) {
             const auto it = baseLevels.find(k);
             if (it != baseLevels.end() && it->second == bytes) continue;
-            putFile(pack / lv / "FinalAlbion" / spelling[k], bytes);
+            putFile(pending.prepare(lv / "FinalAlbion" / spelling[k]), bytes);
             rep.files.push_back((lv / "FinalAlbion" / spelling[k]).generic_string());
         }
         // static maps: a new or changed chunk (a re-laid bank rebases every record, so the
@@ -561,12 +570,16 @@ CaptureReport capture(const fs::path& shadowRoot, const fs::path& baseRoot, cons
             for (const auto& [k, cr] : staticMapsOf(shadowStb, &changed)) {
                 std::string name = k;
                 for (const auto& [lk, sp] : spelling) if (lk == k + ".lev") name = fs::path(sp).stem().string();
-                putFile(pack / "stb" / (name + ".chunk"), cr.chunk);
-                putFile(pack / "stb" / (name + ".record"), cr.record);
+                putFile(pending.prepare(fs::path("stb") / (name + ".chunk")), cr.chunk);
+                putFile(pending.prepare(fs::path("stb") / (name + ".record")), cr.record);
                 rep.maps.push_back(name);
             }
         }
-    } catch (const std::exception& e) { rep.errors.push_back(e.what()); }
+        std::string error;
+        if (!pending.install(false, error)) throw std::runtime_error(error);
+    } catch (const std::exception& e) {
+        rep.files.clear(); rep.maps.clear(); rep.errors.push_back(e.what());
+    }
     return rep;
 }
 

@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: world-pack capture failures and loose levels
+
+Capture used to replace changed world files before parsing the shadow's WAD/STB.
+A malformed-archive fixture reproduced a partial overwrite of an existing pack.
+World files, loose levels and chunk/record pairs now stage before the shared
+commit/rollback step. Reads report failures instead of becoming empty byte arrays,
+and stream completion is checked. Failed reports clear applied file/map lists.
+Shadow-preparation and operation exceptions return errors through the bool API.
+
+Normal and local ASan pack tests pass malformed archive, successful capture,
+missing chunk record, and late locked-map replacement with earlier world-file
+rollback. `test_pack_world.py` passes individual and combined world merges in both
+orders, new WAD/STB content, and sequential GUI map move/new-level capture into one
+pack. The scratch world's BWD/WLD stay unchanged. The final full relink and all
+27 CTest suites pass; one earlier GUI relink waited for the active integration
+process to release the executable. Recovery still excludes abrupt termination.
+
+`test_loose_install.py` also passes extracted-level listing/export, new-level
+creation, duplicate refusal and GUI object deployment. No active WAD is recreated
+and the renamed WAD's hash stays unchanged. These were scratch-file checks;
+new live-game verification and pack deployment/undeployment of these world edits
+remain separate.
+
 ## 2026-10-01 continuation: new-level edits and restore
 
 The compact New level form previously left no space for X/Y values beside

@@ -24,6 +24,11 @@ itself fails, the error names retained recovery files. Manifest saves report wri
 failures. This recovery does not cover process termination or power loss. Adding
 a recipe still requires Mods > Deploy before it affects game banks.
 
+World/level capture also stages all changed world files, loose levels and static
+map chunk/record pairs before replacing pack files. Read failures and reported
+commit failures preserve the previous pack; failed reports list no applied
+layers. This uses the same rollback boundary, excluding abrupt termination.
+
 ## Lip sync recipes in Forge packs
 
 Assets > Dialogue can save staged frame edits to a selected Forge pack. The

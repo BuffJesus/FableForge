@@ -135,6 +135,42 @@ int main() {
         sidecar.name = "MISSING_SIDECAR"; sidecar.model = (root / "gltf/broken.gltf").string();
         require(!pack::addModel(folder, sidecar, error) && snapshot(folder) == withSidecar,
                 "missing sidecar was accepted or changed pack files");
+        const auto captureBase = root / "capture_base", captureShadow = root / "capture_shadow";
+        write(captureBase / "data/Levels/FinalAlbion.wld", "base world");
+        write(captureShadow / "data/Levels/FinalAlbion.wld", "new world");
+        write(folder / "data/Levels/FinalAlbion.wld", "previous packed world");
+        write(captureShadow / "data/Levels/FinalAlbion.wad", "invalid archive");
+        const auto beforeCapture = snapshot(folder);
+        const auto failedCapture = pack::capture(captureShadow, captureBase, folder);
+        require(!failedCapture.errors.empty() && snapshot(folder) == beforeCapture,
+                "failed world capture partially replaced pack files");
+        fs::remove(captureShadow / "data/Levels/FinalAlbion.wad");
+        write(captureShadow / "data/Levels/FinalAlbion/CaptureMap.tng", "new map data");
+        const auto captured = pack::capture(captureShadow, captureBase, folder);
+        require(captured.errors.empty() && captured.files.size() == 2 &&
+                read(folder / "data/Levels/FinalAlbion.wld") == "new world" &&
+                read(folder / "data/Levels/FinalAlbion/CaptureMap.tng") == "new map data",
+                "successful world capture lost a changed layer");
+#ifdef _WIN32
+        write(captureShadow / "data/Levels/FinalAlbion.wld", "replacement world");
+        write(captureShadow / "data/Levels/FinalAlbion/CaptureMap.tng", "replacement map data");
+        const auto beforeLockedCapture = snapshot(folder);
+        const auto capturedMap = folder / "data/Levels/FinalAlbion/CaptureMap.tng";
+        const HANDLE mapHandle = CreateFileW(capturedMap.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                             nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        require(mapHandle != INVALID_HANDLE_VALUE, "cannot lock captured map fixture");
+        pack::CaptureReport lockedCapture;
+        try { lockedCapture = pack::capture(captureShadow, captureBase, folder); }
+        catch (...) { CloseHandle(mapHandle); throw; }
+        CloseHandle(mapHandle);
+        require(!lockedCapture.errors.empty() && lockedCapture.files.empty() && lockedCapture.maps.empty() &&
+                snapshot(folder) == beforeLockedCapture, "late capture failure left changed layers or reported success");
+#endif
+        const auto missingRecordPack = root / "missing_record_pack";
+        write(missingRecordPack / "stb/Map.chunk", "chunk without record");
+        require(!pack::prepareShadow(captureBase, missingRecordPack, root / "prepared_shadow", false, error) &&
+                error.find("Map.record") != std::string::npos,
+                "missing record preparation escaped or lost its error");
         for (const auto& item : fs::directory_iterator(folder))
             require(!item.path().filename().string().starts_with(".forge-"), "staging directory leaked");
         require(fs::equivalent(fs::canonical(root).parent_path(), fs::temp_directory_path()) && root.filename().string().starts_with("FableForgeModPack-"),

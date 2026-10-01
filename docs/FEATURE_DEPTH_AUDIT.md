@@ -284,6 +284,15 @@ file hashes match after restore. A stale removed-map preview was reproduced and
 fixed, with GPU-mesh absence checked by the expanded Setup restore test.
 No new live-game, loose-layout or new-level pack-deployment evidence was added.
 
+## 2026-10-01 world-pack capture and extracted layout
+
+World capture now preserves existing pack files on malformed input or late
+replacement failure; normal/ASan checks pass. Individual/two-order world merges
+and sequential GUI world-move/new-level capture pass. The extracted-layout check
+passes creation and deployment without recreating the WAD or altering its renamed
+copy. All 27 CTest suites pass after the final relink. Live-game and composed-world
+deploy/undeploy checks are still separate.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
