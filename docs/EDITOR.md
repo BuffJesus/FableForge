@@ -45,6 +45,10 @@ to their current files. Unreadable files are treated as differing. Failed target
 replacement or backup/creation-marker cleanup is reported as an error; release
 the file lock and retry to finish cleanup. Staged backups without a manifest are
 left in place for manual recovery.
+A creation marker paired with an original or overlay backup for the same target
+is ambiguous. Restore reports both records and stops before changing any files
+or consuming a stage, including when the target is missing. Preserve those
+records and resolve the intended baseline before retrying.
 If staged recovery fails, Restore stops before applying or forgetting ordinary
 backups; correct the reported problem and retry.
 

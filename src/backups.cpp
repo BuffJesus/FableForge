@@ -230,6 +230,29 @@ bool restore(const Entry& e, bool keepBackup, std::string& error) {
 
 size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::string>& notes, std::string& error) {
     if (gameRunningIn(gameRoot)) { error = "Fable.exe is running; quit the game first (the engine holds these files open)"; return 0; }
+    const auto before = scan(gameRoot);
+    // Older writers could add an original to a file already marked as created.
+    // Neither record establishes which baseline is authoritative. Reject before
+    // consuming a stage or changing any target, even if the target is missing.
+    std::map<fs::path, fs::path> created, originals;
+    for (const auto& e : before) {
+        auto key = e.file.lexically_normal();
+#ifdef _WIN32
+        auto name = key.wstring();
+        for (auto& c : name) c = wchar_t(towlower(c));
+        key = name;
+#endif
+        if (e.kind == Kind::Created) created[key] = e.backup;
+        else if (e.kind == Kind::Original || e.kind == Kind::Overlay) originals[key] = e.backup;
+    }
+    for (const auto& [file, marker] : created) {
+        const auto original = originals.find(file);
+        if (original == originals.end()) continue;
+        error = "conflicting restore records: " + marker.string() + " and " + original->second.string() +
+            "; preserve both and resolve which baseline is intended before retrying";
+        notes.push_back("failed: " + error);
+        return 0;
+    }
     size_t n = 0;
     std::error_code ec;
     // an original taken while a stage was live is the staged content, not retail: the stage's
@@ -238,7 +261,6 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     std::vector<fs::path> rebase;
     {
         std::map<fs::path, fs::file_time_type> staged;
-        const auto before = scan(gameRoot);
         for (const auto& e : before) if (e.kind == Kind::Staged) staged[e.file] = fs::last_write_time(e.backup, ec);
         for (const auto& e : before)
             if (e.kind == Kind::Original && staged.count(e.file) && fs::last_write_time(e.backup, ec) > staged[e.file]) rebase.push_back(e.file);

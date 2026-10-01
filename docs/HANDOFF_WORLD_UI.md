@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: conflicting Restore metadata
+
+Restore now refuses a creation marker paired with an ordinary/legacy original
+or overlay backup for the same target, before any stage recovery or file change.
+The diagnostic names both records. It cannot infer which record represents the
+intended baseline, so it retains both for explicit resolution. Missing targets
+are checked too; Windows target matching ignores case.
+
+The pre-fix fixture (`build/restore-conflicts-wq8b7w0n`) consumed a stage and both
+contradictory records while reporting success. All 12 marker/backup/missing-target
+combinations now preserve the complete install and recover after explicit marker
+removal: normal `build/restore-conflicts-ho0s42n8`, ASan
+`build/restore-conflicts-pvder3r6`. Existing lock/retry/forget checks pass normally
+(`build/restore-failures-vf8oap6b`) and under ASan
+(`build/restore-failures-5xrdtzqa`); mixed conventions and staged rebase pass via
+`tools/test_backups.py --keep`. All three normal writer targets build. This check
+does not resolve editor originals taken after a stage created a new file.
+
 ## 2026-10-01 continuation: repeated edits retain created-file baselines
 
 Repeated terrain writes and loose TNG synchronization used to add an original
