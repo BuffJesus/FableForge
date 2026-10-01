@@ -1,5 +1,7 @@
 #include "backups.hpp"
 #include "gtg.hpp"
+#include "pendingbanks.hpp"
+#include "forge/tng.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 namespace albion::editor {
@@ -17,6 +20,7 @@ std::string readText(const fs::path& p, std::string& error) {
     std::ifstream in(p, std::ios::binary);
     if (!in) { error = "cannot open " + p.string(); return {}; }
     std::stringstream ss; ss << in.rdbuf();
+    if (in.bad()) { error = "cannot read " + p.string(); return {}; }
     return ss.str();
 }
 
@@ -24,7 +28,9 @@ bool writeText(const fs::path& p, const std::string& text, std::string& error) {
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     if (!out) { error = "cannot write " + p.string(); return false; }
     out << text;
-    return bool(out);
+    out.close();
+    if (!out) { error = "cannot finish writing " + p.string(); return false; }
+    return true;
 }
 
 bool backupOnce(const fs::path& p, std::string& error) { return albion::backups::backupOnce(p, error); }   // <file>.forge-orig, once
@@ -40,8 +46,8 @@ std::string fmt(float v) {
 }
 
 std::string physics(const float pos[3], const float forward[2], const std::string& n) {
-    const float fl = std::sqrt(forward[0] * forward[0] + forward[1] * forward[1]);
-    const float fx = fl > 1e-6f ? forward[0] / fl : 0.0f, fy = fl > 1e-6f ? forward[1] / fl : 1.0f;
+    const double fl = std::hypot(double(forward[0]), double(forward[1]));
+    const float fx = fl > 1e-6 ? float(forward[0] / fl) : 0.0f, fy = fl > 1e-6 ? float(forward[1] / fl) : 1.0f;
     return "StartCTCPhysicsStandard;" + n + "PositionX " + fmt(pos[0]) + ";" + n + "PositionY " + fmt(pos[1]) + ";" + n + "PositionZ " + fmt(pos[2]) + ";" + n +
            "RHSetForwardX " + fmt(fx) + ";" + n + "RHSetForwardY " + fmt(fy) + ";" + n + "RHSetForwardZ 0.0;" + n + "RHSetUpX 0.0;" + n + "RHSetUpY 0.0;" + n + "RHSetUpZ 1.0;" + n + "EndCTCPhysicsStandard;" + n;
 }
@@ -66,6 +72,50 @@ std::pair<size_t, size_t> blockAround(const std::string& body, size_t at) {
     end += 9;
     while (end < body.size() && (body[end] == '\n' || body[end] == '\r')) ++end;   // its line end + the blank line after
     return {start, end};
+}
+
+bool directive(std::string_view line, std::string_view name) {
+    const auto begin = line.find_first_not_of(" \t\r");
+    if (begin == std::string_view::npos) return false;
+    line.remove_prefix(begin);
+    return line.starts_with(name) && (line.size() == name.size() ||
+        std::string_view(" \t\r;").find(line[name.size()]) != std::string_view::npos);
+}
+
+void validateForWrite(const GtgFile& file, const std::string& text) {
+    if (file.serialize() != text) throw std::runtime_error("FinalAlbion.gtg does not round-trip; not touching it");
+    if (file.sections.empty()) throw std::runtime_error("FinalAlbion.gtg has no complete map sections");
+    std::istringstream tail(file.tail);
+    std::string line;
+    while (std::getline(tail, line))
+        if (directive(line, "NEWMAP") || directive(line, "ENDMAP"))
+            throw std::runtime_error("FinalAlbion.gtg has an incomplete map section");
+    int previous = 0;
+    for (const auto& section : file.sections) {
+        if (section.slot <= previous) throw std::runtime_error("FinalAlbion.gtg map slots must be positive, unique and ascending");
+        previous = section.slot;
+        std::istringstream lines(section.body);
+        bool inSection = false;
+        while (std::getline(lines, line)) {
+            if (directive(line, "NEWMAP") || directive(line, "ENDMAP"))
+                throw std::runtime_error("FinalAlbion.gtg has nested map sections");
+            if (directive(line, "XXXSectionStart")) {
+                if (inSection) throw std::runtime_error("FinalAlbion.gtg has nested thing sections");
+                inSection = true;
+            } else if (directive(line, "XXXSectionEnd")) {
+                if (!inSection) throw std::runtime_error("FinalAlbion.gtg has an unmatched thing section end");
+                inSection = false;
+            } else if (directive(line, "NewThing") && !inSection)
+                throw std::runtime_error("FinalAlbion.gtg has a thing outside its section");
+        }
+        if (inSection) throw std::runtime_error("FinalAlbion.gtg has an incomplete thing section");
+        const auto body = forge::tng::File::parseText(section.body);
+        for (const auto& thing : body.things()) {
+            if (thing.endLine <= thing.startLine) throw std::runtime_error("FinalAlbion.gtg has an incomplete thing");
+            for (const auto& ctc : thing.ctcBlocks)
+                if (ctc.endLine <= ctc.startLine) throw std::runtime_error("FinalAlbion.gtg has an incomplete component");
+        }
+    }
 }
 }  // namespace
 
@@ -148,41 +198,55 @@ std::optional<RegionEntrance> entranceOf(const fs::path& gameRoot, int slot, std
 
 bool setRegionEntrance(const fs::path& gameRoot, int slot, const std::string& levelName,
                        const float pos[3], const float forward[2], std::vector<std::string>& notes, std::string& error) {
-    if (slot <= 0) { error = "unknown WLD map slot"; return false; }
-    const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion.gtg";
-    const std::string text = readText(path, error);
-    if (text.empty()) return false;
-    if (!backupOnce(path, error)) return false;
-    GtgFile f = GtgFile::parse(text);
-    if (f.serialize() != text) { error = "FinalAlbion.gtg does not round-trip; not touching it"; return false; }
-    GtgSection& s = f.sectionFor(slot);
-    const std::string script = levelName + "HSP";
-    uint64_t uid = f.maxUid();
-    std::string things;
-    // an entrance FableForge wrote before (its HSP carries our script name): replace both blocks
-    const size_t mine = s.body.find("ScriptName " + script + ";");
-    if (mine != std::string::npos) {
-        const auto [h0, h1] = blockAround(s.body, mine);
-        const size_t ent = s.body.rfind("DefinitionType \"REGION_ENTRANCE_POINT\"", h0);
-        size_t e0 = std::string::npos, e1 = std::string::npos;
-        if (ent != std::string::npos) { const auto be = blockAround(s.body, ent); if (be.second == h0) { e0 = be.first; e1 = be.second; } }
-        const size_t cut0 = e0 != std::string::npos ? e0 : h0;
-        auto uidIn = [&](size_t a, size_t b) { const size_t u = s.body.find("\nUID ", a); return u != std::string::npos && u < b ? std::strtoull(s.body.c_str() + u + 5, nullptr, 10) : 0ull; };
-        const uint64_t uidE = e0 != std::string::npos ? uidIn(e0, e1) : ++uid, uidH = uidIn(h0, h1);
-        things = entranceBlock(uidE, pos, forward, f.eol) + startBlock(uidH, script, pos, forward, f.eol);
-        s.body.replace(cut0, h1 - cut0, things);
-        notes.push_back("FinalAlbion.gtg: moved the region entrance of slot " + std::to_string(slot) + " (" + levelName + ") to (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
-    } else {
-        const std::string& n = f.eol;
-        const uint64_t entranceUid = ++uid;
-        const uint64_t startUid = ++uid;
-        things = entranceBlock(entranceUid, pos, forward, n) + startBlock(startUid, script, pos, forward, n);
-        const size_t end = s.body.find("XXXSectionEnd;");
-        if (end == std::string::npos) s.body = "Version 2;" + n + n + "XXXSectionStart NULL;" + n + n + things + "XXXSectionEnd;" + n + n + n;
-        else s.body.insert(end, things);
-        notes.push_back("FinalAlbion.gtg: region entrance + " + script + " added for slot " + std::to_string(slot) + " at (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
-    }
-    return writeText(path, f.serialize(), error);
+    try {
+        if (slot <= 0) { error = "unknown WLD map slot"; return false; }
+        for (int i = 0; i < 3; ++i) if (!std::isfinite(pos[i])) { error = "entrance position must be finite"; return false; }
+        for (int i = 0; i < 2; ++i) if (!std::isfinite(forward[i])) { error = "entrance direction must be finite"; return false; }
+        if (levelName.empty() || levelName.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") != std::string::npos) {
+            error = "entrance level name must contain only letters, digits and underscores"; return false;
+        }
+        const fs::path path = gameRoot / "data" / "Levels" / "FinalAlbion.gtg";
+        const std::string text = readText(path, error);
+        if (text.empty()) return false;
+        GtgFile f = GtgFile::parse(text);
+        validateForWrite(f, text);
+        std::string note;
+        GtgSection& s = f.sectionFor(slot);
+        const std::string script = levelName + "HSP";
+        uint64_t uid = f.maxUid();
+        std::string things;
+        // an entrance FableForge wrote before (its HSP carries our script name): replace both blocks
+        const size_t mine = s.body.find("ScriptName " + script + ";");
+        if (mine != std::string::npos) {
+            const auto [h0, h1] = blockAround(s.body, mine);
+            if (h0 == std::string::npos) { error = "entrance script name is outside a complete thing"; return false; }
+            const size_t ent = s.body.rfind("DefinitionType \"REGION_ENTRANCE_POINT\"", h0);
+            size_t e0 = std::string::npos, e1 = std::string::npos;
+            if (ent != std::string::npos) { const auto be = blockAround(s.body, ent); if (be.second == h0) { e0 = be.first; e1 = be.second; } }
+            const size_t cut0 = e0 != std::string::npos ? e0 : h0;
+            auto uidIn = [&](size_t a, size_t b) { const size_t u = s.body.find("\nUID ", a); return u != std::string::npos && u < b ? std::strtoull(s.body.c_str() + u + 5, nullptr, 10) : 0ull; };
+            if (e0 == std::string::npos && uid == std::numeric_limits<uint64_t>::max()) { error = "no free entrance UID"; return false; }
+            const uint64_t uidE = e0 != std::string::npos ? uidIn(e0, e1) : ++uid, uidH = uidIn(h0, h1);
+            things = entranceBlock(uidE, pos, forward, f.eol) + startBlock(uidH, script, pos, forward, f.eol);
+            s.body.replace(cut0, h1 - cut0, things);
+            note = ("FinalAlbion.gtg: moved the region entrance of slot " + std::to_string(slot) + " (" + levelName + ") to (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
+        } else {
+            const std::string& n = f.eol;
+            if (uid > std::numeric_limits<uint64_t>::max() - 2) { error = "not enough free entrance UIDs"; return false; }
+            const uint64_t entranceUid = ++uid;
+            const uint64_t startUid = ++uid;
+            things = entranceBlock(entranceUid, pos, forward, n) + startBlock(startUid, script, pos, forward, n);
+            const size_t end = s.body.find("XXXSectionEnd;");
+            if (end == std::string::npos) s.body += "XXXSectionStart NULL;" + n + n + things + "XXXSectionEnd;" + n + n + n;
+            else s.body.insert(end, things);
+            note = ("FinalAlbion.gtg: region entrance + " + script + " added for slot " + std::to_string(slot) + " at (" + fmt(pos[0]) + ", " + fmt(pos[1]) + ", " + fmt(pos[2]) + ")");
+        }
+        detail::PendingBanks pending(path.parent_path(), ".forge-gtg-write-");
+        if (!writeText(pending.prepare(path.filename()), f.serialize(), error)) return false;
+        if (!backupOnce(path, error) || !pending.install(false, error)) return false;
+        notes.push_back(std::move(note));
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
 }
 
 }  // namespace albion::editor

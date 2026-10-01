@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: refuse incomplete region-entrance inputs
+
+`build/gtg-before.log` reproduced an unterminated GTG map accepted for editing.
+Round-trip equality alone accepted the whole broken map as a preserved tail.
+The entrance writer now validates complete, positive/unique/ascending map slots,
+thing-section framing and complete parsed things/components before backup or
+writes. This is writer preflight; the existing read-only GTG parser is unchanged.
+It rejects non-finite placement/direction, invalid level-name tokens and exhausted
+UID allocation. Direction normalization uses double hypot to avoid overflow for
+finite float inputs.
+
+Empty-section comments are preserved when adding the first entrance. GTG output
+is staged and checked through close before replacement; locked/read failures
+preserve the old file, and success notes are emitted only after commit. Exceptions
+are returned through the existing bool/error API. This does not establish new
+engine semantics or full validation of arbitrary TNG property values.
+
+New `fableforge_gtg_tests` covers malformed maps, duplicate/order errors, incomplete
+things/components, invalid input/UID exhaustion, comment preservation, idempotent
+updates, locked/unreadable files and successful retry. All 34 normal CTest suites
+pass (19.71s); core export + GTG focused ASan tests pass (1.81s). Normal editor and
+CLI builds pass. `tools/test_newlevel_workspace.py --loose` also passes at
+`build/newlevel-workspace-y0_rogew`: real copied-bank own-region creation, GTG
+entrance, minimap, GUI palette, renamed-WAD preservation and byte-exact Restore.
+The source install was not changed; runtime region travel remains untested.
+
 ## 2026-10-01 continuation: prepare loose LEV navigation before publishing
 
 `build/terrain-save-failure-before.log` reproduced a refused navigation patch that
