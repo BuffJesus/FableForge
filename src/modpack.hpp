@@ -118,13 +118,13 @@ bool prepareShadow(const std::filesystem::path& gameRoot, const std::filesystem:
 CaptureReport capture(const std::filesystem::path& shadowRoot, const std::filesystem::path& baseRoot,
                       const std::filesystem::path& pack);
 
-// A world edit into a pack: prepareShadow (full) in a temp folder, `op` against it,
+// A world edit into a pack: prepareShadow (full) in an operation-owned temp folder, `op` against it,
 // capture the result into the pack, remove the shadow. `op` returns false with its own
 // error to abort (nothing is captured then).
 bool intoPack(const std::filesystem::path& gameRoot, const std::filesystem::path& pack,
               const std::function<bool(const std::filesystem::path& shadowRoot, std::string& error)>& op,
               std::vector<std::string>& notes, std::string& error);
-// The temp folder the World view of a pack reads (prepareShadow viewOnly).
+// The process-owned temp folder the World view of a pack reads (prepareShadow viewOnly).
 std::filesystem::path viewShadowRoot();
 
 } // namespace albion::modpack

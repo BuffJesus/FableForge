@@ -171,6 +171,33 @@ int main() {
         require(!pack::prepareShadow(captureBase, missingRecordPack, root / "prepared_shadow", false, error) &&
                 error.find("Map.record") != std::string::npos,
                 "missing record preparation escaped or lost its error");
+        std::vector<std::string> shadowNotes;
+        const auto independentPack = root / "independent_pack";
+        require(pack::create(independentPack, "independent", error), error);
+        fs::path outerShadowPath;
+        const bool isolated = pack::intoPack(captureBase, independentPack, [&](const fs::path& outer, std::string& why) {
+            outerShadowPath = outer;
+            write(outer / "owned.marker", "outer operation");
+            std::vector<std::string> innerNotes;
+            std::string innerError;
+            const bool nested = pack::intoPack(captureBase, independentPack, [&](const fs::path& inner, std::string& err) {
+                require(inner != outer, "pack operations shared their shadow directory");
+                err = "deliberate nested refusal"; return false;
+            }, innerNotes, innerError);
+            if (nested || innerError != "deliberate nested refusal" || !fs::exists(outer / "owned.marker")) {
+                why = "nested operation erased the outer shadow: " + innerError; return false;
+            }
+            return true;
+        }, shadowNotes, error);
+        require(isolated, error);
+        require(!fs::exists(outerShadowPath), "completed operation leaked its shadow");
+        fs::path failedShadowPath;
+        const auto beforeThrownOperation = snapshot(independentPack);
+        require(!pack::intoPack(captureBase, independentPack, [&](const fs::path& shadow, std::string&) -> bool {
+            failedShadowPath = shadow;
+            throw std::runtime_error("deliberate operation exception");
+        }, shadowNotes, error) && error == "deliberate operation exception" && !fs::exists(failedShadowPath) &&
+                snapshot(independentPack) == beforeThrownOperation, "throwing pack operation leaked files or escaped");
         for (const auto& item : fs::directory_iterator(folder))
             require(!item.path().filename().string().starts_with(".forge-"), "staging directory leaked");
         require(fs::equivalent(fs::canonical(root).parent_path(), fs::temp_directory_path()) && root.filename().string().starts_with("FableForgeModPack-"),

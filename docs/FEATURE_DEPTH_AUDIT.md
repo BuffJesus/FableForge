@@ -293,6 +293,13 @@ passes creation and deployment without recreating the WAD or altering its rename
 copy. All 27 CTest suites pass after the final relink. Live-game and composed-world
 deploy/undeploy checks are still separate.
 
+## 2026-10-01 pack workspace isolation
+
+Nested pack operations no longer delete each other's shared temporary tree.
+Owned edit/process-view folders pass normal/ASan cleanup checks and the complete
+world-pack integration. Concurrent commits to the same destination remain
+outside this workspace-isolation guarantee.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

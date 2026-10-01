@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: isolated pack workspaces
+
+A nested-operation fixture reproduced the fixed `pack_shadow` directory being
+deleted by a second operation. Every pack edit now creates an exclusively owned
+temporary directory; the World view uses a separate process-owned directory.
+Cleanup removes only that owned child, on completion or exception. This isolates
+working copies; it does not serialize simultaneous commits into the same pack.
+
+Normal and local ASan pack checks pass nested-operation independence, exception
+reporting, unchanged destination files and cleanup. The complete world-pack
+integration passes with the new paths, including GUI world view, move and new
+level; its operation/view directories were absent after the GUI exited.
+
 ## 2026-10-01 continuation: world-pack capture failures and loose levels
 
 Capture used to replace changed world files before parsing the shadow's WAD/STB.

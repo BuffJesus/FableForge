@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cctype>
 #include <fstream>
@@ -405,6 +406,30 @@ StbReport applyStaticMaps(const fs::path& folder, const fs::path& baseRoot, cons
 }
 
 namespace {
+class PackWorkspace {
+    fs::path parent_, path_;
+public:
+    explicit PackWorkspace(const char* prefix) {
+        parent_ = fs::absolute(fs::temp_directory_path() / "FableForge").lexically_normal();
+        fs::create_directories(parent_);
+        static std::atomic<uint64_t> serial{0};
+        for (;;) {
+            const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
+            const auto candidate = parent_ / (std::string(prefix) + std::to_string(tick) + "-" + std::to_string(serial++));
+            if (fs::create_directory(candidate)) { path_ = candidate; break; }
+        }
+    }
+    PackWorkspace(const PackWorkspace&) = delete;
+    PackWorkspace& operator=(const PackWorkspace&) = delete;
+    ~PackWorkspace() {
+        if (!path_.empty() && path_.parent_path() == parent_) {
+            std::error_code error;
+            fs::remove_all(path_, error);
+        }
+    }
+    const fs::path& path() const { return path_; }
+};
+
 std::vector<uint8_t> slurpFile(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);
     if (!f) throw std::runtime_error("cannot read " + p.string());
@@ -488,13 +513,15 @@ bool prepareShadow(const fs::path& gameRoot, const fs::path& pack, const fs::pat
     error = e.what(); return false;
 }
 
-fs::path viewShadowRoot() { return fs::temp_directory_path() / "FableForge" / "pack_view"; }
+fs::path viewShadowRoot() {
+    static const PackWorkspace view("pack-view-");
+    return view.path();
+}
 
 bool intoPack(const fs::path& gameRoot, const fs::path& pack, const std::function<bool(const fs::path&, std::string&)>& op,
               std::vector<std::string>& notes, std::string& error) try {
-    const fs::path shadow = fs::temp_directory_path() / "FableForge" / "pack_shadow";
-    std::error_code ec;
-    struct Cleanup { fs::path p; ~Cleanup() { std::error_code e; fs::remove_all(p, e); } } cleanup{shadow};
+    const PackWorkspace workspace("pack-shadow-");
+    const fs::path& shadow = workspace.path();
     if (!prepareShadow(gameRoot, pack, shadow, false, error)) return false;
     if (!op(shadow, error)) return false;
     const auto rep = capture(shadow, gameRoot, pack);
