@@ -11,6 +11,7 @@
 #include <cwctype>
 #include <fstream>
 #include <map>
+#include <stdexcept>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -230,8 +231,8 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     size_t n = 0;
     std::error_code ec;
     // an original taken while a stage was live is the staged content, not retail: the stage's
-    // older .forgebak is the true original. Those originals are rebased onto the reverted file
-    // below instead of being copied back over it.
+    // older .forgebak is the true original. Prepare those baselines before
+    // reverting consumes the staged originals, so a failed rebase is retryable.
     std::vector<fs::path> rebase;
     {
         std::map<fs::path, fs::file_time_type> staged;
@@ -243,15 +244,18 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     // a staged deploy first, through its manifest (restores and removes what it put there)
     if (fs::exists(forge::stage::manifestPath(gameRoot), ec)) {
         try {
+            for (const auto& f : rebase) {
+                Entry baseline;
+                baseline.file = originalOf(f);
+                baseline.backup = f.string() + kStagedSuffix;
+                std::string rebaseError;
+                if (!restore(baseline, true, rebaseError))
+                    throw std::runtime_error("cannot rebase editor baseline: " + rebaseError);
+                notes.push_back("rebased " + baseline.file.filename().string() + " onto the staged original (it was taken on top of the stage)");
+            }
             const auto r = forge::stage::revert(gameRoot);
             notes.push_back("reverted the staged deploy: " + std::to_string(r.restored.size()) + " restored, " + std::to_string(r.removed.size()) + " removed");
             n += r.restored.size() + r.removed.size();
-            for (const auto& f : rebase) {
-                const fs::path orig = originalOf(f);
-                if (!fs::exists(f, ec)) continue;
-                fs::copy_file(f, orig, fs::copy_options::overwrite_existing, ec);
-                notes.push_back((ec ? "could not rebase " : "rebased ") + orig.filename().string() + " onto the reverted file (it was taken on top of the stage)");
-            }
         } catch (const std::exception& ex) {
             error = ex.what();
             notes.push_back(std::string("failed: ") + ex.what());

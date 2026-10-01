@@ -26,7 +26,8 @@ it has). The two other conventions are known too: `.forgebak` (what a staged mod
 put aside; Undeploy consumes it) and `.ovrbak` (FableTLC's overlay installer).
 *Restore the retail files* reverts a staged deploy through its manifest first, then puts
 every original back -- and an original that was taken on top of a stage (its `.forgebak`
-is older) is rebased onto the reverted file instead of copied back over it.
+is older) is rebased onto the staged original before the stage is reverted.
+If that preparation fails, the stage manifest and originals remain for retry.
 `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
 CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over

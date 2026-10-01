@@ -411,6 +411,11 @@ gate passes. Other fixed extraction paths and same-install writers remain open.
 
 ## Restore comparison and cleanup, 2026-10-01
 
+Rebasing now prepares the editor baseline from the staged original before stage
+recovery consumes its manifest/backups. Locked-baseline and subsequent locked
+target cases retain recovery data and retry to retail bytes in normal and ASan
+CLI tests. This resolves the rebase-failure gap recorded below.
+
 Failed staged recovery now stops ordinary Restore. A missing staged original
 fixture preserves the edited target, ordinary backup and manifest, then restores
 retail bytes on retry after supplying the missing original. The existing mixed

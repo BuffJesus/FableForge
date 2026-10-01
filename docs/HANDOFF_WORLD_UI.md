@@ -2,6 +2,18 @@
 
 ## 2026-10-01 continuation: Restore comparison and cleanup
 
+Rebase follow-up: a locked editor baseline reproduced losing the stage manifest
+and retail backup before baseline preparation failed. Restore now prepares each
+affected baseline from its staged original through a temporary file before
+reverting the stage. A locked baseline leaves the stage and target intact; a
+subsequent locked-target failure retains the prepared retail baseline plus stage
+recovery. Both retry successfully. Normal and ASan fixtures pass at
+`build/restore-failures-og237xq2` and `build/restore-failures-qt3y03yd`; the existing
+mixed-convention backup test passes. Full build and all 29 core suites pass
+(19.30 seconds). This resolves the rebase-failure concern
+recorded in the preceding follow-up below. Power-loss and concurrent-writer
+durability are not claimed.
+
 Follow-up: a missing staged original reproduced ordinary Restore continuing
 after stage recovery failed, overwriting the edited target with staged content
 and deleting its ordinary backup under `--forget`. Restore now stops at that

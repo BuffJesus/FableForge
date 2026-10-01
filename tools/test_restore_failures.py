@@ -123,6 +123,32 @@ def main():
     assert run(root, 'failed_stage_retry', forget=True).returncode == 0
     assert bank.read_bytes() == b'retail content'
     assert not backup.exists() and not staged_backup.exists() and not manifest.exists()
+    root, bank, backup = fixture('locked_rebase', b'edited after stage', b'staged content')
+    staged_backup = Path(str(bank) + '.forgebak')
+    staged_backup.write_bytes(b'retail content')
+    os.utime(staged_backup, (1_700_000_000, 1_700_000_000))
+    manifest = root / 'forge_stage_manifest.json'
+    manifest.write_text(json.dumps({'files': [{'path': 'data/CompiledDefs/game.bin', 'had_original': True}]}))
+    handle = lock(backup, 1)
+    try:
+        result = run(root, 'locked_rebase', forget=True)
+    finally:
+        kernel.CloseHandle(handle)
+    assert result.returncode != 0
+    assert bank.read_bytes() == b'edited after stage', 'rebase failure changed target before recovery was ready'
+    assert staged_backup.read_bytes() == b'retail content' and manifest.exists(), 'rebase failure consumed recovery data'
+    assert backup.read_bytes() == b'staged content'
+    handle = lock(bank, 1)
+    try:
+        result = run(root, 'stage_failure_after_rebase', forget=True)
+    finally:
+        kernel.CloseHandle(handle)
+    assert result.returncode != 0 and manifest.exists()
+    assert bank.read_bytes() == b'edited after stage'
+    assert backup.read_bytes() == staged_backup.read_bytes() == b'retail content'
+    assert run(root, 'rebase_retry', forget=True).returncode == 0
+    assert bank.read_bytes() == b'retail content'
+    assert not backup.exists() and not staged_backup.exists() and not manifest.exists()
     assert not failures, '; '.join(failures)
     print('Restore comparison, failure diagnostics, retry and forget: PASS')
 
