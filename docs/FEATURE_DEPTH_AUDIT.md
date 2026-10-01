@@ -487,6 +487,15 @@ Concurrent defs roundtrips own separate output directories and no longer collide
 or remove unowned scratch data. Normal/ASan tests verify semantic roundtrip
 identity, original bank hashes and marker preservation. Writer format unchanged.
 
+## EgoCore compiler workspace ownership, 2026-10-01
+
+Concurrent real Controller Support compiles now preserve both text layers and
+produce identical banks (43 fields, one new record), while retaining unowned
+files. Normal/ASan host checks cover real compiler success and failure cleanup.
+The shared directory helper is now in forgecore with ownership/exception/prefix
+tests; all 30 suites and the full GUI World workspace probe pass. Compiler
+failure still warns and permits DLL-only output; that behavior is not changed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

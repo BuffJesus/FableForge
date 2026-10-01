@@ -2,6 +2,12 @@
 
 # Mod packs, load order, and conflict resolution
 
+EgoCore text compilation uses a separate temporary workspace per normalization,
+including concurrent builds of the same mod into different outputs. Workspaces
+are cleaned on success and compiler failure. This does not enable concurrent
+writes to the same output or install. Compiler failure still reports that the
+text overrides were not applied; a DLL-only result can still be produced.
+
 ## Recipe asset storage and failed edits
 
 New model and ground-theme recipes keep their input files under

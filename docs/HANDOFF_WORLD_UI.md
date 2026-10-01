@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: EgoCore compiler workspace ownership
+
+Concurrent real Controller Support builds collided in the shared compiler tree;
+one emitted only its DLL and warned that its text overrides were not applied
+(`build/egocore-workspace-75z4ocxg`). EgoCore now owns a unique compiler workspace.
+The directory utility lives in forgecore; the application's existing wrapper
+retains its FableForge parent directory and API.
+
+Normal and ASan host tests pass (`build/egocore-workspace-lhlmflwp`,
+`build/egocore-workspace-dwr2n4jv`): both builds apply 43 fields across 14 changed
+records plus one new record, produce identical banks, copy the expected DLL,
+preserve original banks/old-path marker and clean owned directories. A failing
+compiler fixture also cleans up. Existing compiler-failure behavior is unchanged:
+the build warns and can still emit the DLL without its text overrides.
+
+The new directory test covers unique live children, nested cleanup, exception
+cleanup, unsafe-prefix rejection and sibling preservation in normal/ASan builds.
+Full build and all 30 core suites pass (29.91 seconds); the full GUI fit/export/
+400-tile/World-detail probe passes after utility promotion
+(`build/gui-level-workspace-__bpjevw`). Remaining direct temp-path construction
+in the GUI is the user-facing dialogue export destination, not scratch cleanup.
+Same-output or same-install concurrent writers remain unsupported.
+
 ## 2026-10-01 continuation: definitions roundtrip workspace
 
 Two concurrent definitions roundtrips collided writing names.bin in the shared

@@ -1,4 +1,5 @@
 #include "forge/egocore.hpp"
+#include "forge/temporarydirectory.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -164,8 +165,8 @@ bool normaliseDefs(const fs::path& modFolder, const fs::path& gameRoot, const fs
     }
     const fs::path defc = findDefc(paths);
     // the overlay: a copy of the tree with the mod's blocks merged in
-    const fs::path work = fs::temp_directory_path() / "forge_egocore" / report.modName;
-    fs::remove_all(work, ec);
+    const TemporaryDirectory workspace(fs::temp_directory_path() / "forge_egocore", "defs-");
+    const fs::path& work = workspace.path();
     // Both trees carry the mod's ADDED definitions (so the two compiles share one index space
     // and an added record shifts nothing between them); only the mod tree carries the
     // replacements. The base compile then differs from the mod compile exactly where the
