@@ -119,6 +119,11 @@ The exporter never embeds retail data; it reads the textures from **your** insta
 --walkable-colors   COLOR_0 vertex colours
 ```
 
+Numeric export options require complete values: decimal integers for `--texels`
+and `--max-texture`, finite numbers for `--tile` and `--gain`, and two finite
+coordinates for `--origin`. `--up` accepts `y` or `z`. Malformed or missing
+values are refused before exporting; existing numeric clamps still apply.
+
 ## Known gaps (honest list)
 
 * **Texture tiling** — pinned from the engine: the landscape vertex shader maps

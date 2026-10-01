@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -12,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "forge/big.hpp"
@@ -149,11 +151,16 @@ int runExport(const std::string& cmd, const Args& args) {
     std::string installArg, out, target, upArg = "y", originArg;
     bool textures = true, layers = false, walkable = false, quiet = false, foliage = false, things = false, creatures = false, particles = false, world = false, water = true;
     int texels = 8;
-    float tile = 8.0f, gain = 1.0f;
+    float tile = 8.0f, gain = 1.0f, originX = 0.0f, originY = 0.0f;
+    const auto number = []<typename T>(std::string_view value, T& output) {
+        if (value.size() > 1 && value.front() == '+' && value[1] != '-') value.remove_prefix(1);
+        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
+        return parsed.ec == std::errc{} && parsed.ptr == value.data() + value.size() && std::isfinite(double(output));
+    };
     for (size_t i = 1; i < args.size(); ++i) {
         const std::string& a = args[i];
         auto next = [&]() -> std::string {
-            if (i + 1 >= args.size()) { std::fprintf(stderr, "%s needs a value\n", a.c_str()); std::exit(2); }
+            if (i + 1 >= args.size() || args[i + 1].empty() || args[i + 1].starts_with("--")) { std::fprintf(stderr, "%s needs a value\n", a.c_str()); std::exit(2); }
             return args[++i];
         };
         if (a == "--install") installArg = next();
@@ -162,14 +169,22 @@ int runExport(const std::string& cmd, const Args& args) {
         else if (a == "--foliage") foliage = true;
         else if (a == "--things") things = true;
         else if (a == "--no-water") water = false;
-        else if (a == "--max-texture") albion::foliageexport::setTextureLimit(std::atoi(next().c_str()));
+        else if (a == "--max-texture" || a == "--texels") {
+            int value = 0;
+            if (!number(next(), value)) { std::fprintf(stderr, "%s expects a complete decimal integer in the signed 32-bit range\n", a.c_str()); return 2; }
+            if (a == "--max-texture") albion::foliageexport::setTextureLimit(value);
+            else texels = value;
+        }
         else if (a == "--world") world = true;
         else if (a == "--creatures") creatures = true;
         else if (a == "--particles") particles = true;
         else if (a == "--layers") layers = true;
-        else if (a == "--texels") texels = std::atoi(next().c_str());
-        else if (a == "--tile") tile = float(std::atof(next().c_str()));
-        else if (a == "--gain") gain = float(std::atof(next().c_str()));
+        else if (a == "--tile" || a == "--gain") {
+            float value = 0.0f;
+            if (!number(next(), value)) { std::fprintf(stderr, "%s expects a complete finite number\n", a.c_str()); return 2; }
+            if (a == "--tile") tile = value;
+            else gain = value;
+        }
         else if (a == "--up") upArg = lower(next());
         else if (a == "--origin") originArg = next();
         else if (a == "--walkable-colors") walkable = true;
@@ -177,6 +192,15 @@ int runExport(const std::string& cmd, const Args& args) {
         else if (!a.empty() && a[0] == '-') { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return usage(); }
         else if (target.empty()) target = a;
         else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return usage(); }
+    }
+
+    if (upArg != "y" && upArg != "z") { std::fprintf(stderr, "--up expects y or z\n"); return 2; }
+    if (!originArg.empty()) {
+        const size_t comma = originArg.find(',');
+        if (comma == std::string::npos || !number(std::string_view(originArg).substr(0, comma), originX) ||
+            !number(std::string_view(originArg).substr(comma + 1), originY)) {
+            std::fprintf(stderr, "--origin expects two complete finite numbers X,Y\n"); return 2;
+        }
     }
 
     try {
@@ -338,10 +362,8 @@ int runExport(const std::string& cmd, const Args& args) {
         o.mapName = (install.valid && !(fs::exists(target) && fs::is_regular_file(target))) ? lev.stem().string() : std::string();
         o.up = upArg == "z" ? te::UpAxis::Z : te::UpAxis::Y;
         if (!originArg.empty()) {
-            const size_t c = originArg.find(',');
-            if (c == std::string::npos) { std::fprintf(stderr, "--origin needs X,Y\n"); return 2; }
-            o.originX = float(std::atof(originArg.substr(0, c).c_str()));
-            o.originY = float(std::atof(originArg.substr(c + 1).c_str()));
+            o.originX = originX;
+            o.originY = originY;
         } else if (world) {
             if (!install.valid || !te::worldOrigin(install.root, lev.stem().string(), o.originX, o.originY)) {
                 std::fprintf(stderr, "--world: no WLD placement found for %s (is it a retail map name?)\n", lev.stem().string().c_str());

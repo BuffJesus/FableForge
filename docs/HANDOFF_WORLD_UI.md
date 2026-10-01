@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: complete numeric inputs for map exports
+
+`build/export-inputs-yoisa43h/invalid_0.json` reproduced `--texels oops`
+being accepted and replacing the previous GLB. The export parser now requires
+complete signed 32-bit integers for texel/texture limits, finite complete floats
+for tile/gain, exactly two finite origin coordinates and a y/z up axis.
+Value-taking options reject empty, missing or following-option values before
+install lookup or output work. Existing numeric clamps/defaults are unchanged.
+
+`tools/test_export_inputs.py` passes 49 refusals preserving the old GLB, then
+valid signed/scientific inputs. Its GLB passes container, accessor, index and
+bounds checks (4225 vertices, 8192 triangles), including the requested Z-up
+origin (16,-32). Copied input hashes/inventory remain unchanged. Normal
+`build/export-inputs-ipsg_jkz` and ASan `build/export-inputs-khfbpafk` pass.
+The retail smoke runner now accepts an explicit source install;
+`build/export-numeric-smoke-epyylx5z/smoke.log` passes eight textured maps,
+including two with things/foliage, and independent trimesh loading for all eight.
+This CLI-only parser change reuses the preceding 35-suite core gate.
+
 ## 2026-10-01 continuation: publish ground diagnostic PNGs together
 
 `build/ground-exports-qysgbxcd/locked_first.log` reproduced ground returning

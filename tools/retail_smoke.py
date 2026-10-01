@@ -81,10 +81,12 @@ def main():
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--out", default=os.path.join("build", "smoke"))
     ap.add_argument("--no-textures", action="store_true")
+    ap.add_argument("--install", help="explicit read-only source install")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
-    lst = subprocess.run([a.exe, "list"], capture_output=True, text=True)
+    install_args = ["--install", a.install] if a.install else []
+    lst = subprocess.run([a.exe, "list", *install_args], capture_output=True, text=True)
     if lst.returncode != 0:
         print(lst.stderr); return 1
     maps = [ln.split()[0] for ln in lst.stdout.splitlines()[1:] if ln.strip()]
@@ -96,7 +98,7 @@ def main():
     for m in maps:
         out = os.path.join(a.out, m + ".glb")
         full = (maps.index(m) % 4 == 0) and not a.no_textures   # every 4th map with foliage + objects
-        cmd = [a.exe, "export", m, "--out", out, "--quiet"] + (["--no-textures"] if a.no_textures else []) + (["--foliage", "--things"] if full else [])
+        cmd = [a.exe, "export", m, "--out", out, "--quiet", *install_args] + (["--no-textures"] if a.no_textures else []) + (["--foliage", "--things"] if full else [])
         t0 = time.time()
         r = subprocess.run(cmd, capture_output=True, text=True)
         dt = time.time() - t0
