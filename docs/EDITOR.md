@@ -27,7 +27,9 @@ put aside; Undeploy consumes it) and `.ovrbak` (FableTLC's overlay installer).
 *Restore the retail files* reverts a staged deploy through its manifest first, then puts
 every original back -- and an original that was taken on top of a stage (its `.forgebak`
 is older) is rebased onto the staged original before the stage is reverted.
-If that preparation fails, the stage manifest and originals remain for retry.
+The entire stage plan is validated before that preparation, and only originals
+listed in that plan are eligible. If preparation fails, the stage manifest and
+originals remain for retry.
 `src/backups.{hpp,cpp}` scans the
 install for both (root BWD, data/Levels, the loose FinalAlbion folder,
 CompiledDefs, graphics/pc, FSE) and puts things back: originals are copied over
@@ -48,7 +50,8 @@ left in place for manual recovery.
 A creation marker paired with an original or overlay backup for the same target
 is ambiguous. Restore reports both records and stops before changing any files
 or consuming a stage, including when the target is missing. Preserve those
-records and resolve the intended baseline before retrying.
+records and resolve the intended baseline before retrying. A stage that records
+a file as newly created conflicts with an original/overlay backup in the same way.
 If staged recovery fails, Restore stops before applying or forgetting ordinary
 backups; correct the reported problem and retry.
 

@@ -28,6 +28,17 @@ struct Result {
 Result apply(const std::filesystem::path& gameRoot,
              const std::filesystem::path& modDir);
 
+struct RecoveryEntry {
+    std::string relative;
+    std::filesystem::path target, backup;
+    bool hadOriginal;
+};
+
+// Read and validate the whole recovery plan without changing files. Throws for
+// unsafe/duplicate targets, missing originals or non-file targets. Callers may
+// inspect ownership before preparing related recovery data; revert revalidates.
+std::vector<RecoveryEntry> inspectRecovery(const std::filesystem::path& gameRoot);
+
 // Undo a previous apply() using the manifest: restore backups, delete staged
 // files that had no original, remove the manifest. Returns what was done.
 // Preflights missing backups/unsafe paths before writes. If a later copy fails,

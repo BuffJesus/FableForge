@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: validate stage ownership before baseline preparation
+
+A missing staged original could be discovered only after an editor original was
+rebased (`build/restore-stage-plan-ubvv1fjs`). forgecore now exposes its existing
+whole-plan validation as `stage::inspectRecovery`; Restore uses that read-only
+plan before any baseline change, and stage revert revalidates before applying it.
+Only originals belonging to the validated stage are eligible for the existing
+mtime-based rebase. An unrelated orphaned .forgebak cannot replace an editor
+original just because another stage manifest exists.
+
+A stage-created target paired with an original/legacy/overlay backup is now
+reported as conflicting recovery data before writes. Restore cannot establish
+whether that backup predates the stage, so it preserves both records for explicit
+resolution instead of removing then resurrecting the staged file.
+
+`tools/test_restore_stage_plan.py` passes normally
+(`build/restore-stage-plan-xudnjwox`) and under ASan
+(`build/restore-stage-plan-jkiak2as`): missing-plan preservation/retry, unowned
+staged backup preservation and three stage-created conflicts with resolved retry.
+Normal conflict/failure checks pass (`build/restore-conflicts-r_ekojt2`,
+`build/restore-failures-r503rzon`); ASan failure and stage unit checks pass
+(`build/restore-failures-4xtjrn8v`). Full build and all 30 suites pass (21.53 seconds),
+as does the mixed-convention/staged-rebase check. The mtime heuristic within a
+valid stage is unchanged; concurrent writers to one install remain unsupported.
+
 ## 2026-10-01 continuation: conflicting Restore metadata
 
 Restore now refuses a creation marker paired with an ordinary/legacy original

@@ -134,7 +134,7 @@ Result apply(const fs::path& gameRoot, const fs::path& modDir) {
     return result;
 }
 
-Result revert(const fs::path& gameRoot) {
+std::vector<RecoveryEntry> inspectRecovery(const fs::path& gameRoot) {
     const fs::path manifest = manifestPath(gameRoot);
     if (!fs::exists(manifest)) {
         throw std::runtime_error("unstage: no manifest at " + manifest.string());
@@ -144,13 +144,12 @@ Result revert(const fs::path& gameRoot) {
     const json doc = json::parse(in);
     in.close();
 
-    struct Entry { std::string relative; fs::path target, backup; bool hadOriginal; };
-    std::vector<Entry> entries;
+    std::vector<RecoveryEntry> entries;
     std::set<fs::path> targets;
     // Validate the entire recovery plan before changing any file. A missing
     // original is an error, never a reason to delete the installed target.
     for (const auto& item : doc.at("files")) {
-        Entry entry;
+        RecoveryEntry entry;
         entry.relative = item.at("path").get<std::string>();
         entry.target = checkedTarget(gameRoot, entry.relative);
         entry.backup = checkedTarget(gameRoot, entry.relative + kBackupSuffix);
@@ -164,6 +163,12 @@ Result revert(const fs::path& gameRoot) {
             throw std::runtime_error("unstage: target is not a file: " + entry.target.string());
         entries.push_back(std::move(entry));
     }
+    return entries;
+}
+
+Result revert(const fs::path& gameRoot) {
+    const auto entries = inspectRecovery(gameRoot);
+    const auto manifest = manifestPath(gameRoot);
     Result result;
     for (const auto& entry : entries) {
         const auto& [relative, target, backup, hadOriginal] = entry;

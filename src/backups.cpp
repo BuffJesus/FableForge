@@ -31,6 +31,16 @@ bool endsWith(const std::string& s, const char* suffix) {
     return s.size() >= n && s.compare(s.size() - n, n, suffix) == 0;
 }
 
+fs::path targetKey(const fs::path& file) {
+    auto key = file.lexically_normal();
+#ifdef _WIN32
+    auto name = key.wstring();
+    for (auto& c : name) c = wchar_t(towlower(c));
+    key = name;
+#endif
+    return key;
+}
+
 bool sameBytes(const fs::path& a, const fs::path& b) {
     std::error_code ec;
     if (!fs::exists(a, ec) || !fs::exists(b, ec)) return false;
@@ -236,12 +246,7 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     // consuming a stage or changing any target, even if the target is missing.
     std::map<fs::path, fs::path> created, originals;
     for (const auto& e : before) {
-        auto key = e.file.lexically_normal();
-#ifdef _WIN32
-        auto name = key.wstring();
-        for (auto& c : name) c = wchar_t(towlower(c));
-        key = name;
-#endif
+        const auto key = targetKey(e.file);
         if (e.kind == Kind::Created) created[key] = e.backup;
         else if (e.kind == Kind::Original || e.kind == Kind::Overlay) originals[key] = e.backup;
     }
@@ -258,20 +263,31 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
     // an original taken while a stage was live is the staged content, not retail: the stage's
     // older .forgebak is the true original. Prepare those baselines before
     // reverting consumes the staged originals, so a failed rebase is retryable.
-    std::vector<fs::path> rebase;
-    {
-        std::map<fs::path, fs::file_time_type> staged;
-        for (const auto& e : before) if (e.kind == Kind::Staged) staged[e.file] = fs::last_write_time(e.backup, ec);
-        for (const auto& e : before)
-            if (e.kind == Kind::Original && staged.count(e.file) && fs::last_write_time(e.backup, ec) > staged[e.file]) rebase.push_back(e.file);
-    }
     // a staged deploy first, through its manifest (restores and removes what it put there)
     if (fs::exists(forge::stage::manifestPath(gameRoot), ec)) {
         try {
-            for (const auto& f : rebase) {
-                Entry baseline;
-                baseline.file = originalOf(f);
-                baseline.backup = f.string() + kStagedSuffix;
+            const auto plan = forge::stage::inspectRecovery(gameRoot);
+            std::vector<Entry> rebase;
+            for (const auto& staged : plan) {
+                const auto key = targetKey(staged.target);
+                if (!staged.hadOriginal) {
+                    const auto original = originals.find(key);
+                    if (original != originals.end())
+                        throw std::runtime_error("conflicting restore records: stage created " + staged.target.string() +
+                            " but original backup exists: " + original->second.string() +
+                            "; preserve recovery data and resolve which baseline is intended before retrying");
+                    continue;
+                }
+                for (const auto& e : before)
+                    if (e.kind == Kind::Original && targetKey(e.file) == key &&
+                        fs::last_write_time(e.backup) > fs::last_write_time(staged.backup)) {
+                        Entry baseline;
+                        baseline.file = e.backup;
+                        baseline.backup = staged.backup;
+                        rebase.push_back(std::move(baseline));
+                    }
+            }
+            for (const auto& baseline : rebase) {
                 std::string rebaseError;
                 if (!restore(baseline, true, rebaseError))
                     throw std::runtime_error("cannot rebase editor baseline: " + rebaseError);
@@ -288,7 +304,7 @@ size_t restoreAll(const fs::path& gameRoot, bool keepBackup, std::vector<std::st
             // targets and discard the state needed for a safe retry.
             return n;
         }
-    } else rebase.clear();
+    }
     for (const auto& e : scan(gameRoot)) {
         if (e.kind == Kind::Staged) {
             if (e.differs) notes.push_back("left " + e.file.string() + " (a .forgebak outside any stage manifest; undeploy or remove it by hand)");
