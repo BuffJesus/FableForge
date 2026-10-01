@@ -54,6 +54,7 @@ float yawDegrees(const editor::Frame& f) {
 // ------------------------------------------------------------ document
 
 void App::openDocument() {
+    if (modFilesBusy()) return;
     cancelCarry();
     docLoadedFor_.clear();
     thingGlyphs_.clear();
@@ -189,6 +190,7 @@ void App::syncInstances() {
 }
 
 void App::startThingsReload() {
+    if (modFilesBusy()) { thingsReloadPending_ = true; return; }
     if (!documentLoaded() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { thingsReloadPending_ = true; return; }
     thingsReloadPending_ = false;
@@ -2501,6 +2503,8 @@ const char* App::activeFileJob() const {
     if (compactFuture_.valid()) return "bank compaction";
     if (meshImportFuture_.valid()) return "model import";
     if (modsFuture_.valid()) return "mod processing";
+    if (!modsQueuedVerb_.empty()) return "mod preparation";
+    if (modsRefreshPending_) return "mod refresh";
     return nullptr;
 }
 
@@ -2547,6 +2551,7 @@ void App::revertDocument() {
 // ------------------------------------------------------------ terrain tool
 
 void App::startThemeRebake() {
+    if (modFilesBusy()) { rebakePending_ = true; return; }
     if (!documentLoaded() || !doc_.hasTerrain() || !ctx_.ready()) return;
     if (previewFuture_.valid()) { rebakePending_ = true; return; }
     rebakePending_ = false;
@@ -4706,6 +4711,7 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
     pending = false;
     auto it = defThumbs_.find(def);
     if (it != defThumbs_.end()) return it->second;
+    if (modFilesBusy()) { pending = true; return nullptr; }
     if (!ctx_.ready()) { pending = true; return nullptr; }
     if (thumbBudget_ <= 0) { pending = true; return nullptr; }   // one decode per frame
     --thumbBudget_;
@@ -4730,6 +4736,7 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
 
 // ---- theme swatches -----------------------------------------------------------------
 ID3D11ShaderResourceView* App::themeSwatch(const std::string& themeName) {
+    if (modFilesBusy()) return nullptr;
     if (!ctx_.ready()) return nullptr;
     const forge::terraintex::ThemeLibrary* lib = ctx_.themeLibrary();
     const auto* th = lib ? lib->byName(themeName) : nullptr;
@@ -4793,6 +4800,7 @@ void App::drawRuleNotice(const char* key, float width) {
 // ---------------------------------------------------------------- fit to neighbours
 
 void App::startFitNeighbourLoad() {
+    if (modFilesBusy()) { fileWriteBlocked("fit neighbours"); return; }
     if (fitFuture_.valid() || !documentLoaded()) return;
     fitNeighboursFor_ = doc_.mapName();
     fitNeighbours_.clear(); fitNeighboursNote_.clear(); fitPreviewKey_.clear();

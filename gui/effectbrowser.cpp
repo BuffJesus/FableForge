@@ -98,6 +98,7 @@ void App::frameEffectPreview(bool currentOnly) {
 }
 
 void App::refreshEffectBrowser() {
+    if (modFilesBusy()) return;
     const std::string previous=effectBrowserSelection_.name;
     effectBrowserRows_.clear(); effectBrowserError_.clear(); effectBrowserThumbnails_.clear();
     effectBrowserSelection_={}; effectBrowserReady_=false; effectBrowserLoaded_=true;
@@ -114,6 +115,7 @@ void App::refreshEffectBrowser() {
 }
 
 bool App::selectEffect(const std::string& nameOrId) {
+    if (modFilesBusy()) { fileWriteBlocked("select effect"); return false; }
     if (!effectBrowserLoaded_) refreshEffectBrowser();
     const auto found=std::find_if(effectBrowserRows_.begin(),effectBrowserRows_.end(),[&](const auto& row) {
         return std::to_string(row.id)==nameOrId ||
@@ -176,6 +178,7 @@ void App::drawEffectBrowser(float pad,float inner,float cardInner) {
 }
 
 void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
+    if (modFilesBusy()) return;
     using theme::S;
     ImGui::SetCursorScreenPos(origin);
     ImGui::BeginChild("##effectinspector",size,ImGuiChildFlags_AlwaysUseWindowPadding);

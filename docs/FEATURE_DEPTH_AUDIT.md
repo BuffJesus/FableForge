@@ -343,6 +343,18 @@ probes verify refusal, retained draft edits, successful retry and unchanged or
 restored source-bank hashes. Separate processes/CLI writers remain outside this
 guard; it is not a filesystem lock.
 
+## Mod refresh and undeploy recovery, 2026-10-01
+
+Same-window new-level deployment refreshes maps/assets outside the Mods tab and
+waits for World/preview readers. Three scratch cycles (clean, World active, dirty
+map draft) pass with byte-exact eight-bank restoration and an unchanged pack.
+The draft retains object/terrain undo. The inspected new-map screenshot shows
+terrain/water; graphics.big and in-game checks are absent. Normal/ASan stage
+checks prove missing-backup refusal and retry after a locked second target.
+Stage/apply failure atomicity, cross-process writes and pending-world-edit
+refresh remain open. Earlier new-level busy evidence covers failed creation;
+the new refresh script explicitly checks successful creation before deployment.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

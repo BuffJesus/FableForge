@@ -43,6 +43,7 @@ void App::setWorldMode(bool on) {
 }
 
 void App::loadWorld() {
+    if (modFilesBusy()) return;
     // writing into a pack: the view is the game with the pack's world files over it
     std::string root = saveRoot();
     const std::string key = root + "|" + packDest_;

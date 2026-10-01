@@ -4,6 +4,7 @@
 // stream its report into the Activity log. Writes go to the save root (the install, or a
 // scratch tree under test), through the same running-game guard as every other writer.
 #include "app.hpp"
+#include "dialogueaudio.hpp"
 
 #include <array>
 #include <cstdio>
@@ -158,6 +159,7 @@ bool App::modEnable(const std::string& nameOrIndex, bool on) {
 bool App::runModsTool(const std::string& verb) {
     if (modsFuture_.valid()) { pushLog("mods: still busy", 1); return false; }
     if (fileWriteBlocked("mods")) return false;
+    if (batchActive()) { pushLog("mods: wait for the batch export to finish", 1); return false; }
     const fs::path tool = findForgeTools();
     if (tool.empty()) { pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false; }
     if (verb != "conflicts" && backups::gameRunningIn(saveRoot())) {
@@ -168,6 +170,15 @@ bool App::runModsTool(const std::string& verb) {
     const std::string cmd = "\"\"" + tool.string() + "\" mods " + verb + " \"" + saveRoot() + "\"" + (verb == "conflicts" ? " --json" : "") + " 2>&1\"";
     modsVerb_ = verb;
     pushLog("mods: " + verb + " ...", 0);
+    if (verb != "conflicts") {
+        modsQueuedVerb_ = verb; modsQueuedCommand_ = cmd;
+        if (worldTileCancel_) worldTileCancel_->store(true);
+        clearWorldDetail();
+    } else launchModsCommand(cmd);
+    return true;
+}
+
+void App::launchModsCommand(const std::string& cmd) {
     modsFuture_ = std::async(std::launch::async, [cmd]() {
         ModsToolResult r;
         FILE* p = _popen(cmd.c_str(), "r");
@@ -181,7 +192,6 @@ bool App::runModsTool(const std::string& verb) {
         r.rc = _pclose(p);
         return r;
     });
-    return true;
 }
 
 // forge_mods_picks.txt: `key<TAB>winner` per line (forge-tools loadPicks), the keys namespaced by stage
@@ -279,6 +289,16 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
 }
 
 void App::pollModsTool() {
+    refreshAfterMods();
+    if (!modsQueuedVerb_.empty()) {
+        if (modReadersBusy()) return;
+        stopWorldTiles();
+        foliageexport::closeMeshBank(); thumbBankOpen_ = false;
+        const std::string cmd = std::move(modsQueuedCommand_);
+        modsVerb_ = std::move(modsQueuedVerb_);
+        modsQueuedVerb_.clear();
+        launchModsCommand(cmd);
+    }
     if (!modsFuture_.valid() || modsFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const ModsToolResult r = modsFuture_.get();
     if (modsVerb_ == "conflicts" && r.rc == 0) {
@@ -323,6 +343,65 @@ void App::pollModsTool() {
     pushLog("mods " + modsVerb_ + (r.rc == 0 ? ": done" : ": FAILED (rc " + std::to_string(r.rc) + ")"), r.rc == 0 ? 0 : 2);
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") backupsScannedAt_ = 0;   // the Setup card re-scans
     refreshModOrder();
+    if (r.rc == 0 && (modsVerb_ == "deploy" || modsVerb_ == "undeploy")) {
+        modsRefreshPending_ = true;
+        if (worldTileCancel_) worldTileCancel_->store(true);
+        clearWorldDetail();
+        refreshAfterMods();
+    }
+}
+
+bool App::modReadersBusy() const {
+    if (ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
+        neighbourFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
+        worldDetailFuture_.valid() || !worldScenery_.settled) return true;
+    for (const auto& worker : worldTileWorkers_)
+        if (worker.valid() && worker.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return true;
+    return false;
+}
+
+void App::refreshAfterMods() {
+    if (!modsRefreshPending_ || modReadersBusy()) return;
+    // Let readers retire before closing shared banks or replacing their context.
+    stopWorldTiles();
+    modsRefreshPending_ = false;
+    foliageexport::closeMeshBank();
+    thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
+    envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
+    newLevelDonor_.clear();
+    dialogueAudio_.reset(); dialogueLoaded_ = false;
+    dialogueScratchLanguage_.clear();
+    const bool worldDraft = worldPendingCount() != 0;
+    if (!worldDraft) { worldLoaded_ = false; worldLoadedFrom_.clear(); }
+    else pushLog("mods: kept pending world edits; reload the world after saving or discarding them", 1);
+    if (fs::path(saveRoot()).lexically_normal() != fs::path(installPath_).lexically_normal()) {
+        startContextLoad(saveRoot());
+        pushLog("mods: refreshed assets from the save folder; Maps still lists the selected install", 0);
+        return;
+    }
+    const std::string root = installPath_, selected = selectedName_;
+    const bool keepDraft = hasUnsavedEdits() || (documentLoaded() && doc_.strokeActive());
+    std::vector<MapEntry> external;
+    for (const auto& entry : maps_) if (!entry.worldFile.empty() || entry.key.rfind("file:", 0) == 0) external.push_back(entry);
+    ctx_ = {};
+    scanInstall(root);
+    maps_.insert(maps_.end(), external.begin(), external.end());
+    reloadWhenContextReady_ = true;
+    if (keepDraft) {
+        foliageLoadedFor_.clear(); neighboursFor_.clear();
+        loadThingOrigins();
+        pushLog("mods: refreshed the map list and kept the unsaved map draft", 1);
+        return;
+    }
+    selectedName_.clear(); docLoadedFor_.clear();
+    previewLoadedFor_.clear(); foliageLoadedFor_.clear();
+    previewPendingName_.clear(); foliagePendingName_.clear(); neighboursFor_.clear(); lastFramedFor_.clear();
+    renderer_.clear(); renderer_.clearThings();
+    previewScene_ = {}; previewTextured_ = false;
+    foliageInstances_ = thingInstances_ = 0;
+    selectedThing_ = -1; selectedUid_ = 0; extraUids_.clear();
+    if (findEntry(selected)) selectMap(selected);
+    pushLog("mods: refreshed maps and assets from the deployed install", 0);
 }
 
 void App::drawModsPanel(float pad, float inner, float cardInner) {

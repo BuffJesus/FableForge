@@ -506,7 +506,7 @@ bool App::restoreAllBackups() {
     if (!installValid_) return false;
     if (previewFuture_.valid() || foliageFuture_.valid() || neighbourFuture_.valid() || ctxFuture_.valid() ||
         terrainDeployFuture_.valid() || worldFuture_.valid() || newLevelFuture_.valid() || compactFuture_.valid() ||
-        meshImportFuture_.valid() || modsFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
+        meshImportFuture_.valid() || modsBusy() || exportFuture_.valid() || fitFuture_.valid() ||
         worldDetailFuture_.valid() ||
         std::any_of(worldTileWorkers_.begin(),worldTileWorkers_.end(),[](const auto& job){ return job.valid(); })) {
         pushLog("restore: a load or write is still running; try again when it finishes", 1);
@@ -619,7 +619,7 @@ void App::scanInstall(const std::string& picked) {
         if (ctxFuture_.valid() || previewFuture_.valid() || foliageFuture_.valid() ||
             neighbourFuture_.valid() || terrainDeployFuture_.valid() || worldFuture_.valid() ||
             newLevelFuture_.valid() || compactFuture_.valid() || meshImportFuture_.valid() ||
-            modsFuture_.valid() || exportFuture_.valid() || fitFuture_.valid() ||
+            modsBusy() || exportFuture_.valid() || fitFuture_.valid() ||
             worldDetailFuture_.valid() ||
             std::any_of(worldTileWorkers_.begin(), worldTileWorkers_.end(),
                         [](const auto& job) { return job.valid(); })) {
@@ -693,6 +693,7 @@ void App::scanInstall(const std::string& picked) {
 }
 
 void App::startContextLoad(const std::string& fromRoot) {
+    if (modFilesBusy()) return;
     if (!installValid_) return;
     modelsLoaded_ = modelUsersLoaded_ = modelReady_ = false;
     modelRows_.clear(); modelUsers_.clear(); modelName_.clear(); modelError_.clear();
@@ -738,6 +739,7 @@ std::string App::resolveLevPath(const MapEntry& e, std::string& err) {
 }
 
 bool App::openWorld(const std::string& wldPath) {
+    if (modFilesBusy()) { fileWriteBlocked("open world"); return false; }
     std::error_code ec;
     const fs::path wld = fs::absolute(wldPath, ec);
     if (!fs::is_regular_file(wld, ec) || lower(wld.extension().string()) != ".wld") { pushLog("Not a .wld file: " + wldPath, 2); return false; }
@@ -800,6 +802,7 @@ bool App::openDropped(const std::string& path) {
 }
 
 bool App::openLooseLev(const std::string& path) {
+    if (modFilesBusy()) { fileWriteBlocked("open level"); return false; }
     std::error_code ec;
     if (!fs::is_regular_file(path, ec) || lower(fs::path(path).extension().string()) != ".lev") {
         pushLog("Not a .lev file: " + path, 2);
@@ -829,6 +832,7 @@ void App::requestClose() {
 }
 
 void App::selectMap(const std::string& nameOrKey) {
+    if (modFilesBusy()) { fileWriteBlocked("select map"); return; }
     if (nameOrKey == selectedName_) return;
     if (hasUnsavedEdits() && !discardEdits_ && (!auto_.active() || promptInAuto_) && pendingSelect_.empty()) { pendingSelect_ = nameOrKey; return; }
     pendingSelect_.clear();
@@ -865,6 +869,7 @@ void App::setPreviewThings(bool on) {
 }
 
 void App::startFoliageLoad(bool foliageOnly) {
+    if (modFilesBusy()) { foliagePendingName_ = selectedName_; return; }
     if (selectedName_.empty() || !ctx_.ready()) return;
     if (foliageFuture_.valid()) { foliagePendingName_ = selectedName_; return; }
     const MapEntry* found = findEntry(selectedName_);
@@ -906,6 +911,7 @@ const MapEntry* App::findEntry(const std::string& key) const {
 }
 
 void App::startNeighbourLoad() {
+    if (modFilesBusy()) return;
     if (neighbourFuture_.valid() || selectedName_.empty() || !installValid_) return;
     neighboursFor_ = selectedName_;   // one attempt per map: a map that cannot be placed must not retry every frame
     const MapEntry* cur = findEntry(selectedName_);
@@ -963,6 +969,7 @@ void App::startNeighbourLoad() {
 }
 
 void App::startPreviewLoad() {
+    if (modFilesBusy()) { previewPendingName_ = selectedName_; return; }
     if (selectedName_.empty()) return;
     if (previewFuture_.valid()) { previewPendingName_ = selectedName_; return; }
     const MapEntry* found = findEntry(selectedName_);
@@ -997,6 +1004,7 @@ void App::startPreviewLoad() {
 }
 
 void App::startExport() {
+    if (modFilesBusy()) { fileWriteBlocked("export"); return; }
     if (exportFuture_.valid() || selectedName_.empty()) return;
     if (const MapEntry* e = findEntry(selectedName_)) startExportOf(*e);
 }
@@ -1016,6 +1024,7 @@ std::vector<std::string> App::visibleMapNames() const {
 }
 
 void App::startBatchExport(const std::vector<std::string>& names) {
+    if (modFilesBusy()) { fileWriteBlocked("export"); return; }
     if (names.empty() || batchActive()) return;
     batchQueue_ = names;
     batchTotal_ = int(names.size());
@@ -1112,7 +1121,10 @@ void App::pollWorkers() {
         if (ok) {
             ctx_ = *ctxPending_;
             pushLog("Textures ready (game.bin themes + textures.big)", 3);
-            if (reloadWhenContextReady_ && !selectedName_.empty()) startPreviewLoad();
+            if (reloadWhenContextReady_ && !selectedName_.empty()) {
+                if (hasUnsavedEdits() || (documentLoaded() && doc_.strokeActive())) startThemeRebake();
+                else startPreviewLoad();
+            }
             else if ((previewFoliage_ || previewThings_) && previewLoaded() && !foliageLoaded()) startFoliageLoad();
         } else {
             ctxError_ = err;
@@ -1244,6 +1256,8 @@ void App::pollWorkers() {
         if (const MapEntry* e = findEntry(next)) startExportOf(*e);
         else { ++batchDone_; ++batchFailed_; }
     }
+    pollMeshImport();
+    pollModsTool();
     std::lock_guard<std::mutex> lock(logMutex_);
     for (auto& l : logPending_) {
         if (l.first >= 1) {

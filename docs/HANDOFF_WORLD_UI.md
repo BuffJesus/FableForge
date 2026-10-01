@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: mod refresh and retryable undeploy
+
+A valid new-level pack exposed stale map/preview state after mod jobs completed
+outside the Mods panel. Completion now runs globally. Deploy/undeploy waits for
+active bank readers, defers new asset/preview reads, then refreshes maps and
+contexts. World workers retire before bank replacement. Unsaved map drafts and
+undo remain available; removed clean maps lose their preview. Pending world
+edits are retained with a reload message; that path and redirected save-root
+refresh have not received the full integration probe yet.
+
+World view also reproduced a locked STB during undeploy. The previous restore
+consumed earlier backups, and retry could delete an original whose backup was
+gone. Revert now preflights required originals and retains all backups plus the
+manifest until restoration completes. Missing originals refuse before writes;
+a later locked file leaves recovery data for retry. This does not make stage/
+apply failure-atomic or serialize separate processes.
+
+`tools/test_mod_refresh_ui.py` passes valid pack creation and three same-window
+cycles: clean, World active, and unsaved object/terrain edits with undo. All eight
+source banks restore byte-exactly and the pack stays unchanged. Evidence:
+`build/mod-refresh-_92nue4r`; the inspected screenshot shows the added map's
+textured terrain and water. The fixture omits graphics.big; no in-game claim.
+Focused normal/ASan recovery checks pass missing-backup refusal, a locked second
+target followed by retry, new-file removal and path-escape refusal. The complete
+normal build and all 28 CTest suites pass (26.58 seconds).
+
+Correction to earlier writer evidence: `guarded.txt.log` used an invalid 6500
+origin, so creation failed. It proves busy refusal and retained edits through
+failure, not successful creation. The new refresh script uses 6400 and explicitly
+asserts creation success before deployment.
+
 ## 2026-10-01 continuation: overlapping GUI file operations
 
 Several actions checked only their own future; a GUI probe confirmed that an

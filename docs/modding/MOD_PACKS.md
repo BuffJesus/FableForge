@@ -425,3 +425,12 @@ unresolved: neither inspected local Fable install contains a `Gameplay.wad`
 name alone cannot establish retail playability or asset coverage. The author
 reported a separate mod for a Guild building and absent assets in a village
 map; those are case-specific observations, not a general Forge capability.
+
+### Undeploy recovery
+
+Undeploy validates every original backup before restoring any target. A missing
+`.forgebak` for an original is an error and leaves files unchanged. Backups and
+the manifest remain until all restores succeed, so a locked file can be released
+and undeploy retried without losing originals restored earlier. Newly added
+files are removed. This retry guarantee covers restore; failed stage/apply and
+competing processes remain separate concerns.

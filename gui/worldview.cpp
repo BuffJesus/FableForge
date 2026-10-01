@@ -58,6 +58,7 @@ std::string sourceKey(const forge::levelstore::Layout& layout, const std::string
 } // namespace
 
 void App::startWorldTiles() {
+    if (modFilesBusy()) return;
     if (!installValid_ || !worldLoaded_ || !ctx_.ready()) return;
     if (worldTilesFor_ == installPath_ && (!worldTileWorkers_.empty() || !worldTiles_.empty())) return;
     stopWorldTiles();
@@ -133,6 +134,7 @@ void App::stopWorldTiles() {
 
 void App::pollWorldTiles() {
     FORGE_ZONE("World overview poll / upload");
+    if (modFilesBusy()) return;
     if (!worldMode_) return;
     if (!worldLoaded_ && installValid_ && !worldFuture_.valid() && worldLoadedFrom_ != saveRoot() + "|" + packDest_) loadWorld();   // the 3D view has no 2D canvas to trigger it
     if (worldTilesFor_.empty() || worldTilesFor_ != installPath_) startWorldTiles();
@@ -311,7 +313,7 @@ void App::updateWorldDetail() {
             worldDetailLoading_.clear();
         }
     };
-    if (!worldMode_ || !world3D_ || !ctx_.ready()) {
+    if (modFilesBusy() || !worldMode_ || !world3D_ || !ctx_.ready()) {
         if (!worldDetailShown_.empty() || worldDetailCache_.size() || worldDetailUpload_) clearWorldDetail();
         retireDisabledWorker(); return;
     }
@@ -665,7 +667,7 @@ void App::updateWorldDetail() {
 }
 
 void App::updateWorldScenery() {
-    const bool enabled = worldSceneryOn_ && worldMode_ && world3D_ && worldDetailOn_ && ctx_.ready();
+    const bool enabled = !modFilesBusy() && worldSceneryOn_ && worldMode_ && world3D_ && worldDetailOn_ && ctx_.ready();
     renderer_.worldObjectDistance = worldview::requestedDrawDistance(worldDetailRadius_);
     std::vector<WorldScenery::Demand> demand;
     if (enabled) {

@@ -900,7 +900,8 @@ public:
     bool modMove(const std::string& nameOrIndex, int to);
     bool modEnable(const std::string& nameOrIndex, bool on);
     bool runModsTool(const std::string& verb);   // "deploy" | "undeploy" | "conflicts"
-    bool modsBusy() const { return modsFuture_.valid(); }
+    bool modsBusy() const { return modsFuture_.valid() || modsRefreshPending_ || !modsQueuedVerb_.empty(); }
+    bool modFilesBusy() const { return modsRefreshPending_ || !modsQueuedVerb_.empty() || (modsFuture_.valid() && modsVerb_ != "conflicts"); }
     void pollModsTool();
     void drawModsPanel(float pad, float inner, float cardInner);
     size_t modCount() const { return modOrder_.mods.size(); }
@@ -909,6 +910,11 @@ public:
     std::string modProblems() const;   // every row's master problems, "; "-joined (automation)
 private:
     bool modsMode_ = false;
+    bool modsRefreshPending_ = false;
+    std::string modsQueuedVerb_, modsQueuedCommand_;
+    bool modReadersBusy() const;
+    void launchModsCommand(const std::string& command);
+    void refreshAfterMods();
     void resetModDestination();
     forge::modorder::Order modOrder_;
     std::string modOrderError_;

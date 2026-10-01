@@ -774,6 +774,12 @@ pick for the next deploy. *Build and deploy*
 reverts the previous deploy, builds the whole order onto the retail files and stages it
 (originals kept as `.forgebak`); *Undeploy* puts the retail files back. All three run the
 shipped `forge-tools.exe` as a process and stream its output into the Activity log.
+Deploy and undeploy wait for preview/World readers before replacing banks.
+Assets and maps refresh after completion even when another tab is open. Unsaved
+map edits and undo remain intact; a clean map removed by undeploy clears its
+preview. Pending world edits remain; reload the world after saving or discarding
+them to see the new layout.
+
 Refused while Fable runs, and on an install EgoCore has deployed to. The rules of the merge
 are in `docs/modding/MOD_PACKS.md`; CLI: `forge-tools mods ...`.
 

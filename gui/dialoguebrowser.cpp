@@ -605,6 +605,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
 }
 
 void App::drawDialogueViewport(const ImVec2& origin, const ImVec2& size) {
+    if (modFilesBusy()) return;
     ImDrawList* draw=ImGui::GetWindowDrawList();
     draw->AddRectFilled(origin,ImVec2(origin.x+size.x,origin.y+size.y),
                         IM_COL32(17,18,26,255));

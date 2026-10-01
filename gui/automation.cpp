@@ -145,7 +145,7 @@ bool Automation::tick(App& app) {
     std::string rest; std::getline(ss, rest);
     while (!rest.empty() && rest.front() == ' ') rest.erase(rest.begin());
     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (deadline_ == 0) deadline_ = now + (cmd == "wait_world_tiles" ? 900.0 : 60.0);   // generous: cold texture loads on slow disks; the first world-tile build
+    if (deadline_ == 0) deadline_ = now + (cmd == "wait_world_tiles" ? 900.0 : cmd == "wait_file_job" ? 180.0 : 60.0);   // world tiles and full-bank file jobs can outlast ordinary preview loads
     auto waitOn = [&](bool done, const char* what) {
         if (done) { note("ok   " + line); ++pc_; deadline_ = 0; }
         else if (now > deadline_) { fail(std::string("timeout waiting for ") + what + " (" + line + ")"); ++pc_; deadline_ = 0; }
@@ -692,6 +692,7 @@ bool Automation::tick(App& app) {
     else if (cmd == "mods_undeploy") { if (!app.runModsTool("undeploy")) fail("mods_undeploy refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "mods_conflicts") { if (!app.runModsTool("conflicts")) fail("mods_conflicts refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "wait_mods") { app.pollModsTool(); waitOn(!app.modsBusy(), "mods tool"); }
+    else if (cmd == "wait_file_job") waitOn(app.activeFileJob() == nullptr, "file operation and refresh");
     else if (cmd == "mesh_import" || cmd == "mesh_import_refused") {   // mesh_import <model> <NAME> [png]
         std::istringstream rs(rest); std::string model, nm, png; rs >> model >> nm >> png;
         if (app.importMesh(model, nm, png) != (cmd == "mesh_import")) fail(cmd + " returned an unexpected result: " + rest); else note("ok   " + line); ++pc_;

@@ -28,6 +28,8 @@ Result apply(const std::filesystem::path& gameRoot,
 
 // Undo a previous apply() using the manifest: restore backups, delete staged
 // files that had no original, remove the manifest. Returns what was done.
+// Preflights missing backups/unsafe paths before writes. If a later copy fails,
+// the manifest and every original backup remain available for a retry.
 Result revert(const std::filesystem::path& gameRoot);
 
 // Path of the manifest a stage would write.

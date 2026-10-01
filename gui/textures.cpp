@@ -29,6 +29,7 @@ std::filesystem::path App::texturesBigPath() const {
 }
 
 void App::refreshTextures() {
+    if (modFilesBusy()) return;
     std::string err;
     texRows_ = texbrowse::listTextures(texturesBigPath(), err);
     if (texRows_.empty() && !err.empty()) pushLog("textures: " + err, 1);
@@ -52,6 +53,7 @@ std::filesystem::path App::graphicsBigPath() const {
 }
 
 bool App::selectTexture(const std::string& nameOrLabel) {
+    if (modFilesBusy()) { fileWriteBlocked("texture preview"); return false; }
     if (!texturesLoaded_) refreshTextures();
     for (const auto& r : texRows_)
         if (r.name == nameOrLabel || r.label == nameOrLabel || (nameOrLabel.size() < 10 && std::to_string(r.id) == nameOrLabel)) { texSelected_ = r.name; return true; }
@@ -115,6 +117,7 @@ std::vector<uint32_t> App::selectedThingTextures() const {
 }
 
 void App::drawTexturesPanel(float pad, float inner, float cardInner) {
+    if (modFilesBusy()) { ImGui::SetCursorPosX(pad); theme::hint("Assets will refresh when mod processing finishes."); return; }
     if (!installValid_) { ImGui::SetCursorPosX(pad); theme::hint("The asset tools need a Fable install."); return; }
     // Assets: textures.big, your own models, your own ground themes -- everything that writes the
     // game's shared banks, apart from the map editor (a modder's review: keep imports out of it)
@@ -297,6 +300,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
 
 
 void App::refreshModels() {
+    if (modFilesBusy()) return;
     modelsLoaded_ = true;
     modelRows_.clear(); modelUsers_.clear(); modelUsersLoaded_ = false;
     modelGeometry_ = {}; modelReady_ = false; modelId_ = 0;
@@ -315,6 +319,7 @@ void App::refreshModels() {
 }
 
 bool App::selectModel(const std::string& nameOrId) {
+    if (modFilesBusy()) { fileWriteBlocked("model preview"); return false; }
     if (!modelsLoaded_) refreshModels();
     const auto it = std::find_if(modelRows_.begin(), modelRows_.end(), [&](const auto& row) {
         return row.name == nameOrId || std::to_string(row.id) == nameOrId;
