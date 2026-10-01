@@ -45,6 +45,7 @@ struct Options {
     // false to keep world coordinates (when the terrain was exported with --origin).
     bool mapLocal = true;
     std::function<void(const std::string&)> log;
+    std::filesystem::path graphicsBig; // optional asset-bank override; STB still comes from gameRoot
 };
 
 // One material's share of a mesh (trees are leaves + trunk, each its own texture).

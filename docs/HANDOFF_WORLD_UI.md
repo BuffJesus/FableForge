@@ -1,5 +1,80 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: failed model imports preserve bank files
+
+A scratch import with valid definitions/texture and an invalid graphics bank
+failed after replacing textures.big. The importer now prepares all changed
+banks in a private destination-side directory before replacement, reads back
+the staged definitions, retains one-time backups, and rolls back prior renames
+if a later replacement fails. A rollback failure retains recovery files and
+names their directory in the error. This is reported-failure recovery, not a
+cross-file guarantee against power loss or process termination. No bank format
+or imported geometry is intentionally changed. Mesh-entry metadata is copied
+before appending the physics entry, avoiding use of an invalidated vector pointer.
+
+The expanded `tools/test_meshimport.py` passes normal OBJ/GLB import, texture,
+geometry, collision, definition references and backup checks. Invalid graphics
+input preserves every file; a Windows handle denying rename of game.bin forces
+a late commit failure and confirms restoration of the preceding three banks,
+unchanged existing backups and no staging-directory leaks. The same invalid
+input changed textures.big on the pre-fix executable and preserves it now.
+`tools/test_recipe_packs.py` passes both model load orders, model/theme references,
+scratch deployment and byte-exact undeployment with the final read-back check.
+
+The import UI script now returns from Assets to Edit, frames the inserted object
+and checks byte-exact placement undo. Its first inspected capture exposed a
+scratch-root preview bug: definitions came from the redirected import root,
+while the mesh lookup still read the base install's graphics.big. Map things,
+baked foliage, thumbnails and the model browser now resolve the same graphics
+bank, falling back to the install when the context root has no bank. The scene
+loaders accept an explicit graphics override without redirecting level/STB reads.
+The final mesh-import run checks one rendered mesh instance and its inspected
+Arena screenshot shows the brown cube. Placement undo is byte-exact. The core
+export test, texture round-trip suite and eight-map retail export smoke also
+pass, including independent trimesh reads. No in-game import proof was attempted.
+
+## 2026-10-01 continuation: install-specific mod destinations
+
+Switching installs used to retain the previous mod order and selected pack.
+A two-root synthetic probe reproduced `mods_count=1` after switching to a root
+with no mods. An accepted switch now clears the pack selection, conflict report
+and provenance, reloads the destination's order and conflict picks, and lets the
+pack picker choose from that order. A refused switch leaves the current state.
+An explicitly selected pack absent from the order is also labelled as a pack,
+rather than incorrectly displaying "Directly into the game".
+
+The expanded `tools/test_install_switch_ui.py` passes with distinct packs and
+conflict picks in both roots, a dirty-edit refusal, an invalid intermediate root,
+and a return to the first root. It checks every fixture file and the file set
+remain unchanged. The destination screenshot shows SecondPack in the second
+root. The GUI build and all three Setup restore size/scale cases pass.
+No game-install files were changed. Save-root overrides used by automation are
+a separate path; this change addresses the install-folder picker.
+
+## 2026-10-01 continuation: texture previews and compact asset controls
+
+Texture previews now preserve the decoded image's aspect ratio when constrained
+by the preview height. Previously only height was capped, widening tall images.
+The preview uses decoded surface dimensions, matching PNG export even when a
+texture's allocated surface differs from its frame size. Texture metadata wraps;
+Export and Replace stack when their labels cannot fit side by side.
+
+Narrow Assets panels now offer a full-name page menu instead of five abbreviated
+tabs. The model's Reset view button wraps below Wireframe when necessary.
+The GUI build and existing `tests/ui/model_browser.txt` pass. A scrolled compact
+variant covers model search, wireframe, material-to-texture navigation and refresh
+at 800x600 / 1.5. The initial unscrolled variant missed offscreen controls; that
+was not a successful compact check. `build/asset_page_depth.txt` clicks the new
+page menu, Wireframe and Reset view at that size; its captures were inspected.
+
+Texture captures cover BRAZIER_POLE_24 (64x256) and BARREL_BRACED_1_24 (512x256)
+at requested 1280x720 and 800x600 / 1.5. The Export PNG button produces a verified
+64x256 image. `python tools/test_textures.py` passes scratch replacement, append,
+backup and export checks, with mean absolute round-trip pixel difference 0.02.
+Evidence is under `build/ui/texture_*depth*`, `build/ui/model_*small_fixed.png`
+and `build/ui/asset_page_menu_small.png`; scratch scripts are in `build`.
+Checks used hidden editor windows. No game-install files were changed.
+
 ## 2026-09-30 continuation: terrain follows placed things and foliage
 
 Grounded, unlocked `.tng` things now keep their height offset when a brush stroke

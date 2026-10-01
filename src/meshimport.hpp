@@ -47,6 +47,8 @@ struct ImportResult {
     std::vector<std::string> notes;
 };
 
+// Prepare all banks before replacement. A reported commit failure rolls back
+// prior replacements; if rollback itself fails, error names retained recovery files.
 bool importModel(const std::filesystem::path& gameRoot, const ImportRequest& req, ImportResult& out, std::string& error);
 // The same into an output tree: every file is read from outRoot when it is there
 // (an earlier mod layer wrote it) else from baseRoot, and written to outRoot, with

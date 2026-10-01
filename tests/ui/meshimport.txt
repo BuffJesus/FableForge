@@ -17,12 +17,22 @@ assert_state mesh_import_busy 1
 wait_mesh_import
 frames 2
 assert_log OBJECT_FORGE_CUBE_UI ready
+textures_tab 0
 edit 1
 edit_tab 0
 wait_ready
 frames 2
+snapshot_document
 place OBJECT_FORGE_CUBE_UI ForgeCubeUi
 frames 3
 assert_log placed OBJECT_FORGE_CUBE_UI
+assert_state textures_mode 0
+wait_foliage
+assert_state selected_mesh_instances 1
+frame_selected
+frames 4
+clear_toasts
 screenshot build/ui/m4_meshimport.png
+undo
+assert_document_same
 quit

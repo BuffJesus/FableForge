@@ -9,7 +9,7 @@ Copies ~800 MB of banks under build/ (graphics.big + textures.big). Nothing touc
 
   python tools/test_meshimport.py [--root <fable install>] [--keep]
 """
-import argparse, json, os, shutil, struct, subprocess, sys
+import argparse, hashlib, json, os, shutil, struct, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -96,6 +96,63 @@ def write_png(path):
         f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
+def check_failed_imports(scratch, forge):
+    """A failure after texture preparation and one during commit preserve all banks."""
+    from pathlib import Path
+    root = Path(scratch).resolve()
+    if root.parent != (Path(ROOT) / "build").resolve() or root.name != "mesh_root":
+        raise RuntimeError("unexpected mesh test scratch root")
+    banks = [root / rel for rel in ("data/graphics/pc/textures.big", "data/graphics/graphics.big",
+                                    "data/CompiledDefs/names.bin", "data/CompiledDefs/game.bin")]
+
+    def snapshot():
+        result = {}
+        for path in root.rglob("*"):
+            if path.is_file():
+                with path.open("rb") as stream:
+                    result[path.relative_to(root)] = hashlib.file_digest(stream, "sha256").hexdigest()
+        return result
+
+    def attempt(name):
+        before = snapshot()
+        run = subprocess.run([forge, "mesh-import", str(root / "cube.glb"), name,
+                              "--texture", str(root / "wood.png"), "--install", str(root)],
+                             capture_output=True, text=True, timeout=180)
+        clean = before == snapshot() and not list(root.glob(".forge-model-import-*"))
+        okay = run.returncode != 0 and "error:" in run.stderr.lower() and clean
+        print(name, "preserved every file" if okay else "FAILED", run.stderr.strip()[-240:])
+        return okay
+
+    gfx, held = banks[1], root / "graphics.failure-input"
+    gfx.rename(held)
+    try:
+        gfx.write_bytes(b"invalid graphics bank")
+        okay = attempt("FORGE_FAILURE_INPUT")
+    finally:
+        os.replace(held, gfx)
+
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                      ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        # Allow reads/writes but deny deletion/rename of the last bank in the commit.
+        handle = kernel.CreateFileW(str(banks[3]), 0x80000000, 0x1 | 0x2, None, 3, 0x80, None)
+        if handle == ctypes.c_void_p(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            okay = attempt("FORGE_FAILURE_COMMIT") and okay
+        finally:
+            kernel.CloseHandle(handle)
+    else:
+        print("late import lock check skipped (Windows sharing mode required)")
+    return okay
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="")
@@ -152,6 +209,7 @@ def main() -> int:
         if name + "_DIFFUSE" not in tex: print(name, "diffuse texture not appended"); ok = False
     for rel in ("data/graphics/graphics.big", "data/graphics/pc/textures.big", "data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin"):
         if not os.path.exists(os.path.join(scratch, rel + ".forge-orig")): print("no backup for", rel); ok = False
+    ok = check_failed_imports(scratch, forge) and ok
     # the editor's Import model card over the same scratch root, then the new object placed
     gui = os.path.join(ROOT, "build", "FableForge.exe")
     if os.path.exists(gui):

@@ -528,6 +528,7 @@ Scene load(const std::string& mapName, const Options& options, const te::Context
     // Meshes for every palette type that has instances.
     fs::path graphics = options.gameRoot / "data" / "graphics" / "graphics.big";
     if (!fs::exists(graphics)) graphics = options.gameRoot / "data" / "graphics" / "pc" / "graphics.big";
+    if (!options.graphicsBig.empty()) graphics = options.graphicsBig;
     std::string err;
     if (!meshCache().open(graphics, err)) { warn(options, scene, "graphics.big: " + err); return scene; }
 

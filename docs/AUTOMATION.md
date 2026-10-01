@@ -604,3 +604,14 @@ Light-volume coverage: `tests/ui/effect_lights.txt` and
 the wire overlay without changing the camera. `effect_preview_lights`,
 `effect_preview_light_volumes` and `effect_show_light_volumes` expose live light
 count, intersecting drawn volumes and the toggle. `btn_effect_frame` reframes.
+
+Install destination checks expose `pack_destination` (generic path, empty for
+direct game writes) and `mods_picks` (loaded conflict-pick count).
+`tools/test_install_switch_ui.py` exercises different pack lists and picks across
+two roots, an invalid root, a refused dirty switch and returning to the first root.
+Compact asset navigation uses `combo_assets_tab` and `asset_page_0` through
+`asset_page_4`; wide panels retain `seg_assets_tab`.
+
+`selected_mesh_instances` counts uploaded mesh instances belonging to the
+selected thing. The mesh-import UI check waits for scene loading and requires
+one instance before capturing the cube, then verifies byte-exact placement undo.

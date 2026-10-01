@@ -202,10 +202,12 @@ void App::startThingsReload() {
     const te::Context* ctx = ctxHold.get();
     const std::string root = installPath_;
     const std::string text = doc_.text();
-    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, text]() {
+    const auto graphics = graphicsBigPath();
+    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, text, graphics]() {
         FoliageResult r; r.name = entry.key; r.thingsOnly = true;
         thingsexport::Options to;
         to.gameRoot = root;
+        to.graphicsBig = graphics;
         to.textures = true;
         to.up = te::UpAxis::Y;
         to.tngText = text;
@@ -1678,7 +1680,7 @@ void App::drawPackPicker(float width) {
 void App::drawPackDestination(float cardInner) {
     using theme::S;
     const auto packs = packChoices();
-    std::string cur = "Directly into the game (advanced)";
+    std::string cur = packDest_.empty() ? "Directly into the game (advanced)" : "Mod pack: " + packLabel(packDest_);
     for (const auto& [l, f] : packs) if (f == packDest_) cur = "Mod pack: " + l;
     theme::label("Goes into");
     ImGui::SetNextItemWidth(cardInner);
@@ -4643,8 +4645,7 @@ ID3D11ShaderResourceView* App::defThumbnail(const std::string& def, bool& pendin
     if (code <= 0 || !modelId) { defThumbs_[def] = nullptr; return nullptr; }
     if (!thumbBankOpen_) {
         std::string err;
-        std::filesystem::path graphics = std::filesystem::path(installPath_) / "data" / "graphics" / "graphics.big";
-        if (!std::filesystem::exists(graphics)) graphics = std::filesystem::path(installPath_) / "data" / "graphics" / "pc" / "graphics.big";
+        const auto graphics = graphicsBigPath();
         thumbBankOpen_ = foliageexport::openMeshBank(graphics, err);
         if (!thumbBankOpen_) { pushLog("thumbnails: " + err, 1); defThumbs_[def] = nullptr; return nullptr; }
     }

@@ -1,6 +1,11 @@
 # Change install with an open map, an unsaved stroke, an invalid path and a second root.
 wait_maps
 wait_ready
+mods_tab 1
+frames 3
+assert_state mods_count 1
+pack_dest @PACK_A@
+mods_tab 0
 select SwitchA
 wait_loaded
 edit 1
@@ -13,6 +18,8 @@ scan_install @ROOT_B@
 assert_state selected SwitchA
 assert_state terrain_dirty 1
 assert_log save or discard the current edits
+assert_state mods_count 1
+assert_state pack_destination @PACK_A@
 undo
 assert_state terrain_dirty 0
 scan_install @INVALID@
@@ -21,6 +28,9 @@ assert_state maps 0
 assert_state selected
 assert_state doc_loaded 0
 assert_state preview_loaded 0
+assert_state mods_count 0
+assert_state mods_picks 0
+assert_state pack_destination
 setup 1
 frames 3
 screenshot build/ui/install_switch_invalid.png
@@ -32,8 +42,26 @@ wait_maps
 wait_ready
 assert_state install_valid 1
 assert_state maps 1
+assert_state mods_count 2
+assert_state mods_picks 2
+assets_tab 2
+frames 3
+assert_state pack_destination @PACK_B@
+reveal combo_pack_dest
+frames 3
+reveal combo_pack_dest
+frames 3
+screenshot build/ui/install_switch_pack.png
+textures_tab 0
 select SwitchB
 wait_loaded
 assert_state selected SwitchB
 assert_state doc_loaded 1
+scan_install @ROOT_A@
+wait_ready
+assert_state mods_count 1
+assert_state mods_picks 1
+assets_tab 2
+frames 3
+assert_state pack_destination @PACK_A@
 quit

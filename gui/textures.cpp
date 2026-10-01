@@ -39,6 +39,18 @@ void App::refreshTextures() {
     texPreview_ = nullptr;
 }
 
+std::filesystem::path App::graphicsBigPath() const {
+    std::error_code ec;
+    for (const auto& root : {modelRoot_, installPath_}) {
+        if (root.empty()) continue;
+        for (const auto* relative : {"data/graphics/graphics.big", "data/graphics/pc/graphics.big"}) {
+            const auto path = std::filesystem::path(root) / relative;
+            if (std::filesystem::is_regular_file(path, ec)) return path;
+        }
+    }
+    return std::filesystem::path(installPath_) / "data/graphics/graphics.big";
+}
+
 bool App::selectTexture(const std::string& nameOrLabel) {
     if (!texturesLoaded_) refreshTextures();
     for (const auto& r : texRows_)
@@ -107,8 +119,22 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     // Assets: textures.big, your own models, your own ground themes -- everything that writes the
     // game's shared banks, apart from the map editor (a modder's review: keep imports out of it)
     ImGui::SetCursorPosX(pad);
-    theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes", "Effects", "Dialogue"}, inner);
-    auto_.registerWidget("seg_assets_tab");
+    static const char* assetNames[] = {"Textures", "Models", "Ground themes", "Effects", "Dialogue"};
+    const float segmentWidth = (inner - S(4)) / 5;
+    if (segmentWidth < ImGui::CalcTextSize("Ground themes").x + S(8)) {
+        ImGui::SetNextItemWidth(inner);
+        if (ImGui::BeginCombo("##assettab_menu", assetNames[std::clamp(assetsTab_, 0, 4)])) {
+            for (int i = 0; i < 5; ++i) {
+                if (ImGui::Selectable(assetNames[i], assetsTab_ == i)) assetsTab_ = i;
+                auto_.registerWidget(("asset_page_" + std::to_string(i)).c_str());
+            }
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_assets_tab");
+    } else {
+        theme::segmented("##assettab", assetsTab_, {"Textures", "Models", "Ground themes", "Effects", "Dialogue"}, inner);
+        auto_.registerWidget("seg_assets_tab");
+    }
     ImGui::Dummy(ImVec2(0, theme::S(8)));
     if (assetsTab_ == 1) { drawModelBrowser(pad, inner, cardInner); return; }
     if (assetsTab_ == 2) { drawGroundThemeCard(pad, inner, cardInner); return; }
@@ -199,7 +225,9 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
         ImGui::TextColored(theme::vec(theme::Muted), "id %u   %dx%d %s   %d mips   %u bytes   %s", sel->id, sel->width, sel->height, sel->format.c_str(), sel->mips, sel->bytes, sel->bank.c_str());
+        ImGui::PopTextWrapPos();
         if (sel->label != sel->name) { ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner); ImGui::TextColored(theme::vec(theme::Faint), "%s", sel->name.c_str()); ImGui::PopTextWrapPos(); }
         ImGui::PopFont();
         // preview (decoded once per selection, full first mip)
@@ -207,20 +235,25 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             texPreviewFor_ = sel->name;
             terrainexport::Image img; std::string err;
             texPreview_ = texbrowse::decodeTexture(texturesBigPath(), sel->name, img, err) ? renderer_.previewTexture(img) : nullptr;
+            if (texPreview_) texPreviewSize_ = ImVec2(float(img.width), float(img.height));
             if (!texPreview_ && !err.empty()) pushLog("textures: " + err, 1);
         }
         if (texPreview_) {
-            const float w = cardInner, h = sel->width > 0 ? cardInner * float(sel->height) / float(sel->width) : cardInner;
-            ImGui::Image((ImTextureID)(intptr_t)texPreview_, ImVec2(w, std::min(h, S(300))));
+            const float scale = std::min(cardInner / texPreviewSize_.x, S(300) / texPreviewSize_.y);
+            const ImVec2 size(texPreviewSize_.x * scale, texPreviewSize_.y * scale);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cardInner - size.x) * 0.5f);
+            ImGui::Image((ImTextureID)(intptr_t)texPreview_, size);
             auto_.registerWidget("img_texture");
         }
         ImGui::Dummy(ImVec2(0, S(4)));
         const float half = (cardInner - S(6)) * 0.5f;
-        if (theme::ghostButton("Export PNG", ImVec2(half, S(28)))) exportSelectedTexture("");
+        const bool stackActions = half < ImGui::CalcTextSize("Replace from image...").x + S(24);
+        const float actionWidth = stackActions ? cardInner : half;
+        if (theme::ghostButton("Export PNG", ImVec2(actionWidth, S(28)))) exportSelectedTexture("");
         auto_.registerWidget("btn_tex_export");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes %s\\%s.png (the export output folder).", outDirBuf_, sel->label.c_str());
-        ImGui::SameLine(0, S(6));
-        if (theme::ghostButton("Replace from image...", ImVec2(half, S(28)))) texReplaceOpen_ = !texReplaceOpen_;
+        if (!stackActions) ImGui::SameLine(0, S(6));
+        if (theme::ghostButton("Replace from image...", ImVec2(actionWidth, S(28)))) texReplaceOpen_ = !texReplaceOpen_;
         auto_.registerWidget("btn_tex_replace_toggle");
         if (texReplaceOpen_) {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
@@ -269,9 +302,7 @@ void App::refreshModels() {
     modelGeometry_ = {}; modelReady_ = false; modelId_ = 0;
     modelName_.clear(); modelError_.clear(); renderer_.clearModelPreview();
     try {
-        const auto root = std::filesystem::path(modelRoot_.empty() ? installPath_ : modelRoot_);
-        auto path = root / "data/graphics/graphics.big";
-        if (!std::filesystem::exists(path)) path = root / "data/graphics/pc/graphics.big";
+        const auto path = graphicsBigPath();
         modelBankPath_ = path.string();
         const auto file = forge::big::File::open(path);
         const auto* bank = file.findBank("MBANK_ALLMESHES");
@@ -362,8 +393,10 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     ImGui::Text("%u primitives | %u bones", modelGeometry_.primitiveCount, modelGeometry_.boneCount);
     if (modelGeometry_.boneCount) theme::hint("Static pose; animation playback is not available yet.");
     ImGui::Checkbox("Wireframe", &modelWire_); auto_.registerWidget("check_model_wire");
-    ImGui::SameLine();
-    if (theme::ghostButton("Reset view", ImVec2(S(100), S(26)))) { modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1; }
+    const float resetWidth = ImGui::CalcTextSize("Reset view").x + S(24);
+    const bool stackReset = ImGui::GetItemRectSize().x + ImGui::GetStyle().ItemSpacing.x + resetWidth > cardInner;
+    if (!stackReset) ImGui::SameLine();
+    if (theme::ghostButton("Reset view", ImVec2(stackReset ? cardInner : resetWidth, S(28)))) { modelYaw_ = 0.8f; modelPitch_ = 0.55f; modelZoom_ = 1; }
     auto_.registerWidget("btn_model_reset");
     theme::hint("Drag the preview to orbit. Scroll to zoom.");
     if (ImGui::CollapsingHeader("Materials", ImGuiTreeNodeFlags_DefaultOpen)) {

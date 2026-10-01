@@ -157,6 +157,46 @@ only after checking those paths against the current build.
   actions; the Fit change summary and Generate height warning are readable.
   No game files were written by these UI scripts.
 
+## 2026-10-01 asset-browser depth check
+
+Tall texture previews preserve decoded aspect ratio, texture details wrap and
+Export/Replace remain readable in narrow panels. Exported BRAZIER_POLE_24 is
+64x256; tall and wide previews and action controls were inspected at requested
+1280x720 and 800x600 with 1.5 UI scale. The existing scratch texture suite passes
+replacement, append, backup and re-export (mean pixel difference 0.02).
+The compact Assets selector now shows full page names in a menu. Model Reset
+view fits below Wireframe. Existing model-browser automation and a scrolled
+800x600 / 1.5 variant pass search, wireframe, material links and refresh; direct
+menu selection and the repaired controls were also clicked and inspected.
+Game rendering, texture animation and model import/placement remain separate
+checks. Details and local evidence paths are in HANDOFF_WORLD_UI.
+
+## 2026-10-01 install destination depth check
+
+A reproduced stale mod-order/pack destination survived switching between two
+installs. Accepted switches now reload the new root's order and conflict picks
+and clear the old pack/report/provenance. Refused switches preserve the current
+destination. The expanded install-switch test passes with different pack lists,
+an invalid intermediate root and a return switch; every fixture file remains
+byte-identical, with no added files. The second root's destination was inspected
+on screen. All three Setup restore cases still pass. Automation's explicit
+save-root override remains a separate path to audit.
+
+## 2026-10-01 model-import failure depth check
+
+Invalid graphics input previously left an appended texture behind. Imports now
+prepare all outputs first and roll back bank replacements on a reported failure.
+The mesh-import suite verifies unchanged files for invalid input and a forced
+late Windows rename failure, as well as successful OBJ/GLB geometry, collision,
+definition references and backups. Recipe-pack order, deploy and byte-exact
+undeploy checks pass. Recovery after process termination remains unverified.
+Returning the GUI placement check to Edit exposed a redirected-root mesh preview
+mismatch. The preview and thumbnails now use the same bank as the model browser,
+with a base-install fallback. The final check verifies a rendered mesh instance,
+an inspected brown cube in Arena and byte-exact placement undo. Core export,
+texture round-trip and eight-map retail export checks pass. In-game imported-model
+behavior remains unverified. See HANDOFF_WORLD_UI.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

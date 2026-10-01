@@ -799,6 +799,7 @@ public:
     bool texturesMode() const { return texturesMode_; }
     void refreshTextures();
     std::filesystem::path texturesBigPath() const;
+    std::filesystem::path graphicsBigPath() const;
     bool selectTexture(const std::string& nameOrLabel);
     const texbrowse::TextureRow* selectedTexture() const;
     bool exportSelectedTexture(const std::string& outPath);
@@ -944,6 +945,7 @@ private:
     std::vector<std::string> texBanks_;
     std::string texBank_, texSelected_, texPreviewFor_, lastTexturePng_;
     ID3D11ShaderResourceView* texPreview_ = nullptr;
+    ImVec2 texPreviewSize_ = ImVec2(1, 1);
     char texSearch_[64] = {};
     char texImagePath_[512] = {};
     char texAddName_[64] = {};

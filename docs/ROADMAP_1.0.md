@@ -1,5 +1,20 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-01 import depth: model imports prepare their banks before replacement
+and restore prior bank files after a reported commit failure. Invalid-input,
+late file-lock, ordinary import and recipe-pack checks pass. Redirected-root
+previews now read the imported mesh bank; the cube is visible in Arena and
+placement undoes exactly. Core/texture/eight-map export checks pass; see HANDOFF_WORLD_UI.
+
+2026-10-01 install depth: changing folders now refreshes mods and conflict picks
+and clears the prior pack destination. Two-root switching, dirty-edit refusal,
+byte-preservation and Setup restore checks pass; see HANDOFF_WORLD_UI.
+
+2026-10-01 asset depth: tall texture previews preserve aspect ratio, narrow panels
+wrap texture metadata and actions, and Assets pages use a full-name menu when
+tabs cannot fit. Model Reset view stays visible. Compact UI, model browsing and
+scratch texture round-trip checks pass; see HANDOFF_WORLD_UI.
+
 2026-09-30 depth review: existing workflows are being audited feature by feature
 in [FEATURE_DEPTH_AUDIT.md](FEATURE_DEPTH_AUDIT.md), starting with terrain,
 objects and foliage. Grounded objects now follow terrain edits in the same undo

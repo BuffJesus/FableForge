@@ -120,6 +120,7 @@ fe::Scene load(const std::string& mapName, const Options& options, const te::Con
 
     fs::path graphics = options.gameRoot / "data" / "graphics" / "graphics.big";
     if (!fs::exists(graphics)) graphics = options.gameRoot / "data" / "graphics" / "pc" / "graphics.big";
+    if (!options.graphicsBig.empty()) graphics = options.graphicsBig;
     if (!fe::openMeshBank(graphics, err)) { warn("graphics.big: " + err); if (statsOut) *statsOut = st; return scene; }
 
     std::map<uint32_t, int> meshIndexById;

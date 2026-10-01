@@ -639,6 +639,14 @@ void App::scanInstall(const std::string& picked) {
     }
     maps_.clear();
     installPath_ = root;
+    if (switching) {
+        packDest_.clear(); packDestChosen_ = false;
+        modConflicts_.clear(); modReportSummary_.clear();
+        modsVerb_.clear();
+        thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
+        refreshModOrder();
+        loadModPicks();
+    }
     backupList_.clear(); backupsScannedAt_ = -1; bankReportOk_ = false;
     effectsLoaded_ = effectBrowserLoaded_ = effectBrowserReady_ = false;
     effectNames_.clear(); effectPick_.clear();
@@ -870,10 +878,12 @@ void App::startFoliageLoad(bool foliageOnly) {
     const std::string root = installPath_;
     const std::string tngText = documentLoaded() ? doc_.text() : std::string();
     if (documentLoaded() && !foliageOnly) syncedRevision_ = doc_.revision();
-    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, tngText, foliageOnly]() {
+    const auto graphics = graphicsBigPath();
+    foliageFuture_ = std::async(std::launch::async, [ctxHold, entry, ctx, root, tngText, foliageOnly, graphics]() {
         FoliageResult r; r.name = entry.key; r.foliageOnly = foliageOnly;
         foliageexport::Options fo;
         fo.gameRoot = root;
+        fo.graphicsBig = graphics;
         fo.textures = true;
         fo.up = te::UpAxis::Y;
         fo.mapLocal = true;
@@ -881,6 +891,7 @@ void App::startFoliageLoad(bool foliageOnly) {
         if (!foliageOnly) {
             thingsexport::Options to;
             to.gameRoot = root;
+            to.graphicsBig = graphics;
             to.textures = true;
             to.up = te::UpAxis::Y;
             to.tngText = tngText;
@@ -1424,6 +1435,10 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("preview_foliage=" + std::string(previewFoliage_ ? "1" : "0"));
     v.push_back("export_foliage=" + std::string(settings_.foliage ? "1" : "0"));
     v.push_back("thing_instances=" + std::to_string(thingInstances_));
+    size_t selectedMeshInstances = 0;
+    if (selectedThing_ >= 0) for (size_t i = 0; i < renderer_.instanceCount(); ++i)
+        if (renderer_.instance(i).thing == selectedThing_ && renderer_.instance(i).mesh >= 0) ++selectedMeshInstances;
+    v.push_back("selected_mesh_instances=" + std::to_string(selectedMeshInstances));
     v.push_back("preview_things=" + std::string(previewThings_ ? "1" : "0"));
     v.push_back("preview_water=" + std::string(renderer_.showWater ? "1" : "0"));
     v.push_back("export_things=" + std::string(settings_.things ? "1" : "0"));
@@ -1596,6 +1611,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
+    v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
+    v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
     v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));
     v.push_back("origin_mods=" + std::to_string(originMods_.size()));

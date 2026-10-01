@@ -61,6 +61,7 @@ struct Options {
     // (the editor previews unsaved edits this way).
     std::string tngText;
     std::function<void(const std::string&)> log;
+    std::filesystem::path graphicsBig; // optional asset-bank override; levels still come from gameRoot
 };
 
 struct Stats {
