@@ -1014,6 +1014,20 @@ and the editor/CLI build passes. This is a three-bank minimap transaction, not a
 transaction for all new-level stages; later failures can still require Restore.
 No new GUI visual or in-game minimap rendering check was performed.
 
+## 2026-10-01 continuation: strict minimap registration arguments
+
+`build/minimap-cli-inputs-r8tfr13j/invalid_0.json` reproduced `minimap-register`
+accepting `oops` as texture ID zero and changing game.bin. The CLI now parses the
+entire unsigned 32-bit value and rejects unknown/trailing options before install
+lookup or writes. Decimal, hexadecimal, octal and a single leading plus retain
+their prior valid meaning; zero and UINT32_MAX remain representable.
+
+`tools/test_minimap_cli_inputs.py` checks 17 malformed ID/option cases against
+exact scratch-bank/inventory hashes, then six valid forms with exact Restore.
+Normal `build/minimap-cli-inputs-qvbyzcty` and ASan CLI
+`build/minimap-cli-inputs-we8i1kob` pass. This validates argument syntax and range,
+not whether an arbitrary supplied ID names a suitable minimap texture.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
@@ -12,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "forge/big.hpp"
@@ -167,13 +169,31 @@ std::optional<int> runWorld(const std::string& cmd, const Args& args) {
     }
     if (cmd == "minimap-register") {   // minimap-register <MINIMAP_NAME> <texture id> [--install <root>]: PLAYER_GUI MiniMapGraphics entry
         if (args.size() < 3) { std::fprintf(stderr, "usage: forge minimap-register <name> <id> [--install <root>]\n"); return 2; }
+        std::string_view value = args[2];
+        if (!value.empty() && value.front() == '+') value.remove_prefix(1);
+        int base = 10;
+        if (value.size() > 1 && value.front() == '0') {
+            if (value[1] == 'x' || value[1] == 'X') { base = 16; value.remove_prefix(2); }
+            else base = 8;
+        }
+        uint32_t id = 0;
+        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), id, base);
+        if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size()) {
+            std::fprintf(stderr, "invalid minimap texture id: %s (expected an unsigned 32-bit integer)\n", args[2].c_str());
+            return 2;
+        }
         std::string installArg;
-        for (size_t i = 3; i + 1 < args.size(); ++i) if (args[i] == "--install") installArg = args[i + 1];
+        for (size_t i = 3; i < args.size(); ++i) {
+            if (args[i] != "--install" || i + 1 == args.size()) {
+                std::fprintf(stderr, "usage: forge minimap-register <name> <id> [--install <root>]\n"); return 2;
+            }
+            installArg = args[++i];
+        }
         const Install install = findInstall(installArg);
         if (!install.valid) { std::fprintf(stderr, "no Fable install (use --install)\n"); return 2; }
         if (!allowInstallWrite(install)) return 1;
         std::vector<std::string> notes; std::string err;
-        if (!albion::editor::registerMinimapGraphic(install.root, args[1], uint32_t(std::strtoul(args[2].c_str(), nullptr, 0)), notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
+        if (!albion::editor::registerMinimapGraphic(install.root, args[1], id, notes, err)) { std::fprintf(stderr, "error: %s\n", err.c_str()); return 1; }
         for (const auto& n : notes) std::printf("  %s\n", n.c_str());
         return 0;
     }
