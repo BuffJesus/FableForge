@@ -434,7 +434,11 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     ImGui::PushFont(fontSmall_);
     theme::hintMore("Top loads first; the last mod wins. Drag to reorder.", "First loads first, the last word wins. Every mod is a layer: records of game.bin, things of a level, strings of text.big, maps and regions of the world are merged; whole files (banks) are taken from the last mod that ships them. Drag a name to reorder; right-click a FableForge pack for the mods it requires. Check conflicts adds wins / loses to every row. Deploy rebuilds the install from this list onto the retail files.");
     ImGui::PopFont();
-    if (!modOrderError_.empty()) ImGui::TextColored(theme::vec(theme::Warn), "%s", modOrderError_.c_str());
+    if (!modOrderError_.empty()) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::TextColored(theme::vec(theme::Warn), "%s", modOrderError_.c_str());
+        ImGui::PopTextWrapPos();
+    }
     if (modOrder_.mods.empty()) ImGui::TextColored(theme::vec(theme::Faint), "no mods in the order yet");
     int moveUp = -1, moveDown = -1, remove = -1, dragFrom = -1, dragTo = -1;
     int enableIndex = -1;
@@ -557,6 +561,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         theme::label("Conflicts");
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
         if (modAssetStatus_ == "checked") {
             if (modNewMissingMeshes_.empty())
                 ImGui::TextColored(theme::vec(theme::Faint), "Models: no new missing mesh references (%zu in build, %zu in base)", modMissingMeshTotal_, modMissingMeshBaseline_);
@@ -571,6 +576,8 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (modAssetUnparsed_) ImGui::TextColored(theme::vec(theme::Warn), "%zu definitions could not be decoded for the model check", modAssetUnparsed_);
         } else if (!modAssetError_.empty())
             ImGui::TextColored(theme::vec(theme::Warn), "Model check unavailable: %s", modAssetError_.c_str());
+        ImGui::PopTextWrapPos();
+        auto_.registerWidget("mods_asset_status");
         if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently. Reorder packs to choose a lip sync winner. Other winner picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
         if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
@@ -581,7 +588,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             while (t.size() > 4 && ImGui::CalcTextSize((t + "...").c_str()).x > width) t.pop_back();
             return t + "...";
         };
-        const float comboW = S(170);
+        const float comboW = std::min(S(170), cardInner);
         for (size_t i = 0; i < modConflicts_.size() && i < 400; ++i) {
             const auto& c = modConflicts_[i];
             ImGui::PushID(int(i));
@@ -595,8 +602,8 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (c.key.empty()) { ImGui::PopID(); continue; }   // informational row (an id clash)
             if (!c.pickable) {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
-                ImGui::TextUnformatted(c.winner.c_str());
-                if(ImGui::IsItemHovered()) ImGui::SetTooltip("Reorder packs to change this lip sync winner");
+                ImGui::TextUnformatted(fit(c.winner, comboW).c_str());
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nReorder packs to change this lip sync winner", c.winner.c_str());
                 ImGui::PopID();
                 continue;
             }
@@ -611,6 +618,8 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 if (ImGui::Selectable("vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
                 ImGui::EndCombo();
             }
+            auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shown.c_str());
             ImGui::PopID();
         }
         if (modConflicts_.size() > 400) ImGui::TextColored(theme::vec(theme::Faint), "... %zu more (forge-tools mods conflicts --json lists them all)", modConflicts_.size() - 400);

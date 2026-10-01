@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: Mods diagnostics fit narrow cards
+
+The mod-pick failure screenshot exposed an unwrapped model-health warning
+running beyond the Conflicts card. Load-order errors and model-health diagnostics
+now wrap to the card width. Winner controls are bounded by that width; long
+winner names are available on hover, and read-only lip-sync winners use a fitted
+label with their full name in the tooltip.
+
+`build/mods-warning-layout-uy7wnozm` passes hidden GUI captures requested at
+1440x900/1.0, 1024x600/1.5 and 800x600/1.5. Separate compact captures scroll the
+winner fully into view and show its long-name tooltip. Screenshots were visually
+checked: the complete warning fits when revealed, the combo stays within the
+card and the full winner name is readable on hover. The GUI rebuild passes.
+This presentation-only pass reuses the preceding behavior/core checks.
+
 ## 2026-10-01 continuation: mod picks commit before the UI changes
 
 `build/mod-pick-recovery-wmnpwe4s/locked_add.txt.log` reproduced a locked picks
