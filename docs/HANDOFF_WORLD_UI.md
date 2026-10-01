@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: owned World LEV extraction
+
+The World-save regression reproduced overwriting an unrelated LEV in the shared
+`FableForge/overworld` temp directory. World move extraction now uses a separately
+owned directory until File::open finishes reading its in-memory representation;
+loose-level reads retain their existing path.
+
+All four `tools/test_world_async.py` cases pass with an old-path marker preserved
+and no owned LEV workspace left behind (`build/world-async-n4ar6hcf`). The complete
+build and all 29 core suites pass (33.78 seconds). An ASan CLI move on a separate
+seven-bank scratch install passes, then normal Restore returns every bank to its
+source hash; the marker survives and extracted workspaces are gone. Evidence:
+`build/world-asan-jh8pspe2/report.json`, `move.log`, `restore.log`. The first inventory
+assertion was too strict: `restore --forget` retains the unchanged WAD backup.
+That extra file was verified byte-identical and is recorded separately.
+
+This isolates World move extraction, not every temporary-file path. Neighbour
+bakes, stitch, level creation/minimap/entrance helpers and preview extraction
+still have fixed paths to audit. No live-game files were written.
+
 ## 2026-10-01 continuation: World edits during background writes
 
 A real pack save accepted a later move plus cancelled owner/visibility edits,

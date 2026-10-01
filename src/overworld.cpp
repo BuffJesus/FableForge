@@ -1,4 +1,5 @@
 #include "backups.hpp"
+#include "temporarydirectory.hpp"
 #include "profile.hpp"
 #include "overworld.hpp"
 
@@ -59,6 +60,7 @@ void writeFile(const fs::path& p, const void* data, size_t size) {
 // a temp copy because lev::File is path based.
 // `wad` is null for a loose-level install (no FinalAlbion.wad).
 std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, const forge::wad::Archive* wad, const std::string& stem) {
+    std::optional<albion::detail::TemporaryDirectory> extraction;
     fs::path levFile = gameRoot / "data" / "Levels" / "FinalAlbion" / (stem + ".lev");
     if (!fs::exists(levFile)) {
         const std::string want = lower(stem + ".lev");
@@ -67,9 +69,8 @@ std::unique_ptr<forge::lev::File> openLev(const fs::path& gameRoot, const forge:
         for (const auto& e : wad->entries())
             if (lower(fs::path(e.name).filename().string()) == want) {
                 const auto bytes = wad->read(e);
-                const fs::path tmp = fs::temp_directory_path() / "FableForge" / "overworld";
-                fs::create_directories(tmp);
-                levFile = tmp / (stem + ".lev");
+                extraction.emplace("world-lev-");
+                levFile = extraction->path() / (stem + ".lev");
                 writeFile(levFile, bytes.data(), bytes.size());
                 break;
             }

@@ -34,7 +34,11 @@ def main():
         with path.open('rb') as stream:
             return hashlib.file_digest(stream, 'sha256').hexdigest()
     original = {name: digest(root / name) for name in files}
-    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1')
+    temp = work / 'temp'
+    marker = temp / 'FableForge/overworld/TeleporterGreatwood.lev'
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b'owned by another operation')
+    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', TEMP=str(temp), TMP=str(temp))
     def run(name, commands, regions=True):
         pack = work / name
         pack.mkdir()
@@ -61,6 +65,8 @@ quit
         log = Path(str(script) + '.log').read_text()
         assert result.returncode == 0 and 'RESULT PASS' in log, log + result.stderr
         assert original == {rel: digest(root / rel) for rel in files}, 'World pack write changed source banks'
+        assert marker.read_bytes() == b'owned by another operation', 'World write overwrote an unowned extracted LEV'
+        assert not list((temp / 'FableForge').glob('world-lev-*')), 'World write leaked an owned LEV workspace'
         print(name + ': PASS', flush=True)
         return pack
     later = '''world_move TeleporterGreatwood 2048 8032

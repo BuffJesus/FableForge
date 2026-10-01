@@ -401,6 +401,14 @@ source-bank preservation. The pure draft helper passes normal/ASan tests; the
 complete 29-suite core gate passes. Direct-install and in-game behavior were not
 newly exercised by these cases.
 
+## World LEV scratch ownership, 2026-10-01
+
+World moves no longer overwrite an existing LEV in the shared temp directory.
+Four GUI pack-save cases preserve a marker there and leave no owned extraction
+workspace. A separate ASan CLI move and restore preserve all seven source-bank
+hashes; only a byte-identical, unchanged WAD backup remains. The 29-suite core
+gate passes. Other fixed extraction paths and same-install writers remain open.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
