@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 full validation checkpoint
+
+At source commit `6a9c992`, the owned Release build passed
+`python -u tools/check_all.py --no-build`: **96 PASS, 0 FAIL, ALL PASS**, exit 0.
+Log: `build/check_all_stamps_overlays_20261002.log`. No check was skipped.
+The lip-sync traversal's 291 empty/non-type-1 entries are data exclusions;
+20,214 retail entries were checked byte-exact. Corpus-dependent pack checks
+ran with their local archives, including Aeon/Controller, Freeroam, Seasons,
+AlbionSecrets, Dragon Cliff, Lost Content and Expanded Chapters.
+Coverage includes all 36 CTest checks, sculpt/picking/cursor/grid/camera work,
+Ground stamp and survey overlays, retail assets, normal/compact UI, scratch
+new levels/world moves, imports, loose/tall terrain, pack level/world edits,
+backup/restore/install switching and documentation commands. No live writes,
+deployment or in-game native editor comparison was part of this gate.
+Tracked source remained frozen throughout. Read-only Environment Smear
+investigation and isolated candidate fixtures were prepared under `build`.
+
 ## 2026-10-02 continuation: Ground full stamp option
 
 Ground now has **Full stamp** alongside its existing soft blending (the default).
