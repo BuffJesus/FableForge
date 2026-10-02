@@ -878,7 +878,8 @@ separately staged lip-sync edits remain available when you reload their lines.
 a new, verified `dialogue.big` for the selected language; Browse opens Save As,
 and existing archives are protected from overwriting.
 
-Choose a Forge pack and use **Save to pack** to save edited Sound IDs as
+Choose a Forge pack, or enter a name and click **New pack** directly in the
+Dialogue editor. Use **Save to pack** to save edited Sound IDs as
 record recipes. Mods > Deploy composes them in load order: different lines and
 banks coexist, and the later pack wins if two packs edit the same line or one
 ships a whole `dialogue.big`. Mods > Check conflicts identifies the competing

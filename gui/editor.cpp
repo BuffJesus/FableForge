@@ -1665,7 +1665,7 @@ std::vector<std::pair<std::string, std::string>> App::packChoices() {
 }
 
 std::string App::packLabel(const std::string& folder) {
-    for (const auto& [l, f] : packChoices()) if (f == folder) return l;
+    for (const auto& [l, f] : packChoices()) if (fs::path(f).lexically_normal() == fs::path(folder).lexically_normal()) return l;
     return fs::path(folder).filename().string();
 }
 
@@ -1679,29 +1679,29 @@ void App::drawPackPicker(float width) {
     ImGui::SetNextItemWidth(width - ImGui::GetCursorPosX() + ImGui::GetStyle().WindowPadding.x);
     if (ImGui::BeginCombo("##packpick", cur.c_str())) {
         for (const auto& [l, f] : packs)
-            if (ImGui::Selectable(("mod pack " + l).c_str(), f == packDest_)) packDest_ = f;
+            if (ImGui::Selectable(("mod pack " + l).c_str(), fs::path(f).lexically_normal() == fs::path(packDest_).lexically_normal())) packDest_ = f;
         if (ImGui::Selectable("the game directly", packDest_.empty())) packDest_.clear();
         ImGui::EndCombo();
     }
     auto_.registerWidget("combo_pack_pick");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A mod pack: the map's objects / terrain go into the pack; Mods > Deploy builds them into the game with every\nother mod (switchable, shareable, ordered). The game directly: FableForge's classic writes (one-time backups).\nMake a pack on the Assets tab (Models / Ground themes: New pack).");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A mod pack: the map's objects / terrain go into the pack; Mods > Deploy builds them into the game with every\nother mod (switchable, shareable, ordered). The game directly: FableForge's classic writes (one-time backups).\nMake a pack on the Assets tab (Models / Ground themes / Dialogue: New pack).");
     ImGui::PopFont();
 }
 
-void App::drawPackDestination(float cardInner) {
+void App::drawPackDestination(float cardInner, bool allowDirect) {
     using theme::S;
     const auto packs = packChoices();
-    std::string cur = packDest_.empty() ? "Game files (direct)" : "Mod pack: " + packLabel(packDest_);
-    for (const auto& [l, f] : packs) if (f == packDest_) cur = "Mod pack: " + l;
-    theme::label("Goes into");
+    std::string cur = packDest_.empty() ? (allowDirect ? "Game files (direct)" : "Choose a mod pack") : "Mod pack: " + packLabel(packDest_);
+    for (const auto& [l, f] : packs) if (fs::path(f).lexically_normal() == fs::path(packDest_).lexically_normal()) cur = "Mod pack: " + l;
+    theme::label(allowDirect ? "Goes into" : "Save to mod pack");
     ImGui::SetNextItemWidth(cardInner);
     if (ImGui::BeginCombo("##packdest", cur.c_str())) {
         for (const auto& [l, f] : packs)
-            if (ImGui::Selectable(("Mod pack: " + l).c_str(), f == packDest_)) packDest_ = f;
-        if (ImGui::Selectable("Directly into the game (advanced)", packDest_.empty())) packDest_.clear();
+            if (ImGui::Selectable(("Mod pack: " + l).c_str(), fs::path(f).lexically_normal() == fs::path(packDest_).lexically_normal())) packDest_ = f;
+        if (allowDirect && ImGui::Selectable("Directly into the game (advanced)", packDest_.empty())) packDest_.clear();
         ImGui::EndCombo();
     }
-    auto_.registerWidget("combo_pack_dest");
+    auto_.registerWidget(allowDirect ? "combo_pack_dest" : "combo_dialogue_pack");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", packDest_.empty() ? saveRoot().c_str() : packDest_.c_str());
     const float packButtonWidth = std::max(S(90), ImGui::CalcTextSize("New pack").x + ImGui::GetStyle().FramePadding.x * 2);
     const bool stackPack = cardInner < packButtonWidth + S(6) + ImGui::CalcTextSize("New pack name").x + ImGui::GetStyle().FramePadding.x * 2;
@@ -1719,7 +1719,7 @@ void App::drawPackDestination(float cardInner) {
     }
     auto_.registerWidget("btn_new_pack");
     ImGui::PushFont(fontSmall_);
-    theme::hint(packDest_.empty() ? "Directly: the game's banks are rewritten now (one-time backups). The import is not a mod -- it cannot be switched off, shared or ordered."
+    theme::hint(!allowDirect ? "Create or choose a pack, then save your edited lines into it. Mods > Deploy applies the pack to the game." : packDest_.empty() ? "Directly: the game's banks are rewritten now (one-time backups). The import is not a mod -- it cannot be switched off, shared or ordered."
                                   : "Into the pack: the files and a recipe go in the pack; Mods > Deploy builds it into the game with every other mod, so it can be switched off, shared and ordered.");
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, S(4)));

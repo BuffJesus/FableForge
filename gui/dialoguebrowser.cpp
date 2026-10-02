@@ -527,16 +527,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
     if(!dialogueExportMessage_.empty())
         ImGui::TextWrapped("%s",dialogueExportMessage_.c_str());
 
-    const auto packs=packChoices();
-    const std::string packName=packDest_.empty() ? "Choose a mod pack" :
-        "Mod pack: "+packLabel(packDest_);
-    ImGui::SetNextItemWidth(cardInner);
-    if(ImGui::BeginCombo("##dialogue_pack",packName.c_str())) {
-        for(const auto& [label,folder]:packs)
-            if(ImGui::Selectable(label.c_str(),folder==packDest_)) packDest_=folder;
-        ImGui::EndCombo();
-    }
-    auto_.registerWidget("combo_dialogue_pack");
+    drawPackDestination(cardInner,false);
     ImGui::BeginDisabled(!stagedCount || packDest_.empty() ||
                          !modpack::isPack(packDest_));
     if(ImGui::Button("Save to pack##dialogue",ImVec2(cardInner,0)) && !fileWriteBlocked("lip sync pack")) {
@@ -556,7 +547,6 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
     }
     auto_.registerWidget("button_dialogue_add_pack");
     ImGui::EndDisabled();
-    if(packs.empty()) theme::hint("Create a Forge pack on the Models or Ground themes page.");
     theme::endCard();
 
 }

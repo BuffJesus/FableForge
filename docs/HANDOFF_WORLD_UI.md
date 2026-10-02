@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: create lip-sync packs inside Dialogue
+
+Dialogue now reuses the existing pack destination/creation controls, with its
+pack-only mode. A user can create a named pack and save staged lines without
+leaving the editor. Models and Ground themes retain their direct-import option.
+Pack labels and selection compare normalized paths so newly created Windows
+folders display the friendly load-order name despite separator differences.
+
+Normal and compact GUI creation tests pass at build/dialogue-pack-create-y54meg1o:
+create a pack, add its load-order entry, save the expected sound/bank recipe and
+clear staged edits without deploying a dialogue archive. The compact success
+capture was inspected. An initial compact script clicked before nested scrolling
+settled; it now reveals the input after layout settles. Existing two-bank export,
+recipes, conflicts and order tests pass at build/dialogue-edit-tgu7ho4z. The shared
+Models form passes normal/compact failure/retry, completion and next-draft checks
+at build/model-import-form-tc10k8on. All writes were confined to owned scratch.
+
+The preceding development package through 0aac81d has CRC-checked SHA256
+62dab2b01291a50169b19ff050b3aee4c00a67c871dcc91ede735cad86fccbed.
+Inline pack creation requires the next package refresh.
+
 ## 2026-10-01 continuation: muted dialogue scrubbing pauses motion
 
 The slider previously paused audio but left the separate muted/audio-free
