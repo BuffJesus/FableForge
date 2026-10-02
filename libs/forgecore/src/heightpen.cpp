@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace forge::heightpen {
 namespace {
@@ -19,12 +20,39 @@ float limit(float v) {   // GFLimit(v, 0, 2048 - DNZ): NaN passes through
 
 bool inside(const terrain::Heightfield& f, int x, int y) { return x >= 0 && y >= 0 && x < f.cellsX() && y < f.cellsY(); }
 
+bool inRoundedDisc(int bx, int by, int cx, int cy, float radius) {
+    const double dx = double(bx) - cx, dy = double(by) - cy;
+    const float d = float(std::sqrt(float(dx * dx + dy * dy)));
+    return radius > d - 0.5f;
+}
+
 } // namespace
 
 float sizeToRadius(float slider) { return std::pow(2.0f, slider) / 1.0f; }
 
 float speedToOpacity(float speed) {
     return 1.0f - float(std::cos(double(std::clamp(speed, 0.0f, 1.0f) * 0.25f) * 6.2831854820251465));
+}
+
+std::vector<std::pair<int, int>> discFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    std::vector<std::pair<int, int>> vertices;
+    if (cellsX <= 0 || cellsY <= 0 || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(radius) || radius < 0.0f) return vertices;
+    // Reject discs beyond the map before rounding coordinates or bounds.
+    if (double(x) + radius + 1 < 0 || double(y) + radius + 1 < 0 ||
+        double(x) - radius - 1 > cellsX || double(y) - radius - 1 > cellsY) return vertices;
+    const double roundedX = std::nearbyint(double(x)), roundedY = std::nearbyint(double(y));
+    if (roundedX < std::numeric_limits<int>::min() || roundedX > std::numeric_limits<int>::max() ||
+        roundedY < std::numeric_limits<int>::min() || roundedY > std::numeric_limits<int>::max()) return vertices;
+    const int cx = int(roundedX), cy = int(roundedY);
+    const int x0 = int(std::clamp(std::floor(double(cx) - radius), 0.0, double(cellsX - 1)));
+    const int x1 = int(std::clamp(std::ceil(double(cx) + radius), 0.0, double(cellsX - 1)));
+    const int y0 = int(std::clamp(std::floor(double(cy) - radius), 0.0, double(cellsY - 1)));
+    const int y1 = int(std::clamp(std::ceil(double(cy) + radius), 0.0, double(cellsY - 1)));
+    for (int by = y0; by <= y1; ++by)
+        for (int bx = x0; bx <= x1; ++bx)
+            if (inRoundedDisc(bx, by, cx, cy, radius)) vertices.emplace_back(bx, by);
+    return vertices;
 }
 
 uint32_t lcgStep(uint32_t& seed) {
@@ -55,9 +83,7 @@ size_t changeHeight(terrain::Heightfield& field, float x, float y, float radius,
     for (int by = y0; by <= y1; ++by)
         for (int bx = x0; bx <= x1; ++bx) {
             if (!inside(field, bx, by)) continue;
-            const double dx = double(bx - cx), dy = double(by - cy);
-            const float d = float(std::sqrt(float(dx * dx + dy * dy)));
-            if (!(radius > d - 0.5f)) continue;
+            if (!inRoundedDisc(bx, by, cx, cy, radius)) continue;
             uint8_t& seen = altered[size_t(by) * field.cellsX() + bx];
             if (seen) continue;
             float& h = field.at(bx, by);
@@ -92,9 +118,7 @@ size_t paintHeight(terrain::Heightfield& field, float x, float y, float radius, 
     size_t changed = 0;
     for (int by = y0; by <= y1; ++by)
         for (int bx = x0; bx <= x1; ++bx) {
-            const double dx = double(bx - cx), dy = double(by - cy);
-            const float d = std::sqrt(float(dx * dx + dy * dy));
-            if (!(radius > d - 0.5f)) continue;
+            if (!inRoundedDisc(bx, by, cx, cy, radius)) continue;
             if (!inside(field, bx, by)) continue;
             float& h = field.at(bx, by);
             float n = (target - h) * opacity + h;

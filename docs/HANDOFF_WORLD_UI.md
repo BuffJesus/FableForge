@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: exact-step / Flatten cursor footprints
+
+Change Height (exact-step Raise/Lower) and Paint Height (Flatten) cursors now
+round their centre half-to-even, draw the native disc envelope at radius +0.5,
+and show affected vertex dots for radii <=4. The dot query shares the existing
+pen distance predicate, rather than maintaining a separate cursor equation.
+Underlying once-per-stroke, opacity, clamping and undo behavior is preserved.
+Height-key strokes retain their pinned cursor; Smooth/Noise cursor recovery
+remains open because those pens have different footprints.
+
+This uses the already recovered Change Height / Paint Height contract
+(FableWin 0x02975710 / 0x029753d0, same executable identity below).
+Core checks compare the query to actual output of both pens across half-even
+centres, 0.25/0.5-cell radii, the strict 0.5 boundary and its next float,
+one/nine/37-vertex discs, and clipped map corners. Full Release build and all
+36 CTest checks pass. The first normal/compact GUI check passes at
+`build/height-cursor-mcoq_v4s`; both one- and nine-vertex captures inspected.
+The harness is then refined to reveal the tool/radius in compact captures.
+No game writes or in-game probes are part of these checks.
+Final captures/checks pass at `build/height-cursor-vq34hk1p`; the compact
+Flatten nine-vertex capture was inspected with the radius/hint visible.
+Actual size-slider/bracket controls, single-vertex strokes and undo pass at
+`build/terrain-brush-controls-gt4v7jz8`; Height pens also pass. Combined log:
+`build/height_cursor_final_checks.log`. The new cursor check is in check_all.
+
 ## 2026-10-02 investigation: ground-theme Smear proposal needs revision
 
 Fresh full FableWin disassembly confirms the two-pass nine-neighbour brush and

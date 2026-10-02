@@ -26,6 +26,11 @@ The same check exercises the real Speed slider's endpoints in every sculpt
 tool, zero-speed refusal to alter ground, nonzero strokes and undo. State keys
 `pen_speed` and `height_key_step` expose the slider and its derived metre step.
 
+`tools/test_height_cursor.py --install <root>` checks exact-step Raise/Lower
+and Flatten cursors at normal/compact sizes. `brush_cursor_vertices` counts
+the projected affected-vertex dots (shown at radii <=4 cells); the check verifies
+single/9-vertex discs and unchanged terrain/object snapshots.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

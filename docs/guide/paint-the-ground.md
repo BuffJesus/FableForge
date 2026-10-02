@@ -15,6 +15,8 @@ the current sample. Switch to **Flatten** to level the ground to that height.
 Hold `-` or `=` in a sculpt tool to lower or raise a fixed ground spot. Moving
 the pointer keeps the edit at its starting point; release finishes the stroke.
 **Speed** is available in each sculpt tool. Hover it to see the height-key step.
+With **Exact step** in Raise/Lower, or with Flatten, small brushes show dots on
+the vertices they affect. A 0.25-cell radius affects one vertex.
 
 ## Ground textures
 

@@ -3,6 +3,7 @@
 #include "forge/terrain.hpp"
 
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 // The vanilla editor's Height Toolbox pens (FableWin CPaintMapDialog, Land tab), ported from
@@ -20,6 +21,11 @@ constexpr float kMaxHeight = float(2048.0 - double(1.0e-4f));
 float sizeToRadius(float slider);
 // The Speed slider (0 .. 1): opacity = 1 - cos(pi/2 * value) (GetOpacity).
 float speedToOpacity(float speed);
+
+// In-map vertices of Change Height / Paint Height's rounded hard disc. This
+// uses their shared distance predicate; the cursor can show small exact pens.
+std::vector<std::pair<int, int>> discFootprint(int cellsX, int cellsY,
+                                            float x, float y, float radius);
 
 // Change Height (EditChangeHeightPenUndoable 0x02975710): every block with distance < r + 0.5
 // from the rounded centre gets `delta`, at most once per stroke -- `altered` (cellsX*cellsY,

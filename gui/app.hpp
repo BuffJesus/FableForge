@@ -752,6 +752,7 @@ private:
     void drawViewportEdges();
     bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
+    size_t brushCursorVertices_ = 0;  // affected vertex dots visible for a small exact pen
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
     uint64_t syncedTerrainRev_ = 0;
     struct TerrainDeployResult { bool ok = false; std::string error, pack; std::vector<std::string> notes; std::shared_ptr<editor::Document> written; };

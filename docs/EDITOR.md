@@ -277,6 +277,8 @@ item and info display components; absent components are not added.
   moving the pointer keeps that point fixed. Release finishes one undo step.
   These keys work in sculpt tools, including Paths.
   Each sculpt tool exposes **Speed**; hover it for the height-key step in metres.
+  Exact-step Raise/Lower and Flatten show their rounded vertex centre and
+  affected vertex dots at radii up to 4 cells, including a single vertex at 0.25.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

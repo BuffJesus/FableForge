@@ -1419,6 +1419,28 @@ void testHeightPens() {
     CHECK(hp::lcgStep(seed) == 0x26F80001u);
     CHECK(std::fabs(hp::speedToOpacity(0.5f) - 0.29289f) < 1e-4f && hp::speedToOpacity(1.0f) > 0.9999f && hp::speedToOpacity(0.0f) == 0.0f);
     CHECK(hp::sizeToRadius(-2.0f) == 0.25f && hp::sizeToRadius(5.0f) == 32.0f);
+    // Cursor footprints match both real pen outputs, including half-even centres,
+    // the strict radius boundary and clipped map corners.
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {2.5f, 3.0f, 0.25f, 1}, {3.5f, 3.0f, 0.25f, 1},
+             {3.0f, 3.0f, 0.5f, 1}, {3.0f, 3.0f, std::nextafter(0.5f, 1.0f), 5},
+             {3.2f, 3.4f, 1.0f, 9}, {0.0f, 0.0f, 1.0f, 4}, {3.0f, 3.0f, 3.0f, 37}}) {
+        Heightfield raised(8, 8, 5.0f), painted(8, 8, 5.0f);
+        const auto footprint = hp::discFootprint(raised.cellsX(), raised.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        std::vector<uint8_t> altered;
+        CHECK(hp::changeHeight(raised, x, y, radius, 1.0f, altered) == footprint.size());
+        CHECK(hp::paintHeight(painted, x, y, radius, 6.0f, 1.0f) == footprint.size());
+        for (int by = 0; by < raised.cellsY(); ++by)
+            for (int bx = 0; bx < raised.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK(raised.at(bx, by) == (touched ? 6.0f : 5.0f));
+                CHECK(painted.at(bx, by) == raised.at(bx, by));
+            }
+    }
+    CHECK(hp::discFootprint(8, 8, 2.5f, 3.0f, 0.25f).front() == std::pair(2, 3));
+    CHECK(hp::discFootprint(8, 8, 3.5f, 3.0f, 0.25f).front() == std::pair(4, 3));
+    CHECK(hp::discFootprint(8, 8, -20, -20, 1).empty());
     // Change Height: a hard disc (d < r + 0.5) round the rounded centre, once per block per stroke
     {
         Heightfield f(8, 8, 5.0f);

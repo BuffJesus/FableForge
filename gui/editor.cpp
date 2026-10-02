@@ -2733,6 +2733,7 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
 
 void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     brushHit_ = false;
+    brushCursorVertices_ = 0;
     if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) {
         if (doc_.strokeActive()) doc_.endStroke();
         keyStroke_ = false;
@@ -2993,14 +2994,20 @@ void App::drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, flo
 }
 
 void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
+    brushCursorVertices_ = 0;
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
+    const bool roundedDisc = !keyStroke_ &&
+        (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
+    const float centreX = roundedDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = roundedDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const float radius = brushRadius_ + (roundedDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const int n = 48;
     ImVec2 pts[n];
     int got = 0;
     for (int i = 0; i < n; ++i) {
         const float a = float(i) / n * 6.2831853f;
-        const float fx = brushFable_[0] + brushRadius_ * std::cos(a), fy = brushFable_[1] + brushRadius_ * std::sin(a);
+        const float fx = centreX + radius * std::cos(a), fy = centreY + radius * std::sin(a);
         const auto h = doc_.terrainHeight(fx, fy);
         const float p[3] = {fx, h.value_or(0.0f) + 0.05f, -fy};
         float u, v;
@@ -3011,6 +3018,18 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
                     : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    if (roundedDisc && brushRadius_ <= 4.0f) {
+        for (const auto [bx, by] : forge::heightpen::discFootprint(
+                 doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)) {
+            const float p[3] = {float(bx), doc_.terrainHeight(float(bx), float(by)).value_or(0.0f) + 0.05f, -float(by)};
+            float u, v;
+            if (!renderer_.project(p, u, v)) continue;
+            const ImVec2 dot(origin.x + u * size.x, origin.y + v * size.y);
+            dl->AddCircleFilled(dot, theme::S(3.0f), col);
+            dl->AddCircleFilled(dot, theme::S(1.2f), IM_COL32(255, 255, 255, 240));
+            ++brushCursorVertices_;
+        }
+    }
     if (terrainMode_ == 14 && clipDrag_)
         drawGroundRect(origin, size, clipStart_[0], clipStart_[1], brushFable_[0], brushFable_[1], IM_COL32(255, 255, 255, 220));
     if (terrainMode_ == 15 && !terrainClip_.empty()) {
@@ -3032,10 +3051,11 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         if (m > 1) dl->AddPolyline(line, m, col, ImDrawFlags_None, theme::S(3.0f));
     }
     // centre dot
-    const auto hc = doc_.terrainHeight(brushFable_[0], brushFable_[1]);
-    const float c[3] = {brushFable_[0], hc.value_or(0.0f) + 0.05f, -brushFable_[1]};
+    const auto hc = doc_.terrainHeight(centreX, centreY);
+    const float c[3] = {centreX, hc.value_or(0.0f) + 0.05f, -centreY};
     float cu, cv;
-    if (renderer_.project(c, cu, cv)) dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
+    if (!brushCursorVertices_ && renderer_.project(c, cu, cv))
+        dl->AddCircleFilled(ImVec2(origin.x + cu * size.x, origin.y + cv * size.y), theme::S(3.0f), col);
 }
 
 // ---- new level from the selected map
