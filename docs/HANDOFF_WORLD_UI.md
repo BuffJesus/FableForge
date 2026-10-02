@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: readable compact editor selectors
+
+Objects/Terrain/Actors/Level and Select/Move/Rotate/Scale/Terrain now switch from
+segmented rows to dropdowns when full labels would not fit. Wide rows retain
+their existing layout and keyboard shortcuts. Snap has a short visible label;
+its movement/rotation/scale increments are available on hover. Existing automation
+aliases remain available for either selector layout.
+
+At `build/editor-selectors-gffglbmx/800x600`, actual dropdown clicks exercise all
+four sections and five tools, including Terrain following the terrain tool and
+returning to Objects on Move; the document remains unchanged. The 1024x600 / 1.5
+layout fits full row labels and intentionally retains segmented controls. An
+initial test incorrectly expected dropdowns there; `wide.txt.log` verifies the
+wide branch, and both screenshots were inspected. GUI rebuild passes.
+
 ## 2026-10-01 continuation: compact selected-object actions
 
 The selected-object toolbar previously disappeared below a viewport width of

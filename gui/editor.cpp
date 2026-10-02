@@ -3711,11 +3711,28 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
     // ---- tool
     theme::beginCard("##tool", inner);
     theme::label("Tool");
-    if (doc_.hasTerrain()) theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R", "Terrain  T"}, cardInner);
-    else theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R"}, cardInner);
-    auto_.registerWidget("seg_gizmo");
-    theme::toggle("Snap (0.5 units / 15 deg / 0.1x)", &gizmoSnap_);
+    const char* tools[] = {"Select  Q", "Move  W", "Rotate  E", "Scale  R", "Terrain  T"};
+    const char* toolNames[] = {"Select", "Move", "Rotate", "Scale", "Terrain"};
+    const int toolCount = doc_.hasTerrain() ? 5 : 4;
+    if ((cardInner - S(4)) / toolCount < ImGui::CalcTextSize("Terrain").x + S(8)) {
+        ImGui::SetNextItemWidth(cardInner);
+        const char* preview = gizmoOp_ >= 0 && gizmoOp_ < toolCount ? tools[gizmoOp_] : "Choose a tool...";
+        if (ImGui::BeginCombo("##tool_choice", preview)) {
+            for (int i = 0; i < toolCount; ++i) {
+                if (ImGui::Selectable(tools[i], i == gizmoOp_)) gizmoOp_ = i;
+                auto_.registerWidget((std::string("tool_choice_") + toolNames[i]).c_str());
+            }
+            ImGui::EndCombo();
+        }
+        auto_.registerWidget("combo_edit_tool");
+    } else {
+        if (doc_.hasTerrain()) theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R", "Terrain  T"}, cardInner);
+        else theme::segmented("##gizmo", gizmoOp_, {"Select  Q", "Move  W", "Rotate  E", "Scale  R"}, cardInner);
+    }
+    auto_.registerWidget("seg_gizmo"); // stable automation alias for either layout
+    theme::toggle("Snap", &gizmoSnap_);
     auto_.registerWidget("toggle_snap");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move in 0.5-unit steps, rotate by 15 degrees, or scale by 0.1x.");
     ImGui::PushFont(fontSmall_);
     theme::hintMore("Click to select; drag a thing on the ground. Shift+click places the palette pick.", "Click an object to select it. Drag it across the ground or use the gizmo. Arrows nudge, Ctrl+arrows face, [ and ] rotate, comma/period change height, A faces the pointer. Ctrl+Shift+drag clones and carries. Ctrl+D clones and follows the cursor; click ground to drop, Esc to cancel. Shift+click the ground places the picked definition. Del removes, Ctrl+Z/Y undo/redo, F frames, End drops to the ground.");
     ImGui::PopFont();

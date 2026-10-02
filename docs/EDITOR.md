@@ -17,6 +17,8 @@ existing archives remain protected by the exporter.
 **Ctrl+F** focuses search in the current Models, Textures, Effects or Dialogue
 browser. Elsewhere it focuses map search. The shortcut reveals the relevant
 panel if you have hidden it.
+On narrow windows, editor sections and tools use dropdowns so their full names
+remain readable. Hover **Snap** to see its movement, rotation and scale steps.
 
 ## Setup (first run)
 

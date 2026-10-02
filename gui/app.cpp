@@ -2732,8 +2732,21 @@ void App::drawActions(float width) {
         ImGui::Dummy(ImVec2(0, S(2)));
         ImGui::SetCursorPosX(pad);
         int tab = editTab_;
-        if (theme::segmented("##edittab", tab, {"Objects", "Terrain", "Actors", "Level"}, inner)) setEditTab(tab);
-        auto_.registerWidget("seg_edit_tab");
+        const char* sections[] = {"Objects", "Terrain", "Actors", "Level"};
+        if ((inner - S(4)) / 4 < ImGui::CalcTextSize("Objects").x + S(8)) {
+            ImGui::SetNextItemWidth(inner);
+            if (ImGui::BeginCombo("##edit_section", sections[tab])) {
+                for (int i = 0; i < 4; ++i) {
+                    if (ImGui::Selectable(sections[i], i == tab)) setEditTab(i);
+                    auto_.registerWidget((std::string("edit_section_") + sections[i]).c_str());
+                }
+                ImGui::EndCombo();
+            }
+            auto_.registerWidget("combo_edit_section");
+        } else {
+            if (theme::segmented("##edittab", tab, {"Objects", "Terrain", "Actors", "Level"}, inner)) setEditTab(tab);
+        }
+        auto_.registerWidget("seg_edit_tab"); // stable automation alias for either layout
     }
     ImGui::Dummy(ImVec2(0, S(6)));
     // The settings stack takes what it needs (measured last frame); the activity log
