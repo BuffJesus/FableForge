@@ -78,6 +78,15 @@ int main(){
  CHECK(r.meshBoundsFactor(20,false)>2.3f);CHECK(r.meshBoundsFactor(20,true)==1);
  particlepreview::DrawMesh dm;dm.mesh=20;dm.centredOnPosition=true;
  dm.size[0]=dm.size[1]=dm.size[2]=std::sqrt(3.25f);dm.colour[0]=.5f;dm.colour[1]=dm.colour[2]=0;
+ // Camera bounds use transformed geometry, not the largest scale as an isotropic sphere.
+ {auto probe=dm;probe.size[1]*=100;float lo[3],hi[3];
+ CHECK(r.meshFrameBounds(probe,lo,hi));CHECK(std::abs(lo[0]+1.5f)<1e-5f&&std::abs(hi[0]-1.5f)<1e-5f);
+ CHECK(lo[1]==0&&hi[1]==0&&std::abs(lo[2]+1)<1e-5f&&std::abs(hi[2]-1)<1e-5f);
+ probe.centredOnPosition=false;CHECK(r.meshFrameBounds(probe,lo,hi));CHECK(std::abs(lo[0]+4)<1e-5f&&std::abs(hi[0]+1)<1e-5f);
+ probe.position[0]=10;probe.orientation[1]=probe.orientation[3]=std::sqrt(.5f);
+ CHECK(r.meshFrameBounds(probe,lo,hi));CHECK(std::abs(lo[0]-9)<1e-5f&&std::abs(hi[0]-11)<1e-5f);
+ CHECK(std::abs(lo[2]-1)<1e-5f&&std::abs(hi[2]-4)<1e-5f);
+ probe.mesh=999;CHECK(!r.meshFrameBounds(probe,lo,hi));}
  auto meshImage=render(128,128,camera,{}, {dm});centre=sample(meshImage,70,70);
  CHECK(centre[0]>250&&centre[1]<3);CHECK(r.drawnMeshes()==1&&r.meshTriangles()==1);
  CHECK(sample(meshImage,85,70)[0]>250);

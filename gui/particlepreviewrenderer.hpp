@@ -34,6 +34,8 @@ public:
     size_t meshBytes() const;
     float meshBoundsFactor(int32_t id, bool centred) const;
     bool meshUsesAuthoredBounds(int32_t id) const;
+    // Bounds of the rendered geometry in Fable coordinates, including scale and rotation.
+    bool meshFrameBounds(const particlepreview::DrawMesh&, float lo[3], float hi[3]) const;
     // frameCount is the number of equal-height frames stacked vertically.
     // Nominal sprite size is its width; frame aspect scales its height once.
     bool setTexture(int32_t id, const terrainexport::Image&, uint32_t frameCount = 1);

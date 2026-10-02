@@ -45,6 +45,17 @@ struct MeshConstants { float clip[4][4],colour[4],options[4]; };
 
 int mode(int m) { return m>=0 && m<=5 ? m : 2; }
 int operation(int op) { return op>=0 && op<=2 ? op : 0; }
+void meshBasis(const particlepreview::DrawMesh& instance,float radius,float basis[3][3]) {
+    // Row-vector quaternion matrix, matching XMMatrixRotationQuaternion.
+    double length=0;for(float v:instance.orientation)length+=double(v)*v;
+    float q[4]={0,0,0,1};if(length>=.0001)for(int k=0;k<4;++k)q[k]=float(instance.orientation[k]/std::sqrt(length));
+    const float x=q[0],y=q[1],z=q[2],w=q[3];
+    const float rotation[3][3]={{1-2*y*y-2*z*z,2*x*y+2*z*w,2*x*z-2*y*w},
+             {2*x*y-2*z*w,1-2*x*x-2*z*z,2*y*z+2*x*w},
+             {2*x*z+2*y*w,2*y*z-2*x*w,1-2*x*x-2*y*y}};
+    for(int j=0;j<3;++j)for(int k=0;k<3;++k)basis[j][k]=rotation[j][k]*(instance.size[j]/radius*(j<2?-1.f:1.f));
+}
+
 float dot(const float a[3], const float b[3]) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
 }
 
@@ -77,6 +88,7 @@ struct ParticlePreviewRenderer::Impl {
         struct Part { int32_t texture; UINT first,count; };
         std::vector<Part> parts;
         float centre[3]={}, radius=1;
+        float lo[3]={},hi[3]={};
         bool authoredBounds=false;
         size_t bytes=0, triangles=0;
     };
@@ -228,6 +240,20 @@ float ParticlePreviewRenderer::meshBoundsFactor(int32_t id,bool centred) const {
     const auto& m=it->second;double distance2=0;for(float value:m.centre)distance2+=double(value)*value;
     return float(1+std::sqrt(distance2)/m.radius);
 }
+bool ParticlePreviewRenderer::meshFrameBounds(const particlepreview::DrawMesh& instance,float lo[3],float hi[3]) const {
+    const auto it=p_->meshes.find(instance.mesh);if(it==p_->meshes.end())return false;
+    const auto& mesh=it->second;float basis[3][3];meshBasis(instance,mesh.radius,basis);
+    for(int k=0;k<3;++k){lo[k]=INFINITY;hi[k]=-INFINITY;}
+    for(int corner=0;corner<8;++corner) {
+        float point[3];std::copy(instance.position,instance.position+3,point);
+        for(int j=0;j<3;++j) {
+            const float local=((corner&(1<<j))?mesh.hi[j]:mesh.lo[j])-(instance.centredOnPosition?mesh.centre[j]:0.f);
+            for(int k=0;k<3;++k)point[k]+=basis[j][k]*local;
+        }
+        for(int k=0;k<3;++k){if(!std::isfinite(point[k]))return false;lo[k]=std::min(lo[k],point[k]);hi[k]=std::max(hi[k],point[k]);}
+    }
+    return true;
+}
 bool ParticlePreviewRenderer::setMesh(int32_t id,const forge::meshpreview::Geometry& geometry) {
     auto& p=*p_;
     constexpr size_t maxBytes=128ull*1024*1024;
@@ -248,6 +274,7 @@ bool ParticlePreviewRenderer::setMesh(int32_t id,const forge::meshpreview::Geome
         vertices.push_back({v.x,v.y,v.z,v.u,v.v});
     }
     Impl::Mesh mesh;mesh.bytes=bytes;mesh.triangles=geometry.triangles.size();
+    std::copy(lo,lo+3,mesh.lo);std::copy(hi,hi+3,mesh.hi);
     for(int k=0;k<3;++k){mesh.centre[k]=lo[k]*.5f+hi[k]*.5f;
         if(std::abs(mesh.centre[k])>1e12f){p.error="Particle mesh centre exceeds preview bounds";return false;}}
     double radius=0;
@@ -430,14 +457,7 @@ ID3D11ShaderResourceView* ParticlePreviewRenderer::render(int width,int height,c
             p.context->PSSetShaderResources(0,1,&b.texture);p.context->Draw(count,b.first);continue;
         }
         const auto& instance=meshes[command.index];const auto& mesh=p.meshes.at(instance.mesh);
-        // Row-vector quaternion matrix, matching XMMatrixRotationQuaternion.
-        double length=0;for(float v:instance.orientation)length+=double(v)*v;
-        float q[4]={0,0,0,1};if(length>=.0001)for(int k=0;k<4;++k)q[k]=float(instance.orientation[k]/std::sqrt(length));
-        const float x=q[0],y=q[1],z=q[2],w=q[3];
-        float basis[3][3]={{1-2*y*y-2*z*z,2*x*y+2*z*w,2*x*z-2*y*w},
-                         {2*x*y-2*z*w,1-2*x*x-2*z*z,2*y*z+2*x*w},
-                         {2*x*z+2*y*w,2*y*z-2*x*w,1-2*x*x-2*y*y}};
-        for(int j=0;j<3;++j)for(int k=0;k<3;++k)basis[j][k]*=instance.size[j]/mesh.radius*(j<2?-1.f:1.f);
+        float basis[3][3];meshBasis(instance,mesh.radius,basis);
         float origin[3]={instance.position[0],instance.position[1],instance.position[2]};
         if(instance.centredOnPosition)for(int j=0;j<3;++j)for(int k=0;k<3;++k)origin[k]-=basis[j][k]*mesh.centre[j];
         MeshConstants constants{};

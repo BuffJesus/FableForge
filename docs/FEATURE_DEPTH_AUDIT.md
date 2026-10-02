@@ -15,7 +15,7 @@ only after checking those paths against the current build.
 | Ground sculpt, paint, copy and Fit/Generate | Does what the preview shows match the terrain and objects the game receives? | Fractal height range is explicit; Fit now reports affected vertices and largest height shift. Fit preview returns to zero changes after Apply, back to pending changes after Undo, and zero after Redo on Greatwood_Filler_04. Grounded things and foliage follow height edits. | Inspect remaining brush modes, Fit/Generate seams and game output on representative maps. |
 | Foliage and scenery | Do baked trees/grass remain seated and visible before and after terrain deployment? | 2,514 StartOakValeWest foliage instances were re-seated in the preview after a raised-ground stroke; undo restored zero offsets. Terrain-triggered foliage refresh avoids re-decoding placed things. | Compare near trees in the preview and game after deployment; test maps with missing/partial STB foliage. |
 | World view and new levels | Are map placement, seams, neighbour preview and level creation understandable and recoverable? | Scratch copied/blank creation, region entrances, minimap framing, compact actual creation and byte-exact restore pass. Existing edits and edits made during creation are preserved; restoring a removed map clears its preview. | Review pack/loose creation, world movement/seams and new game output. |
-| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue has an all-bank line picker, 18 head previews, compact playback/timeline and a separate edit/export tool. Owned normal/compact workflows, retail pose and scratch recipe/export checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
+| Assets: themes, models, effects, dialogue | Can assets be found, previewed accurately and applied without ambiguous state? | Effect background presets and the 1280x720 / 1.5 scale preview fit; effect transport now carries elapsed time through loops. Dialogue has expandable speaker groups and subtitle leaves, 18 head previews, compact playback/timeline and inline lip-sync editing. Short effects fit their supported lifetimes automatically. Owned normal/compact workflows, retail pose and scratch recipe/export checks pass. | Review each browser from search through preview and export; compare eye attachment with a live retail capture. |
 | Mods and content packs | Can users combine common TLC mods, see conflicts and undo installs? | Mod-pack and Freeroam/Aeon research exists; integration outcomes vary by install order. | Exercise representative local corpus packs in an isolated install and document exact supported paths. |
 | Live game link and deployment | Does a previewed change appear in TLC, and are failure messages actionable? | Scratch-install terrain, theme and custom-theme writes pass; the resulting Greatwood_1 chunk audits cleanly. Failed pack and missing-STB paths restore files and keep edits dirty. | Verify object/terrain/foliage in a running game, then inspect restore from the GUI. |
 | Popups and small-screen UI | Does every floating tool remain tied to its source and usable at high UI scale? | Context test covers Terrain, Level and Properties window closure; tour captures four tool windows at eight requested sizes. | Review setup, confirmation, import and error dialogs with focus/keyboard and resize. |
@@ -2288,6 +2288,27 @@ build/effect-timing-0rgksa1i, including an exact 0.51-second manual end. Existin
 camera/rendering tests pass at build/effect-workspace-b2487sqj. All 36 CTest suites
 pass after rebuilding every target (19.78 seconds). Estimates cover supported
 preview behavior, not full game parity. No live game files were changed.
+
+## 2026-10-01 continuation: tighter effect mesh framing
+
+Frame effect and Frame current now bound transformed mesh geometry rather than
+expanding the largest scale into a sphere. Thin, stretched meshes no longer
+force excessive camera distance. Bounds use the same quaternion/scale basis as
+the renderer, including authored radius and centring. Missing meshes contribute
+no visible geometry. Sprite framing and particle behavior are unchanged.
+
+The initial texture-strip hypothesis was ruled out: TextureRow already contains
+per-frame dimensions. Read-only AIR_GLOW_01 probes at
+build/effect-bounds-probe-78zbkyh5 identified thin mesh 435 with large Z scale.
+The new normal capture is visibly larger, with 4,471 visible pixels (compact
+2,889) at build/effect-timing-s2oe8bcq. WARP renderer tests pass, including scaled
+planar bounds, offset origins and rotation. Both workspace sizes pass at
+build/effect-workspace-3thhk7a2. The old Frame-current 15% enlargement assertion
+failed because the whole-motion view improved; it now requires 5% plus over
+500 changed pixels. Actual gains are 1,708 to 1,842 and 572 to 679 pixels.
+
+This supersedes the preceding framing limitation for the inspected air-glow
+example. Full game rendering parity remains unverified.
 
 ## Audit rule
 

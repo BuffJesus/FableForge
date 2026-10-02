@@ -1070,7 +1070,9 @@ object file is not created by this control.
 Particle previews now include orbit and attraction approximations. Specialized
 orbit modifiers, external targets and multiple attractor points are identified
 where unsupported. Selecting the same effect again preserves paused playback;
-use Restart to reset it. Framing accounts for the sprite's texture aspect.
+use Restart to reset it. Framing accounts for each sprite's frame aspect and
+transformed mesh bounds. Frame effect fits the sampled motion; Frame current
+fits the particles at the selected time.
 
 Moving a creature now updates its existing saved initial-position fields with
 the map's world origin. Pasting into another map rebases them to that destination.

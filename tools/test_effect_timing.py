@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import numpy as np
+from test_effect_grid_pixels import captured_previews
 
 
 def main():
@@ -43,7 +45,8 @@ def main():
                  'assert_state effect_preview_auto_duration 1', 'assert_state effect_preview_duration 10.000000',
                  'effect_select AIR_GLOW_01', 'frames 3',
                  'assert_state effect_preview_duration 1.233333', 'effect_preview_seek .5',
-                 'reveal effect_preview_image', 'frames 3', f'screenshot {dest.as_posix()}/burst.png', 'quit']
+                 'reveal effect_preview_image', 'mouse_move btn_effect_play', 'frames 3',
+                 'dump_widget effect_preview_image', f'screenshot {dest.as_posix()}/burst.png', 'quit']
         script = dest / 'timing.txt'
         script.write_text('\n'.join(lines) + '\n', encoding='utf-8')
         result = subprocess.run([str(repo / 'build/FableForge.exe'), '--install', str(args.install),
@@ -53,6 +56,10 @@ def main():
         (dest / 'output.log').write_text(result.stdout + result.stderr, encoding='utf-8')
         log = Path(str(script) + '.log').read_text(encoding='utf-8')
         assert result.returncode == 0 and 'RESULT PASS' in log, log[-4000:]
+        pixels = captured_previews(dest, Path(str(script)+'.log'), ['burst.png'])[0].astype(np.int16)
+        visible = int((np.max(np.abs(pixels - pixels[0, 0]), axis=2) > 3).sum())
+        assert visible > 150, f'Air glow framed too far away: {visible} visible pixels'
+        print(size, 'air glow visible pixels', visible, flush=True)
         print(size, 'auto lengths, completed replay, fractional end and drag-before-release seek: PASS', flush=True)
 
 

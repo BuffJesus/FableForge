@@ -19,8 +19,9 @@ def main():
     changed = int(np.any(crops[0] != crops[1], axis=2).sum())
     assert visible[0] > 100, f'Full-path frame has too little geometry: {visible[0]} pixels'
     # Compare the complete preview, including pixels previously excluded by the
-    # old hard-coded crop. Require a clear gain, not an exact raster-area ratio.
-    assert visible[1] > visible[0] * 1.15, f'Current frame did not improve visibility: {visible}'
+    # old hard-coded crop. Whole-motion framing now uses tighter mesh bounds;
+    # require a gain and a substantial changed area without the old 15% ratio.
+    assert visible[1] > visible[0] * 1.05, f'Current frame did not improve visibility: {visible}'
     assert changed > 500, f'Camera framing barely changed: {changed} pixels'
     print(f'PASS: visible FX pixels {visible[0]} -> {visible[1]}; changed {changed}')
 

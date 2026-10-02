@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: tighter effect mesh framing
+
+Frame effect and Frame current now bound transformed mesh geometry rather than
+expanding the largest scale into a sphere. Thin, stretched meshes no longer
+force excessive camera distance. Bounds use the same quaternion/scale basis as
+the renderer, including authored radius and centring. Missing meshes contribute
+no visible geometry. Sprite framing and particle behavior are unchanged.
+
+The initial texture-strip hypothesis was ruled out: TextureRow already contains
+per-frame dimensions. Read-only AIR_GLOW_01 probes at
+build/effect-bounds-probe-78zbkyh5 identified thin mesh 435 with large Z scale.
+The new normal capture is visibly larger, with 4,471 visible pixels (compact
+2,889) at build/effect-timing-s2oe8bcq. WARP renderer tests pass, including scaled
+planar bounds, offset origins and rotation. Both workspace sizes pass at
+build/effect-workspace-3thhk7a2. The old Frame-current 15% enlargement assertion
+failed because the whole-motion view improved; it now requires 5% plus over
+500 changed pixels. Actual gains are 1,708 to 1,842 and 572 to 679 pixels.
+
+This supersedes the preceding framing limitation for the inspected air-glow
+example. Full game rendering parity remains unverified.
+
 ## 2026-10-01 continuation: effect timeline length and replay
 
 Short effects now use supported lifetime estimates instead of a fixed ten-second

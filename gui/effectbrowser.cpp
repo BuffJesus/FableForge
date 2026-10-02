@@ -82,9 +82,13 @@ void App::frameEffectPreview(bool currentOnly) {
     auto includeSimulation=[&](const particlepreview::Simulation& state) {
         for (const auto& sprite:state.sprites())
             include(sprite.position,std::max(sprite.size[0],sprite.size[1]*aspect[sprite.texture])*.6f);
-        for (const auto& mesh:state.meshes())
-            include(mesh.position,std::max({std::abs(mesh.size[0]),std::abs(mesh.size[1]),std::abs(mesh.size[2])})*
-                effectRenderer_.meshBoundsFactor(mesh.mesh,mesh.centredOnPosition));
+        for (const auto& mesh:state.meshes()) {
+            float meshLo[3],meshHi[3];
+            if(effectRenderer_.meshFrameBounds(mesh,meshLo,meshHi)) {
+                any=true;
+                for(int k=0;k<3;++k){lo[k]=std::min(lo[k],meshLo[k]);hi[k]=std::max(hi[k],meshHi[k]);}
+            }
+        }
         if (effectShowLightVolumes_) for (const auto& light:state.lights()) include(light.position,light.radius);
     };
     if(currentOnly) includeSimulation(effectSimulation_);
