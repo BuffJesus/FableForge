@@ -1682,6 +1682,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("effect_preview_loops=" + std::to_string(effectLoopCount_));
     v.push_back("effect_preview_speed=" + std::to_string(effectSpeedIndex_));
     v.push_back("effect_preview_duration=" + std::to_string(effectDuration_));
+    v.push_back("effect_preview_auto_duration=" + std::to_string(effectAutoDuration_));
+    v.push_back("effect_preview_position=" + std::to_string(effectSimulation_.position()));
     v.push_back("effect_selected=" + effectBrowserSelection_.name);
     v.push_back("effect_id=" + std::to_string(effectBrowserSelection_.id));
     v.push_back("effect_display_name=" + effectBrowserSelection_.displayName);

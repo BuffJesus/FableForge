@@ -593,9 +593,9 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "effect_preview_duration") {
         std::istringstream rs(rest);float seconds=0;rs>>seconds;
-        if(!rs || !std::isfinite(seconds) || seconds<.5f || seconds>300.f)
-            fail("effect_preview_duration: expected 0.5..300 seconds");
-        else {app.effectDuration_=seconds;note("ok   "+line);}
+        if(!rs || !std::isfinite(seconds) || seconds<float(particlepreview::Simulation::TickSeconds) || seconds>300.f)
+            fail("effect_preview_duration: expected 1/30..300 seconds");
+        else {app.effectDuration_=seconds;app.effectAutoDuration_=false;note("ok   "+line);}
         ++pc_;
     }
     else if (cmd == "effect_preview_loop") {

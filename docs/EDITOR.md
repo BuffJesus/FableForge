@@ -1046,7 +1046,13 @@ investigations (texture append resolution, region cap, villagers).
 The **Assets > Effects** preview has Play/Pause, Restart and Step controls.
 The image appears first; controls wrap on narrow windows, with component details
 below them. Click the Background colour swatch to open its colour picker.
-Step advances one 30 Hz tick and pauses playback. Drag the image to orbit and use
+Auto length fits the timeline to supported particle and light lifetimes, so short
+bursts replay without a long empty tail. Continuous effects use a ten-second
+window. Adjust Length to choose your own window, or enable Auto length to fit it
+again. Drag the timeline to scrub immediately; Play at the end replays the effect.
+An empty, finished preview displays a replay hint. Unsupported components can
+make the in-game duration differ.
+Step advances up to one 30 Hz tick and pauses playback. Drag the image to orbit and use
 the wheel to zoom. Use Background to pick any RGB colour, or choose Dark, Grey
 or Light to make subtle effects visible. Forge remembers this preview choice.
 The preview lists unsupported components and texture problems;

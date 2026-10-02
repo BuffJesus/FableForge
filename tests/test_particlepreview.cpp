@@ -62,16 +62,22 @@ int main(int argc,char** argv) {
     a.step(); check(std::abs(a.time()-pausedTime-1./30.)<1e-10,"paused single step");
     a.reset(effect); a.advance(1000); check(std::abs(a.time()-.2)<1e-10,"elapsed clamp six ticks");
     effect=fixture(); effect.sprites[0].emitter.startTime=.2f; effect.sprites[0].perSecond=0;
+    a.reset(effect);
+    check(a.estimatedDuration() && std::abs(*a.estimatedDuration()-1.2)<.04,"finite preview length includes delayed burst and particle tail");
     a.reset(effect); for(int i=0;i<5;++i) a.step(); check(a.particleCount()==0,"delay prevents burst");
     a.step(); a.step(); check(a.particleCount()==2,"delayed burst starts");
     for(int i=0;i<30;++i) a.step(); check(a.particleCount()==0,"particles expire without respawn");
     effect=fixture(); effect.sprites[0].emitter.startCount=0; effect.sprites[0].emitter.useLife=true; effect.sprites[0].emitter.lifeSecs=.1f;
+    a.reset(effect);
+    check(a.estimatedDuration() && *a.estimatedDuration()>=1.1 && *a.estimatedDuration()<1.14,"finite emitter length includes last particles after emission ends");
     a.reset(effect); for(int i=0;i<15;++i) a.step(); check(a.particleCount()==3,"finite emitter stops continuous emission");
     effect=fixture(); effect.sprites[0].update.gravity=1; effect.sprites[0].update.accelerationScale=1; effect.sprites[0].update.acceleration[0]=3;
     a.reset(effect); a.step(); check(a.sprites()[0].position[0]>0 && a.sprites()[0].position[2]<.1f,"acceleration and gravity affect motion");
     effect=fixture(); effect.sprites[0].single=true; effect.sprites[0].render.animationSecs=1;
+    a.reset(effect);check(!a.estimatedDuration(),"persistent single has no finite preview length");
     a.reset(effect); for(int i=0;i<45;++i) a.step(); check(a.particleCount()==1 && std::abs(a.sprites()[0].framePhase-.5f)<1e-5,"persistent single sprite loops");
     effect.sprites[0].update.useSystemLife=true; effect.sprites[0].update.systemLife=.1f;
+    a.reset(effect);check(a.estimatedDuration() && *a.estimatedDuration()<.14,"system lifetime bounds persistent single");
     a.reset(effect); for(int i=0;i<4;++i) a.step(); check(a.particleCount()==0,"single sprite respects system lifetime");
     effect=fixture(); effect.sprites[0].emitter.startCount=100000; effect.sprites[0].perSecond=100000;
     effect.sprites.resize(80,effect.sprites[0]); a.reset(effect);
@@ -226,15 +232,33 @@ int main(int argc,char** argv) {
     check(equal(a.sprites(),b.sprites()),"mesh orientation preserves all existing sprite RNG positions angles and colours");
     const auto orientation=a.meshes()[0];a.reset(effect);for(int i=0;i<80;++i)a.advance(1./120.);
     check(std::abs(a.meshes()[0].orientation[2]-orientation.orientation[2])<1e-6,"mesh orientation split-frame determinism");
+    {
+        auto timing=fixture();
+        a.reset(timing);check(!a.estimatedDuration(),"continuous emission keeps an explicit preview window");
+        timing.sprites[0].emitter.startCount=0;timing.sprites[0].perSecond=0;
+        a.reset(timing);check(a.estimatedDuration()==0,"empty system adds no artificial preview tail");
+        timing.sprites.clear();effects::LightSystem light;light.useLife=true;light.lifeSecs=.2f;light.startTime=.5f;
+        timing.lights.push_back(light);a.reset(timing);
+        check(a.estimatedDuration() && *a.estimatedDuration()>.7 && *a.estimatedDuration()<.8,"light-only preview includes delay and independent timer");
+        timing.lights[0].respawns=true;a.reset(timing);check(!a.estimatedDuration(),"respawning lights keep a preview window");
+        timing.lights[0].respawns=false;timing.lights[0].useTimeline=true;timing.lights[0].timelineSecs=.6f;
+        a.reset(timing);check(!a.estimatedDuration(),"a stalled light timeline must not be treated as a finite end");
+        a.seek(fixture(),.17);check(std::abs(a.position()-.17)<1e-10,"timeline position retains fractional tick on seek");
+    }
     if(argc>1) {
         std::string error;
         const std::filesystem::path install=argv[1];
         check(effects::openBank(install,error),"retail effects bank opens");
-        size_t randomStart=0,randomAxis=0;
+        size_t randomStart=0,randomAxis=0,finiteEffects=0;
         std::string firstStart,firstAxis,singleAxis;
         for(const auto& name:effects::entryNames(install)) {
             const auto retail=effects::byName(install,name);
             if(!retail || !retail->parsedFully) continue;
+            a.reset(*retail);
+            if(const auto duration=a.estimatedDuration();duration && *duration>0 && *duration<4 && !retail->sprites.empty()) {
+                if(finiteEffects<8) std::printf("retail short effect: %s %.6f s\n",name.c_str(),*duration);
+                ++finiteEffects;
+            }
             for(const auto& mesh:retail->meshes) {
                 if(mesh.config.update.randomInitialRotation) {
                     ++randomStart;if(firstStart.empty()) firstStart=name;

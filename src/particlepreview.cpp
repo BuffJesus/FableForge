@@ -365,6 +365,38 @@ void Simulation::rebuildLights() {
     }
 }
 
+std::optional<double> Simulation::estimatedDuration() const {
+    const double forever=std::numeric_limits<double>::infinity();
+    const auto tickEnd=[](double seconds) { return std::ceil(seconds/TickSeconds)*TickSeconds; };
+    double end=0;
+    for(const auto& state:states_) {
+        const auto& s=state.config;const auto& e=s.emitter;const auto& u=s.update;
+        const double systemEnd=u.useSystemLife?tickEnd(std::max(0.f,finite(u.systemLife))):forever;
+        double last=systemEnd;
+        if(!s.single) {
+            const bool burst=e.startCount || e.startCountRandom;
+            const bool emits=bounded(s.perSecond,0,100000)>0 && (!e.useLife || finite(e.lifeSecs)>0);
+            if(!burst && !emits) continue;
+            const double start=std::max(0.f,finite(e.startTime));
+            const double emissionEnd=emits?(e.useLife?start+std::max(0.f,finite(e.lifeSecs)):forever):start;
+            const double life=(!u.useParticleLife && u.present)?3600.:
+                std::max(1.,std::ceil(double(bounded(s.lifeSecs,.033333334f,3600.f))*30.-1e-5))*TickSeconds;
+            last=std::min(systemEnd,tickEnd(emissionEnd)+life);
+        }
+        end=std::max(end,last);
+    }
+    for(const auto& state:lightStates_) {
+        const auto& l=state.config;
+        // A timeline can stop the native light timer while the light remains
+        // alive. Do not mistake that for a finite end, or cut off respawns.
+        if(!l.useLife || l.respawns ||
+           (l.useTimeline && l.timelineSecs<l.startTime+l.lifeSecs+float(TickSeconds))) return std::nullopt;
+        const double ticks=std::nearbyint(double(l.startTime)*30)+std::floor(double(l.lifeSecs)*30)+2;
+        end=std::max(end,ticks*TickSeconds);
+    }
+    return std::isfinite(end)?std::optional<double>(end):std::nullopt;
+}
+
 void Simulation::advance(double seconds) {
     if(!std::isfinite(seconds) || seconds<=0) return;
     accumulator_+=std::min(seconds,.2);

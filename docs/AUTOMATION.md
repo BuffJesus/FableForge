@@ -311,6 +311,12 @@ and mesh links, light inspection and refresh without writing game data.
 Grey and Light preset buttons (`effect_background_color`, `btn_effect_bg_*`);
 state `effect_background` reports the clear RGB values used by the renderer.
 
+Effect timing: `effect_preview_duration <seconds>` sets a manual window from
+1/30 to 300 seconds. `check_effect_auto_duration` restores the estimated window.
+`effect_preview_position` includes the fractional tick; `effect_preview_time`
+reports completed simulation ticks. `tools/test_effect_timing.py --install <root>`
+checks short bursts, continuous effects, end replay and live scrubbing at two sizes.
+
 Dialogue editing: `assets_tab 4`, `dialogue_select <bank 0..3> <Sound ID>` and
 `click button_dialogue_load` open a line. `dialogue_preset <0..4>` selects a
 retail head. Frame widgets include `button_dialogue_insert_frame`,

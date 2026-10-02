@@ -2,6 +2,7 @@
 #include "effects.hpp"
 #include <array>
 #include <random>
+#include <optional>
 
 namespace albion::particlepreview {
 // Full billboard dimensions in world units; the renderer applies frame aspect.
@@ -48,6 +49,10 @@ public:
     void seek(const effects::Effect& effect,double seconds);
     void step();
     double time() const { return double(ticks_) * TickSeconds; }
+    double position() const { return time() + accumulator_; }
+    // Conservative end of supported preview lifetimes, including delayed
+    // emission and particle tails. No value means a persistent/continuous system.
+    std::optional<double> estimatedDuration() const;
     size_t particleCount() const { return liveCount(); }
     size_t supportedSystems() const { return states_.size(); }
     const std::vector<std::string>& warnings() const { return warnings_; }

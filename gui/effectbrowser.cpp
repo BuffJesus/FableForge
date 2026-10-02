@@ -31,6 +31,12 @@ terrainexport::Image thumbnail(const terrainexport::Image& source) {
 }
 }
 
+void App::fitEffectDuration() {
+    const auto duration=effectSimulation_.estimatedDuration();
+    effectDuration_=float(std::clamp(duration.value_or(10.),particlepreview::Simulation::TickSeconds,
+                                    particlepreview::Simulation::MaxSeekSeconds));
+}
+
 void App::advanceEffectPlayback(double seconds) {
     if(!effectPlaying_ || !std::isfinite(seconds) || seconds<=0) return;
     // Limit a stalled frame to 0.2 s of real time, then honour the selected
@@ -38,7 +44,7 @@ void App::advanceEffectPlayback(double seconds) {
     // caps work per call, so split faster playback into short chunks.
     double remaining=std::min(seconds,.2)*effectSpeeds[std::clamp(effectSpeedIndex_,0,3)];
     while(remaining>1e-9) {
-        const double untilEnd=double(effectDuration_)-effectSimulation_.time();
+        const double untilEnd=double(effectDuration_)-effectSimulation_.position();
         if(untilEnd<=1e-9) {
             if(!effectLoop_) { effectPlaying_=false; return; }
             effectSimulation_.reset(effectBrowserSelection_);
@@ -48,7 +54,7 @@ void App::advanceEffectPlayback(double seconds) {
         const double step=std::min({remaining,untilEnd,.1});
         effectSimulation_.advance(step);
         remaining-=step;
-        if(effectSimulation_.time()+1e-9>=double(effectDuration_)) {
+        if(effectSimulation_.position()+1e-9>=double(effectDuration_)) {
             if(!effectLoop_) { effectPlaying_=false; return; }
             effectSimulation_.reset(effectBrowserSelection_);
             ++effectLoopCount_;
@@ -129,6 +135,7 @@ bool App::selectEffect(const std::string& nameOrId) {
         effectBrowserSelection_=*effect; effectBrowserReady_=true; effectBrowserError_.clear();
         effectBrowserThumbnails_.assign(effect->sprites.size(),{});
         effectSimulation_.reset(*effect); effectLoopCount_=0;
+        effectAutoDuration_=true;fitEffectDuration();
         effectRenderer_.clearTextures(); effectRenderer_.clearMeshes(); effectTexturesReady_=false; effectMeshesReady_=false;
         effectTextureWarnings_.clear();
         frameEffectPreview();
@@ -256,6 +263,13 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
             ImGui::InvisibleButton("##effectpreviewinput",previewSize);
             ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
             auto_.registerWidget("effect_preview_image");
+            if(effectSimulation_.sprites().empty() && effectSimulation_.meshes().empty() &&
+               (!effectShowLightVolumes_ || effectSimulation_.lights().empty())) {
+                const bool ended=!effectPlaying_ && effectSimulation_.position()+1e-6>=effectDuration_;
+                ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),
+                    ImVec2(imageOrigin.x+S(12),imageOrigin.y+previewSize.y*.5f),theme::col(theme::Muted),
+                    ended?"Finished. Press Play to replay.":"No particles at this time.",nullptr,previewSize.x-S(24));
+            }
             if (ImGui::IsItemHovered()) {
                 const auto& io=ImGui::GetIO();
                 if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) effectCamera_.orbit(-io.MouseDelta.x*.008f,-io.MouseDelta.y*.008f);
@@ -275,11 +289,20 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     const auto buttonWidth = [&](const char* text) {
         return ImGui::CalcTextSize(text).x + ImGui::GetStyle().FramePadding.x * 2;
     };
-    if (ImGui::Button(effectPlaying_?"Pause":"Play")) effectPlaying_=!effectPlaying_;
+    if (ImGui::Button(effectPlaying_?"Pause":"Play")) {
+        if(!effectPlaying_ && effectSimulation_.position()+1e-6>=effectDuration_)
+            effectSimulation_.reset(effect);
+        effectPlaying_=!effectPlaying_;
+    }
     auto_.registerWidget("btn_effect_play"); nextControl(buttonWidth("Restart"));
     if (ImGui::Button("Restart")) {effectSimulation_.reset(effect);effectLoopCount_=0;}
     auto_.registerWidget("btn_effect_restart"); nextControl(buttonWidth("Step"));
-    if (ImGui::Button("Step")) { effectPlaying_=false; effectSimulation_.step(); }
+    if (ImGui::Button("Step")) {
+        effectPlaying_=false;
+        if(effectSimulation_.position()<effectDuration_)
+            effectSimulation_.advance(std::min(particlepreview::Simulation::TickSeconds,
+                double(effectDuration_)-effectSimulation_.position()));
+    }
     auto_.registerWidget("btn_effect_step"); nextControl(buttonWidth("Frame effect"));
     if (ImGui::Button("Frame effect")) frameEffectPreview();
     auto_.registerWidget("btn_effect_frame");
@@ -288,12 +311,20 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     auto_.registerWidget("btn_effect_frame_current");
     ImGui::Checkbox("Loop##effect",&effectLoop_);
     auto_.registerWidget("check_effect_loop");
-    nextControl(S(80) + ImGui::CalcTextSize("Duration").x + ImGui::GetStyle().ItemInnerSpacing.x);
+    nextControl(ImGui::GetFrameHeight()+ImGui::CalcTextSize("Auto length").x+ImGui::GetStyle().ItemInnerSpacing.x);
+    if(ImGui::Checkbox("Auto length##effect",&effectAutoDuration_) && effectAutoDuration_) {
+        fitEffectDuration();
+        if(effectSimulation_.position()>effectDuration_) {effectPlaying_=false;effectSimulation_.seek(effect,effectDuration_);}
+    }
+    auto_.registerWidget("check_effect_auto_duration");
+    if(ImGui::IsItemHovered()) ImGui::SetTooltip("Fit the preview to supported emitter, particle and light lifetimes.\nContinuous effects use a 10-second preview window. Unsupported behavior may differ in game.");
+    nextControl(S(80) + ImGui::CalcTextSize("Length").x + ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(S(80));
-    const bool durationChanged=ImGui::DragFloat("Duration##effect",&effectDuration_,
-                                                .1f,.5f,300.f,"%.1f s");
-    effectDuration_=std::clamp(effectDuration_,.5f,300.f);
-    if(durationChanged && effectSimulation_.time()>effectDuration_) {
+    const bool durationChanged=ImGui::DragFloat("Length##effect",&effectDuration_,
+                                                .05f,float(particlepreview::Simulation::TickSeconds),300.f,"%.2f s");
+    effectDuration_=std::clamp(effectDuration_,float(particlepreview::Simulation::TickSeconds),300.f);
+    if(durationChanged) effectAutoDuration_=false;
+    if(durationChanged && effectSimulation_.position()>effectDuration_) {
         effectPlaying_=false;
         effectSimulation_.seek(effect,effectDuration_);
     }
@@ -311,13 +342,14 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         const float fraction=std::clamp((ImGui::GetMousePos().x-timelineMin.x)/timelineSize.x,0.0f,1.0f);
         ImGui::SetTooltip("Seek to %.2f s",fraction*effectDuration_);
     }
-    if(ImGui::IsItemDeactivated()) {
+    if((ImGui::IsItemActive() && ImGui::IsMouseDown(0)) || ImGui::IsItemDeactivated()) {
         const float fraction=std::clamp((ImGui::GetMousePos().x-timelineMin.x)/timelineSize.x,0.0f,1.0f);
         effectPlaying_=false;
-        effectSimulation_.seek(effect,double(fraction*effectDuration_));
+        const double target=double(fraction*effectDuration_);
+        if(std::abs(effectSimulation_.position()-target)>1e-6) effectSimulation_.seek(effect,target);
     }
     const ImVec2 timelineMax(timelineMin.x+timelineSize.x,timelineMin.y+timelineSize.y);
-    const float progress=std::clamp(float(effectSimulation_.time())/effectDuration_,0.0f,1.0f);
+    const float progress=std::clamp(float(effectSimulation_.position())/effectDuration_,0.0f,1.0f);
     auto* timelineDraw=ImGui::GetWindowDrawList();
     timelineDraw->AddRectFilled(timelineMin,timelineMax,IM_COL32(34,37,50,255),S(3));
     timelineDraw->AddRectFilled(timelineMin,ImVec2(timelineMin.x+timelineSize.x*progress,timelineMax.y),
@@ -350,8 +382,8 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         auto_.registerWidget(preset.widget);
         if (i+1<3) ImGui::SameLine();
     }
-    ImGui::TextWrapped("%.2f / %.1f s | %zu particles | %zu previewed systems",
-        effectSimulation_.time(),effectDuration_,effectSimulation_.particleCount(),
+    ImGui::TextWrapped("%.2f / %.2f s | %zu particles | %zu previewed systems",
+        effectSimulation_.position(),effectDuration_,effectSimulation_.particleCount(),
         effectSimulation_.supportedSystems());
     ImGui::TextWrapped("%s  |  id %u  |  %d systems",effect.name.c_str(),effect.id,effect.systems);
     ImGui::TextWrapped("%zu sprite systems  |  %zu mesh systems  |  %zu lights",effect.sprites.size(),effect.meshes.size(),effect.lights.size());

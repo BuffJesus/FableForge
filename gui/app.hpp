@@ -858,10 +858,12 @@ public:
     size_t effectLightVolumesDrawn_=0;
     bool effectPlaying_ = true, effectTexturesReady_ = false, effectRendererReady_ = false, effectMeshesReady_ = false;
     bool effectLoop_=true;
+    bool effectAutoDuration_=true;
     float effectDuration_=10.0f;
     int effectSpeedIndex_=2;
     size_t effectLoopCount_=0;
     void advanceEffectPlayback(double seconds);
+    void fitEffectDuration();
     std::vector<std::string> effectTextureWarnings_;
     void refreshEffectBrowser();
     bool selectEffect(const std::string& nameOrId);
