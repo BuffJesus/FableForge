@@ -1809,6 +1809,11 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("foliage_preview_reseated=" + std::to_string(foliagePreviewReseated_));
     v.push_back("foliage_preview_reseated_any=" + std::to_string(foliagePreviewReseated_ > 0));
     v.push_back("budget_open=" + std::to_string(budgetOpen_));
+    v.push_back("budget_scope=" + std::to_string(budgetScope_));
+    v.push_back("budget_picking=" + std::to_string(budgetPicking_));
+    v.push_back("budget_areas=" + std::to_string(budgetAreas_.size()));
+    v.push_back("budget_area_drag=" + std::to_string(budgetAreaDrag_));
+    v.push_back("budget_things=" + std::to_string(budgetReport_.things));
     v.push_back("selection_inspector_def=" + (selectionInspectorOpen_ && documentLoaded() && selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount()
         ? doc_.summary(size_t(selectedThing_)).definition : std::string{}));
     v.push_back("doc_things=" + std::to_string(documentLoaded() ? doc_.thingCount() : 0));
@@ -2359,7 +2364,7 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
     const float panK = camera_.distance / std::max(size.y, 1.0f) * 1.6f;
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-        contextClickArmed_ = editMode_ && documentLoaded() && viewportHovered_;
+        contextClickArmed_ = editMode_ && documentLoaded() && viewportHovered_ && !budgetPicking_;
         contextClickMoved_ = false;
         contextClickPos_ = io.MousePos;
     }
@@ -2389,6 +2394,12 @@ void App::handleViewportInput(const ImVec2& origin, const ImVec2& size) {
         const float boost = io.KeyShift ? 3.0f : 1.0f;
         if (fwd || strafe || rise) camera_.fly(fwd * boost, strafe * boost, rise * boost, std::min(io.DeltaTime, 0.1f));
     } else {
+        if (editMode_ && budgetOpen_ && budgetScope_ == 3 && budgetPicking_ && !io.KeyAlt) {
+            cancelCarry(); clickArmed_ = false;
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle,0.0f)) camera_.pan(-dx*panK,dy*panK);
+            if (io.MouseWheel != 0 && viewportHovered_) camera_.dolly(io.MouseWheel);
+            return;
+        }
         if (carryCursorMode_) {
             if (viewportHovered_ && size.x > 0 && size.y > 0) {
                 updateCarry((io.MousePos.x - origin.x) / size.x, (io.MousePos.y - origin.y) / size.y);
@@ -2519,14 +2530,17 @@ void App::drawViewport(float width) {
             if (ImGui::GetIO().MousePos.y >= controlsTop) viewportHovered_ = false;
         }
         refreshThingGlyphs(origin, size);
-        if (editMode_ && selectedThing_ >= 0 && size.x >= theme::S(280) &&
+        if (editMode_ && !budgetPicking_ && selectedThing_ >= 0 && size.x >= theme::S(280) &&
             ImGui::IsMouseHoveringRect(ImVec2(origin.x+theme::S(12),origin.y+theme::S(100)),
                                       ImVec2(origin.x+theme::S(276),origin.y+theme::S(140))))
             viewportHovered_ = false;
+        if (budgetOpen_ && budgetScope_ == 3 && budgetPicking_ && ImGui::IsMouseHoveringRect(ImVec2(origin.x+theme::S(12),origin.y+theme::S(70)),ImVec2(origin.x+std::min(theme::S(332),size.x-theme::S(12)),origin.y+theme::S(124)))) viewportHovered_=false;
+        budgetAreaInput(origin, size);
         handleViewportInput(origin, size);
         terrainInput(origin, size);
         drawGizmo(origin, size);
         drawBrushCursor(origin, size);
+        drawBudgetOverlay(origin, size);
         if (editMode_ && gizmoOp_ == 4 && terrainMode_ == 14 && !clipDrag_ &&
             clipRectValid_ && clipRectMap_ == doc_.mapName())
             drawGroundRect(origin, size, float(clipRect_[0]), float(clipRect_[1]),

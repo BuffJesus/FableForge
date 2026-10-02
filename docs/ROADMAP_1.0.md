@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Budget > Areas now captures dragged boxes and clicked objects, with Shift
+accumulation, visible picks, Clear and Escape. Normal/compact input and overlay
+checks pass, alongside existing Budget/controls/selection suites. Native
+half-open bounds and captured UID membership are recorded in HANDOFF_WORLD_UI;
+the report retains its existing bank-cost estimates.
+
 The full draft/survey checkpoint at source `3351548` passes 100 integration
 checks with zero failures or skipped checks, plus focused stock/loose async and
 terrain-only Save-on-close checks. Evidence and limits are in HANDOFF_WORLD_UI.

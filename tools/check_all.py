@@ -103,6 +103,8 @@ def main():
                   [sys.executable, "tools/test_ground_stamp.py", "--install", install_root], capture_output=True)
         ok &= run("Environment strict cell pen, cursor, clear, sample and undo at both sizes",
                   [sys.executable, "tools/test_environment_cursor.py", "--install", install_root], capture_output=True)
+        ok &= run("Budget area boundaries, captured objects and normal/compact input",
+                  [sys.executable, "tools/test_budget_areas.py", "--install", install_root], capture_output=True)
         ok &= run("Joint terrain drafts, reopen, bake baseline and Restore on stock/loose copies",
                   [sys.executable, "tools/test_terrain_drafts.py", "--root", install_root], capture_output=True)
         ok &= run("Walkable/Camera rounded survey pens, cursors and exact undo",

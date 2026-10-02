@@ -172,7 +172,13 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "mouse_move") {   // mouse_move <x> <y>  (window pixels) | mouse_move viewport
         ImGuiIO& io = ImGui::GetIO();
-        if (rest=="selected_pivot") {
+        if (rest.rfind("ground ",0)==0) {
+            float x=0,y=0,u=0,v=0; std::istringstream(rest.substr(7)) >> x >> y;
+            const auto height=app.doc_.terrainHeight(x,y);
+            const float point[3]={x,height.value_or(0),-y};
+            if (!height || !app.renderer_.projectVisible(point,u,v)) { fail("mouse_move: ground point is off screen"); ++pc_; return true; }
+            setVirtualMouse(app.viewportOrigin_.x+u*app.viewportSize_.x,app.viewportOrigin_.y+v*app.viewportSize_.y);
+        } else if (rest=="selected_pivot") {
             float x=0,y=0;
             if (!app.selectedPivotScreen(x,y)) { fail("mouse_move: selected pivot is off screen"); ++pc_; return true; }
             setVirtualMouse(x,y);
@@ -465,7 +471,7 @@ bool Automation::tick(App& app) {
         else if (key == "outdir") { s.outDir = val; std::snprintf(app.outDirBuf_, sizeof app.outDirBuf_, "%s", val.c_str()); }
         else if (key == "saveroot") app.setSaveRoot(val);
         else if (key == "unsaved_prompt") app.promptInAuto_ = val == "1";
-        else if (key == "budget_scope") { app.budgetScope_ = std::clamp(std::atoi(val.c_str()), 0, 2); app.budgetDirty_ = true; }
+        else if (key == "budget_scope") { app.budgetScope_ = std::clamp(std::atoi(val.c_str()), 0, 3); app.budgetDirty_ = true; }
         else if (key == "budget_include") { app.budgetInclude_ = unsigned(std::strtoul(val.c_str(), nullptr, 0)); app.budgetDirty_ = true; }
         else if (key == "budget_copies") { app.budgetAllDuplicates_ = val == "1"; app.budgetDirty_ = true; }
         else if (key == "budget_view") app.budgetView_ = std::clamp(std::atoi(val.c_str()), 0, 2);
@@ -712,6 +718,17 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "brush_save") { if (!app.saveBrush(rest)) fail("brush_save failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "brush_load") { if (!app.loadBrush(rest)) fail("brush_load failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "budget_area") {
+        float x0=0,y0=0,x1=0,y1=0; std::istringstream input(rest);
+        if (!(input>>x0>>y0>>x1>>y1) || !app.addBudgetArea(x0,y0,x1,y1)) fail("budget_area: invalid box");
+        else note("ok   "+line); ++pc_;
+    }
+    else if (cmd == "budget_clear_areas") { app.clearBudgetAreas(); note("ok   "+line); ++pc_; }
+    else if (cmd == "assert_budget_thing") {
+        std::string name; int want=0; std::istringstream(rest)>>name>>want; bool included=false;
+        for (size_t i=0;i<app.doc_.thingCount();++i) if (app.doc_.summary(i).scriptName==name) { included=app.budgetThings_.contains(app.doc_.uidOf(i)); break; }
+        if (included!=(want!=0)) fail("assert_budget_thing "+rest); else note("ok   "+line); ++pc_;
+    }
     else if (cmd == "budget_open") { app.setBudgetOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "budget_run") {   // budget_run [min things]: survey with the window's options, log the totals
         app.runBudgetSurvey();

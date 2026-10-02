@@ -702,7 +702,7 @@ public:
     size_t wholeMapRaise(float d, bool moveThings);
     size_t wholeMapScale(float pct);
     size_t wholeMapSet(float v);
-    void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; }
+    void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; if (!on) budgetAreaDrag_ = budgetPicking_ = false; }
     void runBudgetSurvey();   // the budget survey window's numbers for the current options
     const forge::budget::Report& budgetReport() const { return budgetReport_; }
     bool fitBusy() const { return fitFuture_.valid(); }
@@ -717,7 +717,16 @@ private:
     std::vector<LocalDetailItem> localDetail_;   // the open map's baked plants, kept from the foliage load
     bool budgetOpen_ = false;
     bool budgetDirty_ = false;       // options changed: re-run next frame
-    int budgetScope_ = 0;            // 0 whole map, 1 the selection, 2 around the view centre
+    int budgetScope_ = 0;            // 0 map, 1 selection, 2 view centre, 3 captured areas
+    std::vector<std::array<float,4>> budgetAreas_;
+    std::set<uint64_t> budgetThings_;
+    bool budgetAreaDrag_ = false, budgetPicking_ = false;
+    uint64_t budgetAreaPressUid_ = 0, budgetRevision_ = ~0ull;
+    std::array<float,2> budgetAreaStart_{}, budgetAreaEnd_{};
+    void clearBudgetAreas();
+    bool addBudgetArea(float x0, float y0, float x1, float y1);
+    void budgetAreaInput(const ImVec2& origin, const ImVec2& size);
+    void drawBudgetOverlay(const ImVec2& origin, const ImVec2& size);
     float budgetRadius_ = 20.0f;
     unsigned budgetInclude_ = forge::budget::kAll;
     bool budgetAllDuplicates_ = false;

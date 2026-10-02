@@ -56,6 +56,7 @@ float yawDegrees(const editor::Frame& f) {
 void App::openDocument() {
     if (modFilesBusy()) return;
     cancelCarry();
+    clearBudgetAreas(); budgetHasReport_ = budgetPicking_ = false;
     docLoadedFor_.clear();
     thingGlyphs_.clear();
     selectedThing_ = -1; selectedUid_ = 0;
@@ -1301,7 +1302,7 @@ void App::drawSelectionActions(const ImVec2& origin, const ImVec2& size) {
     selectionPopupOpen_ = false;
     selectionHeightPopupOpen_=false;
     ownedDeletePopupOpen_=false;
-    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { selectionHeightRequested_=false; return; }
+    if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_ || budgetPicking_) { selectionHeightRequested_=false; return; }
     const bool selected = selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount();
     if (selected && size.x >= S(140) && size.y >= S(220)) {
         const bool compact = size.x < S(280);
@@ -2790,7 +2791,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     brushCursorVertices_ = 0;
     brushCursorSoundCells_ = 0;
     brushCursorEnvironmentCells_ = 0;
-    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) {
+    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain() || (budgetOpen_ && budgetScope_ == 3 && budgetPicking_)) {
         if (doc_.strokeActive()) doc_.endStroke();
         keyStroke_ = false;
         return;
@@ -3794,7 +3795,7 @@ void App::editorShortcuts() {
 }
 
 void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
-    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
+    if (!editMode_ || !documentLoaded() || selectedThing_ < 0 || gizmoOp_ == 0 || gizmoOp_ == 4 || (budgetOpen_ && budgetScope_ == 3 && budgetPicking_)) { gizmoWasUsing_ = false; return; }   // 4 = the terrain tool: no gizmo
     // ImGuizmo's viewport-rectangle fallback can see clicks behind a modal.
     // Do not start a drag through a popup; let an existing drag finish normally.
     if (!gizmoWasUsing_ && ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) { ImGuizmo::Enable(false); return; }
@@ -5698,11 +5699,113 @@ void App::drawFitWindow() {
     close();
 }
 
+namespace {
+bool inBudgetArea(const std::array<float,4>& box, float x, float y) {
+    return x >= box[0] && x < box[2] && y >= box[1] && y < box[3];
+}
+}
+
+void App::clearBudgetAreas() {
+    budgetAreas_.clear(); budgetThings_.clear();
+    budgetAreaDrag_ = false; budgetAreaPressUid_ = 0;
+    budgetDirty_ = true;
+}
+
+bool App::addBudgetArea(float x0, float y0, float x1, float y1) {
+    if (!documentLoaded() || !std::isfinite(x0) || !std::isfinite(y0) ||
+        !std::isfinite(x1) || !std::isfinite(y1)) return false;
+    const std::array<float,4> box{std::min(x0,x1),std::min(y0,y1),std::max(x0,x1),std::max(y0,y1)};
+    budgetAreas_.push_back(box);
+    for (size_t i=0;i<doc_.thingCount();++i) {
+        editor::Frame f;
+        if (doc_.frameOf(i,f) && inBudgetArea(box,f.pos[0],f.pos[1]) && doc_.uidOf(i)) budgetThings_.insert(doc_.uidOf(i));
+    }
+    budgetDirty_ = true;
+    return true;
+}
+
+void App::budgetAreaInput(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !budgetOpen_ || budgetScope_ != 3 || !documentLoaded() || size.x <= 0 || size.y <= 0) {
+        budgetPicking_=false; budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    if (!budgetPicking_ || ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)) {
+        budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    auto& io=ImGui::GetIO();
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        clearBudgetAreas(); budgetPicking_=false; return;
+    }
+    if (io.KeyAlt || ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+        ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+        budgetAreaDrag_=false; budgetAreaPressUid_=0; return;
+    }
+    const float u=(io.MousePos.x-origin.x)/size.x, v=(io.MousePos.y-origin.y)/size.y;
+    float point[3];
+    const bool hit=viewportHovered_ && groundUnderCursor(u,v,point);
+    auto uidAtPointer=[&]() -> uint64_t {
+        if (thingsStale()) return 0;
+        float rayOrigin[3],direction[3],distance;
+        renderer_.screenRay(u,v,rayOrigin,direction);
+        const int instance=renderer_.pick(rayOrigin,direction,distance);
+        const int glyph=glyphThingAt(io.MousePos.x,io.MousePos.y);
+        const int thing=glyph>=0 ? glyph : instance<0 ? -1 : renderer_.instance(size_t(instance)).thing;
+        return thing>=0 && size_t(thing)<doc_.thingCount() ? doc_.uidOf(size_t(thing)) : 0;
+    };
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hit) {
+        cancelCarry(); clickArmed_=false;
+        if (!io.KeyShift) clearBudgetAreas();
+        budgetAreaStart_={point[0],point[1]}; budgetAreaEnd_=budgetAreaStart_;
+        budgetAreaPressUid_=uidAtPointer(); budgetAreaDrag_=true;
+    }
+    if (!budgetAreaDrag_) return;
+    if (hit) budgetAreaEnd_={point[0],point[1]};
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (hit) {
+            addBudgetArea(budgetAreaStart_[0],budgetAreaStart_[1],budgetAreaEnd_[0],budgetAreaEnd_[1]);
+            if (budgetAreaPressUid_ && uidAtPointer()==budgetAreaPressUid_) budgetThings_.insert(budgetAreaPressUid_);
+            budgetDirty_=true;
+        }
+        budgetAreaDrag_=false; budgetAreaPressUid_=0;
+    }
+}
+
+void App::drawBudgetOverlay(const ImVec2& origin, const ImVec2& size) {
+    if (!editMode_ || !budgetOpen_ || budgetScope_!=3 || !documentLoaded()) return;
+    const ImU32 colour=IM_COL32(245,195,90,230);
+    for (const auto& box:budgetAreas_) drawGroundRect(origin,size,box[0],box[1],box[2],box[3],colour);
+    if (budgetAreaDrag_) drawGroundRect(origin,size,budgetAreaStart_[0],budgetAreaStart_[1],budgetAreaEnd_[0],budgetAreaEnd_[1],IM_COL32(255,255,255,230));
+    auto* dl=ImGui::GetWindowDrawList();
+    if (budgetPicking_) {
+        const auto cursor=ImGui::GetCursorScreenPos();
+        const ImVec2 top(origin.x+theme::S(12),origin.y+theme::S(70));
+        const float width=std::min(theme::S(320),size.x-theme::S(24));
+        dl->AddRectFilled(top,ImVec2(top.x+width,top.y+theme::S(54)),IM_COL32(18,23,34,225),theme::S(6));
+        ImGui::SetCursorScreenPos(ImVec2(top.x+theme::S(6),top.y+theme::S(4)));
+        ImGui::PushFont(fontSmall_);
+        ImGui::TextColored(theme::vec(theme::Text),"%s",width < theme::S(240) ? "Drag/click; Shift adds" : "Drag or click; Shift adds more");
+        const float buttonWidth=std::min(theme::S(70),(width-theme::S(18))/2);
+        ImGui::SetCursorScreenPos(ImVec2(top.x+theme::S(6),top.y+theme::S(23)));
+        if (theme::ghostButton("Done",ImVec2(buttonWidth,theme::S(26)))) { budgetPicking_=false; budgetAreaDrag_=false; }
+        auto_.registerWidget("btn_budget_pick_done");
+        ImGui::SameLine();
+        if (theme::ghostButton("Clear",ImVec2(buttonWidth,theme::S(26)))) clearBudgetAreas();
+        auto_.registerWidget("btn_budget_pick_clear");
+        ImGui::PopFont();
+        ImGui::SetCursorScreenPos(cursor);
+    }
+    for (uint64_t uid:budgetThings_) {
+        const auto index=doc_.indexOfUid(uid); editor::Frame f;
+        if (!index || !doc_.frameOf(*index,f)) continue;
+        const float point[3]={f.pos[0],f.pos[2]+.15f,-f.pos[1]}; float u,v;
+        if (renderer_.projectVisible(point,u,v)) dl->AddCircle(ImVec2(origin.x+u*size.x,origin.y+v*size.y),theme::S(8),colour,16,theme::S(2));
+    }
+}
+
 // ------------------------------------------------------------ budget survey
 // The vanilla Surveys > Engine tab (inventory 11b; forge/budget.hpp has its rules):
 // things, triangles, vertices and texture memory for an area. Vanilla surveys a
-// dragged box or clicked things; here the area is the whole map, the selection, or a
-// radius around where the camera looks.
+// dragged box or clicked things; Forge also offers whole-map, selected and
+// view-radius scopes. Area picks retain UIDs while plant costs use the boxes.
 
 void App::drawBudgetCard(float pad, float inner, float cardInner) {
     using theme::S;
@@ -5718,6 +5821,7 @@ void App::runBudgetSurvey() {
     namespace bg = forge::budget;
     budgetDirty_ = false;
     if (!documentLoaded()) return;
+    budgetRevision_ = doc_.revision();
     float focus[3]; camera_.focus(focus);
     const float cx = focus[0], cy = -focus[2];
     std::set<int> sel;
@@ -5727,6 +5831,10 @@ void App::runBudgetSurvey() {
     auto inScope = [&](float x, float y, int thing) {
         if (budgetScope_ == 1) return thing >= 0 && sel.count(thing) > 0;
         if (budgetScope_ == 2) return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r2;
+        if (budgetScope_ == 3) {
+            if (thing >= 0) return budgetThings_.contains(doc_.uidOf(size_t(thing)));
+            return std::any_of(budgetAreas_.begin(),budgetAreas_.end(),[&](const auto& box) { return inBudgetArea(box,x,y); });
+        }
         return true;
     };
     std::vector<bg::Item> items;
@@ -5791,6 +5899,7 @@ void App::runBudgetSurvey() {
 void App::drawBudgetWindow() {
     using theme::S;
     namespace bg = forge::budget;
+    if (budgetOpen_ && budgetScope_ == 3 && budgetPicking_) return;
     const std::string sub = "Level / " + doc_.mapName() + " - Survey things, geometry and texture memory in this area.";
     if (!beginToolWindow("##budgetwin", "Budget survey",
                          sub.c_str(),
@@ -5799,8 +5908,17 @@ void App::drawBudgetWindow() {
     bool changed = false;
 
     theme::label("Area");
-    changed |= theme::segmented("##budget_scope", budgetScope_, {"Whole map", "Selected", "Around the view"}, inner);
+    changed |= theme::segmented("##budget_scope", budgetScope_, {"Whole map", "Selected", "Around the view", "Areas"}, inner);
     auto_.registerWidget("seg_budget_scope");
+    if (budgetScope_ == 3) {
+        if (theme::ghostButton("Pick areas in view",ImVec2(inner,S(28)))) { budgetPicking_=true; cancelCarry(); }
+        auto_.registerWidget("btn_budget_pick");
+        theme::hint("Drag on the ground or click a thing. Shift keeps earlier picks. Esc clears the survey.");
+        if (theme::ghostButton("Clear areas", ImVec2(S(120),S(26)))) clearBudgetAreas();
+        auto_.registerWidget("btn_budget_clear_areas");
+        ImGui::SameLine();
+        ImGui::TextColored(theme::vec(theme::Muted),"%zu area(s)",budgetAreas_.size());
+    }
     if (budgetScope_ == 1 && selectedThing_ < 0) theme::hint("Select things in the view (Ctrl+click adds more).");
     if (budgetScope_ == 2) {
         ImGui::SetNextItemWidth(inner - S(96));
@@ -5829,7 +5947,7 @@ void App::drawBudgetWindow() {
     auto_.registerWidget("toggle_budget_copies");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: a model used many times counts once (it is loaded once).\nOn: every copy counts (what gets drawn). Vanilla: 'Count all duplications'.");
 
-    if (changed || budgetDirty_ || !budgetHasReport_) runBudgetSurvey();
+    if (changed || budgetDirty_ || !budgetHasReport_ || budgetRevision_ != doc_.revision()) runBudgetSurvey();
     const bg::Report& r = budgetReport_;
 
     // the four numbers
@@ -5918,13 +6036,13 @@ void App::drawBudgetWindow() {
         std::error_code ec;
         const fs::path dir = settings_.outDir;
         fs::create_directories(dir, ec);
-        const char* scopeName[] = {"whole map", "selection", "around the view"};
+        const char* scopeName[] = {"whole map", "selection", "around the view", "areas"};
         const fs::path file = dir / (doc_.mapName() + "_budget.txt");
         std::ofstream out(file, std::ios::binary);
         bg::Options o;
         o.include = budgetInclude_;
         o.countAllDuplications = budgetAllDuplicates_;
-        out << bg::toText(r, doc_.mapName() + " (" + scopeName[std::clamp(budgetScope_, 0, 2)] + ")", o);
+        out << bg::toText(r, doc_.mapName() + " (" + scopeName[std::clamp(budgetScope_, 0, 3)] + ")", o);
         const bool ok = bool(out);
         budgetSaved_ = ok ? file.string() : std::string();
         pushLog(ok ? "budget report: " + file.string() : "budget report: cannot write " + file.string(), ok ? 3 : 2);

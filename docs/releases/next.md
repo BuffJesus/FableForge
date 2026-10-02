@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Budget areas.** Drag boxes or click objects to survey their cost. Shift keeps
+  earlier picks; highlighted areas and objects show what is included. Done
+  returns to the report, and Clear or Escape starts a fresh survey.
+
 - **Terrain drafts.** Save draft, Ctrl+S and F6 now save terrain alongside objects;
   F7 saves and reloads. Terrain uses a separate file ignored by the game, and
   reopening restores it. Write terrain remains available to apply it later.

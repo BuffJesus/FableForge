@@ -1028,19 +1028,23 @@ Forge's existing duplicate-slot weight merge remains unchanged.
 
 Coordinate the family rule with the water lane, since it only affects depth themes. Effort S (about half a day). Value med.
 
-#### Budget survey cannot survey a dragged box or clicked things
-*weakness, effort M, value low*
+#### Budget area survey
+*implemented 2026-10-02; current-map bank estimates*
 
-**Vanilla:** Survey > Engine: OnEngineSurveyLMBPressed/Held/Released 0x0204f4c0..0x0204f5a0. Dragging with LMB adds a box (AddAreaToEngineSurvey 0x02051310), and the things inside join the survey. Clicking a thing adds it (AddThingToEngineSurvey 0x02051180). Shift keeps the earlier picks, several areas can accumulate, and the picks are drawn (DrawEngineSurveySelections 0x0204e220).
+Budget > Areas offers Pick areas in view, drag boxes, Shift accumulation,
+clicked-object capture, Done and Clear. Escape clears the survey. Boxes are
+minimum-inclusive/maximum-exclusive; object UIDs are captured when a box is
+added, rather than retested against old boxes after movement. Press/release
+matching adds a clicked object independently of rectangle size. Selection,
+gizmos and terrain painting are suppressed during picking; camera navigation
+remains available. Map changes clear picks, and edits refresh the report.
 
-**Fix:** Port OnEngineSurveyLMB* (0x0204f4c0..0x0204f5a0) and AddAreaToEngineSurvey (0x02051310) as a fourth scope, "Area". Effort S-M, value low-med.
-1) gui/app.hpp near line 562: add `std::vector<std::array<float,4>> budgetAreas_; bool budgetAreaDrag_ = false; float budgetAreaStart_[2]{};`. Change the comment to mark scope 3 as "areas". In gui/automation.cpp:269, raise the clamp to 0..3. Add automation keys `budget_area=x0,y0,x1,y1` (appends) and `budget_clear_areas`, and document them in docs/AUTOMATION.md.
-2) Input: add `App::budgetAreaInput(origin,size)` and call it from app.cpp:1817, next to terrainInput. It runs only when `budgetOpen_ && budgetScope_==3 && editMode_ && viewportHovered_`, and it runs before handleViewportInput so that LMB does not also select or move gizmos. Alternatively, handleViewportInput can early-out on LMB in that state. Ray the ground the same way terrainInput does (renderer_.screenRay + rayTerrain, editor.cpp:1595-1600), keeping a local hit in map coordinates (x, -z).
-   - On press, as in vanilla OnEngineSurveyLMBPressed with its shift flag: if Shift is not held, clear budgetAreas_. Then set budgetAreaDrag_ and the start point.
-   - On release: normalise the rectangle (min/max) and push it. If it is degenerate (below about 0.5 units), treat the release as a click. In that case pick the thing under the cursor with the existing viewport pick and add it to a `std::set<int> budgetThings_`. This mirrors AddThingToEngineSurvey, which Shift also accumulates. Then set budgetDirty_.
-3) runBudgetSurvey (editor.cpp:3926): in inScope, when budgetScope_==3, return true if thing>=0 is in budgetThings_ or if (x,y) is inside any budgetAreas_ box. Local detail (editor.cpp:3943) stays included for scope 3 and is point-tested against the boxes. Vanilla uses the renderer's area stats here, so point-in-box is the bank-data equivalent.
-4) Drawing: add `App::drawBudgetOverlay(origin,size)` and call it next to drawBrushCursor (app.cpp:1819). drawBrushCursor early-outs outside terrain mode, so the overlay needs its own call. For scope 3, outline every box with drawGroundRect (editor.cpp:1791) and draw the live drag box. For scope 2, drape a 48-segment circle of radius budgetRadius_ around camera_.focus, reusing the loop from editor.cpp:1813-1825. Pick one budget colour. This stands in for DrawEngineSurveySelections 0x0204e220.
-5) Window (editor.cpp:4000): make the segment list {"Whole map","Selected","Around the view","Areas"}. For Areas, add the hint "Drag on the ground to add a box; Shift+drag keeps earlier boxes; click a thing to add it", plus a "Clear areas" ghost button that clears both containers and sets budgetDirty_. Update scopeName[] at editor.cpp:4125 and change its clamp to 0..3.
+Native Press/Held/Release 0204f4c0/0204f570/0204f5a0, AddThing 02051180,
+AddArea 02051310 and ContainsPoint 01f95410 establish these rules; ProcessInput
+0295c650 establishes Shift/Escape behavior. Current-map local detail uses the
+union of boxes. Existing LOD0/texture bank estimates remain; native renderer
+statistics and cross-map survey are separate work. See HANDOFF_WORLD_UI for
+export provenance, independent boundary checks and normal/compact UI evidence.
 
 #### Walkable / Camera survey pen footprint
 *corrected 2026-10-02*

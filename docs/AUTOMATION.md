@@ -1,5 +1,17 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_budget_areas.py --install <root>` checks captured Budget object UIDs,
+half-open/reversed/degenerate boxes, real mouse drag/Shift/click/Clear/Escape,
+visible overlays, map reset and unchanged document/terrain/camera at both sizes.
+`set budget_scope 3` selects Areas; `budget_area <x0> <y0> <x1> <y1>` adds a box,
+`budget_clear_areas` clears boxes and captured objects, and
+`assert_budget_thing <script name> <0|1>` checks captured membership.
+`mouse_move ground <x> <y>` projects a map-local ground point into the viewport.
+States `budget_scope`, `budget_picking`, `budget_areas`, `budget_area_drag` and
+`budget_things` expose survey state/counts. Widgets `btn_budget_pick`,
+`btn_budget_pick_done`, `btn_budget_pick_clear`, `btn_budget_clear_areas` and
+`seg_budget_scope` exercise the real controls.
+
 `tools/test_terrain_drafts.py --root <install>` copies stock banks under build,
 then tests stock/loose layouts at both sizes. It exercises the Save button,
 Ctrl+S, F6/F7, map-switch prompt, process reopen, untouched active terrain banks,

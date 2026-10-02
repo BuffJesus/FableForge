@@ -1,5 +1,39 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Budget area survey
+
+Budget now has an Areas scope. Pick areas in view temporarily hides the report;
+drag boxes, Shift to accumulate, or click an object, then Done returns to the
+report. Done/Clear and the hint fit below the map title at both window sizes.
+Escape clears all picks. The picker suppresses selection, gizmos and terrain
+strokes while retaining camera navigation. Changing maps clears the survey.
+
+Boxes use minimum-inclusive, maximum-exclusive bounds and normalize reverse
+drags. Object membership is captured by stable UID when an area is added;
+moving an object into or out of an old box does not recapture it. A matching
+press/release object is added independently of the box, with no invented click
+distance threshold. Local detail is filtered against the union of boxes.
+Reports refresh after document edits. This remains a current-map bank survey;
+LOD0/texture estimates are not native live-renderer primitive statistics.
+
+Read-only FableWin.exe SHA256:
+`A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845`.
+Exports `build/budget-area-native.txt`, `budget-area-filter-native.txt`,
+`budget-area-boundary-pick-native.txt`, `budget-area-input-native.txt` and
+`budget-area-cost-native.txt` cover Press/Held/Release 0204f4c0/0204f570/0204f5a0,
+AddThing 02051180, AddArea 02051310, ContainsPoint 01f95410 and ProcessInput
+0295c650. `build/budget-area-boundary-static-probe.txt` independently checks
+nine boundary/interior/outside cases and an empty degenerate box. No native
+runtime comparison or live game write was performed.
+
+Primary Release GUI rebuild passed. `tools/test_budget_areas.py` passes at
+1440x900 and 800x600 / 1.5 scale: half-open/reversed/degenerate rectangles,
+captured membership after moves, real drag/Shift/click/Clear/Escape, overlays,
+map reset and unchanged document, terrain and camera during picking. Final
+fixture: `build/budget-areas-yq7ke415`. Existing budget, controls and selection
+UI suites also pass (`build/budget_area_validation.log`). These focused checks
+follow the frozen 100-check checkpoint below; that gate predates this feature.
+
 ## 2026-10-02 full checkpoint: drafts and survey tools
 
 Source `3351548` passed `python -u tools/check_all.py --no-build`: 100 PASS,
@@ -28,8 +62,8 @@ new-process reopen restores the draft, active LEV/WAD/STB hashes stay unchanged,
 and Restore removes it exactly (`build/terrain-draft-close-check`).
 
 No live game files were written, and no native editor runtime comparison,
-release, push or deployment was performed. Budget area authoring is the next
-scoped GUI change; timed crash recovery remains separate backlog work.
+release, push or deployment was performed. Budget area authoring was subsequently completed above; timed crash recovery
+remains separate backlog work.
 
 
 ## 2026-10-02 continuation: terrain authoring drafts
