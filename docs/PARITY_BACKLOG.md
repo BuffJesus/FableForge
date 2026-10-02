@@ -685,7 +685,9 @@ Effort S. Value med.
 Effort S (about 20 lines, one function). Value med: it stops accidental sculpting on Ctrl+click and matches the vanilla workflow of sampling a height from any pen.
 
 #### No single-vertex brush: the Size minimum is 1 cell, where vanilla goes down to 0.25
-*weakness, effort S, value med*
+*resolved 2026-10-01: exponent slider and bracket size steps expose 0.25..60 cells;
+normal/compact UI checks prove one-vertex exact-step strokes and undo. See
+HANDOFF_WORLD_UI and tools/test_terrain_brush_controls.py. Original analysis follows.*
 
 **Vanilla:** GetBrushSize 0x02907170 gives radius = 2^slider with slider -2..5, so 0.25..32 blocks, default 0.25. The pens use distance < r + 0.5 around the rounded pointer, so r=0.25 or 0.5 edits exactly one vertex. That is how you fix single spikes, pits and single seam vertices.
 

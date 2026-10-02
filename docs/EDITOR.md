@@ -256,7 +256,10 @@ item and info display components; absent components are not added.
   Live preview: the renderer rebuilds the terrain vertex buffer
   in place with recomputed normals every frame of a stroke; the brush ring is
   projected onto the ground. One undo step per stroke, on the same stack as
-  the object edits.
+  the object edits. Radius spans 0.25 to 60 cells with finer control at small
+  sizes; `[` and `]` step by a factor of square-root-two. An exact-step height
+  brush at 0.25 or 0.5 cells edits one vertex at the rounded pointer location.
+  Hover the sculpting instructions for the object-following and undo rules.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

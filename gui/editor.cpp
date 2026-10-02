@@ -3463,8 +3463,8 @@ void App::editorShortcuts() {
                 if (ImGui::IsKeyPressed(tabs[k]) && (k != 1 || doc_.hasTerrain())) setEditTab(k);
         }
         if (gizmoOp_ == 4 && !io.KeyCtrl) {
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) brushRadius_ = std::max(1.0f, brushRadius_ - 1.0f);
-            if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) brushRadius_ = std::min(60.0f, brushRadius_ + 1.0f);
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) brushRadius_ = std::max(0.25f, brushRadius_ / std::sqrt(2.0f));
+            if (ImGui::IsKeyPressed(ImGuiKey_RightBracket)) brushRadius_ = std::min(60.0f, brushRadius_ * std::sqrt(2.0f));
         }
     }
     if (io.KeyCtrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_L,false) && selectedThing_>=0)
@@ -3995,11 +3995,16 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                                   terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7 && !isVanillaPen(terrainMode_);
         char val[48];
         if (usesRadius) {
-            std::snprintf(val, sizeof val, "%.0f cells", brushRadius_);
+            std::snprintf(val, sizeof val, brushRadius_ < 2 ? "%.2f cells" : "%.0f cells", brushRadius_);
             theme::labelValue("Radius   ( [ ] )", val, cardInner);
             ImGui::SetNextItemWidth(cardInner);
-            ImGui::SliderFloat("##radius", &brushRadius_, 1.0f, 60.0f, "");
+            // Native GetBrushSize maps the size exponent to 2^size. Keep the
+            // existing 60-cell maximum, while exposing the single-vertex end.
+            float sizeExponent=std::log2(std::clamp(brushRadius_,0.25f,60.0f));
+            if(ImGui::SliderFloat("##radius", &sizeExponent, -2.0f, std::log2(60.0f), ""))
+                brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
+            if(ImGui::IsItemHovered()) ImGui::SetTooltip("Drag left for precise edits, right for broad strokes.\n0.25 cells reaches a single height vertex; [ and ] change size.");
         }
         if (usesStrength) {
             std::snprintf(val, sizeof val, "%.1f", brushStrength_);
@@ -4020,7 +4025,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
         if (usesRadius && how) {
             ImGui::PushFont(fontSmall_);
-            theme::hint(how);
+            if(terrainMode_<=3 || terrainMode_==16)
+                theme::hintMore(how,"Grounded props follow changes in height and slope when the stroke ends. Creatures and buildings keep their orientation. Locked, floating and buried roots stay put; attached objects follow their parent. Undo restores the ground and objects together.");
+            else theme::hint(how);
             ImGui::PopFont();
         }
         theme::endCard();

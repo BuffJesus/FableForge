@@ -1809,6 +1809,7 @@ std::vector<std::string> App::stateDump() const {
         }
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
+    v.push_back("brush_radius=" + std::to_string(brushRadius_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
     std::string fileJob = activeFileJob() ? activeFileJob() : "none";

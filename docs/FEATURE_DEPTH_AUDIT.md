@@ -2228,6 +2228,24 @@ members and keeps the tested rc.3 download link. Published rc.3 application and
 guide ZIP hashes remain exactly unchanged. No new GitHub release was published;
 other-machine and in-game validation are still pending.
 
+## 2026-10-01 continuation: precise terrain brush controls
+
+The radius slider now uses the already-recovered native 2^size mapping
+(GetBrushSize 0x02907170 / forge::heightpen::sizeToRadius), exposing the 0.25-cell
+minimum while retaining Forge's 60-cell maximum and six-cell default. Bracket
+shortcuts step by sqrt(2); values below two cells display two decimal places.
+Hover help explains small strokes and automatic prop slope following. The
+underlying sculpt algorithms are unchanged.
+
+`tools/test_terrain_brush_controls.py`, now in check_all, drives actual slider
+endpoints and key events at 1440x900/1 and 800x600/1.5. Both quarter-cell and
+half-cell exact-step strokes change exactly one vertex; undo restores the exact
+document and heights; bounds remain 0.25..60. Evidence and inspected compact
+capture: `build/terrain-brush-controls-b4ihv1nt`. The first compact attempt clicked
+before its scrolling layout settled; the harness now waits for foliage and
+reveals the control again. GUI build passes. The existing unit coverage for
+sizeToRadius remains applicable; no terrain algorithm was changed in this step.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
