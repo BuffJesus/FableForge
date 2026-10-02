@@ -8,7 +8,8 @@ touching map. It is a port of the vanilla editor's Fit Neighbours tool.
 ![Fit to neighbours on Greatwood_Filler_04](img/fit_neighbours.png)
 
 1. Open the filler map, then **Edit > Terrain > Fit to neighbours...**. A tool
-   window opens beside the view.
+   window opens beside the view. From the **World** tab, select the filler and press
+   **Fit to neighbours...** on its card to get there in one step.
 2. Check the list of touching maps (north, east, south, west). Only maps that
    actually touch this one are used.
 3. Compare **Now** and **Fitted**. The previews are lit from the side so ridges

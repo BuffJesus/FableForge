@@ -19,6 +19,18 @@
 
 namespace albion::gui {
 
+bool App::worldOpenInEditor(const std::string& name, bool fit) {
+    if (!worldPending_.empty()) { pushLog("world: write or put back the pending moves first", 1); return false; }
+    if (!world_.find(name)) { pushLog("world: no map " + name, 1); return false; }
+    worldDragging_ = false;
+    setWorldMode(false);
+    selectMap(name);
+    setEditMode(true);
+    if (fit) { setEditTab(1); setFitOpen(true); }
+    pushLog("world: opened " + name + (fit ? " with Fit to neighbours" : " for editing"), 0);
+    return true;
+}
+
 namespace {
 
 // a stable colour per region: golden-angle hue walk over the region index
@@ -363,12 +375,7 @@ void App::drawWorldCanvas(const ImVec2& origin, const ImVec2& size) {
     // double-click a map: open it in the editor (the vanilla world map's "Locked for
     // editing" toggle takes a map from the overview into editing the same way)
     if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !worldHover_.empty() && worldPending_.empty()) {
-        const std::string name = worldHover_;
-        worldDragging_ = false;
-        setWorldMode(false);
-        selectMap(name);
-        setEditMode(true);
-        pushLog("world: opened " + name + " for editing", 0);
+        worldOpenInEditor(worldHover_, false);
         return;
     }
     // drag a box
@@ -592,6 +599,25 @@ void App::drawWorldPanel(float pad, float inner, float cardInner) {
             ImGui::TextColored(theme::vec(theme::Warn), "pending: %s -> %s", box->region.empty() ? "(none)" : box->region.c_str(), owner.c_str());
             ImGui::PopFont();
         }
+        // the vanilla world-map popup's FIT_MAP, and its way into editing a map
+        ImGui::Dummy(ImVec2(0, S(6)));
+        const bool pending = !worldPending_.empty();
+        const std::string name = box->name;
+        ImGui::BeginDisabled(pending);
+        if (theme::ghostButton("Open in editor", ImVec2(half, S(28)))) worldOpenInEditor(name, false);
+        auto_.registerWidget("btn_world_open");
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", pending ? "Write or put back the pending moves first." : "Open this map in the Edit tab (or double-click it on the grid).");
+        ImGui::SameLine(0, S(6));
+        ImGui::BeginDisabled(!box->inStb);
+        if (theme::ghostButton("Fit to neighbours...", ImVec2(half, S(28)))) worldOpenInEditor(name, true);
+        auto_.registerWidget("btn_world_fit");
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", pending ? "Write or put back the pending moves first: the fit reads the neighbours where they are written."
+                                    : !box->inStb ? "This map has no terrain chunk to fit."
+                                    : "Open this map with Fit to neighbours: rebuild its ground to meet every touching map (changes height data; preview first).");
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
     }
     theme::endCard();
 

@@ -656,6 +656,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "terrain_scale_pct") { app.wholeMapScale(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }   // EditResizeZPercent
     else if (cmd == "terrain_set_all") { app.wholeMapSet(float(std::atof(rest.c_str()))); note("ok   " + line); ++pc_; }       // EditSetZ
+    else if (cmd == "world_open" || cmd == "world_fit") { if (!app.worldOpenInEditor(rest, cmd == "world_fit")) fail(cmd + " refused: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "wholemap_open") { app.setWholeMapOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "fit_open") { app.setFitOpen(rest != "0"); note("ok   " + line); ++pc_; }
     else if (cmd == "fractal_open") { app.setFractalOpen(rest != "0"); note("ok   " + line); ++pc_; }

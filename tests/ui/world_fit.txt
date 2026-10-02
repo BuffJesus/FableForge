@@ -1,0 +1,32 @@
+# The World tab's selected-map card reaches Fit to neighbours (the vanilla world-map popup's
+# FIT_MAP) and opens the map in Edit. Read-only: nothing is applied or written.
+wait_maps
+wait_ready
+world_tab 1
+frames 3
+assert_state world_loaded 1
+world_select Greatwood_Filler_04
+frames 3
+assert_widget btn_world_fit
+assert_widget btn_world_open
+click btn_world_fit
+frames 3
+wait_loaded
+assert_state world_mode 0
+assert_state edit_tab 1
+frames 3
+wait_fit
+frames 4
+assert_state fit_preview_has_changes 1
+assert_log world: opened Greatwood_Filler_04 with Fit to neighbours
+screenshot build/ui/world_fit.png
+world_tab 1
+frames 3
+world_select Greatwood_1
+frames 2
+click btn_world_open
+frames 3
+wait_loaded
+assert_state world_mode 0
+assert_log world: opened Greatwood_1 for editing
+quit

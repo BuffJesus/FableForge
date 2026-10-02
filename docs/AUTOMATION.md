@@ -114,6 +114,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `link_install` / `link_remove` / `link_go` / `link_spawn` / `link_ping` / `link_poll` | the ForgeFSE live link (state `link_installed`, `link_ready`, `link_hero_map`) |
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
 | `terrain_raise_all <d> [things 0\|1]`, `terrain_scale_pct <pct>`, `terrain_set_all <v>`, `wholemap_open 0\|1` | the Terrain tab's Whole-map heights window (vanilla console EditRaiseZ / EditResizeZPercent / EditSetZ); widgets `btn_wholemap_toggle`, `btn_wholemap_raise`, `btn_wholemap_scale`, `btn_wholemap_set`, `check_wholemap_things` |
+| `world_open <map>` / `world_fit <map>` | the World tab's selected-map card: open the map in Edit, or on Terrain with Fit to neighbours open (refused while moves are pending) |
 | `replace_from <slot>` | the Replace / Flood "Replace this theme" palette slot (the target is `paint_theme`); `click btn_replace_all` runs Replace all |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`); one undo step |
 | *(toasts)* | every warning / error / success log line also shows for 6 s in the viewport's top-right corner (state `toasts` = how many are up); the long jobs' busy button reads `<verb>: <stage>  (N s)` from the job thread |

@@ -1361,7 +1361,10 @@ Do not restore the edit mode if the document fails to open. setEditTab already f
 Effort M (steps 1-3 are S; the new-level target plumbing makes it M). Value low.
 
 #### Fit Neighbours is not reachable from the World tab
-*weakness, effort S, value low*
+*weakness, effort S, value low* -- **DONE 2026-10-02**: the selected-map card has *Open in editor*
+and *Fit to neighbours...* (`btn_world_open`, `btn_world_fit`; `App::worldOpenInEditor`, also used by
+the double-click), disabled while moves are pending or without a terrain chunk. Automation
+`world_open` / `world_fit <map>`; `tests/ui/world_fit.txt`.
 
 **Vanilla:** FIT_MAP sits on the per-map world-map popup (0x028e5442): confirm 'you want to fit this map to its neighbours(this will change height data!)', then EditFitFillerMap(map, Height, Steep, Tension, LoNoise, HiNoise).
 

@@ -675,6 +675,9 @@ private:
 public:
     void setFitOpen(bool on) { fitOpen_ = on; fitScrollTo_ = on ? 3 : 0; }
     void setFractalOpen(bool on) { fractalOpen_ = on; }
+    // World tab: open a map in the Edit tab, optionally on Terrain with Fit to neighbours open
+    // (the vanilla world-map popup's FIT_MAP). Refused while moves are pending.
+    bool worldOpenInEditor(const std::string& name, bool fit);
     void setWholeMapOpen(bool on) { wholeMapOpen_ = on; }
     size_t wholeMapRaise(float d, bool moveThings);
     size_t wholeMapScale(float pct);
