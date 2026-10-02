@@ -1,0 +1,36 @@
+# Escape cancels a pending write confirmation and does nothing else that frame (the selection
+# stays); Enter does not confirm. Read-only: scratch save root, nothing is written.
+wait_maps
+wait_ready
+set saveroot build/ui_confirm_escape
+select OakValeWest_v2
+wait_loaded
+edit 1
+frames 2
+edit_tab 0
+camera 96 108 8 0.75 1.0 62
+place OBJECT_BARREL_BREAKABLE
+frames 2
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+reveal btn_deploy
+frames 2
+click btn_deploy
+frames 2
+assert_state confirm_pending 1
+assert_widget btn_deploy_confirm
+mouse_move viewport
+key_down Enter
+key_up Enter
+frames 2
+assert_state confirm_pending 1
+assert_state doc_dirty 1
+key_down Escape
+key_up Escape
+frames 2
+assert_state confirm_pending 0
+assert_state selected_def OBJECT_BARREL_BREAKABLE
+key_down Escape
+key_up Escape
+frames 2
+assert_state selection_count 0
+quit

@@ -810,6 +810,7 @@ private:
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
     bool confirmWriteBoth_ = false;
+    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_; }
     bool writeObjectsAfterTerrain_ = false;   // set by startWriteBoth until the terrain job finishes
     std::string writeBothMap_, writeBothPack_;
     void finishWriteBoth(bool terrainOk);

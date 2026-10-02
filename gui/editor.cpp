@@ -3472,6 +3472,8 @@ void App::startTerrainDeploy() {
 void App::editorShortcuts() {
     if (!editMode_ || !documentLoaded()) return;
     ImGuiIO& io = ImGui::GetIO();
+    // a pending write confirmation owns Escape (confirmRow cancels it): nothing else reacts this frame
+    if (confirmPending() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) return;
     if (carryArmed_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { cancelCarry(); clickArmed_ = false; return; }
     if (ImGui::IsAnyItemActive() || io.WantTextInput) return;
     if (ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;

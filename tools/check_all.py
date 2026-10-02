@@ -114,6 +114,7 @@ def main():
     ok &= run("ui budget", [gui, "--auto", "tests/ui/budget.txt"])
     ok &= run("ui brushes", [gui, "--auto", "tests/ui/brushes.txt"])
     ok &= run("ui area object delete", [gui, "--auto", "tests/ui/clip_delete.txt"])
+    ok &= run("ui Escape cancels a write confirmation (selection kept, Enter ignored)", [gui, "--auto", "tests/ui/confirm_escape.txt"])
     ok &= run("ui owner + day/night", [gui, "--auto", "tests/ui/owner_daynight.txt"])
     ok &= run("ui height pens (vanilla Height Toolbox)", [gui, "--auto", "tests/ui/height_pens.txt"])
     ok &= run("ui terrain follows placed things and foliage", [gui, "--auto", "tests/ui/terrain_follows_objects.txt"])

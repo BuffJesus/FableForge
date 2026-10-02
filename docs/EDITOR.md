@@ -263,6 +263,9 @@ item and info display components; absent components are not added.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.
+* Every write confirmation (objects, terrain, both, World apply, Setup restore) is
+  an inline row: Escape cancels it and nothing else reacts to that key press (the
+  selection stays). Enter does not confirm a write (`tests/ui/confirm_escape.txt`).
 * **Write terrain and objects into the game** (or *into pack*) appears when both the
   terrain and the placed objects are unsaved. One confirmation starts the terrain
   write; the object write follows only when it succeeded, for the same map and
