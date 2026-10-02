@@ -3622,7 +3622,16 @@ void App::drawGizmo(const ImVec2& origin, const ImVec2& size) {
             // ImGuizmo's scale is the cumulative ratio since the drag began, so it
             // multiplies the start scale; multiplying the per-frame scale compounded it
             const float rel = nf.scale / 100.0f;
-            nf.scale = std::clamp(gizmoStart_.scale * rel, 0.01f, 100.0f);
+            if (gizmoOp_ == 3) {
+                // ImGuizmo adds 1% per screen pixel (10 px = x1.1, and 100 px left reaches 0).
+                // Map that drag exponentially per logical pixel instead: about 0.3% per px either
+                // way (100 px = x1.35 or /1.35), Shift five times finer, snap to 0.1 steps after.
+                const float px = (rel - 1.0f) * 100.0f / std::max(theme::scale(), 0.1f);
+                const float rate = ImGui::GetIO().KeyShift ? 0.0006f : 0.003f;
+                float s = gizmoStart_.scale * std::exp(px * rate);
+                if (gizmoSnap_) s = std::max(0.1f, std::round(s * 10.0f) / 10.0f);
+                nf.scale = std::clamp(s, 0.01f, 100.0f);
+            } else nf.scale = std::clamp(gizmoStart_.scale * rel, 0.01f, 100.0f);
             if (gizmoOp_ != 3) nf.scale = gizmoFrame_.scale;
             if (gizmoOp_ == 3) { nf.pos[0] = gizmoFrame_.pos[0]; nf.pos[1] = gizmoFrame_.pos[1]; nf.pos[2] = gizmoFrame_.pos[2]; }
             gizmoFrame_ = nf;

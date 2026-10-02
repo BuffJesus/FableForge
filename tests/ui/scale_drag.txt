@@ -1,0 +1,42 @@
+# The scale gizmo's drag (AeoN: "scaling is too sensitive"): about 0.3% per logical pixel,
+# exponential so growing and shrinking match, Shift five times finer, undo restores 1.0.
+# Bounds allow for the window/DPI scale. Read-only: scratch save root, nothing written.
+wait_maps
+wait_ready
+set saveroot build/ui_scale_drag
+select OakValeWest_v2
+wait_loaded
+edit 1
+frames 2
+edit_tab 0
+camera 96 108 8 0.75 0.6 40
+place OBJECT_BARREL_BREAKABLE
+frames 3
+gizmo 3
+frames 3
+drag_gizmo 10 0
+frames 3
+assert_state_min selected_scale 1.01
+assert_state_max selected_scale 1.06
+undo
+frames 3
+assert_state selected_scale 1.000
+drag_gizmo 100 0
+frames 3
+assert_state_min selected_scale 1.25
+assert_state_max selected_scale 1.6
+undo
+frames 3
+drag_gizmo -100 0
+frames 3
+assert_state_min selected_scale 0.62
+assert_state_max selected_scale 0.8
+undo
+frames 3
+key_down Shift
+drag_gizmo 100 0
+key_up Shift
+frames 3
+assert_state_min selected_scale 1.03
+assert_state_max selected_scale 1.1
+quit

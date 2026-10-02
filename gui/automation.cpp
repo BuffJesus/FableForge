@@ -1280,12 +1280,14 @@ bool Automation::tick(App& app) {
         else note("ok   " + line);
         ++pc_;
     }
-    else if (cmd == "assert_state_min") {   // assert_state_min <key> <n>: a numeric state of at least n
+    else if (cmd == "assert_state_min" || cmd == "assert_state_max") {   // <key> <n>: a numeric state of at least / at most n
         std::istringstream rs(rest); std::string key; double want = 0; rs >> key >> want;
         std::string cur;
         for (const auto& kv : app.stateDump()) if (kv.rfind(key + "=", 0) == 0) cur = kv.substr(key.size() + 1);
-        if (cur.empty()) fail("assert_state_min: unknown key " + key);
-        else if (std::atof(cur.c_str()) < want) fail("assert_state_min: " + key + "=" + cur + " < " + rest.substr(key.size() + 1));
+        const bool isMin = cmd == "assert_state_min";
+        const double v = std::atof(cur.c_str());
+        if (cur.empty()) fail(cmd + ": unknown key " + key);
+        else if (isMin ? v < want : v > want) fail(cmd + ": " + key + "=" + cur + (isMin ? " < " : " > ") + rest.substr(key.size() + 1));
         else note("ok   " + line);
         ++pc_;
     }

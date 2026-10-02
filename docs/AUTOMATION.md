@@ -169,7 +169,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `assert_file <path>` | file exists and is non-empty |
 | `assert_file_contains <path> <text...>` | the file exists and contains the text (the rest of the line, e.g. `ScriptName UiNamedBarrel;`) |
 | `assert_state <key> <value>` | see `dump_state` for keys |
-| `assert_state_min <key> <n>` | a numeric state key is at least n (e.g. `texture_thumbs_made`, the Textures list thumbnails decoded so far) |
+| `assert_state_min <key> <n>` / `assert_state_max <key> <n>` | a numeric state key is at least / at most n (e.g. `texture_thumbs_made`, the Textures list thumbnails decoded so far) |
 | `assert_widget <widget>` | the widget was drawn this frame |
 | `assert_log <text>` | some app log line contains the text (background job notes, e.g. `1 stitched`) |
 | `world_tab 0\|1`, `world_select <map>`, `world_move <map> <x> <y>`, `world_move_refused ...`, `world_owner <map> <region>`, `world_sees <region> <map> <0\|1>`, `world_stitch <0\|1> [feather]`, `world_revert`, `world_undo`, `world_redo`, `world_apply`, `wait_world` | the World tab: queue moves / region edits, stitch seams after the apply (feather -1 = auto), write them; state keys `world_*` |

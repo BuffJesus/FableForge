@@ -118,6 +118,7 @@ def main():
     ok &= run("ui paint refuses slot 0 and the INVALID_THEME_STANDIN placeholder", [gui, "--auto", "tests/ui/paint_target_guard.txt"])
     ok &= run("ui dropped model fills the import form (nothing imported)", [gui, "--auto", "tests/ui/drop_model.txt"])
     ok &= run("ui texture list thumbnails", [gui, "--auto", "tests/ui/texture_thumbs.txt"])
+    ok &= run("ui scale gizmo drag sensitivity, symmetry, Shift and undo", [gui, "--auto", "tests/ui/scale_drag.txt"])
     ok &= run("ui owner + day/night", [gui, "--auto", "tests/ui/owner_daynight.txt"])
     ok &= run("ui height pens (vanilla Height Toolbox)", [gui, "--auto", "tests/ui/height_pens.txt"])
     ok &= run("ui terrain follows placed things and foliage", [gui, "--auto", "tests/ui/terrain_follows_objects.txt"])
