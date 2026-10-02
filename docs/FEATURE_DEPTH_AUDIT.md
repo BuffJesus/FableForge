@@ -2310,6 +2310,21 @@ failed because the whole-motion view improved; it now requires 5% plus over
 This supersedes the preceding framing limitation for the inspected air-glow
 example. Full game rendering parity remains unverified.
 
+## 2026-10-01 continuation: search from the lip-sync editor
+
+Ctrl+F now returns from inline lip-sync editing to the dialogue tree and focuses
+search. Staged edits remain intact. Normal and compact actual keyboard tests
+pass at build/asset-search-iplat6d9, along with the existing asset-search and
+hidden-panel recovery checks. This corrects a focus regression introduced by
+the inline editor; there is no archive-format change.
+
+The development package through mesh-framing commit 8eec69d passes extracted
+package checks at build/package-smoke-k9gkb_0h (69 documentation links, definitions,
+eight retail exports, GUI pixels and literal-path mod workflow). Its SHA256 is
+12fa6deb909d0cc42e7f805c1e77fc8ea8862651ab86d7a346730668b316cd19.
+The Ctrl+F follow-up requires the next development repackage. Published rc.3
+assets remain unchanged.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

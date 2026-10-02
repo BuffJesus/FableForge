@@ -868,7 +868,8 @@ right panel. Playback pauses and the timeline opens; the right panel becomes
 the editor, keeping the face visible. Choose a frame with the scrubber or
 Previous/Next, then adjust mouth-shape influence from 0% to 100%. Shapes have
 plain descriptions and can be added or removed; insert/delete frame actions
-sit below them. **Browse dialogue** or Escape returns to the tree. Changes remain
+sit below them. **Browse dialogue** or Escape returns to the tree; Ctrl+F also
+returns and focuses search. Changes remain
 staged while switching lines and banks. **Reset this line** discards that line's
 pending changes. **Export archive...** writes
 a new, verified `dialogue.big` for the selected language; Browse opens Save As,

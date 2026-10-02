@@ -1908,6 +1908,7 @@ void App::frame(float dt) {
         ImGuiIO& io = ImGui::GetIO();
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) {
             focusFilter_ = true;
+            if (texturesMode_ && assetsTab_ == 4) setDialogueEditing(false);
             if (texturesMode_ && assetsTab_ != 2) settings_.showActions = true;
             else settings_.showExplorer = true;
         }

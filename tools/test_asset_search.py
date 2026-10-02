@@ -24,6 +24,15 @@ def main():
                       'assert_state tool_panel_visible 0'] + find
             lines += ['assert_state tool_panel_visible 1', f'input_text {query}', 'frames 4',
                       'assert_state '+state, 'assert_state filter ']
+        # Search must leave the inline editor and retain its staged changes.
+        lines += ['assets_tab 4', 'frames 3', 'reveal dialogue_search_result_0', 'frames 3',
+                  'click dialogue_search_result_0', 'frames 3', 'assert_state dialogue_loaded 1',
+                  'reveal button_dialogue_edit', 'frames 3', 'click button_dialogue_edit', 'frames 3',
+                  'reveal button_dialogue_insert_frame', 'frames 3', 'click button_dialogue_insert_frame',
+                  'frames 3', 'assert_state dialogue_staged 1'] + find
+        lines += ['assert_state dialogue_editor_open 0', 'assert_state dialogue_staged 1',
+                  'key_down Ctrl', 'key_down A', 'key_up A', 'key_up Ctrl',
+                  'input_text beefy', 'frames 3', 'assert_state dialogue_search_results 1']
         lines += ['textures_tab 0', 'frames 3', 'click btn_toggle_explorer', 'frames 3',
                   'assert_state map_list_visible 0'] + find
         lines += ['input_text greatwood', 'frames 3', 'assert_state map_list_visible 1',
