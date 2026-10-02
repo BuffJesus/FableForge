@@ -145,7 +145,7 @@ bool Automation::tick(App& app) {
     std::string rest; std::getline(ss, rest);
     while (!rest.empty() && rest.front() == ' ') rest.erase(rest.begin());
     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (deadline_ == 0) deadline_ = now + (cmd == "wait_world_tiles" ? 900.0 : cmd == "wait_mods" ? 600.0 : cmd == "wait_file_job" ? 180.0 : 60.0);   // whole-install mod builds can outlast ordinary preview loads
+    if (deadline_ == 0) deadline_ = now + (cmd == "wait_world_tiles" ? 900.0 : cmd == "wait_mods" ? 600.0 : (cmd == "wait_file_job" || cmd == "wait_world") ? 180.0 : 60.0);   // whole-install mod builds can outlast ordinary preview loads; a stitched world apply re-bakes several chunks (~60 s)
     auto waitOn = [&](bool done, const char* what) {
         if (done) { note("ok   " + line); ++pc_; deadline_ = 0; }
         else if (now > deadline_) { fail(std::string("timeout waiting for ") + what + " (" + line + ")"); ++pc_; deadline_ = 0; }
