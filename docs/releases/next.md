@@ -5,6 +5,11 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Saved snapshots.** Ctrl+B or Create dated snapshot keeps a restore point for
+  the current map's objects and terrain. Saved snapshots lists captures with
+  undoable Restore and confirmed Delete. These points survive draft saves and
+  restarts alongside automatic crash recovery.
+
 - **Crash recovery.** Unsaved objects and terrain are captured automatically every
   five minutes. File > Recovery snapshots changes the interval or captures now.
   Reopening offers Recover or Discard; Recover latest snapshot also works while

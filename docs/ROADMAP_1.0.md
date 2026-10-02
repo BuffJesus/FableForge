@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Dated current-map restore points now have Ctrl+B / File-menu capture and a Saved
+snapshots library with undoable Restore and confirmed Delete. They survive
+Save draft and restart; stock/loose and normal/compact checks pass. World-tab,
+dialogue and asset state remain outside these captures. See HANDOFF_WORLD_UI.
+
+
 Recovery snapshots can now be restored inside the open map from the File menu,
 with a capture time and undo/redo back to later edits. Actual menu workflows pass
 on stock/loose copies at normal/compact sizes; see HANDOFF_WORLD_UI.
@@ -17,7 +23,7 @@ Timed crash recovery now snapshots unsaved objects and terrain into an
 install-scoped app-data archive every five minutes, with configurable intervals
 and manual capture. Recover/Discard works on reopen; recovery is undoable, and
 failed saves keep the archive. Stock/loose and normal/compact checks are tracked
-in HANDOFF_WORLD_UI. A dated snapshot library remains separate work.
+in HANDOFF_WORLD_UI. Whole-world snapshots remain separate work.
 
 Budget > Areas now captures dragged boxes and clicked objects, with Shift
 accumulation, visible picks, Clear and Escape. Normal/compact input and overlay

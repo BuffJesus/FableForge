@@ -1189,3 +1189,12 @@ the archive without changing the loaded map. Failed saves and failed recovery
 keep the archive. A snapshot holds completed edits; an active brush stroke
 waits until it finishes. It covers the current map's objects and terrain;
 pending World-tab, dialogue and asset edits use their existing save workflows.
+
+
+File > Recovery snapshots > Create dated snapshot, or Ctrl+B, keeps a separate
+restore point for the current map. Saved snapshots lists capture times with
+Restore and Delete. Restore supports undo/redo; Cancel leaves your edits and
+recovery archive intact. Delete asks for confirmation, and Escape cancels it.
+These saved points survive Save draft and app restarts until you delete them.
+They cover the current map's objects and terrain, alongside the rotating
+crash-recovery archive described above.

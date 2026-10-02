@@ -864,7 +864,7 @@ private:
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
     bool confirmWriteBoth_ = false;
-    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_; }
+    bool confirmPending() const { return confirmDeploy_ || confirmTerrainDeploy_ || confirmWriteBoth_ || confirmWorldApply_ || confirmRestore_ || !snapshotDeletePending_.empty(); }
     bool writeObjectsAfterTerrain_ = false;   // set by startWriteBoth until the terrain job finishes
     std::string writeBothMap_, writeBothPack_;
     void finishWriteBoth(bool terrainOk);
@@ -1245,14 +1245,22 @@ private:
     bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
     bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
     void drawUnsavedPrompt();
-    struct RecoveryResult { bool ok=false; std::string error, map; std::filesystem::path path; };
+    struct RecoveryResult { bool ok=false, history=false; std::string error, map; std::filesystem::path path; };
     std::future<RecoveryResult> recoveryFuture_;
     std::set<std::filesystem::path> recoveryRetired_;
     std::filesystem::path recoveryPending_, recoveryRoot_;
     std::chrono::steady_clock::time_point recoveryAt_ = std::chrono::steady_clock::now();
     bool recoveryPromptInAuto_ = false;
     bool recoveryTimerInAuto_ = false;
+    bool snapshotsOpen_ = false, snapshotRestore_ = false;
+    std::vector<std::filesystem::path> snapshots_;
+    std::filesystem::path snapshotsFor_;
+    std::filesystem::path snapshotDeletePending_;
     std::filesystem::path recoveryPath() const;
+    std::filesystem::path snapshotDirectory() const;
+    bool createSnapshot();
+    void refreshSnapshots();
+    void drawSnapshotsWindow();
     bool autosaveNow();
     void pollRecovery();
     void retireRecovery();

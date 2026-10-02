@@ -216,7 +216,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "key_down" || cmd == "key_up") {
         static const std::map<std::string, ImGuiKey> keys = {
-            {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
+            {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"B", ImGuiKey_B}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
             {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"H", ImGuiKey_H}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
             {"Y", ImGuiKey_Y}, {"Z", ImGuiKey_Z}, {"F6", ImGuiKey_F6}, {"F7", ImGuiKey_F7},
             {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Enter", ImGuiKey_Enter}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},

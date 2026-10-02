@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: dated current-map snapshot library
+
+File > Recovery snapshots > Create dated snapshot / Ctrl+B freezes objects and
+terrain to an owned app-data restore point. Saved snapshots lists times newest
+first, with Restore and confirmed Delete. The library is scoped by install,
+map, world file and save destination; points survive draft saves and restarts.
+Restore uses the existing validated archive and full-state undo/redo. Cancel
+preserves both history and the rotating recovery archive. Deletion removes only
+the selected archive and its empty reserved directory. Escape cancels the
+confirmation before closing the tool. World-tab, dialogue and asset changes
+remain outside these current-map captures.
+
+Capture uses the existing background recovery worker and publication helper;
+active strokes/batches/file jobs defer capture. Exclusive directory reservation
+keeps captures separate. Timestamped directory names provide deterministic
+newest-first ordering for filesystem times tied at Windows stat precision.
+The GUI's same-label Delete/confirmation ID conflict was found and fixed during
+testing; automation now recognizes B to exercise the actual shortcut.
+
+Release GUI build and tools/test_snapshots.py pass on stock and loose sources,
+normal 1440x900 and compact 800x600 at scale 1.5. Evidence:
+`build/snapshots-ui-4nzs843t` / `build/snapshots-ui-n1rqrefk`.
+Checks cover both capture paths, process reopen, both restore states through
+undo/redo, Save draft retention, Cancel preserving recovery, Escape cancellation,
+confirmed single deletion and map-switch reset. Compact layout was visually
+inspected. Existing recovery stock checks pass both sizes in
+`build/recovery-ui-5mrpfd5y`; controls and selection actions pass in
+`build/snapshots-<name>-regression.log`. Python syntax, docs commands and diff
+checks pass. The broad gate now includes this harness; it has not been rerun,
+and the prior 102-check result retains its frozen-source scope. Core/archive
+format unchanged. No live game writes, push or deployment.
+
+
 ## 2026-10-02 continuation: restore a snapshot in the open map
 
 File > Recovery snapshots > Recover latest snapshot opens the same recovery

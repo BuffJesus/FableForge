@@ -14,6 +14,7 @@
 #include "effects.hpp"
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
+#include "forge/temporarydirectory.hpp"
 
 #include <fstream>
 #include <algorithm>
@@ -58,6 +59,7 @@ void App::openDocument() {
     if (modFilesBusy()) return;
     cancelCarry();
     recoveryPending_.clear();
+    snapshotsOpen_=snapshotRestore_=false; snapshots_.clear(); snapshotsFor_.clear(); snapshotDeletePending_.clear();
     clearBudgetAreas(); budgetHasReport_ = budgetPicking_ = false;
     docLoadedFor_.clear();
     thingGlyphs_.clear();
@@ -3720,6 +3722,7 @@ void App::editorShortcuts() {
     if (carryArmed_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { cancelCarry(); clickArmed_ = false; return; }
     if (ImGui::IsAnyItemActive() || io.WantTextInput) return;
     if (ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) return;
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_B)) { createSnapshot(); return; }
     if (selectionInspectorOpen_ && ImGui::IsKeyPressed(ImGuiKey_Escape)) { selectionInspectorOpen_ = false; return; }
     const bool rmb = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     if (!rmb) {
@@ -3929,6 +3932,97 @@ bool App::autosaveNow() {
     } catch (const std::exception& e) { pushLog(std::string("autosave: ")+e.what(),2); return false; }
 }
 
+fs::path App::snapshotDirectory() const {
+    const auto archive=recoveryPath();
+    const auto root=recoveryRoot_.empty() ? fs::path(settingsPath()).parent_path()/"snapshots" : recoveryRoot_.parent_path()/"snapshots";
+    return root/archive.parent_path().filename()/archive.stem();
+}
+
+bool App::createSnapshot() {
+    if (!documentLoaded() || !doc_.hasTerrain() || doc_.editActive() || activeFileJob() || !recoveryPending_.empty()) return false;
+    if (auto_.active() && recoveryRoot_.empty()) return false;
+    try {
+        auto snapshot=doc_.recoveryWriteSnapshot();
+        const auto captured=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        forge::TemporaryDirectory reserved(snapshotDirectory(),"snapshot-"+std::to_string(captured)+"-");
+        const auto path=reserved.path()/"state.ffsnapshot";
+        const auto map=doc_.mapName();
+        recoveryFuture_=std::async(std::launch::async,[snapshot=std::move(snapshot),path,map]() mutable {
+            RecoveryResult result; result.path=path; result.map=map; result.history=true;
+            result.ok=snapshot.saveRecovery(path,result.error); return result;
+        });
+        reserved.retain();
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("snapshot: ")+e.what(),2); return false; }
+}
+
+void App::refreshSnapshots() {
+    snapshots_.clear(); snapshotsFor_=snapshotDirectory();
+    std::error_code ec;
+    if (!fs::exists(snapshotsFor_,ec)) return;
+    std::map<fs::path,fs::file_time_type> times;
+    for (fs::directory_iterator it(snapshotsFor_,ec),end; !ec && it!=end; it.increment(ec)) {
+        if (!it->is_directory(ec)) { if (ec) break; continue; }
+        const auto file=it->path()/"state.ffsnapshot";
+        if (fs::is_regular_file(file,ec)) {
+            const auto written=fs::last_write_time(file,ec);
+            if (!ec) { snapshots_.push_back(file); times[file]=written; }
+        }
+    }
+    std::sort(snapshots_.begin(),snapshots_.end(),[&](const auto& a,const auto& b) { return times.at(a)!=times.at(b) ? times.at(a)>times.at(b) : a>b; });
+    if (ec) pushLog("snapshot list: "+ec.message(),1);
+}
+
+void App::drawSnapshotsWindow() {
+    if (!documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { snapshotsOpen_=false; return; }
+    if (!snapshotsOpen_) { snapshotDeletePending_.clear(); return; }
+    if (snapshotsFor_!=snapshotDirectory()) refreshSnapshots();
+    using theme::S;
+    const std::string sub=doc_.mapName()+" / Saved restore points for objects and terrain.";
+    if (!beginToolWindow("##snapshots","Saved snapshots",sub.c_str(),&snapshotsOpen_,S(450))) return;
+    const bool busy=activeFileJob()!=nullptr || doc_.editActive();
+    if (theme::primaryButton("Create snapshot",ImVec2(S(170),S(28)),!busy)) createSnapshot();
+    auto_.registerWidget("btn_snapshot_create");
+    ImGui::SameLine();
+    if (theme::ghostButton("Refresh",ImVec2(S(80),S(28)))) refreshSnapshots();
+    auto_.registerWidget("btn_snapshots_refresh");
+    if (snapshots_.empty()) theme::hint("No saved snapshots for this map yet.");
+    for (size_t i=0;i<snapshots_.size();++i) {
+        const auto path=snapshots_[i];
+        ImGui::PushID(int(i));
+        std::error_code timeError;
+        const auto written=fs::last_write_time(path,timeError);
+        char text[32]="Time unavailable";
+        if (!timeError) {
+            const auto systemTime=std::chrono::time_point_cast<std::chrono::system_clock::duration>(written-fs::file_time_type::clock::now()+std::chrono::system_clock::now());
+            const auto stamp=std::chrono::system_clock::to_time_t(systemTime);
+            std::tm local{};
+            if (localtime_s(&local,&stamp)==0) std::strftime(text,sizeof text,"%Y-%m-%d %H:%M:%S",&local);
+        }
+        ImGui::Separator(); ImGui::TextUnformatted(text);
+        ImGui::BeginDisabled(busy || bool(timeError));
+        if (theme::ghostButton("Restore",ImVec2(S(100),S(26)))) { recoveryPending_=path; snapshotRestore_=true; }
+        auto_.registerWidget(("btn_snapshot_restore_"+std::to_string(i)).c_str());
+        ImGui::SameLine();
+        if (theme::dangerButton("Delete",ImVec2(S(100),S(26)))) snapshotDeletePending_=path;
+        auto_.registerWidget(("btn_snapshot_delete_"+std::to_string(i)).c_str());
+        int removal=0;
+        if (snapshotDeletePending_==path) removal=confirmRow("Delete this saved snapshot?","Delete##confirm",toolWindowInner_,S(26),("btn_snapshot_delete_confirm_"+std::to_string(i)).c_str());
+        ImGui::EndDisabled();
+        if (removal) snapshotDeletePending_.clear();
+        if (removal>0) {
+            if (path.parent_path().parent_path()==snapshotDirectory()) {
+                std::error_code ec; fs::remove(path,ec);
+                if (!ec) fs::remove(path.parent_path(),ec);
+                if (ec) pushLog("snapshot delete: "+ec.message(),2);
+                snapshotsFor_.clear();
+            }
+        }
+        ImGui::PopID();
+    }
+    endToolWindow();
+}
+
 void App::retireRecovery() {
     if (!documentLoaded() || (auto_.active() && recoveryRoot_.empty())) return;
     const auto path=recoveryPath();
@@ -3942,7 +4036,11 @@ void App::retireRecovery() {
 void App::pollRecovery() {
     if (recoveryFuture_.valid() && recoveryFuture_.wait_for(std::chrono::milliseconds(0))==std::future_status::ready) {
         const auto result=recoveryFuture_.get();
-        if (recoveryRetired_.erase(result.path)) {
+        if (result.history) {
+            snapshotsFor_.clear();
+            if (!result.ok) { std::error_code ec; fs::remove(result.path.parent_path(),ec); }
+            pushLog(result.ok ? "saved snapshot of "+result.map : "snapshot failed: "+result.error,result.ok ? 3 : 2);
+        } else if (recoveryRetired_.erase(result.path)) {
             std::error_code ec; fs::remove(result.path,ec);
             if (ec) pushLog("recovery cleanup: "+ec.message(),1);
         } else if (result.ok) pushLog("autosaved "+result.map+" (objects and terrain)",0);
@@ -3958,9 +4056,10 @@ void App::pollRecovery() {
 void App::drawRecoveryPrompt() {
     if (recoveryPending_.empty() || (auto_.active() && !recoveryPromptInAuto_)) return;
     using theme::S;
-    ImGui::OpenPopup("Recover unsaved edits");
+    const char* title=snapshotRestore_ ? "Restore saved snapshot" : "Recover unsaved edits";
+    ImGui::OpenPopup(title);
     ImGui::SetNextWindowSize(ImVec2(S(390),0));
-    if (ImGui::BeginPopupModal("Recover unsaved edits",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(title,nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         std::error_code ec;
         const auto written=fs::last_write_time(recoveryPending_,ec);
         if (!ec) {
@@ -3973,12 +4072,12 @@ void App::drawRecoveryPrompt() {
                 auto_.registerWidget("text_recovery_time");
             }
         }
-        ImGui::TextWrapped("%s has a recovery snapshot of objects and terrain. Recover it as an undoable edit, or discard it.",doc_.mapName().c_str());
+        ImGui::TextWrapped(snapshotRestore_ ? "Restore %s's saved objects and terrain? Undo returns to your current edits." : "%s has a recovery snapshot of objects and terrain. Recover it as an undoable edit, or discard it.",doc_.mapName().c_str());
         ImGui::BeginDisabled(activeFileJob()!=nullptr);
         if (theme::primaryButton("Recover",ImVec2(S(160),S(32)))) {
             std::string error;
             if (doc_.recover(recoveryPending_,error)) {
-                recoveryPending_.clear(); recoveryAt_=std::chrono::steady_clock::now();
+                recoveryPending_.clear(); snapshotRestore_=false; recoveryAt_=std::chrono::steady_clock::now();
                 selectedThing_=-1; selectedUid_=0; extraUids_.clear();
                 sectionsDirty_=true; startFoliageLoad();
                 pushLog("recovered objects and terrain; Save draft keeps them",3);
@@ -3987,7 +4086,11 @@ void App::drawRecoveryPrompt() {
         }
         auto_.registerWidget("btn_recovery_recover");
         ImGui::SameLine();
-        if (theme::dangerButton("Discard",ImVec2(S(160),S(32)))) { retireRecovery(); ImGui::CloseCurrentPopup(); }
+        if (theme::dangerButton(snapshotRestore_ ? "Cancel" : "Discard",ImVec2(S(160),S(32)))) {
+            if (snapshotRestore_) { recoveryPending_.clear(); snapshotRestore_=false; }
+            else retireRecovery();
+            ImGui::CloseCurrentPopup();
+        }
         auto_.registerWidget("btn_recovery_discard");
         ImGui::EndDisabled(); ImGui::EndPopup();
     }

@@ -1105,19 +1105,21 @@ or destination failure leaves both edits pending. See HANDOFF_WORLD_UI.
 
 World-tab pending edits and timed crash recovery remain separate follow-ups.
 
-#### No user backups (Create backup file) and no editor autosave
+#### Current-map recovery and snapshots complete; whole-world snapshots pending
 2026-10-02: timed current-map crash recovery is implemented. The default
 five-minute steady-clock timer captures a private object/terrain snapshot to
 one editor archive under install/map-scoped app data. Reopen offers Recover /
 Discard; recovery is one undoable edit. Successful saves or explicit Discard
 retire the archive; failed saves keep it. Manual Snapshot now uses this rotating
-archive. Dated snapshot history, whole-world snapshots and restoration of pending
-World-tab edits remain separate work. See HANDOFF_WORLD_UI for native trigger /
+archive. Ctrl+B / Create dated snapshot and Saved snapshots now provide retained
+current-map history, undoable Restore and confirmed Delete. Whole-world snapshots
+and restoration of pending World-tab edits remain separate work. See HANDOFF_WORLD_UI for native trigger /
 backup evidence and stock/loose, normal/compact checks.
 
-The original proposal below remains relevant to the dated snapshot library;
-reuse Document::saveRecovery / recover for objects and terrain, rather than
-adding independent lossy TNG/LEV loaders or duplicating the implemented timer.
+The original proposal below is historical for implemented current-map capture;
+Document::saveRecovery / recover preserve objects, terrain and authored nav state
+in one archive. Reuse this path for future multi-map capture; WLD/BWD and pending
+World-tab restoration need their own staged transaction.
 
 *gap, effort M, value high*
 

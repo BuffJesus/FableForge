@@ -415,7 +415,7 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     const ImVec2 a = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, a.y + S(4)), ImVec2(a.x + inner, a.y + S(4)), theme::col(theme::Border), 1.0f);
     ImGui::Dummy(ImVec2(0, S(10)));
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
+    if (!confirmPending() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
     // Keep the title and Close reachable while the body scrolls on short screens.
     const float bodyMaxHeight = std::max(1.0f, toolMaxHeight - ImGui::GetCursorPosY() - ImGui::GetCurrentWindow()->WindowPadding.y);
     ImGui::SetNextWindowSizeConstraints(ImVec2(inner, 0), ImVec2(inner, bodyMaxHeight));
@@ -430,6 +430,7 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
 void App::endToolWindow() { ImGui::EndChild(); ImGui::End(); }
 
 void App::drawToolWindows() {
+    drawSnapshotsWindow();
     if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) {
         selectionInspectorOpen_ = fitOpen_ = fractalOpen_ = budgetOpen_ = false;
         return;
@@ -1889,6 +1890,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("terrain_draft_dirty=" + std::string(doc_.hasTerrain() && doc_.terrainDraftDirty() ? "1" : "0"));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));
+    v.push_back("snapshots_open=" + std::string(snapshotsOpen_ ? "1" : "0"));
+    v.push_back("snapshot_count=" + std::to_string(snapshots_.size()));
     v.push_back("confirm_pending=" + std::string(confirmPending() ? "1" : "0"));
     v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
     std::string fileJob = activeFileJob() ? activeFileJob() : "none";
@@ -2098,6 +2101,11 @@ void App::drawMenuBar() {
                 cancelCarry(); recoveryPending_=recoveryPath();
             }
             auto_.registerWidget("menu_recovery_restore");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Create dated snapshot","Ctrl+B",false,documentLoaded() && !doc_.editActive() && !activeFileJob())) createSnapshot();
+            auto_.registerWidget("menu_snapshot_create");
+            if (ImGui::MenuItem("Saved snapshots...",nullptr,false,documentLoaded())) { snapshotsOpen_=true; snapshotsFor_.clear(); }
+            auto_.registerWidget("menu_snapshots");
             ImGui::EndMenu();
         }
         ImGui::Separator();
