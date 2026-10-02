@@ -2273,6 +2273,22 @@ step. The first compact workspace script clicked a scrolled-out header; it now
 reveals that action before clicking. User documentation and the Dialogue image
 were updated. The development ZIP is still the prior build until repackaging.
 
+## 2026-10-01 continuation: effect timeline length and replay
+
+Short effects now use supported lifetime estimates instead of a fixed ten-second
+window. Continuous effects retain that window; manual Length overrides Auto
+length. Play at the end restarts, dragging seeks immediately, fractional end times
+are honored, and empty previews explain completion. Simulation algorithms and
+camera framing are unchanged. Some faint effects still occupy little of the
+whole-motion view; Frame current and zoom remain available.
+
+Retail particle checks pass 86 cases. Activation bursts estimate 0.533333 seconds
+and AIR_GLOW_01 1.233333. Normal/compact replay and live-scrub tests pass at
+build/effect-timing-0rgksa1i, including an exact 0.51-second manual end. Existing
+camera/rendering tests pass at build/effect-workspace-b2487sqj. All 36 CTest suites
+pass after rebuilding every target (19.78 seconds). Estimates cover supported
+preview behavior, not full game parity. No live game files were changed.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

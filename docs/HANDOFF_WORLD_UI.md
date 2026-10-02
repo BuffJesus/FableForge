@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: effect timeline length and replay
+
+Short effects now use supported lifetime estimates instead of a fixed ten-second
+window. Continuous effects retain that window; manual Length overrides Auto
+length. Play at the end restarts, dragging seeks immediately, fractional end times
+are honored, and empty previews explain completion. Simulation algorithms and
+camera framing are unchanged. Some faint effects still occupy little of the
+whole-motion view; Frame current and zoom remain available.
+
+Retail particle checks pass 86 cases. Activation bursts estimate 0.533333 seconds
+and AIR_GLOW_01 1.233333. Normal/compact replay and live-scrub tests pass at
+build/effect-timing-0rgksa1i, including an exact 0.51-second manual end. Existing
+camera/rendering tests pass at build/effect-workspace-b2487sqj. All 36 CTest suites
+pass after rebuilding every target (19.78 seconds). Estimates cover supported
+preview behavior, not full game parity. No live game files were changed.
+
 ## 2026-10-01 continuation: dialogue tree and visible lip-sync editing
 
 Replaced the flat 20,088-line dropdown with a persistent speaker tree (357
