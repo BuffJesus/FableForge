@@ -2733,7 +2733,11 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
 
 void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     brushHit_ = false;
-    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) { if (doc_.strokeActive()) doc_.endStroke(); return; }
+    if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) {
+        if (doc_.strokeActive()) doc_.endStroke();
+        keyStroke_ = false;
+        return;
+    }
     ImGuiIO& io = ImGui::GetIO();
     if (size.x <= 0 || size.y <= 0) return;
     const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
@@ -2756,19 +2760,26 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     fillPen(b);
     const bool lmb = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-    // vanilla '-' / '=' (PaintInputPaintMapHeightAddition): lower / raise the ground under the cursor by the
-    // Speed opacity on every frame the key is held, one undo step per key press; any terrain tool
+    const bool heightTool = (terrainMode_ >= 0 && terrainMode_ <= 3) || terrainMode_ == 9 || terrainMode_ == 16;
+    // Native '-' / '=' (PaintInputPaintMapHeightAddition): sculpt tools only,
+    // Speed opacity per held frame at a latched ground point, one undo step.
     {
         const bool keysFree = !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && !lmb;
-        const bool down = keysFree && (ImGui::IsKeyDown(ImGuiKey_Minus) || ImGui::IsKeyDown(ImGuiKey_Equal));
+        const bool down = keysFree && heightTool && (ImGui::IsKeyDown(ImGuiKey_Minus) || ImGui::IsKeyDown(ImGuiKey_Equal));
         if (keyStroke_ && !down) { doc_.endStroke(); keyStroke_ = false; }
-        if (down && brushHit_ && (keyStroke_ || (!doc_.strokeActive() && viewportHovered_))) {
+        if (down && (keyStroke_ || (brushHit_ && !doc_.strokeActive() && viewportHovered_))) {
             editor::TerrainBrush k = b;
             k.mode = editor::TerrainBrush::Mode::HeightKey;
             const float op = forge::heightpen::speedToOpacity(penSpeed_);
             k.step = ImGui::IsKeyDown(ImGuiKey_Equal) ? op : -op;
+            if (!keyStroke_) {
+                keyAnchor_[0] = brushFable_[0]; keyAnchor_[1] = brushFable_[1];
+            }
+            k.x = keyAnchor_[0]; k.y = keyAnchor_[1];
             if (!keyStroke_) { doc_.beginStroke(k); keyStroke_ = true; }
             doc_.applyBrush(k, 0.0f);
+            brushFable_[0] = keyAnchor_[0]; brushFable_[1] = keyAnchor_[1];
+            brushHit_ = true;
         }
         if (keyStroke_) return;
     }
@@ -2789,7 +2800,6 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     }
     // Native Height Toolbox Ctrl press/held events sample Paint Height for every
     // sculpt pen, including Paths. Do not hijack an already active edit.
-    const bool heightTool = (terrainMode_ >= 0 && terrainMode_ <= 3) || terrainMode_ == 9 || terrainMode_ == 16;
     if (heightTool && io.KeyCtrl && lmb && viewportHovered_ && brushHit_ && !io.KeyAlt &&
         !doc_.strokeActive() && !pathDrag_) {
         if (const auto h = doc_.terrainHeight(brushFable_[0], brushFable_[1])) {
@@ -2915,7 +2925,7 @@ void App::drawPenControls(float cardInner) {
         }
         ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
         auto_.registerWidget("slider_pen_speed");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise the ground under the cursor while held.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise one fixed ground point while held in sculpt tools.");
     } else if (m == 3) {
         row("Smoothness");
         float pct = penSmoothness_ * 100.0f;
@@ -2942,6 +2952,7 @@ void App::drawPenControls(float cardInner) {
         theme::labelValue("Paint height", value, cardInner);
         auto_.registerWidget("text_paint_height");
         theme::hint("Ctrl+drag the ground to pick a height for Flatten.");
+        theme::hint("Hold - / = to lower / raise one fixed spot; release to finish.");
     }
 }
 

@@ -746,6 +746,7 @@ private:
     size_t thingsShown_ = 0;
     bool penApplied_ = false;          // this stroke has had its one application (spray off)
     bool keyStroke_ = false;           // a -/= stroke (vanilla height keys) is running
+    float keyAnchor_[2] = {0, 0};      // ground point latched for the key stroke
     void fillPen(editor::TerrainBrush& b) const;
     void drawPenControls(float cardInner);
     void drawViewportEdges();

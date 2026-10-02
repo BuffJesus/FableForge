@@ -273,6 +273,9 @@ item and info display components; absent components are not added.
   In Raise, Lower, Flatten, Smooth, Noise and Paths, Ctrl+drag samples the ground
   height continuously without editing it. Each tool shows **Paint height**;
   Flatten uses that sampled target instead of the stroke's starting height.
+  Hold `-` or `=` to lower or raise the point where the key press started;
+  moving the pointer keeps that point fixed. Release finishes one undo step.
+  These keys work in sculpt tools, including Paths.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

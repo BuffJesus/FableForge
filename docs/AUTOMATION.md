@@ -18,6 +18,11 @@ all six sculpt tools, Ctrl+Shift, Flatten's sampled target and active-stroke und
 at normal and compact sizes without saving. State keys `pen_target` and
 `pen_target_from_stroke` expose the target; `text_paint_height` names its readout.
 
+`tools/test_height_keys.py --install <root>` checks fixed-point Minus/Equal
+strokes, all six sculpt tools, all other terrain modes, tool switches and exact
+undo at both sizes. `height_key_active`, `height_key_x` and `height_key_y` expose
+the active stroke and latched ground point.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

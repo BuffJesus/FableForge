@@ -1533,6 +1533,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("place_snap_grid=" + std::to_string(placeSnapGrid_));
     v.push_back("pen_target=" + std::to_string(penTarget_));
     v.push_back("pen_target_from_stroke=" + std::to_string(penTargetFromStroke_));
+    v.push_back("height_key_active=" + std::to_string(keyStroke_));
+    v.push_back("height_key_x=" + std::to_string(keyAnchor_[0]));
+    v.push_back("height_key_y=" + std::to_string(keyAnchor_[1]));
     v.push_back("palette_reveal_pending="+std::to_string(!revealDef_.empty()));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));

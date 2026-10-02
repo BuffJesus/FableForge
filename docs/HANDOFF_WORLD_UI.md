@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: fixed-point sculpt height keys
+
+Minus/Equal now latch the ground point when a key stroke starts, continue there
+while held even if the pointer leaves the viewport, and finish one undo step on
+release or exit from sculpt tools. The brush cursor stays at the anchor. Paint,
+Passability and Region ignore these keys. Leaving terrain editing also clears
+the key-stroke flag so a later edit cannot reuse a stale anchor.
+
+Native evidence uses the same FableWin SHA256 below. ProcessInput 0x0294dbe0
+tests GetEditMode()==3 at 0x0294dd29 / 0x0294dd61, calls StickWithLastPoint(true)
+then height addition, and releases the stick plus InsertUndoPartition on key-up.
+StickWithLastPoint 0x02991680 sets byte +0xaf8. GetCurrentPointedAtPos 0x0204b2d0
+returns cached position +0x8dc when that byte is set. Height addition 0x02993840
+reads brush size/opacity and calls EditPlaceHeightAlterationUndoable.
+Local exports: `build/height-keys-native-evidence.txt` and
+`build/height-keys-point-native-evidence.txt`.
+
+The old backlog proposed excluding Paths. Fresh PaintInputPaintMap disassembly
+0x029916a0 calls GetDrawPathsFlag at 0x0299182f before Smear/Noise/PaintHeight
+dispatch, in the same Land input path. Therefore Paths is included among the
+six sculpt tools; there is no pen-specific exclusion in the key handler.
+Dispatch export: `build/paintmap-dispatch-native-evidence.txt` and resolved
+calls in `build/paintmap-dispatch-calls.txt`.
+
+Normal/compact real-key checks pass at `build/height-keys-bcyc0iqy`: all six
+sculpt modes, Minus as well as Equal, moving the camera/pointer away from the
+anchor, leaving the viewport, all eleven other terrain modes ignoring both
+keys, switching to Paint while held, and full document/height undo snapshots.
+The owned Release build was used while the grid/camera broad gate continued
+on stable primary binaries. No install writes or in-game checks exercised here.
+The final hint-text build passes Height pens, Paths, brushes, theme-target guard
+and compact-layout regressions (`build/height_keys_regressions.log`).
+
 ## 2026-10-02 continuation: Ctrl-drag sculpt height picker
 
 Raise, Lower, Flatten, Smooth, Noise and Paths now sample ground height on

@@ -643,7 +643,11 @@ Effort: M (copy mode plus UI card about 1 day; the lock toggle is S). Value: hig
 Effort S. Value med.
 
 #### The -/= height keys follow the moving ray instead of a frozen point, and they work in every Terrain tool, not just Height mode
-*weakness, effort S, value med*
+*resolved 2026-10-02: sculpt-only keys latch their starting ground point,
+continue when the pointer leaves the viewport, and finish one undo step on
+release or tool exit. Paths is included: contrary to the original proposal
+below, native PaintInputPaintMap dispatches GetDrawPathsFlag before the other
+Land pens. See HANDOFF_WORLD_UI and tools/test_height_keys.py.*
 
 **Vanilla:** ProcessInput 0x0294dbe0, on a key-down of DIK_MINUS/DIK_EQUALS (0x0c/0x0d): only when GetEditMode()==3 (PAINT_MAP, the Height Toolbox), it calls PaintInputStickWithLastPoint(1) and then PaintInputPaintMapHeightAddition 0x02993840. On key-up it calls Stick(0) and then InsertUndoPartition (0x0294dd93..ddf9). The column therefore grows on one fixed spot, and the keys do nothing in theme, environment or other modes.
 
