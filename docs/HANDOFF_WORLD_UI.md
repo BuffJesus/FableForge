@@ -31,8 +31,8 @@ marked Latest with the app ZIP, its `.sha256` and the guide ZIP. `main` now trac
 - Scale gizmo: exponential ~0.3% per logical px, Shift finer (AeoN's sensitivity report;
   `scale_drag.txt`); the Properties scale field drags at 0.003.
 New automation: `write_both`, `drop_refused`, `assert_state_min`, `assert_state_max`.
-These new UI scripts passed individually; the full `check_all.py` has not been rerun
-since the release.
+Full `check_all.py` after these: ALL PASS, 82 checks (build/check_all_postrelease.log).
+- Draw Paths now has vanilla square ends (t in [0,1], from FableWin 0x02975ad0); unit-tested.
 
 ## 2026-10-01 continuation: lip-sync Undo and Redo
 
