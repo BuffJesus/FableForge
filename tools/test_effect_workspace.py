@@ -54,7 +54,10 @@ def main():
             if name == 'effect_grid':
                 # Every revealed control must fit horizontally inside the preview pane.
                 preview = re.findall(r'widget_rect effect_preview_image ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)', trace)[0]
-                left, _, right, _ = map(float, preview)
+                left, top, right, bottom = map(float, preview)
+                assert abs((right-left)/(bottom-top)-4/3) < .01, preview
+                if size == '1440x900':
+                    assert right-left < 720 and left > 100, 'Preview should be bounded and centred'
                 for control in controls:
                     match = re.search(r'widget_rect '+control+r' ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)', trace)
                     assert match, control

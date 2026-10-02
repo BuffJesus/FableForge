@@ -2392,6 +2392,22 @@ remain included. The compact capture retains the first mouth-shape slider.
 Automation now accepts Enter; the initial harness failure was an unsupported
 key name, not a frame-navigation failure.
 
+## 2026-10-01 continuation: compact centred Effects viewport
+
+The user reported that the Effects viewport was unnecessarily wide. The preview
+now uses a centred 4:3 area bounded by available width and window height, with a
+600-logical-pixel maximum width. Transport, timeline and background controls
+share that column. Technical details continue below it. At 1440x900 the captured
+image is 510 by 382.5 pixels, replacing the former approximately 1044 by 229 strip.
+Compact controls wrap within the preview width and the page remains scrollable.
+
+Normal/compact workspace checks pass at build/effect-workspace-w5z878dj: transport,
+grid reset pixels, both framing actions, controls and asset links. Added aspect,
+width and centring assertions pass against those captures. Timing/replay/live
+scrubbing and air-glow visibility pass at build/effect-timing-vy5xwi8h. Wide air
+glow and compact blood-pool captures were visually inspected. The change affects
+viewport layout, not the effect simulation or game files.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

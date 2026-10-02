@@ -200,7 +200,6 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     }
     if (!texturesLoaded_) refreshTextures();
     const auto& effect=effectBrowserSelection_;
-    ImGui::TextWrapped("%s",effect.displayName.empty()?effect.name.c_str():effect.displayName.c_str());
     if (!effectRendererReady_) effectRendererReady_=effectRenderer_.init(device_,context_);
     if (effectRendererReady_ && !effectTexturesReady_) {
         effectTexturesReady_=true;
@@ -254,7 +253,17 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
         }
         frameEffectPreview();
     }
-    const ImVec2 previewSize(std::max(1.f,ImGui::GetContentRegionAvail().x),std::clamp(size.y * .40f, S(130), S(270)));
+    const float contentX=ImGui::GetCursorPosX();
+    const float availableWidth=std::max(1.f,ImGui::GetContentRegionAvail().x);
+    const float stageWidth=std::min(availableWidth,std::clamp(size.y*.70f,S(240),S(600)));
+    ImGui::SetCursorPosX(contentX+(availableWidth-stageWidth)*.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
+    ImGui::BeginChild("##effect_preview_stage",ImVec2(stageWidth,0),
+        ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::TextWrapped("%s",effect.displayName.empty()?effect.name.c_str():effect.displayName.c_str());
+    const ImVec2 previewSize(stageWidth,stageWidth*.75f);
     effectLightVolumesDrawn_=0;
     if (effectRendererReady_) {
         auto* image=effectRenderer_.render(int(previewSize.x),int(previewSize.y),effectCamera_,
@@ -389,6 +398,9 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
     ImGui::TextWrapped("%.2f / %.2f s | %zu particles | %zu previewed systems",
         effectSimulation_.position(),effectDuration_,effectSimulation_.particleCount(),
         effectSimulation_.supportedSystems());
+    ImGui::EndChild();
+    auto_.registerWidget("effect_preview_stage");
+    ImGui::SetCursorPosX(contentX);
     ImGui::TextWrapped("%s  |  id %u  |  %d systems",effect.name.c_str(),effect.id,effect.systems);
     ImGui::TextWrapped("%zu sprite systems  |  %zu mesh systems  |  %zu lights",effect.sprites.size(),effect.meshes.size(),effect.lights.size());
     if (effect.parsedFully) theme::hint("All components were decoded. Supported sprites, meshes and light volumes play above; other components remain inspectable.");

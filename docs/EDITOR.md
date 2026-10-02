@@ -1049,8 +1049,8 @@ investigations (texture append resolution, region cap, villagers).
    live link to the running game through ForgeFSE -- see `docs/PLAN.md`.
 
 The **Assets > Effects** preview has Play/Pause, Restart and Step controls.
-The image appears first; controls wrap on narrow windows, with component details
-below them. Click the Background colour swatch to open its colour picker.
+The image uses a centred 4:3 preview, with playback controls and the timeline
+aligned beneath it. Controls wrap on narrow windows; component details follow. Click the Background colour swatch to open its colour picker.
 Auto length fits the timeline to supported particle and light lifetimes, so short
 bursts replay without a long empty tail. Continuous effects use a ten-second
 window. Adjust Length to choose your own window, or enable Auto length to fit it
