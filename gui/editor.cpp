@@ -4196,7 +4196,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         const bool yawDone = ImGui::IsItemDeactivatedAfterEdit();
         auto_.registerWidget("drag_yaw");
         ImGui::SameLine(0, S(6));
-        ImGui::DragFloat("##scale", &f.scale, 0.01f, 0.01f, 100.0f, "x %.3f"); changed |= ImGui::IsItemDeactivatedAfterEdit(); auto_.registerWidget("drag_scale");
+        ImGui::DragFloat("##scale", &f.scale, 0.003f, 0.01f, 100.0f, "x %.3f"); changed |= ImGui::IsItemDeactivatedAfterEdit(); auto_.registerWidget("drag_scale");
         ImGui::PopItemWidth();
         if (std::fabs(yaw - yaw0) > 1e-6f || yawDone) {
             // keep the tilt: rotate the current forward about up by the delta
