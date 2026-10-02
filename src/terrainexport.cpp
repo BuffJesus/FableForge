@@ -553,6 +553,13 @@ std::optional<int32_t> Context::defIntField(const std::string& name, const std::
     return std::nullopt;
 }
 
+std::optional<std::array<uint8_t, 4>> Context::defColourField(const std::string& name, const std::string& field) const {
+    const auto value = defIntField(name, field);
+    if (!value) return std::nullopt;
+    const uint32_t rgba = uint32_t(*value);
+    return std::array<uint8_t, 4>{uint8_t(rgba), uint8_t(rgba >> 8), uint8_t(rgba >> 16), uint8_t(rgba >> 24)};
+}
+
 std::vector<std::pair<std::string, std::string>> Context::definitions(const std::vector<std::string>& types) const {
     std::vector<std::pair<std::string, std::string>> out;
     if (!ready() || !impl_->defs) return out;

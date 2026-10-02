@@ -2650,6 +2650,32 @@ void App::startThemeRebake() {
     });
 }
 
+void App::refreshSurveyOverlay() {
+    int kind = 0;
+    if (editMode_ && editTab_ == 1 && gizmoOp_ == 4 && documentLoaded() && doc_.hasGameMap() && ctx_.ready()) {
+        if (terrainMode_ == 10 && environmentOverlayShow_) kind = 1;
+        if (terrainMode_ == 11 && soundOverlayShow_ != 0) kind = 2;
+    }
+    const int filter = kind == 2 && soundOverlayShow_ == 2 ? soundIndex_ : -1;
+    if (!kind) {
+        renderer_.clearSurveyOverlay();
+        surveyOverlayKind_ = 0;
+        return;
+    }
+    if (renderer_.hasSurveyOverlay() && surveyOverlayKind_ == kind && surveyOverlayFilter_ == filter &&
+        surveyOverlayRevision_ == doc_.terrainRevision() && surveyOverlayMap_ == selectedName_) return;
+    const auto colours = doc_.surveyOverlay(kind == 1, filter, [this](const std::string& name, const std::string& field) {
+        return ctx_.defColourField(name, field);
+    });
+    terrainexport::Image image;
+    image.width = doc_.level()->gameMapWidth(); image.height = doc_.level()->gameMapHeight();
+    image.rgba.reserve(colours.size() * 4);
+    for (const auto& colour : colours) image.rgba.insert(image.rgba.end(), colour.begin(), colour.end());
+    renderer_.updateSurveyOverlay(image);
+    surveyOverlayKind_ = kind; surveyOverlayFilter_ = filter;
+    surveyOverlayRevision_ = doc_.terrainRevision(); surveyOverlayMap_ = selectedName_;
+}
+
 void App::syncTerrain() {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
     if (doc_.themeRevision() != syncedThemeRev_) { syncedThemeRev_ = doc_.themeRevision(); if (syncedThemeRev_ > 1 || doc_.themesDirty()) startThemeRebake(); }
@@ -4019,11 +4045,18 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 ImGui::PopFont();
             }
             if (terrainMode_ == 10) {
+                ImGui::Checkbox("Show colours", &environmentOverlayShow_);
+                auto_.registerWidget("check_environment_overlay");
                 theme::label("Environment theme");
                 ImGui::SetNextItemWidth(cardInner);
                 if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
                     for (size_t i = 0; i < atm.size(); ++i) {
                         if (i != 0 && atm[i].name.empty()) continue;
+                        const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(atm[i].name, "EditorColour").value_or(editor::Document::OverlayColour{});
+                        if (ImGui::ColorButton(("##envcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, 1),
+                                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { envSlot_ = int(i); ImGui::CloseCurrentPopup(); }
+                        auto_.registerWidget(("colour_environment_" + std::to_string(i)).c_str());
+                        ImGui::SameLine();
                         if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
                     }
                     ImGui::EndCombo();
@@ -4051,11 +4084,21 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::EndChild();
                 }
             } else {
+                theme::label("Sound colours");
+                ImGui::SetNextItemWidth(cardInner);
+                ImGui::Combo("##soundoverlay", &soundOverlayShow_, "Off\0All sounds\0This sound only\0");
+                auto_.registerWidget("combo_sound_overlay");
                 theme::label("Sound theme");
                 ImGui::SetNextItemWidth(cardInner);
                 if (ImGui::BeginCombo("##soundidx", soundName(soundIndex_).c_str())) {
-                    for (size_t i = 0; i <= snd.size(); ++i)
+                    for (size_t i = 0; i <= snd.size(); ++i) {
+                        const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(snd[i - 1], "EditColour").value_or(editor::Document::OverlayColour{});
+                        if (ImGui::ColorButton(("##soundcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, colour[3]/255.f),
+                                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { soundIndex_ = int(i); ImGui::CloseCurrentPopup(); }
+                        auto_.registerWidget(("colour_sound_" + std::to_string(i)).c_str());
+                        ImGui::SameLine();
                         if (ImGui::Selectable((soundName(int(i)) + "##snd" + std::to_string(i)).c_str(), int(i) == soundIndex_)) soundIndex_ = int(i);
+                    }
                     ImGui::EndCombo();
                 }
                 auto_.registerWidget("combo_sound");

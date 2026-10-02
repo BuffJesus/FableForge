@@ -625,6 +625,12 @@ private:
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
+    int soundOverlayShow_ = 1;       // off, all, selected
+    bool environmentOverlayShow_ = true;
+    int surveyOverlayKind_ = 0, surveyOverlayFilter_ = -1;
+    uint64_t surveyOverlayRevision_ = ~0ull;
+    std::string surveyOverlayMap_;
+    void refreshSurveyOverlay();
     char envSearch_[64] = {};
     forge::fractal::Params fractal_;     // the Fractals card (vanilla dialog defaults)
     // 14 copy region (drag), 15 paste region (click; R rotates): vanilla Copy and paste

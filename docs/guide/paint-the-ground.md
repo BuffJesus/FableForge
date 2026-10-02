@@ -74,6 +74,12 @@ navigation data. It does not regenerate navigation for a whole map.
 
 ## Write it into the game
 
+Sound and Environ. show their regions in the themes' editor colours. Sound can
+show all sounds, only the selected sound, or be switched off. Environ. has its
+own **Show colours** toggle. Both update during painting and undo. Colour chips
+in the theme pickers select that theme. These are region labels, rather than
+previews of audible sound or the game's lighting.
+
 Painted themes, walkability and heights are all part of the terrain. Press
 **Write terrain into the game** at the bottom of the Edit panel (or *Write terrain
 into pack ...* when *Writes go into* names a pack). Moved or placed objects are a

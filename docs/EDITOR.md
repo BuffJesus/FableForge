@@ -295,6 +295,11 @@ item and info display components; absent components are not added.
   Environ. maps that strict truncated vertex pen to 4x4 game cells and sets each
   touched cell fully to the chosen environment; Strength and time do not scale
   it. Small cursors outline the cells. Picking no environment clears them.
+  Sound's colour overlay can show all sounds, just the selected sound, or be
+  switched off. Environ. shows blended editor colours with its own toggle.
+  Both update while painting and on undo. Colour chips in the theme pickers
+  select that theme. These colours identify regions; they preview neither
+  audible sound nor the game's atmosphere lighting.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

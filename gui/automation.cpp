@@ -513,6 +513,8 @@ bool Automation::tick(App& app) {
         else if (key == "pen_target_from_stroke") app.penTargetFromStroke_ = val == "1";
         else if (key == "pen_speed") app.penSpeed_ = float(std::atof(val.c_str()));
         else if (key == "sound_index") app.soundIndex_ = std::clamp(std::atoi(val.c_str()), 0, int(app.doc_.soundThemes().size()));
+        else if (key == "sound_overlay") app.soundOverlayShow_ = std::clamp(std::atoi(val.c_str()), 0, 2);
+        else if (key == "environment_overlay") app.environmentOverlayShow_ = std::atoi(val.c_str()) != 0;
         else if (key == "environment_index") app.envSlot_ = std::clamp(std::atoi(val.c_str()), 0, 255);
         else if (key == "pen_smoothness") app.penSmoothness_ = float(std::atof(val.c_str()));
         else if (key == "pen_spiky") app.penSpikyness_ = float(std::atof(val.c_str()));

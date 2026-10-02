@@ -551,6 +551,10 @@ public:
     std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
     // Environment maps the strict theme vertex pen to unique game cells.
     std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
+    using OverlayColour = std::array<uint8_t, 4>;
+    using OverlayLookup = std::function<std::optional<OverlayColour>(const std::string&, const std::string&)>;
+    // One RGBA value per game cell. Sound filter -1 means all; 0 means none.
+    std::vector<OverlayColour> surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const;
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;

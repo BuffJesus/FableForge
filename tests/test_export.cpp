@@ -1220,6 +1220,41 @@ void testGameMapGrid(const fs::path& dir) {
 // Environment + sound painting through the document (vanilla ENVIRONMENT tab and
 // Survey > Sounds): brushes on the 4x4 game-map cells, a new environment theme in
 // a free atmos slot, dirty tracking, the loose save, undo.
+void testSurveyOverlay(const fs::path& dir) {
+    using Doc = albion::editor::Document;
+    using Colour = Doc::OverlayColour;
+    const auto path = writeGameMapLev(dir / "survey.lev");
+    auto lev = forge::lev::File::open(path);
+    lev.setAtmosAt(0, 0, {{1, 1, 1}, {85, 85, 85}});
+    lev.setAtmosAt(1, 0, {{1, 0, 0}, {255, 0, 0}});
+    lev.save(path);
+    Doc doc;
+    std::string err;
+    CHECK(doc.openText("Survey", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const Doc::OverlayLookup lookup = [](const std::string& name, const std::string& field) -> std::optional<Colour> {
+        if (name == "SOUND_A" && field == "EditColour") return Colour{200, 10, 20, 37};
+        if (name == "SOUND_B" && field == "EditColour") return Colour{5, 100, 250, 240};
+        if (name == "ENVIRONMENT_UNDERTREES" && field == "EditorColour") return Colour{2, 100, 255, 7};
+        return std::nullopt;
+    };
+    const auto all = doc.surveyOverlay(false, -1, lookup);
+    CHECK((all == std::vector<Colour>{{200,10,20,37}, {200,10,20,37}, {200,10,20,37}, {5,100,250,240}}));
+    CHECK((doc.surveyOverlay(false, 2, lookup) == std::vector<Colour>{{}, {}, {}, {5,100,250,240}}));
+    CHECK((doc.surveyOverlay(false, 0, lookup) == std::vector<Colour>(4)));
+    const auto atmosphere = doc.surveyOverlay(true, -1, lookup);
+    // Truncating each slot gives 0/99/255, rather than rounding the final sum.
+    CHECK((atmosphere == std::vector<Colour>{{0,99,255,128}, {2,100,255,128}, {0,0,0,128}, {0,0,0,128}}));
+    CHECK((doc.surveyOverlay(false, -1, [](const auto&, const auto&) { return std::optional<Colour>{}; }) == std::vector<Colour>(4)));
+    albion::editor::TerrainBrush brush;
+    brush.mode = albion::editor::TerrainBrush::Mode::Sound; brush.themeIndex = 2;
+    brush.x = 1; brush.y = 1; brush.radius = 1;
+    doc.beginStroke(brush); doc.applyBrush(brush, 0.1f);
+    CHECK((doc.surveyOverlay(false, -1, lookup)[0] == Colour{5,100,250,240}));
+    doc.endStroke(); CHECK(doc.undo());
+    CHECK(doc.surveyOverlay(false, -1, lookup) == all);
+}
+
 void testEnvironmentAndSoundPaint(const fs::path& dir) {
     namespace ed = albion::editor;
     const fs::path lev = writeGameMapLev(dir / "envsound.lev");
@@ -3126,6 +3161,7 @@ int main() {
     testDayNightSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
+    testSurveyOverlay(dir);
     testSoundBrushFootprint(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);

@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Sound/environment region overlays now use decoded editor colours, sharp 4x4-cell
+boundaries, all/selected/off sound controls and an environment toggle. They update
+during paint and undo; these identify regions rather than previewing runtime audio
+or lighting. Native colour arithmetic and validation are in HANDOFF_WORLD_UI.
+
 2026-10-02 continuation: saved cell-centre placement now covers new/pasted things
 and ground carry, preserving ground/fixed heights, group spacing and exact undo.
 Normal/compact UI and all 36 core tests pass; native evidence and boundaries are

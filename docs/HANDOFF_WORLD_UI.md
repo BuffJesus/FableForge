@@ -1,5 +1,53 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Sound and environment survey colours
+
+Sound now offers Off / All sounds / This sound only; Environment defaults to
+showing colours and has its own toggle. Theme pickers carry selectable colour
+chips. A game-cell RGBA texture at shader t3 uses integer Load at floor(local
+ground XY/4), preserving sharp boundaries without changing terrain vertices.
+Only the active ground pass is tinted; object/water/world passes and model
+previews remain separate. All four map view modes show the overlay.
+Document queries read live strokes and rebuild on revision, selection, map,
+tool or context changes. Colours decode once per palette entry per rebuild,
+rather than per cell. Install/context replacement and renderer clearing drop
+the resource. Terrain repaint, fill, palette additions and undo refresh it.
+
+Fresh full disassembly `build/survey-overlay-native-full.txt` covers
+SoundOverlayInfo 0x029aa550 through its return at 0x029aaba6, and
+UpdateOverlayAtmos 0x02971d80 through 0x029721be. Source is read-only
+`D:/Documents/FableTLC/debug_build/FableWin.exe`, SHA256
+`A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845`.
+Sound copies EditColour RGBA at definition +0x44, preserving alpha
+(0x029aa89f..0x029aa8ae / 0x029aab26..0x029aab35). Layer 0 means all in
+native code; Forge's adapter uses -1/all and 0/selected None, transparent.
+Atmosphere uses float(strength)/255 and truncates RGB after EACH slot addition
+(0x02971fdc..0x0297213c), then sets A=128 (0x02972152..0x0297215a).
+None is black. Missing colours contribute black/transparent; malformed overfull
+RGB sums clamp to 255. This corrects the historical rounded-final-sum proposal.
+
+The initial rendered check found the embedded schema lacked both definition
+types. Its slice now includes repository SOUND_THEME / CSoundThemeDef /
+ENVIRONMENT_THEME_DAY, and Context::defColourField reads named RGBA fields.
+Retail decode confirms HAUNTED EditorColour ffff00ff and SECRET_PASSAGE
+EditColour 04800080. Definition offsets are evidence, not retail read offsets.
+
+Core fixtures independently check sound alpha, all/selected/None/missing-colour
+behavior, three-slot truncation (2/100/255 at thirds gives 0/99/255), active-stroke
+refresh and exact undo. Full Release build and all 36 CTest checks pass.
+`tools/test_survey_overlay.py` passes rendered normal/compact pixels, controls,
+colour-chip selection, all four view modes, real paint and exact undo at
+`build/survey-overlay-9dcw58ir`. Normal sound and final compact environment
+captures were inspected. Before the added chip-widget assertions, all-mode
+coverage also passed at `build/survey-overlay-d3nnlnj3`.
+Existing Sound and Environment real-click/sample/clear/undo regressions pass
+at `build/sound-cursor-sqkv30hm` / `build/environment-cursor-0y4i_gqi`.
+World 2D/3D/open-map and compact layout scripts pass with RESULT PASS;
+combined output is `build/survey_overlay_regressions.log`. Docs command and
+Python syntax checks pass. An early launch collided with the Windows linker
+(WinError 32); rerunning after the build finished passed.
+No live writes, deployment, audible sound or in-game atmosphere comparison.
+
 ## 2026-10-02 continuation: Environment stamp and cell cursor
 
 Environment now sets each touched 4x4 game cell to {target,0,0}/{255,0,0}

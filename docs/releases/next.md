@@ -5,6 +5,11 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Sound and environment colours.** Terrain painting shows each region's editor
+  colour with sharp cell boundaries. Sound can show all sounds, only the selected
+  sound, or be hidden; Environment has its own toggle. Colours update during
+  painting and undo, and colour chips in the theme pickers select a theme.
+
 - **User guide.** Short task pages under `docs/guide/` (paint the ground, Fit to
   neighbours, mod packs and load order, dialogue lip sync), linked from the README
   and shipped in the ZIP beside it.

@@ -25,6 +25,7 @@ cbuffer Frame : register(b0) {
     float4 eye;
     float4 flags;         // x = pass (0 terrain, 1 instances, 2 water), y = alpha test (cutout materials)
     float4 detail;        // x = object LOD enabled, y = projection in pixels, z = draw distance
+    float4 survey;        // x = game-cell overlay enabled on the active terrain
 };
 cbuffer Object : register(b1) {
     row_major float4x4 world;   // identity for baked geometry; per-thing for instances
@@ -34,6 +35,7 @@ cbuffer Object : register(b1) {
 Texture2D albedo : register(t0);
 Texture2D coarseAlbedo : register(t1);
 Buffer<float4> objectBounds : register(t2);
+Texture2D surveyOverlay : register(t3);
 SamplerState samp : register(s0);
 
 struct VSIn  { float3 pos : POSITION; float3 nrm : NORMAL; float2 uv : TEXCOORD0; float walk : TEXCOORD1; float4 coarseNormal : NORMAL1; };
@@ -75,6 +77,15 @@ float3 heightRamp(float t) {
     if (t < 0.33) return lerp(a, b, t / 0.33);
     if (t < 0.66) return lerp(b, c, (t - 0.33) / 0.33);
     return lerp(c, d, (t - 0.66) / 0.34);
+}
+
+float3 surveyColour(float3 colour, float3 position) {
+    if (survey.x > 0.5) {
+        int2 cell = int2(floor(float2(position.x, -position.z) / 4.0));
+        float4 overlay = surveyOverlay.Load(int3(cell, 0));
+        colour = lerp(colour, overlay.rgb, overlay.a);
+    }
+    return colour;
 }
 
 float4 PS(VSOut i) : SV_Target {
@@ -137,7 +148,7 @@ float4 PS(VSOut i) : SV_Target {
     } else if (mode == 1) {
         float d = distance(eye.xyz, i.wpos);
         float fade = saturate(1.0 - d / (eye.w * 3.0));
-        return float4(lerp(float3(0.30, 0.20, 0.55), float3(0.72, 0.55, 1.0), fade), 1.0);
+        return float4(surveyColour(lerp(float3(0.30, 0.20, 0.55), float3(0.72, 0.55, 1.0), fade), i.wpos), 1.0);
     } else if (mode == 2) {
         // walkable = teal, blocked = orange-red AND diagonally striped, so the two read
         // apart without the hue (red/green colour blindness)
@@ -173,7 +184,7 @@ float4 PS(VSOut i) : SV_Target {
     float haze = saturate((dist - eye.w * 1.5) / (eye.w * 4.0));
     float3 col = base * light;
     col = lerp(col, float3(0.075, 0.07, 0.10), haze * 0.7);
-    return float4(col, 1.0);
+    return float4(surveyColour(col, i.wpos), 1.0);
 }
 )HLSL";
 
@@ -184,6 +195,7 @@ struct FrameCB {
     float eye[4];
     float flags[4];
     float detail[4];
+    float survey[4];
 };
 
 struct ObjectCB {
@@ -969,7 +981,7 @@ void Renderer::screenRay(float u, float v, float origin[3], float dir[3]) const 
 }
 
 void Renderer::releaseMesh() {
-    release(vb_); release(ib_); release(albedo_); release(waterVb_); release(waterIb_);
+    release(vb_); release(ib_); release(albedo_); release(surveyOverlay_); release(waterVb_); release(waterIb_);
     indexCount_ = 0; waterIndexCount_ = 0;
 }
 
@@ -1106,6 +1118,15 @@ void Renderer::clearListThumbs() {
     for (auto& [key, srv] : listThumbs_) release(srv);
     listThumbs_.clear();
     listThumbOrder_.clear();
+}
+
+void Renderer::clearSurveyOverlay() { release(surveyOverlay_); }
+
+bool Renderer::updateSurveyOverlay(const terrainexport::Image& image) {
+    auto* next = makeTexture(image);
+    clearSurveyOverlay();
+    surveyOverlay_ = next;
+    return next != nullptr;
 }
 
 ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img, bool mipmaps) {
@@ -1615,6 +1636,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     lastAspect_ = float(width) / float(height);
     FrameCB cb = {};
     cb.flags[2] = 1.0f;
+    cb.survey[0] = !worldOnly && surveyOverlay_ ? 1.0f : 0.0f;
     mul4(view, proj, cb.viewProj);
     worldDrawnBatches = worldCulledBatches = 0;
     worldDrawnObjects = worldCulledObjects = worldLodObjects = worldObjectDrawCalls = 0;
@@ -1652,6 +1674,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     setObject(kIdentity, kNoTint);
     ID3D11ShaderResourceView* tex = albedo_ ? albedo_ : white_;
     ctx_->PSSetShaderResources(0, 1, &tex);
+    ctx_->PSSetShaderResources(3, 1, &surveyOverlay_);
     ctx_->PSSetSamplers(0, 1, &sampler_);
     ctx_->RSSetState(mode == ViewMode::Wireframe ? wire_ : solid_);
     ctx_->OMSetDepthStencilState(depth_, 0);
@@ -1823,6 +1846,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     FORGE_PLOT("World drawn batches", worldDrawnBatches);
     FORGE_PLOT("World culled batches", worldCulledBatches);
     ctx_->PSSetShaderResources(0, 2, nullSrv);
+    ctx_->PSSetShaderResources(3, 1, nullSrv);
     ctx_->VSSetShaderResources(2, 1, nullSrv);
     resolveTarget();
     return srv_;

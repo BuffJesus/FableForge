@@ -1,5 +1,14 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_survey_overlay.py --install <root>` checks visible survey colours,
+selected-sound filtering, controls, painting and exact undo at normal/compact
+sizes. `set sound_overlay 0|1|2` chooses off/all/selected;
+`set environment_overlay 0|1` sets the atmosphere overlay.
+State `survey_overlay_kind` is 0/off, 1/atmosphere,
+2/sound; `survey_overlay_filter` is -1/all or the selected sound index (0/None).
+Widgets `combo_sound_overlay` and `check_environment_overlay` expose the controls.
+Open theme pickers expose `colour_sound_<index>` and `colour_environment_<slot>`.
+
 `tools/test_placement_grid.py --install <root>` checks the real placement-grid
 toggle at 1440x900 and 800x600 / 1.5 scale, ground and fixed heights, pointer
 placement, paste, special things, carry and exact undo without game writes.

@@ -1222,6 +1222,7 @@ void App::pollWorkers() {
         const auto [ok, err] = ctxFuture_.get();
         if (ok) {
             ctx_ = *ctxPending_;
+            renderer_.clearSurveyOverlay();
             pushLog("Textures ready (game.bin themes + textures.big)", 3);
             if (reloadWhenContextReady_ && !selectedName_.empty()) {
                 if (hasUnsavedEdits() || (documentLoaded() && doc_.strokeActive())) startThemeRebake();
@@ -1230,7 +1231,7 @@ void App::pollWorkers() {
             else if ((previewFoliage_ || previewThings_) && previewLoaded() && !foliageLoaded()) startFoliageLoad();
         } else {
             ctxError_ = err;
-            if (ctxPending_->themeLibrary()) ctx_ = *ctxPending_;   // defs-only context
+            if (ctxPending_->themeLibrary()) { ctx_ = *ctxPending_; renderer_.clearSurveyOverlay(); }   // defs-only context
             pushLog("Textures unavailable: " + err, 1);
         }
         ctxPending_.reset();
@@ -1867,6 +1868,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("brush_cursor_sound_cells=" + std::to_string(brushCursorSoundCells_));
     v.push_back("sound_index=" + std::to_string(soundIndex_));
     v.push_back("brush_cursor_environment_cells=" + std::to_string(brushCursorEnvironmentCells_));
+    v.push_back("survey_overlay_kind=" + std::to_string(renderer_.hasSurveyOverlay() ? surveyOverlayKind_ : 0));
+    v.push_back("survey_overlay_filter=" + std::to_string(surveyOverlayFilter_));
     v.push_back("environment_index=" + std::to_string(envSlot_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));
@@ -2497,6 +2500,7 @@ void App::drawViewport(float width) {
         ImGui::EndChild();
         return;
     }
+    refreshSurveyOverlay();
     ID3D11ShaderResourceView* srv = renderer_.render(uint32_t(std::max(size.x, 8.0f)), uint32_t(std::max(size.y, 8.0f)), camera_, mode_, time_);
     if (srv) {
         ImGui::SetCursorScreenPos(origin);

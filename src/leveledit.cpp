@@ -973,6 +973,37 @@ std::vector<std::pair<int, int>> Document::environmentBrushCells(float x, float 
     return gameCellsForVertices(themeBrushVertices(x, y, radius), level_->gameMapWidth(), level_->gameMapHeight());
 }
 
+std::vector<Document::OverlayColour> Document::surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const {
+    if (!hasGameMap() || !hasTerrain()) return {};
+    const auto& t = liveTerrain();
+    const size_t count = size_t(level_->gameMapWidth()) * level_->gameMapHeight();
+    if (environment ? t.atmosIndex.size() != count || t.atmosStrength.size() != count : t.sound.size() != count) return {};
+    std::array<OverlayColour, 256> colours{};
+    if (environment) {
+        for (size_t i = 1; i < t.atmosPalette.size() && i < colours.size(); ++i)
+            if (!t.atmosPalette[i].name.empty())
+                colours[i] = lookup(t.atmosPalette[i].name, "EditorColour").value_or(OverlayColour{});
+    } else {
+        const auto& sounds = soundThemes();
+        for (size_t i = 0; i < sounds.size() && i + 1 < colours.size(); ++i)
+            if (soundFilter < 0 || soundFilter == int(i + 1))
+                colours[i + 1] = lookup(sounds[i], "EditColour").value_or(OverlayColour{});
+    }
+    std::vector<OverlayColour> result(count);
+    for (size_t cell = 0; cell < count; ++cell) {
+        if (!environment) { result[cell] = colours[t.sound[cell]]; continue; }
+        auto& out = result[cell];
+        for (int slot = 0; slot < 3; ++slot) {
+            const float weight = float(t.atmosStrength[cell][slot]) / 255.0f;
+            const auto& colour = colours[t.atmosIndex[cell][slot]];
+            for (int channel = 0; channel < 3; ++channel)
+                out[channel] = uint8_t(std::min(255, int(double(out[channel]) + double(colour[channel]) * double(weight))));
+        }
+        out[3] = 128;
+    }
+    return result;
+}
+
 std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {
     if (!hasGameMap()) return std::nullopt;
     const TerrainState& t = liveTerrain();

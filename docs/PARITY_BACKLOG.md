@@ -835,33 +835,32 @@ versus a corrected Forge blending contract remains to be resolved.
 5. Tests: add a check to tests/test_export.cpp on a 5x5 lev. Centre (2,2) is theme A=255, with neighbours of theme B=255 on the left column and theme C with a weight under 16. Assert the centre's top-3 order, that blends sum to 255, that the remainder lands on slot 0, that C is dropped, and that the Jacobi rule holds (a neighbour smeared in the same pass sees the pre-pass values). Also add a tests/ui/theme_smear.txt script with a screenshot.
 Effort M, value high.
 
-#### No sound or environment overlay (vanilla Show all / Show selected sounds, atmos colour overlay)
-*gap, effort M, value high*
+#### Sound and environment survey colours
+*resolved 2026-10-02; runtime sound/lighting preview remains separate*
 
-**Vanilla:** Survey > Sounds has Off / Show all sounds / Show selected sound (EditShowAllSounds 0x029a9d50, EditShowSelectedSounds 0x029a9db0, then CEditMap::SoundOverlayInfo 0x029aa550). Every height cell is tinted with its game cell's SOUND_THEME def EditColour (CSoundThemeDef+0x40). For 'selected', only cells whose sound equals the chosen layer are tinted, and the rest are transparent. Painting an environment theme refreshes UpdateOverlayAtmos 0x02971d80: per cell, sum over 3 slots of ENVIRONMENT_THEME_DAY EditorColour (+0x74 in FableWin) times blend/255, at alpha 0x80.
+Sound now offers Off / All sounds / This sound only. Environment has an
+independent overlay toggle. A game-cell texture keeps 4x4-cell boundaries sharp;
+only the active map's ground is tinted, in all four view modes. Paint, fill,
+palette additions and undo invalidate the overlay, including active strokes.
+Colour chips in the theme pickers select their themes.
 
-**Fix:** Effort M, value high. Port the behaviour of SoundOverlayInfo 0x029aa550 and UpdateOverlayAtmos 0x02971d80.
+Fresh disassembly corrects the old proposal: `SoundOverlayInfo` 0x029aa550
+copies all four `EditColour` bytes (FableWin definition +0x44, not +0x40),
+preserving alpha. Native layer 0 means all; Forge uses -1 for all and 0 for
+selected None, which stays transparent. `UpdateOverlayAtmos` 0x02971d80 uses
+float(strength)/255, truncates each RGB channel after each slot's addition,
+then sets alpha 128. Slot 0 is black; rounding the final sum was incorrect.
+Forge clamps malformed overfull accumulations to 255. Missing sound colours
+are transparent; missing atmosphere colours contribute black.
 
-1) Read the colours from defs. ctx_.defIntField(name, field) (src/terrainexport.cpp:507) already decodes a 4-byte field by name, and CRGBColour is 4 bytes. Add a helper in src/terrainexport.cpp, Context::defColourField(name, field) -> optional<array<uint8_t,4>>, which unpacks the byte order the same way defedit.cpp:149 does. Use field 'EditColour' on SOUND_THEME defs and 'EditorColour' on ENVIRONMENT_THEME_DAY defs. Use the field names, not the FableWin offsets 0x44/0x74, which differ from Ego_r's 64/108. Cache the colours per def name in the editor and drop the cache when soundDefs_/envDefs_ reload.
+`Context::defColourField` decodes named fields in RGBA byte order. The embedded
+schema now includes SOUND_THEME / CSoundThemeDef / ENVIRONMENT_THEME_DAY from
+the repository schema; the previous ground/object-only slice could not resolve
+these definitions. Definition offsets are evidence, never retail read offsets.
+Full targeted exports: `build/survey-overlay-native-full.txt`; executable
+identity and validation boundaries are recorded in HANDOFF_WORLD_UI.
 
-2) Build the overlay in Document (src/leveledit.cpp/.hpp). Add two functions, each filling one RGBA per height cell (cellsX x cellsY), with each height cell mapped to its 4x4 game-map cell the way environmentAndSoundAt already does:
-   - soundOverlay(int layer, colourFn, vector<uint32_t>& out). Get s = the cell's sound index. If layer==0: s>0 gets colour(soundThemes[s-1]), anything else gets 0 (transparent). If layer!=0: s==layer gets its colour, anything else gets 0.
-   - atmosOverlay(colourFn, out). Start with rgb=0. For the 3 slots, add EditorColour(atmosPalette[idx]) * strength/255 to rgb, with idx 0 counting as black. Round, clamp to 8 bits, and set A=0x80.
-
-3) Renderer (gui/renderer.cpp/.hpp):
-   - Add an optional per-vertex overlay colour. Either extend the terrain vertex, which already carries walkable at renderer.cpp:891, with a packed RGBA (update the input layout), or bind a second vertex stream.
-   - Add Renderer::updateOverlay(const uint32_t* rgba, int cellsX, int cellsY) and a flag overlayOn.
-   - In the pixel shader (around renderer.cpp:72-91, next to the Walkable branch), blend lerp(base, overlay.rgb, overlay.a) on top of any view mode.
-
-4) UI (gui/editor.cpp, the terrainMode_ 10/11 block at 2601-2679):
-   - While Environ. (10) is active, show the atmos overlay automatically. While Sound (11) is active, show the sound overlay.
-   - Under the sound combo (editor.cpp:2646), add a segmented 'Show: Off / All sounds / This sound only'. 'This sound only' passes soundIndex_ as the layer. These are vanilla Survey > Sounds Off / Show all / Show selected.
-   - Add a compact legend: each sound this map names, with its EditColour chip (and the atmos palette entries for Environ.). Clicking a chip selects that sound or slot.
-   - Rebuild the overlay after every paint stroke, fill, or add-from-game, the way vanilla EditSetSound 0x029a97c0 re-runs SoundOverlayInfo. Rebuilding only the dirty box is enough, as UpdateOverlayAtmos does with its C2DBoxI. Rebuild it on undo too.
-
-5) Automation (gui/automation.cpp:241): add overlay=sound|sound:<n>|atmos|off so headless screenshots can check it.
-
-Leave out the Reflections overlay here (ReflectionsOverlayInfo 0x029aad40 is a separate survey).
+Reflections and runtime audible/lighting previews remain separate work.
 
 #### Ground and environment Paint is a soft airbrush; vanilla Paint is a hard stamp
 *weakness, effort S, value high*
