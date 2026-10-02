@@ -2645,7 +2645,14 @@ void App::syncTerrain() {
 }
 
 // A picker over the map's LEV ground-theme palette (named slots only).
-void App::paletteCombo(const char* id, int& slot, float width) {
+bool App::paintableSlot(int slot) const {
+    const forge::lev::File* lev = doc_.level();
+    if (!lev || slot <= 0 || size_t(slot) >= lev->groundThemes().size()) return false;
+    const std::string& name = lev->groundThemes()[size_t(slot)].name;
+    return !name.empty() && name != "INVALID_THEME_STANDIN";
+}
+
+void App::paletteCombo(const char* id, int& slot, float width, bool asTarget) {
     using theme::S;
     const forge::lev::File* lev = doc_.level();
     const char* current = "(pick a ground theme)";
@@ -2656,7 +2663,7 @@ void App::paletteCombo(const char* id, int& slot, float width) {
         if (lev)
             for (size_t i = 0; i < lev->groundThemes().size(); ++i) {
                 const auto& g = lev->groundThemes()[i];
-                if (g.name.empty()) continue;
+                if (g.name.empty() || (asTarget && !paintableSlot(int(i)))) continue;
                 char lbl[160]; std::snprintf(lbl, sizeof lbl, "%zu  %s", i, g.name.c_str());
                 const float rowH = S(24);
                 const ImVec2 rowPos = ImGui::GetCursorScreenPos();
@@ -2735,8 +2742,12 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     // the cell's strongest theme becomes the one painted, Ctrl+Shift the one replaced
     if (press && io.KeyCtrl && terrainMode_ >= 6 && terrainMode_ <= 8) {
         if (const auto t = doc_.dominantThemeAt(brushFable_[0], brushFable_[1])) {
-            if (io.KeyShift) replaceFrom_ = *t; else paintTheme_ = *t;
             const auto& pal = doc_.level()->groundThemes();
+            if (!io.KeyShift && !paintableSlot(*t)) {
+                pushLog("theme pick: " + (size_t(*t) < pal.size() && !pal[*t].name.empty() ? pal[*t].name : std::string("this cell")) + " is the engine's placeholder, not a theme to paint; Ctrl+Shift+click picks it as the theme to replace", 1);
+                return;
+            }
+            if (io.KeyShift) replaceFrom_ = *t; else paintTheme_ = *t;
             pushLog(std::string("theme picked for ") + (io.KeyShift ? "replace: " : "paint: ") + (size_t(*t) < pal.size() ? pal[*t].name : std::to_string(*t)), 0);
         }
         return;
@@ -2755,6 +2766,10 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
             if (terrainMode_ == 10) envSlot_ = es->first; else soundIndex_ = es->second;
             pushLog(terrainMode_ == 10 ? "environment picked" : "sound picked", 0);
         }
+        return;
+    }
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) {
+        if (press) pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1);
         return;
     }
     if (terrainMode_ == 8) {
@@ -2884,6 +2899,7 @@ void App::drawPenControls(float cardInner) {
 
 void App::terrainStroke(float x, float y, float seconds) {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) { pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1); return; }
     editor::TerrainBrush b;
     b.mode = brushModeFor(terrainMode_);
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
@@ -3929,7 +3945,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         if (terrainMode_ == 7 || terrainMode_ == 8) {
             // the vanilla Themes dialog's "Theme to Replace" / "Theme to Place" pair
             theme::label("Replace this theme");
-            paletteCombo("##replaceFrom", replaceFrom_, cardInner);
+            paletteCombo("##replaceFrom", replaceFrom_, cardInner, false);
             auto_.registerWidget("combo_replace_from");
             theme::label("with this theme");
             paletteCombo("##replaceTo", paintTheme_, cardInner);

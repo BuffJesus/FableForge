@@ -701,7 +701,10 @@ private:
     float fractalPreviewMin_ = 0.0f, fractalPreviewMax_ = 0.0f;
     bool pathDrag_ = false;          // mode 9: LMB down, start fixed at pathStart_
     float pathStart_[2] = {0, 0};
-    void paletteCombo(const char* id, int& slot, float width);
+    void paletteCombo(const char* id, int& slot, float width, bool asTarget = true);
+    // a palette slot that may be painted: named, and not slot 0 ("no theme", never drawn in-game)
+    // or the engine's INVALID_THEME_STANDIN placeholder (retail slot 1)
+    bool paintableSlot(int slot) const;
     uint64_t syncedThemeRev_ = 0;
     bool rebakePending_ = false;     // a theme stroke ended: re-bake the ground albedo from the LEV
     void startThemeRebake();

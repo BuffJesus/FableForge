@@ -330,6 +330,11 @@ item and info display components; absent components are not added.
   the reddish path (screenshots on/off). Scripts: `add_theme <ENGINE_THEME>`,
   state `paint_theme` / `palette_named`; `tests/ui/theme_deploy.txt` (scratch,
   in test_overworld) and `theme_deploy_live.txt`.
+  2026-10-02: those two reserved slots are no longer paint targets. Ground, Replace
+  and Flood refuse a stroke until a real theme is picked (the default is slot 0),
+  the target lists omit the placeholder, and the Ctrl+click eyedropper will not
+  pick it to paint (Ctrl+Shift+click may still pick it as the theme to replace).
+  `tests/ui/paint_target_guard.txt`.
 * **Your own texture as a ground theme** (2026-09-17, in-game verified): *Custom
   texture from a PNG...* in the paint card (or `forge theme-add <png>
   <NAME> [--donor <theme>] [--cliff <png>]`): the PNG is appended to

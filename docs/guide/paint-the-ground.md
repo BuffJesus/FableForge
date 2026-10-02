@@ -14,7 +14,8 @@ paste). This page covers Paint and Passability. Every stroke is one undo step
 2. Pick a theme under *painting with this theme*. The list holds the map's own
    palette. To use another theme from the game, type in *Add a ground theme from
    the game* (grass, cobbles, snow...) and choose one; it takes a free palette
-   slot.
+   slot. The engine's placeholder (`INVALID_THEME_STANDIN`) is not offered; until
+   you pick a theme, painting is refused with a note.
 3. Hold the left mouse button on the ground. **Radius** sets the brush size
    (`[` and `]`), **Strength** how quickly the theme blends in.
 

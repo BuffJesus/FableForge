@@ -1,0 +1,28 @@
+# Painting needs a real ground theme: slot 0 ("no theme", never drawn in-game) and the
+# engine's INVALID_THEME_STANDIN placeholder (retail slot 1) are refused as paint targets.
+# Read-only: scratch save root, nothing is written.
+wait_maps
+wait_ready
+set saveroot build/ui_paint_guard
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+terrain_mode 6
+paint_theme 0
+terrain_stroke 48 96 0.3
+assert_log paint: pick a ground theme to paint first
+assert_state terrain_dirty 0
+paint_theme 1
+terrain_stroke 48 96 0.3
+assert_state terrain_dirty 0
+terrain_mode 8
+terrain_stroke 48 96 0.3
+assert_state terrain_dirty 0
+terrain_mode 6
+add_theme BEACH_SAND
+frames 2
+terrain_stroke 48 96 0.3
+assert_state terrain_dirty 1
+quit
