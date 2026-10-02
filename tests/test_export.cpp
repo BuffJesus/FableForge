@@ -1346,6 +1346,86 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testTerrainDraft(const fs::path& dir) {
+    namespace ed=albion::editor;
+    forge::TemporaryDirectory scratch(dir, "terrain-draft-");
+    const auto root=scratch.path();
+    fs::create_directories(root / "data/Levels/FinalAlbion");
+    const auto source=writeGameMapLev(root / "data/Levels/FinalAlbion/Draft.lev");
+    auto file=forge::lev::File::open(source);
+    for(int y=0;y<9;++y) for(int x=0;x<9;++x) file.setCameraPassableAt(x,y,true);
+    file.save(source); const auto original=readAll(source);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("Draft","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(doc.loadLevel(source,err));
+    const auto bank=doc.savedTerrain();
+    CHECK(!doc.terrainDraftDirty() && !doc.terrainDirty());
+    CHECK(doc.setVertexHeights({{4,4,12}},false));
+    ed::TerrainBrush b; b.mode=ed::TerrainBrush::Mode::ShoreSet; b.x=4; b.y=4; b.radius=.25f;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.addSoundTheme("SOUND_DRAFT",err)==3);
+    b.mode=ed::TerrainBrush::Mode::Sound; b.themeIndex=3;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.terrainDraftDirty() && doc.terrainDirty());
+    CHECK(doc.saveTerrainDraft(root,err));
+    CHECK(!doc.terrainDraftDirty() && doc.terrainDirty() && doc.savedTerrain()==bank);
+    CHECK(readAll(source)==original); // active game LEV is untouched
+    const auto draft=doc.terrainDraftPath(root);
+    CHECK(fs::exists(draft.string()+".forge-created") && !fs::exists(draft.string()+".forge-orig"));
+    const auto saved=forge::lev::File::open(draft);
+    CHECK(saved.heightAt(4,4)==12 && saved.shorePointAt(4,4) && saved.soundAt(1,1)==3);
+    CHECK(saved.soundThemes().back()=="SOUND_DRAFT");
+    CHECK(doc.setVertexHeights({{4,4,13}},false) && doc.terrainDraftDirty());
+    CHECK(doc.undo() && !doc.terrainDraftDirty() && doc.terrainDirty());
+    CHECK(doc.saveTerrainDraft(root,err));
+    CHECK(!fs::exists(draft.string()+".forge-orig")); // repeats retain created semantics
+    ed::Document reopened;
+    CHECK(reopened.openText("Draft","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(reopened.loadLevel(source,err));
+    const auto oldWrite=reopened.terrainWriteSnapshot();
+    CHECK(reopened.loadTerrainDraft(root,err));
+    CHECK(!reopened.acceptTerrainWrite(oldWrite)); // loading a draft replaces the terrain session
+    CHECK(reopened.terrain().heights==doc.terrain().heights && reopened.terrain().shorePoint==doc.terrain().shorePoint &&
+          reopened.terrain().sound==doc.terrain().sound);
+    CHECK(reopened.terrainDirty() && !reopened.terrainDraftDirty());
+    CHECK(reopened.savedTerrain()->heights==bank->heights); // retain baked foliage baseline
+    CHECK(!reopened.loadTerrainDraft(root,err)); // refuse replacement of a pending document
+    CHECK(reopened.saveTerrainLoose(root,err)); // actual LEV write retires authoring draft
+    CHECK(!fs::exists(draft) && !reopened.terrainDirty() && !reopened.terrainDraftDirty());
+    CHECK(forge::lev::File::open(source).heightAt(4,4)==12);
+    // A wrong-grid draft is rejected without replacing the clean document.
+    writeGameMapLev(draft,12,12);
+    ed::Document mismatch;
+    CHECK(mismatch.openText("Draft","Version 2;\r\n",err) && mismatch.loadLevel(source,err));
+    const auto clean=mismatch.terrain().heights;
+    CHECK(!mismatch.loadTerrainDraft(root,err) && mismatch.terrain().heights==clean);
+    CHECK(err.find("different map or grid")!=std::string::npos);
+    // A blocked destination leaves dirty state and the real LEV unchanged.
+    const auto refused=root / "refused";
+    fs::create_directories(mismatch.terrainDraftPath(refused));
+    CHECK(mismatch.setVertexHeights({{2,2,20}},false));
+    CHECK(!mismatch.saveTerrainDraft(refused,err) && mismatch.terrainDraftDirty());
+    CHECK(forge::lev::File::open(source).heightAt(2,2)==0);
+    // Combined saves preflight every destination before publishing either draft.
+    forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+    object.scriptName="JointDraft"; object.position={1,2,3}; mismatch.place(object);
+    const auto joint=root / "joint";
+    const auto tng=joint / "data/Levels/FinalAlbion/Draft.tng";
+    fs::create_directories(tng); // terrain candidate is valid, object target is blocked
+    CHECK(!mismatch.saveDraftLoose(joint,err));
+    CHECK(mismatch.dirty() && mismatch.terrainDraftDirty());
+    CHECK(!fs::exists(mismatch.terrainDraftPath(joint)));
+    CHECK(!fs::exists(mismatch.terrainDraftPath(joint).string()+".forge-created"));
+    fs::remove(tng);
+    CHECK(mismatch.saveDraftLoose(joint,err));
+    CHECK(!mismatch.dirty() && !mismatch.terrainDraftDirty() && mismatch.terrainDirty());
+    CHECK(forge::lev::File::open(mismatch.terrainDraftPath(joint)).heightAt(2,2)==20);
+    const auto objectBytes=readAll(tng);
+    CHECK(std::string(objectBytes.begin(),objectBytes.end()).find("JointDraft")!=std::string::npos);
+    CHECK(fs::exists(tng.string()+".forge-created"));
+    CHECK(mismatch.savedTerrain()->heights==clean);
+}
+
 void testPassabilityPen(const fs::path& dir) {
     namespace ed = albion::editor;
     using Mode=ed::TerrainBrush::Mode;
@@ -2725,6 +2805,20 @@ void testTerrainSaveFailure(const fs::path& dir) {
         CHECK(doc.terrainDirty() && notes.empty());
         CHECK(existing ? readAll(output) == original : !fs::exists(output));
         CHECK(!fs::exists(output.string() + ".forge-orig") && !fs::exists(output.string() + ".forge-created"));
+        // A terrain serialization failure cannot publish a pending object edit.
+        forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+        object.scriptName="MustStayPending"; object.position={1,2,3}; doc.place(object);
+        const auto objects=output.parent_path() / "SaveFailure.tng";
+        fs::create_directories(objects.parent_path());
+        const std::string oldObjects="Version 2;\r\n";
+        { std::ofstream(objects,std::ios::binary) << oldObjects; }
+        CHECK(!doc.saveDraftLoose(root,error,&notes));
+        CHECK(error.find("unsupported block version")!=std::string::npos);
+        CHECK(doc.dirty() && doc.terrainDraftDirty() && notes.empty());
+        const auto unchanged=readAll(objects);
+        CHECK(std::string(unchanged.begin(),unchanged.end())==oldObjects);
+        CHECK(!fs::exists(doc.terrainDraftPath(root)) && !fs::exists(objects.string()+".forge-orig"));
+        CHECK(doc.undo() && !doc.dirty());
         CHECK(doc.undo() && !doc.terrainDirty());
     }
 }
@@ -3410,6 +3504,7 @@ int main() {
     testAtmosSmear(dir);
     testShorePoints(dir);
     testPassabilityPen(dir);
+    testTerrainDraft(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

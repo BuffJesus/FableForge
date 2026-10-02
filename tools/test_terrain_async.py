@@ -109,6 +109,7 @@ assert_state terrain_dirty 0''')
     assert switched == reference, 'map switch changed the deployed terrain snapshot'
     guarded = run('write_busy', f'''assert_state file_job terrain_write
 save_level_refused
+save_draft_refused
 deploy_level_refused
 compact_stb_refused
 mods_deploy_refused

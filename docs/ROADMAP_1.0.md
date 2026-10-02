@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Save draft, Ctrl+S and F6 now save terrain and objects together; F7 saves and
+reloads. Terrain authoring uses a game-ignored `.lev.forge-draft` file and keeps
+the game's terrain/foliage bake baseline. Write terrain remains available after
+saving. Failure and stock/loose validation are tracked in HANDOFF_WORLD_UI.
+
 Walkable/Blocked and Camera pens now share the verified rounded survey disc,
 with one-vertex brushes, small vertex cursors, regular-cell clipping and exact
 undo. Navigation/save behavior stays on the existing path. Native evidence

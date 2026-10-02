@@ -90,6 +90,22 @@ radius of 1 reaches nine. Extra boundary vertices are excluded.
 Painting walkability changes the map's navigation by patching the game's existing
 navigation data. It does not regenerate navigation for a whole map.
 
+## Save your work
+
+**Save draft**, Ctrl+S or F6 saves objects and terrain together. F7 saves and
+reloads the current map. You can switch maps or close the editor after saving;
+reopening the map restores its terrain draft.
+
+Terrain drafts use `<map>.lev.forge-draft` beside the level files. The game
+ignores this file on both stock and loose installs. **Write terrain** remains
+available after saving and applies the terrain to the game, including its bake.
+An object draft remains a `.tng` file; on a loose or external-world install,
+the game reads that file, so saving object edits requires the game to be closed.
+
+If either part of a joint draft save fails, both edits remain pending. Pack
+exports retain the install's authoring draft. A successful terrain write into
+the game retires its draft file. Restore removes Forge-created draft files.
+
 ## Write it into the game
 
 Sound and Environ. show their regions in the themes' editor colours. Sound can

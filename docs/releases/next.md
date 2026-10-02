@@ -5,6 +5,11 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Terrain drafts.** Save draft, Ctrl+S and F6 now save terrain alongside objects;
+  F7 saves and reloads. Terrain uses a separate file ignored by the game, and
+  reopening restores it. Write terrain remains available to apply it later.
+  Failed joint saves keep both edits pending.
+
 - **Precise Passability pens.** Walkable, Blocked, Camera ok and Camera no now use
   the original editor's rounded pen. A 0.25-cell brush reaches one vertex;
   small cursors show affected vertices, and extra boundary vertices stay untouched.

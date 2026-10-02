@@ -311,6 +311,7 @@ private:
     void cameraPlacementPoint(float position[3]) const;
     bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
     bool placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName = "");
+    bool saveDraft();                                   // objects plus ignored terrain authoring file
     bool saveDocument();                                // loose .tng under saveRoot()
     bool deployDocument();                              // FinalAlbion.wad under saveRoot()
     void revertDocument();
@@ -1233,7 +1234,7 @@ private:
     bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
     bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
     void drawUnsavedPrompt();
-    bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDirty())); }
+    bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDraftDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
     // Viewport overlays (0.15b #3): the ground under the cursor (map-local Fable
     // coordinates + height) and a compass; drawn every frame the viewport is hovered.

@@ -212,7 +212,7 @@ bool Automation::tick(App& app) {
         static const std::map<std::string, ImGuiKey> keys = {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
             {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"H", ImGuiKey_H}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
-            {"Y", ImGuiKey_Y}, {"Z", ImGuiKey_Z},
+            {"Y", ImGuiKey_Y}, {"Z", ImGuiKey_Z}, {"F6", ImGuiKey_F6}, {"F7", ImGuiKey_F7},
             {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Enter", ImGuiKey_Enter}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},
             {"Left",ImGuiKey_LeftArrow}, {"Right",ImGuiKey_RightArrow}, {"Up",ImGuiKey_UpArrow}, {"Down",ImGuiKey_DownArrow},
             {"Comma",ImGuiKey_Comma}, {"Period",ImGuiKey_Period}, {"PageUp",ImGuiKey_PageUp}, {"PageDown",ImGuiKey_PageDown},
@@ -1244,6 +1244,8 @@ bool Automation::tick(App& app) {
         if (!app.placeSpawner(families, radius, limit, sn)) fail("place_spawner failed: " + rest); else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "save_draft") { if (!app.saveDraft()) fail("draft save failed"); else note("ok   " + line); ++pc_; }
+    else if (cmd == "save_draft_refused") { if (app.saveDraft()) fail("draft save unexpectedly succeeded"); else note("ok   " + line); ++pc_; }
     else if (cmd == "save_level") { if (!app.saveDocument()) fail("save failed"); else note("ok   " + line); ++pc_; }
     else if (cmd == "save_level_refused") { if (app.saveDocument()) fail("save unexpectedly succeeded"); else note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_level") { if (!app.deployDocument()) fail("deploy failed"); else note("ok   " + line); ++pc_; }

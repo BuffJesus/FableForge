@@ -72,6 +72,11 @@ void App::openDocument() {
         if (!derr.empty()) pushLog("editor: " + derr, 1);
         return;
     }
+    if (doc_.hasTerrain() && fs::exists(doc_.terrainDraftPath(saveRoot()))) {
+        std::string draftError;
+        if (!doc_.loadTerrainDraft(saveRoot(), draftError)) pushLog("terrain draft: " + draftError, 2);
+        else pushLog("opened saved terrain draft; Write terrain applies it to the game", 0);
+    }
     doc_.setCreatureSexLookup([this](const std::string& definition) {
         return ctx_.defIntField(definition,"Sex");
     });
@@ -2534,6 +2539,24 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
     } catch (const std::exception& e) { pushLog(std::string("editor: ") + e.what(), 2); return false; }
 }
 
+bool App::saveDraft() {
+    if (!documentLoaded() || fileWriteBlocked("save draft")) return false;
+    if (doc_.strokeActive()) { pushLog("save draft: finish the terrain stroke first", 1); return false; }
+    if (doc_.external() && saveRoot() != installPath_) {
+        pushLog("save draft: this map belongs to another world; a redirected save root does not apply to it", 2); return false;
+    }
+    // Terrain authoring files are ignored by the game. Loose/external TNG files are active.
+    if (doc_.dirty() && (doc_.external() || forge::levelstore::detect(saveRoot()).looseOnly()) && gameWriteBlocked("save draft")) return false;
+    const bool terrain = doc_.hasTerrain() && doc_.terrainDraftDirty(), objects = doc_.dirty();
+    std::string err; std::vector<std::string> notes;
+    if (!doc_.saveDraftLoose(saveRoot(), err, &notes)) { pushLog("draft save failed: " + err, 2); return false; }
+    for (const auto& note : notes) pushLog(note, 0);
+    if (terrain) pushLog("saved terrain draft " + doc_.terrainDraftPath(saveRoot()).string() + "; Write terrain applies it to the game", 3);
+    if (objects) pushLog("saved " + doc_.loosePath().string(), 3);
+    if (objects && !validateMap().empty()) pushLog("The object draft contains invalid things. Press V to see the first.", 1);
+    return true;
+}
+
 bool App::saveDocument() {
     if (!documentLoaded()) return false;
     if (fileWriteBlocked("save")) return false;
@@ -3707,8 +3730,9 @@ void App::editorShortcuts() {
         else if (selectedThing_ >= 0) deleteSelected();
     }
     if (ImGui::IsKeyPressed(ImGuiKey_V) && !io.KeyCtrl) showFirstInvalid();   // vanilla: find the invalid thing
-    // vanilla saves with Ctrl+S / F6: here the draft (the loose .tng); writing into the game stays a confirmed button
-    if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && doc_.dirty()) saveDocument();
+    // Ctrl+S / F6 save authoring work; F7 saves and reopens it. Deployment stays separate.
+    if (((io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) || ImGui::IsKeyPressed(ImGuiKey_F6)) && hasUnsavedEdits()) saveDraft();
+    if (ImGui::IsKeyPressed(ImGuiKey_F7) && saveDraft()) { openDocument(); startFoliageLoad(); }
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) editUndo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) editRedo();
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedThing_ >= 0) {
@@ -3893,7 +3917,7 @@ void App::drawUnsavedPrompt() {
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, S(10)));
         const float w = (S(390) - 2 * S(6)) / 3.0f;
-        const bool canSave = closePending_ ? (doc_.dirty() || worldPendingCount() > 0) && !worldFuture_.valid() : doc_.dirty();
+        const bool canSave = closePending_ ? (hasUnsavedEdits() || worldPendingCount() > 0) && !worldFuture_.valid() : hasUnsavedEdits();
         const bool reviewDialogue=closePending_ && !canSave && !dialogueStaged_.empty() &&
             !worldFuture_.valid();
         if (theme::primaryButton(reviewDialogue ? "Review dialogue" :
@@ -3906,14 +3930,14 @@ void App::drawUnsavedPrompt() {
                 setDialogueEditing(true);
             } else
             if (closePending_) {
-                const bool draftSaved = !doc_.dirty() || saveDocument();
+                const bool draftSaved = !hasUnsavedEdits() || saveDraft();
                 if (draftSaved && worldPendingCount() > 0) {
                     worldApply();
                     closeSaveWaiting_ = worldFuture_.valid();
                 }
                 if (draftSaved && !hasUnsavedEdits() && worldPendingCount() == 0 &&
                     !worldFuture_.valid() && dialogueStaged_.empty()) quit_ = true;
-            } else if (saveDocument() && !hasUnsavedEdits()) {
+            } else if (saveDraft() && !hasUnsavedEdits()) {
                 const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t);
             }
         }
@@ -3931,7 +3955,7 @@ void App::drawUnsavedPrompt() {
         auto_.registerWidget("btn_unsaved_cancel");
         if (doc_.hasTerrain() && doc_.terrainDirty()) {
             ImGui::PushFont(fontSmall_);
-            theme::hint("Terrain edits are written with 'Write terrain into the game' (or into a pack) in the Edit panel.");
+            theme::hint("Save draft keeps terrain work for later. Write terrain applies it to the game or pack.");
             ImGui::PopFont();
         }
         if (pendingSelect_.empty() && !closePending_) ImGui::CloseCurrentPopup();
@@ -4896,13 +4920,14 @@ void App::drawEditFooter(float pad, float inner) {
         if (r > 0) deployDocument();
     }
     ImGui::SetCursorPosX(pad);
-    if (theme::ghostButton(dirty ? "Save draft" : "Draft saved", ImVec2(dirty ? half : inner, S(32))) && dirty) saveDocument();
+    const bool draftDirty = hasUnsavedEdits();
+    if (theme::ghostButton(draftDirty ? "Save draft" : "Draft saved", ImVec2(draftDirty ? half : inner, S(32))) && draftDirty) saveDraft();
     auto_.registerWidget("btn_save");
     if (ImGui::IsItemHovered()) {
-        if (writesLoose()) ImGui::SetTooltip("Writes data/Levels/FinalAlbion/%s.tng. This install has no FinalAlbion.wad, so the game READS this file:\na draft saved here is live on the next visit. A one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
-        else ImGui::SetTooltip("Keeps a working copy as data/Levels/FinalAlbion/%s.tng (the game never reads it; FableForge reopens it).\nA one-time backup of any existing file is kept as .forge-orig.", doc_.mapName().c_str());
+        if (writesLoose()) ImGui::SetTooltip("Saves a separate terrain draft for FableForge. Objects use %s.tng, which the game reads in this loose install.\nWrite terrain applies the terrain draft and rebuilds its visible meshes.", doc_.mapName().c_str());
+        else ImGui::SetTooltip("Keeps object and terrain drafts for reopening in FableForge.\nTerrain stays separate from the game files until Write terrain; objects use %s.tng.", doc_.mapName().c_str());
     }
-    if (dirty) {
+    if (draftDirty) {
         ImGui::SameLine(0, S(6));
         if (theme::dangerButton("Revert all", ImVec2(half, S(32)))) revertDocument();
         auto_.registerWidget("btn_revert");

@@ -1,5 +1,50 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: terrain authoring drafts
+
+Save draft, Ctrl+S and F6 now save dirty objects and terrain as one staged
+transaction; F7 saves and reopens the current document. Terrain-only work can
+be saved from the footer or map-switch/close prompt. A successful authoring save
+clears `terrain_draft_dirty`, while `terrain_dirty` and Write terrain remain.
+The document restores `<map>.lev.forge-draft` after opening the normal game LEV.
+This suffix is ignored by both stock and renamed-WAD loose layouts. External
+worlds use the same suffix beside their actual LEV; redirected external saves
+remain refused. Object drafts retain the existing TNG path/guard behavior.
+
+The saved authoring baseline is independent of `savedTerrain_`, which still
+anchors game mesh/theme/foliage bakes. Loading validates UID and grid dimensions,
+keeps the bank baseline, and changes the terrain session to reject stale worker
+completion. Terrain serialization/navigation validation and both destination
+preflights finish before backups/publication; PendingBanks rolls publication
+back on failure. Document state changes only after install succeeds. Existing
+created/original recovery semantics remain. Game writes retire the cache in
+the same transaction; Restore --forget also clears its leftover creation marker.
+Pack exports retain the install cache and do not clear unsaved authoring edits.
+Legacy automation `save_level` is still object-only; new `save_draft` and
+`save_draft_refused` cover the joint workflow.
+
+Validation: full build and all 36 CTest cases pass. Core fixtures independently
+parse saved heights/shore/sound names and flags, preserve active LEV bytes and
+bake-baseline identity, check draft reload/session/undo and reject wrong grids.
+Blocked object destinations and unsupported navigation serialization leave
+both edits pending without publishing a terrain file or changing the old TNG.
+The initial fixed-name fixture failed on a repeat run; it now uses an owned
+TemporaryDirectory and the repeat CTest run passes.
+
+`tools/test_terrain_drafts.py` passed stock and loose installs at both window
+sizes under `build/terrain-drafts-1cigiumi`: real Save button, Ctrl+S, F6/F7,
+map-switch Save prompt, process reopen, byte-identical active terrain banks and
+Restore. Reopened draft bakes match all three direct-reference pack files byte
+for byte on both layouts, then game writes retire the cache and exact Restore
+returns the original banks. The harness now additionally asserts unsaved
+terrain authoring state survives direct pack export; the broad gate will cover
+that assertion. Running-game checks with the new joint/terrain-only commands
+pass for stock (`build/loose-save-guard-zxb63ner`) and loose
+(`build/loose-save-guard-ezvgsj5c`) copies. No live install writes, native runtime
+comparison, release or deployment was performed. Timed crash recovery and
+World-tab pending-edit persistence remain separate backlog work.
+
+
 ## 2026-10-02 continuation: rounded Passability pens
 
 Walkable/Blocked and Camera ok/no now share Shore's rounded regular-cell pen,

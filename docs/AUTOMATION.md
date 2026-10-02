@@ -1,5 +1,14 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_terrain_drafts.py --root <install>` copies stock banks under build,
+then tests stock/loose layouts at both sizes. It exercises the Save button,
+Ctrl+S, F6/F7, map-switch prompt, process reopen, untouched active terrain banks,
+draft/direct bake equivalence, game-write cleanup and Restore.
+`save_draft` / `save_draft_refused` exercise the joint object/terrain transaction;
+legacy `save_level` remains object-only. `terrain_draft_dirty` measures edits
+since the authoring save; `terrain_dirty` measures terrain pending for game/pack.
+`key_down` / `key_up` support F6 and F7.
+
 `tools/test_passability_cursor.py --install <root>` checks modes 4/5/12/13:
 rounded 1/9/21-vertex pens, zero Strength/time, real strokes, Walkable/Blocked
 Shift inversion, preservation of other channels and exact undo at both sizes.

@@ -290,6 +290,7 @@ bool Document::loadLevel(const fs::path& levPath, std::string& error) {
             }
         terrain_ = t;
         savedTerrain_ = t;
+        draftTerrain_ = t; draftSoundThemes_ = level_->soundThemes();
         navWalkable_ = t->walkable;
         ++terrainRev_;
     }
@@ -1398,19 +1399,26 @@ bool Document::themesDirty() const {
 }
 
 bool Document::terrainDirty() const {
-    if (!terrain_ || !savedTerrain_) return false;
-    if (soundListGrew_) return true;
-    if (terrain_ == savedTerrain_) return false;
-    if (terrain_->heights != savedTerrain_->heights || terrain_->walkable != savedTerrain_->walkable || terrain_->cameraPassable != savedTerrain_->cameraPassable || terrain_->shorePoint != savedTerrain_->shorePoint ||
-        terrain_->themeIndex != savedTerrain_->themeIndex || terrain_->themeStrength != savedTerrain_->themeStrength) return true;
-    if (terrain_->atmosIndex != savedTerrain_->atmosIndex || terrain_->atmosStrength != savedTerrain_->atmosStrength ||
-        terrain_->sound != savedTerrain_->sound) return true;
-    if (terrain_->atmosPalette.size() != savedTerrain_->atmosPalette.size()) return true;
+    return hasTerrain() && (soundListGrew_ || terrainDiffersFrom(savedTerrain_));
+}
+
+bool Document::terrainDraftDirty() const {
+    return hasTerrain() && (level_->soundThemes() != draftSoundThemes_ || terrainDiffersFrom(draftTerrain_));
+}
+
+bool Document::terrainDiffersFrom(const std::shared_ptr<const TerrainState>& baseline) const {
+    if (!terrain_ || !baseline) return false;
+    if (terrain_ == baseline) return false;
+    if (terrain_->heights != baseline->heights || terrain_->walkable != baseline->walkable || terrain_->cameraPassable != baseline->cameraPassable || terrain_->shorePoint != baseline->shorePoint ||
+        terrain_->themeIndex != baseline->themeIndex || terrain_->themeStrength != baseline->themeStrength) return true;
+    if (terrain_->atmosIndex != baseline->atmosIndex || terrain_->atmosStrength != baseline->atmosStrength ||
+        terrain_->sound != baseline->sound) return true;
+    if (terrain_->atmosPalette.size() != baseline->atmosPalette.size()) return true;
     for (size_t i = 0; i < terrain_->atmosPalette.size(); ++i)
-        if (terrain_->atmosPalette[i].name != savedTerrain_->atmosPalette[i].name || terrain_->atmosPalette[i].value != savedTerrain_->atmosPalette[i].value) return true;
-    if (terrain_->palette.size() != savedTerrain_->palette.size()) return true;
+        if (terrain_->atmosPalette[i].name != baseline->atmosPalette[i].name || terrain_->atmosPalette[i].value != baseline->atmosPalette[i].value) return true;
+    if (terrain_->palette.size() != baseline->palette.size()) return true;
     for (size_t i = 0; i < terrain_->palette.size(); ++i)
-        if (terrain_->palette[i].name != savedTerrain_->palette[i].name || terrain_->palette[i].value != savedTerrain_->palette[i].value) return true;
+        if (terrain_->palette[i].name != baseline->palette[i].name || terrain_->palette[i].value != baseline->palette[i].value) return true;
     return false;
 }
 
@@ -1619,6 +1627,84 @@ void Document::prepareTerrainLoose(const fs::path& prepared, std::shared_ptr<for
     }
 }
 
+fs::path Document::terrainDraftPath(const fs::path& gameRoot) const {
+    const fs::path lev = external() ? externalLev_ : gameRoot / "data/Levels/FinalAlbion" / (mapName_ + ".lev");
+    return fs::path(lev.string() + ".forge-draft");
+}
+
+bool Document::saveDraftLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
+    return saveDraftFiles(gameRoot, error, notes, true);
+}
+
+bool Document::saveTerrainDraft(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
+    return saveDraftFiles(gameRoot, error, notes, false);
+}
+
+bool Document::saveDraftFiles(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes, bool includeObjects) {
+    if ((!hasTerrain() && !includeObjects) || stroke_) { error = "no terrain, or finish the active stroke first"; return false; }
+    const bool writeObjects = includeObjects && dirty();
+    const bool writeTerrain = hasTerrain() && (!includeObjects || terrainDraftDirty());
+    if (!writeObjects && !writeTerrain) return true;
+    const auto terrainPath = terrainDraftPath(gameRoot);
+    const fs::path objectPath = external() ? loosePath_ : gameRoot / "data/Levels/FinalAlbion" / (mapName_ + ".tng");
+    try {
+        if (writeObjects && writeTerrain && fs::absolute(terrainPath.parent_path()).lexically_normal() != fs::absolute(objectPath.parent_path()).lexically_normal())
+            throw std::runtime_error("terrain and object drafts must share a level folder");
+        detail::PendingBanks pending(writeTerrain ? terrainPath.parent_path() : objectPath.parent_path(), ".forge-draft-save-");
+        std::shared_ptr<forge::lev::File> nextLevel;
+        bool patchedNavigation = false;
+        std::vector<std::string> preparedNotes;
+        std::vector<fs::path> targets;
+        // Complete serialization of both files before any backup or publication.
+        if (writeTerrain) {
+            prepareTerrainLoose(pending.prepare(terrainPath.filename()), nextLevel, patchedNavigation, preparedNotes);
+            targets.push_back(terrainPath);
+        }
+        std::string text;
+        if (writeObjects) {
+            text = file_.serialize();
+            std::ofstream out;
+            out.exceptions(std::ios::failbit | std::ios::badbit);
+            out.open(pending.prepare(objectPath.filename()), std::ios::binary);
+            out.write(text.data(), std::streamsize(text.size())); out.close();
+            targets.push_back(objectPath);
+        }
+        for (const auto& path : targets)
+            if (fs::exists(path) && !fs::is_regular_file(path)) throw std::runtime_error("draft destination is not a file: " + path.string());
+        for (const auto& path : targets) if (!backupOnce(path, error)) return false;
+        for (const auto& path : targets) if (!fs::exists(path)) backups::markCreated(path);
+        if (!pending.install(false, error)) return false;
+        if (writeTerrain) {
+            level_ = std::move(nextLevel);
+            if (patchedNavigation) navWalkable_ = terrain_->walkable;
+            draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
+            // savedTerrain_ remains the baseline for the game's baked terrain/foliage.
+        }
+        if (writeObjects) { loosePath_ = objectPath; original_ = std::move(text); dirtyRev_ = ~0ull; }
+        if (notes) notes->insert(notes->end(), preparedNotes.begin(), preparedNotes.end());
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool Document::loadTerrainDraft(const fs::path& gameRoot, std::string& error) {
+    if (!hasTerrain() || stroke_ || dirty() || terrainDirty()) { error = "open a clean terrain document before loading its draft"; return false; }
+    try {
+        Document candidate;
+        if (!candidate.loadLevel(terrainDraftPath(gameRoot), error)) return false;
+        if (candidate.cellsX() != cellsX() || candidate.cellsY() != cellsY() || candidate.level_->uid() != level_->uid()) {
+            error = "terrain draft belongs to a different map or grid"; return false;
+        }
+        const auto bankSounds = level_->soundThemes();
+        terrainSession_ = candidate.terrainSession_;
+        level_ = std::move(candidate.level_); terrain_ = std::move(candidate.terrain_);
+        draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
+        navWalkable_ = terrain_->walkable;
+        soundListGrew_ = level_->soundThemes() != bankSounds;
+        ++terrainRev_; ++themeRev_;
+        return true;
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
 bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
     if (!hasTerrain()) { error = "no terrain loaded"; return false; }
     const fs::path path = external() && packOut_.empty() ? externalLev_ : gameRoot / "data" / "Levels" / "FinalAlbion" / (mapName_ + ".lev");
@@ -1634,10 +1720,13 @@ bool Document::saveTerrainLoose(const fs::path& gameRoot, std::string& error, st
             if (!backupOnce(path, error)) return false;
             if (!fs::exists(path)) albion::backups::markCreated(path);
         }
+        const fs::path draft = fs::path(path.string() + ".forge-draft");
+        if (fs::exists(draft)) pending.remove(draft.filename());
         if (!pending.install(false, error)) return false;
         level_ = std::move(nextLevel);
         if (patchedNavigation) navWalkable_ = terrain_->walkable;
         savedTerrain_ = terrain_;
+        draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes();
         soundListGrew_ = false;
         if (notes) notes->insert(notes->end(), preparedNotes.begin(), preparedNotes.end());
         return true;
@@ -1652,6 +1741,7 @@ Document Document::terrainWriteSnapshot() const {
     out.externalLev_ = externalLev_;
     out.terrain_ = terrain_;
     out.savedTerrain_ = savedTerrain_;
+    out.draftTerrain_ = draftTerrain_; out.draftSoundThemes_ = draftSoundThemes_;
     out.level_ = level_ ? std::make_shared<forge::lev::File>(*level_) : nullptr;
     out.navWalkable_ = navWalkable_;
     out.soundListGrew_ = soundListGrew_;
@@ -1662,6 +1752,7 @@ Document Document::terrainWriteSnapshot() const {
 bool Document::acceptTerrainWrite(const Document& written) {
     if (terrainSession_ != written.terrainSession_ || !level_ || !written.level_) return false;
     savedTerrain_ = written.savedTerrain_;
+    draftTerrain_ = written.draftTerrain_; draftSoundThemes_ = written.draftSoundThemes_;
     soundListGrew_ = level_->soundThemes() != written.level_->soundThemes();
     // Keep the current LEV and its navWalkable_ together. If the worker patched
     // navigation, the next write can apply that patch again to this older nav
@@ -1729,6 +1820,8 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
         prepareTerrainLoose(levPrepared, nextLevel, patchedNavigation, preparedNotes);
         const std::string levBytes = readFile(levPrepared);
         preparedNotes.push_back("wrote " + loose.string());
+        const fs::path draftRelative = fs::path(levRelative.string() + ".forge-draft");
+        if (inPlace && fs::exists(outputRoot / draftRelative)) pending.remove(draftRelative);
         const auto finish = [&]() {
             if (inPlace && backups::gameRunningIn(gameRoot)) { error = "Fable started during terrain deployment; quit to the desktop first"; return false; }
             if (inPlace && !fs::exists(loose)) {
@@ -1740,6 +1833,7 @@ bool Document::deployTerrainSteps(const fs::path& gameRoot, std::vector<std::str
             level_ = std::move(nextLevel);
             if (patchedNavigation) navWalkable_ = terrain_->walkable;
             savedTerrain_ = terrain_;
+            if (inPlace) { draftTerrain_ = terrain_; draftSoundThemes_ = level_->soundThemes(); }
             soundListGrew_ = false;
             notes.insert(notes.end(), preparedNotes.begin(), preparedNotes.end());
             return true;

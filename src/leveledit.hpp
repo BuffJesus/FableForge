@@ -456,7 +456,14 @@ public:
     // the same; followGround = false leaves every placed thing where it is
     bool setVertexHeights(const std::vector<VertexHeight>& edits, bool followGround);
     uint64_t terrainRevision() const { return terrainRev_; }
-    bool terrainDirty() const;
+    bool terrainDirty() const;       // differs from the terrain last written into the game/pack
+    bool terrainDraftDirty() const;  // differs from the most recently saved authoring draft
+    std::filesystem::path terrainDraftPath(const std::filesystem::path& gameRoot) const;
+    bool saveDraftLoose(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes = nullptr);
+    bool saveTerrainDraft(const std::filesystem::path& gameRoot, std::string& error,
+                          std::vector<std::string>* notes = nullptr);
+    bool loadTerrainDraft(const std::filesystem::path& gameRoot, std::string& error);
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
@@ -623,6 +630,11 @@ private:
     bool batchPushed_ = false;
     std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
     std::array<uint32_t, 256> themeFamily_{};             // NoWaterThemeDef per palette slot (setThemeFamilies)
+    bool saveDraftFiles(const std::filesystem::path& gameRoot, std::string& error,
+                        std::vector<std::string>* notes, bool includeObjects);
+    bool terrainDiffersFrom(const std::shared_ptr<const TerrainState>& baseline) const;
+    std::shared_ptr<const TerrainState> draftTerrain_;
+    std::vector<std::string> draftSoundThemes_;
     std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
     std::unique_ptr<TerrainState> working_;              // during a stroke
     std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke

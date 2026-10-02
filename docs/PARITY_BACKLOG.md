@@ -1084,18 +1084,22 @@ normal/compact clicks, overlay pixels and exact undo. Forge edits only this map;
 no native execution or in-game shoreline equivalence has been claimed.
 
 #### No way to save terrain work without writing it into the game; Ctrl+S covers only objects
-*weakness, effort M, value high*
+*weakness, effort S-M, value high*
 
-**Vanilla:** Ctrl+S, F6 and toolbar SAVE_ALL all call SaveAllIfChanged 0x0204b550, which saves the world file and every changed editable level (.lev and .tng) as working files. F7 saves all and then reloads the world. Writing the game data (STB/nav) is a separate load-time step (GenerateOfflineDataForWorld).
+2026-10-02: implemented. Save draft, Ctrl+S and F6 atomically stage pending
+objects and terrain; F7 saves then reopens. The map-switch prompt can save
+terrain-only work. Reopening restores `.lev.forge-draft` beside the level files.
+The game ignores this suffix in stock and loose layouts. TNG saves retain their
+existing loose/external-world game-running guard and recovery metadata.
 
-**Fix:** 1) Add App::saveAll() in gui/editor.cpp, next to saveDocument(). The game's shared Levels folder is involved, so first call gameWriteBlocked("save") and return if it blocks. Then: if doc_.dirty(), call saveDocument(). If doc_.hasTerrain() && doc_.terrainDirty(), call doc_.saveTerrainLoose(saveRoot(), err, &notes) and pushLog each note plus "saved <map>.lev (draft)". It writes the same data/Levels/FinalAlbion/<map>.lev path that deployTerrain later rewrites, so no new folder and no change to resolveLevPath are needed: app.cpp:596 already reopens a loose .lev first. After saving, refresh the MapEntry's loosePath the same way the .tng draft path does, so the next open picks up the draft. Handle an external (other-world) map the same way saveDocument does at editor.cpp:1466.
-2) Change the Ctrl+S / F6 handler at editor.cpp:2370 to call saveAll() when hasUnsavedEdits() (app.hpp:849) instead of saveDocument() when doc_.dirty().
-3) In drawEditFooter (editor.cpp:3226), have 'Save draft' use hasUnsavedEdits() and saveAll(). In the Unsaved-changes modal (editor.cpp:2478), enable the button on hasUnsavedEdits(), call saveAll(), and remove the hint at 2486-2489.
-4) Add F7 = saveAll() and then re-select or reload the current map (selectMap(selectedName_) with discardEdits_ set) to match vanilla's save-and-reload.
-5) Automation: have save_level (gui/automation.cpp:489) call saveAll(), or add a save_all command, and document it in docs/AUTOMATION.md.
-Caveats to show in the tooltip: (a) on a loose install with no FinalAlbion.wad, the game reads the loose .lev. It is therefore live on the next visit, like the .tng draft already is, but FinalAlbion_RT.stb is not re-baked. Warn that heights shown in game will not match until 'Write terrain into the game' re-bakes the STB. (b) saveTerrainLoose patches nav walkability in the .lev at save time, which matches what deploy would do anyway. (c) deployTerrain's hadLoose / backup logic (leveledit.cpp:1082-1085) then sees a FableForge-created loose file. That is fine because saveTerrainLoose already runs backupOnce and markCreated first, but check that Restore (app.cpp:423) still deletes the created .lev.
-Optional, lower priority: World-tab pending edits (gui/world.cpp:600-625) have the same problem. Serialising worldPending_ / worldOwnerEdits_ / worldSeesEdits_ into a sidecar JSON under saveRoot and restoring it in loadWorld could follow later.
-Effort: S-M (mostly wiring; the save function exists). Value: high.
+This supersedes the old proposal to call `saveTerrainLoose` as a draft save:
+that path replaces active loose LEVs and resets the game's bake baseline.
+Separate authoring and game baselines retain height/theme/foliage deltas and
+keep Write terrain available after saving. Pack exports preserve unsaved draft
+state; game writes retire the cache in their file transaction. Serialization
+or destination failure leaves both edits pending. See HANDOFF_WORLD_UI.
+
+World-tab pending edits and timed crash recovery remain separate follow-ups.
 
 #### No user backups (Create backup file) and no editor autosave
 *gap, effort M, value high*
