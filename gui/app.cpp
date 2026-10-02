@@ -436,11 +436,12 @@ void App::drawToolWindows() {
     // These are extensions of their sidebar sections, not independent workspaces.
     // Closing them on navigation keeps a tool from covering an unrelated view.
     if (editTab_ != 0 && editTab_ != 2) selectionInspectorOpen_ = false;
-    if (editTab_ != 1) fitOpen_ = fractalOpen_ = false;
+    if (editTab_ != 1) fitOpen_ = fractalOpen_ = wholeMapOpen_ = false;
     if (editTab_ != 3) budgetOpen_ = false;
     drawSelectionInspector();
     drawFitWindow();
     drawFractalWindow();
+    drawWholeMapWindow();
     drawBudgetWindow();
 }
 

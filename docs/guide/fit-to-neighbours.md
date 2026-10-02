@@ -26,6 +26,9 @@ To see the result in the game, write both the terrain and any objects that moved
 with **Write terrain and objects into the game**. With a pack chosen under
 *Writes go into*, both go into the pack instead.
 
+**Whole-map heights...** raises, scales or flattens every height of the map in one
+step. Raising a map to meet a higher neighbour moves its objects with it.
+
 **Generate terrain...** next to it replaces every height of the map with a
 fractal landscape (the vanilla editor's generator). It sets every height rather
 than adding to them, so run Fit to neighbours afterwards if the edges must meet.

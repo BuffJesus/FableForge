@@ -166,6 +166,31 @@ int main() {
     CHECK(unchanged.pos[2]==4 && moved.pos[2]==9);
     CHECK(stillFloating.pos[2]==12 && child.pos[2]==17 && nested.pos[2]==9);
     CHECK(doc.undo() && doc.frameOf(1,moved) && doc.frameOf(3,child) && doc.frameOf(4,nested) && moved.pos[2]==4 && child.pos[2]==12 && nested.pos[2]==4);
+    // Whole-map heights (vanilla console EditRaiseZ / EditResizeZPercent / EditResetAllZ).
+    // Raise with things moves every placed thing by d, locked and floating ones included
+    // (CEditRaiseZOnThing); without, nothing moves. One undo step each.
+    {
+        const auto text0=doc.text();
+        auto z=[&](size_t i){Frame f;CHECK(doc.frameOf(i,f));return f.pos[2];};
+        CHECK(doc.raiseHeights(0)==0);
+        CHECK(doc.raiseHeights(3,true)==81 && doc.terrain().heights[0]==7);
+        CHECK(z(0)==7 && z(1)==7 && z(2)==15 && z(3)==15 && z(4)==7);
+        CHECK(doc.undo() && doc.text()==text0 && doc.terrain().heights[0]==4);
+        CHECK(doc.raiseHeights(3,false)==81 && z(0)==4 && z(1)==4 && z(2)==12 && z(4)==4);
+        CHECK(doc.undo() && doc.text()==text0);
+        // scale and set keep Forge's grounded-follow rule: the unlocked grounded things follow,
+        // the locked one and the floating one stay
+        CHECK(doc.resizeHeightsPercent(50)==81 && doc.terrain().heights[0]==2);
+        CHECK(z(0)==4 && z(1)==2 && z(2)==12 && z(4)==2);
+        CHECK(doc.undo() && doc.text()==text0 && doc.terrain().heights[0]==4);
+        CHECK(doc.resizeHeightsPercent(100)==0);
+        CHECK(doc.setAllHeights(3000)==81 && std::fabs(doc.terrain().heights[0]-(2048.0f-1e-4f))<1e-3f);   // vanilla clamp
+        CHECK(doc.undo());
+        CHECK(doc.setAllHeights(-5)==81 && doc.terrain().heights[0]==0);
+        CHECK(doc.undo() && doc.text()==text0);
+        CHECK(doc.raiseHeights(-10,true)==81 && doc.terrain().heights[0]==0 && z(1)==-6);   // ground clamps at 0, things move by d
+        CHECK(doc.undo() && doc.text()==text0);
+    }
     // An incomplete pack write must preserve any prior output and leave the
     // terrain edit unsaved so the user can retry after fixing the source bank.
     CHECK(doc.setVertexHeights(edits) && doc.terrainDirty());

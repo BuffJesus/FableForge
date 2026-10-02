@@ -451,6 +451,8 @@ public:
     // Bilinear height of a terrain state at a map-local point (nullopt outside the grid).
     static std::optional<float> sampleHeight(const TerrainState& t, int cellsX, int cellsY, float x, float y);
     bool setVertexHeights(const std::vector<VertexHeight>& edits);
+    // the same; followGround = false leaves every placed thing where it is
+    bool setVertexHeights(const std::vector<VertexHeight>& edits, bool followGround);
     uint64_t terrainRevision() const { return terrainRev_; }
     bool terrainDirty() const;
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
@@ -498,6 +500,16 @@ public:
     // + map-local, so maps done one after another meet at their seams. One undo
     // step; returns the vertices changed.
     size_t applyFractal(const forge::fractal::Params& params);
+    // The vanilla console's whole-map height edits (CEditMap::EditRaiseZ 0x029a8d10,
+    // EditResizeZPercent 0x029a8ac0, EditResetAllZ 0x029a8c30), every vertex clamped to
+    // [0, 2048 - 1e-4] like vanilla. One undo step each; return the vertices changed.
+    // raise: h + d; with moveThings every placed thing rises by d too (CEditRaiseZOnThing
+    // 0x0298e5a0 moves the physics position of every thing), otherwise nothing moves.
+    // scale: h * pct / 100 (100 = no change). set: h = v. These two keep Forge's rule that
+    // grounded objects follow the ground (vanilla leaves things where they are).
+    size_t raiseHeights(float d, bool moveThings = true);
+    size_t resizeHeightsPercent(float pct);
+    size_t setAllHeights(float v);
     // The vanilla world-map "Fit Neighbours" (CEditWorldMap::EditFitFillerMap, ported in
     // forge/fillerfit.hpp): the map rebuilt as a ridge that meets every touching map at
     // the shared edge -- made for filler maps. fittedHeights previews it on the current

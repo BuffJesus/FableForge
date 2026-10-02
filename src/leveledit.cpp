@@ -741,7 +741,9 @@ void Document::endStroke() {
     if (themes) ++themeRev_;
 }
 
-bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
+bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) { return setVertexHeights(edits, true); }
+
+bool Document::setVertexHeights(const std::vector<VertexHeight>& edits, bool followGround) {
     if (!hasTerrain() || stroke_) return false;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     auto next = std::make_unique<TerrainState>(*terrain_);
@@ -757,10 +759,61 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits) {
     terrain_ = std::shared_ptr<const TerrainState>(next.release());
     hf_.reset();
     writeTerrainToLevel();
-    reseatGroundedThings(*before, 1.0f, false);
+    if (followGround) reseatGroundedThings(*before, 1.0f, false);
     ++revision_;
     ++terrainRev_;
     return true;
+}
+
+namespace {
+constexpr float kMaxVertexHeight = 2048.0f - 1e-4f;   // vanilla GFLimit(h, 0, 2048 - 1e-4)
+}
+
+size_t Document::raiseHeights(float d, bool moveThings) {
+    if (!hasTerrain() || stroke_ || !std::isfinite(d) || d == 0.0f) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    std::vector<VertexHeight> edits;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const float h = terrain_->heights[size_t(y) * cx + x], v = std::clamp(h + d, 0.0f, kMaxVertexHeight);
+            if (v != h) edits.push_back({x, y, v});
+        }
+    if (edits.empty() || !setVertexHeights(edits, false)) return 0;
+    if (moveThings)   // same undo step: setVertexHeights pushed it
+        for (size_t i = 0; i < file_.things().size(); ++i) {
+            Frame f;
+            if (!frameOf(i, f)) continue;
+            const auto* physics = physicsOf(file_.things()[i]);
+            if (!physics) continue;
+            f.pos[2] += d;
+            file_.setCtcProperty(i, physics->name, "PositionZ", formatFloat(f.pos[2]));
+            writeInitialPosition(file_, i, f.pos, worldX_, worldY_);
+        }
+    ++revision_;
+    return edits.size();
+}
+
+size_t Document::resizeHeightsPercent(float pct) {
+    if (!hasTerrain() || stroke_ || !std::isfinite(pct) || pct < 0.0f) return 0;
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    std::vector<VertexHeight> edits;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x) {
+            const float h = terrain_->heights[size_t(y) * cx + x], v = std::clamp(h * pct / 100.0f, 0.0f, kMaxVertexHeight);
+            if (v != h) edits.push_back({x, y, v});
+        }
+    return !edits.empty() && setVertexHeights(edits) ? edits.size() : 0;
+}
+
+size_t Document::setAllHeights(float v) {
+    if (!hasTerrain() || stroke_ || !std::isfinite(v)) return 0;
+    const float target = std::clamp(v, 0.0f, kMaxVertexHeight);
+    const int cx = level_->cellsX(), cy = level_->cellsY();
+    std::vector<VertexHeight> edits;
+    for (int y = 0; y < cy; ++y)
+        for (int x = 0; x < cx; ++x)
+            if (terrain_->heights[size_t(y) * cx + x] != target) edits.push_back({x, y, target});
+    return !edits.empty() && setVertexHeights(edits) ? edits.size() : 0;
 }
 
 const std::vector<std::string>& Document::soundThemes() const {

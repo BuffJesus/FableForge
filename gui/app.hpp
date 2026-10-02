@@ -663,6 +663,7 @@ private:
     void drawFitCard(float pad, float inner, float cardInner);   // the sidebar entry: a button that opens the window
     void drawFitWindow();
     void drawFractalWindow();
+    void drawWholeMapWindow();   // the vanilla console's whole-map height edits (raise / scale / set)
     // Floating tool windows: the bigger, occasional tools (previews, many fields) open
     // beside the view instead of stretching the sidebar. Non-modal (the view stays
     // live), centred over the viewport the first time and left where the user drags it,
@@ -674,6 +675,10 @@ private:
 public:
     void setFitOpen(bool on) { fitOpen_ = on; fitScrollTo_ = on ? 3 : 0; }
     void setFractalOpen(bool on) { fractalOpen_ = on; }
+    void setWholeMapOpen(bool on) { wholeMapOpen_ = on; }
+    size_t wholeMapRaise(float d, bool moveThings);
+    size_t wholeMapScale(float pct);
+    size_t wholeMapSet(float v);
     void setBudgetOpen(bool on) { budgetOpen_ = on; budgetDirty_ = on; }
     void runBudgetSurvey();   // the budget survey window's numbers for the current options
     const forge::budget::Report& budgetReport() const { return budgetReport_; }
@@ -681,6 +686,9 @@ public:
     size_t fitApply();   // fit the open map to its neighbours (automation / the button)
 private:
     bool fractalOpen_ = false;
+    bool wholeMapOpen_ = false;
+    float wholeRaise_ = 1.0f, wholeScale_ = 100.0f, wholeSet_ = 10.0f;
+    bool wholeRaiseThings_ = true;
     // ---- budget survey (vanilla Surveys > Engine, inventory 11b): what an area costs the renderer
     struct LocalDetailItem { float x = 0, y = 0; uint32_t mesh = 0; std::string name; };
     std::vector<LocalDetailItem> localDetail_;   // the open map's baked plants, kept from the foliage load

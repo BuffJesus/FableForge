@@ -1,0 +1,37 @@
+# Whole-map heights (the vanilla console's EditRaiseZ / EditResizeZPercent / EditSetZ) in their
+# tool window: raise with objects, scale, set, each one undo step. Read-only: scratch save root.
+wait_maps
+wait_ready
+set saveroot build/ui_wholemap
+select Greatwood_Filler_04
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+frames 2
+click btn_wholemap_toggle
+frames 3
+assert_widget btn_wholemap_raise
+screenshot build/ui/wholemap_window.png
+snapshot_heights
+click btn_wholemap_raise
+frames 3
+assert_log vertices raised by 1, every object moved with them
+assert_heights_changed 1
+undo
+frames 3
+assert_heights_changed 0
+terrain_scale_pct 50
+frames 2
+assert_log vertices scaled to 50%
+assert_heights_changed 1
+undo
+frames 2
+terrain_set_all 3000
+frames 2
+assert_log vertices set to 2048
+undo
+frames 2
+assert_heights_changed 0
+assert_state terrain_dirty 0
+quit

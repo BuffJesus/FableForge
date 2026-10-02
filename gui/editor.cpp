@@ -4126,6 +4126,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         if (theme::ghostButton(fractalOpen_ ? "Generate terrain  (open)" : "Generate terrain...", ImVec2(cardInner, S(26)))) fractalOpen_ = !fractalOpen_;
         auto_.registerWidget("btn_fractal_toggle");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Create hills and valleys from a repeatable pattern. Preview the result before replacing this map's ground heights. Based on the vanilla Fractals tool.");
+        if (theme::ghostButton(wholeMapOpen_ ? "Whole-map heights  (open)" : "Whole-map heights...", ImVec2(cardInner, S(26)))) wholeMapOpen_ = !wholeMapOpen_;
+        auto_.registerWidget("btn_wholemap_toggle");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Raise, scale or set every height of this map at once, e.g. to lift a map to meet its neighbour. The vanilla editor's EditRaiseZ / EditResizeZPercent / EditSetZ.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
         drawFitCard(pad, inner, cardInner);
@@ -5071,6 +5074,76 @@ terrainexport::Image fractalImage(const std::vector<float>& h, int cx, int cy, i
     return img;
 }
 } // namespace
+
+namespace {
+std::string shortFloat(float v) { char b[32]; std::snprintf(b, sizeof b, "%g", double(v)); return b; }
+}
+
+size_t App::wholeMapRaise(float d, bool moveThings) {
+    const size_t n = doc_.raiseHeights(d, moveThings);
+    pushLog(n ? "whole map: " + std::to_string(n) + " vertices raised by " + shortFloat(d) + (moveThings ? ", every object moved with them" : "") + " (one undo step)"
+              : std::string("whole map: nothing to raise"), n ? 0 : 1);
+    return n;
+}
+
+size_t App::wholeMapScale(float pct) {
+    const size_t n = doc_.resizeHeightsPercent(pct);
+    pushLog(n ? "whole map: " + std::to_string(n) + " vertices scaled to " + shortFloat(pct) + "% (one undo step)" : std::string("whole map: nothing to scale"), n ? 0 : 1);
+    return n;
+}
+
+size_t App::wholeMapSet(float v) {
+    const size_t n = doc_.setAllHeights(v);
+    pushLog(n ? "whole map: " + std::to_string(n) + " vertices set to " + shortFloat(std::clamp(v, 0.0f, 2047.9999f)) + " (one undo step)" : std::string("whole map: every vertex already has that height"), n ? 0 : 1);
+    return n;
+}
+
+void App::drawWholeMapWindow() {
+    using theme::S;
+    if (!wholeMapOpen_ || !documentLoaded() || !doc_.hasTerrain()) return;
+    const std::string sub = "Terrain / " + doc_.mapName() + " - Change every height of this map at once.";
+    if (!beginToolWindow("##wholemapwin", "Whole-map heights", sub.c_str(), &wholeMapOpen_, S(460))) return;
+    const float inner = toolWindowInner_;
+    const float fieldW = std::floor(inner * 0.34f), buttonW = inner - fieldW - S(8);
+    if (const auto* h = doc_.terrainHeights(); h && !h->empty()) {
+        const auto [low, high] = std::minmax_element(h->begin(), h->end());
+        ImGui::TextColored(theme::vec(theme::Muted), "Ground now: %.2f to %.2f", *low, *high);
+    }
+    ImGui::Dummy(ImVec2(0, S(4)));
+    auto row = [&](const char* id, float& value, float step, const char* fmt, const char* label, const char* widget, const char* tip) {
+        ImGui::SetNextItemWidth(fieldW);
+        ImGui::InputFloat(id, &value, step, step * 10.0f, fmt);
+        ImGui::SameLine(0, S(8));
+        const bool pressed = theme::ghostButton(label, ImVec2(buttonW, S(28)));
+        auto_.registerWidget(widget);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+        return pressed;
+    };
+    char label[96];
+    std::snprintf(label, sizeof label, "Raise every height by %.2f", wholeRaise_);
+    if (row("##wraise", wholeRaise_, 0.5f, "%.2f", label, "btn_wholemap_raise",
+            "Adds this to every height (negative lowers). With 'Move objects too', every placed object rises by the same amount,\nlike the vanilla EditRaiseZ, so nothing ends up buried or floating.") && wholeRaise_ != 0.0f)
+        wholeMapRaise(wholeRaise_, wholeRaiseThings_);
+    ImGui::Checkbox("Move objects too##wraiseth", &wholeRaiseThings_);
+    auto_.registerWidget("check_wholemap_things");
+    ImGui::Dummy(ImVec2(0, S(4)));
+    std::snprintf(label, sizeof label, "Scale every height to %.0f%%", wholeScale_);
+    if (row("##wscale", wholeScale_, 5.0f, "%.0f", label, "btn_wholemap_scale",
+            "Multiplies every height by this percentage (100 = unchanged, 50 = half as high). Grounded objects follow the ground."))
+        wholeMapScale(std::max(wholeScale_, 0.0f));
+    ImGui::Dummy(ImVec2(0, S(4)));
+    std::snprintf(label, sizeof label, "Set every height to %.2f", wholeSet_);
+    if (row("##wset", wholeSet_, 1.0f, "%.2f", label, "btn_wholemap_set",
+            "Flattens the whole map to this height. Grounded objects follow the ground."))
+        wholeMapSet(wholeSet_);
+    ImGui::Dummy(ImVec2(0, S(6)));
+    ImGui::PushFont(fontSmall_);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
+    ImGui::TextColored(theme::vec(theme::Faint), "Heights stay between 0 and 2048, like the game. Each action is one undo step (Ctrl+Z). Write the terrain (and moved objects) to see it in the game.");
+    ImGui::PopTextWrapPos();
+    ImGui::PopFont();
+    endToolWindow();
+}
 
 void App::drawFractalWindow() {
     using theme::S;
