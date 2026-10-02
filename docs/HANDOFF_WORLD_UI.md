@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 investigation: ground-theme Smear proposal needs revision
+
+Fresh full FableWin disassembly confirms the two-pass nine-neighbour brush and
+strict disc, but contradicts the backlog's simplified proposed algorithm.
+EditPlaceEngineThemeBlendPenUndoable 0x0297c510 clamps radius to at least 1
+before truncation. MapAround9 lives in BSS; its initializer 0x03ff9370 creates
+centre and the eight adjacent offsets. There are two passes so output cannot
+feed later cells in the same application. ENGINE weights use definition-class
+indices; LEV palette ordering and stale stored global indices cannot stand in
+for that ordering. Thresholding at 0x0297c960 only visits class indices 0..2,
+not all weights. Selection's shift at 0x0297ca50 advances from the insertion
+point, overwriting subsequent selected entries; normalization then updates
+the shared weight vector in place, so duplicate selected classes are rescaled
+again. The second pass writes only two blend bytes; the third is implicit.
+
+Literal arithmetic probe with class weights [0,500,700,100] selects [2,1,1],
+produces scratch strengths [169,11,11], and persists [169,11,75]. This is a
+static-instruction probe, not a live native execution or retail equivalence
+claim. Keep implementation deferred until the safe Forge blending contract or
+native quirk compatibility is resolved; copying the backlog pseudocode would
+not recover the observed debug algorithm. Exports: `build/theme-smear-native-full.txt`,
+`build/theme-smear-offsets-native.txt`, `build/theme_smear_selection_probe.py`.
+No Forge core, GUI or install files changed for this investigation.
+
 ## 2026-10-02 broad grid/camera validation
 
 Primary Release binaries at `d935c6c` passed the complete `check_all.py

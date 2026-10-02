@@ -797,6 +797,14 @@ fillPen and the HeightKey path need no changes, because they already read penSpe
 #### Theme Smear (ENGINE tab) missing: the vanilla blend pen
 *gap, effort M, value high*
 
+**2026-10-02 evidence correction:** the proposed algorithm below is incomplete.
+Fresh full disassembly clamps radius to >=1, thresholds only class indices
+0..2, shifts selected classes forward (allowing duplicates), and normalizes
+shared weights in place. LEV slots must also be resolved to definition-class
+ordering. The literal selection probe and addresses are in HANDOFF_WORLD_UI.
+Do not treat this proposal as a verified safe port; native quirk compatibility
+versus a corrected Forge blending contract remains to be resolved.
+
 **Vanilla:** On the ENGINE tab, Smear routes PaintInputEngineThemeMap 0x02993a80 (the GetSmearFlag branch, mode 4) to CEditWorldMap::EditPlaceEngineThemeBlendPenUndoable 0x0297c510. r = (int)brush size. For each vertex (x,y) in the 2r x 2r box from (cx-r, cy-r) with hypot(r-i, r-j) < r, and stride 1 for ENGINE: take the 3x3 neighbourhood (offset table DAT_04ac5558, in-map cells only). Sum the blend byte of each of the 3 slots per theme; theme 0 contributes nothing, and weights under 16 are dropped. Keep the 3 heaviest themes by insertion sort and set blend = weight*255/sum(top3), adding the rounding remainder to the first. Everything is computed from the pre-pass state into a scratch buffer and written in a second pass (Jacobi), then UpdateOverlayAtmos runs for atmos. In vanilla this is the ONLY way to get soft transitions between ground themes.
 
 **Fix:** 1. Add a library routine in libs/forgecore (declare it in include/forge/terrain.hpp, implement it in src/terrain.cpp):
