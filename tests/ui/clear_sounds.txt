@@ -1,0 +1,24 @@
+# Survey > Sounds > Clear all (vanilla EditFillSound 0): the Sound tool's button clears every
+# grid cell of the map in one undo step. Read-only: scratch save root, nothing is written.
+wait_maps
+wait_ready
+set saveroot build/ui_clear_sounds
+select StartOakValeWest
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+terrain_mode 11
+frames 3
+reveal btn_fill_sound
+frames 2
+assert_state terrain_dirty 0
+click btn_fill_sound
+frames 3
+assert_log sounds cleared:
+assert_state terrain_dirty 1
+screenshot build/ui/clear_sounds.png
+undo
+frames 3
+assert_state terrain_dirty 0
+quit

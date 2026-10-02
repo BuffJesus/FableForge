@@ -3923,6 +3923,13 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::EndCombo();
                 }
                 auto_.registerWidget("combo_sound");
+                // vanilla Survey > Sounds > Clear all (EditFillSound 0): one undo step here, so no modal
+                if (theme::ghostButton(soundIndex_ == 0 ? "Clear all sounds on this map" : "Fill the map with this sound", ImVec2(cardInner, S(28)))) {
+                    const size_t n = doc_.fillSound(uint8_t(std::max(soundIndex_, 0)));
+                    pushLog(n ? (soundIndex_ == 0 ? "sounds cleared: " : "sound filled: ") + std::to_string(n) + " grid cells (Ctrl+Z undoes)"
+                              : std::string("sound: every cell already has it"), n ? 0 : 1);
+                }
+                auto_.registerWidget("btn_fill_sound");
                 ImGui::SetNextItemWidth(cardInner);
                 ImGui::InputTextWithHint("##soundsearch", "Add a sound from the game (WOODLAND, OCEAN...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
                 auto_.registerWidget("input_sound_search");

@@ -1226,6 +1226,14 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.level()->cameraPassableAt(4, 4) && doc.level()->cameraPassableAt(1, 1));   // (1,1) is walkable: stays passable
     CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
+    // Survey > Sounds > Clear all (vanilla EditFillSound 0x02970df0): every grid cell, one undo step
+    CHECK(doc.fillSound(3) == 0);                                          // past the sound list
+    const uint8_t before = doc.environmentAndSoundAt(5.0f, 5.0f)->second;
+    CHECK(before != 0 && doc.fillSound(0) > 0);
+    for (const float x : {1.0f, 5.0f}) for (const float y : {1.0f, 5.0f}) CHECK(doc.environmentAndSoundAt(x, y)->second == 0);
+    CHECK(doc.level()->soundAt(1, 1) == 0 && doc.fillSound(0) == 0);       // mirrored; nothing left to change
+    CHECK(doc.undo() && doc.environmentAndSoundAt(5.0f, 5.0f)->second == before);
+    CHECK(doc.fillSound(2) > 0 && doc.level()->soundAt(0, 1) == 2);        // fill with a listed sound
 }
 
 // World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate

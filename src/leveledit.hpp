@@ -518,6 +518,10 @@ public:
     // file after the list). Returns the cell index, -1 on failure (error set). Not an
     // undo step: an unused name is harmless; it is written with the next terrain save.
     int addSoundTheme(const std::string& name, std::string& error);
+    // Vanilla EditFillSound (FableWin 0x02970df0, Survey > Sounds > Clear all with 0): every
+    // game-map cell of this map gets the sound index, 0 = none. Returns the cells changed;
+    // one undo step (vanilla has none). 0 when nothing changes or the index is not listed.
+    size_t fillSound(uint8_t index);
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;

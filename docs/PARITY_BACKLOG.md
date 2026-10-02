@@ -885,7 +885,10 @@ for (size_t g = 0; g < hit.size(); ++g) if (hit[g]) { /* existing Sound / Enviro
 Effort: S. Value: low to medium. The fix mainly matters at small radii (up to about 2.8) and makes the painted footprint slightly larger, matching vanilla. The default radius of 6 already paints something on every click.
 
 #### Clear all sounds missing
-*gap, effort S, value med*
+*gap, effort S, value med* -- **DONE 2026-10-02**: `Document::fillSound` + the Sound tool's
+*Clear all sounds on this map* / *Fill the map with this sound* button (`btn_fill_sound`),
+one undo step; vanilla `EditFillSound` re-read (every in-map position, `EditSetSound`).
+`testEnvironmentAndSoundPaint` + `tests/ui/clear_sounds.txt`.
 
 **Vanilla:** Survey > Sounds > Clear all: CEditControlCentre::ClearAllSounds 0x02051750 asks 'Clear All Sounds?' / 'Confirm Clear All', then calls EditFillSound(0) 0x02970df0, which sets every game cell of every editable map to sound 0.
 

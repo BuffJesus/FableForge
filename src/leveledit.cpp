@@ -821,6 +821,21 @@ std::optional<uint8_t> Document::dominantThemeAt(float x, float y) const {
     return t.themeIndex[i][best];
 }
 
+size_t Document::fillSound(uint8_t index) {
+    if (!hasTerrain() || stroke_ || !level_->hasGameMap() || terrain_->sound.empty()) return 0;
+    if (index > level_->soundThemes().size()) return 0;
+    auto next = std::make_unique<TerrainState>(*terrain_);
+    size_t changed = 0;
+    for (auto& s : next->sound) if (s != index) { s = index; ++changed; }
+    if (!changed) return 0;
+    pushUndo();
+    terrain_ = std::shared_ptr<const TerrainState>(next.release());
+    writeTerrainToLevel();   // mirrors the grid through level_->setSoundAt
+    ++revision_;
+    ++terrainRev_;
+    return changed;
+}
+
 size_t Document::replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x, float y) {
     if (!hasTerrain() || stroke_ || from == to) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
