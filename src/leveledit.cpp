@@ -609,38 +609,19 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
     if (!stroke_ || !working_) return;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     using Mode = TerrainBrush::Mode;
-    if (brush.mode == Mode::ShoreSet || brush.mode == Mode::ShoreClear) {
+    if (brush.mode == Mode::ShoreSet || brush.mode == Mode::ShoreClear ||
+        brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock ||
+        brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
+        auto& flags = brush.mode == Mode::ShoreSet || brush.mode == Mode::ShoreClear ? working_->shorePoint
+                    : brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock ? working_->cameraPassable
+                    : working_->walkable;
+        const uint8_t next = brush.mode == Mode::ShoreSet || brush.mode == Mode::CameraPass || brush.mode == Mode::Walkable ? 1 : 0;
         bool changed = false;
-        for (const auto [x, y] : shoreBrushVertices(brush.x, brush.y, brush.radius)) {
-            auto& value = working_->shorePoint[size_t(y) * cx + x];
-            const uint8_t next = brush.mode == Mode::ShoreSet ? 1 : 0;
+        for (const auto [x, y] : surveyBrushVertices(brush.x, brush.y, brush.radius)) {
+            auto& value = flags[size_t(y) * cx + x];
             if (value != next) { value = next; changed = true; }
         }
         if (changed) ++terrainRev_;
-        return;
-    }
-    if (brush.mode == Mode::CameraPass || brush.mode == Mode::CameraBlock) {
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy <= brush.radius * brush.radius)
-                    working_->cameraPassable[size_t(y) * cx + x] = brush.mode == Mode::CameraPass ? 1 : 0;
-            }
-        ++terrainRev_;
-        return;
-    }
-    if (brush.mode == Mode::Walkable || brush.mode == Mode::Blocked) {
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy <= brush.radius * brush.radius)
-                    working_->walkable[size_t(y) * cx + x] = brush.mode == Mode::Walkable ? 1 : 0;
-            }
-        ++terrainRev_;
         return;
     }
     if (brush.mode == Mode::Theme) {
@@ -996,9 +977,9 @@ std::vector<std::pair<int, int>> Document::themeBrushVertices(float x, float y, 
     return vertices;
 }
 
-std::vector<std::pair<int, int>> Document::shoreBrushVertices(float x, float y, float radius) const {
+std::vector<std::pair<int, int>> Document::surveyBrushVertices(float x, float y, float radius) const {
     if (!hasTerrain()) return {};
-    // Native ReflectionsInput rounds the float world point before local conversion.
+    // Native PassabilityInput / ReflectionsInput round the world point before local conversion.
     return forge::heightpen::discFootprint(cellsX() - 1, cellsY() - 1,
         std::nearbyint(float(worldX_) + x) - float(worldX_),
         std::nearbyint(float(worldY_) + y) - float(worldY_), radius);

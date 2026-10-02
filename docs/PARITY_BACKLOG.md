@@ -1042,6 +1042,25 @@ Coordinate the family rule with the water lane, since it only affects depth them
 4) Drawing: add `App::drawBudgetOverlay(origin,size)` and call it next to drawBrushCursor (app.cpp:1819). drawBrushCursor early-outs outside terrain mode, so the overlay needs its own call. For scope 3, outline every box with drawGroundRect (editor.cpp:1791) and draw the live drag box. For scope 2, drape a 48-segment circle of radius budgetRadius_ around camera_.focus, reusing the loop from editor.cpp:1813-1825. Pick one budget colour. This stands in for DrawEngineSurveySelections 0x0204e220.
 5) Window (editor.cpp:4000): make the segment list {"Whole map","Selected","Around the view","Areas"}. For Areas, add the hint "Drag on the ground to add a box; Shift+drag keeps earlier boxes; click a thing to add it", plus a "Clear areas" ghost button that clears both containers and sets budgetDirty_. Update scopeName[] at editor.cpp:4125 and change its clamp to 0..3.
 
+#### Walkable / Camera survey pen footprint
+*corrected 2026-10-02*
+
+The four Passability pens share Shore's native rounded world-pointer disc:
+sqrtf(float(dx*dx+dy*dy))-0.5 < radius, clipped to regular cells. This replaces
+Forge's cell-centre distance test, which could miss radius-0.25 clicks. Small
+cursors show 1/9/21 affected vertices at radii 0.25/1/2. Strength/time are
+ignored and repeated unchanged applications leave the revision unchanged.
+Existing Shift inversion for Walkable/Blocked remains; camera controls stay
+separate. Stroke undo, navigation patching and the saver's walkable/camera OR
+remain on their established paths.
+
+Read-only export `build/passability-pen-native-full.txt` covers PassabilityInput
+02051d50, EditSetPassability 02970060, EditSetCameraPassability 02970630 and
+per-map setters 029a9630/029a9940. The caller uses GFFloatToLongNear; the two
+world pens use inclusive floor/ceil bounds, the same float-distance test as
+Shore, and editable-map filters. Forge remains scoped to this map. See
+HANDOFF_WORLD_UI for independent byte-delta fixtures and normal/compact checks.
+
 #### Reflections survey (shore-point flag brush)
 *implemented 2026-10-02; authored flags only*
 

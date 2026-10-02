@@ -137,6 +137,8 @@ private:
     uint64_t ownedSnapUid_=0;
     uint64_t ownedSnapParentUid_=0;
     std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
+    struct PassabilitySnapshot { std::vector<uint8_t> walkable, camera; };
+    std::optional<PassabilitySnapshot> passabilitySnap_;
     std::optional<std::vector<uint8_t>> shoreSnap_;
     std::optional<std::vector<uint8_t>> soundSnap_;   // snapshot_sounds / assert_sound_changes
     struct ThemeSnapshot { std::vector<std::array<uint8_t, 3>> indices, strengths; };

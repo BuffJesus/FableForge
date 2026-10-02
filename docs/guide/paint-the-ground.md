@@ -83,6 +83,10 @@ the stroke. **Show shore points** marks set cells in translucent red; small
 brushes show the affected vertices. The flags save with terrain and undo as one
 stroke. The visible water shoreline comes from water generation.
 
+Walkable, Blocked, Camera ok and Camera no use a rounded vertex pen. Small
+brushes show the affected vertices; a radius of 0.25 reaches one vertex and a
+radius of 1 reaches nine. Extra boundary vertices are excluded.
+
 Painting walkability changes the map's navigation by patching the game's existing
 navigation data. It does not regenerate navigation for a whole map.
 

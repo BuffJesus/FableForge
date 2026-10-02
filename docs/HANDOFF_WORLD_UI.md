@@ -1,5 +1,48 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: rounded Passability pens
+
+Walkable/Blocked and Camera ok/no now share Shore's rounded regular-cell pen,
+replacing the old cell-centre test. Radius 0.25 reaches one vertex, radius 1
+reaches nine and radius 2 reaches 21. Small cursors show the same vertices;
+extra boundary vertices are excluded. Strength/time do not affect these pens,
+and repeated unchanged applications no longer advance the terrain revision.
+Walkable/Blocked Shift inversion remains. Existing navigation patching, stroke
+undo and the camera saver OR are unchanged.
+
+Read-only `build/passability-pen-native-full.txt` covers PassabilityInput
+02051d50, EditSetPassability 02970060, EditSetCameraPassability 02970630 and
+per-map setters 029a9630/029a9940. Executable SHA256 matches the Smear evidence
+below. The caller rounds the float world point through GFFloatToLongNear. Both
+pens use floor/ceil inclusive bounds and sqrtf(float(dx*dx+dy*dy))-0.5 < radius
+(the already-verified double 04022eb8 is 0.5), filtered to editable map cells.
+The existing rounded disc helper satisfies this contract; the document's shared
+query is now named `surveyBrushVertices` and includes world-origin rounding.
+Forge edits only the current map; no native runtime comparison was performed.
+
+Independent core fixtures exercise all four modes with explicit 3x3 expected
+masks, zero Strength/time, no-op revisions, one-vertex pens and boundary refusal.
+Saved LEVs match exact expected byte deltas: +15 for walkability, +16 for camera,
+and the confirmed +16 OR when setting walkable on previously camera-blocked
+cells. Other terrain/game-grid fields are unchanged. Existing terrain/navigation
+fixtures now target exact vertices with radius 0.25 instead of old half-cell
+centres; their original saved-cell and two-cell navigation connectivity
+assertions remain, and the core target passes.
+
+`tools/test_passability_cursor.py` passes normal/compact checks for all four pens:
+1/9/21 projected vertices, actual mouse strokes, Walkable/Blocked Shift inversion,
+zero-time automation dispatch, unchanged heights/themes/environment/sound/shore/
+objects and exact undo. Evidence: `build/passability-cursor-8vtpdn7g`; compact
+single-vertex Camera no screenshot inspected. Full Release build passes.
+All 36 CTest checks pass. The shared Shore check passed both sizes at
+`build/shore-points-ln6quppa`; `tests/ui/editor.txt` and `tests/ui/parity.txt`
+also finished RESULT PASS, including scratch object saving and terrain undo.
+Regression log: `build/passability_pen_regressions.log`. Documentation command
+checks, Python syntax and diff whitespace checks pass.
+The new harness is registered in check_all; the earlier 96-check checkpoint is
+not a result for this source change. The live game install remains read-only.
+
+
 ## 2026-10-02 continuation: authored shore-point flags
 
 Terrain > Passability > Shore paints On/Off with Shift inversion, a Show shore

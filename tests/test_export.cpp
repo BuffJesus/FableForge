@@ -1056,7 +1056,7 @@ void testTerrainEditing(const fs::path& lev, const fs::path& dir) {
     CHECK(doc.undo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0) && near(doc.level()->heightAt(2, 2), h0) && !doc.terrainDirty());
     CHECK(doc.redo() && near(doc.terrain().heights[size_t(2) * 5 + 2], h0 + 2.0f));
     // walkable paint
-    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.6f; b.x = 1.5f; b.y = 1.5f;
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.25f; b.x = 1; b.y = 1;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.terrain().walkable[size_t(1) * 5 + 1] == 0 && !doc.level()->walkableAt(1, 1));
     CHECK(doc.level()->walkableAt(2, 2));   // even rows are walkable in the synthetic map
@@ -1290,7 +1290,7 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.terrain().cameraPassable.size() == size_t(doc.cellsX()) * doc.cellsY());
     b.mode = ed::TerrainBrush::Mode::CameraPass; b.x = 4.5f; b.y = 4.5f; b.radius = 0.6f;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
-    b.mode = ed::TerrainBrush::Mode::CameraBlock; b.x = 1.5f; b.y = 1.5f;
+    b.mode = ed::TerrainBrush::Mode::CameraBlock; b.x = 1.25f; b.y = 1.25f;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(doc.level()->cameraPassableAt(4, 4) && doc.level()->cameraPassableAt(1, 1));   // (1,1) is walkable: stays passable
     CHECK(doc.terrain().cameraPassable[size_t(1) * doc.cellsX() + 1] == 0 && doc.terrainDirty());
@@ -1346,6 +1346,57 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testPassabilityPen(const fs::path& dir) {
+    namespace ed = albion::editor;
+    using Mode=ed::TerrainBrush::Mode;
+    int fixture=0;
+    for (const auto mode : {Mode::Walkable,Mode::Blocked,Mode::CameraPass,Mode::CameraBlock}) {
+        const auto path=writeGameMapLev(dir / ("passability_pen_"+std::to_string(fixture++)+".lev"));
+        auto level=forge::lev::File::open(path);
+        const bool walkMode=mode==Mode::Walkable || mode==Mode::Blocked;
+        const bool set=mode==Mode::Walkable || mode==Mode::CameraPass;
+        for (int y=0;y<9;++y) for (int x=0;x<9;++x) {
+            level.setWalkableAt(x,y,mode==Mode::Blocked);
+            level.setCameraPassableAt(x,y,!set);
+        }
+        level.save(path); const auto before=readAll(path);
+        ed::Document doc; std::string err;
+        CHECK(doc.openText("PassabilityPen","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+        CHECK(doc.loadLevel(path,err)); const auto baseline=doc.terrain();
+        ed::TerrainBrush brush; brush.mode=mode; brush.x=3.5f; brush.y=3.5f; brush.radius=1; brush.strength=0;
+        const auto revision=doc.terrainRevision();
+        doc.beginStroke(brush); doc.applyBrush(brush,0); doc.applyBrush(brush,0);
+        CHECK(doc.terrainRevision()==revision+1); doc.endStroke();
+        auto expected=before;
+        for (int y=0;y<9;++y) for (int x=0;x<9;++x) {
+            const size_t n=size_t(y)*9+x;
+            const bool hit=x>=3 && x<=5 && y>=3 && y<=5;
+            CHECK(doc.terrain().walkable[n]==(walkMode && hit ? uint8_t(set) : baseline.walkable[n]));
+            CHECK(doc.terrain().cameraPassable[n]==(!walkMode && hit ? uint8_t(set) : baseline.cameraPassable[n]));
+            if (hit) {
+                const size_t off=level.cellDataOffset()+n*21;
+                expected[off+(walkMode?15:16)]=uint8_t(set);
+                if (mode==Mode::Walkable) expected[off+16]=1; // confirmed native saver OR
+            }
+        }
+        CHECK(doc.terrain().heights==baseline.heights && doc.terrain().shorePoint==baseline.shorePoint &&
+              doc.terrain().sound==baseline.sound && doc.terrain().atmosIndex==baseline.atmosIndex &&
+              doc.terrain().atmosStrength==baseline.atmosStrength && doc.terrain().themeIndex==baseline.themeIndex &&
+              doc.terrain().themeStrength==baseline.themeStrength);
+        CHECK(doc.saveTerrainLoose(dir / ("passability_root_"+std::to_string(fixture)),err));
+        CHECK(readAll(dir / ("passability_root_"+std::to_string(fixture)) / "data/Levels/FinalAlbion/PassabilityPen.lev")==expected);
+        CHECK(doc.undo() && doc.terrain().walkable==baseline.walkable && doc.terrain().cameraPassable==baseline.cameraPassable);
+        brush.radius=.25f; doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+        size_t changed=0; const auto& flags=walkMode ? doc.terrain().walkable : doc.terrain().cameraPassable;
+        const auto& oldFlags=walkMode ? baseline.walkable : baseline.cameraPassable;
+        for(size_t n=0;n<flags.size();++n) changed+=flags[n]!=oldFlags[n];
+        CHECK(changed==1 && flags[size_t(4)*9+4]==uint8_t(set));
+        CHECK(doc.undo());
+        brush.x=8; brush.y=8; doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+        CHECK(!doc.undo()); // regular cells only; extra boundary vertex excluded
+    }
+}
+
 void testShorePoints(const fs::path& dir) {
     namespace ed = albion::editor;
     using Cells = std::vector<std::pair<int, int>>;
@@ -1372,12 +1423,12 @@ void testShorePoints(const fs::path& dir) {
     ed::Document doc; std::string err;
     CHECK(doc.openText("Shore", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
     CHECK(doc.loadLevel(path,err));
-    CHECK((doc.shoreBrushVertices(3.5f,3.5f,.25f) == Cells{{4,4}})); // half-even caller
-    CHECK((doc.shoreBrushVertices(2.5f,2.5f,.25f) == Cells{{2,2}}));
-    CHECK((doc.shoreBrushVertices(4,4,.5f) == Cells{{4,4}})); // distance 1 excluded strictly
-    CHECK((doc.shoreBrushVertices(4,4,1) == Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}}));
-    CHECK((doc.shoreBrushVertices(0,0,1) == Cells{{0,0},{1,0},{0,1},{1,1}}));
-    CHECK(doc.shoreBrushVertices(8,8,.25f).empty()); // extra boundary vertices not regular cells
+    CHECK((doc.surveyBrushVertices(3.5f,3.5f,.25f) == Cells{{4,4}})); // half-even caller
+    CHECK((doc.surveyBrushVertices(2.5f,2.5f,.25f) == Cells{{2,2}}));
+    CHECK((doc.surveyBrushVertices(4,4,.5f) == Cells{{4,4}})); // distance 1 excluded strictly
+    CHECK((doc.surveyBrushVertices(4,4,1) == Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}}));
+    CHECK((doc.surveyBrushVertices(0,0,1) == Cells{{0,0},{1,0},{0,1},{1,1}}));
+    CHECK(doc.surveyBrushVertices(8,8,.25f).empty()); // extra boundary vertices not regular cells
     const auto baseline = doc.terrain();
     ed::TerrainBrush brush; brush.mode=ed::TerrainBrush::Mode::ShoreSet;
     brush.x=4; brush.y=4; brush.radius=1; brush.strength=0;
@@ -2602,9 +2653,9 @@ void testNavPatch(const fs::path& dir) {
     CHECK(doc.openText("nav32", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
     CHECK(doc.loadLevel(base, err));
     albion::editor::TerrainBrush b;
-    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.4f; b.x = 20.5f; b.y = 12.5f; b.strength = 1;
+    b.mode = albion::editor::TerrainBrush::Mode::Blocked; b.radius = 0.25f; b.x = 20; b.y = 12; b.strength = 1;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
-    b.mode = albion::editor::TerrainBrush::Mode::Walkable; b.x = 5.5f; b.y = 7.5f;
+    b.mode = albion::editor::TerrainBrush::Mode::Walkable; b.x = 5; b.y = 7;
     doc.beginStroke(b); doc.applyBrush(b, 0.1f); doc.endStroke();
     CHECK(!doc.terrain().walkable[size_t(12) * 33 + 20] && doc.terrain().walkable[size_t(7) * 33 + 5]);
     const fs::path root = dir / "nav_root";
@@ -3358,6 +3409,7 @@ int main() {
     testGroundThemeStamp(dir);
     testAtmosSmear(dir);
     testShorePoints(dir);
+    testPassabilityPen(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

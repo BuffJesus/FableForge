@@ -103,6 +103,8 @@ def main():
                   [sys.executable, "tools/test_ground_stamp.py", "--install", install_root], capture_output=True)
         ok &= run("Environment strict cell pen, cursor, clear, sample and undo at both sizes",
                   [sys.executable, "tools/test_environment_cursor.py", "--install", install_root], capture_output=True)
+        ok &= run("Walkable/Camera rounded survey pens, cursors and exact undo",
+                  [sys.executable, "tools/test_passability_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Shore-point pen, On/Off/Shift, visible overlays and exact undo",
                   [sys.executable, "tools/test_shore_points.py", "--install", install_root], capture_output=True)
         ok &= run("Environment Smear sparse cursor, controls, sampling and exact undo",

@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Walkable/Blocked and Camera pens now share the verified rounded survey disc,
+with one-vertex brushes, small vertex cursors, regular-cell clipping and exact
+undo. Navigation/save behavior stays on the existing path. Native evidence
+and focused checks are in HANDOFF_WORLD_UI.
+
 Terrain > Passability > Shore now paints independent shore-point flags, with
 On/Off, Shift inversion, red overlays and stroke undo. Native serialization and
 byte-preservation evidence are in HANDOFF_WORLD_UI. Visible water shoreline

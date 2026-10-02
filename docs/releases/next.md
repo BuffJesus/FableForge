@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Precise Passability pens.** Walkable, Blocked, Camera ok and Camera no now use
+  the original editor's rounded pen. A 0.25-cell brush reaches one vertex;
+  small cursors show affected vertices, and extra boundary vertices stay untouched.
+
 - **Shore-point editing.** Terrain > Passability > Shore paints shore-point flags
   with On/Off and Shift to reverse the stroke. Red shows set cells; flags save
   with terrain and undo as one stroke. Visible water shoreline generation is separate.

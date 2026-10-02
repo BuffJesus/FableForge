@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_passability_cursor.py --install <root>` checks modes 4/5/12/13:
+rounded 1/9/21-vertex pens, zero Strength/time, real strokes, Walkable/Blocked
+Shift inversion, preservation of other channels and exact undo at both sizes.
+`snapshot_passability` stores walkability and camera flag arrays;
+`assert_passability_changes <walk count> <camera count>` checks both against
+that snapshot. `brush_cursor_vertices` reports small survey pen vertices.
+
 `tools/test_shore_points.py --install <root>` checks mode 17's 1/9/21-cell
 shore pen, real On/Off controls, Shift inversion, unchanged other channels,
 visible overlays in four view modes and exact undo at normal/compact sizes.

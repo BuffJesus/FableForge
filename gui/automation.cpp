@@ -1307,6 +1307,28 @@ bool Automation::tick(App& app) {
         }
         ++pc_;
     }
+    else if (cmd == "snapshot_passability") {
+        if (!app.doc_.hasTerrain()) fail("snapshot_passability: no terrain");
+        else { passabilitySnap_ = PassabilitySnapshot{app.doc_.terrain().walkable, app.doc_.terrain().cameraPassable}; note("ok   " + line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_passability_changes") {
+        size_t expectedWalk=0, expectedCamera=0; std::istringstream input(rest);
+        const auto* terrain=app.doc_.hasTerrain() ? &app.doc_.terrain() : nullptr;
+        if (!(input >> expectedWalk >> expectedCamera) || !passabilitySnap_ || !terrain ||
+            terrain->walkable.size()!=passabilitySnap_->walkable.size() || terrain->cameraPassable.size()!=passabilitySnap_->camera.size())
+            fail("assert_passability_changes: invalid counts or missing/mismatched snapshot");
+        else {
+            size_t walk=0,camera=0;
+            for(size_t i=0;i<terrain->walkable.size();++i) {
+                walk+=terrain->walkable[i]!=passabilitySnap_->walkable[i];
+                camera+=terrain->cameraPassable[i]!=passabilitySnap_->camera[i];
+            }
+            if(walk!=expectedWalk || camera!=expectedCamera) fail(line+" (walk="+std::to_string(walk)+", camera="+std::to_string(camera)+")");
+            else note("ok   "+line);
+        }
+        ++pc_;
+    }
     else if (cmd == "snapshot_shore") {
         if (!app.doc_.hasTerrain()) fail("snapshot_shore: no terrain");
         else { shoreSnap_ = app.doc_.terrain().shorePoint; note("ok   " + line); }

@@ -553,8 +553,8 @@ public:
     std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
     // Environment maps the strict theme vertex pen to unique game cells.
     std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
-    // Native reflection pen, clipped to this map's regular cells (extra boundary vertices excluded).
-    std::vector<std::pair<int, int>> shoreBrushVertices(float x, float y, float radius) const;
+    // Native walkability/camera/shore pen, clipped to regular cells (extra boundary vertices excluded).
+    std::vector<std::pair<int, int>> surveyBrushVertices(float x, float y, float radius) const;
     std::vector<std::pair<int, int>> environmentSmearBrushCells(float x, float y, float radius) const;
     using OverlayColour = std::array<uint8_t, 4>;
     std::vector<OverlayColour> shoreOverlay() const;

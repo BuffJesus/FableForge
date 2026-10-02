@@ -3036,28 +3036,28 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     brushCursorSoundCells_ = 0;
     brushCursorEnvironmentCells_ = 0;
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
-    const bool shoreDisc = terrainMode_ == 17;
+    const bool surveyDisc = terrainMode_ == 4 || terrainMode_ == 5 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17;
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool keyDisc = keyStroke_;
     const bool replaceDisc = terrainMode_ == 7;
     const bool stampDisc = terrainMode_ == 6 && paintStamp_;
-    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc || shoreDisc;
+    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc || surveyDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
     const bool environmentDisc = terrainMode_ == 10;
     const bool environmentSmearDisc = environmentDisc && envSmear_;
-    const float centreX = shoreDisc ? std::nearbyint(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+    const float centreX = surveyDisc ? std::nearbyint(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
         : environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
         : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = shoreDisc ? std::nearbyint(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+    const float centreY = surveyDisc ? std::nearbyint(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
         : environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
         : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
-                                  : brushRadius_ + (roundedDisc || soundDisc || shoreDisc ? 0.5f : 0.0f);
+                                  : brushRadius_ + (roundedDisc || soundDisc || surveyDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
@@ -3109,7 +3109,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     }
     if (got > 2) dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     if (vertexDisc && brushRadius_ <= 4.0f) {
-        const auto vertices = shoreDisc ? doc_.shoreBrushVertices(brushFable_[0], brushFable_[1], brushRadius_) : keyDisc
+        const auto vertices = surveyDisc ? doc_.surveyBrushVertices(brushFable_[0], brushFable_[1], brushRadius_) : keyDisc
             ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
             : replaceDisc || stampDisc
             ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], brushRadius_)
@@ -4309,8 +4309,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
             if (ImGui::IsItemHovered()) {
-                if (terrainMode_ == 17)
-                    ImGui::SetTooltip("Rounded vertex pen; small brushes show affected regular cells. Shift reverses On/Off.");
+                if (terrainMode_ == 4 || terrainMode_ == 5 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17)
+                    ImGui::SetTooltip("Rounded vertex pen; small brushes show the affected regular cells.");
                 else if (terrainMode_ == 10 && envSmear_)
                     ImGui::SetTooltip("Blends each reached 4x4 cell with its neighbours. The minimum effective radius is 1; small brushes outline the cells.");
                 else if (terrainMode_ == 10)
