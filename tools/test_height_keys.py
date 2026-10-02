@@ -36,6 +36,26 @@ def main():
                       f'key_up {key}', 'wait_foliage', 'assert_state height_key_active 0',
                       'assert_heights_changed 1', 'undo', 'wait_foliage',
                       'assert_heights_changed 0', 'assert_document_same']
+        # Every sculpt tool exposes the actual Speed slider, including Paths.
+        for mode in [0, 1, 2, 3, 9, 16]:
+            lines += [f'terrain_mode {mode}', 'frames 3', 'assert_widget slider_pen_speed',
+                      'reveal slider_pen_speed', 'frames 3', 'reveal slider_pen_speed', 'frames 3',
+                      'mouse_move slider_pen_speed', 'mouse_down left', 'mouse_delta -10000 0',
+                      'mouse_up left', 'frames 3', 'assert_state pen_speed 0.000000',
+                      'assert_state height_key_step 0.000000',
+                      'camera 64 110 20 0 1.5 40', 'frames 3', 'mouse_move viewport',
+                      'key_down Equal', 'frames 3', 'key_up Equal', 'wait_foliage',
+                      'assert_heights_changed 0', 'assert_document_same',
+                      'reveal slider_pen_speed', 'frames 3', 'reveal slider_pen_speed', 'frames 3',
+                      'mouse_move slider_pen_speed', 'mouse_down left', 'mouse_delta 10000 0',
+                      'mouse_up left', 'frames 3', 'assert_state pen_speed 1.000000',
+                      'assert_state height_key_step 1.000000', 'mouse_move viewport',
+                      'key_down Equal', 'frames 3', 'key_up Equal', 'wait_foliage',
+                      'assert_heights_changed 1', 'undo', 'wait_foliage',
+                      'assert_heights_changed 0', 'assert_document_same']
+        lines += ['clear_toasts', 'reveal slider_pen_speed', 'frames 3',
+                  'reveal slider_pen_speed', 'frames 3', 'mouse_move viewport',
+                  f'screenshot {dest.as_posix()}/sculpt-speed.png', 'set pen_speed 0.5']
         for mode in [4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15]:
             for key in ['Equal', 'Minus']:
                 lines += [f'terrain_mode {mode}', 'camera 64 110 20 0 1.5 40', 'frames 3',
@@ -58,7 +78,7 @@ def main():
         (dest / 'output.log').write_text(result.stdout + result.stderr, encoding='utf-8')
         log = Path(str(script) + '.log').read_text(encoding='utf-8')
         assert result.returncode == 0 and 'RESULT PASS' in log, log[-4000:]
-        print(size, 'fixed-point keys, sculpt-only gating, tool switch and single undo: PASS', flush=True)
+        print(size, 'fixed-point keys, six Speed sliders, sculpt-only gating and undo: PASS', flush=True)
 
 
 if __name__ == '__main__':

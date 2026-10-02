@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "forge/heightpen.hpp"
 #include "worlddemand.hpp"
 
 #include "ImGuizmo.h"
@@ -1533,6 +1534,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("place_snap_grid=" + std::to_string(placeSnapGrid_));
     v.push_back("pen_target=" + std::to_string(penTarget_));
     v.push_back("pen_target_from_stroke=" + std::to_string(penTargetFromStroke_));
+    v.push_back("pen_speed=" + std::to_string(penSpeed_));
+    v.push_back("height_key_step=" + std::to_string(forge::heightpen::speedToOpacity(penSpeed_)));
     v.push_back("height_key_active=" + std::to_string(keyStroke_));
     v.push_back("height_key_x=" + std::to_string(keyAnchor_[0]));
     v.push_back("height_key_y=" + std::to_string(keyAnchor_[1]));

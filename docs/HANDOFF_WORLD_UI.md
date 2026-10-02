@@ -1,5 +1,37 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 broad grid/camera validation
+
+Primary Release binaries at `d935c6c` passed the complete `check_all.py
+--no-build` gate: 88 checks, zero failures, exit 0 / ALL PASS. This includes
+all 36 CTest checks, both grid/camera additions, retail and normal/compact UI,
+scratch new levels/overworld, supported mod corpora, imports, restores and pack
+level/world writes. No check was skipped; lip-sync fixture traversal omits
+291 empty/non-type-1 entries while comparing 20,214 retail entries byte exactly.
+Log: `build/check_all_grid_cameras_20261002.log`. The sculpt-control changes
+below were tested separately on owned binaries during the gate, preserving
+its build identity. No additional game deployment or live probes were run.
+
+## 2026-10-02 continuation: shared sculpt Speed control
+
+Speed is now visible in all six sculpt tools. The original slider ID and
+automation widget are retained. Its tooltip gives the actual Minus/Equal step
+in metres per held frame and explains its additional Flatten target blend.
+Native CPaintMapDialog::GetOpacity 0x02907840 reads a shared dialog slider and
+calls GFGetWeightedFractionSlowStartFastEnd 0x02907a70. The height-addition
+routine independently reads GetOpacity, with no selected-pen condition.
+Local export: `build/sculpt-speed-native-evidence.txt`, same FableWin identity.
+This UI change retains the existing pen and key algorithms.
+Normal/compact checks pass at `build/height-keys-ipl14p48`: actual slider
+endpoints in each sculpt tool, zero-speed strokes preserving both snapshots,
+full-speed strokes with exact undo, and the prior fixed-anchor/tool-gating
+cases. Both Speed screenshots inspected; docs command check passes.
+Primary Release GUI rebuilt after the broad gate ended. Final Ctrl-drag checks
+pass at `build/height-pick-1xri_5eu` with shared Speed and fixed-point keys;
+Height pens, Paths, theme-target guard and compact layout also pass
+(`build/sculpt_final_regressions.log`). No repeated broad gate was needed for
+these GUI-only changes after the complete stable grid/camera gate.
+
 ## 2026-10-02 continuation: fixed-point sculpt height keys
 
 Minus/Equal now latch the ground point when a key stroke starts, continue there

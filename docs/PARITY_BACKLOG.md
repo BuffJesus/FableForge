@@ -780,7 +780,9 @@ Effort S. Value med (the common case is lifting a map to meet its neighbour, or 
 Effort: S (about 60-100 lines, plus a test). Value: low. It only matters at radius 1-3, because the slider minimum is 1.
 
 #### The Speed slider (the step for -/=) is visible only in Flatten
-*weakness, effort S, value low*
+*resolved 2026-10-02: the shared Speed slider is visible in all six sculpt
+tools, with the actual height-key step in its tooltip. Real slider endpoint
+checks and zero/nonzero key strokes are in tools/test_height_keys.py.*
 
 **Vanilla:** The Height Toolbox always shows Size and Speed (OPACITY_SLIDER, GetOpacity 0x02907840). Speed feeds Paint Height, Smear and the -/= step (PaintInputPaintMapHeightAddition 0x02993840), so the user can tune the key step whichever Land pen is selected.
 

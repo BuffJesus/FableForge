@@ -276,6 +276,7 @@ item and info display components; absent components are not added.
   Hold `-` or `=` to lower or raise the point where the key press started;
   moving the pointer keeps that point fixed. Release finishes one undo step.
   These keys work in sculpt tools, including Paths.
+  Each sculpt tool exposes **Speed**; hover it for the height-key step in metres.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

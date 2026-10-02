@@ -22,6 +22,9 @@ at normal and compact sizes without saving. State keys `pen_target` and
 strokes, all six sculpt tools, all other terrain modes, tool switches and exact
 undo at both sizes. `height_key_active`, `height_key_x` and `height_key_y` expose
 the active stroke and latched ground point.
+The same check exercises the real Speed slider's endpoints in every sculpt
+tool, zero-speed refusal to alter ground, nonzero strokes and undo. State keys
+`pen_speed` and `height_key_step` expose the slider and its derived metre step.
 
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.

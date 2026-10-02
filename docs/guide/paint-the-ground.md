@@ -14,6 +14,7 @@ on the ground to sample its height without changing it. **Paint height** shows
 the current sample. Switch to **Flatten** to level the ground to that height.
 Hold `-` or `=` in a sculpt tool to lower or raise a fixed ground spot. Moving
 the pointer keeps the edit at its starting point; release finishes the stroke.
+**Speed** is available in each sculpt tool. Hover it to see the height-key step.
 
 ## Ground textures
 

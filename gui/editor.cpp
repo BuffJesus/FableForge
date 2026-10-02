@@ -2918,14 +2918,6 @@ void App::drawPenControls(float cardInner) {
             penTarget_ = std::clamp(penTarget_, 0.0f, 2048.0f);
             auto_.registerWidget("input_pen_target");
         }
-        {
-            char v[16]; std::snprintf(v, sizeof v, "%.1f", penSpeed_);
-            theme::labelValue("Speed", v, cardInner);
-            ImGui::SetNextItemWidth(cardInner);
-        }
-        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
-        auto_.registerWidget("slider_pen_speed");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("How far toward the target each application goes: 1 - cos(90 deg x speed)\n(0.5 = 29%%, 1 = all the way). Vanilla's Speed slider.\nIt is also the step of the - / = keys, which lower / raise one fixed ground point while held in sculpt tools.");
     } else if (m == 3) {
         row("Smoothness");
         float pct = penSmoothness_ * 100.0f;
@@ -2941,6 +2933,18 @@ void App::drawPenControls(float cardInner) {
         ImGui::SliderFloat("##pmag", &penMagnifier_, 1.0f, 50.0f, "%.1f");
         auto_.registerWidget("slider_pen_magnifier");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Each jump is up to 0.01 + 0.05 x amount world units (vanilla noise magnifier, 1 - 50).");
+    }
+    {
+        char value[16]; std::snprintf(value, sizeof value, "%.1f", penSpeed_);
+        theme::labelValue("Speed", value, cardInner);
+        ImGui::SetNextItemWidth(cardInner);
+        ImGui::SliderFloat("##pspeed", &penSpeed_, 0.0f, 1.0f, "");
+        auto_.registerWidget("slider_pen_speed");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(
+            "Height keys (- / =): %.3f m per held frame at one fixed spot.\n"
+            "Flatten: fraction toward the target per application = 1 - cos(90 deg x speed)\n"
+            "(0.5 = 29%%, 1 = all the way).",
+            forge::heightpen::speedToOpacity(penSpeed_));
     }
     if (isVanillaPen(m)) {
         ImGui::Checkbox("Repeat while held##pspray", &penSpray_);
