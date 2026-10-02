@@ -22,9 +22,9 @@ touching map. It is a port of the vanilla editor's Fit Neighbours tool.
 The whole map is rebuilt in one undo step (Ctrl+Z). Grounded objects follow the
 new ground; floating and locked objects stay where they are.
 
-To see the result in the game, write both the terrain and any objects that moved:
-**Write terrain into the game** and **Write objects into WAD**. With a pack chosen
-under *Writes go into*, both go into the pack instead.
+To see the result in the game, write both the terrain and any objects that moved
+with **Write terrain and objects into the game**. With a pack chosen under
+*Writes go into*, both go into the pack instead.
 
 **Generate terrain...** next to it replaces every height of the map with a
 fractal landscape (the vanilla editor's generator). It sets every height rather

@@ -51,8 +51,12 @@ navigation data. It does not regenerate navigation for a whole map.
 Painted themes, walkability and heights are all part of the terrain. Press
 **Write terrain into the game** at the bottom of the Edit panel (or *Write terrain
 into pack ...* when *Writes go into* names a pack). Moved or placed objects are a
-separate write: **Write objects into WAD**. The panel tells you when both are
-needed.
+separate write: **Write objects into WAD**.
+
+When both changed (objects standing on reshaped ground move with it), the panel
+offers **Write terrain and objects into the game** with one confirmation. It
+writes the terrain first and the objects only after that succeeded; if the
+terrain write fails, nothing else is written and both edits stay in the draft.
 
 Start a new game or enter the map fresh to see the change; see the
 [engine rules](../ENGINE_RULES.md).

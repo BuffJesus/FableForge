@@ -1235,6 +1235,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "terrain_stroke") { float x = 0, y = 0, sec = 1; std::istringstream(rest) >> x >> y >> sec; app.terrainStroke(x, y, sec); note("ok   " + line); ++pc_; }
     else if (cmd == "deploy_terrain") { app.deployTerrain(); note("..   " + line); ++pc_; }
+    else if (cmd == "write_both") { if (!app.startWriteBoth()) fail("write_both refused"); else note("..   " + line); ++pc_; }
     else if (cmd == "wait_terrain") waitOn(!app.terrainDeployBusy(), "terrain deploy");
     else if (cmd == "frame_selected") { app.frameSelected(); note("ok   " + line); ++pc_; }
     else if (cmd == "export") { app.startExport(); note("ok   " + line); ++pc_; }

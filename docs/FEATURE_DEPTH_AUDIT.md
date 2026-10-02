@@ -43,8 +43,11 @@ only after checking those paths against the current build.
 - Terrain and placed things are separate game write paths. A terrain write now
   warns when object edits remain in the draft; the footer states that both writes
   are needed and names the object write explicitly. The object write is still
-  needed for those positions to appear in TLC. A combined reviewed deployment
-  remains an open depth task.
+  needed for those positions to appear in TLC. 2026-10-02: the footer now
+  offers a combined *Write terrain and objects* (terrain first, objects only after
+  it succeeded; same map and destination). `tests/ui/write_both.txt` passes on the
+  scratch install with the barrel found in the written WAD and a clean chunk
+  audit. The terrain-failure and map-switch branches are not exercised by a test.
 - The fixed-size STB write now patches a temporary copy and replaces the bank
   only after both chunk and record writes succeed. Failed pack writes restore
   prior `.lev`, `.chunk` and `.record` bytes (or remove newly created output)

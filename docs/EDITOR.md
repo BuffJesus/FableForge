@@ -263,6 +263,12 @@ item and info display components; absent components are not added.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.
+* **Write terrain and objects into the game** (or *into pack*) appears when both the
+  terrain and the placed objects are unsaved. One confirmation starts the terrain
+  write; the object write follows only when it succeeded, for the same map and
+  destination. A failed terrain write writes nothing else and keeps both drafts.
+  The single writes below it remain available as secondary buttons
+  (`tests/ui/write_both.txt`, run by `tools/test_overworld.py` on its scratch install).
 * **Deploy** (`Write terrain into the game`) writes the terrain as it was when
   clicked. You can keep editing while it runs; later strokes remain unsaved,
   and switching maps does not change the pending write. It prepares the files

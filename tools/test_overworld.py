@@ -246,6 +246,22 @@ def main() -> int:
         r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
         if "0 with findings" not in r.stdout:
             print("Greatwood_1 chunk does not audit after the sculpt deploy:", r.stdout[-400:]); ok = False
+        # terrain and objects in one action: the terrain first, then the placed barrel into the WAD
+        r = subprocess.run([gui, "--auto", "tests/ui/write_both.txt"], capture_output=True, text=True, cwd=ROOT)
+        log = os.path.join(ROOT, "tests", "ui", "write_both.txt.log")
+        wad = open(os.path.join(scratch, "data", "Levels", "FinalAlbion.wad"), "rb").read()
+        if r.returncode != 0:
+            print("GUI write-both script failed:")
+            if os.path.exists(log):
+                print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+            ok = False
+        elif b"UiWriteBothBarrel" not in wad:
+            print("write both: the placed barrel is not in the scratch FinalAlbion.wad"); ok = False
+        else:
+            print("GUI write-both script PASS")
+        r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
+        if "0 with findings" not in r.stdout:
+            print("Greatwood_1 chunk does not audit after the combined write:", r.stdout[-400:]); ok = False
         # a ground theme added from the game, painted and deployed (layer meshes rebuilt)
         r = subprocess.run([gui, "--auto", "tests/ui/theme_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
         log = os.path.join(ROOT, "tests", "ui", "theme_deploy.txt.log")

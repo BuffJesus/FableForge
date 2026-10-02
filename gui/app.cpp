@@ -1831,6 +1831,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
     v.push_back("brush_radius=" + std::to_string(brushRadius_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
+    v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));
     v.push_back("terrain_deploy_busy=" + std::string(terrainDeployBusy() ? "1" : "0"));
     std::string fileJob = activeFileJob() ? activeFileJob() : "none";
     std::replace(fileJob.begin(), fileJob.end(), ' ', '_');
@@ -1869,6 +1870,7 @@ void App::frame(float dt) {
         if (r.ok && !r.pack.empty()) pushLog("terrain written into pack " + packLabel(r.pack) + " (Mods > Deploy puts it in the game)", 3);
         else if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
+        if (writeObjectsAfterTerrain_) finishWriteBoth(r.ok);
     }
     if (worldFuture_.valid() && worldFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const WorldJob r = worldFuture_.get();

@@ -157,6 +157,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `new_level <name> <x> <y> [region]` / `wait_new_level` | fill the "New level" card and install (BWD/WLD/WAD/STB under the install), wait for it; refuses unsaved map edits and retains edits made while the job runs. Origin widgets: `input_new_level_x`, `input_new_level_y` |
 | `new_level_own_region 0\|1` | request an own region with the next `new_level`, using the card's New slot / Use filler mode (New slot by default); direct creation includes a minimap |
 | `new_level_blank <theme slot> <height> [<w> <h>]` | switch the card to Blank with that ground theme / height (and a retail size) before `new_level` |
+| `write_both` | the footer's *Write terrain and objects*: the terrain job, then the object write once it succeeded (state `write_both_pending`; widgets `btn_write_both`, `btn_write_both_confirm`); `wait_terrain` waits for both |
 | `deploy_terrain` / `wait_terrain` | write a terrain snapshot under saveroot or pack destination (worker thread); `terrain_deploy_busy` reports the pending job |
 | `set unsaved_prompt 0\|1` | scripted runs skip the unsaved-changes prompt unless opted in |
 | `dump_log` | copy the activity log into the script log |

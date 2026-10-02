@@ -1,0 +1,41 @@
+# Write terrain and objects in one action (tools/test_overworld.py prepares
+# build/ui_overworld_install): a sculpt plus a placed barrel on Greatwood_1, the footer's
+# combined button and its confirmation; the terrain is written first, then the objects.
+wait_maps
+wait_ready
+set saveroot build/ui_overworld_install
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+edit_tab 0
+camera 48 96 45 0.9 0.85 60
+frames 2
+place OBJECT_BARREL_BREAKABLE UiWriteBothBarrel
+frames 2
+edit_tab 1
+terrain_mode 0
+brush 8 6
+terrain_stroke 40 90 0.5
+frames 2
+assert_state terrain_dirty 1
+assert_state doc_dirty 1
+assert_state write_both_pending 0
+reveal btn_write_both
+frames 2
+click btn_write_both
+frames 2
+reveal btn_write_both_confirm
+frames 2
+screenshot build/ui/write_both_confirm.png
+click btn_write_both_confirm
+frames 2
+wait_terrain
+frames 4
+assert_state write_both_pending 0
+assert_state terrain_dirty 0
+assert_state doc_dirty 0
+assert_log re-baked terrain chunk
+assert_log wrote Greatwood_1.tng into FinalAlbion.wad
+quit

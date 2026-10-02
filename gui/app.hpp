@@ -256,6 +256,9 @@ public:
     void setBrush(float radius, float strength) { brushRadius_ = radius; brushStrength_ = strength; }
     bool terrainDeployBusy() const { return terrainDeployFuture_.valid(); }
     void deployTerrain() { startTerrainDeploy(); }
+    // terrain first, then the objects once that write succeeded (both touch FinalAlbion.wad)
+    bool startWriteBoth();
+    bool writeBothPending() const { return writeObjectsAfterTerrain_; }
     void moveSelected(float dx, float dy, float dz);   // map-local Fable units
     void rotateSelected(float degrees);                // yaw about the up axis
     void rotateSelectedWorld(float degrees,int axis);  // 0=Z, 1=X, 2=Y
@@ -806,6 +809,10 @@ private:
     void setNewLevel(const std::string& name, int x, int y, const std::string& region) { std::snprintf(newLevelName_, sizeof newLevelName_, "%s", name.c_str()); newLevelX_ = x; newLevelY_ = y; newLevelRegion_ = region; }
     bool newLevelBusy() const { return newLevelFuture_.valid(); }
     bool confirmTerrainDeploy_ = false;
+    bool confirmWriteBoth_ = false;
+    bool writeObjectsAfterTerrain_ = false;   // set by startWriteBoth until the terrain job finishes
+    std::string writeBothMap_, writeBothPack_;
+    void finishWriteBoth(bool terrainOk);
 
     // ---- overworld (gui/world.cpp): every map's box on a 2D grid, drag to move,
     // pending moves applied to the install in one go (WLD/BWD/STB)

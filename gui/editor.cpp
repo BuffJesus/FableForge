@@ -2575,6 +2575,27 @@ bool App::deployDocument() {
     return true;
 }
 
+bool App::startWriteBoth() {
+    if (!documentLoaded() || !doc_.hasTerrain() || writeObjectsAfterTerrain_) return false;
+    writeObjectsAfterTerrain_ = true;   // before the start: its "objects stay in the draft" note does not apply
+    writeBothMap_ = doc_.mapName();
+    writeBothPack_ = packDest_;
+    startTerrainDeploy();
+    if (!terrainDeployFuture_.valid()) { writeObjectsAfterTerrain_ = false; return false; }   // refused; it logged why
+    return true;
+}
+
+void App::finishWriteBoth(bool terrainOk) {
+    writeObjectsAfterTerrain_ = false;
+    if (!terrainOk) { pushLog("objects not written: the terrain write failed first. Both edits stay in the draft; fix the error and write again.", 2); return; }
+    if (!documentLoaded() || doc_.mapName() != writeBothMap_ || packDest_ != writeBothPack_) {
+        pushLog("objects not written: the map or the write destination changed while the terrain was being written. Write the objects again.", 1);
+        return;
+    }
+    if (!doc_.dirty()) return;   // nothing left to write
+    deployDocument();
+}
+
 void App::revertDocument() {
     if (!documentLoaded()) return;
     while (doc_.undo()) {}
@@ -3431,7 +3452,7 @@ void App::startTerrainDeploy() {
     const std::string root = saveRoot();
     const auto ctxHold = std::make_shared<const te::Context>(ctx_);   // the library lives in it; a reload must not free it
     const forge::terraintex::ThemeLibrary* lib = ctxHold->themeLibrary();
-    if (doc_.dirty()) pushLog("Terrain write leaves placed-object edits in the draft. Use the object write below to update their positions in the game.", 1);
+    if (doc_.dirty() && !writeObjectsAfterTerrain_) pushLog("Terrain write leaves placed-object edits in the draft. Use the object write below to update their positions in the game.", 1);
     pushLog(std::string("terrain: writing .lev") + (writesLoose() ? "" : ", FinalAlbion.wad") + " and re-baking the FinalAlbion_RT.stb chunk...", 0);
     beginJob();
     const editor::ProgressFn progress = jobProgress();
@@ -4503,6 +4524,9 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     drawPackPicker(inner);
     const bool toPack = !packDest_.empty();
+    // with the combined write on offer, the single writes are the secondary choice
+    const bool both = dirty && doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid();
+    auto writeButton = [&](const std::string& label, ImVec2 size) { return both ? theme::ghostButton(label.c_str(), size) : theme::primaryButton(label.c_str(), size); };
     if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
         // Repair objects stranded by a draft from before automatic terrain following.
         ImGui::SetCursorPosX(pad);
@@ -4511,22 +4535,37 @@ void App::drawEditFooter(float pad, float inner) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("For drafts made before objects followed terrain automatically. Moves objects that still sit near the old ground toward the new ground. Already moved, buried, floating and locked objects stay.");
     }
     if (doc_.hasTerrain() && (doc_.terrainDirty() || terrainDeployFuture_.valid())) {
-        if (dirty) {
+        if (dirty && !terrainDeployFuture_.valid()) {
+            // one action for the common case: the ground and the objects standing on it changed together
             ImGui::SetCursorPosX(pad);
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
-            ImGui::TextColored(theme::vec(theme::Muted), "Ground and placed objects changed. Write both below to see both in %s.", toPack ? "the pack" : "the game");
-            ImGui::PopTextWrapPos();
+            if (toPack) {
+                if (theme::primaryButton(("Write terrain and objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) startWriteBoth();
+                auto_.registerWidget("btn_write_both");
+            } else if (!confirmWriteBoth_) {
+                if (theme::primaryButton("Write terrain and objects into the game", ImVec2(inner, S(42)))) confirmWriteBoth_ = true;
+                auto_.registerWidget("btn_write_both");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the terrain first, then the placed objects once the terrain write succeeded.\nIf the terrain write fails, nothing else is written and both edits stay in the draft.");
+            } else {
+                const std::string q = "Rewrite " + doc_.mapName() + "'s terrain (.lev" + (writesLoose() ? "" : ", FinalAlbion.wad") + ", FinalAlbion_RT.stb), then its objects? (one-time .forge-orig backups)";
+                const int r = confirmRow(q.c_str(), "Yes, write both", inner, S(42), "btn_write_both_confirm");
+                if (r != 0) confirmWriteBoth_ = false;
+                if (r > 0) startWriteBoth();
+            }
+            ImGui::SetCursorPosX(pad);
+            ImGui::PushFont(fontSmall_);
+            ImGui::TextColored(theme::vec(theme::Muted), "Or write one at a time:");
+            ImGui::PopFont();
         }
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
-            theme::primaryButton(jobLabel("Saving terrain").c_str(), ImVec2(inner, S(36)), false);
+            theme::primaryButton(jobLabel(writeObjectsAfterTerrain_ ? "Saving terrain, then objects" : "Saving terrain").c_str(), ImVec2(inner, S(36)), false);
         } else if (toPack) {
             // into a pack nothing in the game changes: no confirmation
-            if (theme::primaryButton(("Write terrain into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(36)))) startTerrainDeploy();
+            if (writeButton("Write terrain into pack " + packLabel(packDest_), ImVec2(inner, S(36)))) startTerrainDeploy();
             auto_.registerWidget("btn_terrain_deploy");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The .lev and this map's re-baked static-map chunk go into the pack (data/Levels/FinalAlbion + stb/);\nMods > Deploy writes them into the game with the other mods. Nothing in the game changes now.");
         } else if (!confirmTerrainDeploy_) {
-            if (theme::primaryButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
+            if (writeButton("Write terrain into the game", ImVec2(inner, S(36)))) confirmTerrainDeploy_ = true;
             auto_.registerWidget("btn_terrain_deploy");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", writesLoose()
                 ? "Writes the loose .lev (this install has no FinalAlbion.wad, so the game reads it) and re-bakes this map's\nterrain chunk inside FinalAlbion_RT.stb from the edited heights (same size, patched in place).\nOne-time .forge-orig backups of both files."
@@ -4543,11 +4582,11 @@ void App::drawEditFooter(float pad, float inner) {
     ImGui::SetCursorPosX(pad);
     const float half = (inner - S(6)) * 0.5f;
     if (toPack) {
-        if (theme::primaryButton(("Write objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) deployDocument();
+        if (writeButton("Write objects into pack " + packLabel(packDest_), ImVec2(inner, S(42)))) deployDocument();
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes %s.tng into the pack (data/Levels/FinalAlbion); Mods > Deploy merges it thing by thing\nwith the other mods and writes it into the game. Nothing in the game changes now.", doc_.mapName().c_str());
     } else if (!confirmDeploy_) {
-        if (theme::primaryButton(writesLoose() ? "Write objects into game" : "Write objects into WAD", ImVec2(inner, S(42)))) confirmDeploy_ = true;
+        if (writeButton(writesLoose() ? "Write objects into game" : "Write objects into WAD", ImVec2(inner, S(42)))) confirmDeploy_ = true;
         auto_.registerWidget("btn_deploy");
         if (ImGui::IsItemHovered()) {
             if (writesLoose()) ImGui::SetTooltip("This install has no FinalAlbion.wad: the game reads the loose files in data/Levels/FinalAlbion,\nso this writes %s.tng there. The original file is backed up once as .forge-orig.", doc_.mapName().c_str());
