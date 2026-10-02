@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_ground_stamp.py --install <root>` checks the Ground Full stamp
+toggle, strict vertex cursor, full assignments with zero Strength, real clicks,
+soft-brush compatibility and exact undo at normal/compact sizes.
+`set paint_stamp 0|1`, state `paint_stamp` and widget `check_paint_stamp` expose
+the option. `assert_theme_stamp <x> <y> <theme>` checks the live vertex's exact
+{theme,0,0}/{255,0,0} blend, including during a stroke.
+
 `tools/test_survey_overlay.py --install <root>` checks visible survey colours,
 selected-sound filtering, controls, painting and exact undo at normal/compact
 sizes. `set sound_overlay 0|1|2` chooses off/all/selected;

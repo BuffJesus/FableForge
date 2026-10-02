@@ -1347,6 +1347,60 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testGroundThemeStamp(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeGameMapLev(dir / "ground_stamp.lev");
+    auto level = forge::lev::File::open(path);
+    for (int y = 0; y < level.cellsY(); ++y) for (int x = 0; x < level.cellsX(); ++x)
+        level.setThemeBlendAt(x, y, {2, 3, 4}, {100, 100, 55});
+    level.save(path);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("GroundStamp", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const auto baseline = doc.terrain();
+    using Vertices = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Vertices vertices; };
+    for (const Case& c : std::vector<Case>{
+            {3.75f,3.75f,.25f,{{3,3}}}, {3.75f,3.75f,1,{{3,3}}},
+            {3.75f,3.75f,2,{{2,2},{3,2},{4,2},{2,3},{3,3},{4,3},{2,4},{3,4},{4,4}}},
+            {0,0,1.5f,{{0,0},{1,0},{0,1},{1,1}}}, {-1,-1,.25f,{}}, {3,3,0,{}}}) {
+        ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Theme; b.themeStamp = true;
+        b.themeIndex = 9; b.x = c.x; b.y = c.y; b.radius = c.radius; b.strength = 0;
+        doc.beginStroke(b); doc.applyBrush(b, 0);
+        const auto revision = doc.terrainRevision();
+        doc.applyBrush(b, 10); CHECK(doc.terrainRevision() == revision); // repeated stamp is idempotent
+        doc.endStroke();
+        for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x) {
+            const bool hit = std::find(c.vertices.begin(), c.vertices.end(), std::make_pair(x,y)) != c.vertices.end();
+            const size_t i = size_t(y)*doc.cellsX()+x;
+            CHECK((doc.terrain().themeIndex[i] == (hit ? std::array<uint8_t,3>{9,0,0} : baseline.themeIndex[i])));
+            CHECK((doc.terrain().themeStrength[i] == (hit ? std::array<uint8_t,3>{255,0,0} : baseline.themeStrength[i])));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().walkable == baseline.walkable &&
+              doc.terrain().sound == baseline.sound && doc.terrain().atmosIndex == baseline.atmosIndex);
+        if (!c.vertices.empty()) {
+            const auto root = dir / "ground_stamp_root";
+            CHECK(doc.saveTerrainLoose(root, err));
+            const auto saved = forge::lev::File::open(root / "data/Levels/FinalAlbion/GroundStamp.lev");
+            for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x)
+                for (int k = 0; k < 3; ++k) {
+                    const size_t i = size_t(y)*doc.cellsX()+x;
+                    CHECK(saved.themeIndexAt(x,y,k) == doc.terrain().themeIndex[i][k]);
+                    CHECK(saved.themeStrengthAt(x,y,k) == doc.terrain().themeStrength[i][k]);
+                }
+            CHECK(doc.undo());
+        }
+        CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    }
+    ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Theme; b.themeStamp = true;
+    b.themeIndex = 0; b.x = 3; b.y = 3; b.radius = 6;
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    b.themeStamp = false; b.themeIndex = 9; b.strength = 0; // existing soft brush still honours strength
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+}
+
 void testReplaceBrushFootprint(const fs::path& dir) {
     namespace ed = albion::editor;
     const auto path = writeSyntheticLev(dir / "replace_footprint.lev", 8, 8, [](int, int) { return 20.0f; });
@@ -3163,6 +3217,7 @@ int main() {
     testEnvironmentAndSoundPaint(dir);
     testSurveyOverlay(dir);
     testSoundBrushFootprint(dir);
+    testGroundThemeStamp(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

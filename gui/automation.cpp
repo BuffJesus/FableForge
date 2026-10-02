@@ -508,6 +508,7 @@ bool Automation::tick(App& app) {
         else if (key == "things_script_only") app.thingsScriptOnly_ = val == "1";
         else if (key == "things_nearest") app.thingsNearest_ = val == "1";
         else if (key == "pen_exact") app.penExactStep_ = val == "1";
+        else if (key == "paint_stamp") app.paintStamp_ = val == "1";
         else if (key == "pen_step") app.penStep_ = float(std::atof(val.c_str()));
         else if (key == "pen_target") { app.penTarget_ = float(std::atof(val.c_str())); app.penTargetFromStroke_ = false; }
         else if (key == "pen_target_from_stroke") app.penTargetFromStroke_ = val == "1";
@@ -1286,6 +1287,20 @@ bool Automation::tick(App& app) {
                 if (changed != expected) fail(line + " (" + std::to_string(changed) + " blends differ)");
                 else note("ok   " + line);
             }
+        }
+        ++pc_;
+    }
+    else if (cmd == "assert_theme_stamp") {
+        int x = -1, y = -1, theme = -1; std::istringstream input(rest);
+        if (!(input >> x >> y >> theme) || !app.doc_.hasTerrain() || x < 0 || y < 0 ||
+            x >= app.doc_.cellsX() || y >= app.doc_.cellsY() || theme < 1 || theme > 255)
+            fail(cmd + ": invalid coordinates/theme or missing terrain");
+        else {
+            const auto& terrain = app.doc_.liveTerrain();
+            const size_t i = size_t(y) * app.doc_.cellsX() + x;
+            if (terrain.themeIndex[i] != std::array<uint8_t,3>{uint8_t(theme),0,0} ||
+                terrain.themeStrength[i] != std::array<uint8_t,3>{255,0,0}) fail(line + " (not a full assignment)");
+            else note("ok   " + line);
         }
         ++pc_;
     }

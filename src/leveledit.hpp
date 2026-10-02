@@ -91,6 +91,7 @@ struct TerrainBrush {
     uint8_t themeIndex = 0;    // Theme / ReplaceTheme: LEV palette slot to paint
     uint8_t replaceFrom = 0;   // ReplaceTheme: the slot being replaced
     bool exactStep = false;    // Raise / Lower: vanilla Change Height, +-step once per block per stroke
+    bool themeStamp = false;   // Theme: native full assignment, strict truncated vertex disc
     float step = 1.0f;         // world units
     bool targetFromStroke = true;   // Flatten: the ground where the stroke starts, else `target`
     float target = 0.0f;       // Flatten: vanilla Paint Height's "m" box

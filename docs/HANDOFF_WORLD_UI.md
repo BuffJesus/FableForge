@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Ground full stamp option
+
+Ground now has **Full stamp** alongside its existing soft blending (the default).
+It assigns {target,0,0}/{255,0,0} to every considered height vertex in one
+application, independent of Strength/time. Theme 0 is refused. Strength is hidden
+while stamping; small cursors show the same strict truncated vertex disc used
+by Replace and Environment. Existing palette/placeholder guards still apply.
+The API flag is TerrainBrush::themeStamp; `fillPen` supplies both pointer and
+automation strokes. Actual painting and cursor reuse `themeBrushVertices`;
+repeated identical stamps do not advance terrain revision.
+
+Native `EditPlaceEngineThemeUndoable` 0x029799d0 rejects ENGINE target 0
+at 0x029799f1..0x02979a0b, uses strict squared distance at
+0x02979aa0..0x02979afb, writes the target and clears slots 1/2 at
+0x02979ba2..0x02979bf4, and writes blends 255/0 at 0x02979bf6..0x02979c49.
+The caller `PaintInputEngineThemeMap` 0x02993a80 truncates through ToC2DCoordI;
+the earlier lround proposal was wrong. Same FableWin identity below; reused
+`build/sound-env-footprint-native-evidence.txt` and theme caller/centre exports.
+No new native execution or evidence checkout changes.
+
+`testGroundThemeStamp` checks independently listed vertices, fractional centres,
+strict radius boundaries, corners and empty brushes, mixed blends becoming full
+assignments at zero strength/dt, repeat idempotence, theme-0 refusal, the old
+soft brush respecting Strength, saved scratch LEV values and exact undo.
+Heights, walkability, sound and atmosphere remain unchanged.
+Normal/compact real toggle, zero-Strength pointer strokes, 1/9 cursor vertices,
+live and final full-blend assertions, soft-mode return and exact undo pass at
+`build/ground-stamp-gkcywzdz`. Compact radius-2 capture was inspected.
+Full Release build and all 36 CTest checks pass. Replace cursor (both sizes),
+paint-target guards and existing brush scripts pass; combined output is
+`build/ground_stamp_regressions.log`. Docs command/Python checks pass.
+No live writes, deployment or in-game ground-material comparison.
+
 ## 2026-10-02 continuation: Sound and environment survey colours
 
 Sound now offers Off / All sounds / This sound only; Environment defaults to

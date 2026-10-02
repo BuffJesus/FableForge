@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Full ground stamp.** Ground can set every vertex inside its strict brush
+  footprint fully to the chosen theme in one application. Small cursors show
+  the vertices. Switch Full stamp off to use the existing soft brush.
+
 - **Sound and environment colours.** Terrain painting shows each region's editor
   colour with sharp cell boundaries. Sound can show all sounds, only the selected
   sound, or be hidden; Environment has its own toggle. Colours update during

@@ -1,5 +1,9 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Ground now offers a full native stamp alongside its existing soft brush. It
+shares Replace/Environment's strict truncated vertex disc, shows small cursor
+dots and ignores Strength/time. Native evidence and checks are in HANDOFF_WORLD_UI.
+
 Sound/environment region overlays now use decoded editor colours, sharp 4x4-cell
 boundaries, all/selected/off sound controls and an environment toggle. They update
 during paint and undo; these identify regions rather than previewing runtime audio

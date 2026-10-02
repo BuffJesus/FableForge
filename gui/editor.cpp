@@ -2909,6 +2909,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
 }
 
 void App::fillPen(editor::TerrainBrush& b) const {
+    b.themeStamp = paintStamp_;
     b.exactStep = penExactStep_; b.step = penStep_;
     b.targetFromStroke = penTargetFromStroke_; b.target = penTarget_; b.speed = penSpeed_;
     b.smoothness = penSmoothness_; b.spikyness = penSpikyness_; b.magnifier = penMagnifier_;
@@ -3031,13 +3032,14 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool keyDisc = keyStroke_;
     const bool replaceDisc = terrainMode_ == 7;
-    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc;
+    const bool stampDisc = terrainMode_ == 6 && paintStamp_;
+    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
     const bool environmentDisc = terrainMode_ == 10;
-    const float centreX = replaceDisc || environmentDisc ? std::trunc(brushFable_[0])
+    const float centreX = replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = replaceDisc || environmentDisc ? std::trunc(brushFable_[1])
+    const float centreY = replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
                                   : brushRadius_ + (roundedDisc || soundDisc ? 0.5f : 0.0f);
@@ -3085,7 +3087,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (vertexDisc && brushRadius_ <= 4.0f) {
         const auto vertices = keyDisc
             ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
-            : replaceDisc
+            : replaceDisc || stampDisc
             ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], brushRadius_)
             : smearDisc
             ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
@@ -4169,6 +4171,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PopFont();
         }
         if (terrainMode_ == 6) {
+            ImGui::Checkbox("Full stamp", &paintStamp_);
+            auto_.registerWidget("check_paint_stamp");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sets every considered vertex fully to this theme in one application. Switch off for soft blending.");
             // ground theme picker: the map's LEV palette (slot -> ENGINE_THEME name), named slots
             const forge::lev::File* lev = doc_.level();
             const char* current = "(pick a ground theme)";
@@ -4239,7 +4244,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         // the brush size where a tool has one (flood / copy / paste do not); strength where it blends
         const bool usesRadius = terrainMode_ != 8 && terrainMode_ != 14 && terrainMode_ != 15;
         const bool usesStrength = usesRadius && terrainMode_ != 9 && terrainMode_ != 10 && terrainMode_ != 11 && terrainMode_ != 4 && terrainMode_ != 5 &&
-                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7 && !isVanillaPen(terrainMode_);
+                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7 && !(terrainMode_ == 6 && paintStamp_) && !isVanillaPen(terrainMode_);
         char val[48];
         if (usesRadius) {
             std::snprintf(val, sizeof val, brushRadius_ < 2 ? "%.2f cells" : "%.0f cells", brushRadius_);
@@ -4256,6 +4261,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes outline affected environment cells.");
                 else if (terrainMode_ == 11)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nEach touched vertex paints its containing 4x4 sound cell. Small brushes outline those cells.");
+                else if ((terrainMode_ == 6 && paintStamp_) || terrainMode_ == 7)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes show considered vertices.");
                 else if (terrainMode_ <= 3 || terrainMode_ == 9 || terrainMode_ == 16)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nExact-step Raise/Lower and Flatten can reach one vertex at 0.25 cells.\nHeld height keys ask for a larger Radius when their footprint is empty.");
                 else ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.");
@@ -4276,6 +4283,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         else if (terrainMode_ == 3) how = "Hold LMB: bumps and pits move toward their neighbours; straight slopes stay. One undo step per stroke.";
         else if (terrainMode_ == 16) how = "Hold LMB: random vertices inside the square jump up and down. Ground averaging sea level stays; no vertex goes below 0. One undo step per stroke.";
         else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";
+        else if (terrainMode_ == 6 && paintStamp_) how = "Sets each considered vertex fully to the theme in one application. Small brushes show the vertices. Each stroke is one undo step.";
         else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13)
             how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
         if (usesRadius && how) {

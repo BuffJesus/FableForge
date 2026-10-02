@@ -862,37 +862,28 @@ identity and validation boundaries are recorded in HANDOFF_WORLD_UI.
 
 Reflections and runtime audible/lighting previews remain separate work.
 
-#### Ground and environment Paint is a soft airbrush; vanilla Paint is a hard stamp
-*weakness, effort S, value high*
+#### Ground full stamp and environment assignment
+*resolved 2026-10-02; soft Ground blending remains available*
 
-Environment resolved 2026-10-02: full {target,0,0}/{255,0,0} game-cell
-assignment, with target 0 clearing, the truncated strict vertex pen and small
-cell outlines. Strength/time no longer affect this tool. Ground Paint retains
-its existing soft brush; a separate stamp option remains open. Fresh caller
-evidence corrects the historical `lround` proposal: `ToC2DCoordI` truncates.
+Environment always assigns {target,0,0}/{255,0,0} to touched game cells,
+with target 0 clearing. Ground now offers **Full stamp** beside its existing
+soft brush (soft remains the default). Full stamp sets that same full blend
+at each considered height vertex, ignores Strength/time and refuses theme 0.
+Both use the verified strict radius around a truncated integer vertex; the
+historical lround proposal was incorrect. Small stamp cursors show considered
+vertices and the unused Strength slider is hidden.
 
-**Vanilla:** EditPlaceEngineThemeUndoable 0x029799d0: for every vertex with (x-cx)^2+(y-cy)^2 < r^2 (integer cursor, editable map, script-brush mask), slot0 = theme, slots 1-2 = 0, blend0 = 255, blend1 = 0. One application gives full coverage. For ENGINE it does nothing if theme == 0 (X0-NULL). With ATMOS_THEME the same loop writes the game cell under each vertex. Soft edges come from Smear.
+`EditPlaceEngineThemeUndoable` 0x029799d0 rejects ENGINE target 0 at
+0x029799f1..0x02979a0b, tests strict squared distance, writes slot 0 and clears
+slots 1/2, then writes blends 255/0 (third implicit). The existing
+`themeBrushVertices` query shares this geometry with Replace/Environment.
+Core fixtures check full assignment with zero strength/dt, repeats, strict
+boundaries, corners, empty brushes, saved LEV values and exact undo; GUI tests
+exercise both application modes, real clicks and small cursors.
+Native exports and validation boundaries are in HANDOFF_WORLD_UI.
 
-**Fix:** 1. Add `bool hardEdge = false;` to editor::TerrainBrush (src/leveledit.hpp, next to exactStep at about :91) with the comment "vanilla EditPlaceEngineThemeUndoable 0x029799d0 stamp". Set `b.hardEdge = penHardTheme_;` in App::fillPen (gui/editor.cpp:1709).
-
-2. In Document::applyBrush Mode::Theme (src/leveledit.cpp:475), when brush.hardEdge is set:
-   - If themeIndex == 0, return. Vanilla skips ENGINE theme 0.
-   - Set `icx = int(std::lround(brush.x))` and `icy` the same way. Vanilla's cursor is a C2DCoordI, so the circle is centred on an integer vertex.
-   - For y from max(0, ftol(icy - r)) to min(h, icy + r), and x likewise: if `float(sqr(x-icx) + sqr(y-icy)) < r*r` (strict), call `level_->setThemeBlendAt(x, y, {theme,0,0}, {255,0,0})`, then mirror it into working_->themeIndex/themeStrength as the existing loop does.
-   - Increment terrainRev_ and return.
-   Put the helper in libs/forgecore terrain.cpp as `size_t stampTheme(lev::File&, int cx, int cy, float r, uint8_t theme)` so the automation path and tests can reuse it.
-
-3. Mode::Environment (leveledit.cpp:492), hard branch: loop over the same integer vertices inside r^2 (strict `<`). Map each one to its game cell with gx = x/4, gy = y/4, clamped to the game-map size. Set `atmosIndex[g] = {theme,0,0}` and `atmosStrength[g] = {255,0,0}`. Theme 0 is allowed here, because vanilla allows ATMOS with 0. A cell is written if any of its vertices is under the pen, which matches vanilla's footprint better than the current cell-centre test.
-
-4. Add modes 6 and 10 to App::isVanillaPen (gui/app.hpp:600) when penHardTheme_ is set, so the existing penApplied_ gate (editor.cpp:1704) applies the stamp once per click and every frame with Spray. Since the stamp is idempotent, per-frame application during a drag also works. The main goal is to stop dt scaling.
-
-5. drawPenControls (editor.cpp:1718) currently returns early unless m is 0/1/2/3/16. Extend it to 6 and 10 with a `Hard edge (vanilla)` checkbox (`auto_.registerWidget("check_pen_hard")`) and the tooltip "Vanilla Paint: every point under the brush becomes 100% this theme in one click. Use Smear for soft edges." Hide the Strength slider when it is on. Add the checkbox to docs/AUTOMATION.md.
-
-6. Default: keep it off until the Smear pen (EditPlaceEngineThemeBlendPenUndoable 0x0297c510 / Blur) is ported. After that, make it on by default, because Paint plus Smear is the vanilla workflow.
-
-7. Add a forgecore test: stamping one vertex inside r gives exactly {t,0,0}/{255,0,0}, a vertex at exactly r stays unchanged, and theme 0 does nothing.
-
-Effort: S. Value: high.
+Ground Smear remains deferred pending a contract for the native class-selection
+quirks described above; adding the stamp does not invent a smoothing algorithm.
 
 #### Environment Smear missing (vanilla Blur on the atmos grid)
 *gap, effort S, value med*

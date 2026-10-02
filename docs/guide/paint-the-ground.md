@@ -34,6 +34,11 @@ At a radius of 0.25 or 0.5 it reaches none; increase **Radius** when prompted.
 3. Hold the left mouse button on the ground. **Radius** sets the brush size
    (`[` and `]`), **Strength** how quickly the theme blends in.
 
+**Full stamp** sets every considered vertex fully to the theme in one
+application. It uses a strict disc centred on a truncated vertex; small cursors
+show the vertices. Strength is hidden while Full stamp is on. Switch it off to
+keep soft blending.
+
 Hide **Foliage** in the chips at the bottom of the view to see the ground under
 trees. Your own picture can become a theme too: *Your own ground texture...*
 opens **Assets > Ground themes**.

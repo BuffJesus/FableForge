@@ -1864,6 +1864,7 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("gizmo=" + std::to_string(gizmoOp_));
     v.push_back("brush_radius=" + std::to_string(brushRadius_));
+    v.push_back("paint_stamp=" + std::string(paintStamp_ ? "1" : "0"));
     v.push_back("brush_cursor_vertices=" + std::to_string(brushCursorVertices_));
     v.push_back("brush_cursor_sound_cells=" + std::to_string(brushCursorSoundCells_));
     v.push_back("sound_index=" + std::to_string(soundIndex_));

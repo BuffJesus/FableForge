@@ -622,6 +622,7 @@ private:
     // 10 paint environment (atmos), 11 paint sound -- the .lev's 4x4 game-map grid
     int terrainMode_ = 0;
     int paintTheme_ = 0;             // LEV palette slot painted (6) / put in (7, 8)
+    bool paintStamp_ = false;        // Ground: full native stamp instead of soft blending
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)

@@ -99,6 +99,8 @@ def main():
                   [sys.executable, "tools/test_sound_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Replace strict vertex pen, cursor and undo at normal/compact sizes",
                   [sys.executable, "tools/test_replace_cursor.py", "--install", install_root], capture_output=True)
+        ok &= run("Ground full stamp, strict vertex cursor, real paint and exact undo",
+                  [sys.executable, "tools/test_ground_stamp.py", "--install", install_root], capture_output=True)
         ok &= run("Environment strict cell pen, cursor, clear, sample and undo at both sizes",
                   [sys.executable, "tools/test_environment_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Sound/environment survey colours, selected filtering, controls and undo",

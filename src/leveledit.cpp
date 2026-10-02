@@ -630,6 +630,20 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         return;
     }
     if (brush.mode == Mode::Theme) {
+        if (brush.themeStamp) {
+            if (brush.themeIndex == 0) return; // native ENGINE rejects None
+            const std::array<uint8_t, 3> indices{brush.themeIndex, 0, 0}, strengths{255, 0, 0};
+            bool changed = false;
+            for (const auto [x, y] : themeBrushVertices(brush.x, brush.y, brush.radius)) {
+                const size_t i = size_t(y) * cx + x;
+                if (working_->themeIndex[i] == indices && working_->themeStrength[i] == strengths) continue;
+                working_->themeIndex[i] = indices; working_->themeStrength[i] = strengths;
+                level_->setThemeBlendAt(x, y, indices, strengths);
+                changed = true;
+            }
+            if (changed) ++terrainRev_;
+            return;
+        }
         // paint straight into the level (the library brush keeps the 3-slot invariant), then mirror the touched cells
         forge::terrain::ThemeBrush tb;
         tb.centerX = brush.x; tb.centerY = brush.y; tb.radius = brush.radius;
