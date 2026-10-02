@@ -1941,7 +1941,6 @@ void App::frame(float dt) {
 
     const float total = ImGui::GetContentRegionAvail().x;
     const float strip = theme::S(14.0f);
-    const bool dialogueWorkspace = texturesMode_ && assetsTab_ == 4;
     const bool assetPreview = standaloneAssetPreview();
     const bool showExplorer = settings_.showExplorer && !assetPreview;
     const float leftStrip = assetPreview ? 0.0f : strip;
@@ -1973,14 +1972,6 @@ void App::frame(float dt) {
         const float pad = ImGui::GetCursorPosX();
         const float inner = ImGui::GetContentRegionAvail().x;
         drawModelImportCard(pad, inner, inner - theme::S(24));
-        endToolWindow();
-    }
-    if (dialogueWorkspace && dialogueToolsOpen_ &&
-        beginToolWindow("##dialogue_tools", "Edit lip sync", "Changes stay in this session until exported or added to a pack.",
-                        &dialogueToolsOpen_, theme::S(460))) {
-        const float pad = ImGui::GetCursorPosX();
-        const float inner = ImGui::GetContentRegionAvail().x;
-        drawDialogueTools(pad, inner, inner - theme::S(24));
         endToolWindow();
     }
     drawSetupPanel();
@@ -2908,7 +2899,8 @@ void App::drawActions(float width) {
         if (assetsTab_ == 3) theme::hint("Effects inspection is read-only.");
         else if (assetsTab_ == 4) {
             ImGui::PopFont();
-            if(theme::primaryButton("Edit & save lip sync...", ImVec2(inner,S(32)),dialogueLoaded_)) dialogueToolsOpen_=true;
+            if(theme::primaryButton(dialogueToolsOpen_?"Back to dialogue":"Edit lip sync", ImVec2(inner,S(32)),dialogueLoaded_))
+                setDialogueEditing(!dialogueToolsOpen_);
             auto_.registerWidget("button_dialogue_tools");
             ImGui::PushFont(fontSmall_);
             if(!dialogueStaged_.empty()) ImGui::Text("%zu unsaved line(s)",dialogueStaged_.size());

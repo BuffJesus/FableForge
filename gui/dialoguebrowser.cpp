@@ -22,7 +22,29 @@ namespace {
 constexpr std::array<const char*,4> bankNames={
     "Dialogue.lut", "Dialogue2.lut", "ScriptDialogue.lut", "ScriptDialogue2.lut"};
 
+const char* mouthShapeLabel(const std::string& symbol) {
+    if(symbol=="AH") return "AH - open mouth";
+    if(symbol=="EE") return "EE - wide mouth";
+    if(symbol=="MM") return "MM - closed lips";
+    if(symbol=="OH") return "OH - rounded mouth";
+    if(symbol=="SZ") return "SZ - S / Z sounds";
+    if(symbol=="WW") return "WW - W sound";
+    return symbol.c_str();
+}
+
 } // namespace
+
+void App::setDialogueEditing(bool editing) {
+    dialogueToolsOpen_=editing;
+    if(!editing) return;
+    if(dialogueAudio_ && dialogueAudio_->playing()) {
+        dialogueTime_=float(dialogueAudio_->position());
+        dialogueAudio_->pause();
+    }
+    dialogueMotionPlaying_=false;
+    dialogueTracksOpen_=true;
+    settings_.showActions=true;
+}
 
 void App::frameDialoguePlayback() {
     if(!texturesMode_ || assetsTab_!=4) {
@@ -31,6 +53,9 @@ void App::frameDialoguePlayback() {
         dialogueMotionPlaying_=false;
         return;
     }
+    if(dialogueToolsOpen_ && !ImGui::IsAnyItemActive() && !ImGui::GetIO().WantTextInput &&
+       !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+       ImGui::IsKeyPressed(ImGuiKey_Escape)) setDialogueEditing(false);
     if(!dialogueLoaded_) {dialogueMotionPlaying_=false;return;}
     const float duration=float(std::max(dialogueAudioDuration_,
                                         double(dialogueEntry_.duration())));
@@ -62,6 +87,8 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     const auto archivePath=[&] {
         return (languageRoot/dialogueLanguage_/"dialogue.big").lexically_normal();
     };
+    if(dialogueToolsOpen_) drawDialogueTools(pad,inner,cardInner);
+    else {
     std::vector<std::string> languages;
     std::error_code ec;
     for(fs::directory_iterator it(languageRoot,ec),end; !ec && it!=end; it.increment(ec)) {
@@ -136,28 +163,39 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     const fs::path folder=languageRoot/dialogueLanguage_;
     if(ensureTextIndex(folder)) {
         const std::string cacheKey=folder.string()+"\n"+dialogueSearchQuery_.data();
-        if(cacheKey!=dialogueSearchCacheKey_) {
+        const bool searchChanged=cacheKey!=dialogueSearchCacheKey_;
+        if(searchChanged) {
             dialogueSearchResults_=dialogueTextIndex_->search("",dialogueSearchQuery_.data(),
                 std::numeric_limits<size_t>::max());
+            dialogueSearchGroups_.clear();
+            for(size_t i=0;i<dialogueSearchResults_.size();++i) {
+                const auto& speaker=dialogueSearchResults_[i].line.speaker;
+                dialogueSearchGroups_[speaker.empty() || speaker=="NONE" ? "Unknown speaker" : speaker].push_back(i);
+            }
             dialogueSearchCacheKey_=cacheKey;
         }
-        ImGui::Text("%zu line%s",dialogueSearchResults_.size(),dialogueSearchResults_.size()==1?"":"s");
-        const std::string selected=dialogueLoaded_ && !dialogueSubtitles_.empty() ?
-            dialogueSubtitles_.front().content : "Choose dialogue...";
-        ImGui::SetNextItemWidth(cardInner);
-        const auto* viewport=ImGui::GetMainViewport();
-        const float popupWidth=std::min(theme::S(600),viewport->Size.x-theme::S(24));
-        ImGui::SetNextWindowSizeConstraints(ImVec2(popupWidth,0),ImVec2(popupWidth,viewport->Size.y*.7f));
-        if(ImGui::BeginCombo("##dialogue_line",selected.c_str())) {
-            ImGui::TextUnformatted("Choose a voiced line");
-            ImGui::BeginChild("##dialogue_results",ImVec2(0,std::min(theme::S(360),viewport->Size.y*.45f)),false);
+        ImGui::TextWrapped("%zu line%s / %zu speaker%s",dialogueSearchResults_.size(),
+            dialogueSearchResults_.size()==1?"":"s",dialogueSearchGroups_.size(),dialogueSearchGroups_.size()==1?"":"s");
+        theme::hint("Expand a speaker, then choose a line.");
+        ImGui::BeginChild("##dialogue_results",ImVec2(cardInner,theme::S(300)),false);
+        auto_.registerWidget("tree_dialogue_lines");
             if(dialogueSearchResults_.empty()) theme::hint("No matches. Try fewer words or another speaker.");
             const float rowHeight=ImGui::GetTextLineHeightWithSpacing()*3+theme::S(10);
+            size_t groupIndex=0;
+            for(const auto& [speaker,indices]:dialogueSearchGroups_) {
+                ImGui::PushID(speaker.c_str());
+                if(searchChanged && dialogueSearchQuery_[0] && dialogueSearchResults_.size()<=100)
+                    ImGui::SetNextItemOpen(true,ImGuiCond_Always);
+                const bool open=ImGui::TreeNodeEx("##speaker",ImGuiTreeNodeFlags_SpanAvailWidth,
+                    "%s (%zu)",speaker.c_str(),indices.size());
+                auto_.registerWidget(("dialogue_group_"+std::to_string(groupIndex++)).c_str());
+                if(!open) { ImGui::PopID();continue; }
             ImGuiListClipper clipper;
-            clipper.Begin(int(dialogueSearchResults_.size()),rowHeight);
-            while(clipper.Step()) for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
-                const auto& hit=dialogueSearchResults_[size_t(i)];
-                ImGui::PushID(i);
+            clipper.Begin(int(indices.size()),rowHeight);
+            while(clipper.Step()) for(int row=clipper.DisplayStart;row<clipper.DisplayEnd;++row) {
+                const size_t i=indices[size_t(row)];
+                const auto& hit=dialogueSearchResults_[i];
+                ImGui::PushID(int(i));
                 const auto pos=ImGui::GetCursorScreenPos();
                 const float width=ImGui::GetContentRegionAvail().x;
                 const auto current=forge::lut::dialoguePair(bankNames[size_t(dialogueBank_)],dialogueLanguage_);
@@ -167,7 +205,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
                         const auto pair=forge::lut::dialoguePair(bankNames[bank],dialogueLanguage_);
                         if(pair && pair->lipsyncBank==hit.lipsyncBank && hit.soundId<=uint32_t(std::numeric_limits<int>::max())) {
                             dialogueBank_=int(bank);dialogueId_=int(hit.soundId);loadRequested=true;
-                            ImGui::CloseCurrentPopup();break;
+                            break;
                         }
                     }
                 }
@@ -175,17 +213,14 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n%s\n%s | %u",hit.line.name.c_str(),hit.line.content.c_str(),hit.lipsyncBank.c_str(),hit.soundId);
                 auto* draw=ImGui::GetWindowDrawList();
                 draw->PushClipRect(pos,ImVec2(pos.x+width,pos.y+rowHeight-theme::S(5)),true);
-                const std::string speaker=(hit.line.speaker.empty() || hit.line.speaker=="NONE" ? "Dialogue" : hit.line.speaker)+"  /  "+std::to_string(hit.soundId);
-                draw->AddText(pos,theme::col(theme::Muted),speaker.c_str());
-                draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(pos.x,pos.y+ImGui::GetTextLineHeightWithSpacing()),
+                draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),pos,
                     theme::col(theme::Text),hit.line.content.c_str(),nullptr,width);
                 draw->PopClipRect();
                 ImGui::PopID();
             }
+                ImGui::TreePop();ImGui::PopID();
+            }
             ImGui::EndChild();
-            ImGui::EndCombo();
-        }
-        auto_.registerWidget("combo_dialogue_line");
     } else theme::hint(dialogueTextError_.c_str());
     ImGui::Spacing();
     const bool advancedOpen=ImGui::CollapsingHeader("Look up by bank & ID");
@@ -277,6 +312,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     theme::hint("Choose a line, then play it beside the character preview.");
     theme::endCard();
 
+    }
     const auto& presets=forge::lipsync::headPresets();
     if(!dialoguePresetChecked_) {
         dialoguePresetChecked_=true;
@@ -358,7 +394,8 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
         ImGui::Dummy(ImVec2(0,theme::S(8)));
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##dialogueeditor",inner);
-        theme::label("Edit lip sync frames");
+        theme::label("Mouth shapes");
+        theme::hint("Choose a frame, then adjust its mouth shapes.");
         const bool playing=dialogueMotionPlaying_ ||
             (dialogueAudio_ && dialogueAudio_->playing());
         if(playing) theme::hint("Pause playback to edit a frame.");
@@ -366,7 +403,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
         if(!dialogueEntry_.frames.empty() && dialogueEntry_.fps) {
             const size_t frame=std::min(dialogueEntry_.frames.size()-1,
                 size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));
-            ImGui::Text("Frame %zu / %zu",frame,dialogueEntry_.frames.size()-1);
+            ImGui::Text("Frame %zu of %zu",frame+1,dialogueEntry_.frames.size());
             const auto jump=[&](size_t target) {
                 dialogueTime_=float((double(target)+0.01)/dialogueEntry_.fps);
                 if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
@@ -377,6 +414,59 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
             if(ImGui::SmallButton("Next##lipframe") && frame+1<dialogueEntry_.frames.size())
                 jump(frame+1);
             auto_.registerWidget("button_dialogue_next_frame");
+            // Frame navigation above may have changed the selected time.
+            const size_t current=std::min(dialogueEntry_.frames.size()-1,
+                size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));
+            const auto keys=dialogueEntry_.frames[current];
+            for(size_t i=0;i<keys.size();++i) {
+                const auto& keyWeight=keys[i];
+                const auto viseme=std::find_if(dialogueEntry_.dictionary.begin(),
+                    dialogueEntry_.dictionary.end(),[&](const auto& item) {
+                        return item.id==keyWeight.id;
+                    });
+                const std::string symbol=viseme==dialogueEntry_.dictionary.end() ?
+                    "Unknown" : viseme->symbol;
+                ImGui::PushID(int(i));
+                ImGui::TextWrapped("%s",mouthShapeLabel(symbol));
+                float value=keyWeight.weight*100.f/255.f;
+                const float removeWidth=ImGui::CalcTextSize("Remove").x+ImGui::GetStyle().FramePadding.x*2;
+                ImGui::SetNextItemWidth(cardInner-removeWidth-ImGui::GetStyle().ItemSpacing.x);
+                if(ImGui::SliderFloat("##weight",&value,0,100,"%.0f%%")) {
+                    dialogueEntry_.frames[current][i].weight=uint8_t(std::lround(value*255.f/100.f));
+                    stage();
+                }
+                auto_.registerWidget(("slider_dialogue_key_"+std::to_string(i)).c_str());
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("Influence on this frame: 0%% off, 100%% full mouth shape.");
+                ImGui::SameLine();
+                if(ImGui::SmallButton("Remove##remove")) {
+                    dialogueEntry_.frames[current].erase(
+                        dialogueEntry_.frames[current].begin()+i);
+                    stage();
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            if(dialogueEntry_.frames[current].size()<4) {
+              if(ImGui::BeginCombo("##dialogue_add_phoneme","Add mouth shape...")) {
+                static constexpr std::array<const char*,6> symbols={
+                    "AH","EE","MM","OH","SZ","WW"};
+                for(const char* symbol:symbols) {
+                    bool present=false;
+                    for(const auto& viseme:dialogueEntry_.dictionary)
+                        if(viseme.symbol==symbol)
+                            for(const auto& keyWeight:dialogueEntry_.frames[current])
+                                present|=keyWeight.id==viseme.id;
+                    if(present) continue;
+                    if(ImGui::Selectable(mouthShapeLabel(symbol))) {
+                        forge::lipsync::setWeight(dialogueEntry_,current,symbol,255);
+                        stage();
+                    }
+                }
+                ImGui::EndCombo();
+              }
+              auto_.registerWidget("combo_dialogue_add_phoneme");
+            }
             if(ImGui::SmallButton("Insert after##lipframe")) {
                 forge::lipsync::insertFrameAfter(dialogueEntry_,frame);
                 stage();jump(frame+1);
@@ -390,56 +480,6 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
             }
             auto_.registerWidget("button_dialogue_delete_frame");
             ImGui::EndDisabled();
-            // Re-read the frame after insert/delete changed the vector.
-            const size_t current=std::min(dialogueEntry_.frames.size()-1,
-                size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));
-            const auto keys=dialogueEntry_.frames[current];
-            for(size_t i=0;i<keys.size();++i) {
-                const auto& keyWeight=keys[i];
-                const auto viseme=std::find_if(dialogueEntry_.dictionary.begin(),
-                    dialogueEntry_.dictionary.end(),[&](const auto& item) {
-                        return item.id==keyWeight.id;
-                    });
-                const std::string symbol=viseme==dialogueEntry_.dictionary.end() ?
-                    "Unknown" : viseme->symbol;
-                ImGui::PushID(int(i));
-                int value=keyWeight.weight;
-                ImGui::SetNextItemWidth(cardInner-theme::S(55));
-                if(ImGui::SliderInt(symbol.c_str(),&value,0,255)) {
-                    dialogueEntry_.frames[current][i].weight=uint8_t(value);
-                    stage();
-                }
-                auto_.registerWidget(("slider_dialogue_key_"+std::to_string(i)).c_str());
-                ImGui::SameLine();
-                if(ImGui::SmallButton("x##remove")) {
-                    dialogueEntry_.frames[current].erase(
-                        dialogueEntry_.frames[current].begin()+i);
-                    stage();
-                    ImGui::PopID();
-                    break;
-                }
-                ImGui::PopID();
-            }
-            if(dialogueEntry_.frames[current].size()<4) {
-              if(ImGui::BeginCombo("##dialogue_add_phoneme","Add phoneme...")) {
-                static constexpr std::array<const char*,6> symbols={
-                    "AH","EE","MM","OH","SZ","WW"};
-                for(const char* symbol:symbols) {
-                    bool present=false;
-                    for(const auto& viseme:dialogueEntry_.dictionary)
-                        if(viseme.symbol==symbol)
-                            for(const auto& keyWeight:dialogueEntry_.frames[current])
-                                present|=keyWeight.id==viseme.id;
-                    if(present) continue;
-                    if(ImGui::Selectable(symbol)) {
-                        forge::lipsync::setWeight(dialogueEntry_,current,symbol,255);
-                        stage();
-                    }
-                }
-                ImGui::EndCombo();
-              }
-              auto_.registerWidget("combo_dialogue_add_phoneme");
-            }
         }
         if(dialogueStaged_.contains(key)) {
             if(theme::ghostButton("Reset this line",ImVec2(cardInner,theme::S(26)))) {
@@ -468,7 +508,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                      dialogueScratchPath_.size(),cardInner,PathField::DialogueExport,
                      "input_dialogue_scratch_path")) dialogueExportMessage_.clear();
     ImGui::BeginDisabled(!stagedCount);
-    if(ImGui::Button("Export dialogue archive##dialogue")) {
+    if(ImGui::Button("Export archive...##dialogue",ImVec2(cardInner,0))) {
         dialogueExportMessage_.clear();
         try {
             std::vector<forge::lipsync::ArchiveEdit> edits;
@@ -499,7 +539,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
     auto_.registerWidget("combo_dialogue_pack");
     ImGui::BeginDisabled(!stagedCount || packDest_.empty() ||
                          !modpack::isPack(packDest_));
-    if(ImGui::Button("Save lines to pack##dialogue") && !fileWriteBlocked("lip sync pack")) {
+    if(ImGui::Button("Save to pack##dialogue",ImVec2(cardInner,0)) && !fileWriteBlocked("lip sync pack")) {
         std::vector<forge::lipsync::ArchiveEdit> edits;
         for(const auto& [key,value]:dialogueStaged_)
             if(std::get<0>(key)==archivePath().string())
@@ -532,6 +572,12 @@ void App::drawDialogueViewport(const ImVec2& viewportOrigin, const ImVec2& size)
     ImGui::PushFont(fontBold_);
     ImGui::TextUnformatted("Dialogue");
     ImGui::PopFont();
+    if(dialogueLoaded_) {
+        ImGui::SameLine();
+        if(ImGui::Button(dialogueToolsOpen_?"Browse dialogue":"Edit lip sync"))
+            setDialogueEditing(!dialogueToolsOpen_);
+        auto_.registerWidget("button_dialogue_edit");
+    }
     ImGui::TextUnformatted("Preview character");
     const auto& presets=forge::lipsync::headPresets();
     ImGui::SetNextItemWidth(std::clamp(contentWidth-theme::S(82),theme::S(60),theme::S(320)));

@@ -2246,6 +2246,33 @@ before its scrolling layout settled; the harness now waits for foliage and
 reveals the control again. GUI build passes. The existing unit coverage for
 sizeToRadius remains applicable; no terrain algorithm was changed in this step.
 
+## 2026-10-01 continuation: dialogue tree and visible lip-sync editing
+
+Replaced the flat 20,088-line dropdown with a persistent speaker tree (357
+retail English speakers). Groups show counts; their leaves show subtitles, with
+full text and source on hover. Search still spans all banks and expands small
+matching groups automatically; leaf identity retains bank plus Sound ID.
+The legacy bank/ID lookup remains available.
+
+Edit lip sync is now beside the Dialogue heading as well as in the fixed footer.
+It pauses playback, opens the timeline and switches the right panel to editing,
+keeping the face visible. Frame navigation precedes mouth-shape controls;
+weights display percentages and shape descriptions. Less common insert/delete
+commands follow the shapes. Browse dialogue / Escape returns to the tree, and
+staged edits survive switching lines. Archive export and pack recipe behavior
+are unchanged. The earlier floating dialogue editor is superseded.
+
+Normal and compact browse/search, tree collapse/expand, playback, automatic pause,
+frame insertion and exported frame counts pass at `build/dialogue-workspace-i9t1xo9c`.
+Final compact capture was inspected: the first mouth-shape slider is visible
+without hiding the face. `build/dialogue-edit-me_d587o` passes two-bank export,
+line switching, reset, Escape, close/review behavior, pack recipes, conflicts and
+load-order composition. Existing native Browse test navigation was updated for
+the tree; the OS picker implementation did not change and was not rerun in this
+step. The first compact workspace script clicked a scrolled-out header; it now
+reveals that action before clicking. User documentation and the Dialogue image
+were updated. The development ZIP is still the prior build until repackaging.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

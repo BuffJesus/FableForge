@@ -845,9 +845,11 @@ the map list. Your map-list preference returns when you leave these previews.
 In Models, **Import model...** opens a separate tool window; Escape closes it.
 The form confirms successful imports and pack additions. If you start entering
 another model while an import runs, those new values remain when it finishes.
-The **Choose dialogue...** dropdown lists linked lines immediately. Search by
+The dialogue tree groups linked lines by speaker. Expand a speaker and select
+a line beneath it; hovering shows the complete subtitle and source. Search by
 words, speaker, entry name or Sound ID across every bank in the selected
-language; the picker selects the matching bank automatically. English retail
+language; selecting a line chooses its bank automatically. Small search results
+expand automatically, and groups can still be collapsed. English retail
 resolves 20,088 linked lines. **Look up by bank & ID** remains available for
 unlinked entries. The map explorer is hidden while using Dialogue.
 
@@ -861,22 +863,26 @@ muted or audio-free lines can still animate. **Show lip sync timeline** opens
 one scrollable set of phoneme tracks; drag a track to seek.
 Seeking to the end stops there; press **Play** to start the line again.
 
-The fixed **Edit & save lip sync...** action opens a separate tool window.
-Pause playback to change frame weights, add/remove phonemes, or insert/delete
-frames. Changes remain staged while switching lines and banks. **Reset this
-line** discards that line's pending changes. **Export dialogue archive** writes
+Click **Edit lip sync** beside the Dialogue heading or at the bottom of the
+right panel. Playback pauses and the timeline opens; the right panel becomes
+the editor, keeping the face visible. Choose a frame with the scrubber or
+Previous/Next, then adjust mouth-shape influence from 0% to 100%. Shapes have
+plain descriptions and can be added or removed; insert/delete frame actions
+sit below them. **Browse dialogue** or Escape returns to the tree. Changes remain
+staged while switching lines and banks. **Reset this line** discards that line's
+pending changes. **Export archive...** writes
 a new, verified `dialogue.big` for the selected language; Browse opens Save As,
 and existing archives are protected from overwriting.
 
-Choose a Forge pack and use **Save lines to pack** to save edited Sound IDs as
+Choose a Forge pack and use **Save to pack** to save edited Sound IDs as
 record recipes. Mods > Deploy composes them in load order: different lines and
 banks coexist, and the later pack wins if two packs edit the same line or one
 ships a whole `dialogue.big`. Mods > Check conflicts identifies the competing
 packs; reorder them to change the winner. Saving recipes clears pending changes
 for that language. Closing with staged edits offers **Review dialogue**, which
-reopens the edit/save window.
+reopens the edit/save panel.
 
-![Dialogue workspace with the visible line picker and preview controls](walkthrough/w13_dialogue_workspace.png)
+![Dialogue workspace with its speaker tree and preview controls](walkthrough/w13_dialogue_workspace.png)
 
 The Assets panel holds *Textures* (below), *Models* (the browser and import above),
 *Effects* (inspection), *Dialogue* (preview and lip sync editing) and *Ground themes*

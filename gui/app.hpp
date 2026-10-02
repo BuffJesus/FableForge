@@ -875,6 +875,7 @@ public:
     void drawDialogueViewport(const ImVec2& origin, const ImVec2& size);
     void drawDialogueTools(float pad, float inner, float cardInner);
     bool dialogueToolsOpen_ = false;
+    void setDialogueEditing(bool editing);
     bool dialogueTracksOpen_ = false;
     void frameDialoguePlayback();
     std::string dialogueLanguage_ = "English";
@@ -898,6 +899,7 @@ public:
     std::array<char,160> dialogueSearchQuery_{};
     std::string dialogueSearchCacheKey_;
     std::vector<forge::dialoguetext::Match> dialogueSearchResults_;
+    std::map<std::string,std::vector<size_t>> dialogueSearchGroups_;
     int dialoguePreset_ = 0;
     bool dialoguePresetChecked_ = false;
     forge::lipsync::PresetAssets dialoguePresetAssets_;
