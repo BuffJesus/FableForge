@@ -270,6 +270,9 @@ item and info display components; absent components are not added.
   sizes; `[` and `]` step by a factor of square-root-two. An exact-step height
   brush at 0.25 or 0.5 cells edits one vertex at the rounded pointer location.
   Hover the sculpting instructions for the object-following and undo rules.
+  In Raise, Lower, Flatten, Smooth, Noise and Paths, Ctrl+drag samples the ground
+  height continuously without editing it. Each tool shows **Paint height**;
+  Flatten uses that sampled target instead of the stroke's starting height.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

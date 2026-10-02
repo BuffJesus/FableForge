@@ -3,10 +3,16 @@
 Open a map, then **Edit > Terrain** (or press T). The **Terrain tool** card has
 four groups: **Sculpt** (heights), **Paint** (what the ground looks and sounds
 like), **Passability** (where the hero and camera may go) and **Region** (copy and
-paste). This page covers Paint and Passability. Every stroke is one undo step
+paste). Every stroke is one undo step
 (Ctrl+Z).
 
 ![Painting a sand path](img/paint_ground.png)
+
+## Pick a sculpting height
+
+With Raise, Lower, Flatten, Smooth, Noise or Paths selected, hold Ctrl and drag
+on the ground to sample its height without changing it. **Paint height** shows
+the current sample. Switch to **Flatten** to level the ground to that height.
 
 ## Ground textures
 

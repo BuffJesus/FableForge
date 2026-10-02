@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Ctrl-drag sculpt height picker
+
+Raise, Lower, Flatten, Smooth, Noise and Paths now sample ground height on
+Ctrl+LMB press and every held frame. Ctrl+Shift samples too. Sampling sets
+Flatten's explicit target and each sculpt tool shows Paint height. Existing
+active brush/path edits retain control if Ctrl is pressed midway through them.
+
+Read-only native evidence uses the FableWin SHA256 recorded below. ProcessInput
+0x0294dbe0 checks Ctrl before dispatching press/held LMB events to thunk
+0x017b3fb8 (PaintInputPickupHeight 0x029940d0), without a pen-specific condition.
+The Land branch reads ground height into SetLeftAltitude. Local disassembly:
+`build/height-pick-native-evidence.txt`; symbols from FableTLC's editor manifest.
+
+The first normal/compact real mouse checks pass at `build/height-pick-s8t6w3kl`:
+all six tools sample a 30 m patch and then a 20 m patch with LMB still held,
+terrain/object snapshots remain exact, Ctrl+Shift samples, and Ctrl pressed
+mid-stroke preserves the edit and undo. Both Paint height screenshots inspected.
+An owned `build-height-pick` Release build keeps the broad gate's primary
+binaries fixed at the grid/camera milestone while this UI change is tested.
+No game writes or in-game probes are part of this change's checks.
+Final checks at `build/height-pick-gq7rqbko` also prove Flatten consumes the
+sampled target and undo restores both snapshots. Height pens, theme-target
+guard, Paths, brushes and compact-layout regressions pass on the owned build
+(`build/height_pick_regressions.log`). The new picker check is in check_all.
+
 ## 2026-10-02 continuation: whole-map Raise camera fields
 
 Raise with Move objects too now includes camera coordinate bases and spline key

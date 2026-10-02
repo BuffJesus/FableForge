@@ -2787,12 +2787,17 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
-    // Ctrl+click in Flatten: the vanilla height eyedropper (PaintInputPickupHeight) fills the target
-    if (press && io.KeyCtrl && terrainMode_ == 2) {
+    // Native Height Toolbox Ctrl press/held events sample Paint Height for every
+    // sculpt pen, including Paths. Do not hijack an already active edit.
+    const bool heightTool = (terrainMode_ >= 0 && terrainMode_ <= 3) || terrainMode_ == 9 || terrainMode_ == 16;
+    if (heightTool && io.KeyCtrl && lmb && viewportHovered_ && brushHit_ && !io.KeyAlt &&
+        !doc_.strokeActive() && !pathDrag_) {
         if (const auto h = doc_.terrainHeight(brushFable_[0], brushFable_[1])) {
             penTarget_ = *h; penTargetFromStroke_ = false;
-            char msg[64]; std::snprintf(msg, sizeof msg, "flatten: target height %.2f", *h);
-            pushLog(msg, 0);
+            if (press) {
+                char msg[64]; std::snprintf(msg, sizeof msg, "picked height %.2f", *h);
+                pushLog(msg, 0);
+            }
         }
         return;
     }
@@ -2875,7 +2880,7 @@ void App::fillPen(editor::TerrainBrush& b) const {
 void App::drawPenControls(float cardInner) {
     using theme::S;
     const int m = terrainMode_;
-    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 16) return;
+    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 9 && m != 16) return;
     const float labelW = S(110);
     auto row = [&](const char* label) {
         ImGui::AlignTextToFramePadding();
@@ -2896,7 +2901,7 @@ void App::drawPenControls(float cardInner) {
     } else if (m == 2) {
         ImGui::Checkbox("Level to where the stroke starts##ptfs", &penTargetFromStroke_);
         auto_.registerWidget("check_pen_target_from_stroke");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the ground under the first click is the target.\nOff: the target height below (vanilla Paint Height); Ctrl+click the ground to sample it.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: the ground under the first click is the target.\nOff: the target height below (vanilla Paint Height); Ctrl+drag the ground to sample it.");
         if (!penTargetFromStroke_) {
             row("Target (m)");
             ImGui::InputFloat("##ptarget", &penTarget_, 0.5f, 5.0f, "%.2f");
@@ -2931,6 +2936,12 @@ void App::drawPenControls(float cardInner) {
         ImGui::Checkbox("Repeat while held##pspray", &penSpray_);
         auto_.registerWidget("check_pen_spray");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Vanilla Spray can. On: applies every frame while the button is held. Off: once per click.");
+    }
+    {
+        char value[32]; std::snprintf(value, sizeof value, "%.2f m", penTarget_);
+        theme::labelValue("Paint height", value, cardInner);
+        auto_.registerWidget("text_paint_height");
+        theme::hint("Ctrl+drag the ground to pick a height for Flatten.");
     }
 }
 
@@ -4120,7 +4131,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         const char* how = nullptr;
         if ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_) how = "Click or drag: every block under the brush moves by the step once per stroke (a terrace). Shift swaps raise and lower. One undo step per stroke.";
         else if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
-        else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+click samples the target. One undo step per stroke.";
+        else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+drag samples the target. One undo step per stroke.";
         else if (terrainMode_ == 3) how = "Hold LMB: bumps and pits move toward their neighbours; straight slopes stay. One undo step per stroke.";
         else if (terrainMode_ == 16) how = "Hold LMB: random blocks under the brush jump up and down (nothing happens where the ground under the brush averages sea level; no block goes below 0). One undo step per stroke.";
         else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";

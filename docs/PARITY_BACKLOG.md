@@ -669,7 +669,10 @@ Effort S. Value med.
 **Effort:** S. **Value:** med.
 
 #### Ctrl eyedropper for height works only in Flatten, and only on a single click
-*weakness, effort S, value med*
+*resolved 2026-10-02: continuous Ctrl-drag sampling in all six sculpt tools,
+with a visible Paint height value. Real mouse tests at normal/compact sizes
+cover Ctrl+Shift, unchanged documents and active-stroke undo. See
+HANDOFF_WORLD_UI and tools/test_height_pick.py. Original analysis follows.*
 
 **Vanilla:** ProcessInput routes any LMB press or held event in Height mode with Ctrl down (0x1d/0x67) to PaintInputPickupHeight 0x029940d0 instead of the pen, whichever Land pen is selected (Change Height, Smear, Noise, Draw Paths, Paint Height). With the Land tab selected, it sets the Paint Height box (SetLeftAltitude) from CWorldMap::GetGroundSizeZAt. It samples on press and on every held event, so a Ctrl-drag keeps updating the value.
 

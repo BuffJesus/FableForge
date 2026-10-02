@@ -24,6 +24,9 @@ version is chosen; validation is recorded at release time, not here.
   one step.
 - **Draw Paths** now has the original editor's square ends: ground behind the
   start and past the end of the drag is no longer flattened.
+- **Pick a height in every sculpt tool.** Ctrl+drag samples the ground height
+  continuously in Raise, Lower, Flatten, Smooth, Noise and Paths. Each shows
+  the sampled height, ready to use with Flatten.
 - **Gentler scaling.** The scale gizmo changes size about 0.3% per pixel instead of
   1%, grows and shrinks symmetrically, and Shift makes it five times finer. The
   Properties scale field drags at the same gentler rate.

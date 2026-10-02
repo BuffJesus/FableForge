@@ -13,6 +13,11 @@ lowered StartOakValeWest documents into separate owned scratch folders. It
 independently verifies camera base and spline-key Z changes, unchanged directions,
 timings and other rows, and exact document/terrain undo. The live install is read-only.
 
+`tools/test_height_pick.py --install <root>` checks real Ctrl-drag sampling in
+all six sculpt tools, Ctrl+Shift, Flatten's sampled target and active-stroke undo
+at normal and compact sizes without saving. State keys `pen_target` and
+`pen_target_from_stroke` expose the target; `text_paint_height` names its readout.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's
