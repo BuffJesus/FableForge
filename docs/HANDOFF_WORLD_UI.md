@@ -1,6 +1,6 @@
 # World view and UI continuation - 2026-09-29
 
-## 2026-10-02: 0.18.0 built and validated, publication pending
+## 2026-10-02: 0.18.0 built, validated and published
 
 Commit `4ca5a62` ("Release FableForge 0.18.0") carries the stable version, README,
 guide link, screenshots and validation notes (`docs/releases/0.18.0.md`). Full suite:
@@ -13,10 +13,26 @@ reset with `forge restore`, then put back. SHA256 trees match pre-probe state
 (1,912 + 1,217 files; 18 files still differ from backups, as before).
 `dist/FableForge-0.18.0-win64.zip` (+ `.sha256`, guide ZIP) passes `test_package.py`.
 
-Not done (the auto-mode classifier refused the push): tag `v0.18.0`, push
-`main` (fast-forward from origin/main) + `feat/editor-ui-shell` + the tag, CI
-green, `gh release create v0.18.0` with both ZIPs, marked latest, notes from
-`docs/releases/0.18.0.md`. After tagging, set `FORGE_VERSION_SUFFIX` back to "-dev".
+Published later that day: tag `v0.18.0` on `4ca5a62`, CI green, GitHub release
+marked Latest with the app ZIP, its `.sha256` and the guide ZIP. `main` now tracks
+`feat/editor-ui-shell` (fast-forwarded and pushed together); the suffix is "-dev".
+
+## 2026-10-02: post-release work on main (all pushed, CI green)
+
+- `docs/guide/`: task pages (paint, Fit to neighbours, mod packs, lip sync) with
+  captures from `tests/ui/guide_shots.txt`; packaged beside README (87 links pass).
+- Edit footer: *Write terrain and objects* (terrain first, objects only after it
+  succeeded); `write_both.txt` + `write_both_fail.txt` run inside `test_overworld.py`.
+- Escape cancels any inline write confirmation without deselecting
+  (`confirm_escape.txt`); Enter never confirms a write.
+- Paint refuses palette slot 0 and INVALID_THEME_STANDIN as targets (`paint_target_guard.txt`).
+- A dropped `.glb`/`.gltf`/`.obj` fills the Models import form (`drop_model.txt`).
+- Textures list thumbnails, 4 ms/frame budget, invalidated on file change (`texture_thumbs.txt`).
+- Scale gizmo: exponential ~0.3% per logical px, Shift finer (AeoN's sensitivity report;
+  `scale_drag.txt`); the Properties scale field drags at 0.003.
+New automation: `write_both`, `drop_refused`, `assert_state_min`, `assert_state_max`.
+These new UI scripts passed individually; the full `check_all.py` has not been rerun
+since the release.
 
 ## 2026-10-01 continuation: lip-sync Undo and Redo
 
