@@ -844,6 +844,10 @@ these backups require manual recovery and are not editor Restore inputs.
 
 ## Assets tab
 
+**Textures** lists every textures.big entry with a small thumbnail (decoded a few per
+frame as rows scroll into view, refreshed after a replace, an add or any other change
+to the file), its size and pixel format; the selected one gets the full preview.
+
 **Effects** lists the installed particle effects by name or numeric id. Select
 an effect to inspect its active sprite, mesh and light systems, including sprite
 textures, colours, sizes, emission rate, lifetime, offsets and light radius.

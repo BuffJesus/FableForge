@@ -1755,6 +1755,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("custom_theme_failed=" + std::string(customThemeError_.empty() ? "0" : "1"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
     v.push_back("textures_count=" + std::to_string(texRows_.size()));
+    v.push_back("texture_thumbs_made=" + std::to_string(texThumbsMade_));
     v.push_back("texture_search=" + std::string(texSearch_));
     v.push_back("tool_panel_visible=" + std::to_string(settings_.showActions));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <d3d11.h>
 #include <string>
+#include <deque>
 #include <map>
 #include <vector>
 
@@ -280,6 +281,13 @@ public:
     // Small UI swatch of a decoded texture, cached by textures.big id (the theme picker);
     // owned by the renderer, freed with it. Downsampled to 64x64 so 200 themes cost ~3 MB.
     ID3D11ShaderResourceView* swatch(uint32_t id, const terrainexport::Image& img);
+    // The Textures list's row thumbnails, keyed by entry name: at most 32 px on the long side
+    // (aspect kept), the oldest dropped past kListThumbCap. listThumb returns false when the
+    // key has no thumbnail yet; makeListThumb stores one (null remembers a failure).
+    static constexpr size_t kListThumbCap = 768;
+    bool listThumb(const std::string& key, ID3D11ShaderResourceView*& srv) const;
+    ID3D11ShaderResourceView* makeListThumb(const std::string& key, const terrainexport::Image& img);
+    void clearListThumbs();
     // The Textures tab's preview: one full-size texture at a time (the previous is freed).
     ID3D11ShaderResourceView* previewTexture(const terrainexport::Image& img);
     // A UI image kept under `key` (the previous one of that key is freed): the fractal preview.
@@ -310,6 +318,8 @@ private:
     ID3D11ShaderResourceView* renderMeshPreview(const GpuMesh& g, uint32_t size,
                                                float yaw, float pitch, float zoom, bool wire);
     std::map<uint32_t, ID3D11ShaderResourceView*> swatches_;
+    std::map<std::string, ID3D11ShaderResourceView*> listThumbs_;
+    std::deque<std::string> listThumbOrder_;
     std::map<std::string, ID3D11ShaderResourceView*> uiTextures_;
     ID3D11ShaderResourceView* preview_ = nullptr;
     std::map<std::string, ID3D11ShaderResourceView*> thumbs_;

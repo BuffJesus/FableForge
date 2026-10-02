@@ -12,6 +12,8 @@
 
 #include "terrainexport.hpp"
 
+namespace forge::big { class File; }
+
 namespace albion::texbrowse {
 
 struct TextureRow {
@@ -31,6 +33,9 @@ std::vector<TextureRow> listTextures(const std::filesystem::path& texturesBig, s
 
 // Decode an entry's first mip to RGBA.
 bool decodeTexture(const std::filesystem::path& texturesBig, const std::string& entryName,
+                   terrainexport::Image& out, std::string& error);
+// The same from an archive already open (the list thumbnails decode many entries).
+bool decodeTexture(const forge::big::File& texturesBig, const std::string& entryName,
                    terrainexport::Image& out, std::string& error);
 
 // Authored sprite frames, cropped out of allocation padding and stacked vertically.

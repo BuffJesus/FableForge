@@ -392,6 +392,7 @@ Renderer::~Renderer() {
     thumbs_.clear();
     for (auto& [id, srv] : swatches_) release(srv);
     swatches_.clear();
+    clearListThumbs();
     for (auto& [key, srv] : uiTextures_) release(srv);
     uiTextures_.clear();
     release(preview_);
@@ -1056,6 +1057,55 @@ ID3D11ShaderResourceView* Renderer::swatch(uint32_t id, const terrainexport::Ima
     } else srv = makeTexture(img);
     swatches_[id] = srv;   // a null entry remembers a texture that could not be made
     return srv;
+}
+
+bool Renderer::listThumb(const std::string& key, ID3D11ShaderResourceView*& srv) const {
+    const auto it = listThumbs_.find(key);
+    if (it == listThumbs_.end()) return false;
+    srv = it->second;
+    return true;
+}
+
+ID3D11ShaderResourceView* Renderer::makeListThumb(const std::string& key, const terrainexport::Image& img) {
+    if (ID3D11ShaderResourceView* have = nullptr; listThumb(key, have)) return have;
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (img.width && img.height && img.rgba.size() >= size_t(img.width) * img.height * 4) {
+        // box-filter to at most 32 px on the long side; each output pixel averages its source box
+        const uint32_t longSide = std::max(img.width, img.height);
+        const uint32_t tw = std::max(1u, img.width * 32 / std::max(32u, longSide));
+        const uint32_t th = std::max(1u, img.height * 32 / std::max(32u, longSide));
+        terrainexport::Image t;
+        t.width = tw; t.height = th; t.rgba.resize(size_t(tw) * th * 4);
+        for (uint32_t y = 0; y < th; ++y)
+            for (uint32_t x = 0; x < tw; ++x) {
+                const uint32_t x0 = x * img.width / tw, x1 = std::max(x0 + 1, (x + 1) * img.width / tw);
+                const uint32_t y0 = y * img.height / th, y1 = std::max(y0 + 1, (y + 1) * img.height / th);
+                uint64_t acc[4] = {0, 0, 0, 0};
+                for (uint32_t yy = y0; yy < y1; ++yy)
+                    for (uint32_t xx = x0; xx < x1; ++xx) {
+                        const uint8_t* p = &img.rgba[(size_t(yy) * img.width + xx) * 4];
+                        for (int c = 0; c < 4; ++c) acc[c] += p[c];
+                    }
+                const uint64_t n = uint64_t(x1 - x0) * (y1 - y0);
+                uint8_t* o = &t.rgba[(size_t(y) * tw + x) * 4];
+                for (int c = 0; c < 4; ++c) o[c] = uint8_t(acc[c] / n);
+            }
+        srv = makeTexture(t);
+    }
+    listThumbs_[key] = srv;
+    listThumbOrder_.push_back(key);
+    while (listThumbOrder_.size() > kListThumbCap) {
+        const auto it = listThumbs_.find(listThumbOrder_.front());
+        if (it != listThumbs_.end()) { release(it->second); listThumbs_.erase(it); }
+        listThumbOrder_.pop_front();
+    }
+    return srv;
+}
+
+void Renderer::clearListThumbs() {
+    for (auto& [key, srv] : listThumbs_) release(srv);
+    listThumbs_.clear();
+    listThumbOrder_.clear();
 }
 
 ID3D11ShaderResourceView* Renderer::makeTexture(const terrainexport::Image& img, bool mipmaps) {

@@ -111,7 +111,12 @@ std::vector<TextureRow> listTextures(const fs::path& texturesBig, std::string& e
 
 bool decodeTexture(const fs::path& texturesBig, const std::string& entryName, terrainexport::Image& out, std::string& error) {
     try {
-        const auto file = forge::big::File::open(texturesBig);
+        return decodeTexture(forge::big::File::open(texturesBig), entryName, out, error);
+    } catch (const std::exception& e) { error = e.what(); return false; }
+}
+
+bool decodeTexture(const forge::big::File& file, const std::string& entryName, terrainexport::Image& out, std::string& error) {
+    try {
         const auto* e = findEntry(file, entryName);
         if (!e) { error = "no texture named " + entryName; return false; }
         const auto mip = forge::terraintex::decodeMip0(e->subHeader, file.entryData(*e));

@@ -1,0 +1,17 @@
+# The Textures list shows a thumbnail per visible row, decoded a few per frame from one open
+# textures.big. Read-only: nothing is written.
+wait_maps
+wait_ready
+set saveroot build/ui_texture_thumbs
+textures_tab 1
+assets_tab 0
+frames 40
+assert_state_min texture_thumbs_made 6
+click input_texsearch
+input_text BARREL
+frames 40
+reveal list_textures
+mouse_move 10 500
+frames 2
+screenshot build/ui/texture_thumbs.png
+quit

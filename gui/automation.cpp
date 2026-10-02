@@ -1280,6 +1280,15 @@ bool Automation::tick(App& app) {
         else note("ok   " + line);
         ++pc_;
     }
+    else if (cmd == "assert_state_min") {   // assert_state_min <key> <n>: a numeric state of at least n
+        std::istringstream rs(rest); std::string key; double want = 0; rs >> key >> want;
+        std::string cur;
+        for (const auto& kv : app.stateDump()) if (kv.rfind(key + "=", 0) == 0) cur = kv.substr(key.size() + 1);
+        if (cur.empty()) fail("assert_state_min: unknown key " + key);
+        else if (std::atof(cur.c_str()) < want) fail("assert_state_min: " + key + "=" + cur + " < " + rest.substr(key.size() + 1));
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "assert_log") {   // assert_log <text>: some app log line contains the text
         if (!app.logContains(rest)) fail("assert_log: no log line contains '" + rest + "'"); else note("ok   " + line);
         ++pc_;

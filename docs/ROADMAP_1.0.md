@@ -580,8 +580,10 @@ camera + QWER). What a stranger hits is *density and feedback*:
    game-theme search list and a "painting with this theme" row show the base albedo, 64x64
    box-filtered from the texture cache, `Renderer::swatch`); *Add an object* mesh thumbnails DONE
    2026-09-18 (`Renderer::thumbnail`: the def's mesh rendered once into a 96 px target from a
-   three-quarter view, one decode per frame for the visible rows, cached by def). Still open:
-   texture-tab thumbnails (the list is 6,300 long; the preview covers the selected one).
+   three-quarter view, one decode per frame for the visible rows, cached by def). Texture-tab
+   thumbnails DONE 2026-10-02: visible rows decode from one open textures.big within ~4 ms a
+   frame, cached by entry name (32 px, aspect kept, 768 at most), dropped and redone when
+   the file changes (`tests/ui/texture_thumbs.txt`).
 5. **Drag & drop**: PNG/JPG/TGA onto the window = custom ground texture (DONE 2026-09-18:
    lands in the Terrain tab's custom-texture input with a `GROUND_<file>` name, auto `drop
    <file>`); `.lev` already opened as a loose map. GLB onto the viewport = import model: DONE

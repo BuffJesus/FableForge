@@ -1009,6 +1009,14 @@ private:
     std::string texBank_, texSelected_, texPreviewFor_, lastTexturePng_;
     ID3D11ShaderResourceView* texPreview_ = nullptr;
     ImVec2 texPreviewSize_ = ImVec2(1, 1);
+    // list thumbnails: one open textures.big (index only), reopened when the file changes
+    std::shared_ptr<const forge::big::File> texThumbFile_;
+    std::filesystem::path texThumbPath_;
+    std::filesystem::file_time_type texThumbTime_{};
+    uintmax_t texThumbSize_ = 0;
+    size_t texThumbsMade_ = 0;   // cumulative, for scripted checks
+    void syncTextureThumbs();
+    ID3D11ShaderResourceView* textureListThumb(const texbrowse::TextureRow& row, double& budgetMs);
     char texSearch_[64] = {};
     char texImagePath_[512] = {};
     char texAddName_[64] = {};

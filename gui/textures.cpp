@@ -3,6 +3,7 @@
 #include "app.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 
 #include "theme.hpp"
@@ -38,6 +39,37 @@ void App::refreshTextures() {
     texturesLoaded_ = true;
     texPreviewFor_.clear();
     texPreview_ = nullptr;
+    texThumbFile_.reset();   // contents may have changed: thumbnails decode again
+    renderer_.clearListThumbs();
+}
+
+// The list thumbnails read one open archive; any change of the file (a replace, an add, a mod
+// deploy, a model import) reopens it and drops the thumbnails made from the old contents.
+void App::syncTextureThumbs() {
+    const auto path = texturesBigPath();
+    std::error_code ec;
+    const auto time = std::filesystem::last_write_time(path, ec);
+    const uintmax_t size = ec ? 0 : std::filesystem::file_size(path, ec);
+    if (texThumbFile_ && path == texThumbPath_ && !ec && time == texThumbTime_ && size == texThumbSize_) return;
+    texThumbFile_.reset();
+    renderer_.clearListThumbs();
+    texThumbPath_ = path; texThumbTime_ = time; texThumbSize_ = size;
+    if (ec) return;
+    try { texThumbFile_ = std::make_shared<const forge::big::File>(forge::big::File::open(path)); }
+    catch (const std::exception& e) { pushLog(std::string("textures: thumbnails unavailable: ") + e.what(), 1); }
+}
+
+// A row's thumbnail, decoded while this frame's budget lasts (at least one per frame);
+// null while it waits or when the entry cannot be decoded.
+ID3D11ShaderResourceView* App::textureListThumb(const texbrowse::TextureRow& row, double& budgetMs) {
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (renderer_.listThumb(row.name, srv) || !texThumbFile_ || budgetMs <= 0) return srv;
+    const auto t0 = std::chrono::steady_clock::now();
+    terrainexport::Image img; std::string err;
+    srv = renderer_.makeListThumb(row.name, texbrowse::decodeTexture(*texThumbFile_, row.name, img, err) ? img : terrainexport::Image{});
+    ++texThumbsMade_;
+    budgetMs -= std::max(0.5, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+    return srv;
 }
 
 std::filesystem::path App::graphicsBigPath() const {
@@ -199,13 +231,29 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
     ImGui::BeginChild("##texlist", ImVec2(cardInner, S(200)), ImGuiChildFlags_None);
     ImGui::PopStyleColor();
+    syncTextureThumbs();
+    double thumbBudgetMs = 4.0;   // decode time per frame; scrolling fills the rest over the next frames
+    const float rowH = S(26), box = S(22);
     ImGuiListClipper clipper;
-    clipper.Begin(int(rows.size()));
+    clipper.Begin(int(rows.size()), rowH + ImGui::GetStyle().ItemSpacing.y);
     while (clipper.Step())
         for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
             const auto& r = texRows_[size_t(rows[size_t(k)])];
-            char lbl[200]; std::snprintf(lbl, sizeof lbl, "%s   %dx%d %s##tx%zu", r.label.c_str(), r.width, r.height, r.format.c_str(), size_t(rows[size_t(k)]));
-            if (ImGui::Selectable(lbl, r.name == texSelected_)) texSelected_ = r.name;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            char id[32]; std::snprintf(id, sizeof id, "##tx%zu", size_t(rows[size_t(k)]));
+            if (ImGui::Selectable(id, r.name == texSelected_, 0, ImVec2(0, rowH))) texSelected_ = r.name;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 b0(at.x + S(2), at.y + (rowH - box) * 0.5f), b1(b0.x + box, b0.y + box);
+            dl->AddRectFilled(b0, b1, theme::col(theme::Bg2));
+            if (ID3D11ShaderResourceView* t = textureListThumb(r, thumbBudgetMs)) {
+                // aspect kept inside the square
+                const float aspect = r.height > 0 ? float(r.width) / float(r.height) : 1.0f;
+                const ImVec2 sz = aspect >= 1.0f ? ImVec2(box, box / aspect) : ImVec2(box * aspect, box);
+                const ImVec2 i0(b0.x + (box - sz.x) * 0.5f, b0.y + (box - sz.y) * 0.5f);
+                dl->AddImage((ImTextureID)(intptr_t)t, i0, ImVec2(i0.x + sz.x, i0.y + sz.y));
+            }
+            char lbl[200]; std::snprintf(lbl, sizeof lbl, "%s   %dx%d %s", r.label.c_str(), r.width, r.height, r.format.c_str());
+            dl->AddText(ImVec2(b1.x + S(8), at.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f), theme::col(theme::Text), lbl);
         }
     ImGui::EndChild();
     ImGui::PopFont();
