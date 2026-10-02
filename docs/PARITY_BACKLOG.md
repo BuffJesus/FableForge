@@ -919,7 +919,13 @@ There is no hf_ reset and no themeRev_ bump, because heights and ground themes a
 Effort S, value low-med. Clearing or reseeding a map's ambience is occasional, but painting a whole map by hand is tedious.
 
 #### Replace / Flood Replace miss vanilla's water-family match and hold-by-index rule
-*weakness, effort S, value med*
+*weakness, effort S, value med* -- **DONE 2026-10-02 except step 6's pen footprint**:
+`ThemeEntry::noWaterThemeDef` (verified: each WATER_* ladder shares its _0 def's index, e.g.
+WATER_BWLAKE_* = 1933, non-water 0), `replaceThemesInBlend`, `Document::setThemeFamilies` /
+`replaceMatchSet`, any-strength matching, `to` = 0 refused, the Replace pen uses the match set,
+and the card names the family before Replace all. Unit tests (family, zero-strength flood,
+to = 0) and `tests/ui/replace_water_family.txt` (BanditCampResidential: BWLAKE and WWLAKE
+ladders). Still open: the pen's integer centre and strict `<` footprint (step 6).
 
 **Vanilla:** EditReplaceEngineThemeUndoable 0x0297a6c0, EditFloodReplaceEngineThemeUndoable 0x02979ff0 and IsPosValidFloodReplaceSite 0x02979e00 treat a slot as matching when its theme index == theme_to_replace, OR when both the slot's and the replace theme's CEngineThemeDef NoWaterThemeDef (+0x78) are non-zero and equal. Picking one depth theme of a water ladder therefore replaces the whole family (W1..Wn). A slot matches whatever its blend (strength 0 included). Only the index is rewritten and blends are kept. The pen uses integer vertices with a strict (dx^2+dy^2) < r^2.
 

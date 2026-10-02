@@ -1,0 +1,39 @@
+# Replace All treats a water ladder as one theme, like the vanilla editor (NoWaterThemeDef):
+# on BanditCampResidential, replacing WATER_BWLAKE_1 (slot 9) also takes WATER_BWLAKE_0 (slot 10)
+# and leaves the WWLAKE ladder alone; the card says so first. Read-only: nothing is written.
+wait_maps
+wait_ready
+set saveroot build/ui_replace_family
+select BanditCampResidential
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+terrain_mode 8
+replace_from 9
+paint_theme 2
+frames 3
+reveal btn_replace_all
+frames 2
+screenshot build/ui/replace_family.png
+click btn_replace_all
+frames 3
+assert_log (with the rest of its water family: WATER_BWLAKE_0)
+assert_state terrain_dirty 1
+replace_from 23
+frames 2
+click btn_replace_all
+frames 3
+assert_log (with the rest of its water family: WATER_WWLAKE_0, WATER_WWLAKE_1, WATER_WWLAKE_4, WATER_WWLAKE_8)
+undo
+undo
+frames 3
+assert_state terrain_dirty 0
+replace_from 2
+paint_theme 3
+frames 2
+click btn_replace_all
+frames 3
+assert_state terrain_dirty 1
+dump_log
+quit

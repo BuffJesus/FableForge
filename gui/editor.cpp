@@ -2645,6 +2645,22 @@ void App::syncTerrain() {
 }
 
 // A picker over the map's LEV ground-theme palette (named slots only).
+std::string App::syncThemeFamilies() {
+    std::array<uint32_t, 256> fam{};
+    const forge::lev::File* lev = doc_.level();
+    const forge::terraintex::ThemeLibrary* lib = ctx_.ready() ? ctx_.themeLibrary() : nullptr;
+    if (lev && lib)
+        for (size_t i = 0; i < lev->groundThemes().size() && i < fam.size(); ++i)
+            if (const auto* t = lib->byName(lev->groundThemes()[i].name)) fam[i] = t->noWaterThemeDef;
+    doc_.setThemeFamilies(fam);
+    if (!lev || replaceFrom_ < 0 || replaceFrom_ >= 256 || !fam[size_t(replaceFrom_)]) return {};
+    std::string others;
+    size_t n = 0;
+    for (size_t i = 0; i < lev->groundThemes().size() && i < fam.size(); ++i)
+        if (int(i) != replaceFrom_ && fam[i] == fam[size_t(replaceFrom_)]) { others += (n++ ? ", " : "") + lev->groundThemes()[i].name; }
+    return n ? "with the rest of its water family: " + others : std::string();
+}
+
 bool App::paintableSlot(int slot) const {
     const forge::lev::File* lev = doc_.level();
     if (!lev || slot <= 0 || size_t(slot) >= lev->groundThemes().size()) return false;
@@ -2775,8 +2791,9 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     if (terrainMode_ == 8) {
         if (press) {
             if (replaceFrom_ < 0) { pushLog("flood replace: pick the theme to replace (Ctrl+Shift+click the ground or the list)", 1); return; }
+            const std::string family = syncThemeFamilies();
             const size_t n = doc_.replaceTheme(uint8_t(replaceFrom_), uint8_t(paintTheme_), editor::Document::ReplaceScope::Connected, brushFable_[0], brushFable_[1]);
-            pushLog(n ? "flood replace: " + std::to_string(n) + " cells" : std::string("flood replace: the clicked cell does not hold the theme to replace"), n ? 0 : 1);
+            pushLog(n ? "flood replace: " + std::to_string(n) + " cells" + (family.empty() ? "" : " (" + family + ")") : std::string("flood replace: the clicked cell does not hold the theme to replace"), n ? 0 : 1);
         }
         return;
     }
@@ -2813,6 +2830,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         return;
     }
     if (!doc_.strokeActive() && press) {
+        if (terrainMode_ == 7) syncThemeFamilies();
         doc_.beginStroke(b);
         clickArmed_ = false;
         penApplied_ = false;
@@ -2906,6 +2924,7 @@ void App::terrainStroke(float x, float y, float seconds) {
     b.themeIndex = uint8_t(terrainMode_ == 10 ? envSlot_ : terrainMode_ == 11 ? soundIndex_ : paintTheme_);
     b.replaceFrom = uint8_t(std::max(replaceFrom_, 0));
     fillPen(b);
+    if (terrainMode_ == 7) syncThemeFamilies();
     doc_.beginStroke(b);
     doc_.applyBrush(b, seconds);
     doc_.endStroke();
@@ -3967,12 +3986,19 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             paletteCombo("##replaceTo", paintTheme_, cardInner);
             auto_.registerWidget("combo_replace_to");
             const bool can = replaceFrom_ >= 0 && replaceFrom_ != paintTheme_;
+            const std::string family = syncThemeFamilies();
             if (theme::ghostButton("Replace all on this map", ImVec2(cardInner, S(28))) && can) {
                 const size_t n = doc_.replaceTheme(uint8_t(replaceFrom_), uint8_t(paintTheme_), editor::Document::ReplaceScope::All);
-                pushLog("replace all: " + std::to_string(n) + " cells", n ? 0 : 1);
+                pushLog("replace all: " + std::to_string(n) + " cells" + (family.empty() ? "" : " (" + family + ")"), n ? 0 : 1);
             }
             auto_.registerWidget("btn_replace_all");
             ImGui::PushFont(fontSmall_);
+            if (!family.empty()) {
+                // vanilla matches a water ladder as one theme (NoWaterThemeDef); say so before it happens
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+                ImGui::TextColored(theme::vec(theme::Warn), "Replaces it %s (one theme to the engine, like the vanilla editor).", family.c_str());
+                ImGui::PopTextWrapPos();
+            }
             theme::hint(terrainMode_ == 7 ? "Hold LMB: under the brush, the first theme becomes the second in every blend slot. Ctrl+click samples the theme to paint, Ctrl+Shift+click the theme to replace. One undo step per stroke."
                                           : "Click the ground: the connected patch holding the first theme (8-neighbour flood, like the vanilla editor) takes the second. Ctrl+click samples the theme to paint, Ctrl+Shift+click the theme to replace. One undo step.");
             ImGui::PopFont();

@@ -113,6 +113,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `place_fishing_spot [OBJECT_DEF\|-] [scriptname]` | a `MARKER_FISHING_SPOT` at the camera focus on the ground; the optional def is the first catch (`CTCContainerRewardHero`), empty or `-` = the game's fish table; the ScriptName is what the in-game `--things` probe looks up |
 | `link_install` / `link_remove` / `link_go` / `link_spawn` / `link_ping` / `link_poll` | the ForgeFSE live link (state `link_installed`, `link_ready`, `link_hero_map`) |
 | `reseat_things` | every object that stood on ground changed since the last save follows it (offset kept; one undo step) |
+| `replace_from <slot>` | the Replace / Flood "Replace this theme" palette slot (the target is `paint_theme`); `click btn_replace_all` runs Replace all |
 | `add_theme <ENGINE_THEME>` | add a ground theme from game.bin to a free LEV palette slot and select it for painting (state `paint_theme`, `palette_named`); one undo step |
 | *(toasts)* | every warning / error / success log line also shows for 6 s in the viewport's top-right corner (state `toasts` = how many are up); the long jobs' busy button reads `<verb>: <stage>  (N s)` from the job thread |
 | `def_search <text>` | fills the *Add an object* box (rows show a mesh thumbnail) |

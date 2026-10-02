@@ -661,7 +661,10 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         return;
     }
     if (brush.mode == Mode::ReplaceTheme) {
-        // a hard swap under the pen (cell centres inside the radius), mirrored into the level like Theme
+        // a hard swap under the pen (cell centres inside the radius), mirrored into the level like Theme;
+        // the slot match is replaceTheme's (index or water family, any strength)
+        if (brush.themeIndex == 0) return;
+        const auto match = replaceMatchSet(brush.replaceFrom);
         const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
         const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
         for (int y = y0; y <= y1; ++y)
@@ -670,7 +673,7 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
                 if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
                 const size_t i = size_t(y) * cx + x;
                 const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
-                const auto next = forge::terrain::replaceThemeInBlend(blend, brush.replaceFrom, brush.themeIndex);
+                const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
                 if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
                 working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
                 level_->setThemeBlendAt(x, y, next.indices, next.strengths);
@@ -836,13 +839,21 @@ size_t Document::fillSound(uint8_t index) {
     return changed;
 }
 
+std::array<bool, 256> Document::replaceMatchSet(uint8_t from) const {
+    std::array<bool, 256> match{};
+    for (size_t s = 0; s < 256; ++s)
+        match[s] = s == from || (themeFamily_[s] != 0 && themeFamily_[s] == themeFamily_[from]);
+    return match;
+}
+
 size_t Document::replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x, float y) {
-    if (!hasTerrain() || stroke_ || from == to) return 0;
+    if (!hasTerrain() || stroke_ || from == to || to == 0) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     auto next = std::make_unique<TerrainState>(*terrain_);
+    const auto match = replaceMatchSet(from);
     auto holds = [&](size_t i) {
         for (int k = 0; k < 3; ++k)
-            if (next->themeIndex[i][k] == from && next->themeStrength[i][k] > 0) return true;
+            if (match[next->themeIndex[i][k]]) return true;
         return false;
     };
     std::vector<uint8_t> hit(size_t(cx) * cy, 0);
@@ -869,7 +880,8 @@ size_t Document::replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, floa
     size_t changed = 0;
     for (size_t i = 0; i < hit.size(); ++i) {
         if (!hit[i]) continue;
-        const auto blend = forge::terrain::replaceThemeInBlend({next->themeIndex[i], next->themeStrength[i]}, from, to);
+        const auto blend = forge::terrain::replaceThemesInBlend({next->themeIndex[i], next->themeStrength[i]}, match, to);
+        if (blend.indices == next->themeIndex[i] && blend.strengths == next->themeStrength[i]) continue;   // already `to`
         next->themeIndex[i] = blend.indices; next->themeStrength[i] = blend.strengths;
         ++changed;
     }

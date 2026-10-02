@@ -1133,6 +1133,19 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(themeAt(8, 8) == 7);
     CHECK(doc.undo() && themeAt(8, 8) == 1 && themeAt(0, 0) == 7);
     CHECK(doc.undo() && themeAt(0, 0) == 1);
+    CHECK(doc.replaceTheme(1, 0, ed::Document::ReplaceScope::All) == 0);     // "no theme" is never a target
+    // a water family (NoWaterThemeDef shared by palette slots 2 and 3): replacing 3 takes 2 too,
+    // and theme 1 (family 0) is untouched
+    {
+        std::array<uint32_t, 256> fam{};
+        fam[2] = fam[3] = 1933;
+        doc.setThemeFamilies(fam);
+        CHECK(doc.replaceTheme(3, 9, ed::Document::ReplaceScope::All) == size_t(3 * doc.cellsY()));
+        CHECK(themeAt(4, 4) == 9 && themeAt(0, 0) == 1 && themeAt(7, 7) == 1);
+        CHECK(doc.undo() && themeAt(4, 4) == 2);
+        doc.setThemeFamilies({});
+        CHECK(doc.replaceTheme(3, 9, ed::Document::ReplaceScope::All) == 0);   // exact index again: no 3 on the map
+    }
     // the Replace pen: only cells under the brush
     ed::TerrainBrush b;
     b.mode = ed::TerrainBrush::Mode::ReplaceTheme; b.replaceFrom = 2; b.themeIndex = 9; b.x = 4.5f; b.y = 4.5f; b.radius = 1.0f;
@@ -1150,6 +1163,27 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(std::fabs(doc.level()->heightAt(3, 2) - 13.0f) < 1e-4f);
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
     CHECK(doc.drawPath(2.0f, 2.0f, 2.0f, 2.0f, 1.0f) == 0);           // a zero-length drag sets nothing
+    // vanilla IsPosValidFloodReplaceSite: a slot holding `from` matches at any strength, so the
+    // flood crosses a band where theme 1 sits in a zero-strength slot (only the index changes)
+    const fs::path zpath = writeSyntheticLev(dir / "themes_zero.lev", 8, 8, [](int x, int y) { return float(x + 10 * y); });
+    {
+        auto lev = forge::lev::File::open(zpath);
+        for (int y = 0; y < lev.cellsY(); ++y)
+            for (int x = 0; x < lev.cellsX(); ++x) {
+                if (x >= 3 && x <= 5) lev.setThemeBlendAt(x, y, {5, 1, 0}, {255, 0, 0});
+                else lev.setThemeBlendAt(x, y, {1, 0, 0}, {255, 0, 0});
+            }
+        lev.save(zpath);
+    }
+    ed::Document zdoc;
+    CHECK(zdoc.openText("ThemesZero", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(zdoc.loadLevel(zpath, err));
+    const int zcx = zdoc.cellsX();
+    CHECK(zdoc.replaceTheme(1, 7, ed::Document::ReplaceScope::Connected, 0.5f, 0.5f) == size_t(zcx * zdoc.cellsY()));
+    const auto& zt = zdoc.terrain();
+    CHECK(zt.themeIndex[size_t(4) * zcx + 7][0] == 7);                                  // reached past the band
+    CHECK(zt.themeIndex[size_t(4) * zcx + 4][0] == 5 && zt.themeIndex[size_t(4) * zcx + 4][1] == 7 &&
+          zt.themeStrength[size_t(4) * zcx + 4][0] == 255 && zt.themeStrength[size_t(4) * zcx + 4][1] == 0);   // blend kept
 }
 
 // The .lev game-map grid (FableWin CGameMapCell): environment blend + sound per

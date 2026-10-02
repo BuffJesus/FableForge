@@ -109,6 +109,8 @@ ThemeBlend paintThemeBlend(ThemeBlend current, uint8_t themeIndex, float opacity
 // that then share an index merge into the first, strengths summed, so the byte
 // sum stays 255; a merged-away slot keeps the index at strength 0.
 ThemeBlend replaceThemeInBlend(ThemeBlend blend, uint8_t from, uint8_t to);
+// The same for a set of indices (a water family), whatever the slot's strength.
+ThemeBlend replaceThemesInBlend(ThemeBlend blend, const std::array<bool, 256>& match, uint8_t to);
 
 struct ThemeBrush {
     float centerX = 0.0f;

@@ -120,6 +120,7 @@ def main():
     ok &= run("ui texture list thumbnails", [gui, "--auto", "tests/ui/texture_thumbs.txt"])
     ok &= run("ui scale gizmo drag sensitivity, symmetry, Shift and undo", [gui, "--auto", "tests/ui/scale_drag.txt"])
     ok &= run("ui clear all sounds (vanilla EditFillSound), one undo step", [gui, "--auto", "tests/ui/clear_sounds.txt"])
+    ok &= run("ui Replace all takes a whole water family (vanilla NoWaterThemeDef)", [gui, "--auto", "tests/ui/replace_water_family.txt"])
     ok &= run("ui owner + day/night", [gui, "--auto", "tests/ui/owner_daynight.txt"])
     ok &= run("ui height pens (vanilla Height Toolbox)", [gui, "--auto", "tests/ui/height_pens.txt"])
     ok &= run("ui terrain follows placed things and foliage", [gui, "--auto", "tests/ui/terrain_follows_objects.txt"])

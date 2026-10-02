@@ -302,8 +302,14 @@ size_t applyBrush(Heightfield& field, const Brush& brush) {
 }
 
 ThemeBlend replaceThemeInBlend(ThemeBlend blend, uint8_t from, uint8_t to) {
+    std::array<bool, 256> match{};
+    match[from] = true;
+    return replaceThemesInBlend(blend, match, to);
+}
+
+ThemeBlend replaceThemesInBlend(ThemeBlend blend, const std::array<bool, 256>& match, uint8_t to) {
     for (auto& index : blend.indices)
-        if (index == from) index = to;
+        if (match[index]) index = to;
     for (int i = 0; i < 3; ++i)
         for (int j = i + 1; j < 3; ++j)
             if (blend.indices[j] == blend.indices[i] && blend.strengths[j] != 0) {

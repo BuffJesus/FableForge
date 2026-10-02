@@ -464,8 +464,16 @@ public:
     // from the cell under (x, y) over the cells holding `from`, replacing it with
     // `to`. All: every cell of the map (Replace All; not in vanilla). One undo
     // step; returns the cells changed (0 = nothing to do, no undo step).
+    // Like vanilla (also IsPosValidFloodReplaceSite 0x02979e00 and the Replace pen
+    // 0x0297a6c0), a cell holds `from` when any slot's index matches, whatever its
+    // strength, and a slot matches when its index is `from` or shares `from`'s water
+    // family (setThemeFamilies). `to` = 0 ("no theme") is refused.
     enum class ReplaceScope { Connected, All };
     size_t replaceTheme(uint8_t from, uint8_t to, ReplaceScope scope, float x = 0, float y = 0);
+    // One NoWaterThemeDef per LEV palette slot (0 = none); the App fills it from the
+    // theme library. All zeros = exact-index matching.
+    void setThemeFamilies(const std::array<uint32_t, 256>& families) { themeFamily_ = families; }
+    std::array<bool, 256> replaceMatchSet(uint8_t from) const;
     // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.
@@ -583,6 +591,7 @@ private:
     int batchDepth_ = 0;
     bool batchPushed_ = false;
     std::shared_ptr<const TerrainState> terrain_;        // committed state (immutable, shared with snapshots)
+    std::array<uint32_t, 256> themeFamily_{};             // NoWaterThemeDef per palette slot (setThemeFamilies)
     std::shared_ptr<const TerrainState> savedTerrain_;   // baseline for terrainDirty()
     std::unique_ptr<TerrainState> working_;              // during a stroke
     std::unique_ptr<forge::terrain::Heightfield> hf_;    // during a stroke

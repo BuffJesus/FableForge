@@ -374,6 +374,8 @@ ThemeLibrary ThemeLibrary::load(const bin::File& defs,
             bool found = false;
             const int32_t type = fieldInt32(decoded, "WaterType", found);
             if (found) theme.waterType = type;
+            const int32_t family = fieldInt32(decoded, "NoWaterThemeDef", found);
+            if (found && family > 0) theme.noWaterThemeDef = uint32_t(family);
             for (const auto& f : decoded.fields)
                 if (f.name == "WaterHeight" && f.value.size() >= 4) { std::memcpy(&theme.waterHeight, f.value.data(), 4); break; }
         }

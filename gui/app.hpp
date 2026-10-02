@@ -705,6 +705,11 @@ private:
     // a palette slot that may be painted: named, and not slot 0 ("no theme", never drawn in-game)
     // or the engine's INVALID_THEME_STANDIN placeholder (retail slot 1)
     bool paintableSlot(int slot) const;
+    // the water family (NoWaterThemeDef) of every LEV palette slot, from the theme library,
+    // handed to the document before a Replace / Flood Replace (vanilla matches a whole family)
+    // Returns, for the theme to replace, a note naming the rest of its family ("" when none).
+    std::string syncThemeFamilies();
+    void setReplaceFrom(int slot) { replaceFrom_ = slot; }
     uint64_t syncedThemeRev_ = 0;
     bool rebakePending_ = false;     // a theme stroke ended: re-bake the ground albedo from the LEV
     void startThemeRebake();

@@ -117,6 +117,10 @@ struct ThemeEntry {
     // PeekHasWaterFast).
     float waterHeight = 0.0f;
     int32_t waterType = 0;
+    // A water ladder's shared family (CEngineThemeDef NoWaterThemeDef, +0x78): the def index
+    // of its zero-depth theme (WATER_BWLAKE_0..16 all hold 1933), 0 for non-water themes.
+    // The vanilla Replace / Flood Replace treat a family as one theme.
+    uint32_t noWaterThemeDef = 0;
 };
 
 class ThemeLibrary {
