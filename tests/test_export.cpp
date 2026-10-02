@@ -503,8 +503,7 @@ fs::path writeSyntheticLev(const fs::path& path, int w, int h,
 
 // A fileVersion-3 .lev with the game-map grid (environment + sound themes): an
 // 8x8 map -> 2x2 game-map cells, sounds {SOUND_A, SOUND_B}, atmos slot 1 named.
-fs::path writeGameMapLev(const fs::path& path) {
-    const int w = 8, h = 8;
+fs::path writeGameMapLev(const fs::path& path, int w = 8, int h = 8) {
     std::vector<uint8_t> b;
     put<uint32_t>(b, 25); put<uint16_t>(b, 6404); b.insert(b.end(), 3, 0);
     put<uint32_t>(b, 0);
@@ -1345,6 +1344,74 @@ void testSoundBrushFootprint(const fs::path& dir) {
     ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 3; b.radius = 60;
     doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
+}
+
+void testAtmosSmear(const fs::path& dir) {
+    namespace terrain = forge::terrain;
+    using Slots = std::array<uint8_t, 3>;
+    using Cells = std::vector<std::pair<int, int>>;
+    CHECK(terrain::atmosSmearFootprint(5,5,5,5,1).empty());
+    CHECK((terrain::atmosSmearFootprint(5,5,5,5,1.25f) == Cells{{1,1}}));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,1.25f) == Cells(4,{0,0})));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,1.25f,1024,1024) == Cells{{0,0}}));
+    CHECK((terrain::atmosSmearFootprint(5,5,0,0,0) == Cells{{0,0}})); // minimum radius 1
+    CHECK(terrain::atmosSmearFootprint(5,5,0,0,std::numeric_limits<float>::infinity()).empty());
+    const Cells cross{{2,1},{1,2},{2,2},{3,2},{2,3}};
+    CHECK(terrain::atmosSmearFootprint(5,5,8,8,4) == cross);
+    std::vector<Slots> indices{{1,0,0},{2,0,0}}, strengths(2,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,2,1,0,0,1) == 1);
+    CHECK((indices[0] == Slots{2,1,0} && strengths[0] == Slots{127,127,1}));
+    indices = {{1,0,0},{2,0,0}}; strengths.assign(2,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,2,1,0,0,1.25f) == 4);
+    CHECK((indices[0] == Slots{2,1,0} && strengths[0] == Slots{239,15,1}));
+    indices.assign(9,{1,0,0}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,4) == 0); // uniform canonical area
+    indices.assign(9,{1,1,1}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,1) == 0); // only one key; unused indices stay
+    strengths.assign(9,{0,0,0});
+    CHECK(terrain::blurAtmos(indices,strengths,3,3,4,4,1) == 0); // malformed zero denominator
+
+    const auto path = writeGameMapLev(dir / "atmos_smear.lev",20,20);
+    auto level = forge::lev::File::open(path);
+    level.setAtmosTheme(2,"ENVIRONMENT_HAUNTED",88);
+    for (int y=0;y<5;++y) for(int x=0;x<5;++x)
+        level.setAtmosAt(x,y,{{uint8_t(x<2?1:2),0,0},{255,0,0}});
+    level.save(path);
+    albion::editor::Document doc; std::string err;
+    CHECK(doc.openText("AtmosSmear","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(doc.loadLevel(path,err));
+    const auto baseline = doc.terrain();
+    albion::editor::TerrainBrush brush;
+    brush.mode = albion::editor::TerrainBrush::Mode::EnvironmentSmear;
+    brush.x=8; brush.y=8; brush.radius=4; brush.strength=0;
+    doc.beginStroke(brush); doc.applyBrush(brush,0);
+    CHECK((doc.liveTerrain().atmosStrength[12] == Slots{168,86,1}));
+    doc.endStroke();
+    const std::vector<Slots> expected{{170,85,0},{179,75,1},{168,86,1},{235,19,1},{166,88,1}};
+    for (int y=0;y<5;++y) for (int x=0;x<5;++x) {
+        const size_t n=size_t(y)*5+x;
+        const auto visit=std::find(cross.begin(),cross.end(),std::make_pair(x,y));
+        if (visit==cross.end()) {
+            CHECK(doc.terrain().atmosIndex[n] == baseline.atmosIndex[n] && doc.terrain().atmosStrength[n] == baseline.atmosStrength[n]);
+        } else {
+            const size_t k=size_t(visit-cross.begin());
+            CHECK(doc.terrain().atmosStrength[n] == expected[k]);
+            CHECK((doc.terrain().atmosIndex[n] == (k==1 ? Slots{1,2,0} : Slots{2,1,0})));
+        }
+    }
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().sound==baseline.sound &&
+          doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+    const auto root=dir / "atmos_smear_root";
+    CHECK(doc.saveTerrainLoose(root,err));
+    const auto saved=forge::lev::File::open(root / "data/Levels/FinalAlbion/AtmosSmear.lev");
+    for(int y=0;y<5;++y) for(int x=0;x<5;++x) {
+        const size_t n=size_t(y)*5+x;
+        const auto cell=saved.atmosAt(x,y);
+        CHECK(cell.indices==doc.terrain().atmosIndex[n] && cell.strengths==doc.terrain().atmosStrength[n]);
+        CHECK(saved.soundAt(x,y)==baseline.sound[n]);
+    }
+    CHECK(doc.undo());
+    CHECK(doc.terrain().atmosIndex==baseline.atmosIndex && doc.terrain().atmosStrength==baseline.atmosStrength);
 }
 
 void testGroundThemeStamp(const fs::path& dir) {
@@ -3218,6 +3285,7 @@ int main() {
     testSurveyOverlay(dir);
     testSoundBrushFootprint(dir);
     testGroundThemeStamp(dir);
+    testAtmosSmear(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

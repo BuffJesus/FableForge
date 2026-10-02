@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Environ. now offers in-place Smear with the native counter footprint, tie rules
+and truncated blend weights. Small cursors show reached cells and prompt for a
+larger Radius when empty. It operates within the current map; native cross-map
+neighbour reads remain outside this scope. Evidence and checks are in HANDOFF_WORLD_UI.
+
 Ground now offers a full native stamp alongside its existing soft brush. It
 shares Replace/Environment's strict truncated vertex disc, shows small cursor
 dots and ignores Strength/time. Native evidence and checks are in HANDOFF_WORLD_UI.

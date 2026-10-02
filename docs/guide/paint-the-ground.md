@@ -58,6 +58,10 @@ paints the cell containing its rounded ground vertex.
 Environ. sets each touched 4x4 cell fully to the chosen environment. Its small
 brush outlines the cells; *(no environment)* clears them. Radius 1 considers
 only the pointer's truncated vertex, which can differ from Sound's brush.
+Switch Environ. from **Paint** to **Smear** to blend each reached cell with its
+neighbours. Small brushes outline the cells; increase **Radius** if prompted.
+Smear has a minimum effective radius of 1 and works within this map. Holding
+the mouse keeps blending; Ctrl+Z undoes the whole stroke.
 With *(no sound)* chosen, **Clear all sounds on this map** removes every ambient
 sound in one step; with a sound chosen, the same button fills the whole map with it.
 Older `.lev` files without a game-map grid do not offer these two.

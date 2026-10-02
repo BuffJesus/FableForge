@@ -2909,6 +2909,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
 }
 
 void App::fillPen(editor::TerrainBrush& b) const {
+    if (b.mode == editor::TerrainBrush::Mode::Environment && envSmear_) b.mode = editor::TerrainBrush::Mode::EnvironmentSmear;
     b.themeStamp = paintStamp_;
     b.exactStep = penExactStep_; b.step = penStep_;
     b.targetFromStroke = penTargetFromStroke_; b.target = penTarget_; b.speed = penSpeed_;
@@ -3037,9 +3038,12 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
     const bool environmentDisc = terrainMode_ == 10;
-    const float centreX = replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
+    const bool environmentSmearDisc = environmentDisc && envSmear_;
+    const float centreX = environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+        : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
+    const float centreY = environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+        : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
                                   : brushRadius_ + (roundedDisc || soundDisc ? 0.5f : 0.0f);
@@ -3050,12 +3054,21 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if ((soundDisc || environmentDisc) && brushRadius_ <= 4.0f) {
         const auto cells = soundDisc
             ? doc_.soundBrushCells(brushFable_[0], brushFable_[1], brushRadius_)
+            : environmentSmearDisc
+            ? doc_.environmentSmearBrushCells(brushFable_[0], brushFable_[1], brushRadius_)
             : doc_.environmentBrushCells(brushFable_[0], brushFable_[1], brushRadius_);
         for (const auto [gx, gy] : cells)
             drawGroundRect(origin, size, float(gx * 4), float(gy * 4),
                            float((gx + 1) * 4), float((gy + 1) * 4), col);
         if (soundDisc) brushCursorSoundCells_ = cells.size();
         else brushCursorEnvironmentCells_ = cells.size();
+        if (environmentSmearDisc && cells.empty()) {
+            ImGui::PushFont(fontSmall_);
+            const float wrap = std::max(theme::S(40), size.x - theme::S(24));
+            dl->AddText(fontSmall_, ImGui::GetFontSize(), ImVec2(origin.x + theme::S(12), origin.y + theme::S(80)), col,
+                        "Increase Radius to reach a cell.", nullptr, wrap);
+            ImGui::PopFont();
+        }
         return;
     }
     if (noiseSquare) {
@@ -4047,43 +4060,50 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 ImGui::PopFont();
             }
             if (terrainMode_ == 10) {
+                if (theme::chip("Paint", !envSmear_)) envSmear_ = false;
+                auto_.registerWidget("chip_environment_paint");
+                ImGui::SameLine();
+                if (theme::chip("Smear", envSmear_)) envSmear_ = true;
+                auto_.registerWidget("chip_environment_smear");
                 ImGui::Checkbox("Show colours", &environmentOverlayShow_);
                 auto_.registerWidget("check_environment_overlay");
-                theme::label("Environment theme");
-                ImGui::SetNextItemWidth(cardInner);
-                if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
-                    for (size_t i = 0; i < atm.size(); ++i) {
-                        if (i != 0 && atm[i].name.empty()) continue;
-                        const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(atm[i].name, "EditorColour").value_or(editor::Document::OverlayColour{});
-                        if (ImGui::ColorButton(("##envcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, 1),
-                                               ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { envSlot_ = int(i); ImGui::CloseCurrentPopup(); }
-                        auto_.registerWidget(("colour_environment_" + std::to_string(i)).c_str());
-                        ImGui::SameLine();
-                        if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
-                    }
-                    ImGui::EndCombo();
-                }
-                auto_.registerWidget("combo_env_slot");
-                ImGui::SetNextItemWidth(cardInner);
-                ImGui::InputTextWithHint("##envsearch", "Add an environment from the game (UNDERTREES, HAUNTED...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
-                auto_.registerWidget("input_env_search");
-                if (envSearch_[0] && ctx_.ready()) {
-                    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
-                    ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
-                    ImGui::PopStyleColor();
-                    ImGui::PushFont(fontSmall_);
-                    if (envDefs_.empty()) envDefs_ = ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
-                    for (const auto& [name, type] : envDefs_) {
-                        if (!contains(name, envSearch_)) continue;
-                        if (ImGui::Selectable(name.c_str())) {
-                            const auto idx = ctx_.definitionIndex(name);
-                            const int slot = idx ? doc_.addEnvironmentTheme(name, *idx) : -1;
-                            if (slot >= 0) { envSlot_ = slot; pushLog("environment " + name + " in atmos slot " + std::to_string(slot), 0); }
-                            else pushLog("environment: no free atmos slot (or no game-map grid)", 1);
+                if (!envSmear_) {
+                    theme::label("Environment theme");
+                    ImGui::SetNextItemWidth(cardInner);
+                    if (ImGui::BeginCombo("##envslot", atmosName(envSlot_).c_str())) {
+                        for (size_t i = 0; i < atm.size(); ++i) {
+                            if (i != 0 && atm[i].name.empty()) continue;
+                            const auto colour = i == 0 ? editor::Document::OverlayColour{} : ctx_.defColourField(atm[i].name, "EditorColour").value_or(editor::Document::OverlayColour{});
+                            if (ImGui::ColorButton(("##envcolour" + std::to_string(i)).c_str(), ImVec4(colour[0]/255.f, colour[1]/255.f, colour[2]/255.f, 1),
+                                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(S(14), S(14)))) { envSlot_ = int(i); ImGui::CloseCurrentPopup(); }
+                            auto_.registerWidget(("colour_environment_" + std::to_string(i)).c_str());
+                            ImGui::SameLine();
+                            if (ImGui::Selectable((atmosName(int(i)) + "##env" + std::to_string(i)).c_str(), int(i) == envSlot_)) envSlot_ = int(i);
                         }
+                        ImGui::EndCombo();
                     }
-                    ImGui::PopFont();
-                    ImGui::EndChild();
+                    auto_.registerWidget("combo_env_slot");
+                    ImGui::SetNextItemWidth(cardInner);
+                    ImGui::InputTextWithHint("##envsearch", "Add an environment from the game (UNDERTREES, HAUNTED...)", envSearch_, sizeof envSearch_, ImGuiInputTextFlags_CharsUppercase);
+                    auto_.registerWidget("input_env_search");
+                    if (envSearch_[0] && ctx_.ready()) {
+                        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::vec(theme::Bg0));
+                        ImGui::BeginChild("##envlist", ImVec2(cardInner, S(100)), ImGuiChildFlags_None);
+                        ImGui::PopStyleColor();
+                        ImGui::PushFont(fontSmall_);
+                        if (envDefs_.empty()) envDefs_ = ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
+                        for (const auto& [name, type] : envDefs_) {
+                            if (!contains(name, envSearch_)) continue;
+                            if (ImGui::Selectable(name.c_str())) {
+                                const auto idx = ctx_.definitionIndex(name);
+                                const int slot = idx ? doc_.addEnvironmentTheme(name, *idx) : -1;
+                                if (slot >= 0) { envSlot_ = slot; pushLog("environment " + name + " in atmos slot " + std::to_string(slot), 0); }
+                                else pushLog("environment: no free atmos slot (or no game-map grid)", 1);
+                            }
+                        }
+                        ImGui::PopFont();
+                        ImGui::EndChild();
+                    }
                 }
             } else {
                 theme::label("Sound colours");
@@ -4135,7 +4155,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
             ImGui::PushFont(fontSmall_);
             theme::hint(terrainMode_ == 10
-                ? "Each touched 4x4 cell takes the chosen environment in one application. Small brushes outline the cells they affect. Ctrl+click samples an environment. Saved with the terrain."
+                ? envSmear_
+                    ? "Blends each reached cell with its eight neighbours while you paint. Small brushes outline the cells; increase Radius if none are reached. Ctrl+click samples an environment."
+                    : "Each touched 4x4 cell takes the chosen environment in one application. Small brushes outline the cells they affect. Ctrl+click samples an environment. Saved with the terrain."
                 : "Paints background sound (birds, sea, village) on the map's 4x4-cell grid. Small brushes outline the cells they affect. Ctrl+click samples a sound. Saved with the terrain.");
             ImGui::PopFont();
         }
@@ -4257,7 +4279,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
             if (ImGui::IsItemHovered()) {
-                if (terrainMode_ == 10)
+                if (terrainMode_ == 10 && envSmear_)
+                    ImGui::SetTooltip("Blends each reached 4x4 cell with its neighbours. The minimum effective radius is 1; small brushes outline the cells.");
+                else if (terrainMode_ == 10)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes outline affected environment cells.");
                 else if (terrainMode_ == 11)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nEach touched vertex paints its containing 4x4 sound cell. Small brushes outline those cells.");

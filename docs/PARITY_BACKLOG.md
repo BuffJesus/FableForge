@@ -885,15 +885,33 @@ Native exports and validation boundaries are in HANDOFF_WORLD_UI.
 Ground Smear remains deferred pending a contract for the native class-selection
 quirks described above; adding the stamp does not invent a smoothing algorithm.
 
-#### Environment Smear missing (vanilla Blur on the atmos grid)
-*gap, effort S, value med*
+#### Environment Smear (vanilla Blur on the atmos grid)
+*implemented 2026-10-02; current-map boundary*
 
-**Vanilla:** On the ENVIRONMENT tab (mode 5), Smear calls CEditWorldMap::Blur 0x0297b910. r = max(brush size, 1). It visits game-map cells (height coords divisible by 4) with hypot <= r and, for each, reads the 3x3 GAME cells around it (offset*4). It sums the atmos blend of all 3 slots per atmos theme, including slot value 0 ('none'), in a multimap. It then sorts by summed weight descending, writes the top 3 into slots 0..2 and sets blend[k] = round(w_k*255/sum_top3) for k = 0,1. It works in place (Gauss-Seidel) and refreshes UpdateOverlayAtmos.
+Environ. offers Paint / Smear. Smear hides the palette/search, keeps Ctrl sampling
+and Show colours, and blends immediately in place on each brush event. Strength
+and elapsed time do not affect it. Small cursors outline unique reached cells;
+empty footprints ask for a larger Radius. Saving and undo share the atmos draft.
 
-**Fix:** 1) libs/forgecore: add `size_t blurAtmos(std::vector<std::array<uint8_t,3>>& idx, std::vector<std::array<uint8_t,3>>& str, int gw, int gh, float cx, float cy, float radius)` to forge/terrain.hpp/.cpp. It works on game-cell units: the centre game cell is (cx/4, cy/4) and r = max(radius,1) in height cells, so it visits the game cells whose height-coord offset satisfies hypot <= r. Visit order is row-major (y outer, x inner), in place, to match vanilla's Gauss-Seidel update order. For each cell, sum str[n][k] per idx[n][k] over the 3x3 neighbourhood (offsets -1..1 game cells, centre included) x 3 slots. Keep idx 0 ('none') as a real key and skip neighbours outside [0,gw)x[0,gh) (vanilla reads across the world map, but we have one map). Sort by weight descending. For equal weights, put the higher theme index first: vanilla's std::multimap reverse iteration returns the later-inserted key, and insertion runs in ascending theme order. Write the top 3 (fewer if fewer distinct themes; pad unused slots with index 0 / strength 0). Set s0 = round(w0*255/S) and s1 = round(w1*255/S), where S is the top-3 sum, and s2 = 255 - s0 - s1 (vanilla writes only blends 0 and 1; slot 2 is implicit). If S == 0, leave the cell as it is (vanilla would divide by zero). Return the count of changed cells. Add a unit test in tests/test_export.cpp: a hard two-theme border is softened, a uniform area is left unchanged, and the ordering holds.
-2) src/leveledit.hpp:84: add Mode::EnvSmear. In src/leveledit.cpp:492, handle EnvSmear beside Environment. Call blurAtmos on working_->atmosIndex/atmosStrength with brush.x/y/radius, ignore dt/strength (vanilla Blur has no opacity), and bump terrainRev_ when n > 0. The existing mirror at leveledit.cpp:419-429 and the dirty check at :942 already cover atmos, so saving and undo work unchanged. Use the same spray semantics as the other pens: one application per brush event while LMB is held.
-3) gui/editor.cpp: in the Environ. tool panel (~2604-2676), add a Paint | Smear segmented toggle (a new member such as envSmear_). Make the mode mapping at ~1577 return M::EnvSmear when terrainMode_==10 && envSmear_. Hide the theme picker and add-from-game search while in Smear mode. Leave Ctrl+click sampling as it is. Tooltip: "Blends each 4x4 cell's environment with its 8 neighbours (vanilla ENVIRONMENT Smear)".
-4) Optional: add an `env smear x y r` verb to docs/AUTOMATION.md if the automation language exposes environment paint. Effort S, value med.
+Fresh disassembly of Blur 0x0297b910 through 0x0297c13a corrects the historical
+proposal: the float world pointer is truncated, r=max(size,1), and integer y/x
+counters run 0..floor(2r) inclusive. Coordinates trunc(cx-r+j), trunc(cy-r+i)
+must be globally divisible by four. Distance is sqrtf(float((r-j)^2+(r-i)^2))
+<= r. Fractional counters can revisit a cell, especially at world zero; repeated
+applications are preserved while the cursor alone deduplicates. The document's
+world origin participates in sampling.
+
+Each cell sums all three slots from its 3x3 game-cell neighbourhood, including
+None and zero-weight keys. The atmosphere getter returns palette bytes, not
+definition IDs. Highest weight wins, with higher palette index first on ties.
+Only the top three weights normalize; strengths 0/1 truncate weight*255/sum and
+strength 2 takes the remainder. Unused index slots stay unchanged. Later cells
+read earlier writes. Ground Smear remains deferred.
+
+Forge operates within the current map; absent neighbours contribute key 0,
+weight 0. Native Blur can read adjacent world maps. Malformed zero-sum cells
+stay unchanged; nonfinite/unrepresentable pen inputs are refused. Native runtime
+equivalence has not been exercised. See HANDOFF_WORLD_UI for evidence and checks.
 
 #### Sound and environment brush footprint too small: game-cell-centre test instead of the vanilla height-cell pen
 *weakness, effort S, value med*

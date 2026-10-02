@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Environment Smear.** Environ. can blend each reached cell with its eight
+  neighbours while painting. Small brushes outline reached cells and prompt for
+  a larger Radius when none are reached. Smear operates within the current map.
+
 - **Full ground stamp.** Ground can set every vertex inside its strict brush
   footprint fully to the chosen theme in one application. Small cursors show
   the vertices. Switch Full stamp off to use the existing soft brush.

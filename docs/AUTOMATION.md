@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_environment_smear.py --install <root>` checks Paint/Smear controls,
+empty/fractional sparse cursors, real mouse strokes, Ctrl sampling, preservation
+of other channels and exact undo at normal/compact sizes.
+`set environment_smear 0|1` and state `environment_smear` expose the option;
+widgets `chip_environment_paint` / `chip_environment_smear` select it. Existing
+`terrain_stroke`, environment snapshots and cell-change assertions also cover
+Smear; cursor counts are unique cells although the pen may revisit them.
+
 `tools/test_ground_stamp.py --install <root>` checks the Ground Full stamp
 toggle, strict vertex cursor, full assignments with zero Strength, real clicks,
 soft-brush compatibility and exact undo at normal/compact sizes.

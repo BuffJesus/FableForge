@@ -625,6 +625,7 @@ private:
     bool paintStamp_ = false;        // Ground: full native stamp instead of soft blending
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
+    bool envSmear_ = false;          // Environment: blend the neighbouring game cells
     int soundIndex_ = 0;             // 11: sound list index painted (0 = none)
     int soundOverlayShow_ = 1;       // off, all, selected
     bool environmentOverlayShow_ = true;

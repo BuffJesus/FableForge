@@ -1,5 +1,59 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Environment Smear
+
+Environ. offers Paint / Smear, with Paint the default. Smear hides the target
+picker/search, keeps Ctrl sampling and Show colours, ignores Strength/time and
+uses the same stroke draft/save/undo path. Small cursors outline distinct reached
+4x4 cells; an empty footprint asks for a larger Radius. Ground Smear stays deferred.
+
+Native evidence was recovered read-only from the debug FableWin.exe (SHA256
+A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845).
+Owned exports: `build/environment-smear-native-full.txt` (Blur 0297b910 through
+0297c13a), `replace-dispatch-native-evidence.txt` (ATMOS dispatch 02993c4d),
+`environment-smear-world-readers-native.txt`, `environment-smear-palette-reader-native.txt`,
+`environment-smear-insert-native.txt`, `environment-smear-tree-insert-native.txt`
+and `environment-smear-tree-order-native.txt`. Distance/root/sqrt/sqrtf/import
+exports trace GFHypoteneuse's float-rounded squared sum and the imported sqrt.
+These are static reconstruction evidence, not a native runtime comparison.
+
+The float world point truncates before the inclusive integer counter loop
+0..floor(2r), with r=max(size,1). Truncated sample coordinates must be globally
+4-aligned, while distance uses the counter offsets. World origin and repeated
+samples matter: (0,0), radius 1.25 at origin zero visits four times; origin 1024
+visits once. The bounded-counter optimization matched a direct-loop static probe
+on 3,000 cases (`environment-smear-bounded-probe.txt`). The cursor deduplicates;
+the core preserves visit order/repetitions.
+
+All three slots of nine neighbours participate, including None/zero-weight keys.
+The ATMOS getter returns palette bytes. Weight ties prefer the higher index;
+normalization truncates the first two strengths and leaves the remainder in the
+third. Unused indices survive, and each cell writes immediately. The previous
+backlog's simple cell-disc, rounding and zero-padding proposal was corrected.
+Forge reads only this map; out-of-map neighbours contribute key 0/weight 0.
+Native reads can cross world maps. Zero-sum malformed cells stay unchanged;
+nonfinite/unrepresentable coordinates and radii are refused.
+
+Independent core fixtures check ordered cross visits, empty/fractional pens,
+world-origin differences, ties {127,127,1}, four revisits {239,15,1}, uniform
+areas, unused slots and malformed weights. A five-cell half-plane fixture has
+strengths {170,85,0}, {179,75,1}, {168,86,1}, {235,19,1}, {166,88,1}; scratch
+saved LEV values, unrelated channels and exact undo are checked. Standalone
+candidate fixtures passed before source promotion (`atmos_smear_candidate_test.exe`).
+
+`tools/test_environment_smear.py` passed normal 1440x900 and compact 800x600 /
+1.5 scale: real Paint/Smear chips, empty/fractional cell outlines, real strokes,
+Ctrl sampling, zero-time automation dispatch, unchanged other channels and exact
+undo. Evidence: `build/environment-smear-tsxuh92w`; compact empty hint and normal
+painted overlay screenshots inspected. Existing Environment paint checks passed
+both sizes (`build/environment-cursor-behz78uz`). Full Release build and docs
+command/Python syntax checks and all 36 CTest checks passed. Existing survey
+colour/selected-filter/paint/undo checks also passed both sizes
+(`build/survey-overlay-btoxbxyd`). The new harness is registered in check_all;
+the earlier 96-check checkpoint remains scoped to source 6a9c992 and was not
+rerun for this change. Live install files stayed read-only.
+
+
 ## 2026-10-02 full validation checkpoint
 
 At source commit `6a9c992`, the owned Release build passed

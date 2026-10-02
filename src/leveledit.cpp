@@ -690,6 +690,12 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         if (changed) ++terrainRev_;
         return;
     }
+    if (brush.mode == Mode::EnvironmentSmear) {
+        if (!hasGameMap()) return;
+        if (forge::terrain::blurAtmos(working_->atmosIndex, working_->atmosStrength,
+                level_->gameMapWidth(), level_->gameMapHeight(), brush.x, brush.y, brush.radius, worldX_, worldY_)) ++terrainRev_;
+        return;
+    }
     if (brush.mode == Mode::ReplaceTheme) {
         // Native Replace uses truncated integer vertices and a strict disc;
         // mirror the swapped blends into the level like Theme.
@@ -985,6 +991,14 @@ std::vector<std::pair<int, int>> Document::soundBrushCells(float x, float y, flo
 std::vector<std::pair<int, int>> Document::environmentBrushCells(float x, float y, float radius) const {
     if (!hasTerrain() || !hasGameMap()) return {};
     return gameCellsForVertices(themeBrushVertices(x, y, radius), level_->gameMapWidth(), level_->gameMapHeight());
+}
+
+std::vector<std::pair<int, int>> Document::environmentSmearBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    auto cells = forge::terrain::atmosSmearFootprint(level_->gameMapWidth(), level_->gameMapHeight(), x, y, radius, worldX_, worldY_);
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
 }
 
 std::vector<Document::OverlayColour> Document::surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const {
