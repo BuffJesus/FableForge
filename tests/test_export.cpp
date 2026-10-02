@@ -1145,8 +1145,11 @@ void testThemeToolsAndPaths(const fs::path& dir) {
     CHECK(pathed > 0);
     CHECK(std::fabs(h(3, 2) - 13.0f) < 1e-4f && std::fabs(h(3, 0) - 13.0f) < 1e-4f && std::fabs(h(6, 1) - 16.0f) < 1e-4f);
     CHECK(std::fabs(h(3, 4) - 43.0f) < 1e-4f);                          // outside the radius
+    // vanilla square ends: behind the start and past the end nothing changes (was a round cap)
+    CHECK(std::fabs(h(0, 1) - 10.0f) < 1e-4f && std::fabs(h(7, 1) - 17.0f) < 1e-4f);
     CHECK(std::fabs(doc.level()->heightAt(3, 2) - 13.0f) < 1e-4f);
     CHECK(doc.undo() && std::fabs(h(3, 2) - 23.0f) < 1e-4f);
+    CHECK(doc.drawPath(2.0f, 2.0f, 2.0f, 2.0f, 1.0f) == 0);           // a zero-length drag sets nothing
 }
 
 // The .lev game-map grid (FableWin CGameMapCell): environment blend + sound per

@@ -3972,7 +3972,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         }
         if (terrainMode_ == 9) {
             ImGui::PushFont(fontSmall_);
-            theme::hintMore("Drag from the start of the path to its end: the ground between becomes a ramp.", "Drag on the ground from the start of the path to its end and release: every vertex within the radius of the line takes the height interpolated between the ground at the two ends (the vanilla Height Toolbox's Draw Paths). One undo step.");
+            theme::hintMore("Drag from the start of the path to its end: the ground between becomes a ramp.", "Drag on the ground from the start of the path to its end and release: every vertex within the radius of the line, between its two ends, takes the height interpolated between the ground at the ends. The strip has square ends, so the ground behind the start and past the end stays as it was (the vanilla Height Toolbox's Draw Paths). One undo step.");
             ImGui::PopFont();
         }
         if (terrainMode_ == 6) {

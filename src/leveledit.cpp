@@ -1089,18 +1089,26 @@ size_t Document::pasteTerrainCells(const TerrainClip& clip, int x, int y, int qu
     return changed;
 }
 
+// The vanilla Height Toolbox's Draw Paths (FableWin CEditWorldMap::EditDrawPathPenUndoable
+// 0x02975ad0): a vertex is set when its perpendicular distance to the start->end line is
+// within the radius AND its projection t lies in [0, 1] (GFGetShortestDistance2DSquared-
+// BetweenPointAndLine returns t unclamped); height = start + t * (end - start). So the strip
+// is a rectangle with square ends: nothing behind the start or past the end changes. A
+// zero-length drag sets nothing (the vanilla helper asserts on equal points).
 size_t Document::drawPath(float x0, float y0, float x1, float y1, float radius) {
     if (!hasTerrain() || stroke_ || !(radius > 0)) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     const auto h0 = sampleHeight(*terrain_, cx, cy, x0, y0), h1 = sampleHeight(*terrain_, cx, cy, x1, y1);
     if (!h0 || !h1) return 0;
     const float sx = x1 - x0, sy = y1 - y0, len2 = sx * sx + sy * sy;
+    if (!(len2 > 0)) return 0;
     const int vx0 = std::max(0, int(std::floor(std::min(x0, x1) - radius))), vx1 = std::min(cx - 1, int(std::ceil(std::max(x0, x1) + radius)));
     const int vy0 = std::max(0, int(std::floor(std::min(y0, y1) - radius))), vy1 = std::min(cy - 1, int(std::ceil(std::max(y0, y1) + radius)));
     std::vector<VertexHeight> edits;
     for (int y = vy0; y <= vy1; ++y)
         for (int x = vx0; x <= vx1; ++x) {
-            const float t = len2 > 0 ? std::clamp(((float(x) - x0) * sx + (float(y) - y0) * sy) / len2, 0.0f, 1.0f) : 0.0f;
+            const float t = ((float(x) - x0) * sx + (float(y) - y0) * sy) / len2;
+            if (t < 0.0f || t > 1.0f) continue;
             const float dx = float(x) - (x0 + sx * t), dy = float(y) - (y0 + sy * t);
             if (dx * dx + dy * dy > radius * radius) continue;
             const float h = *h0 + (*h1 - *h0) * t;
