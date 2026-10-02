@@ -289,6 +289,9 @@ item and info display components; absent components are not added.
   Sound paints each 4x4 game cell touched by its rounded height-vertex disc.
   Small Sound brushes outline those cells, including a 0.25-cell single-vertex
   brush that paints its containing sound cell. Larger cursors show the pen disc.
+  Replace uses a truncated vertex centre and a strict radius: vertices exactly
+  on the radius stay unchanged. Small cursors show considered vertices; only
+  matching themes change. Radius 1 considers just the centre vertex.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

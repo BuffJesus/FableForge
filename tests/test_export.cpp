@@ -1312,6 +1312,49 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testReplaceBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeSyntheticLev(dir / "replace_footprint.lev", 8, 8, [](int, int) { return 20.0f; });
+    {
+        auto level = forge::lev::File::open(path);
+        for (int y = 0; y < level.cellsY(); ++y) for (int x = 0; x < level.cellsX(); ++x)
+            level.setThemeBlendAt(x, y, {2, 3, 4}, {100, 100, 55});
+        level.save(path);
+    }
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("ReplaceFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    std::array<uint32_t, 256> families{}; families[2] = families[3] = 1933;
+    doc.setThemeFamilies(families);
+    const auto baseline = doc.terrain();
+    using Vertices = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Vertices vertices; };
+    for (const Case& c : std::vector<Case>{
+            {3.5f, 3.5f, .25f, {{3, 3}}}, {3.9f, 3.9f, 1, {{3, 3}}},
+            {4.5f, 4.5f, 1, {{4, 4}}},
+            {3, 3, std::nextafter(1.0f, 2.0f), {{3, 2}, {2, 3}, {3, 3}, {4, 3}, {3, 4}}},
+            {3, 3, 2, {{2, 2}, {3, 2}, {4, 2}, {2, 3}, {3, 3}, {4, 3}, {2, 4}, {3, 4}, {4, 4}}},
+            {0, 0, 1.5f, {{0, 0}, {1, 0}, {0, 1}, {1, 1}}},
+            {-.5f, -.5f, .25f, {{0, 0}}}, {-.6f, -.6f, .25f, {{0, 0}}},
+            {3, 3, 0, {}}, {-1, -1, .25f, {}}}) {
+        CHECK(doc.replaceBrushVertices(c.x, c.y, c.radius) == c.vertices);
+        ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::ReplaceTheme;
+        b.replaceFrom = 2; b.themeIndex = 9; b.x = c.x; b.y = c.y; b.radius = c.radius;
+        doc.beginStroke(b); doc.applyBrush(b, .1f); doc.endStroke();
+        for (int y = 0; y < doc.cellsY(); ++y) for (int x = 0; x < doc.cellsX(); ++x) {
+            const bool hit = std::find(c.vertices.begin(), c.vertices.end(), std::make_pair(x, y)) != c.vertices.end();
+            const size_t i = size_t(y) * doc.cellsX() + x;
+            CHECK(doc.terrain().themeIndex[i][0] == (hit ? 9 : 2));
+            CHECK(doc.terrain().themeIndex[i][1] == (hit ? 9 : 3));
+            CHECK(doc.terrain().themeIndex[i][2] == 4);
+            CHECK((doc.terrain().themeStrength[i] == (hit ? std::array<uint8_t, 3>{200, 0, 55} : baseline.themeStrength[i])));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().walkable == baseline.walkable);
+        if (!c.vertices.empty()) CHECK(doc.undo());
+        CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
+    }
+}
+
 // World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate
 // between kept samples, and the disk cache refuses another source's key.
 void testWorldTiles(const fs::path& dir) {
@@ -3032,6 +3075,7 @@ int main() {
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
     testSoundBrushFootprint(dir);
+    testReplaceBrushFootprint(dir);
     testHeightPens();
     testTrackPath();
     testFractal();

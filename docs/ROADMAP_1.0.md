@@ -11,6 +11,8 @@ cover all six sculpt tools. Exact-step/Flatten/Smooth and height-key cursors sho
 small vertex footprints; empty height-key footprints ask for a larger Radius.
 Sound now uses its rounded vertex pen and outlines affected 4x4 cells at small
 sizes; scratch output, normal/compact clicks, sampling and undo are checked.
+Replace's strict disc now uses the verified truncated centre, with considered
+vertex dots and normal/compact real-click/undo coverage.
 The grid/camera broad gate passes 88 checks; later sculpt changes pass focused
 normal/compact checks. See HANDOFF_WORLD_UI for exact build/evidence boundaries.
 

@@ -97,6 +97,8 @@ def main():
                   [sys.executable, "tools/test_terrain_brush_controls.py", "--install", install_root], capture_output=True)
         ok &= run("Sound brush cells, cursor, sampling and undo at normal/compact sizes",
                   [sys.executable, "tools/test_sound_cursor.py", "--install", install_root], capture_output=True)
+        ok &= run("Replace strict vertex pen, cursor and undo at normal/compact sizes",
+                  [sys.executable, "tools/test_replace_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("effect auto length, replay and live scrubbing",
                   [sys.executable, "tools/test_effect_timing.py", "--install", install_root], capture_output=True)
         ok &= run("ui dialogue lip sync browser", [gui, "--auto", "tests/ui/dialogue_browser.txt"])

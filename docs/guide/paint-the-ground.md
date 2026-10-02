@@ -42,6 +42,9 @@ opens **Assets > Ground themes**.
 whole connected patch with one click, like the vanilla editor. For both, Ctrl+click
 the ground to pick the theme to paint and Ctrl+Shift+click to pick the theme to
 replace.
+Replace's small cursor shows the vertices it considers; only matching themes
+change. It truncates the pointer to a vertex and excludes the radius boundary,
+so a radius of 1 considers one vertex.
 
 **Environ.** and **Sound** paint the map's environment (lighting and atmosphere)
 and ambient sound regions. Ctrl+click samples what is already under the cursor.

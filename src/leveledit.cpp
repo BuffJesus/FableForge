@@ -670,23 +670,19 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         return;
     }
     if (brush.mode == Mode::ReplaceTheme) {
-        // a hard swap under the pen (cell centres inside the radius), mirrored into the level like Theme;
+        // Native Replace uses truncated integer vertices and a strict disc;
+        // mirror the swapped blends into the level like Theme.
         // the slot match is replaceTheme's (index or water family, any strength)
         if (brush.themeIndex == 0) return;
         const auto match = replaceMatchSet(brush.replaceFrom);
-        const int x0 = std::max(0, int(std::floor(brush.x - brush.radius))), x1 = std::min(cx - 1, int(std::ceil(brush.x + brush.radius)));
-        const int y0 = std::max(0, int(std::floor(brush.y - brush.radius))), y1 = std::min(cy - 1, int(std::ceil(brush.y + brush.radius)));
-        for (int y = y0; y <= y1; ++y)
-            for (int x = x0; x <= x1; ++x) {
-                const float dx = float(x) + 0.5f - brush.x, dy = float(y) + 0.5f - brush.y;
-                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
-                const size_t i = size_t(y) * cx + x;
-                const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
-                const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
-                if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
-                working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
-                level_->setThemeBlendAt(x, y, next.indices, next.strengths);
-            }
+        for (const auto [x, y] : replaceBrushVertices(brush.x, brush.y, brush.radius)) {
+            const size_t i = size_t(y) * cx + x;
+            const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
+            const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
+            if (next.indices == blend.indices && next.strengths == blend.strengths) continue;
+            working_->themeIndex[i] = next.indices; working_->themeStrength[i] = next.strengths;
+            level_->setThemeBlendAt(x, y, next.indices, next.strengths);
+        }
         ++terrainRev_;
         return;
     }
@@ -937,6 +933,26 @@ int Document::addSoundTheme(const std::string& name, std::string& error) {
         ++terrainRev_;
         return idx;
     } catch (const std::exception& e) { error = e.what(); return -1; }
+}
+
+std::vector<std::pair<int, int>> Document::replaceBrushVertices(float x, float y, float radius) const {
+    std::vector<std::pair<int, int>> vertices;
+    if (!hasTerrain() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(radius) || radius <= 0) return vertices;
+    const double centreX = std::trunc(double(x)), centreY = std::trunc(double(y));
+    const int cx = cellsX(), cy = cellsY();
+    if (centreX + radius < 0 || centreY + radius < 0 ||
+        centreX - radius > cx - 1 || centreY - radius > cy - 1) return vertices;
+    // Clamp floating bounds before integer conversion, including off-map pens.
+    const int x0 = int(std::clamp(std::trunc(centreX - radius), 0.0, double(cx - 1)));
+    const int x1 = int(std::clamp(std::floor(centreX + radius), 0.0, double(cx - 1)));
+    const int y0 = int(std::clamp(std::trunc(centreY - radius), 0.0, double(cy - 1)));
+    const int y1 = int(std::clamp(std::floor(centreY + radius), 0.0, double(cy - 1)));
+    const double radiusSquared = double(radius) * radius;
+    for (int by = y0; by <= y1; ++by) for (int bx = x0; bx <= x1; ++bx) {
+        const double dx = bx - centreX, dy = by - centreY;
+        if (dx * dx + dy * dy < radiusSquared) vertices.emplace_back(bx, by);
+    }
+    return vertices;
 }
 
 std::vector<std::pair<int, int>> Document::soundBrushCells(float x, float y, float radius) const {

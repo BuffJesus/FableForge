@@ -138,6 +138,8 @@ private:
     uint64_t ownedSnapParentUid_=0;
     std::vector<float> heightSnap_;   // snapshot_heights / assert_heights_changed   // reveal <widget>: scroll its window so the widget is on screen
     std::optional<std::vector<uint8_t>> soundSnap_;   // snapshot_sounds / assert_sound_changes
+    struct ThemeSnapshot { std::vector<std::array<uint8_t, 3>> indices, strengths; };
+    std::optional<ThemeSnapshot> themeSnap_;   // snapshot_themes / assert_theme_changes
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
     int dragPhase_ = 0;

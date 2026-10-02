@@ -476,6 +476,9 @@ public:
     // theme library. All zeros = exact-index matching.
     void setThemeFamilies(const std::array<uint32_t, 256>& families) { themeFamily_ = families; }
     std::array<bool, 256> replaceMatchSet(uint8_t from) const;
+    // Replace pen vertices: the theme caller truncates the pointer, then the
+    // native pen tests strict squared distance < radius^2 (0x0297a6c0).
+    std::vector<std::pair<int, int>> replaceBrushVertices(float x, float y, float radius) const;
     // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.

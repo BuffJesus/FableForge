@@ -3002,11 +3002,14 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool keyDisc = keyStroke_;
-    const bool vertexDisc = roundedDisc || smearDisc || keyDisc;
+    const bool replaceDisc = terrainMode_ == 7;
+    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
-    const float centreX = vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const float centreX = replaceDisc ? std::trunc(brushFable_[0])
+        : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = replaceDisc ? std::trunc(brushFable_[1])
+        : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
                                   : brushRadius_ + (roundedDisc || soundDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -3050,6 +3053,8 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (vertexDisc && brushRadius_ <= 4.0f) {
         const auto vertices = keyDisc
             ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
+            : replaceDisc
+            ? doc_.replaceBrushVertices(brushFable_[0], brushFable_[1], brushRadius_)
             : smearDisc
             ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
             : forge::heightpen::discFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_);

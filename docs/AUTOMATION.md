@@ -43,6 +43,14 @@ The empty-footprint hint and fractional-radius dots are captured at both sizes.
 a listed index (0 is none). `snapshot_sounds` captures the sound grid and
 `assert_sound_changes <count>` checks the exact number of changed cells.
 
+`tools/test_replace_cursor.py --install <root>` checks Replace's truncated
+centre and strict 1/9-vertex pen through actual mouse clicks at both sizes,
+preserving heights/sounds/objects and undoing exact theme blends.
+`snapshot_themes` captures all ground indices and strengths;
+`assert_theme_changes <count>` checks changed vertex blends. For Replace,
+`brush_cursor_vertices` counts considered dots; theme matching can leave some
+of those vertices unchanged.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

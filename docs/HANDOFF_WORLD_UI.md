@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: strict Replace vertex pen
+
+Replace now uses a truncated vertex centre and strict squared distance instead
+of a raw-pointer cell-centre test. Radius 1 considers only the centre vertex;
+radius 2 considers nine vertices and excludes the four vertices exactly on its
+boundary. `Document::replaceBrushVertices` supplies both the paint loop and
+small cursor dots (radii <=4). Dots mean considered vertices; only matching
+slots change. Water-family matching, zero-strength matching and Forge's existing
+duplicate-slot weight merge remain unchanged. Flood/Replace all are unchanged.
+
+Fresh native evidence corrects the backlog's proposed rounding: the caller
+`PaintInputEngineThemeMap` 0x02993a80 calls `C3DVector::ToC2DCoordI` at
+0x02993bb8; its implementation 0x01addc10 uses `_ftol2_sse`, truncating both
+coordinates. `EditReplaceEngineThemeUndoable` 0x0297a6c0 uses truncated lower
+loop bounds (0x0297a723..0x0297a79a) and rejects squared distance >= radius^2
+(0x0297a7a0..0x0297a7ef). Exports: `build/replace-dispatch-native-evidence.txt`,
+`build/replace-centre-native-evidence.txt`,
+`build/replace-footprint-native-evidence.txt`; same FableWin identity below.
+This is geometry recovery, not a claim of native blend serialization parity.
+
+`testReplaceBrushFootprint` uses independently listed vertices for fractional
+centres, strict radius boundaries, corners and empty discs, plus family-slot
+merge results and exact undo. The first fixture assertion incorrectly expected
+unchanged duplicate weights; it was corrected to the existing {200,0,55} merge
+rule, without altering that algorithm. Scoped tests then pass; full Release
+build and all 36 CTest checks pass too. Actual normal/compact Replace clicks,
+cursor counts, unchanged heights/sounds/objects and exact theme undo pass at
+`build/replace-cursor-83hhbceg`. Normal radius-1 and compact radius-2 captures
+were inspected. `tests/ui/replace_water_family.txt` passes; output in
+`build/replace_cursor_family_regression.log`. Docs/Python checks pass. The docs
+command check was retried after its CLI executable finished linking.
+No live install writes or in-game texture comparison was exercised.
+
 ## 2026-10-02 continuation: Sound vertex pen and cell cursor
 
 Sound now paints each 4x4 game cell touched by a rounded height-vertex disc,

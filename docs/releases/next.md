@@ -24,6 +24,8 @@ version is chosen; validation is recorded at release time, not here.
   one step.
 - **Small Sound brushes work at the pointer.** Sound painting uses the original
   editor's rounded vertex pen and outlines the affected 4x4 cells at small sizes.
+- **Precise Replace pen.** Replace uses the original editor's truncated vertex
+  centre and strict radius, with considered-vertex dots for small brushes.
 - **Draw Paths** now has the original editor's square ends: ground behind the
   start and past the end of the drag is no longer flattened.
 - **Pick a height in every sculpt tool.** Ctrl+drag samples the ground height
