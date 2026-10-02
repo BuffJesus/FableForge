@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: restore the last map and camera session
+
+Normal startup now reopens the last known map in the same install, remembers
+View/Edit, editing tab and terrain tool, and applies its saved camera once after
+preview upload. Camera state includes position, yaw/pitch, distance, FOV and fly
+speed. Further rebakes retain the restored view. Missing maps and different
+installs skip restoration; malformed/nonfinite or invalid camera values are
+ignored without dropping unrelated settings. A failed document open does not
+restore Edit. Session data is metadata only and does not save map edits.
+
+Automated runs still ignore ordinary settings. Explicit absolute
+FABLEFORGE_TEST_SETTINGS opts a script into an owned settings file for startup
+and exit; main calls saveSettings in both modes and that method enforces the
+isolation guard. Recovery remains separately isolated through its existing
+owned-root controls. No normal user settings were read or written by the tests.
+
+Release GUI build passes. tools/test_session.py exercises process capture/reopen,
+exact complete camera equality, tab/tool/Edit restoration, default automation
+isolation, malformed camera fallback, missing map and install mismatch, and
+switching to another map with a fresh camera. Stock and loose sources pass both
+sizes in `build/session-ui-06gwo595` / `build/session-ui-wd8y1p4i`.
+Dated snapshot regression passes both sizes in `build/snapshots-ui-tcxgd2d2`;
+controls pass in `build/session-controls-regression.log`. Documentation-command,
+Python syntax and diff checks pass. Core and file formats unchanged; no broad
+gate rerun or in-game claim.
+
+
 ## 2026-10-02 continuation: dated current-map snapshot library
 
 File > Recovery snapshots > Create dated snapshot / Ctrl+B freezes objects and

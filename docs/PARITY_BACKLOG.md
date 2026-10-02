@@ -1148,9 +1148,9 @@ World-tab restoration need their own staged transaction.
 
 5. Automation (docs/AUTOMATION.md): add `autosave_now`, `assert_autosave_exists 0|1`, `snapshot`, `restore_snapshot <i>`. Add a test that sculpts, calls autosave_now, reopens, recovers and checks assert_heights_changed 1.
 
-Remaining effort: M for a dated snapshot library and World-tab restore. Timed
-current-map recovery and saved terrain drafts are implemented above; a history
-of user-created restore points is still pending.
+Remaining effort: M for whole-world snapshots and World-tab restore. Timed
+current-map recovery, saved terrain drafts and retained dated restore points
+are implemented above.
 
 #### World tab cannot create, remove or rename regions or set their display name, def, minimap or world-map flag
 *gap, effort M, value high*
@@ -1412,8 +1412,13 @@ Effort S (about 80-120 lines, all in gui/editor.cpp plus a few members in gui/ap
 
 Effort S (roughly 60-80 lines). Value med.
 
-#### Editor session (last map, tab/mode, camera) is not restored
-*weakness, effort S, value med*
+#### Editor session (last map, tab/mode, camera) restored
+*resolved 2026-10-02: install/map-scoped startup restores camera, View/Edit,
+editing tab and terrain tool. Invalid camera data, missing maps, different
+installs and automation isolation are checked on stock/loose sources at both
+sizes. World overview camera and external-world reopen remain separate.*
+
+The following proposal is historical for the implemented current-map session.
 
 **Vanilla:** SaveSettings 0x0203d9c0 / LoadSettings 0x0203cdc0 write StartEditorSettings ViewMode EditMode CamPos CamViewDir EngineGridFlag SnapToGridFlag Showing{Creatures,Buildings,Objects,HolySites,Villages} ShowDetailMode EditingScriptBrush EndEditorSettings, so the editor reopens in the same mode and camera.
 

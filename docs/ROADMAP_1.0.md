@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+The editor now reopens the last map and camera in the same install, with its
+View/Edit mode, editing tab and terrain tool. Invalid camera data or missing
+maps fall back safely; stock/loose process tests pass at both sizes. Session
+metadata does not save edits. See HANDOFF_WORLD_UI.
+
+
 Dated current-map restore points now have Ctrl+B / File-menu capture and a Saved
 snapshots library with undoable Restore and confirmed Delete. They survive
 Save draft and restart; stock/loose and normal/compact checks pass. World-tab,

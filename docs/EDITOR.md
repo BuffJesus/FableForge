@@ -1198,3 +1198,9 @@ recovery archive intact. Delete asks for confirmation, and Escape cancels it.
 These saved points survive Save draft and app restarts until you delete them.
 They cover the current map's objects and terrain, alongside the rotating
 crash-recovery archive described above.
+
+
+The editor remembers the last map and its camera, View/Edit mode, editing tab
+and terrain tool on exit. Reopening the same install restores that session.
+If the map is missing or camera data is invalid, it uses the normal fallback.
+This remembers your view; use Save draft or snapshots to keep edits.

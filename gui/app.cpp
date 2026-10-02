@@ -209,7 +209,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
 
     settings_.outDir = (fs::path(std::getenv("USERPROFILE") ? std::getenv("USERPROFILE") : ".") / "Documents" / "FableForge").string();
     std::string savedInstall;
-    if (!auto_.active()) { firstRun_ = !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
+    if (settingsEnabled()) { firstRun_ = !auto_.active() && !fs::exists(settingsPath()); loadSettings(savedInstall); }   // scripted runs stay deterministic
     std::snprintf(outDirBuf_, sizeof outDirBuf_, "%s", settings_.outDir.c_str());
 
     std::string root = installOverride;
@@ -223,7 +223,15 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
             if (env.installValid) { root = env.installDir.string(); installSource_ = env.detectSource; }
         } catch (...) {}
     }
-    if (!root.empty()) scanInstall(root);
+    if (!root.empty()) {
+        scanInstall(root);
+        std::error_code ecA,ecB;
+        const auto active=fs::weakly_canonical(root,ecA), saved=fs::weakly_canonical(sessionInstall_,ecB);
+        if (!sessionMap_.empty() && !sessionInstall_.empty() && !ecA && !ecB && lower(active.string())==lower(saved.string()) && findEntry(sessionMap_)) {
+            selectMap(sessionMap_);
+            if (documentLoaded()) { setEditMode(sessionEdit_); setEditTab(editTab_); }
+        } else { sessionMap_.clear(); sessionCamera_.reset(); }
+    }
     else pushLog("No Fable install found. Point me at your 'Fable The Lost Chapters' folder.", 1);
     return true;
 }
@@ -611,7 +619,17 @@ bool App::restoreAllBackups() {
     return err.empty();
 }
 
+bool App::settingsEnabled() const {
+    if (!auto_.active()) return true;
+    const char* owned=std::getenv("FABLEFORGE_TEST_SETTINGS");
+    return owned && fs::path(owned).is_absolute();
+}
+
 std::string App::settingsPath() const {
+    if (auto_.active()) {
+        const char* owned=std::getenv("FABLEFORGE_TEST_SETTINGS");
+        if (owned && fs::path(owned).is_absolute()) return owned;
+    }
     const char* appdata = std::getenv("APPDATA");
     const fs::path dir = fs::path(appdata ? appdata : ".") / "FableForge";
     // the app was Albion Atlas until 0.16: carry the old settings and presets over once
@@ -627,6 +645,24 @@ void App::loadSettings(std::string& savedInstall) {
     try {
         const auto j = nlohmann::json::parse(f);
         savedInstall = j.value("install", "");
+        sessionInstall_=savedInstall;
+        sessionMap_=j.value("lastMap","");
+        sessionEdit_=j.value("editMode",false);
+        terrainMode_=std::clamp(j.value("terrainMode",terrainMode_),0,18);
+        try { if (j.contains("camera") && j["camera"].is_object()) {
+            const auto& c=j["camera"];
+            if (c.value("map","")==sessionMap_ && c.contains("pos") && c["pos"].is_array() && c["pos"].size()==3) {
+                Camera view;
+                view.posX=c["pos"][0].get<float>(); view.posY=c["pos"][1].get<float>(); view.posZ=c["pos"][2].get<float>();
+                view.yaw=c.at("yaw").get<float>(); view.pitch=c.at("pitch").get<float>(); view.distance=c.at("distance").get<float>();
+                view.fovY=c.value("fov",view.fovY); view.flySpeed=c.value("speed",view.flySpeed);
+                if (std::isfinite(view.posX) && std::isfinite(view.posY) && std::isfinite(view.posZ) && std::isfinite(view.yaw) &&
+                    std::isfinite(view.pitch) && std::isfinite(view.distance) && std::isfinite(view.fovY) && std::isfinite(view.flySpeed) &&
+                    view.distance>0 && view.fovY>0 && view.fovY<3.14f && view.flySpeed>0 && std::fabs(view.pitch)<1.571f)
+                    sessionCamera_=view;
+            }
+        }
+        } catch (...) { sessionCamera_.reset(); }
         settings_.outDir = j.value("out_dir", settings_.outDir);
         settings_.autosave = j.value("autosave",settings_.autosave);
         settings_.autosaveMinutes = std::clamp(j.value("autosaveMinutes",settings_.autosaveMinutes),1,30);
@@ -660,7 +696,7 @@ void App::loadSettings(std::string& savedInstall) {
 }
 
 void App::saveSettings() const {
-    if (auto_.active()) return;
+    if (!settingsEnabled()) return;
     try {
         fs::create_directories(fs::path(settingsPath()).parent_path());
         nlohmann::json j = {
@@ -670,12 +706,17 @@ void App::saveSettings() const {
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
             {"foliage", settings_.foliage}, {"things", settings_.things}, {"water", settings_.water}, {"creatures", settings_.creatures}, {"texSize", settings_.texSize}, {"world", settings_.world},
             {"editTab", editTab_}, {"uiScale", settings_.uiScale},
+            {"lastMap",selectedName_}, {"editMode",editMode_}, {"terrainMode",terrainMode_},
             {"showExplorer", settings_.showExplorer}, {"showActions", settings_.showActions},
             {"moveOwned", moveOwned_},
             {"placeSnapGrid", placeSnapGrid_},
             {"effectBackground", {effectBackground_[0],effectBackground_[1],effectBackground_[2]}},
             {"effectShowGrid", effectShowGrid_},
         };
+        if (previewLoaded() && documentLoaded()) j["camera"]={
+            {"map",selectedName_}, {"pos",{camera_.posX,camera_.posY,camera_.posZ}},
+            {"yaw",camera_.yaw}, {"pitch",camera_.pitch}, {"distance",camera_.distance},
+            {"fov",camera_.fovY}, {"speed",camera_.flySpeed}};
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
 }
@@ -943,6 +984,7 @@ void App::selectMap(const std::string& nameOrKey) {
     auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == nameOrKey; });
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
+    if (it->key!=sessionMap_) sessionCamera_.reset();
     selectedName_ = it->key;
     scrollToSelected_ = true;
     groupOpen_[it->group] = true;
@@ -1247,7 +1289,9 @@ void App::pollWorkers() {
             pushLog("Preview failed for " + r.name + ": " + r.error, 2);
         } else if (r.name == selectedName_) {
             // Re-bakes of the same map (gain change, textures arriving) keep the camera.
-            renderer_.upload(r.scene, camera_, lastFramedFor_ != r.name);
+            const bool restoreCamera=sessionCamera_.has_value() && r.name==sessionMap_ && documentLoaded();
+            renderer_.upload(r.scene, camera_, !restoreCamera && lastFramedFor_ != r.name);
+            if (restoreCamera) { camera_=*sessionCamera_; sessionCamera_.reset(); }
             lastFramedFor_ = r.name;
             previewScene_ = std::move(r.scene);
             previewScene_.albedo = {};  // GPU owns it now; keep stats only
@@ -1534,6 +1578,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
+    v.push_back("terrain_mode=" + std::to_string(terrainMode_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);
     v.push_back("place_snap_grid=" + std::to_string(placeSnapGrid_));

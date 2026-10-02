@@ -5,6 +5,9 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Remembered editor session.** Reopening the same install returns to the last
+  map, camera, View/Edit mode, editing tab and terrain tool.
+
 - **Saved snapshots.** Ctrl+B or Create dated snapshot keeps a restore point for
   the current map's objects and terrain. Saved snapshots lists captures with
   undoable Restore and confirmed Delete. These points survive draft saves and

@@ -293,7 +293,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     }
 
     g_app = nullptr;
-    if (!automated) app.saveSettings();
+    app.saveSettings();
     const int code = automated ? app.automation().exitCode() : 0;
     if (automated) {
         std::ofstream log(autoScript + ".log", std::ios::app);

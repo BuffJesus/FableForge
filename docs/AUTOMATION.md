@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_session.py --install <root>` checks exact camera and map/tab/tool
+restoration across processes, malformed camera fallback, missing maps,
+install mismatch and default automation isolation at both sizes. An explicit
+absolute `FABLEFORGE_TEST_SETTINGS` path enables startup/exit settings only in
+that owned file. Without it, automated runs ignore and do not write ordinary
+settings. State `terrain_mode` exposes the active terrain tool.
+
+
 `tools/test_snapshots.py --install <root>` checks dated captures via Ctrl+B and
 the File menu, process reopen, restore/undo/redo, retention after Save draft,
 cancel without removing recovery, Escape cancellation and confirmed deletion

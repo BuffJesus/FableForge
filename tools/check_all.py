@@ -105,6 +105,8 @@ def main():
                   [sys.executable, "tools/test_environment_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Crash recovery reopen, captured workers, timer and normal/compact controls",
                   [sys.executable, "tools/test_recovery.py", "--install", install_root], capture_output=True)
+        ok &= run("Map and camera session restore, invalid data and automation isolation",
+                  [sys.executable, "tools/test_session.py", "--install", install_root], capture_output=True)
         ok &= run("Dated snapshot capture, reopen, undo and confirmed deletion at both sizes",
                   [sys.executable, "tools/test_snapshots.py", "--install", install_root], capture_output=True)
         ok &= run("Budget area boundaries, captured objects and normal/compact input",

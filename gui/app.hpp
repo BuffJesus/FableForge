@@ -338,6 +338,10 @@ private:
     const MapEntry* findEntry(const std::string& key) const;
     void loadSettings(std::string& savedInstall);
     std::string settingsPath() const;
+    bool settingsEnabled() const;
+    std::string sessionMap_, sessionInstall_;
+    std::optional<Camera> sessionCamera_;
+    bool sessionEdit_ = false;
     // what the chosen folder offers: each false switches a feature off with a reason
     // levels = FinalAlbion.wad or the loose FinalAlbion\*.lev files (modders' extracted installs);
     // missing = the full path of every required file that is not there, for the Setup panel
