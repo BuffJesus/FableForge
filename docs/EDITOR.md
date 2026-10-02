@@ -286,6 +286,9 @@ item and info display components; absent components are not added.
   While a height key is held, small brushes show that key pen's distinct vertices.
   Its fractional-radius footprint differs from the mouse pens: at 0.25 or 0.5
   it reaches none, and the cursor asks you to increase Radius.
+  Sound paints each 4x4 game cell touched by its rounded height-vertex disc.
+  Small Sound brushes outline those cells, including a 0.25-cell single-vertex
+  brush that paints its containing sound cell. Larger cursors show the pen disc.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

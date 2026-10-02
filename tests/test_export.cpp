@@ -1270,6 +1270,48 @@ void testEnvironmentAndSoundPaint(const fs::path& dir) {
     CHECK(doc.fillSound(2) > 0 && doc.level()->soundAt(0, 1) == 2);        // fill with a listed sound
 }
 
+void testSoundBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    ed::Document doc;
+    std::string err;
+    CHECK(doc.openText("SoundFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(writeGameMapLev(dir / "sound_footprint.lev"), err));
+    CHECK(doc.fillSound(0) == 4);
+    const auto baseline = doc.terrain();
+    using Cells = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Cells cells; };
+    for (const Case& c : std::vector<Case>{
+            {0, 0, .25f, {{0, 0}}}, {2, 2, 1, {{0, 0}}},
+            {2.5f, 2.5f, .25f, {{0, 0}}}, {3.5f, 3.5f, .25f, {{1, 1}}},
+            {3, 3, 1, {{0, 0}, {0, 1}, {1, 0}, {1, 1}}},
+            {4, 0, 1, {{0, 0}, {1, 0}}}, {7, 7, 1, {{1, 1}}},
+            {-.6f, -.6f, .25f, {}}, {-.5f, -.5f, .25f, {{0, 0}}}}) {
+        CHECK(doc.soundBrushCells(c.x, c.y, c.radius) == c.cells);
+        ed::TerrainBrush b;
+        b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 2;
+        b.x = c.x; b.y = c.y; b.radius = c.radius;
+        doc.beginStroke(b); doc.applyBrush(b, .1f); doc.applyBrush(b, .1f); doc.endStroke();
+        for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+            const bool hit = std::find(c.cells.begin(), c.cells.end(), std::make_pair(gx, gy)) != c.cells.end();
+            CHECK(doc.level()->soundAt(gx, gy) == (hit ? 2 : 0));
+        }
+        CHECK(doc.terrain().heights == baseline.heights && doc.terrain().atmosIndex == baseline.atmosIndex &&
+              doc.terrain().atmosStrength == baseline.atmosStrength && doc.terrain().themeIndex == baseline.themeIndex);
+        if (!c.cells.empty()) {
+            const fs::path root = dir / "sound_footprint_root";
+            CHECK(doc.saveTerrainLoose(root, err));
+            const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "SoundFootprint.lev");
+            for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx)
+                CHECK(saved.soundAt(gx, gy) == doc.level()->soundAt(gx, gy));
+        }
+        if (!c.cells.empty()) CHECK(doc.undo());
+        CHECK(doc.terrain().sound == baseline.sound);
+    }
+    ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Sound; b.themeIndex = 3; b.radius = 60;
+    doc.beginStroke(b); doc.applyBrush(b, 1); doc.endStroke();
+    CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
+}
+
 // World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate
 // between kept samples, and the disk cache refuses another source's key.
 void testWorldTiles(const fs::path& dir) {
@@ -2989,6 +3031,7 @@ int main() {
     testDayNightSections();
     testGameMapGrid(dir);
     testEnvironmentAndSoundPaint(dir);
+    testSoundBrushFootprint(dir);
     testHeightPens();
     testTrackPath();
     testFractal();

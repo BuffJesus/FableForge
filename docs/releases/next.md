@@ -22,6 +22,8 @@ version is chosen; validation is recorded at release time, not here.
   original editor's height rules.
 - **Clear all sounds.** The Sound tool clears, or fills, a map's ambient sound in
   one step.
+- **Small Sound brushes work at the pointer.** Sound painting uses the original
+  editor's rounded vertex pen and outlines the affected 4x4 cells at small sizes.
 - **Draw Paths** now has the original editor's square ends: ground behind the
   start and past the end of the drag is no longer flattened.
 - **Pick a height in every sculpt tool.** Ctrl+drag samples the ground height

@@ -1,5 +1,42 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Sound vertex pen and cell cursor
+
+Sound now paints each 4x4 game cell touched by a rounded height-vertex disc,
+instead of requiring that cell's centre to lie under the raw pointer circle.
+A 0.25-cell click therefore paints its containing cell. Radius-1 clicks near
+boundaries can paint two or four cells. `Document::soundBrushCells` supplies
+both the unique-cell paint loop and the small (radius <=4) cell outlines;
+larger cursors show the rounded pen disc. Invalid sound indices remain refused.
+Environment keeps its existing pen pending separate evidence.
+
+Fresh read-only disassembly: `SoundsInput` 0x02052230 rounds via
+`GFFloatToLongNear` 0x018c4020 (`fistp`, half-even). `EditSetSounds` 0x02971010
+uses bounds from that rounded centre (0x02971022..0x0297109a), then
+`hypot - 0.5 < radius` (0x02971112..0x0297113d), with editable/map bounds checks.
+The backlog's proposed raw-pointer bounds were incorrect. `EditSetSound`
+0x029a97c0 maps the vertices with `HeightMapUnitToGameMapUnit` 0x022342c0,
+which divides by four, and skips an already-set value. Exports:
+`build/sound-env-footprint-native-evidence.txt`,
+`build/sound-setter-native-evidence.txt`,
+`build/sound-cell-conversion-native-evidence.txt`. Same FableWin identity below.
+The Environment routine 0x029799d0 instead tests strict squared distance;
+the historical shared Sound/Environment proposal is not sufficient to port it.
+
+`testSoundBrushFootprint` verifies independently listed single/multiple cells,
+half-even centres, clipped corners, repeated applications, invalid indices,
+scratch LEV sound values and undo. Heights, ground themes and atmosphere remain
+unchanged in the fixture. Full Release build and all 36 CTest checks pass.
+Actual normal/compact clicks, 1/2/4-cell cursor counts, Ctrl sampling, unchanged
+heights/objects and exact sound undo pass at `build/sound-cursor-406xord9`.
+Normal four-cell and compact single-cell captures were inspected. Sound hint
+now describes painting; Radius tooltips distinguish Sound/sculpt/other modes.
+Docs command and Python syntax checks pass. No live install writes, deployment
+or in-game sound playback was exercised.
+After the hint/tooltip edit, both sizes pass again at
+`build/sound-cursor-gnzirp48`; existing `tests/ui/clear_sounds.txt` passes too
+(`build/sound_cursor_clear_regression.log` and the script's RESULT PASS log).
+
 ## 2026-10-02 continuation: fractional height-key cursor
 
 Held height keys now show their distinct affected vertices at radii <=4, using

@@ -45,6 +45,8 @@ replace.
 
 **Environ.** and **Sound** paint the map's environment (lighting and atmosphere)
 and ambient sound regions. Ctrl+click samples what is already under the cursor.
+Small Sound brushes outline each 4x4 cell they touch; even a 0.25-cell brush
+paints the cell containing its rounded ground vertex.
 With *(no sound)* chosen, **Clear all sounds on this map** removes every ambient
 sound in one step; with a sound chosen, the same button fills the whole map with it.
 Older `.lev` files without a game-map grid do not offer these two.

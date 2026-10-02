@@ -902,6 +902,14 @@ Effort: S. Value: high.
 #### Sound and environment brush footprint too small: game-cell-centre test instead of the vanilla height-cell pen
 *weakness, effort S, value med*
 
+Sound corrected 2026-10-02: `Document::soundBrushCells` maps the rounded height
+disc to unique sound cells; small cursors outline those cells. Native
+`SoundsInput` 0x02052230 uses half-even rounding, and `EditSetSounds`
+0x02971010 derives its loop bounds from that rounded centre, contrary to the
+historical proposal below. The setter 0x029a97c0 divides by four and skips an
+already-set sound. Environment remains open: 0x029799d0 uses a strict squared
+radius predicate, so it must not inherit Sound's `distance - 0.5` test.
+
 **Vanilla:** EditSetSounds 0x02971010 uses a cursor rounded to the nearest vertex (GFFloatToLongNear in SoundsInput 0x02052230). It loops over height cells in [floor(c-r), ceil(c+r)] and, for each with hypot - 0.5 < r, calls EditSetSound on the game cell containing it. The game cell under the cursor is always painted, even at radius 1. Env paint (0x029799d0 with ATMOS) likewise maps every vertex in the pen to its game cell.
 
 **Fix:** 1. In src/leveledit.cpp, Document::applyBrush, replace the centre-test loop in the `Mode::Environment || Mode::Sound` branch (lines 497-510) with a port of 0x02971010:

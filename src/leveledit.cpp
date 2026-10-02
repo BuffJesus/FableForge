@@ -638,7 +638,20 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         ++terrainRev_;
         return;
     }
-    if (brush.mode == Mode::Environment || brush.mode == Mode::Sound) {
+    if (brush.mode == Mode::Sound) {
+        if (!level_->hasGameMap() || working_->sound.empty() || brush.themeIndex > level_->soundThemes().size()) return;
+        // EditSetSounds tests height vertices, then EditSetSound maps each to
+        // its 4x4 game cell. Repeated vertices set the same sound only once.
+        const int gw = level_->gameMapWidth();
+        bool changed = false;
+        for (const auto [gx, gy] : soundBrushCells(brush.x, brush.y, brush.radius)) {
+            auto& sound = working_->sound[size_t(gy) * gw + gx];
+            if (sound != brush.themeIndex) { sound = brush.themeIndex; changed = true; }
+        }
+        if (changed) ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::Environment) {
         // game-map cells (4x4 height cells each) whose centre is under the brush
         if (!level_->hasGameMap() || working_->sound.empty()) return;
         const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
@@ -648,10 +661,6 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
                 const float dx = float(gx) * 4.0f + 2.0f - brush.x, dy = float(gy) * 4.0f + 2.0f - brush.y;
                 if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
                 const size_t g = size_t(gy) * gw + gx;
-                if (brush.mode == Mode::Sound) {
-                    if (brush.themeIndex <= level_->soundThemes().size()) working_->sound[g] = brush.themeIndex;
-                    continue;
-                }
                 forge::terrain::ThemeBlend blend{working_->atmosIndex[g], working_->atmosStrength[g]};
                 if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255) blend = {{blend.indices[0], 0, 0}, {255, 0, 0}};
                 const auto next = forge::terrain::paintThemeBlend(blend, brush.themeIndex, opacity);
@@ -928,6 +937,17 @@ int Document::addSoundTheme(const std::string& name, std::string& error) {
         ++terrainRev_;
         return idx;
     } catch (const std::exception& e) { error = e.what(); return -1; }
+}
+
+std::vector<std::pair<int, int>> Document::soundBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
+    auto cells = forge::heightpen::discFootprint(cellsX(), cellsY(), x, y, radius);
+    for (auto& [gx, gy] : cells) { gx /= 4; gy /= 4; }
+    std::erase_if(cells, [&](const auto& cell) { return cell.first >= gw || cell.second >= gh; });
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
 }
 
 std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {

@@ -2734,6 +2734,7 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
 void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     brushHit_ = false;
     brushCursorVertices_ = 0;
+    brushCursorSoundCells_ = 0;
     if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain()) {
         if (doc_.strokeActive()) doc_.endStroke();
         keyStroke_ = false;
@@ -2995,6 +2996,7 @@ void App::drawGroundRect(const ImVec2& origin, const ImVec2& size, float x0, flo
 
 void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     brushCursorVertices_ = 0;
+    brushCursorSoundCells_ = 0;
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
@@ -3002,14 +3004,23 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const bool keyDisc = keyStroke_;
     const bool vertexDisc = roundedDisc || smearDisc || keyDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
-    const float centreX = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const bool soundDisc = terrainMode_ == 11;
+    const float centreX = vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
-                                  : brushRadius_ + (roundedDisc ? 0.5f : 0.0f);
+                                  : brushRadius_ + (roundedDisc || soundDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
                     : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
+    if (soundDisc && brushRadius_ <= 4.0f) {
+        const auto cells = doc_.soundBrushCells(brushFable_[0], brushFable_[1], brushRadius_);
+        for (const auto [gx, gy] : cells)
+            drawGroundRect(origin, size, float(gx * 4), float(gy * 4),
+                           float((gx + 1) * 4), float((gy + 1) * 4), col);
+        brushCursorSoundCells_ = cells.size();
+        return;
+    }
     if (noiseSquare) {
         // GFRandom(ceil(radius)) excludes its upper bound. Enclose each
         // possible vertex's half-cell area, clipped to the map extent.
@@ -4069,7 +4080,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PushFont(fontSmall_);
             theme::hint(terrainMode_ == 10
                 ? "Paints the environment theme (an ENVIRONMENT_THEME_DAY def) on the map's 4x4-cell grid, blended like ground themes. Ctrl+click samples it. Saved with the terrain."
-                : "Paints the background sound (birds, sea, village) on the map's 4x4-cell grid. The list is the sounds this map names; one added from the game joins it (the .lev after the list is re-laid, every offset shifted). Ctrl+click samples it. Saved with the terrain.");
+                : "Paints background sound (birds, sea, village) on the map's 4x4-cell grid. Small brushes outline the cells they affect. Ctrl+click samples a sound. Saved with the terrain.");
             ImGui::PopFont();
         }
         if (terrainMode_ == 7 || terrainMode_ == 8) {
@@ -4186,7 +4197,13 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             if(ImGui::SliderFloat("##radius", &sizeExponent, -2.0f, std::log2(60.0f), ""))
                 brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
-            if(ImGui::IsItemHovered()) ImGui::SetTooltip("Drag left for precise edits, right for broad strokes.\n0.25 cells reaches a single height vertex; [ and ] change size.");
+            if (ImGui::IsItemHovered()) {
+                if (terrainMode_ == 11)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nEach touched vertex paints its containing 4x4 sound cell. Small brushes outline those cells.");
+                else if (terrainMode_ <= 3 || terrainMode_ == 9 || terrainMode_ == 16)
+                    ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nExact-step Raise/Lower and Flatten can reach one vertex at 0.25 cells.\nHeld height keys ask for a larger Radius when their footprint is empty.");
+                else ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.");
+            }
         }
         if (usesStrength) {
             std::snprintf(val, sizeof val, "%.1f", brushStrength_);

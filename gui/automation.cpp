@@ -512,6 +512,7 @@ bool Automation::tick(App& app) {
         else if (key == "pen_target") { app.penTarget_ = float(std::atof(val.c_str())); app.penTargetFromStroke_ = false; }
         else if (key == "pen_target_from_stroke") app.penTargetFromStroke_ = val == "1";
         else if (key == "pen_speed") app.penSpeed_ = float(std::atof(val.c_str()));
+        else if (key == "sound_index") app.soundIndex_ = std::clamp(std::atoi(val.c_str()), 0, int(app.doc_.soundThemes().size()));
         else if (key == "pen_smoothness") app.penSmoothness_ = float(std::atof(val.c_str()));
         else if (key == "pen_spiky") app.penSpikyness_ = float(std::atof(val.c_str()));
         else if (key == "pen_magnifier") app.penMagnifier_ = float(std::atof(val.c_str()));
@@ -1244,6 +1245,24 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); int theme = -1; float h = 20; int w = 0, hh = 0; rs >> theme >> h >> w >> hh;
         app.setNewLevelBlank(theme, h, w, hh); note("ok   " + line); ++pc_; }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
+    else if (cmd == "snapshot_sounds") {
+        if (!app.doc_.hasTerrain() || !app.doc_.hasGameMap()) fail("snapshot_sounds: no sound grid");
+        else { soundSnap_ = app.doc_.terrain().sound; note("ok   " + line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_sound_changes") {
+        size_t expected = 0; std::istringstream input(rest);
+        if (!(input >> expected) || !soundSnap_ || !app.doc_.hasTerrain() ||
+            app.doc_.terrain().sound.size() != soundSnap_->size()) fail("assert_sound_changes: invalid count or missing/mismatched snapshot");
+        else {
+            const auto& sound = app.doc_.terrain().sound;
+            size_t changed = 0;
+            for (size_t i = 0; i < sound.size(); ++i) changed += sound[i] != (*soundSnap_)[i];
+            if (changed != expected) fail(line + " (" + std::to_string(changed) + " cells differ)");
+            else note("ok   " + line);
+        }
+        ++pc_;
+    }
     else if (cmd == "snapshot_heights") { heightSnap_ = app.doc_.hasTerrain() ? app.doc_.terrain().heights : std::vector<float>{}; note("ok   " + line); ++pc_; }
     else if (cmd == "assert_heights_changed") {   // 1: some vertex differs from snapshot_heights, 0: none does
         size_t diff = 0;

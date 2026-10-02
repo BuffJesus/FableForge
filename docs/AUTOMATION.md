@@ -36,6 +36,13 @@ Height-key cursor cases cover radii 0.25/0.5/1/1.5/2, with 0/0/5/4/13 distinct
 vertices, unchanged snapshots for empty footprints and exact undo for strokes.
 The empty-footprint hint and fractional-radius dots are captured at both sizes.
 
+`tools/test_sound_cursor.py --install <root>` checks actual Sound mouse strokes,
+1/2/4-cell cursor outlines, Ctrl sampling and exact undo at normal/compact sizes.
+`brush_cursor_sound_cells` counts queried cells outlined by small Sound cursors;
+`sound_index` exposes the selected palette index. `set sound_index <n>` selects
+a listed index (0 is none). `snapshot_sounds` captures the sound grid and
+`assert_sound_changes <count>` checks the exact number of changed cells.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

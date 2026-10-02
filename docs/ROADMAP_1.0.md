@@ -9,6 +9,8 @@ native flag/serialization evidence and independent scratch TNG comparisons.
 Ctrl-drag height sampling, fixed-point height keys and shared Speed controls now
 cover all six sculpt tools. Exact-step/Flatten/Smooth and height-key cursors show
 small vertex footprints; empty height-key footprints ask for a larger Radius.
+Sound now uses its rounded vertex pen and outlines affected 4x4 cells at small
+sizes; scratch output, normal/compact clicks, sampling and undo are checked.
 The grid/camera broad gate passes 88 checks; later sculpt changes pass focused
 normal/compact checks. See HANDOFF_WORLD_UI for exact build/evidence boundaries.
 

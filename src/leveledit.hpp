@@ -543,6 +543,9 @@ public:
     // game-map cell of this map gets the sound index, 0 = none. Returns the cells changed;
     // one undo step (vanilla has none). 0 when nothing changes or the index is not listed.
     size_t fillSound(uint8_t index);
+    // Game-map cells touched by vanilla EditSetSounds' rounded height-vertex
+    // disc (0x02971010). One entry per sound cell, clipped to this map's grid.
+    std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;
