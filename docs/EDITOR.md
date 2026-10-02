@@ -133,7 +133,8 @@ the camera controls. Right-clicking an object already in a multiple selection
 keeps that selection together.
 
 A selected object also has a compact Focus / Properties / Actions toolbar in
-the viewport. Properties opens a floating inspector that follows selection and
+the viewport, or one **Object actions...** menu when the viewport is narrow.
+Properties opens a floating inspector that follows selection and
 uses the same editable component fields as the side panel. With several objects
 selected, it shows the primary object's properties. Duplicate, Delete and Drop
 to ground use the normal undo history. Closing the inspector does not deselect

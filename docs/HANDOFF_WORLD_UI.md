@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: compact selected-object actions
+
+The selected-object toolbar previously disappeared below a viewport width of
+280 scaled pixels. Narrow viewports now show one full-width Object actions
+button that opens the existing Focus/Properties/actions menu; wide viewports
+retain the three separate buttons. No selection or edit algorithms changed.
+
+`build/compact-object-actions-a96fe88s` passes at 800x600 / 1.5, 1024x600 / 1.5
+and 1440x900 / 1.0. Actual clicks focus the selection, open its matching Properties,
+duplicate it and undo back to zero document changes. The action button's recorded
+bounds fit the viewport. The compact screenshot was inspected. Changes remained
+in memory and were undone; no game files were written.
+
 ## 2026-10-01 continuation: tool headers remain reachable
 
 Long tool windows previously scrolled their title and Close control out of view

@@ -1299,19 +1299,27 @@ void App::drawSelectionActions(const ImVec2& origin, const ImVec2& size) {
     ownedDeletePopupOpen_=false;
     if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { selectionHeightRequested_=false; return; }
     const bool selected = selectedThing_ >= 0 && size_t(selectedThing_) < doc_.thingCount();
-    if (selected && size.x >= S(280) && size.y >= S(220)) {
+    if (selected && size.x >= S(140) && size.y >= S(220)) {
+        const bool compact = size.x < S(280);
+        const float toolsWidth = std::min(S(264), size.x - S(24));
         const ImVec2 cursor = ImGui::GetCursorScreenPos();
         ImGui::SetCursorScreenPos(ImVec2(origin.x+S(12),origin.y+S(100)));
         ImGui::PushStyleColor(ImGuiCol_ChildBg,theme::vec(theme::Bg0));
-        ImGui::BeginChild("##selection_tools",ImVec2(S(264),S(40)),ImGuiChildFlags_None,
+        ImGui::BeginChild("##selection_tools",ImVec2(toolsWidth,S(40)),ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::PushFont(fontSmall_);
+        if (compact) {
+            if (ImGui::Button("Object actions...", ImVec2(toolsWidth, S(28)))) selectionPopupRequested_ = true;
+            auto_.registerWidget("btn_selection_actions");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Focus, properties and actions for the selected object.");
+        } else {
         if (ImGui::Button("Focus",ImVec2(S(66),S(28)))) frameSelected();
         auto_.registerWidget("btn_selection_focus"); ImGui::SameLine();
         if (ImGui::Button("Properties",ImVec2(S(88),S(28)))) selectionInspectorOpen_ = true;
         auto_.registerWidget("btn_selection_properties"); ImGui::SameLine();
         if (ImGui::Button("Actions",ImVec2(S(74),S(28)))) selectionPopupRequested_ = true;
         auto_.registerWidget("btn_selection_actions");
+        }
         ImGui::PopFont(); ImGui::EndChild(); ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos(cursor);
     }

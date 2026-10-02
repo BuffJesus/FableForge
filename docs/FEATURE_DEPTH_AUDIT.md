@@ -2144,6 +2144,19 @@ closure checks pass. Dialogue browser/playback/edit/export passes again at
 `build/dialogue-workspace-j01ockif` for both sizes after the shared shell change.
 Compact import, terrain and properties screenshots were inspected.
 
+## 2026-10-01 continuation: compact selected-object actions
+
+The selected-object toolbar previously disappeared below a viewport width of
+280 scaled pixels. Narrow viewports now show one full-width Object actions
+button that opens the existing Focus/Properties/actions menu; wide viewports
+retain the three separate buttons. No selection or edit algorithms changed.
+
+`build/compact-object-actions-a96fe88s` passes at 800x600 / 1.5, 1024x600 / 1.5
+and 1440x900 / 1.0. Actual clicks focus the selection, open its matching Properties,
+duplicate it and undo back to zero document changes. The action button's recorded
+bounds fit the viewport. The compact screenshot was inspected. Changes remained
+in memory and were undone; no game files were written.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
