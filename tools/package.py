@@ -64,6 +64,7 @@ def main():
         readme = f.read()
     for doc in ["FIRST_LEVEL.md", "ENGINE_RULES.md", "EDITOR.md", "AUTOMATION.md", "CLI.md"]:
         readme = readme.replace("docs/" + doc, doc)
+    readme = readme.replace("docs/guide/", "guide/")
     readme = readme.replace("vendor/EgoCore-LICENSE.txt", "EgoCore-LICENSE.txt")
     readme = readme.replace("vendor/VENDORED.md", "THIRD_PARTY.md")
     readme += "\nIllustrated Aeon Edition + Controller Support setup: open [AEON_CONTROLLER.html](AEON_CONTROLLER.html) in your browser.\n"
@@ -98,6 +99,11 @@ def main():
     shutil.copytree(os.path.join("docs", "modding"), os.path.join(stage, "docs", "modding"))   # the mod-pack / .fmp / load-order design the forge-tools mods family implements
     shutil.copytree(os.path.join("docs", "releases"), os.path.join(stage, "docs", "releases"))
     shutil.copy(os.path.join("docs", "FEATURE_GALLERY.md"), os.path.join(stage, "docs", "FEATURE_GALLERY.md"))
+    # the task guide sits beside README as guide/: its ../FIRST_LEVEL.md, ../ENGINE_RULES.md and
+    # ../walkthrough/ links resolve there; the modding docs stay under docs/
+    shutil.copytree(os.path.join("docs", "guide"), os.path.join(stage, "guide"))
+    for page in (Path(stage) / "guide").glob("*.md"):
+        page.write_text(page.read_text(encoding="utf-8").replace("](../modding/", "](../docs/modding/"), encoding="utf-8")
     nested_editor = (root / "docs/EDITOR.md").read_text(encoding="utf-8")
     nested_editor = nested_editor.replace("](walkthrough/", "](../walkthrough/")
     (Path(stage) / "docs/EDITOR.md").write_text(nested_editor, encoding="utf-8")

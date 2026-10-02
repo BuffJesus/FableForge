@@ -3695,7 +3695,7 @@ void App::drawUnsavedPrompt() {
         auto_.registerWidget("btn_unsaved_cancel");
         if (doc_.hasTerrain() && doc_.terrainDirty()) {
             ImGui::PushFont(fontSmall_);
-            theme::hint("Terrain edits are written with 'Save terrain into the game' in the Edit panel.");
+            theme::hint("Terrain edits are written with 'Write terrain into the game' (or into a pack) in the Edit panel.");
             ImGui::PopFont();
         }
         if (pendingSelect_.empty() && !closePending_) ImGui::CloseCurrentPopup();

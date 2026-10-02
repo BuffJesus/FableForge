@@ -50,7 +50,8 @@ and brushes, effects, dialogue, mods, setup and budget survey. The
 2. Pick a map on the left, or open **World** to find it on the 2D map or in the
    3D flyover. Double-click a map in World to open it for editing.
 3. Use **Export**, **Edit**, **Assets** or **Mods** on the right. Start with
-   [your first level](docs/FIRST_LEVEL.md) for a guided edit and safe save.
+   [your first level](docs/FIRST_LEVEL.md) for a guided edit and safe save; the
+   [user guide](docs/guide/README.md) has a short page for each task.
 
 ```
 forge list                             # every map in FinalAlbion.wad
@@ -75,6 +76,8 @@ goes to the loose files. FableForge never recreates `FinalAlbion.wad` on such an
 WAD would override every loose level.
 
 New here? Read **[docs/FIRST_LEVEL.md](docs/FIRST_LEVEL.md)** -- your first level in ten minutes, with screenshots.
+Then the **[user guide](docs/guide/README.md)**: painting the ground, Fit to neighbours, mod packs and
+load order, dialogue lip sync.
 
 **Your install is safe.** Every file FableForge writes into the game is backed up first
 (`forge backups` lists them); `forge restore` -- or *Restore backed-up files* on the GUI's Setup panel -- puts the backed-up

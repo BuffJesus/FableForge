@@ -1,0 +1,104 @@
+# User guide screenshots (docs/guide/): one capture per task page, on the retail install.
+# Nothing is written to the install: the save root is a scratch folder and no deploy runs.
+# The mod-pack capture needs the local corpus under work/nexus_mods (see tests/ui/mods.txt).
+#   build\FableForge.exe --auto tests\ui\guide_shots.txt --size 1600x900
+wait_maps
+wait_ready
+set saveroot build/guide_install
+# 1. Paint: a sand path brushed across Greatwood_1 (markers and foliage hidden)
+select Greatwood_1
+wait_loaded
+wait_foliage
+edit 1
+frames 2
+edit_tab 1
+click chip_foliage
+click chip_markers
+frames 2
+add_theme BEACH_SAND
+terrain_mode 6
+brush 6 10
+camera 48 96 45 0.9 0.85 80
+frames 2
+terrain_stroke 40 88 0.8
+terrain_stroke 44 92 0.8
+terrain_stroke 48 96 0.8
+terrain_stroke 52 100 0.8
+terrain_stroke 56 104 0.8
+frames 3
+wait_loaded
+wait_foliage
+camera 48 96 45 0.9 0.95 45
+frames 5
+mouse_move 10 500
+clear_toasts
+frames 2
+screenshot docs/guide/img/paint_ground.png
+# 2. Passability: the Walkable view with the walkable brush active
+terrain_mode 4
+mode walkable
+frames 3
+clear_toasts
+screenshot docs/guide/img/paint_passability.png
+mode textured
+click chip_foliage
+click chip_markers
+frames 2
+# 3. Fit to neighbours: the filler's preview before Apply
+select Greatwood_Filler_04
+wait_loaded
+edit 1
+frames 2
+edit_tab 1
+terrain_mode 0
+frames 2
+fit_open 1
+frames 2
+wait_fit
+frames 4
+assert_state fit_preview_has_changes 1
+mouse_move 10 500
+frames 2
+clear_toasts
+screenshot docs/guide/img/fit_neighbours.png
+fit_open 0
+frames 2
+# 4. Mods: two packs in the load order
+edit 0
+mods_tab 1
+frames 2
+mod_add work/nexus_mods/_peek/SpecialMelee/SpecialMeleeAbilities.fmp Special Melee
+mod_add work/nexus_mods/_peek/F2MeleeWeapons F2 Melee (levels)
+frames 2
+assert_state mods_count 2
+frames 4
+clear_toasts
+screenshot docs/guide/img/mods_load_order.png
+mods_tab 0
+frames 2
+# 5. Dialogue: a line found by search, a character head, the inline lip-sync editor
+assets_tab 4
+frames 5
+dialogue_search beefy
+frames 2
+assert_state dialogue_search_results 1
+reveal dialogue_search_result_0
+frames 3
+click dialogue_search_result_0
+frames 3
+assert_state dialogue_loaded 1
+click combo_dialogue_preset
+frames 2
+click dialogue_character_3
+frames 3
+assert_state dialogue_head_ready 1
+reveal button_dialogue_edit
+frames 3
+click button_dialogue_edit
+frames 3
+assert_state dialogue_editor_open 1
+dialogue_export_path C:\FableMods\my_dialogue.big
+clear_toasts
+frames 3
+screenshot docs/guide/img/dialogue_lipsync.png
+quit

@@ -13,7 +13,8 @@ import os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = ["README.md", "docs/RELEASE.md", "docs/FIRST_LEVEL.md", "docs/EDITOR.md", "docs/ENGINE_RULES.md",
         "docs/AUTOMATION.md", "docs/CLI.md", "docs/modding/FMP_FORMAT.md", "docs/modding/LOAD_ORDER.md",
-        "docs/modding/MOD_PACKS.md"]
+        "docs/modding/MOD_PACKS.md", "docs/guide/README.md", "docs/guide/paint-the-ground.md",
+        "docs/guide/fit-to-neighbours.md", "docs/guide/mod-packs.md", "docs/guide/dialogue-lip-sync.md"]
 # words that follow `forge` in prose without being a subcommand
 PROSE = {"exe", "reads", "writes", "is", "the", "a", "an", "and", "or", "does", "cannot", "never", "output",
          "tools", "restore", "backups"}
