@@ -767,6 +767,84 @@ bool Document::setVertexHeights(const std::vector<VertexHeight>& edits, bool fol
 
 namespace {
 constexpr float kMaxVertexHeight = 2048.0f - 1e-4f;   // vanilla GFLimit(h, 0, 2048 - 1e-4)
+
+// Preserve the authored X/Y spelling and whitespace when changing a camera Z.
+std::optional<std::string> raisedCameraCoord(const std::string& raw, float delta) {
+    if (delta == 0 || raw.rfind("C3DCoordF(", 0) != 0 || raw.back() != ')') return std::nullopt;
+    size_t begin = 10;
+    for (int axis = 0; axis < 3; ++axis) {
+        const size_t end = axis == 2 ? raw.size() - 1 : raw.find(',', begin);
+        if (end == std::string::npos) return std::nullopt;
+        const std::string token = raw.substr(begin, end - begin);
+        char* tail = nullptr;
+        const float value = std::strtof(token.c_str(), &tail);
+        if (tail == token.c_str() || !std::isfinite(value)) return std::nullopt;
+        while (*tail && std::isspace(static_cast<unsigned char>(*tail))) ++tail;
+        if (*tail) return std::nullopt;
+        if (axis == 2) {
+            if (!std::isfinite(value + delta)) return std::nullopt;
+            size_t first = begin, last = end;
+            while (first < last && std::isspace(static_cast<unsigned char>(raw[first]))) ++first;
+            while (last > first && std::isspace(static_cast<unsigned char>(raw[last - 1]))) --last;
+            std::string result = raw;
+            result.replace(first, last - first, formatFloat(value + delta));
+            return result;
+        }
+        begin = end + 1;
+    }
+    return std::nullopt;
+}
+
+void raiseCameraPoint(forge::tng::File& file, size_t index, float delta, bool movedPhysics) {
+    // SetHeightDeltaZ base 024f4900, spline 025cea00; OnSerialise 024f3e20.
+    // CoordBase is saved relative to the parent when its flag is set. Account
+    // for that parent's simultaneous physics move when editing serialized Z.
+    struct Edit { std::string ctc, key, value; };
+    std::vector<Edit> edits;
+    for (const auto& block : file.things()[index].ctcBlocks) {
+        static const std::set<std::string> types{
+            "CTCCameraPointDefinitionBase", "CTCCameraPointBuilding", "CTCCameraPointFixedPoint",
+            "CTCCameraPointFixedDolly", "CTCCameraPointTrack", "CTCCameraPointGeneralCase",
+            "CTCCameraPointDead", "CTCCameraPointScripted", "CTCCameraPointScriptedSpline"};
+        if (!types.count(block.name)) continue;
+        if (std::count_if(file.things()[index].ctcBlocks.begin(), file.things()[index].ctcBlocks.end(),
+            [&](const auto& other) { return other.name == block.name; }) != 1) continue;
+        auto truth = [&](const char* key) -> std::optional<bool> {
+            for (const auto& property : block.properties)
+                if (lower(property.key) == lower(key)) {
+                    const auto value = lower(property.value);
+                    if (value == "true" || value == "1") return true;
+                    if (value == "false" || value == "0") return false;
+                    return std::nullopt;
+                }
+            return false;   // native persistence defaults for both flags
+        };
+        const auto relative = truth("UsingRelativeCoords"), parent = truth("IsCoordBaseRelativeToParent");
+        const float baseDelta = relative && parent ? ((*relative ? delta : 0.0f) -
+            (movedPhysics && *parent ? delta : 0.0f)) : 0.0f;
+        for (const auto& property : block.properties) {
+            const auto key = lower(property.key);
+            if (std::count_if(block.properties.begin(), block.properties.end(),
+                [&](const auto& other) { return lower(other.key) == key; }) != 1) continue;
+            float amount = 0.0f;
+            if (key == "coordbase") amount = baseDelta;
+            else if (block.name == "CTCCameraPointScriptedSpline" && key.rfind("keycameras[", 0) == 0) {
+                const size_t close = key.find(']', 11);
+                if (close == std::string::npos || key.substr(close) != "].position") continue;
+                const auto digits = key.substr(11, close - 11);
+                if (digits.empty() || digits.find_first_not_of("0123456789") != std::string::npos) continue;
+                // Native loads exactly NumKeyCameras keys; orphan rows stay untouched.
+                const float count = propF(block, "NumKeyCameras", 0);
+                if (!std::isfinite(count) || count < 0 || std::trunc(count) != count ||
+                    std::strtod(digits.c_str(), nullptr) >= count) continue;
+                amount = delta;
+            }
+            if (const auto value = raisedCameraCoord(property.value, amount))
+                edits.push_back({block.name, property.key, *value});
+        }
+    }
+    for (const auto& edit : edits) file.setCtcProperty(index, edit.ctc, edit.key, edit.value);
+}
 }
 
 size_t Document::raiseHeights(float d, bool moveThings) {
@@ -782,12 +860,14 @@ size_t Document::raiseHeights(float d, bool moveThings) {
     if (moveThings)   // same undo step: setVertexHeights pushed it
         for (size_t i = 0; i < file_.things().size(); ++i) {
             Frame f;
-            if (!frameOf(i, f)) continue;
-            const auto* physics = physicsOf(file_.things()[i]);
-            if (!physics) continue;
-            f.pos[2] += d;
-            file_.setCtcProperty(i, physics->name, "PositionZ", formatFloat(f.pos[2]));
-            writeInitialPosition(file_, i, f.pos, worldX_, worldY_);
+            const bool moved = frameOf(i, f);
+            if (moved) {
+                const std::string physics = physicsOf(file_.things()[i])->name;
+                f.pos[2] += d;
+                file_.setCtcProperty(i, physics, "PositionZ", formatFloat(f.pos[2]));
+                writeInitialPosition(file_, i, f.pos, worldX_, worldY_);
+            }
+            raiseCameraPoint(file_, i, d, moved);
         }
     ++revision_;
     return edits.size();

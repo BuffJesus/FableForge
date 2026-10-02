@@ -18,6 +18,8 @@ version is chosen; validation is recorded at release time, not here.
   editor does, and say which depths they include before Replace all.
 - **Whole-map heights.** Raise (optionally with every object), scale or flatten a
   whole map's ground in one step (Terrain > Whole-map heights...).
+  Raise also handles camera coordinate bases and spline key positions using the
+  original editor's height rules.
 - **Clear all sounds.** The Sound tool clears, or fills, a map's ambient sound in
   one step.
 - **Draw Paths** now has the original editor's square ends: ground behind the
@@ -39,4 +41,3 @@ version is chosen; validation is recorded at release time, not here.
 ## Known limits
 
 The Replace pen's footprint still differs slightly from the original editor's.
-Whole-map Raise does not yet move camera-point targets.

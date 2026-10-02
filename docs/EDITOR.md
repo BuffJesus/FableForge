@@ -215,6 +215,10 @@ item and info display components; absent components are not added.
   Pasted groups retain their spacing around the snapped anchor. This option is
   saved between sessions. The gizmo's Snap toggle, terrain pens and track-node
   placement keep their existing rules.
+* **Whole-map Raise** (Terrain > Whole-map heights): with Move objects too,
+  physics positions and camera spline keys rise by the chosen amount. Camera
+  coordinate bases follow their relative-coordinate flags, including the saved
+  offset from the moving parent. Camera directions and timing stay unchanged.
 * **Multi-select**: Ctrl+click adds/removes (viewport or list); the gizmo, nudges,
   Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
   Copy/paste carries a *fragment* (blocks + positions relative to the centroid),

@@ -8,6 +8,11 @@ placement, paste, special things, carry and exact undo without game writes.
 XY within 0.001; `assert_selected_cell_centre` checks grid alignment.
 `assert_selected_ground [offset]` checks terrain-relative Z within 0.01.
 
+`tools/test_wholemap_cameras.py --install <root>` saves baseline, raised and
+lowered StartOakValeWest documents into separate owned scratch folders. It
+independently verifies camera base and spline-key Z changes, unchanged directions,
+timings and other rows, and exact document/terrain undo. The live install is read-only.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

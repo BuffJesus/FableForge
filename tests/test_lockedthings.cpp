@@ -29,6 +29,72 @@ std::filesystem::path flatLevel() {
     std::ofstream(path,std::ios::binary).write(reinterpret_cast<const char*>(b.data()),std::streamsize(b.size()));
     return path;
 }
+void checkCameraRaise(const std::filesystem::path& path) {
+    using namespace albion::editor;
+    const std::string scripted = "StartCTCCameraPointScripted;\r\n"
+        "UsingRelativeCoords FALSE;\r\nIsCoordBaseRelativeToParent TRUE;\r\n"
+        "CoordBase C3DCoordF(1.0000, -2.500, 10.0 );\r\n"
+        "StartPos.Z 17.0;\r\nEndPos.Z 21.0;\r\nEndCTCCameraPointScripted;\r\n";
+    const std::string spline = "StartCTCCameraPointScriptedSpline;\r\n"
+        "UsingRelativeCoords TRUE;\r\nIsCoordBaseRelativeToParent FALSE;\r\n"
+        "CoordBase C3DCoordF(0.00,0.0,10.0);\r\nNumKeyCameras 2;\r\n"
+        "KeyCameras[0].Position C3DCoordF(2.000,3.0,5.0);\r\n"
+        "KeyCameras[1].Position C3DCoordF(-4.00,6.000,9.0);\r\n"
+        "KeyCameras[2].Position C3DCoordF(1.0,2.0,100.0);\r\n"
+        "KeyCameras[0].LookDirection C3DCoordF(0.0,0.0,1.0);\r\n"
+        "KeyCameras[0].Duration 5.0;\r\nEndCTCCameraPointScriptedSpline;\r\n";
+    auto parentRelative = spline;
+    parentRelative.replace(parentRelative.find("IsCoordBaseRelativeToParent FALSE"),
+        std::strlen("IsCoordBaseRelativeToParent FALSE"), "IsCoordBaseRelativeToParent TRUE");
+    auto absolute = scripted;
+    absolute.replace(absolute.find("IsCoordBaseRelativeToParent TRUE"),
+        std::strlen("IsCoordBaseRelativeToParent TRUE"), "IsCoordBaseRelativeToParent FALSE");
+    Document doc; std::string error;
+    CHECK(doc.openText("CameraRaise", "Version 2;\r\n" + thing(1,scripted) + thing(2,spline) +
+        thing(3,parentRelative) + thing(4,absolute), error));
+    CHECK(doc.loadLevel(path,error));
+    const auto original = doc.text();
+    auto value = [&](size_t index, const char* key) {
+        for (const auto& row : doc.propertiesOf(index)) if (row.key == key) return row.value;
+        return std::string();
+    };
+    CHECK(doc.raiseHeights(3,true)==81);
+    CHECK(value(0,"CoordBase")=="C3DCoordF(1.0000, -2.500, 7.0 )"); // compensate moving parent
+    CHECK(value(1,"CoordBase")=="C3DCoordF(0.00,0.0,13.0)"); // absolute saved base, relative runtime coords
+    CHECK(value(2,"CoordBase")=="C3DCoordF(0.00,0.0,10.0)"); // parent and base rise together
+    CHECK(value(3,"CoordBase")=="C3DCoordF(1.0000, -2.500, 10.0 )"); // absolute coordinates stay
+    CHECK(value(1,"KeyCameras[0].Position")=="C3DCoordF(2.000,3.0,8.0)");
+    CHECK(value(1,"KeyCameras[1].Position")=="C3DCoordF(-4.00,6.000,12.0)");
+    CHECK(value(1,"KeyCameras[2].Position")=="C3DCoordF(1.0,2.0,100.0)"); // outside native key count
+    CHECK(value(1,"KeyCameras[0].LookDirection")=="C3DCoordF(0.0,0.0,1.0)");
+    CHECK(value(1,"KeyCameras[0].Duration")=="5.0");
+    CHECK(value(0,"StartPos.Z")=="17.0" && value(0,"EndPos.Z")=="21.0");
+    const auto raised = doc.text();
+    CHECK(doc.undo() && doc.text()==original && doc.terrain().heights[0]==4);
+    CHECK(doc.redo() && doc.text()==raised);
+    CHECK(doc.undo());
+    CHECK(doc.raiseHeights(3,false)==81 && doc.text()==original);
+    CHECK(doc.undo());
+    CHECK(doc.raiseHeights(-10,true)==81 && doc.terrain().heights[0]==0);
+    CHECK(value(0,"CoordBase")=="C3DCoordF(1.0000, -2.500, 20.0 )");
+    CHECK(value(1,"KeyCameras[0].Position")=="C3DCoordF(2.000,3.0,-5.0)");
+    CHECK(doc.undo() && doc.text()==original);
+    const std::string malformed = "StartCTCCameraPointScriptedSpline;\r\n"
+        "UsingRelativeCoords TRUE;\r\nCoordBase C3DCoordF(1,2,nan);\r\nNumKeyCameras 2;\r\n"
+        "KeyCameras[0].Position C3DCoordF(bad,2,3);\r\n"
+        "KeyCameras[1].Position C3DCoordF(1,2,3) trailing;\r\nEndCTCCameraPointScriptedSpline;\r\n";
+    CHECK(doc.openText("BadCamera", "Version 2;\r\n"+thing(1,malformed),error));
+    CHECK(doc.loadLevel(path,error) && doc.raiseHeights(3,true)==81);
+    CHECK(value(0,"CoordBase")=="C3DCoordF(1,2,nan)");
+    CHECK(value(0,"KeyCameras[0].Position")=="C3DCoordF(bad,2,3)");
+    CHECK(value(0,"KeyCameras[1].Position")=="C3DCoordF(1,2,3) trailing");
+    const std::string noPhysics = "NewThing Thing;\r\nUID 1;\r\n" + spline + "EndThing;\r\n";
+    CHECK(doc.openText("CameraWithoutPhysics", "Version 2;\r\n"+noPhysics,error));
+    CHECK(doc.loadLevel(path,error) && doc.raiseHeights(3,true)==81);
+    CHECK(value(0,"CoordBase")=="C3DCoordF(0.00,0.0,13.0)");
+    CHECK(value(0,"KeyCameras[0].Position")=="C3DCoordF(2.000,3.0,8.0)");
+}
+
 void checkSlopes(const std::filesystem::path& path) {
     using namespace albion::editor;
     auto typed=[](int uid,const std::string& type,const char* physics="CTCPhysicsStandard") {
@@ -224,6 +290,7 @@ int main() {
     std::filesystem::remove(levOut.parent_path().parent_path().parent_path());std::filesystem::remove(chunkOut.parent_path());
     std::filesystem::remove(pack);
     checkSlopes(path);
+    checkCameraRaise(path);
     std::filesystem::remove(path);
     std::cout << "locked things checks passed\n";
 }

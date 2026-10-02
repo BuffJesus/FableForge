@@ -4,6 +4,8 @@
 and ground carry, preserving ground/fixed heights, group spacing and exact undo.
 Normal/compact UI and all 36 core tests pass; native evidence and boundaries are
 recorded in HANDOFF_WORLD_UI. Gizmo snap remains a separate control.
+Whole-map Raise now includes camera coordinate bases and spline keys, with
+native flag/serialization evidence and independent scratch TNG comparisons.
 
 2026-10-01 workflow depth: new-level creation preserves edits made while the job
 runs, compact origins remain readable, and Restore clears removed-map previews.

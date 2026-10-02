@@ -504,7 +504,8 @@ public:
     // EditResizeZPercent 0x029a8ac0, EditResetAllZ 0x029a8c30), every vertex clamped to
     // [0, 2048 - 1e-4] like vanilla. One undo step each; return the vertices changed.
     // raise: h + d; with moveThings every placed thing rises by d too (CEditRaiseZOnThing
-    // 0x0298e5a0 moves the physics position of every thing), otherwise nothing moves.
+    // 0x0298e5a0 moves physics, camera coordinate bases and spline key positions),
+    // otherwise nothing moves. Relative camera bases account for the parent's move.
     // scale: h * pct / 100 (100 = no change). set: h = v. These two keep Forge's rule that
     // grounded objects follow the ground (vanilla leaves things where they are).
     size_t raiseHeights(float d, bool moveThings = true);

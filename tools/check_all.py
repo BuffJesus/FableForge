@@ -85,6 +85,8 @@ def main():
                   [sys.executable, "tools/test_terrain_slope.py", "--install", install_root], capture_output=True)
         ok &= run("cell-centre placement, paste and carry at normal/compact sizes",
                   [sys.executable, "tools/test_placement_grid.py", "--install", install_root], capture_output=True)
+        ok &= run("whole-map Raise camera bases, spline keys, scratch output and undo",
+                  [sys.executable, "tools/test_wholemap_cameras.py", "--install", install_root], capture_output=True)
         ok &= run("precise terrain brush controls",
                   [sys.executable, "tools/test_terrain_brush_controls.py", "--install", install_root], capture_output=True)
         ok &= run("effect auto length, replay and live scrubbing",

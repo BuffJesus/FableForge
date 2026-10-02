@@ -5135,7 +5135,7 @@ void App::drawWholeMapWindow() {
     char label[96];
     std::snprintf(label, sizeof label, "Raise every height by %.2f", wholeRaise_);
     if (row("##wraise", wholeRaise_, 0.5f, "%.2f", label, "btn_wholemap_raise",
-            "Adds this to every height (negative lowers). With 'Move objects too', every placed object rises by the same amount,\nlike the vanilla EditRaiseZ, so nothing ends up buried or floating.") && wholeRaise_ != 0.0f)
+            "Adds this to every height (negative lowers). With 'Move objects too', every placed object rises by the same amount.\nCamera coordinate bases and spline keys follow the original editor's height rules.") && wholeRaise_ != 0.0f)
         wholeMapRaise(wholeRaise_, wholeRaiseThings_);
     ImGui::Checkbox("Move objects too##wraiseth", &wholeRaiseThings_);
     auto_.registerWidget("check_wholemap_things");

@@ -723,8 +723,11 @@ Effort S (about 30 lines, gui only, plus one test). Value medium.
 tab's *Whole-map heights...* tool window, automation `terrain_raise_all` / `terrain_scale_pct` /
 `terrain_set_all` / `wholemap_open`. Raise with objects moves every thing's physics position by d
 (CEditRaiseZOnThing 0x0298e5a0 re-read); scale and set keep Forge's grounded-follow rule instead
-of vanilla's leave-in-place. Not ported: CEditRaiseZOnThing's second call on a thing's
-CTCCameraPointDefinitionBase (vtable +0x8c with d), whose effect on the camera point is unread.
+of vanilla's leave-in-place. Camera height handling is now included: base SetHeightDeltaZ
+0x024f4900 changes CoordBase when UsingRelativeCoords is true; the serialized parent-relative
+base accounts for the simultaneous physics move. Spline override 0x025cea00 also raises
+each key Position, preserving directions and timings. Core flag/undo cases and independent
+retail scratch output comparisons pass (`tools/test_wholemap_cameras.py`).
 Unit tests in `test_lockedthings.cpp`; `tests/ui/wholemap_heights.txt`.
 
 **Vanilla:** Console editor commands ConsoleEditRaiseZ 0x0204cc40, ConsoleEditResizeZPercent 0x0204c980 and ConsoleEditSetZ 0x0204cae0 run CEditWorldMap::EditRaiseZ 0x02973e20, EditResizeZPercent 0x02973c50 and EditSetZ 0x02973d40 over every editable map. Per map: CEditMap::EditRaiseZ 0x029a8d10 does h + d, EditResizeZPercent 0x029a8ac0 does h * factor, EditResetAllZ sets h = v, each clamped to [0, 2048-1e-4]. EditRaiseZ also moves every thing in the map up by d (CEditRaiseZOnThing 0x0298e5a0: physics position z += d, including camera-point TCs). Each call does Backup first.

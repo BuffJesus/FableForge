@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: whole-map Raise camera fields
+
+Raise with Move objects too now includes camera coordinate bases and spline key
+positions in the existing terrain/object undo step. The old "camera-point targets"
+limit was imprecise: scripted StartPos/EndPos and look directions are unchanged by
+native SetHeightDeltaZ. Malformed vectors and duplicate component/coordinate rows
+are preserved; absent camera fields are not invented.
+
+Native evidence, same FableWin SHA256 as the grid entry below:
+`CEditRaiseZOnThing` 0x0298e5a0 calls camera vtable +0x8c independently of physics;
+base 0x024f4900 adds d to CoordBase.Z (+0x1e) only under UsingRelativeCoords (+0x3a).
+`ghidra_out/struct_layouts_egor.tsv` confirms these fields. Scripted override
+0x025ce9d0 calls the base through thunk 0x017b4d5f. Spline override 0x025cea00
+also adds d to each key's Position via GetPosition/SetPosition (0x025c7f50 / 0x025c7d40).
+Base OnSerialise 0x024f3e20 converts CoordBase to/from parent-relative coordinates
+under IsCoordBaseRelativeToParent; both bool persistence defaults are false.
+Consequently the saved base delta is `(UsingRelativeCoords ? d : 0) -
+(physicsMoved && IsCoordBaseRelativeToParent ? d : 0)`. This formula is inferred
+from the native state change and serialization branches, not from field names.
+Spline serialization 0x025cb1e0 uses `KeyCameras[n].Position` and NumKeyCameras;
+retail StartOakValeWest supplies the independent field spelling/shape check.
+Local disassembly: `build/wholemap-camera-native-evidence.txt`; extracted retail
+fixture: `build/camera-point-retail-evidence/Data/Levels/FinalAlbion/StartOakValeWest.tng`.
+
+Focused tests cover all four base-flag combinations, no-physics cameras, spline
+keys, orphan rows, malformed coordinates, lowering with terrain clamping, Move
+objects off and exact undo/redo. The scratch GUI test independently reads saved
+baseline/+3/-10 TNGs: 49 base changes and 51 spline key changes per direction.
+Every other camera row and section byte is preserved; existing InitialPos
+synchronization retains its float spelling tolerance. First parser check found
+that already-existing InitialPosX synchronization trims one micro-unit on a retail
+villager, so the verifier now permits only its validated numeric spelling delta.
+No game deployment or in-game camera playback has been exercised.
+Full build and all 36 CTest checks pass. Final scratch output is retained at
+`build/wholemap-cameras-sw4a8rb5`; the verifier was corrected to include native
+two-word `Holy Site` types and rechecked against the same saved bytes.
+Whole-map heights, terrain-following objects and owned-movement UI regressions
+pass. Both new checks are part of the broad gate.
+
 ## 2026-10-02 continuation: cell-centre placement
 
 Added a saved *Snap to cell centres* option beside Fixed height in the Objects
