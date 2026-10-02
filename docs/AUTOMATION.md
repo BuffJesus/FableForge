@@ -180,7 +180,7 @@ Settings persistence is disabled under `--auto` so runs are deterministic.
 | `dump_widget <widget>` | log the current widget rectangle as x0 y0 x1 y1 for screenshot checks |
 | `close`, `quit` | request the editor's close flow (`close_prompt` state) or force the scripted run to end |
 
-`${TEMP}` and `${USERPROFILE}` expand inside a line. Waits time out after 60 s.
+`${TEMP}` and `${USERPROFILE}` expand inside a line. Waits time out after 60 s, except `wait_world` and `wait_file_job` (180 s), `wait_mods` (600 s) and `wait_world_tiles` (900 s); a stitched world apply varies from about 40 s to over 60 s.
 
 ## Registered widgets
 
