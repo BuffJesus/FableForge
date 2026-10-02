@@ -1719,6 +1719,7 @@ void App::drawPackDestination(float cardInner) {
 
 // Import into the chosen pack (a recipe) or directly (the in-place import). model: the Models page.
 bool App::addToPackOrGame(bool model) {
+    if (model) meshImportSuccess_.clear();
     auto& lastError = model ? meshImportError_ : customThemeError_;
     lastError.clear();
     if (fileWriteBlocked("asset import")) { lastError = "Wait for the current file operation to finish, then import again."; return false; }
@@ -1732,7 +1733,11 @@ bool App::addToPackOrGame(bool model) {
     if (model) {
         modpack::ModelRecipe r; r.name = upper(meshName_); r.model = meshModelPath_; r.texture = meshTexturePng_;
         ok = modpack::addModel(packDest_, r, err);
-        if (ok) { pushLog("pack: model " + r.name + " added (OBJECT_" + r.name + " after the next Mods > Deploy)", 3); meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0; }
+        if (ok) {
+            meshImportSuccess_ = "Added OBJECT_" + r.name + " to " + packLabel(packDest_) + ". Use Mods > Deploy to install it.";
+            pushLog("pack: model " + r.name + " added (OBJECT_" + r.name + " after the next Mods > Deploy)", 3);
+            meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
+        }
     } else {
         modpack::GroundThemeRecipe r; r.name = upper(customName_); r.png = customPng_; r.donor = customDonor_;
         ok = modpack::addGroundTheme(packDest_, r, err);
@@ -1761,6 +1766,12 @@ void App::drawModelImportCard(float pad, float inner, float cardInner) {
     const bool meshBusy = meshImportFuture_.valid();
     const bool meshCan = meshModelPath_[0] && meshName_[0] && !meshBusy && !ctxFuture_.valid();
     drawPackDestination(cardInner);
+    if (!meshImportSuccess_.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Success));
+        ImGui::TextWrapped("%s", meshImportSuccess_.c_str());
+        auto_.registerWidget("mesh_import_success");
+        ImGui::PopStyleColor();
+    }
     if (theme::primaryButton(meshBusy ? "Importing..." : packDest_.empty() ? "Import into the game" : "Add to the pack", ImVec2(cardInner, S(30)), meshCan))
         addToPackOrGame(true);
     auto_.registerWidget("btn_mesh_import");
@@ -1862,6 +1873,7 @@ bool App::createCustomTheme(const std::string& png, const std::string& name, con
 
 bool App::importMesh(const std::string& model, const std::string& name, const std::string& texturePng) {
     meshImportError_.clear();
+    meshImportSuccess_.clear();
     auto fail = [&](const std::string& message) {
         meshImportError_ = message; pushLog("import model: " + message, 1); return false;
     };
@@ -1872,8 +1884,10 @@ bool App::importMesh(const std::string& model, const std::string& name, const st
     req.model = model; req.name = name; req.texturePng = texturePng;
     pushLog("import model " + name + ": composing " + model + " into graphics.big (a copy of the bank is rewritten; a few seconds)...", 0);
     const std::string root = saveRoot();
-    meshImportFuture_ = std::async(std::launch::async, [root, req]() {
+    const std::array<std::string, 3> submittedFields{meshModelPath_, meshName_, meshTexturePng_};
+    meshImportFuture_ = std::async(std::launch::async, [root, req, submittedFields]() {
         MeshImportJob job;
+        job.submittedFields = submittedFields;
         meshimport::ImportResult out;
         job.ok = meshimport::importModel(root, req, out, job.error);
         job.notes = out.notes; job.objectName = out.objectName;
@@ -1887,11 +1901,15 @@ void App::pollMeshImport() {
     const MeshImportJob job = meshImportFuture_.get();
     meshImportError_ = job.ok ? std::string{} : job.error;
     if (!job.ok) { pushLog("import model failed: " + job.error, 2); return; }
+    meshImportSuccess_ = "Imported " + job.objectName + ". Find it under Add an object.";
     for (const auto& n : job.notes) pushLog("import model: " + n, 0);
     pushLog(job.objectName + " ready: find it under Add an object (with a collision hull from its own triangles; not yet seen in-game)", 3);
     // the def list, the thumbnails and the texture context must see the new entries
     foliageexport::closeMeshBank(); thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear(); envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
-    meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
+    // Keep the next draft if the user changed any field while this import ran.
+    if (job.submittedFields == std::array<std::string, 3>{meshModelPath_, meshName_, meshTexturePng_}) {
+        meshModelPath_[0] = 0; meshName_[0] = 0; meshTexturePng_[0] = 0;
+    }
     startContextLoad(saveRoot());
 }
 

@@ -61,6 +61,8 @@ def main():
                   [sys.executable, "tools/test_mod_winner_refresh.py", "--root", install_root], capture_output=True)
         ok &= run("active asset search and hidden panel keyboard recovery",
                   [sys.executable, "tools/test_asset_search.py", "--install", install_root], capture_output=True)
+        ok &= run("model import form, pack retry and next-draft preservation",
+                  [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
             ok &= run("invalid mod inputs preserve the previous deployment",
                       [sys.executable, "tools/test_mod_picks_inputs.py", "--root", install_root], capture_output=True)

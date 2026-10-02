@@ -2103,6 +2103,29 @@ model assertion uses exact ID 169 for its one-result expectation. The check is
 included in `check_all.py`. Automation's new `input_text` command feeds ImGui's
 normal text input path instead of mutating application search strings.
 
+## 2026-10-01 continuation: import feedback and next-draft preservation
+
+Model import now confirms completion inside the form: pack additions identify
+the object and destination and point to Mods > Deploy; direct imports identify
+the object and Add an object. Starting another attempt or changing install/save
+roots clears old completion feedback. The import job snapshots the three form
+fields and only clears an unchanged submitted form on success. A draft entered
+while the worker is running is preserved as a group.
+
+The complete GUI workflow passes at `build/model-import-form-c1n_4er1` using
+`tools/test_model_import_form.py`: both window sizes create a pack, reject a
+missing model, retain entered values through a page switch, copy an OBJ/PNG with
+spaces in their filenames exactly, and display completion. Copied definition
+banks remain unchanged for pack additions. On copied game banks, a second draft
+entered while the first import runs survives closing/reopening the form, imports
+successfully next, and an unchanged completed form clears normally. Compact
+completion screenshots were inspected. The check is included in `check_all.py`.
+
+An initial reproduction used Escape directly in the edited name field; that can
+legitimately cancel the text edit and is not evidence of draft loss. The final
+regression explicitly commits the field by changing focus before closing, and
+asserts the job is still busy when the next draft is entered. No live game writes.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

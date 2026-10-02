@@ -833,6 +833,8 @@ supported particle systems but does not edit or save them.
 Models, Effects and Dialogue give the preview more room by temporarily hiding
 the map list. Your map-list preference returns when you leave these previews.
 In Models, **Import model...** opens a separate tool window; Escape closes it.
+The form confirms successful imports and pack additions. If you start entering
+another model while an import runs, those new values remain when it finishes.
 The **Choose dialogue...** dropdown lists linked lines immediately. Search by
 words, speaker, entry name or Sound ID across every bank in the selected
 language; the picker selects the matching bank automatically. English retail

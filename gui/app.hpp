@@ -274,7 +274,14 @@ public:
     char meshName_[64] = {};
     char meshTexturePng_[512] = {};
     std::string meshImportError_;
-    struct MeshImportJob { bool ok = false; std::string error; std::vector<std::string> notes; std::string objectName; };
+    std::string meshImportSuccess_;
+    struct MeshImportJob {
+        bool ok = false;
+        std::string error;
+        std::vector<std::string> notes;
+        std::string objectName;
+        std::array<std::string, 3> submittedFields;
+    };
     std::future<MeshImportJob> meshImportFuture_;
 public:
     bool importMesh(const std::string& model, const std::string& name, const std::string& texturePng);
