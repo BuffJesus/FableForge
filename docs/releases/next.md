@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Shore-point editing.** Terrain > Passability > Shore paints shore-point flags
+  with On/Off and Shift to reverse the stroke. Red shows set cells; flags save
+  with terrain and undo as one stroke. Visible water shoreline generation is separate.
+
 - **Environment Smear.** Environ. can blend each reached cell with its eight
   neighbours while painting. Small brushes outline reached cells and prompt for
   a larger Radius when none are reached. Smear operates within the current map.

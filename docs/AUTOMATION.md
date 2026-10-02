@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_shore_points.py --install <root>` checks mode 17's 1/9/21-cell
+shore pen, real On/Off controls, Shift inversion, unchanged other channels,
+visible overlays in four view modes and exact undo at normal/compact sizes.
+`set shore_set 0|1` selects Off/On; `set shore_overlay 0|1` hides/shows red flags.
+States `shore_set` and `shore_overlay`, widgets `chip_shore_on`, `chip_shore_off`
+and `check_shore_overlay` expose them. `snapshot_shore` / `assert_shore_changes
+<count>` check changed flag cells. `survey_overlay_kind` 3 means shore points.
+
 `tools/test_environment_smear.py --install <root>` checks Paint/Smear controls,
 empty/fractional sparse cursors, real mouse strokes, Ctrl sampling, preservation
 of other channels and exact undo at normal/compact sizes.

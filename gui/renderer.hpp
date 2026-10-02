@@ -189,7 +189,7 @@ public:
     // Fable z) and walkability of the uploaded terrain in place; normals are
     // recomputed. The grid must match the uploaded scene.
     bool updateTerrain(const float* heights, const uint8_t* walkable, int cellsX, int cellsY);
-    bool updateSurveyOverlay(const terrainexport::Image& image);
+    bool updateSurveyOverlay(const terrainexport::Image& image, float cellSize = 4.0f);
     void clearSurveyOverlay();
     bool hasSurveyOverlay() const { return surveyOverlay_ != nullptr; }
     // Ray (render space) against the uploaded heightfield; `hit` is the render-
@@ -236,6 +236,7 @@ private:
     uint32_t waterIndexCount_ = 0;
     ID3D11ShaderResourceView* albedo_ = nullptr;
     ID3D11ShaderResourceView* surveyOverlay_ = nullptr;
+    float surveyCellSize_ = 4.0f;
     struct FoliageBatch {
         std::vector<terrainlod::Patch> terrainPatches;
         std::vector<ObjectRange> objects;

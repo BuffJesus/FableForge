@@ -81,7 +81,7 @@ float3 heightRamp(float t) {
 
 float3 surveyColour(float3 colour, float3 position) {
     if (survey.x > 0.5) {
-        int2 cell = int2(floor(float2(position.x, -position.z) / 4.0));
+        int2 cell = int2(floor(float2(position.x, -position.z) / survey.y));
         float4 overlay = surveyOverlay.Load(int3(cell, 0));
         colour = lerp(colour, overlay.rgb, overlay.a);
     }
@@ -1122,10 +1122,11 @@ void Renderer::clearListThumbs() {
 
 void Renderer::clearSurveyOverlay() { release(surveyOverlay_); }
 
-bool Renderer::updateSurveyOverlay(const terrainexport::Image& image) {
+bool Renderer::updateSurveyOverlay(const terrainexport::Image& image, float cellSize) {
     auto* next = makeTexture(image);
     clearSurveyOverlay();
     surveyOverlay_ = next;
+    surveyCellSize_ = cellSize;
     return next != nullptr;
 }
 
@@ -1637,6 +1638,7 @@ ID3D11ShaderResourceView* Renderer::render(uint32_t width, uint32_t height, cons
     FrameCB cb = {};
     cb.flags[2] = 1.0f;
     cb.survey[0] = !worldOnly && surveyOverlay_ ? 1.0f : 0.0f;
+    cb.survey[1] = surveyCellSize_;
     mul4(view, proj, cb.viewProj);
     worldDrawnBatches = worldCulledBatches = 0;
     worldDrawnObjects = worldCulledObjects = worldLodObjects = worldObjectDrawCalls = 0;

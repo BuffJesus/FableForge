@@ -134,6 +134,9 @@ public:
     // CMap::SaveToFile writes camera-passable OR walkable, so walkable implies it)
     bool cameraPassableAt(int x, int y) const;
     void setCameraPassableAt(int x, int y, bool passable);
+    // Independent serialized shore-point byte (+19); setters preserve every other byte.
+    bool shorePointAt(int x, int y) const;
+    void setShorePointAt(int x, int y, bool shore);
     bool preferredPathAt(int x, int y) const;
     void setPreferredPathAt(int x, int y, bool preferred);
     // index 0..2: up to three blended ground themes per cell.

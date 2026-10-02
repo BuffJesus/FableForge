@@ -1872,6 +1872,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("survey_overlay_kind=" + std::to_string(renderer_.hasSurveyOverlay() ? surveyOverlayKind_ : 0));
     v.push_back("survey_overlay_filter=" + std::to_string(surveyOverlayFilter_));
     v.push_back("environment_index=" + std::to_string(envSlot_));
+    v.push_back("shore_set=" + std::string(shoreSet_ ? "1" : "0"));
+    v.push_back("shore_overlay=" + std::string(shoreOverlayShow_ ? "1" : "0"));
     v.push_back("environment_smear=" + std::string(envSmear_ ? "1" : "0"));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));

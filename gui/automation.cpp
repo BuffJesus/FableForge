@@ -516,6 +516,8 @@ bool Automation::tick(App& app) {
         else if (key == "sound_index") app.soundIndex_ = std::clamp(std::atoi(val.c_str()), 0, int(app.doc_.soundThemes().size()));
         else if (key == "sound_overlay") app.soundOverlayShow_ = std::clamp(std::atoi(val.c_str()), 0, 2);
         else if (key == "environment_overlay") app.environmentOverlayShow_ = std::atoi(val.c_str()) != 0;
+        else if (key == "shore_set") app.shoreSet_ = std::atoi(val.c_str()) != 0;
+        else if (key == "shore_overlay") app.shoreOverlayShow_ = std::atoi(val.c_str()) != 0;
         else if (key == "environment_smear") app.envSmear_ = std::atoi(val.c_str()) != 0;
         else if (key == "environment_index") app.envSlot_ = std::clamp(std::atoi(val.c_str()), 0, 255);
         else if (key == "pen_smoothness") app.penSmoothness_ = float(std::atof(val.c_str()));
@@ -1301,6 +1303,24 @@ bool Automation::tick(App& app) {
             const size_t i = size_t(y) * app.doc_.cellsX() + x;
             if (terrain.themeIndex[i] != std::array<uint8_t,3>{uint8_t(theme),0,0} ||
                 terrain.themeStrength[i] != std::array<uint8_t,3>{255,0,0}) fail(line + " (not a full assignment)");
+            else note("ok   " + line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "snapshot_shore") {
+        if (!app.doc_.hasTerrain()) fail("snapshot_shore: no terrain");
+        else { shoreSnap_ = app.doc_.terrain().shorePoint; note("ok   " + line); }
+        ++pc_;
+    }
+    else if (cmd == "assert_shore_changes") {
+        size_t expected = 0; std::istringstream input(rest);
+        if (!(input >> expected) || !shoreSnap_ || !app.doc_.hasTerrain() ||
+            app.doc_.terrain().shorePoint.size() != shoreSnap_->size()) fail("assert_shore_changes: invalid count or missing/mismatched snapshot");
+        else {
+            const auto& flags = app.doc_.terrain().shorePoint;
+            size_t changed = 0;
+            for (size_t i = 0; i < flags.size(); ++i) changed += flags[i] != (*shoreSnap_)[i];
+            if (changed != expected) fail(line + " (" + std::to_string(changed) + " cells differ)");
             else note("ok   " + line);
         }
         ++pc_;

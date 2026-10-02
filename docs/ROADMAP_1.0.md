@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Terrain > Passability > Shore now paints independent shore-point flags, with
+On/Off, Shift inversion, red overlays and stroke undo. Native serialization and
+byte-preservation evidence are in HANDOFF_WORLD_UI. Visible water shoreline
+generation remains separate.
+
 Environ. now offers in-place Smear with the native counter footprint, tie rules
 and truncated blend weights. Small cursors show reached cells and prompt for a
 larger Radius when empty. It operates within the current map; native cross-map

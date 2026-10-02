@@ -1346,6 +1346,77 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testShorePoints(const fs::path& dir) {
+    namespace ed = albion::editor;
+    using Cells = std::vector<std::pair<int, int>>;
+    const auto path = writeGameMapLev(dir / "shore.lev");
+    auto level = forge::lev::File::open(path);
+    // Canonical camera bytes avoid the existing saver's walkable OR during the delta check.
+    for (int y=0; y<level.cellsY(); ++y) for (int x=0; x<level.cellsX(); ++x) level.setCameraPassableAt(x,y,true);
+    level.save(path);
+    auto original = readAll(path);
+    original[level.cellDataOffset()+(size_t(7)*9+7)*21+19]=0x80; // noncanonical true byte
+    std::ofstream(path,std::ios::binary|std::ios::trunc).write(reinterpret_cast<const char*>(original.data()),std::streamsize(original.size()));
+    level=forge::lev::File::open(path);
+    const size_t offset = level.cellDataOffset() + (size_t(3) * level.cellsX() + 2) * 21 + 19;
+    level.setShorePointAt(2,3,true);
+    const auto patched = dir / "shore_patch.lev"; level.save(patched);
+    auto expected = original; expected[offset] = 1;
+    CHECK(readAll(patched) == expected); // exactly one byte; unknown/trailing data stay
+    CHECK(forge::lev::File::open(patched).shorePointAt(2,3));
+    level.setShorePointAt(2,3,false); level.save(patched);
+    CHECK(readAll(patched) == original);
+    bool threw = false;
+    try { level.setShorePointAt(-1,0,true); } catch (const std::exception&) { threw = true; }
+    CHECK(threw);
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("Shore", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path,err));
+    CHECK((doc.shoreBrushVertices(3.5f,3.5f,.25f) == Cells{{4,4}})); // half-even caller
+    CHECK((doc.shoreBrushVertices(2.5f,2.5f,.25f) == Cells{{2,2}}));
+    CHECK((doc.shoreBrushVertices(4,4,.5f) == Cells{{4,4}})); // distance 1 excluded strictly
+    CHECK((doc.shoreBrushVertices(4,4,1) == Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}}));
+    CHECK((doc.shoreBrushVertices(0,0,1) == Cells{{0,0},{1,0},{0,1},{1,1}}));
+    CHECK(doc.shoreBrushVertices(8,8,.25f).empty()); // extra boundary vertices not regular cells
+    const auto baseline = doc.terrain();
+    ed::TerrainBrush brush; brush.mode=ed::TerrainBrush::Mode::ShoreSet;
+    brush.x=4; brush.y=4; brush.radius=1; brush.strength=0;
+    const auto revision=doc.terrainRevision();
+    doc.beginStroke(brush); doc.applyBrush(brush,0);
+    CHECK(doc.terrainRevision() == revision+1);
+    const auto colours=doc.shoreOverlay();
+    CHECK(colours.size() == 64 && (colours[4*8+4] == ed::Document::OverlayColour{255,0,0,128}));
+    CHECK((colours[0] == ed::Document::OverlayColour{}));
+    doc.applyBrush(brush,0); CHECK(doc.terrainRevision() == revision+1); // repeated stamp is a no-op
+    doc.endStroke(); CHECK(doc.terrainDirty());
+    expected=original;
+    for (const auto [x,y] : Cells{{3,3},{4,3},{5,3},{3,4},{4,4},{5,4},{3,5},{4,5},{5,5}})
+        expected[level.cellDataOffset()+(size_t(y)*9+x)*21+19]=1;
+    const auto root=dir / "shore_root";
+    CHECK(doc.saveTerrainLoose(root,err));
+    CHECK(readAll(root / "data/Levels/FinalAlbion/Shore.lev") == expected);
+    CHECK(!doc.terrainDirty());
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().walkable==baseline.walkable &&
+          doc.terrain().cameraPassable==baseline.cameraPassable && doc.terrain().sound==baseline.sound &&
+          doc.terrain().atmosIndex==baseline.atmosIndex && doc.terrain().atmosStrength==baseline.atmosStrength &&
+          doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+    brush.mode=ed::TerrainBrush::Mode::ShoreClear;
+    doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke();
+    CHECK(doc.terrain().shorePoint==baseline.shorePoint && doc.terrainDirty());
+    CHECK(doc.undo() && doc.terrain().shorePoint[size_t(4)*9+4]);
+    CHECK(doc.undo() && doc.terrain().shorePoint==baseline.shorePoint);
+    doc.beginStroke(brush); doc.applyBrush(brush,0); doc.endStroke(); // clear empty region adds no undo
+    CHECK(!doc.undo());
+    ed::Document legacy;
+    CHECK(legacy.openText("ShoreLegacy", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",err));
+    CHECK(legacy.loadLevel(writeSyntheticLev(dir / "shore_legacy.lev",8,8,[](int,int){return 0.f;}),err));
+    CHECK(!legacy.hasGameMap());
+    brush.mode=ed::TerrainBrush::Mode::ShoreSet; brush.radius=.25f;
+    legacy.beginStroke(brush); legacy.applyBrush(brush,0); legacy.endStroke();
+    CHECK(legacy.terrain().shorePoint[size_t(4)*9+4] && legacy.shoreOverlay().size()==64);
+    CHECK(legacy.undo() && !legacy.terrain().shorePoint[size_t(4)*9+4]);
+}
+
 void testAtmosSmear(const fs::path& dir) {
     namespace terrain = forge::terrain;
     using Slots = std::array<uint8_t, 3>;
@@ -3286,6 +3357,7 @@ int main() {
     testSoundBrushFootprint(dir);
     testGroundThemeStamp(dir);
     testAtmosSmear(dir);
+    testShorePoints(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

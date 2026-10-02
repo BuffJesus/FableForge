@@ -63,6 +63,7 @@ bool invert(const float m[16], float out[16]);
 struct TerrainState {
     std::vector<float> heights;
     std::vector<uint8_t> walkable;
+    std::vector<uint8_t> shorePoint;                    // independent LEV cell byte +19
     std::vector<uint8_t> cameraPassable;                // per cell (+16); walkable cells are always passable
     std::vector<std::array<uint8_t, 3>> themeIndex;     // per cell: the 3 palette slots
     std::vector<std::array<uint8_t, 3>> themeStrength;  // ... and their weights (sum 255)
@@ -83,7 +84,7 @@ struct TerrainBrush {
     // Flatten / Smooth / Noise and Raise / Lower with exactStep are the vanilla Height Toolbox
     // pens (forge/heightpen: Paint Height, Smear, Noise, Change Height): one application per
     // call, no dt, no falloff. Raise / Lower without exactStep are FableForge's smooth brush.
-    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey, EnvironmentSmear };   // HeightKey: the -/= keys, `step` signed
+    enum class Mode { Raise, Lower, Flatten, Smooth, Walkable, Blocked, Theme, ReplaceTheme, Environment, Sound, CameraPass, CameraBlock, Noise, HeightKey, EnvironmentSmear, ShoreSet, ShoreClear };   // HeightKey: the -/= keys, `step` signed
     Mode mode = Mode::Raise;
     float x = 0, y = 0;        // map-local centre
     float radius = 6.0f;
@@ -552,8 +553,11 @@ public:
     std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
     // Environment maps the strict theme vertex pen to unique game cells.
     std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
+    // Native reflection pen, clipped to this map's regular cells (extra boundary vertices excluded).
+    std::vector<std::pair<int, int>> shoreBrushVertices(float x, float y, float radius) const;
     std::vector<std::pair<int, int>> environmentSmearBrushCells(float x, float y, float radius) const;
     using OverlayColour = std::array<uint8_t, 4>;
+    std::vector<OverlayColour> shoreOverlay() const;
     using OverlayLookup = std::function<std::optional<OverlayColour>(const std::string&, const std::string&)>;
     // One RGBA value per game cell. Sound filter -1 means all; 0 means none.
     std::vector<OverlayColour> surveyOverlay(bool environment, int soundFilter, const OverlayLookup& lookup) const;

@@ -78,6 +78,11 @@ is walkable, red is blocked.
 - **Camera ok / Camera no** paint where the camera may pass. Walkable ground is
   always camera-passable, so this matters on cliffs, walls and water edges.
 
+**Shore** paints shore-point flags with **On** or **Off**. Hold Shift to reverse
+the stroke. **Show shore points** marks set cells in translucent red; small
+brushes show the affected vertices. The flags save with terrain and undo as one
+stroke. The visible water shoreline comes from water generation.
+
 Painting walkability changes the map's navigation by patching the game's existing
 navigation data. It does not regenerate navigation for a whole map.
 

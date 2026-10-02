@@ -1,5 +1,58 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: authored shore-point flags
+
+Terrain > Passability > Shore paints On/Off with Shift inversion, a Show shore
+points toggle and one undo step per stroke. Strength/time are ignored. Small
+pens show regular-cell vertices; extra boundary vertices stay untouched.
+Set flags appear red/alpha128 through the existing survey texture, now parameterized
+for 1-unit shore cells or 4-unit atmosphere/sound cells. Tool exit clears it.
+This edits LEV flags, independently of visible water shoreline generation.
+
+Read-only debug exports `build/shore-point-native-full.txt` cover ReflectionsInput
+02052620, EditSetReflections 029712e0, EditSetReflection 029a9860 and
+ReflectionsOverlayInfo 029aad40. `build/shore-point-save-native.txt` traces
+CMap::SaveToFile 02234c60 through its final return. Executable identity is the
+same SHA256 recorded in the Environment Smear section below.
+
+The caller rounds the float world pointer via GFFloatToLongNear; native pen
+bounds are floor/ceil inclusive, with sqrtf(float(dx*dx+dy*dy))-0.5 < radius.
+The referenced double 04022eb8 is confirmed 0.5. Existing rounded disc queries
+already implement this test; shore queries clip to width/height regular cells
+and preserve world-origin rounding. Native edits +9 bit 2, skips unchanged flags
+and updates the red overlay. Its saver copies that bit to the 21-byte record's
++19 byte at 02235748..51. No sound/environment definition lookup or game grid
+is needed for shore overlays. Forge handles only the current map.
+
+Core fixtures verify half-even ties, strict radius boundaries, corner clipping,
+excluded extra vertices, live red/transparent RGBA, no-op revision handling,
+clear/set/undo, noncanonical true-byte preservation, old levels without a game
+grid and rejected out-of-range File coordinates. A direct File set/clear emits exactly
+one byte delta; a saved Document stroke emits exactly the nine expected shore
+bytes with every other byte preserved. The fixture's camera bytes are canonical:
+the existing walkable/camera OR rule otherwise legitimately changes +16.
+Noncanonical true shore bytes survive unrelated edits because only boolean
+changes invoke the setter. No native runtime or in-game shoreline comparison
+has been performed.
+
+Initial normal/compact harness passed at `build/shore-points-84w_wfpm`: 1/9/21
+cursor vertices, zero Strength/time, real On/Off chips, Shift clearing, unchanged
+heights/themes/environment/sound/objects and exact undo. Rendered pixel changes
+were checked in Textured, Height, Walkable and Wireframe. Normal red overlay and
+compact one-vertex screenshots were inspected. Full Release build, all 36 CTest
+checks and docs commands passed; the expanded legacy/noncanonical fixtures also
+passed the core target. Shared survey controls/pixels and Environment Smear
+regressions passed both sizes (`build/survey-overlay-tl80u0yc`,
+`build/environment-smear-r6hhzbq2`, log `build/shore_point_regressions.log`).
+The compact tool row was then adjusted to keep Shore's label readable on its
+own row; the final two-size brush/control/overlay check passed at
+`build/shore-points-xem24q97`. A real compact tool-selection click also passed
+at `build/shore-tool-hmvutqlw`; its readable Shore button was visually inspected.
+check_all registers
+the new harness; the prior 96-check checkpoint was not repeated. Live game
+files stayed read-only.
+
+
 ## 2026-10-02 continuation: Environment Smear
 
 Environ. offers Paint / Smear, with Paint the default. Smear hides the target

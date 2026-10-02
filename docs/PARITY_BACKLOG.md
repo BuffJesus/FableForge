@@ -1042,36 +1042,27 @@ Coordinate the family rule with the water lane, since it only affects depth them
 4) Drawing: add `App::drawBudgetOverlay(origin,size)` and call it next to drawBrushCursor (app.cpp:1819). drawBrushCursor early-outs outside terrain mode, so the overlay needs its own call. For scope 3, outline every box with drawGroundRect (editor.cpp:1791) and draw the live drag box. For scope 2, drape a 48-segment circle of radius budgetRadius_ around camera_.focus, reusing the loop from editor.cpp:1813-1825. Pick one budget colour. This stands in for DrawEngineSurveySelections 0x0204e220.
 5) Window (editor.cpp:4000): make the segment list {"Whole map","Selected","Around the view","Areas"}. For Areas, add the hint "Drag on the ground to add a box; Shift+drag keeps earlier boxes; click a thing to add it", plus a "Clear areas" ghost button that clears both containers and sets budgetDirty_. Update scopeName[] at editor.cpp:4125 and change its clamp to 0..3.
 
-#### Reflections survey (shore-point flag brush) not ported
-*gap, effort S, value low*
+#### Reflections survey (shore-point flag brush)
+*implemented 2026-10-02; authored flags only*
 
-**Vanilla:** Survey > Reflection: ReflectionsInput 0x02052620, where LMB sets and the modifier-click clears, calls EditSetReflections 0x029712e0 (height cells with hypot - 0.5 < r) and then CEditMap::EditSetReflection 0x029a9860, which toggles CHeightMapCell+9 bit 2. PDB egor names that bit ShorePoint, and it is persisted as the .lev cell byte +19. The overlay is ReflectionsOverlayInfo 0x029aad40, red at alpha 0x80 where set.
+Terrain > Passability > Shore offers On / Off, Shift inversion and Show shore
+points. It uses the rounded native vertex pen, excludes extra boundary vertices,
+ignores Strength/time, and records one undo step per stroke. Red {255,0,0,128}
+marks set regular cells in Textured, Wireframe, Height and Walkable views.
+The flags save with terrain; visible water shoreline generation remains separate.
 
-**Fix:** Effort S, value low.
+Read-only native evidence: ReflectionsInput 0x02052620 rounds the float world
+point through GFFloatToLongNear. EditSetReflections 0x029712e0 visits inclusive
+floor/ceil pen bounds and tests sqrtf(float(dx*dx+dy*dy))-0.5 < radius, filtered
+to editable world-map cells. EditSetReflection 0x029a9860 changes CHeightMapCell
++9 bit 2 only when needed. ReflectionsOverlayInfo 0x029aad40 emits red/alpha128
+for set cells, transparent otherwise. SaveToFile 0x02234c60 serializes that bit
+at record offset +19 (0x02235748..51). Forge patches that byte only when its
+boolean value changes; noncanonical true bytes survive unrelated edits.
 
-1. forgecore: add `bool File::shorePointAt(int x,int y) const { return cell(x,y)[19]!=0; }` and `void setShorePointAt(int,int,bool)` in libs/forgecore/src/lev.cpp, next to preferredPathAt (about line 400). Declare both in lev.hpp.
-
-2. Document state, in src/leveledit.hpp:
-   - Add `std::vector<uint8_t> shorePoint;` to TerrainState, beside cameraPassable (line 64).
-   - Extend `enum class Mode` (line 84) with ShoreSet and ShoreClear.
-
-3. Load and save, in src/leveledit.cpp:
-   - Resize and fill the vector from shorePointAt where cameraPassable is loaded (lines 219 and 240).
-   - Write it back in the save loop (about line 410) only for cells whose value changed. Unlike +16 there is no OR with walkable: vanilla stores the bit as painted.
-   - Add `shorePoint` to the equality and dirty checks at lines 573 and 940.
-
-4. Brush: copy the CameraPass/CameraBlock block at leveledit.cpp:451-461 into a ShoreSet/ShoreClear block. Use vanilla's pen test from EditSetReflections 0x029712e0: a cell is inside when hypot(dx,dy) - 0.5 < r. Before porting, confirm that test by disassembling 0x029712e0 with scratchpad/cmp/fwdis.py. Write only cells whose value changes, as EditSetReflection 0x029a9860 does, so undo stays minimal.
-
-5. GUI, in gui/editor.cpp:
-   - Put "Shore point on / off" tools in the Terrain tab's passability group next to the camera brush, sharing its radius slider. LMB sets. Vanilla clears with a modifier-click (ReflectionsInput's bool arg), so map clearing to the ShoreClear tool or to the same modifier the camera brush uses.
-   - Add a toggleable overlay that tints set cells red at alpha 0x80, matching ReflectionsOverlayInfo 0x029aad40.
-   - Add a tooltip saying this is the editor's shore-point/reflection flag stored in the .lev, and that the game's water shoreline comes from the water generator.
-
-6. Automation: add `shore set|clear x y r` alongside the camera-pass verb in docs/AUTOMATION.md and its dispatcher.
-
-7. Gate before calling it a gameplay feature: scan Fable.exe (retail) for reads of the loaded ShorePoint bit. Look in the CHeightMapCell loader and ConvertFromOld (FableWin 0x022423a0) for the +19 to +9 bit-2 transfer, then look for consumers of `[cell+9]` bit 2. If there are none, ship it as a data-parity/inspection tool (the overlay is useful because about 160 retail maps carry the flag) and label it editor-only.
-
-### World map + regions + map popup + map vi...
+See HANDOFF_WORLD_UI for disassembly provenance, independent byte deltas,
+normal/compact clicks, overlay pixels and exact undo. Forge edits only this map;
+no native execution or in-game shoreline equivalence has been claimed.
 
 #### No way to save terrain work without writing it into the game; Ctrl+S covers only objects
 *weakness, effort M, value high*

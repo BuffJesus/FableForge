@@ -2652,9 +2652,12 @@ void App::startThemeRebake() {
 
 void App::refreshSurveyOverlay() {
     int kind = 0;
-    if (editMode_ && editTab_ == 1 && gizmoOp_ == 4 && documentLoaded() && doc_.hasGameMap() && ctx_.ready()) {
-        if (terrainMode_ == 10 && environmentOverlayShow_) kind = 1;
-        if (terrainMode_ == 11 && soundOverlayShow_ != 0) kind = 2;
+    if (editMode_ && editTab_ == 1 && gizmoOp_ == 4 && documentLoaded() && doc_.hasTerrain()) {
+        if (terrainMode_ == 17 && shoreOverlayShow_) kind = 3;
+        if (doc_.hasGameMap() && ctx_.ready()) {
+            if (terrainMode_ == 10 && environmentOverlayShow_) kind = 1;
+            if (terrainMode_ == 11 && soundOverlayShow_ != 0) kind = 2;
+        }
     }
     const int filter = kind == 2 && soundOverlayShow_ == 2 ? soundIndex_ : -1;
     if (!kind) {
@@ -2664,14 +2667,15 @@ void App::refreshSurveyOverlay() {
     }
     if (renderer_.hasSurveyOverlay() && surveyOverlayKind_ == kind && surveyOverlayFilter_ == filter &&
         surveyOverlayRevision_ == doc_.terrainRevision() && surveyOverlayMap_ == selectedName_) return;
-    const auto colours = doc_.surveyOverlay(kind == 1, filter, [this](const std::string& name, const std::string& field) {
+    const auto colours = kind == 3 ? doc_.shoreOverlay() : doc_.surveyOverlay(kind == 1, filter, [this](const std::string& name, const std::string& field) {
         return ctx_.defColourField(name, field);
     });
     terrainexport::Image image;
-    image.width = doc_.level()->gameMapWidth(); image.height = doc_.level()->gameMapHeight();
+    image.width = kind == 3 ? doc_.level()->width() : doc_.level()->gameMapWidth();
+    image.height = kind == 3 ? doc_.level()->height() : doc_.level()->gameMapHeight();
     image.rgba.reserve(colours.size() * 4);
     for (const auto& colour : colours) image.rgba.insert(image.rgba.end(), colour.begin(), colour.end());
-    renderer_.updateSurveyOverlay(image);
+    renderer_.updateSurveyOverlay(image, kind == 3 ? 1.0f : 4.0f);
     surveyOverlayKind_ = kind; surveyOverlayFilter_ = filter;
     surveyOverlayRevision_ = doc_.terrainRevision(); surveyOverlayMap_ = selectedName_;
 }
@@ -2752,6 +2756,7 @@ editor::TerrainBrush::Mode brushModeFor(int mode) {
         case 14: case 15: return M::Theme;   // not brushes: handled before any stroke starts
         case 13: return M::CameraBlock;
         case 16: return M::Noise;
+        case 17: return M::ShoreSet;
         default: return M::Theme;
     }
 }
@@ -2892,6 +2897,8 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         if (press) pushLog("replace: pick the theme to replace (Ctrl+Shift+click the ground or the list)", 1);
         return;
     }
+    if (terrainMode_ == 17 && io.KeyShift)
+        b.mode = b.mode == editor::TerrainBrush::Mode::ShoreSet ? editor::TerrainBrush::Mode::ShoreClear : editor::TerrainBrush::Mode::ShoreSet;
     if (!doc_.strokeActive() && press) {
         if (terrainMode_ == 7) syncThemeFamilies();
         doc_.beginStroke(b);
@@ -2910,6 +2917,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
 
 void App::fillPen(editor::TerrainBrush& b) const {
     if (b.mode == editor::TerrainBrush::Mode::Environment && envSmear_) b.mode = editor::TerrainBrush::Mode::EnvironmentSmear;
+    if (b.mode == editor::TerrainBrush::Mode::ShoreSet && !shoreSet_) b.mode = editor::TerrainBrush::Mode::ShoreClear;
     b.themeStamp = paintStamp_;
     b.exactStep = penExactStep_; b.step = penStep_;
     b.targetFromStroke = penTargetFromStroke_; b.target = penTarget_; b.speed = penSpeed_;
@@ -3028,25 +3036,28 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     brushCursorSoundCells_ = 0;
     brushCursorEnvironmentCells_ = 0;
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
+    const bool shoreDisc = terrainMode_ == 17;
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool keyDisc = keyStroke_;
     const bool replaceDisc = terrainMode_ == 7;
     const bool stampDisc = terrainMode_ == 6 && paintStamp_;
-    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc;
+    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc || shoreDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
     const bool environmentDisc = terrainMode_ == 10;
     const bool environmentSmearDisc = environmentDisc && envSmear_;
-    const float centreX = environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+    const float centreX = shoreDisc ? std::nearbyint(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
+        : environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
         : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+    const float centreY = shoreDisc ? std::nearbyint(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
+        : environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
         : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
-                                  : brushRadius_ + (roundedDisc || soundDisc ? 0.5f : 0.0f);
+                                  : brushRadius_ + (roundedDisc || soundDisc || shoreDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
@@ -3098,7 +3109,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     }
     if (got > 2) dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     if (vertexDisc && brushRadius_ <= 4.0f) {
-        const auto vertices = keyDisc
+        const auto vertices = shoreDisc ? doc_.shoreBrushVertices(brushFable_[0], brushFable_[1], brushRadius_) : keyDisc
             ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
             : replaceDisc || stampDisc
             ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], brushRadius_)
@@ -3987,7 +3998,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             struct Tool { int mode; const char* label; };
             static const std::vector<Tool> sculpt = {{0, "Raise"}, {1, "Lower"}, {2, "Flatten"}, {3, "Smooth"}, {16, "Noise"}, {9, "Path"}};
             static const std::vector<Tool> paint = {{6, "Ground"}, {7, "Replace"}, {8, "Flood"}, {10, "Environ."}, {11, "Sound"}};
-            static const std::vector<Tool> pass = {{4, "Walkable"}, {5, "Blocked"}, {12, "Camera ok"}, {13, "Camera no"}};
+            static const std::vector<Tool> pass = {{4, "Walkable"}, {5, "Blocked"}, {12, "Camera ok"}, {13, "Camera no"}, {17, "Shore"}};
             static const std::vector<Tool> region = {{14, "Copy"}, {15, "Paste"}};
             const std::vector<Tool>* groups[4] = {&sculpt, &paint, &pass, &region};
             int cat = 0;
@@ -3999,9 +4010,11 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 if (!inside) terrainMode_ = (*groups[cat])[0].mode;
             }
             auto_.registerWidget("seg_terrain_category");
+            const bool separateShore = cat == 2 && cardInner < S(260);
             std::vector<const char*> labels;
             std::vector<int> modes;
             for (const auto& t : *groups[cat]) {
+                if (separateShore && t.mode == 17) continue;
                 if ((t.mode == 10 || t.mode == 11) && !doc_.hasGameMap()) continue;   // older .lev: no game-map grid
                 labels.push_back(t.label); modes.push_back(t.mode);
             }
@@ -4009,6 +4022,10 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             for (size_t i = 0; i < modes.size(); ++i) if (modes[i] == terrainMode_) pick = int(i);
             if (theme::segmented("##tmode", pick, labels, cardInner) && pick >= 0) terrainMode_ = modes[size_t(pick)];
             auto_.registerWidget("seg_terrain_mode");
+            if (separateShore) {
+                if (theme::chip("Shore", terrainMode_ == 17)) terrainMode_ = 17;
+                auto_.registerWidget("chip_tool_shore");
+            }
         }
         {
             if (terrainMode_ == 14 || terrainMode_ == 15) {
@@ -4043,6 +4060,19 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             }
         }
         {
+            if (terrainMode_ == 17) {
+                theme::label("Shore points");
+                if (theme::chip("On", shoreSet_)) shoreSet_ = true;
+                auto_.registerWidget("chip_shore_on");
+                ImGui::SameLine();
+                if (theme::chip("Off", !shoreSet_)) shoreSet_ = false;
+                auto_.registerWidget("chip_shore_off");
+                ImGui::Checkbox("Show shore points", &shoreOverlayShow_);
+                auto_.registerWidget("check_shore_overlay");
+                ImGui::PushFont(fontSmall_);
+                theme::hint("Paint shore-point flags; Shift reverses On/Off. Red marks set cells. Saved with terrain. The visible water shoreline comes from water generation.");
+                ImGui::PopFont();
+            }
             if (terrainMode_ == 12 || terrainMode_ == 13) {
                 ImGui::PushFont(fontSmall_);
                 theme::hintMore("Where the camera may go: matters on cliffs, walls and water edges.", "Where the camera may pass (the .lev's camera-passability byte; vanilla Survey > Passability). Walkable cells are always camera-passable -- the vanilla saver ORs them -- so this matters on blocked ground: cliffs, walls, water edges.");
@@ -4266,7 +4296,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         // the brush size where a tool has one (flood / copy / paste do not); strength where it blends
         const bool usesRadius = terrainMode_ != 8 && terrainMode_ != 14 && terrainMode_ != 15;
         const bool usesStrength = usesRadius && terrainMode_ != 9 && terrainMode_ != 10 && terrainMode_ != 11 && terrainMode_ != 4 && terrainMode_ != 5 &&
-                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 7 && !(terrainMode_ == 6 && paintStamp_) && !isVanillaPen(terrainMode_);
+                                  terrainMode_ != 12 && terrainMode_ != 13 && terrainMode_ != 17 && terrainMode_ != 7 && !(terrainMode_ == 6 && paintStamp_) && !isVanillaPen(terrainMode_);
         char val[48];
         if (usesRadius) {
             std::snprintf(val, sizeof val, brushRadius_ < 2 ? "%.2f cells" : "%.0f cells", brushRadius_);
@@ -4279,7 +4309,9 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                 brushRadius_=forge::heightpen::sizeToRadius(sizeExponent);
             auto_.registerWidget("slider_radius");
             if (ImGui::IsItemHovered()) {
-                if (terrainMode_ == 10 && envSmear_)
+                if (terrainMode_ == 17)
+                    ImGui::SetTooltip("Rounded vertex pen; small brushes show affected regular cells. Shift reverses On/Off.");
+                else if (terrainMode_ == 10 && envSmear_)
                     ImGui::SetTooltip("Blends each reached 4x4 cell with its neighbours. The minimum effective radius is 1; small brushes outline the cells.");
                 else if (terrainMode_ == 10)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes outline affected environment cells.");
@@ -4308,7 +4340,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         else if (terrainMode_ == 16) how = "Hold LMB: random vertices inside the square jump up and down. Ground averaging sea level stays; no vertex goes below 0. One undo step per stroke.";
         else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";
         else if (terrainMode_ == 6 && paintStamp_) how = "Sets each considered vertex fully to the theme in one application. Small brushes show the vertices. Each stroke is one undo step.";
-        else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13)
+        else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17)
             how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
         if (usesRadius && how) {
             ImGui::PushFont(fontSmall_);
