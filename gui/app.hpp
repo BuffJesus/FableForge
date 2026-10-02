@@ -73,6 +73,8 @@ struct MapEntry {
 };
 
 struct ExportSettings {
+    bool autosave = true;
+    int autosaveMinutes = 5;
     int format = 0;          // 0 = glb, 1 = obj
     bool textures = true;
     int texels = 8;
@@ -1243,6 +1245,18 @@ private:
     bool promptInAuto_ = false;      // scripted runs skip the prompt unless they opt in
     bool discardEdits_ = false;      // set by the prompt's Discard: the next selectMap drops the document
     void drawUnsavedPrompt();
+    struct RecoveryResult { bool ok=false; std::string error, map; std::filesystem::path path; };
+    std::future<RecoveryResult> recoveryFuture_;
+    std::set<std::filesystem::path> recoveryRetired_;
+    std::filesystem::path recoveryPending_, recoveryRoot_;
+    std::chrono::steady_clock::time_point recoveryAt_ = std::chrono::steady_clock::now();
+    bool recoveryPromptInAuto_ = false;
+    bool recoveryTimerInAuto_ = false;
+    std::filesystem::path recoveryPath() const;
+    bool autosaveNow();
+    void pollRecovery();
+    void retireRecovery();
+    void drawRecoveryPrompt();
     bool hasUnsavedEdits() const { return documentLoaded() && (doc_.dirty() || (doc_.hasTerrain() && doc_.terrainDraftDirty())); }
     ImVec2 viewportOrigin_, viewportSize_;
     // Viewport overlays (0.15b #3): the ground under the cursor (map-local Fable

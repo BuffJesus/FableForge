@@ -451,6 +451,11 @@ bool Automation::tick(App& app) {
         while (!val.empty() && val.front() == ' ') val.erase(val.begin());
         ExportSettings& s = app.settings();
         if (key == "format") s.format = lower(val) == "obj" ? 1 : 0;
+        else if (key == "autosave") s.autosave = val == "1";
+        else if (key == "autosave_minutes") s.autosaveMinutes = std::clamp(std::atoi(val.c_str()),1,30);
+        else if (key == "recovery_root") app.recoveryRoot_ = val;
+        else if (key == "recovery_prompt") app.recoveryPromptInAuto_ = val == "1";
+        else if (key == "recovery_timer") app.recoveryTimerInAuto_ = val == "1";
         else if (key == "textures") s.textures = val == "1";
         else if (key == "layers") s.layers = val == "1";
         else if (key == "walkable") s.walkable = val == "1";
@@ -718,6 +723,18 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "brush_save") { if (!app.saveBrush(rest)) fail("brush_save failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "brush_load") { if (!app.loadBrush(rest)) fail("brush_load failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "autosave_now") {
+        if (!app.autosaveNow()) fail("autosave_now refused"); else note("ok   "+line); ++pc_;
+    }
+    else if (cmd == "autosave_due") {
+        app.recoveryAt_=std::chrono::steady_clock::now()-std::chrono::minutes(app.settings_.autosaveMinutes);
+        note("ok   "+line); ++pc_;
+    }
+    else if (cmd == "wait_autosave") waitOn(!app.recoveryFuture_.valid(),"recovery snapshot");
+    else if (cmd == "assert_autosave_exists") {
+        const bool exists=fs::is_regular_file(app.recoveryPath());
+        if (exists!=(rest=="1")) fail("assert_autosave_exists "+rest); else note("ok   "+line); ++pc_;
+    }
     else if (cmd == "budget_area") {
         float x0=0,y0=0,x1=0,y1=0; std::istringstream input(rest);
         if (!(input>>x0>>y0>>x1>>y1) || !app.addBudgetArea(x0,y0,x1,y1)) fail("budget_area: invalid box");

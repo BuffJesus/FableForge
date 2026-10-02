@@ -1371,7 +1371,10 @@ void testRecovery(const fs::path& dir) {
     doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
     const auto wanted=doc.terrain(); const auto names=doc.level()->soundThemes();
     const auto path=scratch.path()/"recovery.ffrecovery";
-    CHECK(doc.saveRecovery(path,err));
+    auto frozen=doc.recoveryWriteSnapshot();
+    CHECK(doc.setVertexHeights({{4,4,13}},false));
+    CHECK(frozen.saveRecovery(path,err));
+    CHECK(doc.terrain().heights[4*9+4]==13); // worker captures the earlier terrain and objects
     CHECK(doc.dirty() && doc.terrainDraftDirty() && doc.savedTerrain()==bank);
     CHECK(readAll(source)==sourceBytes);
     ed::Document reopened;

@@ -1106,12 +1106,18 @@ or destination failure leaves both edits pending. See HANDOFF_WORLD_UI.
 World-tab pending edits and timed crash recovery remain separate follow-ups.
 
 #### No user backups (Create backup file) and no editor autosave
-2026-10-02 foundation: Document::saveRecovery / recover now use one staged
-editor archive, preserve independent camera flags and navigation baseline, and
-recover objects/terrain/sound names as one reversible edit. Native trigger and
-backup naming are checked in HANDOFF_WORLD_UI. Timer, path scoping, cleanup and
-recovery/snapshot UI remain pending. The proposal below predates this foundation;
-reuse the archive rather than adding independent lossy TNG/LEV loaders.
+2026-10-02: timed current-map crash recovery is implemented. The default
+five-minute steady-clock timer captures a private object/terrain snapshot to
+one editor archive under install/map-scoped app data. Reopen offers Recover /
+Discard; recovery is one undoable edit. Successful saves or explicit Discard
+retire the archive; failed saves keep it. Manual Snapshot now uses this rotating
+archive. Dated snapshot history, whole-world snapshots and restoration of pending
+World-tab edits remain separate work. See HANDOFF_WORLD_UI for native trigger /
+backup evidence and stock/loose, normal/compact checks.
+
+The original proposal below remains relevant to the dated snapshot library;
+reuse Document::saveRecovery / recover for objects and terrain, rather than
+adding independent lossy TNG/LEV loaders or duplicating the implemented timer.
 
 *gap, effort M, value high*
 
@@ -1140,7 +1146,9 @@ reuse the archive rather than adding independent lossy TNG/LEV loaders.
 
 5. Automation (docs/AUTOMATION.md): add `autosave_now`, `assert_autosave_exists 0|1`, `snapshot`, `restore_snapshot <i>`. Add a test that sculpts, calls autosave_now, reopens, recovers and checks assert_heights_changed 1.
 
-Effort: M (about 1 day; the async copy and dialogs already have patterns in editor.cpp). Value: high. Terrain edits currently have no crash safety at all, and loose-install drafts have no restore point short of retail.
+Remaining effort: M for a dated snapshot library and World-tab restore. Timed
+current-map recovery and saved terrain drafts are implemented above; a history
+of user-created restore points is still pending.
 
 #### World tab cannot create, remove or rename regions or set their display name, def, minimap or world-map flag
 *gap, effort M, value high*

@@ -56,6 +56,7 @@ float yawDegrees(const editor::Frame& f) {
 void App::openDocument() {
     if (modFilesBusy()) return;
     cancelCarry();
+    recoveryPending_.clear();
     clearBudgetAreas(); budgetHasReport_ = budgetPicking_ = false;
     docLoadedFor_.clear();
     thingGlyphs_.clear();
@@ -83,6 +84,14 @@ void App::openDocument() {
     });
     if (!derr.empty()) pushLog("editor: " + derr, 1);
     docLoadedFor_ = selectedName_;
+    recoveryAt_ = std::chrono::steady_clock::now();
+    recoveryPending_.clear();
+    if (!auto_.active() || !recoveryRoot_.empty()) {
+        std::error_code ec;
+        const auto path=recoveryPath();
+        if (fs::is_regular_file(path,ec)) recoveryPending_=path;
+        else if (ec) pushLog("recovery check: "+ec.message(),1);
+    }
     syncedRevision_ = doc_.revision();
     hiddenSections_.clear(); sectionsDirty_ = true; sectionsCardRev_ = ~0ull;
     tracksCacheRev_ = ~0ull; linkPick_.active = false; trackLinkPick_ = false; attachPick_.active = false;
@@ -2551,6 +2560,7 @@ bool App::saveDraft() {
     const bool terrain = doc_.hasTerrain() && doc_.terrainDraftDirty(), objects = doc_.dirty();
     std::string err; std::vector<std::string> notes;
     if (!doc_.saveDraftLoose(saveRoot(), err, &notes)) { pushLog("draft save failed: " + err, 2); return false; }
+    retireRecovery();
     for (const auto& note : notes) pushLog(note, 0);
     if (terrain) pushLog("saved terrain draft " + doc_.terrainDraftPath(saveRoot()).string() + "; Write terrain applies it to the game", 3);
     if (objects) pushLog("saved " + doc_.loosePath().string(), 3);
@@ -2566,12 +2576,14 @@ bool App::saveDocument() {
     if ((doc_.external() || forge::levelstore::detect(saveRoot()).looseOnly()) && gameWriteBlocked("save")) return false;
     std::string err;
     if (!doc_.saveLoose(saveRoot(), err)) { pushLog("save failed: " + err, 2); return false; }
+    if (!hasUnsavedEdits()) retireRecovery();
     pushLog("saved " + doc_.loosePath().string(), 3);
     if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first (saved anyway, as vanilla does).", 1);
     return true;
 }
 
 const char* App::activeFileJob() const {
+    if (recoveryFuture_.valid()) return "recovery snapshot";
     if (terrainDeployFuture_.valid()) return "terrain write";
     if (worldFuture_.valid()) return "world write";
     if (newLevelFuture_.valid()) return "level creation";
@@ -2612,6 +2624,7 @@ bool App::deployDocument() {
     if (doc_.external() && saveRoot() != installPath_) { pushLog("deploy: this map belongs to another world and writes its own files; a redirected save root does not apply to it", 2); return false; }
     std::string err;
     if (!doc_.deployWad(saveRoot(), err)) { pushLog("deploy failed: " + err, 2); return false; }
+    if (!hasUnsavedEdits()) retireRecovery();
     if (writesLoose()) pushLog("wrote " + doc_.loosePath().string() + " (loose-level install: the game reads this file)", 3);
     else pushLog("wrote " + doc_.mapName() + ".tng into FinalAlbion.wad (backup FinalAlbion.wad.forge-orig)", 3);
     if (const auto n = validateMap().size()) pushLog("There are " + std::to_string(n) + " invalid thing(s) on this map. Press V to see the first.", 1);
@@ -3698,6 +3711,7 @@ void App::startTerrainDeploy() {
 // ------------------------------------------------------------ viewport
 
 void App::editorShortcuts() {
+    if (!recoveryPending_.empty()) return;
     if (!editMode_ || !documentLoaded()) return;
     ImGuiIO& io = ImGui::GetIO();
     // a pending write confirmation owns Escape (confirmRow cancels it): nothing else reacts this frame
@@ -3884,6 +3898,88 @@ editor::Frame App::groupFrame(const editor::Frame& start) const {
 
 // ------------------------------------------------------------ unsaved-changes prompt
 
+fs::path App::recoveryPath() const {
+    auto hash=[](const std::string& text) {
+        uint64_t value=14695981039346656037ull;
+        for (unsigned char c:text) { value^=c; value*=1099511628211ull; }
+        char buf[17]; std::snprintf(buf,sizeof buf,"%016llx",static_cast<unsigned long long>(value));
+        return std::string(buf);
+    };
+    const auto root=recoveryRoot_.empty() ? fs::path(settingsPath()).parent_path()/"autosave" : recoveryRoot_;
+    const MapEntry* map=findEntry(selectedName_);
+    const std::string identity=doc_.mapName()+"|"+(map ? map->worldFile : "")+"|"+saveRoot();
+    return root/hash(lowerCopy(fs::weakly_canonical(installPath_).generic_string()))/(hash(identity)+".ffrecovery");
+}
+
+bool App::autosaveNow() {
+    if (!documentLoaded() || !doc_.hasTerrain() || doc_.strokeActive() || activeFileJob() || !recoveryPending_.empty()) return false;
+    if (auto_.active() && recoveryRoot_.empty()) { pushLog("autosave: scripted runs need an owned recovery root",1); return false; }
+    try {
+        const auto path=recoveryPath();
+        auto snapshot=doc_.recoveryWriteSnapshot();
+        recoveryRetired_.erase(path);
+        const auto map=doc_.mapName();
+        recoveryFuture_=std::async(std::launch::async,[snapshot=std::move(snapshot),path,map]() mutable {
+            RecoveryResult result; result.path=path; result.map=map;
+            result.ok=snapshot.saveRecovery(path,result.error); return result;
+        });
+        recoveryAt_=std::chrono::steady_clock::now();
+        return true;
+    } catch (const std::exception& e) { pushLog(std::string("autosave: ")+e.what(),2); return false; }
+}
+
+void App::retireRecovery() {
+    if (!documentLoaded() || (auto_.active() && recoveryRoot_.empty())) return;
+    const auto path=recoveryPath();
+    recoveryRetired_.insert(path);
+    std::error_code ec; fs::remove(path,ec);
+    if (ec) pushLog("recovery cleanup: "+ec.message(),1);
+    if (recoveryPending_==path) recoveryPending_.clear();
+    recoveryAt_=std::chrono::steady_clock::now();
+}
+
+void App::pollRecovery() {
+    if (recoveryFuture_.valid() && recoveryFuture_.wait_for(std::chrono::milliseconds(0))==std::future_status::ready) {
+        const auto result=recoveryFuture_.get();
+        if (recoveryRetired_.erase(result.path)) {
+            std::error_code ec; fs::remove(result.path,ec);
+            if (ec) pushLog("recovery cleanup: "+ec.message(),1);
+        } else if (result.ok) pushLog("autosaved "+result.map+" (objects and terrain)",0);
+        else pushLog("autosave failed: "+result.error,2);
+        if (closePending_ && !hasUnsavedEdits() && !worldPendingCount() && !worldFuture_.valid() && dialogueStaged_.empty()) {
+            retireRecovery(); quit_=true;
+        }
+    }
+    if ((!auto_.active() || recoveryTimerInAuto_) && settings_.autosave && hasUnsavedEdits() && recoveryPending_.empty() && !activeFileJob() &&
+        std::chrono::steady_clock::now()-recoveryAt_>=std::chrono::minutes(settings_.autosaveMinutes)) autosaveNow();
+}
+
+void App::drawRecoveryPrompt() {
+    if (recoveryPending_.empty() || (auto_.active() && !recoveryPromptInAuto_)) return;
+    using theme::S;
+    ImGui::OpenPopup("Recover unsaved edits");
+    ImGui::SetNextWindowSize(ImVec2(S(390),0));
+    if (ImGui::BeginPopupModal("Recover unsaved edits",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("%s has a recovery snapshot of objects and terrain. Recover it as an undoable edit, or discard it.",doc_.mapName().c_str());
+        ImGui::BeginDisabled(activeFileJob()!=nullptr);
+        if (theme::primaryButton("Recover",ImVec2(S(160),S(32)))) {
+            std::string error;
+            if (doc_.recover(recoveryPending_,error)) {
+                recoveryPending_.clear(); recoveryAt_=std::chrono::steady_clock::now();
+                selectedThing_=-1; selectedUid_=0; extraUids_.clear();
+                sectionsDirty_=true; startFoliageLoad();
+                pushLog("recovered objects and terrain; Save draft keeps them",3);
+                ImGui::CloseCurrentPopup();
+            } else pushLog("recovery failed: "+error,2);
+        }
+        auto_.registerWidget("btn_recovery_recover");
+        ImGui::SameLine();
+        if (theme::dangerButton("Discard",ImVec2(S(160),S(32)))) { retireRecovery(); ImGui::CloseCurrentPopup(); }
+        auto_.registerWidget("btn_recovery_discard");
+        ImGui::EndDisabled(); ImGui::EndPopup();
+    }
+}
+
 void App::drawUnsavedPrompt() {
     if (pendingSelect_.empty() && !closePending_) return;
     using theme::S;
@@ -3944,8 +4040,9 @@ void App::drawUnsavedPrompt() {
         }
         auto_.registerWidget("btn_unsaved_save");
         ImGui::SameLine(0, S(6));
-        ImGui::BeginDisabled(worldFuture_.valid());
+        ImGui::BeginDisabled(worldFuture_.valid() || recoveryFuture_.valid());
         if (theme::dangerButton("Discard", ImVec2(w, S(32)))) {
+            retireRecovery();
             if (closePending_) quit_ = true;
             else { const std::string t = pendingSelect_; pendingSelect_.clear(); discardEdits_ = true; selectMap(t); }
         }

@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: timed crash recovery
+
+Automatic recovery snapshots default to every five minutes while the current
+map has unsaved authoring edits. File > Recovery snapshots offers an on/off
+control, 1/5/10/30-minute intervals and Snapshot now. The steady clock drives
+the interval; strokes, file jobs and a pending recovery decision defer it.
+A private Document::recoveryWriteSnapshot copies objects, world origin and LEV
+before launching the worker; later edits and map switches cannot enter its data.
+
+Archives live under the settings directory's `autosave` folder, separated by
+canonical install identity and map/world/save-root identity. Game files and
+saved drafts remain untouched. Opening a map with an archive offers Recover /
+Discard. Recover applies objects and terrain as one undoable edit, refreshes
+foliage, and leaves authoring edits pending. Failed recovery retains the archive.
+Save draft removes it only after success. Object-only/game saves remove it once
+all authoring work is saved; pack exports retain it. Explicit Discard removes it.
+Close/Discard waits for an active recovery worker so it cannot recreate a retired
+archive after the UI exits. Closing a pending recovery decision preserves it.
+Manual Snapshot now uses the rotating recovery archive; a dated snapshot library
+and whole-world snapshots remain separate backlog work.
+
+Automation stays isolated: no automatic timer or user-data archive access unless
+explicitly configured with an owned recovery root; the timer and modal have
+separate test opt-ins. `tools/test_recovery.py --install <root>` passes normal and
+compact sizes on stock and renamed-WAD copies. It tests new-process reopen,
+real Recover/Discard buttons, private object/terrain capture during later edits,
+exact document/height undo and redo, enabled/disabled elapsed timers, successful
+save cleanup, and failed joint save preservation of archive bytes and dirty state.
+Evidence: `build/recovery-ui-xq_2rjba` (final stock),
+`build/recovery-ui-ldkjmhn9` (loose).
+The compact modal was visually inspected (`build/recovery-ui-b53u0_vc`).
+Full Release rebuild and all 36 CTest cases pass, including the new frozen
+Document snapshot test. Documentation-command and Python syntax checks pass;
+existing Budget, controls and selection-action suites pass with hidden GUI windows
+(`build/recovery-budget-regression.log`, `recovery-controls-regression.log`,
+`recovery-selection_actions-regression.log`).
+The earlier 100-check broad gate predates Budget/recovery. No native runtime
+comparison, live game write, push, release or deployment was performed.
+
 ## 2026-10-02 recovery archive foundation (timer/UI still pending)
 
 Document::saveRecovery writes one staged CBOR archive containing TNG text,

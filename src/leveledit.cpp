@@ -1649,6 +1649,14 @@ fs::path Document::terrainDraftPath(const fs::path& gameRoot) const {
     return fs::path(lev.string() + ".forge-draft");
 }
 
+Document Document::recoveryWriteSnapshot() const {
+    if (stroke_ || batchDepth_) throw std::logic_error("finish the active edit before taking a recovery snapshot");
+    auto out = terrainWriteSnapshot();
+    out.file_ = file_;
+    out.worldX_ = worldX_; out.worldY_ = worldY_;
+    return out;
+}
+
 bool Document::saveRecovery(const fs::path& path, std::string& error) const {
     if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before taking a recovery snapshot"; return false; }
     try {

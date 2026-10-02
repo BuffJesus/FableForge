@@ -627,6 +627,8 @@ void App::loadSettings(std::string& savedInstall) {
         const auto j = nlohmann::json::parse(f);
         savedInstall = j.value("install", "");
         settings_.outDir = j.value("out_dir", settings_.outDir);
+        settings_.autosave = j.value("autosave",settings_.autosave);
+        settings_.autosaveMinutes = std::clamp(j.value("autosaveMinutes",settings_.autosaveMinutes),1,30);
         settings_.format = j.value("format", settings_.format);
         settings_.up = j.value("up", settings_.up);
         settings_.textures = j.value("textures", settings_.textures);
@@ -661,6 +663,7 @@ void App::saveSettings() const {
     try {
         fs::create_directories(fs::path(settingsPath()).parent_path());
         nlohmann::json j = {
+            {"autosave",settings_.autosave}, {"autosaveMinutes",settings_.autosaveMinutes},
             {"install", installPath_}, {"out_dir", std::string(outDirBuf_)}, {"format", settings_.format},
             {"up", settings_.up}, {"textures", settings_.textures}, {"texels", settings_.texels},
             {"tile", settings_.tile}, {"gain", settings_.gain}, {"layers", settings_.layers}, {"walkable", settings_.walkable},
@@ -922,12 +925,12 @@ bool App::openLooseLev(const std::string& path) {
 }
 
 void App::requestClose() {
-    if (hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
+    if (recoveryFuture_.valid() || hasUnsavedEdits() || worldPendingCount() > 0 || worldFuture_.valid() ||
         !dialogueStaged_.empty()) {
         pendingSelect_.clear();
         closePending_ = true;
         closeSaveWaiting_ = worldFuture_.valid();
-    } else quit_ = true;
+    } else { if (recoveryPending_.empty()) retireRecovery(); quit_ = true; }
 }
 
 void App::selectMap(const std::string& nameOrKey) {
@@ -1809,6 +1812,9 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("foliage_preview_reseated=" + std::to_string(foliagePreviewReseated_));
     v.push_back("foliage_preview_reseated_any=" + std::to_string(foliagePreviewReseated_ > 0));
     v.push_back("budget_open=" + std::to_string(budgetOpen_));
+    v.push_back("recovery_pending=" + std::to_string(!recoveryPending_.empty()));
+    v.push_back("recovery_busy=" + std::to_string(recoveryFuture_.valid()));
+    v.push_back("autosave_enabled=" + std::to_string(settings_.autosave));
     v.push_back("budget_scope=" + std::to_string(budgetScope_));
     v.push_back("budget_picking=" + std::to_string(budgetPicking_));
     v.push_back("budget_areas=" + std::to_string(budgetAreas_.size()));
@@ -1901,6 +1907,7 @@ std::vector<std::string> App::stateDump() const {
 // ------------------------------------------------------------------ drawing
 
 void App::frame(float dt) {
+    pollRecovery();
     renderer_.pollTextureCleanup();
     time_ += dt;
     frameDialoguePlayback();
@@ -1923,6 +1930,7 @@ void App::frame(float dt) {
         else if (r.ok) pushLog("terrain saved into the game (start a new game or re-enter the region to see it)", 3);
         else pushLog("terrain save failed: " + r.error, 2);
         if (writeObjectsAfterTerrain_) finishWriteBoth(r.ok);
+        if (r.ok && r.pack.empty() && !hasUnsavedEdits()) retireRecovery();
     }
     if (worldFuture_.valid() && worldFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         const WorldJob r = worldFuture_.get();
@@ -2038,6 +2046,7 @@ void App::frame(float dt) {
     drawPanelStrip(false);
     if (settings_.showActions) { ImGui::SameLine(0, 0); drawActions(right); }
     drawUnsavedPrompt();
+    drawRecoveryPrompt();
     if (firstRun_ && !auto_.active()) { firstRun_ = false; setupOpen_ = true; tourPending_ = true; }
     drawToolWindows();
     if (!texturesMode_ || assetsTab_ != 1) modelImportOpen_ = false;
@@ -2067,6 +2076,17 @@ void App::drawMenuBar() {
     ImGui::TextColored(theme::vec(theme::Accent), "FableForge");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
     if (ImGui::BeginMenu("File")) {
+        if (ImGui::BeginMenu("Recovery snapshots")) {
+            if (ImGui::MenuItem("Automatic snapshots",nullptr,settings_.autosave)) { settings_.autosave=!settings_.autosave; saveSettings(); }
+            for (int minutes : {1,5,10,30}) {
+                const std::string label="Every "+std::to_string(minutes)+" minute(s)";
+                if (ImGui::MenuItem(label.c_str(),nullptr,settings_.autosaveMinutes==minutes)) { settings_.autosaveMinutes=minutes; saveSettings(); }
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Snapshot now",nullptr,false,documentLoaded() && !activeFileJob())) autosaveNow();
+            auto_.registerWidget("menu_autosave_now");
+            ImGui::EndMenu();
+        }
         if (ImGui::MenuItem("Open world (.wld)...", "Ctrl+Shift+O")) openWorldFile();
         if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
         ImGui::Separator();

@@ -1171,3 +1171,18 @@ Restart and Step control the same timeline. These are diagnostic volumes, not
 scene illumination. Runtime position parameters use the local origin in this preview.
 
 ![Particle light volumes](walkthrough/w22_light_volumes.png)
+
+## Recovering unsaved map edits
+
+File > Recovery snapshots controls automatic captures of the current map's
+unsaved objects and terrain. The default interval is five minutes; choose
+1, 5, 10 or 30 minutes, turn captures off, or use Snapshot now. Captures use
+app-data files separated by install and map, without changing game files or
+your saved draft.
+
+On reopening a map, Recover restores its snapshot as one undoable edit. Save
+draft then keeps that work and removes the recovery archive. Discard removes
+the archive without changing the loaded map. Failed saves and failed recovery
+keep the archive. A snapshot holds completed edits; an active brush stroke
+waits until it finishes. It covers the current map's objects and terrain;
+pending World-tab, dialogue and asset edits use their existing save workflows.

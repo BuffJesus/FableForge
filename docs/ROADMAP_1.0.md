@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Timed crash recovery now snapshots unsaved objects and terrain into an
+install-scoped app-data archive every five minutes, with configurable intervals
+and manual capture. Recover/Discard works on reopen; recovery is undoable, and
+failed saves keep the archive. Stock/loose and normal/compact checks are tracked
+in HANDOFF_WORLD_UI. A dated snapshot library remains separate work.
+
 Budget > Areas now captures dragged boxes and clicked objects, with Shift
 accumulation, visible picks, Clear and Escape. Normal/compact input and overlay
 checks pass, alongside existing Budget/controls/selection suites. Native

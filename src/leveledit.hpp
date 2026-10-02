@@ -467,6 +467,7 @@ public:
     // Standalone editor recovery archive: never marks authoring/game baselines saved.
     bool saveRecovery(const std::filesystem::path& path, std::string& error) const;
     bool recover(const std::filesystem::path& path, std::string& error);
+    Document recoveryWriteSnapshot() const;
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
