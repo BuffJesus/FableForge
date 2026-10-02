@@ -860,7 +860,8 @@ does not change which character speaks the line in the game. Drag to rotate,
 scroll to zoom, or use **Reset view**. Play/Pause, Stop, Loop, Mute and the time
 slider sit below the preview. Audio uses the matching LUT clip when available;
 muted or audio-free lines can still animate. **Show lip sync timeline** opens
-one scrollable set of phoneme tracks; drag a track to seek.
+one scrollable set of phoneme tracks; drag a track to seek. Scrubbing pauses
+playback, including muted or audio-free animation.
 Seeking to the end stops there; press **Play** to start the line again.
 
 Click **Edit lip sync** beside the Dialogue heading or at the bottom of the

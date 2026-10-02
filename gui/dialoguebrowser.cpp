@@ -698,8 +698,10 @@ void App::drawDialogueViewport(const ImVec2& viewportOrigin, const ImVec2& size)
             ImGui::PopStyleVar();
         }
     ImGui::SetNextItemWidth(contentWidth);
-    if(ImGui::SliderFloat("##dialogue_time",&dialogueTime_,0,duration,"%.2f s") && dialogueAudio_)
-        dialogueAudio_->seek(dialogueTime_,dialogueError_);
+    if(ImGui::SliderFloat("##dialogue_time",&dialogueTime_,0,duration,"%.2f s")) {
+        dialogueMotionPlaying_=false;
+        if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
+    }
     auto_.registerWidget("slider_dialogue_time");
     ImGui::Checkbox("Show lip sync timeline",&dialogueTracksOpen_);
     auto_.registerWidget("checkbox_dialogue_timeline");
@@ -747,10 +749,11 @@ void App::drawDialogueViewport(const ImVec2& viewportOrigin, const ImVec2& size)
         ImGui::InvisibleButton("##dialogue_large_timeline",ImVec2(width,rows*rowHeight));
         auto_.registerWidget("timeline_dialogue_large");
         auto_.registerWidget("timeline_dialogue");
-        if(ImGui::IsItemActive() && ImGui::IsMouseDown(0))
+        if(ImGui::IsItemActive() && ImGui::IsMouseDown(0)) {
+            dialogueMotionPlaying_=false;
             dialogueTime_=duration*std::clamp((ImGui::GetIO().MousePos.x-left)/width,0.0f,1.0f);
-        if(ImGui::IsItemActive() && ImGui::IsMouseDown(0) && dialogueAudio_)
-            dialogueAudio_->seek(dialogueTime_,dialogueError_);
+            if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
+        }
     }
     ImGui::SetCursorScreenPos(ImVec2(trackOrigin.x,top+float(rows)*rowHeight));
     ImGui::Dummy(ImVec2(1,1));

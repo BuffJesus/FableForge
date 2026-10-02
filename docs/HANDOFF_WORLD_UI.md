@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: muted dialogue scrubbing pauses motion
+
+The slider previously paused audio but left the separate muted/audio-free
+animation clock running. Both the time slider and large timeline now pause that
+clock when scrubbed. The regression reproduced at dialogue-workspace-pux19olu;
+normal and compact actual-input flows pass at build/dialogue-workspace-ob9qqceh,
+including muted slider drag before mouse release, muted timeline seeking, audible
+replay, editor entry and scratch archive export. The input archive is unchanged.
+
+The development ZIP through 75ebdbb passes build/package-smoke-xn27ttp0, with
+SHA256 02964f41d178fc592d7404ebf61ea3c02eea0e0d82e5ae4bb85383f895ff820c.
+This muted-scrub follow-up is pending the next package refresh.
+
 ## 2026-10-01 continuation: dialogue refresh after Setup restore
 
 A new scratch workflow reproduced stale loaded dialogue after a successful Setup

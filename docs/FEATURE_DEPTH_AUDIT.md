@@ -2347,6 +2347,19 @@ Additional head-layout checks pass at build/dialogue-layout-ciw588ik for
 1440x900, 1280x720/1.5 and 1024x600/1.5, including covered-eye and four visible
 mouth-pose pixel checks. Ctrl+F navigation evidence remains asset-search-iplat6d9.
 
+## 2026-10-01 continuation: muted dialogue scrubbing pauses motion
+
+The slider previously paused audio but left the separate muted/audio-free
+animation clock running. Both the time slider and large timeline now pause that
+clock when scrubbed. The regression reproduced at dialogue-workspace-pux19olu;
+normal and compact actual-input flows pass at build/dialogue-workspace-ob9qqceh,
+including muted slider drag before mouse release, muted timeline seeking, audible
+replay, editor entry and scratch archive export. The input archive is unchanged.
+
+The development ZIP through 75ebdbb passes build/package-smoke-xn27ttp0, with
+SHA256 02964f41d178fc592d7404ebf61ea3c02eea0e0d82e5ae4bb85383f895ff820c.
+This muted-scrub follow-up is pending the next package refresh.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
