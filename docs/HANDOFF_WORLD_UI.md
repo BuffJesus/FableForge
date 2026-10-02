@@ -1,5 +1,51 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Environment stamp and cell cursor
+
+Environment now sets each touched 4x4 game cell to {target,0,0}/{255,0,0}
+in one application; target 0 clears it. Its centre truncates and its disc is
+strict, unlike Sound's rounded expanded disc. Small cursors (radii <=4) outline
+the actual cells. The Strength control is removed because strength/time no
+longer affect this tool. `themeBrushVertices` (renamed from
+`replaceBrushVertices`) shares the verified strict geometry with Replace;
+`environmentBrushCells` and Sound share only the vertex-to-game-cell mapping.
+Ground Paint retains its soft blending behavior; Environment Smear is still open.
+
+Native call path: `PaintInputEngineThemeMap` 0x02993a80 selects ATMOS (type 1)
+when GetEditMode is 5 (0x02993aa4..0x02993abb), truncates via ToC2DCoordI,
+and calls `EditPlaceEngineThemeUndoable` 0x029799d0 from 0x02993d03. The
+separately named `PaintInputEnvironmentThemeMap` 0x029940c0 is only a stub.
+The real pen tests strict squared distance (0x02979aa0..0x02979afb), writes
+the target to slot 0, clears 1/2 and sets blends 255/0
+(0x02979ba2..0x02979c49); ATMOS target 0 is explicitly allowed
+(0x029799f1..0x02979a0b). Transactions route through
+`ActionSetEngineTheme` 0x0295f160 / `SetThemeAtBlock` 0x024a41d0 to
+`SetEngineThemeAt` 0x02237b90. Its ATMOS branch divides both coordinates by
+four and calls `SetAtmosTheme` (0x02237cf3..0x02237d37); the blend path at
+0x02237fd5..0x02238019 does likewise. This confirms that the historical
+strength-weighted Environment proposal was incorrect.
+
+Exports: `build/environment-dispatch-native-evidence.txt`,
+`build/environment-world-setter-native-evidence.txt`,
+`build/environment-cell-setter-native-evidence.txt`, plus the theme caller,
+centre, and `build/sound-env-footprint-native-evidence.txt` above/below. Same
+read-only FableWin identity below. `forge-tools defs list` confirms
+ENVIRONMENT_HAUNTED is retail ENVIRONMENT_THEME_DAY index 2351.
+
+`testEnvironmentBrushFootprint` checks independently listed 1/3/4-cell sets,
+fractional centres, strict boundaries, corners and empty discs. Mixed blends
+become full assignments even with zero strength and dt; 0 clears, repeat is
+idempotent, scratch LEV indices/strengths and sound values match, and exact undo
+restores all blends. Heights, ground themes and sound stay unchanged.
+Full Release build and all 36 CTest checks pass. Real normal/compact paint,
+1/2/4-cell outlines, Ctrl sampling, clear and separate stroke undo pass at
+`build/environment-cursor-4h4l1tdp`. Normal four-cell and compact single-cell
+captures were inspected. Docs command/Python checks pass. No live install
+writes, deployment or in-game atmosphere comparison was exercised.
+After the shared query/mapping refactor, normal/compact Sound and Replace
+regressions pass at `build/sound-cursor-1fmcu_8h` and
+`build/replace-cursor-6nbsu1ee`, including exact grid/blend undo.
+
 ## 2026-10-02 continuation: strict Replace vertex pen
 
 Replace now uses a truncated vertex centre and strict squared distance instead

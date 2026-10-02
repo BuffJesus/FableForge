@@ -140,6 +140,7 @@ private:
     std::optional<std::vector<uint8_t>> soundSnap_;   // snapshot_sounds / assert_sound_changes
     struct ThemeSnapshot { std::vector<std::array<uint8_t, 3>> indices, strengths; };
     std::optional<ThemeSnapshot> themeSnap_;   // snapshot_themes / assert_theme_changes
+    std::optional<ThemeSnapshot> environmentSnap_;   // snapshot_environments / assert_environment_changes
     int clickPhase_ = 0;
     float dragDx_ = 0, dragDy_ = 0;   // drag_gizmo in progress when dragPhase_ > 0
     int dragPhase_ = 0;
@@ -757,6 +758,7 @@ private:
     bool brushHit_ = false;
     size_t brushCursorVertices_ = 0;  // affected vertex dots visible for a small exact pen
     size_t brushCursorSoundCells_ = 0;  // outlined sound cells for a small brush
+    size_t brushCursorEnvironmentCells_ = 0;
     float brushFable_[2] = {0, 0};   // map-local x/y under the cursor
     uint64_t syncedTerrainRev_ = 0;
     struct TerrainDeployResult { bool ok = false; std::string error, pack; std::vector<std::string> notes; std::shared_ptr<editor::Document> written; };

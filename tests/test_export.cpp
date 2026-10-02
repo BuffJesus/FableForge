@@ -1337,7 +1337,7 @@ void testReplaceBrushFootprint(const fs::path& dir) {
             {0, 0, 1.5f, {{0, 0}, {1, 0}, {0, 1}, {1, 1}}},
             {-.5f, -.5f, .25f, {{0, 0}}}, {-.6f, -.6f, .25f, {{0, 0}}},
             {3, 3, 0, {}}, {-1, -1, .25f, {}}}) {
-        CHECK(doc.replaceBrushVertices(c.x, c.y, c.radius) == c.vertices);
+        CHECK(doc.themeBrushVertices(c.x, c.y, c.radius) == c.vertices);
         ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::ReplaceTheme;
         b.replaceFrom = 2; b.themeIndex = 9; b.x = c.x; b.y = c.y; b.radius = c.radius;
         doc.beginStroke(b); doc.applyBrush(b, .1f); doc.endStroke();
@@ -1353,6 +1353,58 @@ void testReplaceBrushFootprint(const fs::path& dir) {
         if (!c.vertices.empty()) CHECK(doc.undo());
         CHECK(doc.terrain().themeIndex == baseline.themeIndex && doc.terrain().themeStrength == baseline.themeStrength);
     }
+}
+
+void testEnvironmentBrushFootprint(const fs::path& dir) {
+    namespace ed = albion::editor;
+    const auto path = writeGameMapLev(dir / "environment_footprint.lev");
+    {
+        auto level = forge::lev::File::open(path);
+        level.setAtmosTheme(2, "ENVIRONMENT_HAUNTED", 88);
+        level.setAtmosTheme(3, "ENVIRONMENT_TEST", 99);
+        for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx)
+            level.setAtmosAt(gx, gy, {{1, 2, 3}, {120, 80, 55}});
+        level.save(path);
+    }
+    ed::Document doc; std::string err;
+    CHECK(doc.openText("EnvironmentFootprint", "Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n", err));
+    CHECK(doc.loadLevel(path, err));
+    const auto baseline = doc.terrain();
+    using Cells = std::vector<std::pair<int, int>>;
+    struct Case { float x, y, radius; Cells cells; };
+    for (const uint8_t target : {uint8_t(0), uint8_t(1)})
+        for (const Case& c : std::vector<Case>{
+                {3.5f, 3.5f, .25f, {{0, 0}}}, {4.5f, 4.5f, .25f, {{1, 1}}},
+                {3, 3, 1, {{0, 0}}},
+                {3, 3, std::nextafter(1.0f, 2.0f), {{0, 0}, {0, 1}, {1, 0}}},
+                {3, 3, 1.5f, {{0, 0}, {0, 1}, {1, 0}, {1, 1}}},
+                {0, 0, 1.5f, {{0, 0}}}, {7, 7, 1.5f, {{1, 1}}}, {-1, -1, .25f, {}}}) {
+            CHECK(doc.environmentBrushCells(c.x, c.y, c.radius) == c.cells);
+            ed::TerrainBrush b; b.mode = ed::TerrainBrush::Mode::Environment;
+            b.themeIndex = target; b.x = c.x; b.y = c.y; b.radius = c.radius; b.strength = 0;
+            doc.beginStroke(b); doc.applyBrush(b, 0); doc.applyBrush(b, 0); doc.endStroke();
+            for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+                const bool hit = std::find(c.cells.begin(), c.cells.end(), std::make_pair(gx, gy)) != c.cells.end();
+                const size_t g = size_t(gy) * 2 + gx;
+                CHECK((doc.terrain().atmosIndex[g] == (hit ? std::array<uint8_t, 3>{target, 0, 0} : baseline.atmosIndex[g])));
+                CHECK((doc.terrain().atmosStrength[g] == (hit ? std::array<uint8_t, 3>{255, 0, 0} : baseline.atmosStrength[g])));
+            }
+            CHECK(doc.terrain().heights == baseline.heights && doc.terrain().themeIndex == baseline.themeIndex &&
+                  doc.terrain().themeStrength == baseline.themeStrength && doc.terrain().sound == baseline.sound);
+            if (!c.cells.empty()) {
+                const auto root = dir / "environment_footprint_root";
+                CHECK(doc.saveTerrainLoose(root, err));
+                const auto saved = forge::lev::File::open(root / "data" / "Levels" / "FinalAlbion" / "EnvironmentFootprint.lev");
+                for (int gy = 0; gy < 2; ++gy) for (int gx = 0; gx < 2; ++gx) {
+                    const size_t g = size_t(gy) * 2 + gx;
+                    CHECK(saved.atmosAt(gx, gy).indices == doc.terrain().atmosIndex[g]);
+                    CHECK(saved.atmosAt(gx, gy).strengths == doc.terrain().atmosStrength[g]);
+                    CHECK(saved.soundAt(gx, gy) == baseline.sound[g]);
+                }
+                CHECK(doc.undo());
+            }
+            CHECK(doc.terrain().atmosIndex == baseline.atmosIndex && doc.terrain().atmosStrength == baseline.atmosStrength);
+        }
 }
 
 // World-view tiles (src/worldtiles): the decimation keeps the far edge, heights interpolate
@@ -3076,6 +3128,7 @@ int main() {
     testEnvironmentAndSoundPaint(dir);
     testSoundBrushFootprint(dir);
     testReplaceBrushFootprint(dir);
+    testEnvironmentBrushFootprint(dir);
     testHeightPens();
     testTrackPath();
     testFractal();

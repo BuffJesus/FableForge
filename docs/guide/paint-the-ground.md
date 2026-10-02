@@ -50,6 +50,9 @@ so a radius of 1 considers one vertex.
 and ambient sound regions. Ctrl+click samples what is already under the cursor.
 Small Sound brushes outline each 4x4 cell they touch; even a 0.25-cell brush
 paints the cell containing its rounded ground vertex.
+Environ. sets each touched 4x4 cell fully to the chosen environment. Its small
+brush outlines the cells; *(no environment)* clears them. Radius 1 considers
+only the pointer's truncated vertex, which can differ from Sound's brush.
 With *(no sound)* chosen, **Clear all sounds on this map** removes every ambient
 sound in one step; with a sound chosen, the same button fills the whole map with it.
 Older `.lev` files without a game-map grid do not offer these two.

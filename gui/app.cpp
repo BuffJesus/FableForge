@@ -1866,6 +1866,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("brush_cursor_vertices=" + std::to_string(brushCursorVertices_));
     v.push_back("brush_cursor_sound_cells=" + std::to_string(brushCursorSoundCells_));
     v.push_back("sound_index=" + std::to_string(soundIndex_));
+    v.push_back("brush_cursor_environment_cells=" + std::to_string(brushCursorEnvironmentCells_));
+    v.push_back("environment_index=" + std::to_string(envSlot_));
     v.push_back("terrain_dirty=" + std::string(documentLoaded() && doc_.hasTerrain() && doc_.terrainDirty() ? "1" : "0"));
     v.push_back("write_both_pending=" + std::string(writeObjectsAfterTerrain_ ? "1" : "0"));
     v.push_back("confirm_pending=" + std::string(confirmPending() ? "1" : "0"));

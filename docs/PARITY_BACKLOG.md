@@ -866,6 +866,12 @@ Leave out the Reflections overlay here (ReflectionsOverlayInfo 0x029aad40 is a s
 #### Ground and environment Paint is a soft airbrush; vanilla Paint is a hard stamp
 *weakness, effort S, value high*
 
+Environment resolved 2026-10-02: full {target,0,0}/{255,0,0} game-cell
+assignment, with target 0 clearing, the truncated strict vertex pen and small
+cell outlines. Strength/time no longer affect this tool. Ground Paint retains
+its existing soft brush; a separate stamp option remains open. Fresh caller
+evidence corrects the historical `lround` proposal: `ToC2DCoordI` truncates.
+
 **Vanilla:** EditPlaceEngineThemeUndoable 0x029799d0: for every vertex with (x-cx)^2+(y-cy)^2 < r^2 (integer cursor, editable map, script-brush mask), slot0 = theme, slots 1-2 = 0, blend0 = 255, blend1 = 0. One application gives full coverage. For ENGINE it does nothing if theme == 0 (X0-NULL). With ATMOS_THEME the same loop writes the game cell under each vertex. Soft edges come from Smear.
 
 **Fix:** 1. Add `bool hardEdge = false;` to editor::TerrainBrush (src/leveledit.hpp, next to exactStep at about :91) with the comment "vanilla EditPlaceEngineThemeUndoable 0x029799d0 stamp". Set `b.hardEdge = penHardTheme_;` in App::fillPen (gui/editor.cpp:1709).
@@ -907,8 +913,10 @@ disc to unique sound cells; small cursors outline those cells. Native
 `SoundsInput` 0x02052230 uses half-even rounding, and `EditSetSounds`
 0x02971010 derives its loop bounds from that rounded centre, contrary to the
 historical proposal below. The setter 0x029a97c0 divides by four and skips an
-already-set sound. Environment remains open: 0x029799d0 uses a strict squared
-radius predicate, so it must not inherit Sound's `distance - 0.5` test.
+already-set sound. Environment is also corrected, using its own truncated
+strict squared-radius pen (0x029799d0), mapped to unique game cells. It stamps
+full coverage and allows 0 to clear; it does not inherit Sound's rounded
+`distance - 0.5` test or the proposed strength-weighted blend.
 
 **Vanilla:** EditSetSounds 0x02971010 uses a cursor rounded to the nearest vertex (GFFloatToLongNear in SoundsInput 0x02052230). It loops over height cells in [floor(c-r), ceil(c+r)] and, for each with hypot - 0.5 < r, calls EditSetSound on the game cell containing it. The game cell under the cursor is always painted, even at radius 1. Env paint (0x029799d0 with ATMOS) likewise maps every vertex in the pen to its game cell.
 

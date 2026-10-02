@@ -292,6 +292,9 @@ item and info display components; absent components are not added.
   Replace uses a truncated vertex centre and a strict radius: vertices exactly
   on the radius stay unchanged. Small cursors show considered vertices; only
   matching themes change. Radius 1 considers just the centre vertex.
+  Environ. maps that strict truncated vertex pen to 4x4 game cells and sets each
+  touched cell fully to the chosen environment; Strength and time do not scale
+  it. Small cursors outline the cells. Picking no environment clears them.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

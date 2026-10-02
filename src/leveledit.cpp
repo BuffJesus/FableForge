@@ -42,6 +42,14 @@ namespace {
 
 constexpr size_t kUndoDepth = 128;
 
+std::vector<std::pair<int, int>> gameCellsForVertices(std::vector<std::pair<int, int>> cells, int gw, int gh) {
+    for (auto& [gx, gy] : cells) { gx /= 4; gy /= 4; }
+    std::erase_if(cells, [&](const auto& cell) { return cell.first >= gw || cell.second >= gh; });
+    std::sort(cells.begin(), cells.end());
+    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+    return cells;
+}
+
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower(uint8_t(c))); return s; }
 
 bool placeholderTrackName(const std::string& name) {
@@ -652,21 +660,20 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         return;
     }
     if (brush.mode == Mode::Environment) {
-        // game-map cells (4x4 height cells each) whose centre is under the brush
+        // Native EditPlaceEngineThemeUndoable with ATMOS sets slot 0 to the
+        // target, clears slots 1/2 and sets blends 255/0 (third is implicit).
         if (!level_->hasGameMap() || working_->sound.empty()) return;
-        const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
-        const float opacity = std::clamp(brush.strength * dt, 0.0f, 1.0f);
-        for (int gy = 0; gy < gh; ++gy)
-            for (int gx = 0; gx < gw; ++gx) {
-                const float dx = float(gx) * 4.0f + 2.0f - brush.x, dy = float(gy) * 4.0f + 2.0f - brush.y;
-                if (dx * dx + dy * dy > brush.radius * brush.radius) continue;
-                const size_t g = size_t(gy) * gw + gx;
-                forge::terrain::ThemeBlend blend{working_->atmosIndex[g], working_->atmosStrength[g]};
-                if (unsigned(blend.strengths[0]) + blend.strengths[1] + blend.strengths[2] != 255) blend = {{blend.indices[0], 0, 0}, {255, 0, 0}};
-                const auto next = forge::terrain::paintThemeBlend(blend, brush.themeIndex, opacity);
-                working_->atmosIndex[g] = next.indices; working_->atmosStrength[g] = next.strengths;
+        const int gw = level_->gameMapWidth();
+        const std::array<uint8_t, 3> indices{brush.themeIndex, 0, 0}, strengths{255, 0, 0};
+        bool changed = false;
+        for (const auto [gx, gy] : environmentBrushCells(brush.x, brush.y, brush.radius)) {
+            const size_t g = size_t(gy) * gw + gx;
+            if (working_->atmosIndex[g] != indices || working_->atmosStrength[g] != strengths) {
+                working_->atmosIndex[g] = indices; working_->atmosStrength[g] = strengths;
+                changed = true;
             }
-        ++terrainRev_;
+        }
+        if (changed) ++terrainRev_;
         return;
     }
     if (brush.mode == Mode::ReplaceTheme) {
@@ -675,7 +682,7 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
         // the slot match is replaceTheme's (index or water family, any strength)
         if (brush.themeIndex == 0) return;
         const auto match = replaceMatchSet(brush.replaceFrom);
-        for (const auto [x, y] : replaceBrushVertices(brush.x, brush.y, brush.radius)) {
+        for (const auto [x, y] : themeBrushVertices(brush.x, brush.y, brush.radius)) {
             const size_t i = size_t(y) * cx + x;
             const forge::terrain::ThemeBlend blend{working_->themeIndex[i], working_->themeStrength[i]};
             const auto next = forge::terrain::replaceThemesInBlend(blend, match, brush.themeIndex);
@@ -935,7 +942,7 @@ int Document::addSoundTheme(const std::string& name, std::string& error) {
     } catch (const std::exception& e) { error = e.what(); return -1; }
 }
 
-std::vector<std::pair<int, int>> Document::replaceBrushVertices(float x, float y, float radius) const {
+std::vector<std::pair<int, int>> Document::themeBrushVertices(float x, float y, float radius) const {
     std::vector<std::pair<int, int>> vertices;
     if (!hasTerrain() || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(radius) || radius <= 0) return vertices;
     const double centreX = std::trunc(double(x)), centreY = std::trunc(double(y));
@@ -957,13 +964,13 @@ std::vector<std::pair<int, int>> Document::replaceBrushVertices(float x, float y
 
 std::vector<std::pair<int, int>> Document::soundBrushCells(float x, float y, float radius) const {
     if (!hasTerrain() || !hasGameMap()) return {};
-    const int gw = level_->gameMapWidth(), gh = level_->gameMapHeight();
-    auto cells = forge::heightpen::discFootprint(cellsX(), cellsY(), x, y, radius);
-    for (auto& [gx, gy] : cells) { gx /= 4; gy /= 4; }
-    std::erase_if(cells, [&](const auto& cell) { return cell.first >= gw || cell.second >= gh; });
-    std::sort(cells.begin(), cells.end());
-    cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
-    return cells;
+    return gameCellsForVertices(forge::heightpen::discFootprint(cellsX(), cellsY(), x, y, radius),
+                               level_->gameMapWidth(), level_->gameMapHeight());
+}
+
+std::vector<std::pair<int, int>> Document::environmentBrushCells(float x, float y, float radius) const {
+    if (!hasTerrain() || !hasGameMap()) return {};
+    return gameCellsForVertices(themeBrushVertices(x, y, radius), level_->gameMapWidth(), level_->gameMapHeight());
 }
 
 std::optional<std::pair<uint8_t, uint8_t>> Document::environmentAndSoundAt(float x, float y) const {

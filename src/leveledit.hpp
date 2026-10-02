@@ -476,9 +476,9 @@ public:
     // theme library. All zeros = exact-index matching.
     void setThemeFamilies(const std::array<uint32_t, 256>& families) { themeFamily_ = families; }
     std::array<bool, 256> replaceMatchSet(uint8_t from) const;
-    // Replace pen vertices: the theme caller truncates the pointer, then the
-    // native pen tests strict squared distance < radius^2 (0x0297a6c0).
-    std::vector<std::pair<int, int>> replaceBrushVertices(float x, float y, float radius) const;
+    // Theme Paint/Replace vertices: the caller truncates the pointer, then
+    // tests strict squared distance < radius^2 (0x029799d0 / 0x0297a6c0).
+    std::vector<std::pair<int, int>> themeBrushVertices(float x, float y, float radius) const;
     // Height Toolbox "Draw Paths" (EditDrawPathPenUndoable): every vertex within
     // `radius` of the segment takes the height interpolated between the ground
     // at its two ends. One undo step; returns the vertices changed.
@@ -549,6 +549,8 @@ public:
     // Game-map cells touched by vanilla EditSetSounds' rounded height-vertex
     // disc (0x02971010). One entry per sound cell, clipped to this map's grid.
     std::vector<std::pair<int, int>> soundBrushCells(float x, float y, float radius) const;
+    // Environment maps the strict theme vertex pen to unique game cells.
+    std::vector<std::pair<int, int>> environmentBrushCells(float x, float y, float radius) const;
     // What the grid holds under a map-local point: the strongest atmos slot and the sound.
     std::optional<std::pair<uint8_t, uint8_t>> environmentAndSoundAt(float x, float y) const;
     int paletteSlotOf(const std::string& name) const;

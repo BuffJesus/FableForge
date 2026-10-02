@@ -513,6 +513,7 @@ bool Automation::tick(App& app) {
         else if (key == "pen_target_from_stroke") app.penTargetFromStroke_ = val == "1";
         else if (key == "pen_speed") app.penSpeed_ = float(std::atof(val.c_str()));
         else if (key == "sound_index") app.soundIndex_ = std::clamp(std::atoi(val.c_str()), 0, int(app.doc_.soundThemes().size()));
+        else if (key == "environment_index") app.envSlot_ = std::clamp(std::atoi(val.c_str()), 0, 255);
         else if (key == "pen_smoothness") app.penSmoothness_ = float(std::atof(val.c_str()));
         else if (key == "pen_spiky") app.penSpikyness_ = float(std::atof(val.c_str()));
         else if (key == "pen_magnifier") app.penMagnifier_ = float(std::atof(val.c_str()));
@@ -1128,6 +1129,15 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "reseat_things") { app.reseatThings(); note("ok   " + line); ++pc_; }
     else if (cmd == "add_theme") { if (!app.addPaintTheme(rest)) fail("add_theme failed: " + rest); else note("ok   " + line); ++pc_; }
+    else if (cmd == "add_environment") {
+        const auto definitions = app.ctx_.definitions({"ENVIRONMENT_THEME_DAY"});
+        const bool listed = std::any_of(definitions.begin(), definitions.end(), [&](const auto& entry) { return entry.first == rest; });
+        const auto index = listed ? app.ctx_.definitionIndex(rest) : std::nullopt;
+        const int slot = index ? app.doc_.addEnvironmentTheme(rest, *index) : -1;
+        if (slot < 0) fail("add_environment failed: " + rest);
+        else { app.envSlot_ = slot; note("ok   " + line + " (slot " + std::to_string(slot) + ")"); }
+        ++pc_;
+    }
     else if (cmd == "custom_theme" || cmd == "custom_theme_refused") {   // custom_theme <png> <NAME> [donor] [cliffPng]
         std::istringstream rs(rest); std::string png, nm, donor, cliff; rs >> png >> nm >> donor >> cliff;
         const bool okay = app.createCustomTheme(png, nm, donor, cliff);
@@ -1245,27 +1255,35 @@ bool Automation::tick(App& app) {
         std::istringstream rs(rest); int theme = -1; float h = 20; int w = 0, hh = 0; rs >> theme >> h >> w >> hh;
         app.setNewLevelBlank(theme, h, w, hh); note("ok   " + line); ++pc_; }
     else if (cmd == "brush") { float r = 6, s = 4; std::istringstream(rest) >> r >> s; app.setBrush(r, s); note("ok   " + line); ++pc_; }
-    else if (cmd == "snapshot_themes") {
-        if (!app.doc_.hasTerrain()) fail("snapshot_themes: no terrain");
+    else if (cmd == "snapshot_themes" || cmd == "snapshot_environments") {
+        if (!app.doc_.hasTerrain() || (cmd == "snapshot_environments" && !app.doc_.hasGameMap())) fail(cmd + ": no terrain/grid");
         else {
             const auto& terrain = app.doc_.terrain();
-            themeSnap_ = ThemeSnapshot{terrain.themeIndex, terrain.themeStrength};
+            if (cmd == "snapshot_environments") environmentSnap_ = ThemeSnapshot{terrain.atmosIndex, terrain.atmosStrength};
+            else themeSnap_ = ThemeSnapshot{terrain.themeIndex, terrain.themeStrength};
             note("ok   " + line);
         }
         ++pc_;
     }
-    else if (cmd == "assert_theme_changes") {
+    else if (cmd == "assert_theme_changes" || cmd == "assert_environment_changes") {
         size_t expected = 0; std::istringstream input(rest);
-        if (!(input >> expected) || !themeSnap_ || !app.doc_.hasTerrain() ||
-            app.doc_.terrain().themeIndex.size() != themeSnap_->indices.size() ||
-            app.doc_.terrain().themeStrength.size() != themeSnap_->strengths.size())
-            fail("assert_theme_changes: invalid count or missing/mismatched snapshot");
+        const bool environment = cmd == "assert_environment_changes";
+        const auto& snapshot = environment ? environmentSnap_ : themeSnap_;
+        if (!(input >> expected) || !snapshot || !app.doc_.hasTerrain())
+            fail(cmd + ": invalid count or missing snapshot/terrain");
         else {
-            const auto& terrain = app.doc_.terrain(); size_t changed = 0;
-            for (size_t i = 0; i < terrain.themeIndex.size(); ++i)
-                changed += terrain.themeIndex[i] != themeSnap_->indices[i] || terrain.themeStrength[i] != themeSnap_->strengths[i];
-            if (changed != expected) fail(line + " (" + std::to_string(changed) + " vertices differ)");
-            else note("ok   " + line);
+            const auto& terrain = app.doc_.terrain();
+            const auto& indices = environment ? terrain.atmosIndex : terrain.themeIndex;
+            const auto& strengths = environment ? terrain.atmosStrength : terrain.themeStrength;
+            if (indices.size() != snapshot->indices.size() || strengths.size() != snapshot->strengths.size())
+                fail(cmd + ": snapshot size differs");
+            else {
+                size_t changed = 0;
+                for (size_t i = 0; i < indices.size(); ++i)
+                    changed += indices[i] != snapshot->indices[i] || strengths[i] != snapshot->strengths[i];
+                if (changed != expected) fail(line + " (" + std::to_string(changed) + " blends differ)");
+                else note("ok   " + line);
+            }
         }
         ++pc_;
     }

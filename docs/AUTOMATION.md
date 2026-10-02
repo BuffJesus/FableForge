@@ -51,6 +51,15 @@ preserving heights/sounds/objects and undoing exact theme blends.
 `brush_cursor_vertices` counts considered dots; theme matching can leave some
 of those vertices unchanged.
 
+`tools/test_environment_cursor.py --install <root>` checks Environment's strict
+1/2/4-cell pen through real mouse strokes, sampling, clearing and exact undo at
+both sizes. `brush_cursor_environment_cells` counts queried outlined cells;
+`environment_index` exposes the selected slot. `set environment_index <n>` sets
+it, and `add_environment <ENVIRONMENT_THEME_DAY name>` adds/selects a valid
+definition in the map's atmosphere palette. `snapshot_environments` captures
+all atmosphere indices/strengths; `assert_environment_changes <count>` checks
+the exact number of changed cell blends.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's
