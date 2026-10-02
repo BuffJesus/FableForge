@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02: 0.18.0 built and validated, publication pending
+
+Commit `4ca5a62` ("Release FableForge 0.18.0") carries the stable version, README,
+guide link, screenshots and validation notes (`docs/releases/0.18.0.md`). Full suite:
+all checks passed except two load-only flakes, which passed rerun alone (Dialogue workspace
+x2, overworld moves). In-game probes (things, compact, region, restore) all pass
+from a fresh New Game. The first region run raced the compact stage's game shutdown; the
+probe runner now waits for Fable.exe to exit. Before the probes, the shared install
+and My Games/Fable were snapshotted to `D:\tmp\fable_install_snapshot_20261002`,
+reset with `forge restore`, then put back. SHA256 trees match pre-probe state
+(1,912 + 1,217 files; 18 files still differ from backups, as before).
+`dist/FableForge-0.18.0-win64.zip` (+ `.sha256`, guide ZIP) passes `test_package.py`.
+
+Not done (the auto-mode classifier refused the push): tag `v0.18.0`, push
+`main` (fast-forward from origin/main) + `feat/editor-ui-shell` + the tag, CI
+green, `gh release create v0.18.0` with both ZIPs, marked latest, notes from
+`docs/releases/0.18.0.md`. After tagging, set `FORGE_VERSION_SUFFIX` back to "-dev".
+
 ## 2026-10-01 continuation: lip-sync Undo and Redo
 
 The editor has Undo/Redo buttons and Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z shortcuts.
