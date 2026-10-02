@@ -18,6 +18,11 @@ For unattended local checks, set `FABLEFORGE_AUTOMATION_HIDDEN=1` in the test
 process environment. Scripted editor children remain hidden; ordinary launches
 are unaffected. Builds should use a bounded job count, e.g. `cmake --build build -j 2`.
 
+Keep local development packages separate from published assets with
+`python tools/package.py --no-check --output-dir dist/development` after the
+relevant checks pass. Both the application and guide ZIPs use that destination;
+`--guide-only` accepts it too. The default remains `dist` for release tooling.
+
 ## Final release checklist
 
 1. Game closed (`Fable.exe` not running from the install: every writer and the suite's

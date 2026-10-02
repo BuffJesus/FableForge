@@ -2209,6 +2209,25 @@ wrong snapshot verb or a camera below terrain; neither was counted as visual
 validation. Source install was read-only; game runtime remains untested. The
 published rc.3 remains unchanged and does not contain this fix.
 
+## 2026-10-01 continuation: isolated development package
+
+`tools/package.py --output-dir` now places both ZIPs and its validated staging
+folder in the chosen destination, including guide-only mode. This permits local
+iteration without overwriting the published standalone guide or its checksum.
+The existing default remains dist. The CLI reference now reflects the current
+development binary rather than rc.3.
+
+`dist/development/FableForge-0.18.0-dev-win64.zip` contains the compass correction,
+UI workspace/import/search improvements, dialogue playback fix and terrain prop
+slope following. Extracted-package validation at `build/package-smoke-erc5r0b2`
+passes 69 documentation links, definition lookup, eight retail exports, rendered
+GUI smoke and literal-path mod workflows from an unrelated working directory.
+Application and guide CRC checks pass and SHA256 sidecars were written. Separate
+guide-only output under `build/package-guide-output-check` has the six expected
+members and keeps the tested rc.3 download link. Published rc.3 application and
+guide ZIP hashes remain exactly unchanged. No new GitHub release was published;
+other-machine and in-game validation are still pending.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

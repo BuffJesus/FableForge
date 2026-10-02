@@ -2,19 +2,21 @@
 """Build a release zip: dist/FableForge-<version>-win64.zip with both exes,
 README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
-  python tools/package.py [--version 0.1.0] [--no-check] [--guide-only]
+  python tools/package.py [--version 0.1.0] [--no-check] [--guide-only] [--output-dir dist]
 """
 import argparse, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
 
-def package_guide(root):
+def package_guide(root, output=None):
     guide_dir = root / "docs/walkthrough/aeon-controller"
     # A development ZIP name need not have a GitHub tag. Keep the standalone
     # README aligned with the tested application download in the walkthrough.
     guide = (guide_dir / "index.html").read_text(encoding="utf-8")
     link = re.search(r'https://github\.com/BuffJesus/FableForge/releases/tag/[^"\s]+', guide)
     download = link.group(0) if link else "https://github.com/BuffJesus/FableForge/releases"
-    guide_zip = root / "dist/FableForge-Aeon-Controller-Guide.zip"
+    output = output if output is not None else root / "dist"
+    output.mkdir(parents=True, exist_ok=True)
+    guide_zip = output / "FableForge-Aeon-Controller-Guide.zip"
     with zipfile.ZipFile(guide_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(guide_dir / "index.html", "AEON_CONTROLLER.html")
         for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
@@ -37,19 +39,21 @@ def main():
     ap.add_argument("--version", default=version)
     ap.add_argument("--no-check", action="store_true")
     ap.add_argument("--guide-only", action="store_true", help="Package only the illustrated Aeon/controller guide")
+    ap.add_argument("--output-dir", type=Path, default=root / "dist", help="Folder for ZIPs and staging; use a separate folder for development builds")
     a = ap.parse_args()
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?', a.version):
         ap.error("version must be a semantic version, optionally with a prerelease suffix")
+    output = a.output_dir.resolve()
+    output.mkdir(parents=True, exist_ok=True)
     if a.guide_only:
-        (root / "dist").mkdir(exist_ok=True)
-        package_guide(root)
+        package_guide(root, output)
         return 0
     if not a.no_check and subprocess.run([sys.executable, "tools/check_all.py"]).returncode != 0:
         print("checks failed; not packaging"); return 1
     name = f"FableForge-{a.version}-win64"
-    stage = os.path.join("dist", name)
-    if Path(stage).resolve().parent != (root / "dist").resolve():
-        raise RuntimeError("Package staging directory escaped dist")
+    stage = output / name
+    if stage.resolve().parent != output:
+        raise RuntimeError("Package staging directory escaped output directory")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
     for f in ["FableForge.exe", "forge.exe", "forge-tools.exe"]:
@@ -104,15 +108,15 @@ def main():
     shutil.copytree(os.path.join("docs", "screenshots"), os.path.join(stage, "docs", "screenshots"))
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
-    zpath = os.path.join("dist", name + ".zip")
+    zpath = output / (name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
-        for root, _, files in os.walk(stage):
+        for folder, _, files in os.walk(stage):
             for f in files:
-                p = os.path.join(root, f)
+                p = os.path.join(folder, f)
                 z.write(p, os.path.join(name, os.path.relpath(p, stage)))
     print(f"wrote {zpath} ({os.path.getsize(zpath)/1e6:.1f} MB)")
     for f in sorted(os.listdir(stage)): print(f"  {f:28s} {os.path.getsize(os.path.join(stage, f))/1e6:6.2f} MB")
-    package_guide(Path(__file__).resolve().parents[1])
+    package_guide(root, output)
     return 0
 
 if __name__ == "__main__":
