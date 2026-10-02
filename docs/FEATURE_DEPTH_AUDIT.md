@@ -2381,6 +2381,17 @@ The preceding development package through 0aac81d has CRC-checked SHA256
 62dab2b01291a50169b19ff050b3aee4c00a67c871dcc91ede735cad86fccbed.
 Inline pack creation requires the next package refresh.
 
+## 2026-10-01 continuation: direct lip-sync frame navigation
+
+The inline editor now accepts a one-based frame number, with one/ten-frame
+spinner steps. Inputs clamp to the valid range; Previous and Next disable at
+the endpoints. Navigation does not stage an edit. Normal and compact real-input
+checks pass at build/dialogue-workspace-8plo73a1: jump to 10, step to 9 and back,
+clamp zero to 1, then insert/export as before. Muted/audible playback checks
+remain included. The compact capture retains the first mouth-shape slider.
+Automation now accepts Enter; the initial harness failure was an unsupported
+key name, not a frame-navigation failure.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

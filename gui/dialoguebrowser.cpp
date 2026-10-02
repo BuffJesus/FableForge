@@ -408,12 +408,21 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                 dialogueTime_=float((double(target)+0.01)/dialogueEntry_.fps);
                 if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
             };
-            if(ImGui::SmallButton("Previous##lipframe") && frame>0) jump(frame-1);
+            int frameNumber=int(std::min(frame+1,size_t(std::numeric_limits<int>::max())));
+            ImGui::SetNextItemWidth(cardInner);
+            if(ImGui::InputInt("##dialogue_frame",&frameNumber,1,10))
+                jump(size_t(std::clamp(frameNumber,1,int(std::min(dialogueEntry_.frames.size(),size_t(std::numeric_limits<int>::max())))))-1);
+            auto_.registerWidget("input_dialogue_frame");
+            if(ImGui::IsItemHovered()) ImGui::SetTooltip("Jump to a frame by number. Hold Ctrl for ten-frame steps.");
+            ImGui::BeginDisabled(frame==0);
+            if(ImGui::SmallButton("Previous##lipframe")) jump(frame-1);
             auto_.registerWidget("button_dialogue_previous_frame");
+            ImGui::EndDisabled();
             ImGui::SameLine();
-            if(ImGui::SmallButton("Next##lipframe") && frame+1<dialogueEntry_.frames.size())
-                jump(frame+1);
+            ImGui::BeginDisabled(frame+1>=dialogueEntry_.frames.size());
+            if(ImGui::SmallButton("Next##lipframe")) jump(frame+1);
             auto_.registerWidget("button_dialogue_next_frame");
+            ImGui::EndDisabled();
             // Frame navigation above may have changed the selected time.
             const size_t current=std::min(dialogueEntry_.frames.size()-1,
                 size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));

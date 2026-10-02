@@ -646,3 +646,7 @@ as `mod_requires_<row>_<other-row>`. Indices follow the current displayed order.
 `selected_mesh_instances` counts uploaded mesh instances belonging to the
 selected thing. The mesh-import UI check waits for scene loading and requires
 one instance before capturing the cube, then verifies byte-exact placement undo.
+
+Dialogue frame navigation: `input_dialogue_frame` accepts a one-based frame number;
+`dialogue_frame` reports the selected frame. `key_down Enter` / `key_up Enter`
+commit typed input in keyboard workflows.

@@ -866,8 +866,8 @@ Seeking to the end stops there; press **Play** to start the line again.
 
 Click **Edit lip sync** beside the Dialogue heading or at the bottom of the
 right panel. Playback pauses and the timeline opens; the right panel becomes
-the editor, keeping the face visible. Choose a frame with the scrubber or
-Previous/Next, then adjust mouth-shape influence from 0% to 100%. Shapes have
+the editor, keeping the face visible. Type a frame number or use the scrubber
+and Previous/Next, then adjust mouth-shape influence from 0% to 100%. Shapes have
 plain descriptions and can be added or removed; insert/delete frame actions
 sit below them. **Browse dialogue** or Escape returns to the tree; Ctrl+F also
 returns and focuses search. Changes remain

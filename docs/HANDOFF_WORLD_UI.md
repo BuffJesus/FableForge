@@ -1,5 +1,16 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: direct lip-sync frame navigation
+
+The inline editor now accepts a one-based frame number, with one/ten-frame
+spinner steps. Inputs clamp to the valid range; Previous and Next disable at
+the endpoints. Navigation does not stage an edit. Normal and compact real-input
+checks pass at build/dialogue-workspace-8plo73a1: jump to 10, step to 9 and back,
+clamp zero to 1, then insert/export as before. Muted/audible playback checks
+remain included. The compact capture retains the first mouth-shape slider.
+Automation now accepts Enter; the initial harness failure was an unsupported
+key name, not a frame-navigation failure.
+
 ## 2026-10-01 continuation: create lip-sync packs inside Dialogue
 
 Dialogue now reuses the existing pack destination/creation controls, with its

@@ -1642,6 +1642,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("dialogue_bank=" + std::to_string(dialogueBank_));
     v.push_back("dialogue_id=" + std::to_string(dialogueId_));
     v.push_back("dialogue_frames=" + std::to_string(dialogueLoaded_ ? dialogueEntry_.frames.size() : 0));
+    v.push_back("dialogue_frame=" + std::to_string(dialogueLoaded_ && !dialogueEntry_.frames.empty()
+        ? 1+std::min(dialogueEntry_.frames.size()-1,size_t(std::max(0.f,dialogueTime_)*dialogueEntry_.fps)) : 0));
     v.push_back("dialogue_subtitles_count=" + std::to_string(dialogueSubtitles_.size()));
     v.push_back("dialogue_subtitle_name=" + (dialogueSubtitles_.empty() ? "" : dialogueSubtitles_.front().name));
     v.push_back("dialogue_search_results=" + std::to_string(dialogueSearchResults_.size()));
