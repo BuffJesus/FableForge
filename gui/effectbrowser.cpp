@@ -279,9 +279,13 @@ void App::drawEffectViewport(const ImVec2& origin,const ImVec2& size) {
             if(effectSimulation_.sprites().empty() && effectSimulation_.meshes().empty() &&
                (!effectShowLightVolumes_ || effectSimulation_.lights().empty())) {
                 const bool ended=!effectPlaying_ && effectSimulation_.position()+1e-6>=effectDuration_;
+                const char* message=ended?"Finished. Press Play to replay.":"No particles at this time.";
+                const float wrapWidth=std::max(1.f,previewSize.x-S(24));
+                const ImVec2 textSize=ImGui::CalcTextSize(message,nullptr,false,wrapWidth);
                 ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),ImGui::GetFontSize(),
-                    ImVec2(imageOrigin.x+S(12),imageOrigin.y+previewSize.y*.5f),theme::col(theme::Muted),
-                    ended?"Finished. Press Play to replay.":"No particles at this time.",nullptr,previewSize.x-S(24));
+                    ImVec2(imageOrigin.x+(previewSize.x-textSize.x)*.5f,
+                           imageOrigin.y+(previewSize.y-textSize.y)*.5f),
+                    theme::col(theme::Muted),message,nullptr,wrapWidth);
             }
             if (ImGui::IsItemHovered()) {
                 const auto& io=ImGui::GetIO();

@@ -2408,6 +2408,14 @@ scrubbing and air-glow visibility pass at build/effect-timing-vy5xwi8h. Wide air
 glow and compact blood-pool captures were visually inspected. The change affects
 viewport layout, not the effect simulation or game files.
 
+## 2026-10-01 continuation: centred Effects completion message
+
+The empty-preview status is now centred horizontally and vertically using its
+measured text bounds. This includes "Finished. Press Play to replay." and the
+no-particles status. Normal and compact finished captures were visually checked
+in build/effect-timing-jidfhwjw; timing, replay and live scrubbing checks passed.
+The application build passed. This is a presentation-only change.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
