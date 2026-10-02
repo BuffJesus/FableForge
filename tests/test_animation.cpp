@@ -35,6 +35,12 @@ struct Crc {
         word(uint16_t(t.positionPalette.size()));
         for(uint16_t v:t.positionPalette) word(v);
     }
+    void animation(const std::string& name,const forge::animation::Animation& a) {
+        string(name);string(a.rigName);byte(a.cyclic?1:0);real(a.duration);
+        dword(uint32_t(a.tracks.size()));dword(uint32_t(a.helperTracks.size()));
+        for(const auto& t:a.tracks) track(t);
+        for(const auto& t:a.helperTracks) track(t);
+    }
     uint32_t finish() const {return ~value;}
 };
 
@@ -63,7 +69,8 @@ int main(int argc,char** argv) {
             require(bank,"graphics mesh bank missing");
             std::set<std::string> names;
             size_t totalTracks=0;
-            Crc canonical;
+            size_t legacyNames=0,legacyTracks=0;
+            Crc canonical,legacy;
             for(const auto& preset:forge::lipsync::headPresets())
                 for(const auto& track:preset.tracks) names.insert(track.animation);
             for(const auto& name:names) {
@@ -75,22 +82,23 @@ int main(int argc,char** argv) {
                 const auto animation=forge::animation::decode(archive.entryData(*entry));
                 require(!animation.tracks.empty(),"phoneme animation has no tracks");
                 totalTracks+=animation.tracks.size();
-                canonical.string(name);
-                canonical.string(animation.rigName);
-                canonical.byte(animation.cyclic?1:0);
-                canonical.real(animation.duration);
-                canonical.dword(uint32_t(animation.tracks.size()));
-                canonical.dword(uint32_t(animation.helperTracks.size()));
-                for(const auto& track:animation.tracks) canonical.track(track);
-                for(const auto& track:animation.helperTracks) canonical.track(track);
+                canonical.animation(name,animation);
+                if(!name.starts_with("ANIM_ORACLE_")) {
+                    ++legacyNames;legacyTracks+=animation.tracks.size();
+                    legacy.animation(name,animation);
+                }
                 std::cout << name << ": " << animation.rigName << ", "
                           << animation.tracks.size() << " tracks\n";
             }
-            if(canonical.finish()!=0x046e7276u)
+            // Independent parse_anim_xseq.py validation preserves the five-head
+            // reference and adds the Oracle's six clips (96 object tracks).
+            require(legacyNames==30 && legacyTracks==1518 && legacy.finish()==0x046e7276u,
+                    "original retail phoneme tracks differ from independent Python parser");
+            if(canonical.finish()!=0xfbeecd06u)
                 std::cerr << "animation CRC " << std::hex << canonical.finish()
-                          << " expected 46e7276" << std::dec << '\n';
-            require(names.size()==30 && totalTracks==1518 &&
-                    canonical.finish()==0x046e7276u,
+                          << " expected fbeecd06" << std::dec << '\n';
+            require(names.size()==36 && totalTracks==1614 &&
+                    canonical.finish()==0xfbeecd06u,
                     "retail phoneme tracks differ from independent Python parser");
             std::cout << "animation: " << names.size() << " unique phoneme assets, "
                       << totalTracks << " tracks, CRC " << std::hex

@@ -1,10 +1,9 @@
 # FableForge
 
-**Current preview: [0.18.0-rc.3](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.3)** — a redesigned Dialogue workspace, native Browse controls,
-an illustrated Aeon/controller guide, and safer mod and terrain writes.
-See the [release notes](docs/releases/0.18.0-rc.3.md) for changes and validation limits.
-The latest final release remains 0.17.1 while fresh-game and separate-machine
-release checks are completed.
+**Latest release: [0.18.0](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0)** ?
+a speaker tree and inline lip-sync editor with Undo/Redo, native Browse controls,
+a stable camera compass, terrain props that follow slopes, and clearer effect previews.
+See the [release notes](docs/releases/0.18.0.md) for changes and validation limits.
 
 *Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
 library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
@@ -45,7 +44,7 @@ and brushes, effects, dialogue, mods, setup and budget survey. The
 
 ## Start in the editor
 
-1. Unzip the [current preview](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0-rc.3)
+1. Unzip the [latest release](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0)
    and run `FableForge.exe`. Choose the folder containing `Fable.exe` if it is
    not found automatically.
 2. Pick a map on the left, or open **World** to find it on the 2D map or in the

@@ -88,6 +88,11 @@ def run_harness(stage: str, args: list[str]) -> dict:
     r = sh([sys.executable, HARNESS, "--report", report, *args])
     if DRY:
         return {"ok": True, "dry": True}
+    # the harness returns while Fable.exe is still shutting down; the next stage's writer
+    # refuses ("quit the game before writing its files") until the process is gone
+    deadline = time.time() + 120
+    while game_running() and time.time() < deadline:
+        time.sleep(2)
     if r.stdout.strip():
         print("    " + "\n    ".join(r.stdout.strip().splitlines()[-8:]))
     if r.stderr.strip():
