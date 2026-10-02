@@ -169,6 +169,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     theme::label("textures.big");
     ImGui::SetNextItemWidth(cardInner);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
+    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     ImGui::InputTextWithHint("##texsearch", "Search textures (name, id)", texSearch_, sizeof texSearch_);
     ImGui::PopStyleVar();
     auto_.registerWidget("input_texsearch");
@@ -359,6 +360,7 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
     if (theme::ghostButton("Refresh", ImVec2((cardInner-S(6))*0.35f, S(28)))) refreshModels();
     auto_.registerWidget("btn_model_refresh");
     ImGui::SetNextItemWidth(cardInner);
+    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     ImGui::InputTextWithHint("##modelsearch", "Search models (name, id)", modelSearch_, sizeof modelSearch_);
     auto_.registerWidget("input_modelsearch");
     const std::string needle = modelSearch_;

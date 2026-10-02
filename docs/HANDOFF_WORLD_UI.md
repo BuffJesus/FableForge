@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: search shortcut follows the current browser
+
+`build/asset-search-before-rfmjpo1d` reproduced Ctrl+F doing nothing in Models:
+text input left all 3294 models displayed because focus was queued for the hidden
+map search. Ctrl+F now reveals and focuses search in Models, Textures, Effects or
+Dialogue; other pages reveal/focus the map list. Asset searches leave the map
+filter unchanged. The Help shortcut description and editor guide reflect this.
+
+`tools/test_asset_search.py` passes at `build/asset-search-an66l4o7` for 1440x900
+and 800x600 / 1.5, sending actual Ctrl+F plus UTF-8 input, checking model-ID,
+effect-name, dialogue-word and texture-name searches, then hidden map-list
+recovery. Its first post-fix run correctly found two barrel-name matches, so the
+model assertion uses exact ID 169 for its one-result expectation. The check is
+included in `check_all.py`. Automation's new `input_text` command feeds ImGui's
+normal text input path instead of mutating application search strings.
+
 ## 2026-10-01 continuation: compact Effects workspace
 
 The compact capture at `build/asset-workspaces-lzbsz58e/800x600-effect.png`

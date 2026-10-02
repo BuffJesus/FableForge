@@ -204,6 +204,10 @@ bool Automation::tick(App& app) {
         io.AddMousePosEvent(vmX_, vmY_);
         note("ok   " + line); ++pc_; waitFrames_ = 1;
     }
+    else if (cmd == "input_text") {
+        ImGui::GetIO().AddInputCharactersUTF8(rest.c_str());
+        note("ok   " + line); ++pc_; waitFrames_ = 2;
+    }
     else if (cmd == "key_down" || cmd == "key_up") {
         static const std::map<std::string, ImGuiKey> keys = {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},

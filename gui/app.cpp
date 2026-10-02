@@ -328,7 +328,7 @@ void App::drawHelpOverlay() {
         {"Edit: objects", {{"Q  W  E  R", "select / move / rotate / scale tool"}, {"Click", "select a thing or marker"}, {"Drag a thing", "carry it across the ground"}, {"Shift + click", "place the palette pick on the ground"}, {"Ctrl + Shift + drag", "clone and carry the selection"}, {"Ctrl + click", "add to / remove from the selection"}, {"Arrows / Shift + arrows", "nudge 0.05 / 0.5 units"}, {"Ctrl + arrows / A", "face a cardinal direction / pointer"}, {"[  ] / Shift / Alt", "rotate 2 degrees about Z / Y / X"}, {",  . / PgDn  PgUp", "lower / raise; Shift uses 0.01"}, {"Ctrl + D", "clone; click ground to drop"}, {"Ctrl + C  /  Ctrl + V", "copy / paste at the view centre"}, {"Del", "delete"}, {"End", "drop to the ground"}, {"Esc", "cancel carry or clear selection"}, {"Ctrl + Z  /  Ctrl + Y", "undo / redo (also on the World tab)"}, {"Ctrl + S  or  F6", "save the draft (the loose .tng)"}, {"V", "show the first invalid thing"}}},
         {"Edit: terrain", {{"T", "terrain tool (opens the Terrain tab)"}, {"LMB hold", "sculpt / paint"}, {"Shift", "swap raise / lower (including exact step); paint walkable"}, {"[  ]", "brush radius"}, {"Ctrl + click", "sample the theme to paint"}, {"Ctrl + Shift + click", "sample the theme to replace"}, {"LMB drag", "a path / a copy rectangle"}, {"R", "turn the paste 90 degrees"}}},
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
-        {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the map list"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
+        {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the current browser"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
     };
     const float colW = S(190);
     ImGui::Columns(2, "##helpcols", false);
@@ -1704,6 +1704,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("custom_theme_failed=" + std::string(customThemeError_.empty() ? "0" : "1"));
     v.push_back("origin_things=" + std::to_string(thingOrigin_.size()));
     v.push_back("textures_count=" + std::to_string(texRows_.size()));
+    v.push_back("texture_search=" + std::string(texSearch_));
+    v.push_back("tool_panel_visible=" + std::to_string(settings_.showActions));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }
     v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));
     v.push_back("world_maps=" + std::to_string(world_.maps.size()));
@@ -1890,7 +1892,11 @@ void App::frame(float dt) {
     }
     {
         ImGuiIO& io = ImGui::GetIO();
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) focusFilter_ = true;
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) {
+            focusFilter_ = true;
+            if (texturesMode_ && assetsTab_ != 2) settings_.showActions = true;
+            else settings_.showExplorer = true;
+        }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) { if (io.KeyShift) openWorldFile(); else openLevelFile(); }
         if (!standaloneAssetPreview() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_LeftBracket)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_RightBracket)) { settings_.showActions = !settings_.showActions; saveSettings(); }
@@ -2156,7 +2162,7 @@ void App::drawExplorer(float width) {
     ImGui::SetCursorPosX(S(16));
     ImGui::SetNextItemWidth(width - S(32));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(7)));
-    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
+    if (focusFilter_ && (!texturesMode_ || assetsTab_ == 2)) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     if (ImGui::InputTextWithHint("##filter", width < S(250) ? "Search maps..." : "Search maps...   (Ctrl+F)", filterBuf_, sizeof filterBuf_)) filter_ = filterBuf_;
     ImGui::PopStyleVar();
     auto_.registerWidget("input_filter");

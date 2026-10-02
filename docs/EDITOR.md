@@ -14,6 +14,10 @@ use the separate Add, Import or Export action to apply it. Cancel keeps the
 previous path. Dialogue export uses a Save As dialog for a new `.big` file;
 existing archives remain protected by the exporter.
 
+**Ctrl+F** focuses search in the current Models, Textures, Effects or Dialogue
+browser. Elsewhere it focuses map search. The shortcut reveals the relevant
+panel if you have hidden it.
+
 ## Setup (first run)
 
 A *Setup* panel opens on the first run (and from the install status in the

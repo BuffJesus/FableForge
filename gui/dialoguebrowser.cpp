@@ -127,6 +127,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     ImGui::Spacing();
     ImGui::TextUnformatted("Search all dialogue");
     ImGui::SetNextItemWidth(cardInner);
+    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     if(ImGui::InputTextWithHint("##dialogue_search","Words, speaker, name or ID",
                                dialogueSearchQuery_.data(),dialogueSearchQuery_.size()))
         dialogueError_.clear();

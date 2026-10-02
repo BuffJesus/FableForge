@@ -145,6 +145,7 @@ void App::drawEffectBrowser(float pad,float inner,float cardInner) {
     if (theme::ghostButton("Refresh",ImVec2(cardInner,S(28)))) refreshEffectBrowser();
     auto_.registerWidget("btn_effect_refresh");
     ImGui::SetNextItemWidth(cardInner);
+    if (focusFilter_) { ImGui::SetKeyboardFocusHere(); focusFilter_ = false; }
     ImGui::InputTextWithHint("##effectbrowsersearch","Search effects (name, id)",effectBrowserSearch_,sizeof effectBrowserSearch_);
     auto_.registerWidget("input_effect_browser_search");
     const std::string query=effectBrowserSearch_;

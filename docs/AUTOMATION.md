@@ -1,5 +1,10 @@
 # GUI automation (`--auto <script>`)
 
+`input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
+`key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
+`tools/test_asset_search.py --install <root>` checks the active asset browser's
+search and recovery of hidden panels at normal and compact window sizes.
+
 `tests/ui/attach_picker.txt` clicks the target-side Attach objects control,
 resolves a named visible thing through the same viewport pick path, then checks
 attach, detach and exact undo. It uses `select_script <name>`,
