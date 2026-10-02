@@ -1,5 +1,9 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+The full draft/survey checkpoint at source `3351548` passes 100 integration
+checks with zero failures or skipped checks, plus focused stock/loose async and
+terrain-only Save-on-close checks. Evidence and limits are in HANDOFF_WORLD_UI.
+
 Save draft, Ctrl+S and F6 now save terrain and objects together; F7 saves and
 reloads. Terrain authoring uses a game-ignored `.lev.forge-draft` file and keeps
 the game's terrain/foliage bake baseline. Write terrain remains available after

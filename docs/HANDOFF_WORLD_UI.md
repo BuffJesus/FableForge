@@ -1,5 +1,37 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 full checkpoint: drafts and survey tools
+
+Source `3351548` passed `python -u tools/check_all.py --no-build`: 100 PASS,
+zero FAIL, exit 0 / ALL PASS. No checks were skipped. The 291 empty/non-type-1
+lipsync entries are corpus exclusions; 20,214 eligible entries are byte exact.
+Evidence: `build/check_all_drafts_20261002.log`. Source and primary Release
+binaries stayed frozen throughout the gate; Budget area investigation/candidates
+were confined to ignored build scratch.
+
+This covers all 36 CTest cases, environment Smear, shore/passability pens,
+authoring drafts and existing retail/UI, imports, world moves, loose/tall levels,
+pack recipes/writes, backups/restore/install switching and documentation commands.
+Aeon/Controller, Freeroam, Seasons/AlbionSecrets, Dragon Cliff, Lost Content and
+Expanded Chapters were all exercised. The full draft harness is at
+`build/terrain-drafts-xecfi99m`; its direct-pack assertion explicitly confirms
+`terrain_draft_dirty` remains 1 when unsaved authoring work is exported to a pack.
+
+Additional focused regressions passed after the broad gate:
+`tools/test_terrain_async.py` on stock and loose copies, including the new
+`save_draft_refused` during a file job. Later edits, switches, repeated writes,
+full height/theme pack deltas and snapshot-byte equivalence all pass. Evidence:
+`build/terrain_draft_async_checks.log`, `build/terrain-async-sea358zb` (stock),
+`build/terrain-async-hp9h49t1` (loose). The real terrain-only Save-on-close button
+also passes: doc_dirty 0, authoring terrain dirty, Save work closes successfully,
+new-process reopen restores the draft, active LEV/WAD/STB hashes stay unchanged,
+and Restore removes it exactly (`build/terrain-draft-close-check`).
+
+No live game files were written, and no native editor runtime comparison,
+release, push or deployment was performed. Budget area authoring is the next
+scoped GUI change; timed crash recovery remains separate backlog work.
+
+
 ## 2026-10-02 continuation: terrain authoring drafts
 
 Save draft, Ctrl+S and F6 now save dirty objects and terrain as one staged
@@ -36,9 +68,9 @@ sizes under `build/terrain-drafts-1cigiumi`: real Save button, Ctrl+S, F6/F7,
 map-switch Save prompt, process reopen, byte-identical active terrain banks and
 Restore. Reopened draft bakes match all three direct-reference pack files byte
 for byte on both layouts, then game writes retire the cache and exact Restore
-returns the original banks. The harness now additionally asserts unsaved
-terrain authoring state survives direct pack export; the broad gate will cover
-that assertion. Running-game checks with the new joint/terrain-only commands
+returns the original banks. The final broad-gate run also asserts unsaved
+terrain authoring state survives direct pack export (see checkpoint above).
+Running-game checks with the new joint/terrain-only commands
 pass for stock (`build/loose-save-guard-zxb63ner`) and loose
 (`build/loose-save-guard-ezvgsj5c`) copies. No live install writes, native runtime
 comparison, release or deployment was performed. Timed crash recovery and
