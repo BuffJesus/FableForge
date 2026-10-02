@@ -1,5 +1,42 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: props follow edited terrain slopes
+
+Terrain following previously changed only Z and skipped edits with unchanged
+height at an object's pivot. Automatic strokes and direct height edits now
+rotate grounded, unlocked Object props by the change between canonical terrain
+frames. These use the derivative of the same bilinear height surface used for
+placement, with one-sided cells at map borders. Relative authored lean, heading
+and scale are preserved; canonical frames avoid cumulative yaw through repeated
+slope changes. Creature, Building, Marker and navigator roots retain orientation.
+Owned descendants follow their parent's rigid transform, including locked or
+floating children; roots deliberately floating/buried or locked remain unchanged.
+Terrain and all object changes share one undo step. Older-draft repair stays Z-only
+because its saved baseline cannot safely identify already-applied rotations.
+
+This automatic tilt is a user-requested Forge enhancement, not claimed native
+parity. Revisited FableWin `CEditWorldMap::EditSetGroundSizeZAtBlockUndoable`
+0x0297aa90 in the existing `lanes/water/f_0297aa90.txt` disassembly under
+`C:/Users/Cornelio/AppData/Local/Temp/claude/D--Documents-FableTLC/130e9b68-87fa-44cd-90d1-1630b5eeb085/scratchpad`.
+The inspected setter adds height transactions and refits water/themes; it does
+not establish a prop slope policy. Existing native uniform-Z behavior is recorded
+in PARITY_BACKLOG at CEditRaiseZOnThing 0x0298e5a0. No engine placement policy was
+inferred from a symbol name. Evidence executable identity remains the FableWin
+SHA256 recorded in HANDOFF_NAV.
+
+All 36 CTest suites pass (22.29 seconds). Expanded locked-things coverage includes
+slope-only changes, both slope axes, boundary vertices, upright classes, locked
+roots and owned children, floating roots, authored lean/scale, 30 reshape/flatten
+cycles, exact undo/redo, repair idempotence and actual brush completion.
+`tools/test_terrain_slope.py` is included in check_all: at
+`build/terrain-slope-wpcvthkc` a Greatwood prop rotates after sculpting, its saved
+scratch TNG contains a normalized tilted basis, and one undo restores its frame
+and heights. Visible captures were inspected using the same flow at
+`build/terrain-slope-ujxryjrb/visible.txt.log`. Earlier harness attempts used the
+wrong snapshot verb or a camera below terrain; neither was counted as visual
+validation. Source install was read-only; game runtime remains untested. The
+published rc.3 remains unchanged and does not contain this fix.
+
 ## 2026-10-01 continuation: readable compact editor selectors
 
 Objects/Terrain/Actors/Level and Select/Move/Rotate/Scale/Terrain now switch from

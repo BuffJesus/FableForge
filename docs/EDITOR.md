@@ -299,8 +299,12 @@ item and info display components; absent components are not added.
   (`stbrelocate::reseatFoliageZ` against the terrain as last deployed; bounds
   grow by the largest change) and writes the chunk size-aware (a re-laid
   foliage section can grow it). In-game: a +6 hill under Greatwood_1's trees,
-  heights 121/121 and trunks rooted on the new slope. Placed objects are
-  re-seated on request (*Re-seat objects on the new ground*), not silently.
+  heights 121/121 and trunks rooted on the new slope. Grounded, unlocked placed
+  objects now follow height edits automatically in the same undo step. Props
+  also tilt with changes in slope, preserving their existing lean relative to
+  the ground; creatures, buildings and markers keep their orientation. Attached
+  children follow the parent's complete rigid transform. Floating and buried
+  roots stay put. The older-draft repair action adjusts height only.
   `tests/ui/terrain_deploy.txt` (scratch) / `terrain_deploy_live.txt` (real install).
 * **Any ground theme of the game** (2026-09-17): the paint picker lists the map's
   LEV palette (named slots) and a search box adds any ENGINE_THEME from game.bin

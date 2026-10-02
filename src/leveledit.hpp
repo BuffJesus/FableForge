@@ -190,7 +190,10 @@ public:
     // invalid/nonfinite input, missing frame or locks. Successful no-ops keep history.
     bool setHeight(size_t index, float height);
     // Repairs an older draft after the ground changed. Current brush and direct
-    // height edits already move grounded unlocked things in their own undo step.
+    // height edits already move grounded unlocked things in their own undo step;
+    // props also follow the slope, preserving their terrain-relative orientation.
+    // Creatures, buildings and markers retain their orientation. Owned children
+    // follow their parent's rigid transform. This older-draft repair is Z-only.
     // A thing near the old ground follows only if it is not already closer to
     // the new ground; deliberately floating/buried things stay. Returns moved count.
     size_t reseatThings(const TerrainState& before, float tolerance = 1.0f);

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <iostream>
+#include <cmath>
 #define CHECK(x) do { if (!(x)) { std::cerr << __LINE__ << ": " #x "\n"; std::exit(1); } } while(false)
 
 std::string thing(int uid,const std::string& editor,const char* physics="CTCPhysicsStandard") {
@@ -27,6 +28,71 @@ std::filesystem::path flatLevel() {
     const auto path=std::filesystem::temp_directory_path()/("forge-lock-"+std::to_string(stamp)+".lev");
     std::ofstream(path,std::ios::binary).write(reinterpret_cast<const char*>(b.data()),std::streamsize(b.size()));
     return path;
+}
+void checkSlopes(const std::filesystem::path& path) {
+    using namespace albion::editor;
+    auto typed=[](int uid,const std::string& type,const char* physics="CTCPhysicsStandard") {
+        auto s=thing(uid,"",physics);
+        s.replace(s.find("NewThing Object"),15,"NewThing "+type);
+        return s;
+    };
+    const auto locked="StartCTCEditor;\r\nLockedInPlace TRUE;\r\nEndCTCEditor;\r\n";
+    auto child=thing(7,"StartCTCOwnedEntity;\r\nOwnerUID 1;\r\nEndCTCOwnedEntity;\r\n"+std::string(locked));
+    child.replace(child.find("PositionX 2.0"),13,"PositionX 3.0");
+    child.replace(child.find("PositionY 3.0"),13,"PositionY 5.0");
+    child.replace(child.find("PositionZ 4.0"),13,"PositionZ 7.0");
+    auto floating=thing(8,"");
+    floating.replace(floating.find("PositionZ 4.0"),13,"PositionZ 12.0");
+    auto border=thing(9,"");
+    border.replace(border.find("PositionX 2.0"),13,"PositionX 8.0");
+    border.replace(border.find("PositionY 3.0"),13,"PositionY 8.0");
+    Document doc;std::string error;
+    CHECK(doc.openText("Slopes","Version 2;\r\n"+thing(1,"")+thing(2,locked)+
+        typed(3,"Building")+typed(4,"AICreature")+typed(5,"Marker")+
+        typed(6,"Object","CTCPhysicsNavigator")+child+floating+border,error));
+    CHECK(doc.loadLevel(path,error));
+    const auto original=doc.text();
+    const auto flat=doc.terrain();
+    auto plane=[&](float dx,float dy,float lift=0) {
+        std::vector<Document::VertexHeight> edits;
+        for(int y=0;y<9;++y) for(int x=0;x<9;++x) edits.push_back({x,y,4+lift+dx*(x-2)+dy*(y-3)});
+        CHECK(doc.setVertexHeights(edits));
+    };
+    auto near=[](float a,float b) { return std::fabs(a-b)<2e-5f; };
+    plane(.5f,.25f);
+    Frame root,attached,edge;
+    CHECK(doc.frameOf(0,root) && near(root.pos[2],4)); // slope-only edit
+    const float length=std::sqrt(1.3125f);
+    CHECK(near(root.up[0],-.5f/length) && near(root.up[1],-.25f/length) && near(root.up[2],1/length));
+    CHECK(near(root.forward[0]*root.up[0]+root.forward[1]*root.up[1]+root.forward[2]*root.up[2],0));
+    for(size_t i=1;i<6;++i) { Frame f;CHECK(doc.frameOf(i,f) && f.up[2]==1 && f.pos[2]==4); }
+    CHECK(doc.frameOf(6,attached) && near(attached.up[0],root.up[0]));
+    float distance=0,vertical=0;
+    for(int k=0;k<3;++k) { const float d=attached.pos[k]-root.pos[k];distance+=d*d;vertical+=d*root.up[k]; }
+    CHECK(near(distance,14) && near(vertical,3)); // locked owned child moves rigidly
+    CHECK(doc.frameOf(7,attached) && attached.pos[2]==12 && attached.up[2]==1);
+    CHECK(doc.frameOf(8,edge) && near(edge.up[0],root.up[0]) && near(edge.pos[2],8.25f));
+    const auto sloped=doc.text();
+    CHECK(doc.reseatThings(flat)==0 && doc.text()==sloped); // repair cannot double tilt
+    CHECK(doc.undo() && doc.text()==original && doc.terrain().heights==flat.heights);
+    CHECK(doc.redo() && doc.text()==sloped);
+    plane(0,0);
+    for(int repeat=0;repeat<30;++repeat) { plane(.5f,.25f);plane(-.3f,.7f);plane(0,0); }
+    CHECK(doc.frameOf(0,root) && near(root.up[0],0) && near(root.up[2],1) && near(root.forward[1],1));
+    CHECK(doc.frameOf(6,attached) && near(attached.pos[0],3) && near(attached.pos[1],5) && near(attached.pos[2],7));
+    // Authored lean and scale survive a slope round trip.
+    root.up[0]=.6f;root.up[2]=.8f;root.scale=2;doc.setFrame(0,root);
+    plane(.5f,.25f,2);
+    CHECK(doc.frameOf(0,root) && near(root.up[0]*(-.5f/length)+root.up[1]*(-.25f/length)+root.up[2]/length,.8f) && root.scale==2);
+    for(size_t i=2;i<6;++i) { Frame f;CHECK(doc.frameOf(i,f) && f.up[2]==1 && near(f.pos[2],6)); }
+    plane(0,0);
+    CHECK(doc.frameOf(0,root) && near(root.up[0],.6f) && near(root.up[2],.8f));
+    // The actual brush end-of-stroke path uses the same rotation and undo.
+    const auto beforeBrush=doc.text();
+    TerrainBrush brush;brush.mode=TerrainBrush::Mode::Raise;brush.x=3;brush.y=3;brush.radius=.25f;brush.exactStep=true;brush.step=.5f;
+    doc.beginStroke(brush);doc.applyBrush(brush,.016f);doc.endStroke();
+    CHECK(doc.frameOf(0,root) && std::fabs(root.up[0]-.6f)>.01f);
+    CHECK(doc.undo() && doc.text()==beforeBrush);
 }
 int main() {
     using albion::editor::Document;using albion::editor::Frame;
@@ -132,6 +198,7 @@ int main() {
     std::filesystem::remove(levOut.parent_path());std::filesystem::remove(levOut.parent_path().parent_path());
     std::filesystem::remove(levOut.parent_path().parent_path().parent_path());std::filesystem::remove(chunkOut.parent_path());
     std::filesystem::remove(pack);
+    checkSlopes(path);
     std::filesystem::remove(path);
     std::cout << "locked things checks passed\n";
 }

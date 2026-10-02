@@ -75,6 +75,8 @@ def main():
     if dialogue:
         ok &= run("map compass heading through pitch, travel, zoom and turns",
                   [sys.executable, "tools/test_compass.py", "--install", install_root], capture_output=True)
+        ok &= run("terrain slope following, saved orientation and undo",
+                  [sys.executable, "tools/test_terrain_slope.py", "--install", install_root], capture_output=True)
         ok &= run("ui dialogue lip sync browser", [gui, "--auto", "tests/ui/dialogue_browser.txt"])
         ok &= run("ui dialogue head layouts, eyes and posed pixels",
                   [sys.executable, "tools/test_dialogue_layout.py", "--install", install_root], capture_output=True)

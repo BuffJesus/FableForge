@@ -1186,19 +1186,57 @@ size_t Document::reseatGroundedThings(const TerrainState& before, float toleranc
     if (!hasTerrain() || stroke_) return 0;
     const int cx = level_->cellsX(), cy = level_->cellsY();
     if (before.heights.size() != terrain_->heights.size()) return 0;
-    struct Move { size_t index; std::string ctc; float z; };
+    struct Move { size_t index; Frame frame; bool rotated; };
     std::vector<Move> moves;
     const auto& things=file_.things();
     std::vector<std::optional<float>> groundedDelta(things.size());
+    using Rotation = std::array<float,9>;
+    const Rotation identity{1,0,0,0,1,0,0,0,1};
+    std::vector<Rotation> rotations(things.size(),identity);
+    // Canonical terrain frames avoid accumulating yaw when a slope is edited
+    // repeatedly. Their relative rotation preserves an authored lean/heading.
+    // This is Forge's automatic prop-follow behavior, not a native editor port.
+    auto slopeFrame=[&](const TerrainState& t,float x,float y) {
+        const int ix=std::min(int(x),cx-2), iy=std::min(int(y),cy-2);
+        const float fx=x-ix, fy=y-iy;
+        auto h=[&](int xx,int yy) { return t.heights[size_t(yy)*cx+xx]; };
+        float n[3]={-((h(ix+1,iy)-h(ix,iy))*(1-fy)+(h(ix+1,iy+1)-h(ix,iy+1))*fy),
+                    -((h(ix,iy+1)-h(ix,iy))*(1-fx)+(h(ix+1,iy+1)-h(ix+1,iy))*fx),1};
+        normalise3(n);
+        const float d=1+n[2];
+        return Rotation{1-n[0]*n[0]/d,-n[0]*n[1]/d,n[0],
+                        -n[0]*n[1]/d,1-n[1]*n[1]/d,n[1],-n[0],-n[1],n[2]};
+    };
+    auto rotate=[](const Rotation& r,float v[3]) {
+        const float p[3]={v[0],v[1],v[2]};
+        for(int row=0;row<3;++row) v[row]=r[row*3]*p[0]+r[row*3+1]*p[1]+r[row*3+2]*p[2];
+    };
     for (size_t i = 0; i < things.size(); ++i) {
         if (isLocked(i)) continue;
         Frame f;
         if (!frameOf(i, f)) continue;
         const auto was = sampleHeight(before, cx, cy, f.pos[0], f.pos[1]);
         const auto now = sampleHeight(*terrain_, cx, cy, f.pos[0], f.pos[1]);
-        if (!was || !now || std::fabs(*was - *now) < 1e-4f) continue;
+        if (!was || !now) continue;
         if (std::fabs(f.pos[2] - *was) > tolerance) continue;   // was floating / sunk on purpose
         if (recordUndo && std::fabs(f.pos[2] - *now) <= std::fabs(f.pos[2] - *was)) continue;
+        bool slopeChanged=false;
+        // Repair uses a saved height baseline and must never apply the same
+        // tilt twice. Automatic edits have an exact before/after pair.
+        if (!recordUndo && cx>1 && cy>1 && things[i].type=="Object" &&
+            !things[i].findCtc("CTCPhysicsNavigator") &&
+            !things[i].definitionType().starts_with("BUILDING_") &&
+            !things[i].definitionType().starts_with("CREATURE_")) {
+            const auto a=slopeFrame(before,f.pos[0],f.pos[1]);
+            const auto b=slopeFrame(*terrain_,f.pos[0],f.pos[1]);
+            for(size_t k=0;k<a.size();++k) slopeChanged |= std::fabs(a[k]-b[k])>1e-6f;
+            if(slopeChanged) for(int row=0;row<3;++row) for(int col=0;col<3;++col) {
+                float value=0;
+                for(int k=0;k<3;++k) value+=b[row*3+k]*a[col*3+k];
+                rotations[i][row*3+col]=value;
+            }
+        }
+        if (std::fabs(*was-*now)<1e-4f && !slopeChanged) continue;
         groundedDelta[i]=*now-*was;
     }
     // Ownership is a rigid placement relationship: a floating or locked child
@@ -1209,14 +1247,25 @@ size_t Document::reseatGroundedThings(const TerrainState& before, float toleranc
     std::vector<bool> visited(things.size(),false);
     auto moveTree=[&](size_t root) {
         const float delta=*groundedDelta[root];
+        Frame pivot;
+        frameOf(root,pivot);
+        const auto& rotation=rotations[root];
+        const bool rotated=rotation!=identity;
         std::vector<size_t> queue{root};
         visited[root]=true;
         for (size_t next=0;next<queue.size();++next) {
             const size_t i=queue[next];
             Frame f;
             if (frameOf(i,f)) {
-                const auto* phys=physicsOf(things[i]);
-                moves.push_back({i,phys->name,f.pos[2]+delta});
+                if(rotated) {
+                    for(int k=0;k<3;++k) f.pos[k]-=pivot.pos[k];
+                    rotate(rotation,f.pos);
+                    for(int k=0;k<3;++k) f.pos[k]+=pivot.pos[k];
+                    rotate(rotation,f.forward);
+                    rotate(rotation,f.up);
+                }
+                f.pos[2]+=delta;
+                moves.push_back({i,f,rotated});
             }
             for (size_t child:children[i]) if (!visited[child]) {
                 visited[child]=true;
@@ -1239,9 +1288,12 @@ size_t Document::reseatGroundedThings(const TerrainState& before, float toleranc
     if (moves.empty()) return 0;
     if (recordUndo) pushUndo();
     for (const auto& m : moves) {
-        file_.setCtcProperty(m.index, m.ctc, "PositionZ", formatFloat(m.z));
-        Frame frame;
-        if (frameOf(m.index,frame)) writeInitialPosition(file_,m.index,frame.pos,worldX_,worldY_);
+        if(m.rotated) writeFrame(file_,m.index,m.frame,worldX_,worldY_);
+        else {
+            const auto ctc=physicsOf(file_.things()[m.index])->name;
+            file_.setCtcProperty(m.index,ctc,"PositionZ",formatFloat(m.frame.pos[2]));
+            writeInitialPosition(file_,m.index,m.frame.pos,worldX_,worldY_);
+        }
     }
     ++revision_;
     return moves.size();
