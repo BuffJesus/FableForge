@@ -2416,6 +2416,20 @@ no-particles status. Normal and compact finished captures were visually checked
 in build/effect-timing-jidfhwjw; timing, replay and live scrubbing checks passed.
 The application build passed. This is a presentation-only change.
 
+## 2026-10-01 continuation: clear lip-sync frame shape limits
+
+An empty frame explains that mouth shapes can be added. The Add mouth shape
+control remains visible and disabled at the native four-shape limit, with a
+remove-first explanation. Remove buttons and shape choices have automation IDs.
+The existing pack-creation check now inserts an empty frame, adds four shapes,
+adjusts influence, replaces one shape, exports and saves the updated recipe.
+Both normal and compact checks pass at build/dialogue-pack-create-zv7mgh3_.
+Independent manifest checks verify four unique shapes and their weights; the
+exported frame count and source archive SHA256 are checked. Empty/full captures
+were visually inspected. Initial harness failures were a dictionary-schema
+assumption and clicks before compact scrolling settled; retained failed runs
+are build/dialogue-pack-create-lvdif5bz, ewrsrehn and m5cc2p67.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

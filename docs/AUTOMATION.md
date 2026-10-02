@@ -650,3 +650,9 @@ one instance before capturing the cube, then verifies byte-exact placement undo.
 Dialogue frame navigation: `input_dialogue_frame` accepts a one-based frame number;
 `dialogue_frame` reports the selected frame. `key_down Enter` / `key_up Enter`
 commit typed input in keyboard workflows.
+
+Dialogue mouth shapes: `button_dialogue_remove_key_<index>` removes a shape from
+the selected frame. `combo_dialogue_add_phoneme` stays registered at the four-shape
+limit, where it is disabled. Its options use `dialogue_add_shape_<symbol>` (AH, EE,
+MM, OH, SZ, WW); shapes already present are omitted. The pack-creation check also
+covers empty/full frames, replacement, influence values and scratch export.

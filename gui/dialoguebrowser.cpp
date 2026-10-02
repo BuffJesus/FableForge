@@ -427,6 +427,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
             const size_t current=std::min(dialogueEntry_.frames.size()-1,
                 size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));
             const auto keys=dialogueEntry_.frames[current];
+            if(keys.empty()) theme::hint("No mouth shapes on this frame. Add one below.");
             for(size_t i=0;i<keys.size();++i) {
                 const auto& keyWeight=keys[i];
                 const auto viseme=std::find_if(dialogueEntry_.dictionary.begin(),
@@ -447,7 +448,9 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                 auto_.registerWidget(("slider_dialogue_key_"+std::to_string(i)).c_str());
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("Influence on this frame: 0%% off, 100%% full mouth shape.");
                 ImGui::SameLine();
-                if(ImGui::SmallButton("Remove##remove")) {
+                const bool remove=ImGui::SmallButton("Remove##remove");
+                auto_.registerWidget(("button_dialogue_remove_key_"+std::to_string(i)).c_str());
+                if(remove) {
                     dialogueEntry_.frames[current].erase(
                         dialogueEntry_.frames[current].begin()+i);
                     stage();
@@ -456,8 +459,10 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                 }
                 ImGui::PopID();
             }
-            if(dialogueEntry_.frames[current].size()<4) {
-              if(ImGui::BeginCombo("##dialogue_add_phoneme","Add mouth shape...")) {
+            const bool full=dialogueEntry_.frames[current].size()>=4;
+            ImGui::BeginDisabled(full);
+            ImGui::SetNextItemWidth(cardInner);
+            if(ImGui::BeginCombo("##dialogue_add_phoneme","Add mouth shape...")) {
                 static constexpr std::array<const char*,6> symbols={
                     "AH","EE","MM","OH","SZ","WW"};
                 for(const char* symbol:symbols) {
@@ -471,11 +476,13 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                         forge::lipsync::setWeight(dialogueEntry_,current,symbol,255);
                         stage();
                     }
+                    auto_.registerWidget((std::string("dialogue_add_shape_")+symbol).c_str());
                 }
                 ImGui::EndCombo();
-              }
-              auto_.registerWidget("combo_dialogue_add_phoneme");
             }
+            auto_.registerWidget("combo_dialogue_add_phoneme");
+            ImGui::EndDisabled();
+            if(full) theme::hint("Four shapes per frame. Remove one to add another.");
             if(ImGui::SmallButton("Insert after##lipframe")) {
                 forge::lipsync::insertFrameAfter(dialogueEntry_,frame);
                 stage();jump(frame+1);
