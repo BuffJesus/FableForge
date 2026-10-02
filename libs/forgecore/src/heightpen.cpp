@@ -61,6 +61,12 @@ uint32_t lcgStep(uint32_t& seed) {
     return seed;
 }
 
+std::vector<std::pair<int, int>> smearFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    if (!std::isfinite(radius) || double(radius) > std::numeric_limits<int>::max()) return {};
+    const int r = int(std::max(radius, 1.0f));
+    return discFootprint(cellsX, cellsY, x, y, float(r) - 0.5f);
+}
+
 uint32_t random(uint32_t max, uint32_t& seed) {
     lcgStep(seed);   // advances even when max is 0
     return max ? seed % max : 0u;
@@ -163,7 +169,7 @@ size_t smear(terrain::Heightfield& field, float x, float y, float radius, float 
         for (int i = 0; i < side; ++i) {
             const int bx = cx - r + i, by = cy - r + j;
             if (!inside(field, bx, by)) continue;
-            if (!(std::sqrt(float((r - i) * (r - i) + (r - j) * (r - j))) < float(r))) continue;
+            if (!inRoundedDisc(bx, by, cx, cy, float(r) - 0.5f)) continue;
             buf[size_t(j) * side + i] = filtered(bx, by);
             in[size_t(j) * side + i] = 1;
         }

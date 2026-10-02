@@ -27,7 +27,7 @@ tool, zero-speed refusal to alter ground, nonzero strokes and undo. State keys
 `pen_speed` and `height_key_step` expose the slider and its derived metre step.
 
 `tools/test_height_cursor.py --install <root>` checks exact-step Raise/Lower
-and Flatten cursors at normal/compact sizes. `brush_cursor_vertices` counts
+and Flatten/Smooth cursors at normal/compact sizes. `brush_cursor_vertices` counts
 the projected affected-vertex dots (shown at radii <=4 cells); the check verifies
 single/9-vertex discs and unchanged terrain/object snapshots.
 

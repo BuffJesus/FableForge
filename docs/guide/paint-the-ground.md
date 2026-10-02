@@ -17,6 +17,8 @@ the pointer keeps the edit at its starting point; release finishes the stroke.
 **Speed** is available in each sculpt tool. Hover it to see the height-key step.
 With **Exact step** in Raise/Lower, or with Flatten, small brushes show dots on
 the vertices they affect. A 0.25-cell radius affects one vertex.
+Smooth also shows its considered vertices; its radius rounds down to a whole
+cell, with a minimum of 1. Smooth may leave flat ground and straight slopes as they are.
 
 ## Ground textures
 

@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Smooth cursor footprint
+
+Smooth now rounds its cursor centre and uses its actual integer-radius disc,
+with vertex dots at small sizes. Radius clamps to >=1 before truncation; a
+radius below 2 considers only the centre vertex. The query and actual Smear
+pen reuse the same distance predicate. Smoothing, spike filtering, two-pass
+height updates, clamping and undo are unchanged.
+
+Fresh FableWin EditSmoothPenUndoable 0x0297b3c0 disassembly confirms radius
+clamp/truncation at 0x0297b3ff..0x0297b433, 2r loop bounds, and the strict
+distance comparison at 0x0297b535..0x0297b54a. Thus offsets at both +/-r are
+excluded: the affected vertex set is symmetric despite the half-open bounds.
+The backlog's suggested (-0.5,-0.5) cursor shift was incorrect and was not
+used. Export: `build/smooth-footprint-native-evidence.txt`, same FableWin
+identity recorded below; this is an interpretation of confirmed bounds/test.
+
+Checkerboard core fixtures compare actual changed vertices to the query,
+including half-even centres, fractional radius truncation, 1/9/25-vertex discs
+and clipped corners. Full Release build passes. Normal/compact cursor checks
+pass at `build/height-cursor-mznkul22`, preserving terrain/object snapshots.
+No install writes or in-game probes were exercised.
+All 36 CTest checks pass after the full rebuild. Normal nine-vertex and compact
+single-vertex Smooth screenshots were inspected; docs command check passes.
+
 ## 2026-10-02 continuation: exact-step / Flatten cursor footprints
 
 Change Height (exact-step Raise/Lower) and Paint Height (Flatten) cursors now

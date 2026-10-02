@@ -31,7 +31,7 @@ version is chosen; validation is recorded at release time, not here.
   raise its starting spot. Moving the pointer keeps that spot fixed, and
   releasing the key finishes one undo step. Other terrain tools ignore the keys.
   Speed is available in every sculpt tool, with the key step shown in its tooltip.
-- **Precise sculpt cursors.** Exact-step Raise/Lower and Flatten show their
+- **Precise sculpt cursors.** Exact-step Raise/Lower, Flatten and Smooth show their
   rounded centre and affected vertices for small brushes, including a single
   vertex at a 0.25-cell radius.
 - **Gentler scaling.** The scale gizmo changes size about 0.3% per pixel instead of

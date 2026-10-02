@@ -26,6 +26,10 @@ float speedToOpacity(float speed);
 // uses their shared distance predicate; the cursor can show small exact pens.
 std::vector<std::pair<int, int>> discFootprint(int cellsX, int cellsY,
                                             float x, float y, float radius);
+// Smear considers the strict integer-radius disc, with radius clamped to >=1
+// then truncated. The rejected boundary makes its vertex set symmetric.
+std::vector<std::pair<int, int>> smearFootprint(int cellsX, int cellsY,
+                                             float x, float y, float radius);
 
 // Change Height (EditChangeHeightPenUndoable 0x02975710): every block with distance < r + 0.5
 // from the rounded centre gets `delta`, at most once per stroke -- `altered` (cellsX*cellsY,

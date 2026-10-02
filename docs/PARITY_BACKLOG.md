@@ -759,8 +759,10 @@ Effort S. Value med (the common case is lifting a map to meet its neighbour, or 
 *partly resolved 2026-10-02: Change Height (exact-step Raise/Lower) and Paint
 Height (Flatten) use a rounded-centre ring and actual affected-vertex dots for
 radii <=4, including single-vertex brushes. Their distance predicate is shared
-with the core footprint query and verified against actual pen output. Smooth,
-Noise and height-key footprint visualization remain open. Original proposal follows.*
+with the core footprint query and verified against actual pen output. Smooth
+now shows its strict integer-radius disc too; contrary to the proposal below,
+the rejected outer boundary makes its vertex set symmetric, with no half-cell
+offset. Noise and height-key footprint visualization remain open. Original proposal follows.*
 
 **Vanilla:** Every ported pen acts on a hard disc around the pointer rounded to a block (fistp): Change Height and Paint Height use d < r + 0.5. Smear uses offsets [-r, r-1] with r = trunc(max(r,1)), so its footprint is asymmetric (EditSmoothPenUndoable 0x0297b3c0, EditChangeHeightPenUndoable 0x02975710).
 

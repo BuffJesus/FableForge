@@ -279,6 +279,8 @@ item and info display components; absent components are not added.
   Each sculpt tool exposes **Speed**; hover it for the height-key step in metres.
   Exact-step Raise/Lower and Flatten show their rounded vertex centre and
   affected vertex dots at radii up to 4 cells, including a single vertex at 0.25.
+  Smooth shows its strict integer-radius disc: radius is clamped to at least 1
+  then truncated, so a radius below 2 considers only the centre vertex.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

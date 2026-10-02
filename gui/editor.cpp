@@ -2998,9 +2998,12 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (!brushHit_ || !editMode_ || gizmoOp_ != 4) return;
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
-    const float centreX = roundedDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = roundedDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
-    const float radius = brushRadius_ + (roundedDisc ? 0.5f : 0.0f);
+    const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
+    const bool vertexDisc = roundedDisc || smearDisc;
+    const float centreX = vertexDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = vertexDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
+                                  : brushRadius_ + (roundedDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const int n = 48;
     ImVec2 pts[n];
@@ -3018,9 +3021,11 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
                     : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
                     : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
-    if (roundedDisc && brushRadius_ <= 4.0f) {
-        for (const auto [bx, by] : forge::heightpen::discFootprint(
-                 doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)) {
+    if (vertexDisc && brushRadius_ <= 4.0f) {
+        const auto vertices = smearDisc
+            ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
+            : forge::heightpen::discFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_);
+        for (const auto [bx, by] : vertices) {
             const float p[3] = {float(bx), doc_.terrainHeight(float(bx), float(by)).value_or(0.0f) + 0.05f, -float(by)};
             float u, v;
             if (!renderer_.project(p, u, v)) continue;

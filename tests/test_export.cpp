@@ -1441,6 +1441,23 @@ void testHeightPens() {
     CHECK(hp::discFootprint(8, 8, 2.5f, 3.0f, 0.25f).front() == std::pair(2, 3));
     CHECK(hp::discFootprint(8, 8, 3.5f, 3.0f, 0.25f).front() == std::pair(4, 3));
     CHECK(hp::discFootprint(8, 8, -20, -20, 1).empty());
+    // Smear's strict integer-radius disc is symmetric despite its half-open
+    // loop bounds. A checkerboard makes every considered vertex change.
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {2.5f, 3.0f, 0.25f, 1}, {3.5f, 3.0f, 1.9f, 1},
+             {3.0f, 3.0f, 2.0f, 9}, {3.0f, 3.0f, 3.0f, 25}, {0.0f, 0.0f, 2.0f, 4}}) {
+        Heightfield f(8, 8, 0.0f);
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) f.at(bx, by) = (bx + by) % 2 ? 10.0f : 20.0f;
+        const auto footprint = hp::smearFootprint(f.cellsX(), f.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        CHECK(hp::smear(f, x, y, radius, 1.0f, 0.0f) == footprint.size());
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK((f.at(bx, by) != ((bx + by) % 2 ? 10.0f : 20.0f)) == touched);
+            }
+    }
     // Change Height: a hard disc (d < r + 0.5) round the rounded centre, once per block per stroke
     {
         Heightfield f(8, 8, 5.0f);
