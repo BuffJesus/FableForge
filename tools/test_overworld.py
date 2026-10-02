@@ -262,6 +262,25 @@ def main() -> int:
         r = subprocess.run([cli, "chunk-audit", "Greatwood_1", "--install", scratch], capture_output=True, text=True)
         if "0 with findings" not in r.stdout:
             print("Greatwood_1 chunk does not audit after the combined write:", r.stdout[-400:]); ok = False
+        # the combined write with a failing terrain write: nothing else is written
+        stb = os.path.join(scratch, "data", "Levels", "FinalAlbion_RT.stb")
+        os.rename(stb, stb + ".hidden")
+        try:
+            wad_before = open(os.path.join(scratch, "data", "Levels", "FinalAlbion.wad"), "rb").read()
+            r = subprocess.run([gui, "--auto", "tests/ui/write_both_fail.txt"], capture_output=True, text=True, cwd=ROOT)
+            log = os.path.join(ROOT, "tests", "ui", "write_both_fail.txt.log")
+            wad_after = open(os.path.join(scratch, "data", "Levels", "FinalAlbion.wad"), "rb").read()
+            if r.returncode != 0:
+                print("GUI write-both failure script failed:")
+                if os.path.exists(log):
+                    print(chr(10).join(open(log, encoding="utf-8", errors="replace").read().splitlines()[-15:]))
+                ok = False
+            elif wad_after != wad_before:
+                print("write both: the WAD changed although the terrain write failed"); ok = False
+            else:
+                print("GUI write-both failure script PASS")
+        finally:
+            os.rename(stb + ".hidden", stb)
         # a ground theme added from the game, painted and deployed (layer meshes rebuilt)
         r = subprocess.run([gui, "--auto", "tests/ui/theme_deploy.txt"], capture_output=True, text=True, cwd=ROOT)
         log = os.path.join(ROOT, "tests", "ui", "theme_deploy.txt.log")

@@ -1,0 +1,29 @@
+# The combined write when the terrain write fails (tools/test_overworld.py hides the scratch
+# install's FinalAlbion_RT.stb first): no object write follows and both drafts stay unsaved.
+wait_maps
+wait_ready
+set saveroot build/ui_overworld_install
+select Greatwood_1
+wait_loaded
+edit 1
+frames 2
+assert_state doc_loaded 1
+camera 48 96 45 0.9 0.85 60
+place OBJECT_BARREL_BREAKABLE UiWriteBothFailBarrel
+frames 2
+edit_tab 1
+terrain_mode 0
+brush 8 6
+terrain_stroke 56 100 0.5
+frames 2
+assert_state terrain_dirty 1
+assert_state doc_dirty 1
+write_both
+wait_terrain
+frames 4
+assert_state write_both_pending 0
+assert_state terrain_dirty 1
+assert_state doc_dirty 1
+assert_log terrain save failed
+assert_log objects not written: the terrain write failed first
+quit

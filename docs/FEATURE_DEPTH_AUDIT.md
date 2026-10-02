@@ -47,7 +47,9 @@ only after checking those paths against the current build.
   offers a combined *Write terrain and objects* (terrain first, objects only after
   it succeeded; same map and destination). `tests/ui/write_both.txt` passes on the
   scratch install with the barrel found in the written WAD and a clean chunk
-  audit. The terrain-failure and map-switch branches are not exercised by a test.
+  audit. `tests/ui/write_both_fail.txt` hides the scratch STB: the terrain write
+  fails, no object write follows, the WAD is byte-identical and both drafts stay
+  unsaved. The map-switch branch is not exercised by a test.
 - The fixed-size STB write now patches a temporary copy and replaces the bank
   only after both chunk and record writes succeed. Failed pack writes restore
   prior `.lev`, `.chunk` and `.record` bytes (or remove newly created output)
