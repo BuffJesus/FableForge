@@ -1248,6 +1248,7 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "wait_batch") waitOn(!app.batchActive() && !app.exportBusy(), "batch export");
     else if (cmd == "drop") { if (!app.openDropped(rest)) fail("drop failed: " + rest); else note("ok   " + line); ++pc_; }   // what a file dropped on the window does
+    else if (cmd == "drop_refused") { if (app.openDropped(rest)) fail("drop accepted: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "open") { if (!app.openLooseLev(rest)) fail("open failed: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "capture_begin") { capturePrefix_ = rest; captureFrame_ = 0; note("ok   " + line); ++pc_; }
     else if (cmd == "capture_end") { capturePrefix_.clear(); note("ok   " + line); ++pc_; }

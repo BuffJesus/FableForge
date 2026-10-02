@@ -856,7 +856,8 @@ supported particle systems but does not edit or save them.
 **Dialogue** opens a workspace for finding, previewing and editing spoken lines.
 Models, Effects and Dialogue give the preview more room by temporarily hiding
 the map list. Your map-list preference returns when you leave these previews.
-In Models, **Import model...** opens a separate tool window; Escape closes it.
+In Models, **Import model...** opens a separate tool window; Escape closes it. Dropping a `.glb`, `.gltf` or `.obj` on the window opens the same window with the
+model path and an `OBJECT_<FILE NAME>` name filled in; nothing is imported until you press the import button.
 The form confirms successful imports and pack additions. If you start entering
 another model while an import runs, those new values remain when it finishes.
 The dialogue tree groups linked lines by speaker. Expand a speaker and select

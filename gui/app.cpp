@@ -876,6 +876,23 @@ bool App::openDropped(const std::string& path) {
         pushLog("drop: " + fs::path(path).filename().string() + " is ready as a new ground theme (Assets > Ground themes); name it and press Create", 0);
         return true;
     }
+    if (ext == ".glb" || ext == ".gltf" || ext == ".obj") {
+        // a model: Assets > Models with the import form filled in (nothing is imported yet)
+        std::error_code ec;
+        if (!fs::is_regular_file(path, ec)) { pushLog("drop: cannot read " + path, 2); return false; }
+        if (meshImportFuture_.valid()) { pushLog("drop: a model import is running; drop the file again when it finishes", 1); return false; }
+        std::snprintf(meshModelPath_, sizeof meshModelPath_, "%s", fs::absolute(path).string().c_str());
+        if (!meshName_[0]) {
+            std::string nm = fs::path(path).stem().string();
+            for (auto& c : nm) { c = char(std::toupper(static_cast<unsigned char>(c))); if (!std::isalnum(static_cast<unsigned char>(c))) c = '_'; }
+            std::snprintf(meshName_, sizeof meshName_, "%.*s", int(sizeof meshName_ - 1), nm.c_str());
+        }
+        setTexturesMode(true);
+        assetsTab_ = 1;
+        modelImportOpen_ = true;
+        pushLog("drop: " + fs::path(path).filename().string() + " is ready to import as OBJECT_" + std::string(meshName_) + " (Assets > Models); check the name and destination, then import", 0);
+        return true;
+    }
     return openLooseLev(path);
 }
 
@@ -1717,6 +1734,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("model_selected=" + modelName_);
     v.push_back("model_ready=" + std::to_string(modelReady_));
     v.push_back("model_import_open=" + std::to_string(modelImportOpen_));
+    v.push_back("mesh_name=" + std::string(meshName_[0] ? meshName_ : "-"));
     v.push_back("map_list_visible=" + std::to_string(settings_.showExplorer && !standaloneAssetPreview()));
     v.push_back("model_vertices=" + std::to_string(modelGeometry_.vertices.size()));
     v.push_back("model_triangles=" + std::to_string(modelGeometry_.triangles.size()));

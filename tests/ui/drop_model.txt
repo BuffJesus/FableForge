@@ -1,0 +1,16 @@
+# Dropping a model file on the window opens Assets > Models with the import form filled in
+# (path + an OBJECT_ name from the file name); nothing is imported until Import is pressed.
+wait_maps
+wait_ready
+set saveroot build/ui_drop_model
+drop tests/ui/fixtures/drop crate.obj
+frames 3
+assert_state textures_mode 1
+assert_state assets_tab 1
+assert_state model_import_open 1
+assert_state mesh_name DROP_CRATE
+assert_log is ready to import as OBJECT_DROP_CRATE
+assert_widget input_mesh_model
+screenshot build/ui/drop_model.png
+drop_refused tests/ui/fixtures/missing.glb
+quit
