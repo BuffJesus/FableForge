@@ -762,7 +762,9 @@ radii <=4, including single-vertex brushes. Their distance predicate is shared
 with the core footprint query and verified against actual pen output. Smooth
 now shows its strict integer-radius disc too; contrary to the proposal below,
 the rejected outer boundary makes its vertex set symmetric, with no half-cell
-offset. Noise and height-key footprint visualization remain open. Original proposal follows.*
+offset. Noise now outlines its actual possible poke square, using offsets
+smaller than ceil(radius), clipped to the map. Height-key footprint
+visualization remains open. Original proposal follows.*
 
 **Vanilla:** Every ported pen acts on a hard disc around the pointer rounded to a block (fistp): Change Height and Paint Height use d < r + 0.5. Smear uses offsets [-r, r-1] with r = trunc(max(r,1)), so its footprint is asymmetric (EditSmoothPenUndoable 0x0297b3c0, EditChangeHeightPenUndoable 0x02975710).
 

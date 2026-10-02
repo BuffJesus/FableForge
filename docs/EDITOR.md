@@ -281,6 +281,8 @@ item and info display components; absent components are not added.
   affected vertex dots at radii up to 4 cells, including a single vertex at 0.25.
   Smooth shows its strict integer-radius disc: radius is clamped to at least 1
   then truncated, so a radius below 2 considers only the centre vertex.
+  Noise outlines its possible random poke area as a square around the rounded
+  centre. It considers random vertices there, rather than editing every vertex.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

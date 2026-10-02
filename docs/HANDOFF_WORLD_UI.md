@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: Noise cursor square
+
+Noise now outlines the half-cell envelope of its possible random vertices,
+around the rounded centre, clipped to the map. It retains a centre marker;
+vertex dots are not used because the pen selects random pokes. The existing
+noise/RNG/height/undo implementation is unchanged, including its initial
+disc-average sea-level gate. Height-key input in Noise keeps the key cursor.
+
+Fresh FableWin EditGenerateNoisePenUndoable 0x02975f00 disassembly reads radius
+and calls GFFloatToLongCeil then GFRandom for each coordinate at
+0x02976268..0x02976296, followed by random sign selection. GFRandom 0x018cf370
+returns unsigned division remainder (0x018cf3b8), so its upper bound is
+exclusive. Possible offsets therefore extend to ceil(radius)-1, not the full
+ceil(radius) square in the old proposal. Export:
+`build/noise-footprint-native-evidence.txt`, same FableWin identity below.
+The cursor envelope adds half a cell around those possible vertex centres.
+Release GUI build passes. Normal/compact cursor checks and captures pass at
+`build/height-cursor-94wn4fdw`; normal three-by-three and compact single-vertex
+Noise captures were inspected. Height pens (including actual Noise and undo)
+pass too; combined log `build/noise_cursor_checks.log`. Core is unchanged from
+the preceding all-36-pass Smooth build. No install writes/live probes ran.
+
 ## 2026-10-02 continuation: Smooth cursor footprint
 
 Smooth now rounds its cursor centre and uses its actual integer-radius disc,

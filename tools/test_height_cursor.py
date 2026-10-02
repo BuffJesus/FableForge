@@ -38,6 +38,11 @@ def main():
                   'assert_state brush_cursor_vertices 0']
         for mode in [9, 16]:
             lines += [f'terrain_mode {mode}', 'frames 3', 'assert_state brush_cursor_vertices 0']
+        for radius in [0.25, 2]:
+            lines += [f'brush {radius} 4', 'reveal slider_radius', 'frames 3',
+                      'reveal slider_radius', 'frames 3', 'mouse_move viewport', 'frames 3',
+                      'assert_state brush_cursor_vertices 0', 'assert_heights_changed 0',
+                      'assert_document_same', f'screenshot {dest.as_posix()}/noise-radius{radius}.png']
         lines += ['assert_heights_changed 0', 'assert_document_same', 'quit']
         script = dest / 'cursor.txt'
         script.write_text('\n'.join(lines) + '\n', encoding='utf-8')

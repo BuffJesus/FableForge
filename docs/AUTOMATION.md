@@ -30,6 +30,8 @@ tool, zero-speed refusal to alter ground, nonzero strokes and undo. State keys
 and Flatten/Smooth cursors at normal/compact sizes. `brush_cursor_vertices` counts
 the projected affected-vertex dots (shown at radii <=4 cells); the check verifies
 single/9-vertex discs and unchanged terrain/object snapshots.
+It also captures the Noise square at single-vertex and three-by-three sizes
+for visual inspection, without changing the document.
 
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.

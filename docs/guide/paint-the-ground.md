@@ -19,6 +19,7 @@ With **Exact step** in Raise/Lower, or with Flatten, small brushes show dots on
 the vertices they affect. A 0.25-cell radius affects one vertex.
 Smooth also shows its considered vertices; its radius rounds down to a whole
 cell, with a minimum of 1. Smooth may leave flat ground and straight slopes as they are.
+Noise shows a square enclosing its possible random pokes.
 
 ## Ground textures
 

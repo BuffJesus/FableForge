@@ -3000,11 +3000,28 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool vertexDisc = roundedDisc || smearDisc;
-    const float centreX = vertexDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
-    const float centreY = vertexDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
+    const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
+    const float centreX = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[0]) : brushFable_[0];
+    const float centreY = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[1]) : brushFable_[1];
     const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
                                   : brushRadius_ + (roundedDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
+                    : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
+                    : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
+    if (noiseSquare) {
+        // GFRandom(ceil(radius)) excludes its upper bound. Enclose each
+        // possible vertex's half-cell area, clipped to the map extent.
+        const float extent = std::max(0.0f, std::ceil(brushRadius_) - 1.0f) + 0.5f;
+        drawGroundRect(origin, size, std::max(0.0f, centreX - extent), std::max(0.0f, centreY - extent),
+                       std::min(float(doc_.cellsX() - 1), centreX + extent),
+                       std::min(float(doc_.cellsY() - 1), centreY + extent), col);
+        const float p[3] = {centreX, doc_.terrainHeight(centreX, centreY).value_or(0.0f) + 0.05f, -centreY};
+        float u, v;
+        if (renderer_.project(p, u, v))
+            dl->AddCircleFilled(ImVec2(origin.x + u * size.x, origin.y + v * size.y), theme::S(3.0f), col);
+        return;
+    }
     const int n = 48;
     ImVec2 pts[n];
     int got = 0;
@@ -3017,9 +3034,6 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         if (!renderer_.project(p, u, v)) return;
         pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
     }
-    const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
-                    : terrainMode_ >= 6 && terrainMode_ <= 8 ? IM_COL32(240, 200, 80, 230)
-                    : terrainMode_ == 4 ? IM_COL32(80, 220, 140, 230) : terrainMode_ == 5 ? IM_COL32(230, 80, 90, 230) : theme::col(theme::Accent);
     dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     if (vertexDisc && brushRadius_ <= 4.0f) {
         const auto vertices = smearDisc
@@ -4173,7 +4187,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         else if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
         else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+drag samples the target. One undo step per stroke.";
         else if (terrainMode_ == 3) how = "Hold LMB: bumps and pits move toward their neighbours; straight slopes stay. One undo step per stroke.";
-        else if (terrainMode_ == 16) how = "Hold LMB: random blocks under the brush jump up and down (nothing happens where the ground under the brush averages sea level; no block goes below 0). One undo step per stroke.";
+        else if (terrainMode_ == 16) how = "Hold LMB: random vertices inside the square jump up and down. Ground averaging sea level stays; no vertex goes below 0. One undo step per stroke.";
         else if (terrainMode_ == 4 || terrainMode_ == 5) how = "Hold LMB on the ground to paint; Shift swaps walkable and blocked. Switch the view to Walkable to see it. Each stroke is one undo step.";
         else if (terrainMode_ == 6 || terrainMode_ == 10 || terrainMode_ == 11 || terrainMode_ == 12 || terrainMode_ == 13)
             how = "Hold LMB on the ground to paint. Each stroke is one undo step.";
