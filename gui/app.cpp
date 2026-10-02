@@ -367,18 +367,19 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     if (!*open) return false;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float viewportWidth = std::max(S(360), viewportSize_.x - S(24));
-    const float toolWidth = std::min(width, viewportWidth);
+    const float toolWidth = std::min({width, viewportWidth, std::max(1.0f, vp->Size.x - S(24))});
+    const float toolMaxHeight = std::max(1.0f, vp->Size.y - S(60));
     const ImVec2 centre(viewportOrigin_.x + viewportSize_.x * 0.5f,
                         viewportOrigin_.y + viewportSize_.y * 0.5f);
     ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(toolWidth, 0), ImVec2(toolWidth, vp->Size.y - S(60)));   // scrolls on a short screen
+    ImGui::SetNextWindowSizeConstraints(ImVec2(toolWidth, 0), ImVec2(toolWidth, toolMaxHeight));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::vec(theme::Bg1));
     ImGui::PushStyleColor(ImGuiCol_Border, theme::vec(theme::Border));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S(12));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(18), S(14)));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
     const bool visible = ImGui::Begin(id, open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                                                ImGuiWindowFlags_AlwaysAutoResize);
+                                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!visible) { ImGui::End(); return false; }
@@ -391,7 +392,6 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
         if (fix.x != wp.x || fix.y != wp.y) ImGui::SetWindowPos(fix);
     }
     const float inner = ImGui::GetContentRegionAvail().x;
-    toolWindowInner_ = inner;
     // header: title, subtitle, close
     const ImVec2 top = ImGui::GetCursorPos();
     ImGui::PushFont(fontBold_);
@@ -407,16 +407,26 @@ bool App::beginToolWindow(const char* id, const char* title, const char* subtitl
     const ImVec2 after = ImGui::GetCursorPos();
     ImGui::SetCursorPos(ImVec2(top.x + inner - S(26), top.y));
     if (theme::ghostButton("\xC3\x97##toolclose", ImVec2(S(26), S(26)))) *open = false;
+    const std::string key = std::string(id).rfind("##", 0) == 0 ? id + 2 : id;
+    auto_.registerWidget(("tool_close_" + key).c_str());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Close (Esc)");
     ImGui::SetCursorPos(after);
     const ImVec2 a = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, a.y + S(4)), ImVec2(a.x + inner, a.y + S(4)), theme::col(theme::Border), 1.0f);
     ImGui::Dummy(ImVec2(0, S(10)));
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) *open = false;
+    // Keep the title and Close reachable while the body scrolls on short screens.
+    const float bodyMaxHeight = std::max(1.0f, toolMaxHeight - ImGui::GetCursorPosY() - ImGui::GetCurrentWindow()->WindowPadding.y);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(inner, 0), ImVec2(inner, bodyMaxHeight));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::BeginChild("##tool_body", ImVec2(inner, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
+                      ImGuiWindowFlags_NoBackground);
+    ImGui::PopStyleVar();
+    toolWindowInner_ = ImGui::GetContentRegionAvail().x;
     return true;
 }
 
-void App::endToolWindow() { ImGui::End(); }
+void App::endToolWindow() { ImGui::EndChild(); ImGui::End(); }
 
 void App::drawToolWindows() {
     if (!editMode_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_) {

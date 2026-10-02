@@ -2126,6 +2126,24 @@ legitimately cancel the text edit and is not evidence of draft loss. The final
 regression explicitly commits the field by changing focus before closing, and
 asserts the job is still busy when the next draft is entered. No live game writes.
 
+## 2026-10-01 continuation: tool headers remain reachable
+
+Long tool windows previously scrolled their title and Close control out of view
+(for example the compact model-import completion capture). The shared tool shell
+now keeps its header outside a bounded scrolling body, and caps width against
+the application window as well as the viewport. The tool content width accounts
+for the body's scrollbar. Close controls have stable automation identifiers.
+
+`build/tool-headers-khbgbuwv` exercises normal and compact captures. Six compact
+tools (model import, dialogue edit, Generate, Fit, Budget and Properties) keep
+identical close-control bounds before/after revealing lower content, and actual
+Close clicks work. Properties uses its viewport context menu at compact size;
+the old three-button selection toolbar is absent when the viewport is too narrow.
+That independent layout gap remains for the next pass. Existing tool-context
+closure checks pass. Dialogue browser/playback/edit/export passes again at
+`build/dialogue-workspace-j01ockif` for both sizes after the shared shell change.
+Compact import, terrain and properties screenshots were inspected.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved
