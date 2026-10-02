@@ -397,13 +397,32 @@ bool Automation::tick(App& app) {
         }
         ++pc_;
     }
+    else if (cmd == "assert_selected_xy") {
+        float x = 0, y = 0; std::istringstream(rest) >> x >> y;
+        editor::Frame frame;
+        if (app.selectedThing_ < 0 || !app.doc_.frameOf(size_t(app.selectedThing_), frame) ||
+            std::abs(frame.pos[0] - x) > 0.001f || std::abs(frame.pos[1] - y) > 0.001f)
+            fail("assert_selected_xy: position differs from " + rest);
+        else note("ok   " + line);
+        ++pc_;
+    }
+    else if (cmd == "assert_selected_cell_centre") {
+        editor::Frame frame;
+        if (app.selectedThing_ < 0 || !app.doc_.frameOf(size_t(app.selectedThing_), frame) ||
+            std::abs(frame.pos[0] - (std::trunc(frame.pos[0]) + 0.5f)) > 0.001f ||
+            std::abs(frame.pos[1] - (std::trunc(frame.pos[1]) + 0.5f)) > 0.001f)
+            fail("assert_selected_cell_centre: selected XY is not at a cell centre");
+        else note("ok   " + line);
+        ++pc_;
+    }
     else if (cmd == "assert_selected_ground") {
         editor::Frame frame;
         if (app.selectedThing_ < 0 || !app.doc_.frameOf(size_t(app.selectedThing_),frame) || !app.doc_.hasTerrain())
             fail("assert_selected_ground: no terrain or selected frame");
         else {
             const auto expected = app.doc_.groundHeight(frame.pos[0],frame.pos[1]);
-            if (!expected || std::abs(frame.pos[2]-*expected)>0.01f) fail("selected object is not on the ground");
+            const float offset = rest.empty() ? 0.0f : float(std::atof(rest.c_str()));
+            if (!expected || std::abs(frame.pos[2]-*expected-offset)>0.01f) fail("selected object has the wrong height above ground");
             else note("ok   " + line);
         }
         ++pc_;
@@ -510,6 +529,7 @@ bool Automation::tick(App& app) {
         else if (key == "place_def") app.placeDef_ = val;
         else if (key == "place_angle") app.placeAngleDeg_ = float(std::atof(val.c_str()));
         else if (key == "place_height") { app.placeFixedHeight_ = !val.empty() && val != "off"; if (app.placeFixedHeight_) app.placeHeight_ = float(std::atof(val.c_str())); }
+        else if (key == "place_snap_grid") { app.placeSnapGrid_ = val == "on" || val == "1"; }
         else fail("set: unknown key " + key);
         note("ok   " + line); ++pc_;
     }

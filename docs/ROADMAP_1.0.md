@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-02 continuation: saved cell-centre placement now covers new/pasted things
+and ground carry, preserving ground/fixed heights, group spacing and exact undo.
+Normal/compact UI and all 36 core tests pass; native evidence and boundaries are
+recorded in HANDOFF_WORLD_UI. Gizmo snap remains a separate control.
+
 2026-10-01 workflow depth: new-level creation preserves edits made while the job
 runs, compact origins remain readable, and Restore clears removed-map previews.
 Scratch creation/restore, extracted layouts, world-pack composition and new-level

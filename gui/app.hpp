@@ -300,6 +300,8 @@ private:
     void frameSelected();
     void showSelectedInPalette();
     void drawPlacementOptions(float width);
+    void snapPlacementPoint(float position[3]) const;
+    void cameraPlacementPoint(float position[3]) const;
     bool placeDefinition(const std::string& def, const std::string& scriptName = "");   // at the camera focus point, on the ground; CREATURE_ as an AICreature
     bool placeDefinitionAt(const std::string& def, const float position[3], const std::string& scriptName = "");
     bool saveDocument();                                // loose .tng under saveRoot()
@@ -477,6 +479,7 @@ private:
     int placeFacing_ = 0;            // 0 toward the camera, 1 random (vanilla), 2 fixed angle
     float placeAngleDeg_ = 0.0f;     // fixed angle, degrees clockwise from +Y (vanilla turns x 360)
     bool placeFixedHeight_ = false;  // vanilla "Place at constant height": absolute Z, never under the ground
+    bool placeSnapGrid_ = false;     // vanilla Options > Snap To Grid (cell-centre placement/carry)
     // vanilla owner combo (NEditGui::CMenu PLAYER_LIST_BOX -> CEditControlCentre::SelectedPlayerNumber):
     // -1 Auto, 0..3 Player N, 4 Neutral. Placement: creatures, buildings, villages, objects take it;
     // Auto = a creature def's DefaultOwner, 4 otherwise (PaintInputPlaceThingAt 0x02994490, owner 5 ->

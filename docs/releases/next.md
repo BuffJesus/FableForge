@@ -30,6 +30,9 @@ version is chosen; validation is recorded at release time, not here.
   with its path and name filled in.
 - **World tab:** the selected map's card opens it in the editor or straight into
   Fit to neighbours.
+- **Snap to cell centres.** A saved placement option puts new and pasted things
+  on the centres of the 1 m grid cells. Carry uses the same grid while keeping
+  the object's height above ground.
 - **Escape** cancels any pending write confirmation without clearing the selection;
   Enter never confirms a write.
 

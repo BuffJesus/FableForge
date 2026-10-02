@@ -567,6 +567,11 @@ and an unchanged document; screenshot `walkthrough/w21_show_in_palette.png`.
 #### Snap to grid behaves differently from vanilla: relative 0.5-unit steps instead of cell centres on the ground
 *weakness, effort S, value low*
 
+2026-10-02: the saved placement option below now covers placement, paste and
+carry with native cell centres. The existing gizmo Snap remains separate and
+relative; changing its translation behavior is deferred. Terrain pens and
+track-node placement keep their mode-specific rules.
+
 **Vanilla:** With Options > Snap To Grid on, GetCurrentPointedAtPos 0x0204b2d0 passes the pointer through FindNearestSnappedPos 0x02049280. That gives x = int(x) + 0.5, y = int(y) + 0.5, z = GetGroundSizeZAt: the centre of the 1-unit cell, sitting on the ground. Placement and carry therefore land things on a world-aligned cell grid.
 
 **Fix:** 1) Add a helper next to snapSelectedToGround in gui/editor.cpp, porting FindNearestSnappedPos 0x02049280:
@@ -1371,7 +1376,11 @@ the double-click), disabled while moves are pending or without a terrain chunk. 
 **Fix:** 1) gui/world.cpp, Selected-map card, after the owner combo block (before theme::endCard() at ~line 515): add two buttons. (a) ghostButton "Open in editor", which runs the same sequence as the double-click at world.cpp:321-328 (worldDragging_=false; setWorldMode(false); selectMap(box->name); setEditMode(true); pushLog). (b) ghostButton "Fit to neighbours...", which runs that sequence, then setEditTab(1) (the Terrain tab, app.hpp:364) and setFitOpen(true) (app.hpp:548). Register the buttons as widgets btn_world_open and btn_world_fit. Disable both while worldPending_ is non-empty (the same guard as the double-click), with a tooltip saying "Write or put back pending moves first". Fit reads neighbour heights from the written layout (loadWorldLayout in startFitNeighbourLoad, editor.cpp:3525), so unwritten moves would give wrong seams. Also disable Fit when box->inStb is false or the map has no terrain. Tooltip: reuse editor.cpp:3733 plus "changes height data", which stands in for vanilla's confirm text; the Fit window's Now/Fitted preview and explicit Fit button (editor.cpp:3882) already act as the confirmation, so no modal is needed. 2) No change to drawFitWindow is needed. It opens once documentLoaded() is true, because fitOpen_ persists across the asynchronous map load, and it reloads neighbours through the fitNeighboursFor_ != doc_.mapName() check (editor.cpp:3745). Keep the vanilla defaults and do not reset fitParams_. 3) Optional: an automation verb world_fit <map> in gui/automation.cpp next to fit_open (line 326) that does the same sequence, so the flow can be screenshot-tested; then update the ROADMAP row 22 note. Out of scope: the "several fillers at once" part of row 22 and the pack entry point.
 
 #### Options > Snap To Grid (cell-centre placement) has no equivalent
-*gap, effort S, value low*
+*gap, effort S, value low* — **DONE 2026-10-02**: saved *Snap to cell centres*
+placement option; new things, fragment/preset anchors, special things and carry
+snap before ground sampling. Carry snaps after the grab offset. Fixed height,
+emitter offset, paste spacing and one-step undo are preserved. Normal/compact
+real-control checks pass (`tools/test_placement_grid.py`); details in HANDOFF_WORLD_UI.
 
 **Vanilla:** Options > &Snap To Grid â†’ SetSnapToGridFlag 0x0203d5d0. GetCurrentPointedAtPos 0x0204b3f8 then calls FindNearestSnappedPos 0x02049280: x,y are truncated to int (_ftol), +0.5 is added (constant 0x401de04 = 0.5), and z = GetGroundSizeZAt. The pointer is snapped to the centre of the 1-unit cell, on the ground, for placement and pointer-driven edits. Persisted as SnapToGridFlag in editor settings.
 

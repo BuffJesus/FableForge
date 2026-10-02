@@ -645,6 +645,7 @@ void App::loadSettings(std::string& savedInstall) {
         settings_.showExplorer = j.value("showExplorer", settings_.showExplorer);
         settings_.showActions = j.value("showActions", settings_.showActions);
         moveOwned_ = j.value("moveOwned", moveOwned_);
+        placeSnapGrid_ = j.value("placeSnapGrid", placeSnapGrid_);
         if (j.contains("effectBackground") && j["effectBackground"].is_array() && j["effectBackground"].size()==3)
             for (size_t i=0;i<3;++i) {
                 const float colour=j["effectBackground"][i].get<float>();
@@ -666,6 +667,7 @@ void App::saveSettings() const {
             {"editTab", editTab_}, {"uiScale", settings_.uiScale},
             {"showExplorer", settings_.showExplorer}, {"showActions", settings_.showActions},
             {"moveOwned", moveOwned_},
+            {"placeSnapGrid", placeSnapGrid_},
             {"effectBackground", {effectBackground_[0],effectBackground_[1],effectBackground_[2]}},
             {"effectShowGrid", effectShowGrid_},
         };
@@ -1528,6 +1530,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);
+    v.push_back("place_snap_grid=" + std::to_string(placeSnapGrid_));
     v.push_back("palette_reveal_pending="+std::to_string(!revealDef_.empty()));
     v.push_back("toasts=" + std::to_string(toasts_.size()));
     v.push_back("help_open=" + std::string(helpOpen_ ? "1" : "0"));

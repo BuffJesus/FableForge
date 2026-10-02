@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_placement_grid.py --install <root>` checks the real placement-grid
+toggle at 1440x900 and 800x600 / 1.5 scale, ground and fixed heights, pointer
+placement, paste, special things, carry and exact undo without game writes.
+`set place_snap_grid on|off` sets the option; state `place_snap_grid` and widget
+`toggle_place_snap_grid` expose it. `assert_selected_xy <x> <y>` checks map-local
+XY within 0.001; `assert_selected_cell_centre` checks grid alignment.
+`assert_selected_ground [offset]` checks terrain-relative Z within 0.01.
+
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.
 `tools/test_asset_search.py --install <root>` checks the active asset browser's

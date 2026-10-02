@@ -282,8 +282,7 @@ void App::copySelection() {
 void App::pasteClipboard() {
     if (!documentLoaded()) return;
     if (clipboard_.empty()) { pushLog("paste: the clipboard is empty (Ctrl+C a selection first)", 1); return; }
-    float focus[3]; camera_.focus(focus);
-    const float at[3] = {focus[0], -focus[2], focus[1]};
+    float at[3]; cameraPlacementPoint(at);
     try {
         const auto pasted = doc_.paste(clipboard_, at, true);
         if (pasted.empty()) return;
@@ -2058,7 +2057,9 @@ void App::updateCarry(float u, float v) {
     if (!carryArmed_) return;
     float ground[3];
     if (!groundUnderCursor(u, v, ground)) return;
-    const float x = ground[0] + carryGrab_[0], y = ground[1] + carryGrab_[1];
+    ground[0] += carryGrab_[0]; ground[1] += carryGrab_[1];
+    snapPlacementPoint(ground);
+    const float x = ground[0], y = ground[1];
     const auto height = doc_.groundHeight(x, y);
     if (!height) return;
     carrying_ = true;
@@ -2422,6 +2423,9 @@ void App::drawPlacementOptions(float width) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Take the ground height where the camera looks.");
         theme::hint("A world height. Where the ground is higher, the thing sits on the ground.");
     }
+    if (theme::toggle("Snap to cell centres", &placeSnapGrid_)) saveSettings();
+    auto_.registerWidget("toggle_place_snap_grid");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Place, paste and carry things on the centres of the 1 m grid cells.\nGround height is sampled after snapping; carrying keeps the height above ground.\nThe gizmo's Snap toggle is separate.");
 }
 
 int App::ownerFor(const std::string& def) const {
@@ -2468,6 +2472,19 @@ bool App::thingHiddenBySection(const std::vector<std::string>& per, size_t t) co
     return (split.second == 1 && !showDayOnly_) || (split.second == 2 && !showNightOnly_);
 }
 
+void App::snapPlacementPoint(float position[3]) const {
+    if (!placeSnapGrid_) return;
+    const auto snapped = forge::thingplacer::snapToCellCentre(position[0], position[1]);
+    position[0] = snapped.x; position[1] = snapped.y;
+    position[2] = doc_.groundHeight(position[0], position[1]).value_or(position[2]);
+}
+
+void App::cameraPlacementPoint(float position[3]) const {
+    float focus[3]; camera_.focus(focus);
+    position[0] = focus[0]; position[1] = -focus[2]; position[2] = focus[1];
+    snapPlacementPoint(position);
+}
+
 bool App::placeDefinition(const std::string& def, const std::string& scriptName) {
     float focus[3]; camera_.focus(focus);
     const float position[3] = {focus[0], -focus[2], focus[1]};
@@ -2485,7 +2502,9 @@ bool App::placeDefinitionAt(const std::string& def, const float position[3], con
     p.definitionType = def;
     p.thingType = def.rfind("BUILDING_", 0) == 0 ? "Building" : "Object";
     p.scriptName = scriptName;
-    p.position = {position[0], position[1], position[2]};
+    float at[3] = {position[0], position[1], position[2]};
+    snapPlacementPoint(at);
+    p.position = {at[0], at[1], at[2]};
     p.player = ownerFor(def);
     if (const auto h = doc_.groundHeight(p.position.x, p.position.y)) p.position.z = *h;
     if (placeFixedHeight_) p.position.z = forge::thingplacer::constantPlacementHeight(placeHeight_, p.position.z);
@@ -2998,8 +3017,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
 bool App::placeSpawner(const std::vector<std::string>& families, float radius, int limit, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (families.empty()) { pushLog("editor: pick at least one creature family", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeCreatureGenerator(pos, families, radius, limit, scriptName);
@@ -3018,8 +3036,7 @@ bool App::placeSpawner(const std::vector<std::string>& families, float radius, i
 bool App::placeVillage(const std::string& def, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (def.rfind("VILLAGE_", 0) != 0) { pushLog("editor: " + def + " is not a VILLAGE_ definition", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeVillage(pos, def, scriptName, ownerFor(def));
@@ -3192,8 +3209,7 @@ void App::drawLiveLinkCard(float pad, float inner, float cardInner) {
 
 bool App::placeFishingSpot(const std::string& reward, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     try {
         const size_t n = doc_.placeFishingSpot(pos, reward, scriptName);
@@ -4688,8 +4704,7 @@ bool App::setEntranceHere() {
     if (!documentLoaded()) { pushLog("entrance: no level document", 1); return false; }
     if (!doc_.worldSlot()) { pushLog("entrance: " + doc_.mapName() + " is not placed in FinalAlbion.wld", 1); return false; }
     if (gameWriteBlocked("entrance")) return false;
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h;
     float d[3]; camera_.dir(d);
     const float fwd[2] = {-d[0], d[2]};   // face the camera, like a placed object
@@ -4723,8 +4738,7 @@ void App::drawEntranceCard(float pad, float inner, float cardInner) {
 bool App::placeEmitter(const std::string& effectName, const std::string& scriptName) {
     if (!documentLoaded()) { pushLog("editor: no level document", 1); return false; }
     if (effectName.empty()) { pushLog("editor: pick an effect first", 1); return false; }
-    float focus[3]; camera_.focus(focus);
-    float pos[3] = {focus[0], -focus[2], focus[1]};
+    float pos[3]; cameraPlacementPoint(pos);
     if (const auto h = doc_.groundHeight(pos[0], pos[1])) pos[2] = *h + 0.5f;   // half a unit up, where retail puts most flames
     try {
         const size_t n = doc_.placeEmitter(pos, effectName, scriptName);
@@ -4802,8 +4816,7 @@ bool App::placePreset(const std::string& name) {
     editor::Document::Fragment frag;
     std::string err;
     if (!editor::loadPreset(hit->file, frag, err)) { pushLog("preset: " + err, 2); return false; }
-    float focus[3]; camera_.focus(focus);
-    const float at[3] = {focus[0], -focus[2], focus[1]};
+    float at[3]; cameraPlacementPoint(at);
     try {
         const auto placed = doc_.paste(frag, at, true);
         if (placed.empty()) return false;

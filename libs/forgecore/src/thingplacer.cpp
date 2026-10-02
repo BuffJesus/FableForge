@@ -138,6 +138,10 @@ float constantPlacementHeight(float height, float groundZ) {
     return height < groundZ ? groundZ : height;
 }
 
+Vec3 snapToCellCentre(float x, float y) {
+    return {std::trunc(x) + 0.5f, std::trunc(y) + 0.5f, 0.0f};
+}
+
 float terrainHeightAt(const lev::File& level, float localX, float localY) {
     const int maxX = level.cellsX() - 1;
     const int maxY = level.cellsY() - 1;

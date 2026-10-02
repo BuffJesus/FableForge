@@ -2480,6 +2480,15 @@ void testVanillaPlacement() {
     CHECK(std::fabs(fq.x - tp::kGroundUpZ) < 1e-6f && std::fabs(fq.y) < 1e-5f);
     // constant height never goes under the ground
     CHECK(tp::constantPlacementHeight(10.0f, 4.0f) == 10.0f && tp::constantPlacementHeight(2.0f, 4.0f) == 4.0f);
+    const auto cell = tp::snapToCellCentre(3.7f, 12.99f);
+    CHECK(cell.x == 3.5f && cell.y == 12.5f);
+    const auto edge = tp::snapToCellCentre(0.0f, 1.0f);
+    CHECK(edge.x == 0.5f && edge.y == 1.5f);
+    // Native _ftol truncates toward zero, including negative inputs.
+    const auto negative = tp::snapToCellCentre(-3.7f, -0.75f);
+    CHECK(negative.x == -2.5f && negative.y == 0.5f);
+    const auto again = tp::snapToCellCentre(cell.x, cell.y);
+    CHECK(again.x == cell.x && again.y == cell.y);
 }
 
 void testBudgetSurvey() {

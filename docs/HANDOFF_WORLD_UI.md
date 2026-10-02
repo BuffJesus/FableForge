@@ -1,5 +1,33 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: cell-centre placement
+
+Added a saved *Snap to cell centres* option beside Fixed height in the Objects
+and Actors placement controls. It snaps new definitions, pointer placement,
+clipboard/preset anchors, spawners, villages, fishing spots, emitters and region
+entrances to the 1 m cell centres, then samples ground there. Carry snaps after
+its grab offset and keeps height above terrain. Fixed height applies after the
+terrain sample; emitters retain their half-unit lift. Group paste preserves
+relative layout around the snapped anchor. Gizmo Snap, track placement, terrain
+pens, raw height sampling and live-link teleport retain their existing rules.
+
+Evidence: FableTLC `ghidra_out/fablewin_editor_symbols.tsv` names
+`CEditControlCentre::FindNearestSnappedPos` at `0x02049280`; fresh read-only PE
+disassembly confirms two `_ftol` conversions, addition of `{0.5,0.5,0}` and then
+the ground query. The constant at `0x0401de04` is 0.5. Executable SHA256
+`A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845`;
+local export `build/placement-grid-native-evidence.txt`. Core helper uses
+truncation toward zero, also checked for negative inputs.
+
+Build and all 36 CTest checks pass. Normal 1440x900 and compact 800x600 / 1.5
+real-control, unsnapped/snapped XY, ground/fixed-height, pointer, paste, special
+thing, carry-offset and exact undo checks pass at `build/placement-grid-abpoao3i`.
+Both control captures inspected. First test run clicked below the nested card
+before scrolling settled; a second reveal fixes the harness, with no game writes.
+The check is included in `check_all.py`. No in-game deployment was exercised.
+Existing placement, ground/clone carry, owned duplication and terrain-brush UI
+regressions pass with snapping off.
+
 ## 2026-10-02: 0.18.0 built, validated and published
 
 Commit `4ca5a62` ("Release FableForge 0.18.0") carries the stable version, README,

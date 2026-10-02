@@ -209,6 +209,12 @@ item and info display components; absent components are not added.
   file's `0xFFFFFE00` namespace, `thingplacer` blocks in retail field order
   (`Object` for `OBJECT_*`, `Building` for `BUILDING_*`). Placement lands on
   the LEV terrain height (bilinear, like the retail placer).
+* **Snap to cell centres** (placement options): place, paste and carry on the
+  centres of the 1 m grid cells. Ground height is sampled at the snapped point;
+  Fixed height still clamps to terrain and carry keeps its height above ground.
+  Pasted groups retain their spacing around the snapped anchor. This option is
+  saved between sessions. The gizmo's Snap toggle, terrain pens and track-node
+  placement keep their existing rules.
 * **Multi-select**: Ctrl+click adds/removes (viewport or list); the gizmo, nudges,
   Del, Ctrl+D, Ctrl+C/V act on the set as one undo step (`Document::beginBatch`).
   Copy/paste carries a *fragment* (blocks + positions relative to the centroid),
