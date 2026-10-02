@@ -91,7 +91,7 @@ def main():
                   [sys.executable, "tools/test_height_pick.py", "--install", install_root], capture_output=True)
         ok &= run("fixed-point sculpt height keys, other tools unchanged and undo",
                   [sys.executable, "tools/test_height_keys.py", "--install", install_root], capture_output=True)
-        ok &= run("exact-step, Flatten and Smooth cursor vertices at normal/compact sizes",
+        ok &= run("sculpt and height-key cursor vertices at normal/compact sizes",
                   [sys.executable, "tools/test_height_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("precise terrain brush controls",
                   [sys.executable, "tools/test_terrain_brush_controls.py", "--install", install_root], capture_output=True)

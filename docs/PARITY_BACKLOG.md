@@ -756,15 +756,19 @@ Leave the vanilla world-level loop over every editable map (skipping index 0) ou
 Effort S. Value med (the common case is lifting a map to meet its neighbour, or taming a fractal result).
 
 #### The brush circle does not show the vanilla pens' real footprint
-*partly resolved 2026-10-02: Change Height (exact-step Raise/Lower) and Paint
+*resolved for small pens 2026-10-02: Change Height (exact-step Raise/Lower) and Paint
 Height (Flatten) use a rounded-centre ring and actual affected-vertex dots for
 radii <=4, including single-vertex brushes. Their distance predicate is shared
 with the core footprint query and verified against actual pen output. Smooth
 now shows its strict integer-radius disc too; contrary to the proposal below,
 the rejected outer boundary makes its vertex set symmetric, with no half-cell
 offset. Noise now outlines its actual possible poke square, using offsets
-smaller than ceil(radius), clipped to the map. Height-key footprint
-visualization remains open. Original proposal follows.*
+smaller than ceil(radius), clipped to the map. Height keys show their distinct
+fractional/truncated vertices at radii <=4; at 0.25/0.5 the footprint is empty
+and the cursor requests a larger Radius. The query shares the actual pen's
+sample visitor, retaining repeated corner applications in the pen. Larger
+disc outlines remain approximations. Historical proposal follows; its Smooth
+offset and Noise extent assumptions were corrected by native evidence.*
 
 **Vanilla:** Every ported pen acts on a hard disc around the pointer rounded to a block (fistp): Change Height and Paint Height use d < r + 0.5. Smear uses offsets [-r, r-1] with r = trunc(max(r,1)), so its footprint is asymmetric (EditSmoothPenUndoable 0x0297b3c0, EditChangeHeightPenUndoable 0x02975710).
 

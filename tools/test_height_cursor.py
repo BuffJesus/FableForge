@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check visible rounded-disc terrain vertices at normal and compact sizes."""
+"""Check sculpt and fractional height-key cursors at normal and compact sizes."""
 import argparse
 import os
 from pathlib import Path
@@ -43,6 +43,19 @@ def main():
                       'reveal slider_radius', 'frames 3', 'mouse_move viewport', 'frames 3',
                       'assert_state brush_cursor_vertices 0', 'assert_heights_changed 0',
                       'assert_document_same', f'screenshot {dest.as_posix()}/noise-radius{radius}.png']
+        # Height-key geometry is fractional/truncated, unlike the mouse disc.
+        lines += ['terrain_mode 0', 'set pen_speed 0.5']
+        for radius, count in [(0.25, 0), (0.5, 0), (1, 5), (1.5, 4), (2, 13)]:
+            lines += [f'brush {radius} 4', 'camera 64 110 20 0 1.5 12',
+                      'frames 3', 'mouse_move viewport', 'frames 3', 'key_down Equal', 'frames 3',
+                      'assert_state height_key_active 1', f'assert_state brush_cursor_vertices {count}']
+            if radius in [0.25, 1.5]:
+                lines += [f'screenshot {dest.as_posix()}/height-key-radius{radius}.png']
+            lines += ['key_up Equal', 'wait_foliage', 'assert_state height_key_active 0',
+                      f'assert_heights_changed {int(count > 0)}']
+            if count:
+                lines += ['undo', 'wait_foliage']
+            lines += ['assert_heights_changed 0', 'assert_document_same']
         lines += ['assert_heights_changed 0', 'assert_document_same', 'quit']
         script = dest / 'cursor.txt'
         script.write_text('\n'.join(lines) + '\n', encoding='utf-8')
@@ -53,7 +66,7 @@ def main():
         (dest / 'output.log').write_text(result.stdout + result.stderr, encoding='utf-8')
         log = Path(str(script) + '.log').read_text(encoding='utf-8')
         assert result.returncode == 0 and 'RESULT PASS' in log, log[-3000:]
-        print(size, 'single/9-vertex discs, exact/Flatten/Smooth pens and unchanged snapshots: PASS', flush=True)
+        print(size, 'sculpt discs, Noise square, fractional height keys and exact snapshots/undo: PASS', flush=True)
 
 
 if __name__ == '__main__':

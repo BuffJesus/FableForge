@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: fractional height-key cursor
+
+Held height keys now show their distinct affected vertices at radii <=4, using
+the same sample visitor as the actual pen. Their fractional/truncated positions
+differ from mouse pens: interior radii 0.25/0.5/1/1.5/2 reach 0/0/5/4/13 vertices.
+Empty footprints display "Increase Radius to reach a vertex." while held.
+The query deduplicates dots; the actual pen preserves repeated applications:
+at the corner, radius 1.5 modifies vertex (0,0) four times. Larger outlines are
+still approximate. No pen strength, sampling, latch or undo rules changed.
+
+Fresh static evidence: `EditPlaceHeightAlterationUndoable` 0x029796b0, sample
+loops 0x029796ef..0x02979737, truncated positions 0x02979775/0x02979789 and
+distance check 0x029797b5..0x029797d9; export
+`build/height-key-footprint-native-evidence.txt`. Its random gate is enabled by
+the pen parameter; the height-key caller 0x02993840 sets that parameter to zero,
+as recorded in `build/height-keys-native-evidence.txt`. Same read-only FableWin
+identity as below; these are instruction checks, not native runtime comparisons.
+
+Full Release build and all 36 CTest checks pass. Normal/compact cursor cases,
+unchanged empty-footprint snapshots and actual stroke undo pass at
+`build/height-cursor-hbkjkj1l`. Normal/compact empty-hint and normal four-dot
+captures were inspected. No install files were written.
+The full fixed-point/Speed/six-tool/other-mode/undo regression passes at both
+sizes in `build/height-keys-6_w4iusg`; docs command and Python syntax checks pass.
+
 ## 2026-10-02 continuation: Noise cursor square
 
 Noise now outlines the half-cell envelope of its possible random vertices,

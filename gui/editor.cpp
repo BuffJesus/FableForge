@@ -2999,7 +2999,8 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
-    const bool vertexDisc = roundedDisc || smearDisc;
+    const bool keyDisc = keyStroke_;
+    const bool vertexDisc = roundedDisc || smearDisc || keyDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const float centreX = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[0]) : brushFable_[0];
     const float centreY = vertexDisc || noiseSquare ? std::nearbyint(brushFable_[1]) : brushFable_[1];
@@ -3025,7 +3026,7 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const int n = 48;
     ImVec2 pts[n];
     int got = 0;
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n && !(keyDisc && brushRadius_ <= 4.0f); ++i) {
         const float a = float(i) / n * 6.2831853f;
         const float fx = centreX + radius * std::cos(a), fy = centreY + radius * std::sin(a);
         const auto h = doc_.terrainHeight(fx, fy);
@@ -3034,9 +3035,11 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
         if (!renderer_.project(p, u, v)) return;
         pts[got++] = ImVec2(origin.x + u * size.x, origin.y + v * size.y);
     }
-    dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
+    if (got > 2) dl->AddPolyline(pts, got, col, ImDrawFlags_Closed, theme::S(2.0f));
     if (vertexDisc && brushRadius_ <= 4.0f) {
-        const auto vertices = smearDisc
+        const auto vertices = keyDisc
+            ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
+            : smearDisc
             ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
             : forge::heightpen::discFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_);
         for (const auto [bx, by] : vertices) {
@@ -3047,6 +3050,17 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
             dl->AddCircleFilled(dot, theme::S(3.0f), col);
             dl->AddCircleFilled(dot, theme::S(1.2f), IM_COL32(255, 255, 255, 240));
             ++brushCursorVertices_;
+        }
+        if (keyDisc && vertices.empty()) {
+            const float p[3] = {centreX, doc_.terrainHeight(centreX, centreY).value_or(0.0f) + 0.05f, -centreY};
+            float u, v;
+            if (renderer_.project(p, u, v)) {
+                const float wrap = std::min(theme::S(220.0f), size.x - theme::S(16.0f));
+                const float left = std::max(origin.x + theme::S(8.0f),
+                    std::min(origin.x + u * size.x + theme::S(8.0f), origin.x + size.x - wrap - theme::S(8.0f)));
+                dl->AddText(nullptr, 0.0f, ImVec2(left, origin.y + v * size.y + theme::S(8.0f)),
+                            theme::col(theme::Text), "Increase Radius to reach a vertex.", nullptr, wrap);
+            }
         }
     }
     if (terrainMode_ == 14 && clipDrag_)

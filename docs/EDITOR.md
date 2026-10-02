@@ -283,6 +283,9 @@ item and info display components; absent components are not added.
   then truncated, so a radius below 2 considers only the centre vertex.
   Noise outlines its possible random poke area as a square around the rounded
   centre. It considers random vertices there, rather than editing every vertex.
+  While a height key is held, small brushes show that key pen's distinct vertices.
+  Its fractional-radius footprint differs from the mouse pens: at 0.25 or 0.5
+  it reaches none, and the cursor asks you to increase Radius.
 * File operations run one at a time in the editor. Competing saves/imports,
   mod-order edits and save-folder changes ask you to wait for the named job;
   the draft remains editable while it runs.

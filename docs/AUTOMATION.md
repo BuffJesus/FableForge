@@ -32,6 +32,9 @@ the projected affected-vertex dots (shown at radii <=4 cells); the check verifie
 single/9-vertex discs and unchanged terrain/object snapshots.
 It also captures the Noise square at single-vertex and three-by-three sizes
 for visual inspection, without changing the document.
+Height-key cursor cases cover radii 0.25/0.5/1/1.5/2, with 0/0/5/4/13 distinct
+vertices, unchanged snapshots for empty footprints and exact undo for strokes.
+The empty-footprint hint and fractional-radius dots are captured at both sizes.
 
 `input_text <text>` sends UTF-8 text through ImGui to the focused input. Use
 `key_down Ctrl`, `key_down F`, then release both keys to test search shortcuts.

@@ -35,6 +35,8 @@ version is chosen; validation is recorded at release time, not here.
   rounded centre and affected vertices for small brushes, including a single
   vertex at a 0.25-cell radius.
   Noise outlines its possible random poke area as a square.
+  Held height keys show their distinct vertices and ask for a larger Radius
+  when the fractional-radius pen reaches none.
 - **Gentler scaling.** The scale gizmo changes size about 0.3% per pixel instead of
   1%, grows and shrinks symmetrically, and Shift makes it five times finer. The
   Properties scale field drags at the same gentler rate.

@@ -26,6 +26,23 @@ bool inRoundedDisc(int bx, int by, int cx, int cy, float radius) {
     return radius > d - 0.5f;
 }
 
+template<class Visit>
+void visitHeightAddition(int cellsX, int cellsY, float x, float y, float radius, Visit visit) {
+    const int cx = nearest(x), cy = nearest(y);
+    const float span = 2.0f * radius + kDnz;
+    for (int j = 0; float(j) < span; ++j)
+        for (int i = 0; float(i) < span; ++i) {
+            const float px = float(cx) - radius + float(i), py = float(cy) - radius + float(j);
+            const float di = radius - float(i), dj = radius - float(j);
+            if (!(std::sqrt(dj * dj + di * di) < radius + kDnz)) continue;
+            // Truncation keeps (-1,0) at vertex zero. Reject out-of-map
+            // values before converting them so the query can stay bounded.
+            if (px <= -1.0f || py <= -1.0f || px >= float(cellsX) || py >= float(cellsY)) continue;
+            const int bx = int(px), by = int(py);
+            visit(bx, by);
+        }
+}
+
 } // namespace
 
 float sizeToRadius(float slider) { return std::pow(2.0f, slider) / 1.0f; }
@@ -67,6 +84,20 @@ std::vector<std::pair<int, int>> smearFootprint(int cellsX, int cellsY, float x,
     return discFootprint(cellsX, cellsY, x, y, float(r) - 0.5f);
 }
 
+std::vector<std::pair<int, int>> heightAdditionFootprint(int cellsX, int cellsY, float x, float y, float radius) {
+    std::vector<std::pair<int, int>> vertices;
+    if (cellsX <= 0 || cellsY <= 0 || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(radius) || radius < 0.0f) return vertices;
+    if (double(x) < std::numeric_limits<int>::min() || double(x) > std::numeric_limits<int>::max() ||
+        double(y) < std::numeric_limits<int>::min() || double(y) > std::numeric_limits<int>::max()) return vertices;
+    visitHeightAddition(cellsX, cellsY, x, y, radius, [&](int bx, int by) { vertices.emplace_back(bx, by); });
+    std::sort(vertices.begin(), vertices.end(), [](const auto& a, const auto& b) {
+        return a.second < b.second || (a.second == b.second && a.first < b.first);
+    });
+    vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
+    return vertices;
+}
+
 uint32_t random(uint32_t max, uint32_t& seed) {
     lcgStep(seed);   // advances even when max is 0
     return max ? seed % max : 0u;
@@ -101,19 +132,12 @@ size_t changeHeight(terrain::Heightfield& field, float x, float y, float radius,
 }
 
 size_t heightAddition(terrain::Heightfield& field, float x, float y, float radius, float amount) {
-    const int cx = nearest(x), cy = nearest(y);
-    const float span = 2.0f * radius + kDnz;
     size_t changed = 0;
-    for (int j = 0; float(j) < span; ++j)
-        for (int i = 0; float(i) < span; ++i) {
-            const int bx = int(float(cx) - radius + float(i)), by = int(float(cy) - radius + float(j));   // ftol: toward zero
-            const float di = radius - float(i), dj = radius - float(j);
-            if (!(std::sqrt(dj * dj + di * di) < radius + kDnz)) continue;
-            if (!inside(field, bx, by)) continue;
-            float& h = field.at(bx, by);
-            const float next = limit(h + amount);
-            if (next != h) { h = next; ++changed; }
-        }
+    visitHeightAddition(field.cellsX(), field.cellsY(), x, y, radius, [&](int bx, int by) {
+        float& h = field.at(bx, by);
+        const float next = limit(h + amount);
+        if (next != h) { h = next; ++changed; }
+    });
     return changed;
 }
 

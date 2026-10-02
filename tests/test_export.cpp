@@ -1469,6 +1469,22 @@ void testHeightPens() {
         CHECK(hp::changeHeight(f, 2.5f, 3.0f, 0.25f, 3000.0f, altered) == 1 && f.at(2, 3) == hp::kMaxHeight);   // 2.5 -> 2 (half to even), clamped
     }
     // the -/= keys: r = 1 is the plus of 5 blocks (corners at 1.41 are out), applied again on every call
+    for (const auto [x, y, radius, count] : std::vector<std::array<float, 4>>{
+             {3.0f, 3.0f, 0.25f, 0}, {3.0f, 3.0f, 0.5f, 0},
+             {3.0f, 3.0f, 1.0f, 5}, {3.0f, 3.0f, 1.5f, 4},
+             {3.0f, 3.0f, 2.0f, 13}, {0.0f, 0.0f, 1.5f, 1}}) {
+        Heightfield f(8, 8, 5.0f);
+        const auto footprint = hp::heightAdditionFootprint(f.cellsX(), f.cellsY(), x, y, radius);
+        CHECK(footprint.size() == size_t(count));
+        const size_t applications = hp::heightAddition(f, x, y, radius, 1.0f);
+        CHECK(applications == (x == 0.0f ? 4u : size_t(count)));
+        for (int by = 0; by < f.cellsY(); ++by)
+            for (int bx = 0; bx < f.cellsX(); ++bx) {
+                const bool touched = std::find(footprint.begin(), footprint.end(), std::pair{bx, by}) != footprint.end();
+                CHECK((f.at(bx, by) != 5.0f) == touched);
+            }
+        if (x == 0.0f) CHECK(f.at(0, 0) == 9.0f); // four truncated samples, one cursor dot
+    }
     {
         Heightfield f(8, 8, 5.0f);
         CHECK(hp::heightAddition(f, 4.0f, 4.0f, 1.0f, 0.5f) == 5);
