@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: recovery publication and exact bytes
+
+Recovery now stages its complete archive in one owned sibling directory and
+publishes by one same-volume replacement. Windows uses MoveFileExW with
+REPLACE_EXISTING / WRITE_THROUGH and no COPY_ALLOWED fallback; POSIX uses rename.
+The old archive stays at its public name until replacement, and a locked-file
+failure retains its bytes. The recovery LEV changes a camera byte only when its
+boolean differs from the authored channel, preserving an untouched 0x80 true
+byte. Timed capture quietly defers batches/gizmo edits as well as brush strokes.
+
+Standalone local Windows probe (`build/recovery-atomic-static-probe.txt`):
+500 replacement attempts with a concurrent reader produced zero missing-name
+or partial-data observations. 298 attempts were rejected with Win32 5 under
+reader contention; the previous archive remained available. The previous
+two-rename pattern completed 500 writes but exposed 7,441 missing-name reads.
+These are local filesystem observations, not power-loss durability guarantees.
+The initial dynamically linked probe had loader error 0xc0000139; a standalone
+static build resolved it. Primary Release binaries had no loader error.
+Microsoft's [MoveFileExW documentation](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
+provides flag semantics. [ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew)
+without a backup has documented failure cases that remove the replaced name;
+that operation was not selected as a fallback.
+
+Focused core tests pass exact unedited LEV payload bytes, preserved noncanonical
+camera state after edits, an actual Blocked edit with its original navigation
+baseline, locked publication failure followed by a successful later replacement,
+recovered later heights, and active-batch/stroke refusals. The first focused
+rebuild exposed Windows near/far header macros and an ambiguous JSON binary
+comparison in the new tests; both are corrected. Full primary Release rebuild
+passes. Stock and loose GUI recovery harnesses pass at both sizes:
+`build/recovery-ui-kcgq0rh_` / `build/recovery-ui-_qmacr6n`. All 36 CTest cases and
+documentation-command checks pass after the refinement. The broad 102-check gate below
+covers source 22cbbd6 before these focused refinements. No live game writes.
+
+
 ## 2026-10-02 full checkpoint: Budget and crash recovery
 
 Frozen source `22cbbd6` and primary Release binaries passed

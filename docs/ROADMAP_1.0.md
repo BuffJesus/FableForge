@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Recovery publication now uses one same-volume replacement, retains the prior
+archive on a locked-file failure, and preserves untouched camera bytes exactly.
+Focused core and stock/loose UI evidence follows the 102-check checkpoint in
+HANDOFF_WORLD_UI.
+
 The Budget/recovery checkpoint at frozen source `22cbbd6` passes 102 integration
 checks with zero failures or skips. Evidence and the scoped publication /
 byte-preservation follow-ups are recorded in HANDOFF_WORLD_UI.

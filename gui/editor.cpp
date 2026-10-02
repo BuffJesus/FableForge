@@ -3912,7 +3912,7 @@ fs::path App::recoveryPath() const {
 }
 
 bool App::autosaveNow() {
-    if (!documentLoaded() || !doc_.hasTerrain() || doc_.strokeActive() || activeFileJob() || !recoveryPending_.empty()) return false;
+    if (!documentLoaded() || !doc_.hasTerrain() || doc_.editActive() || activeFileJob() || !recoveryPending_.empty()) return false;
     if (auto_.active() && recoveryRoot_.empty()) { pushLog("autosave: scripted runs need an owned recovery root",1); return false; }
     try {
         const auto path=recoveryPath();

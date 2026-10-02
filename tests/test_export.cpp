@@ -14,6 +14,15 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#undef near
+#undef far
+#endif
+
 #include "forge/heightpen.hpp"
 #include "forge/trackpath.hpp"
 #include "worldtiles.hpp"
@@ -1350,19 +1359,27 @@ void testRecovery(const fs::path& dir) {
     namespace ed=albion::editor;
     forge::TemporaryDirectory scratch(dir,"recovery-");
     const auto source=writeGameMapLev(scratch.path()/"Recovery.lev");
-    const auto sourceBytes=readAll(source);
+    auto sourceBytes=readAll(source);
+    const auto cameraByte=forge::lev::File::open(source).cellDataOffset()+(size_t(7)*9+7)*21+16;
+    sourceBytes[cameraByte]=0x80; // unchanged noncanonical true must survive recovery serialization
+    std::ofstream(source,std::ios::binary).write(reinterpret_cast<const char*>(sourceBytes.data()),std::streamsize(sourceBytes.size()));
     const std::string original="Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
     std::string err;
     ed::Document doc;
     CHECK(doc.openText("Recovery",original,err) && doc.loadLevel(source,err));
     const auto bank=doc.savedTerrain();
+    const auto cleanPath=scratch.path()/"clean.ffrecovery";
+    CHECK(doc.saveRecovery(cleanPath,err));
+    const auto cleanArchive=json::from_cbor(readAll(cleanPath));
+    const auto& cleanLevel=cleanArchive.at("lev").get_binary();
+    CHECK(std::equal(cleanLevel.begin(),cleanLevel.end(),sourceBytes.begin(),sourceBytes.end()));
     forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
     object.scriptName="Recovered"; object.position={1,2,3}; doc.place(object);
     CHECK(doc.setVertexHeights({{4,4,12}},false));
     ed::TerrainBrush b; b.x=4; b.y=4; b.radius=.25f;
-    b.mode=ed::TerrainBrush::Mode::Walkable;
+    b.mode=ed::TerrainBrush::Mode::Blocked; b.x=3; b.y=3;
     doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
-    b.mode=ed::TerrainBrush::Mode::CameraBlock;
+    b.mode=ed::TerrainBrush::Mode::CameraBlock; b.x=4; b.y=4;
     doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
     b.mode=ed::TerrainBrush::Mode::ShoreSet;
     doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
@@ -1393,6 +1410,10 @@ void testRecovery(const fs::path& dir) {
     CHECK(reopened.redo() && reopened.level()->soundThemes()==names && reopened.terrain().sound==wanted.sound);
     // Wrong-map, truncated and malformed archives must leave the document and undo intact.
     auto bytes=readAll(path); auto archive=json::from_cbor(bytes);
+    const auto& navBytes=archive.at("nav_walkable").get_binary();
+    CHECK(std::equal(navBytes.begin(),navBytes.end(),bank->walkable.begin(),bank->walkable.end()));
+    CHECK(bank->walkable[3*9+3] && !wanted.walkable[3*9+3]);
+    CHECK(archive.at("lev").get_binary()[frozen.level()->cellDataOffset()+(size_t(7)*9+7)*21+16]==0x80);
     archive["map"]="Other";
     auto invalid=json::to_cbor(archive);
     const auto bad=scratch.path()/"bad.ffrecovery";
@@ -1407,6 +1428,20 @@ void testRecovery(const fs::path& dir) {
     CHECK(!doc.saveRecovery(scratch.path()/"blocked",err) && readAll(path)==bytes);
     doc.beginStroke(b); CHECK(!doc.saveRecovery(path,err) && !doc.recover(path,err)); doc.endStroke();
     CHECK(readAll(path)==bytes && readAll(source)==sourceBytes);
+#ifdef _WIN32
+    const HANDLE locked=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    CHECK(locked!=INVALID_HANDLE_VALUE);
+    if (locked!=INVALID_HANDLE_VALUE) {
+        CHECK(!doc.saveRecovery(path,err)); // failed replacement keeps the last successful archive
+        CloseHandle(locked);
+        CHECK(readAll(path)==bytes);
+    }
+#endif
+    CHECK(doc.saveRecovery(path,err) && readAll(path)!=bytes);
+    CHECK(reopened.recover(path,err) && reopened.terrain().heights[4*9+4]==13);
+    doc.beginBatch(); CHECK(doc.editActive());
+    CHECK(!doc.saveRecovery(path,err) && !doc.recover(path,err));
+    doc.endBatch(); CHECK(!doc.editActive());
 }
 
 void testTerrainDraft(const fs::path& dir) {

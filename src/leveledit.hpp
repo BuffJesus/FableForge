@@ -466,6 +466,7 @@ public:
     bool loadTerrainDraft(const std::filesystem::path& gameRoot, std::string& error);
     // Standalone editor recovery archive: never marks authoring/game baselines saved.
     bool saveRecovery(const std::filesystem::path& path, std::string& error) const;
+    bool editActive() const { return stroke_ || batchDepth_ > 0; }
     bool recover(const std::filesystem::path& path, std::string& error);
     Document recoveryWriteSnapshot() const;
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)

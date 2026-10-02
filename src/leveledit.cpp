@@ -20,6 +20,19 @@
 #include <set>
 #include <unordered_map>
 #include <stdexcept>
+#include <system_error>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#undef near
+#undef far
+#endif
 
 #include "forge/heightpen.hpp"
 #include "forge/navpatch.hpp"
@@ -1661,13 +1674,16 @@ bool Document::saveRecovery(const fs::path& path, std::string& error) const {
     if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before taking a recovery snapshot"; return false; }
     try {
         const auto target = fs::absolute(path).lexically_normal();
-        detail::PendingBanks pending(target.parent_path(), ".forge-recovery-");
-        forge::TemporaryDirectory scratch(target.parent_path(), ".forge-recovery-lev-");
+        if (fs::exists(target) && !fs::is_regular_file(target))
+            throw std::runtime_error("recovery destination is not a file: " + target.string());
+        forge::TemporaryDirectory scratch(target.parent_path(), ".forge-recovery-");
         auto lev = *level_;
         // Game serialization ORs camera flags with walkability. Recovery retains
         // the authored channel independently, including extra boundary vertices.
-        for (int y=0; y<cellsY(); ++y) for (int x=0; x<cellsX(); ++x)
-            lev.setCameraPassableAt(x,y,terrain_->cameraPassable[size_t(y)*cellsX()+x] != 0);
+        for (int y=0; y<cellsY(); ++y) for (int x=0; x<cellsX(); ++x) {
+            const bool camera = terrain_->cameraPassable[size_t(y)*cellsX()+x] != 0;
+            if (lev.cameraPassableAt(x,y) != camera) lev.setCameraPassableAt(x,y,camera);
+        }
         const auto levPath = scratch.path()/"terrain.lev";
         lev.save(levPath);
         const auto levText = readFile(levPath);
@@ -1678,11 +1694,20 @@ bool Document::saveRecovery(const fs::path& path, std::string& error) const {
             {"nav_walkable",nlohmann::json::binary(navWalkable_)}, {"sound_list_grew",soundListGrew_}
         };
         const auto bytes = nlohmann::json::to_cbor(archive);
+        const auto prepared = scratch.path()/"archive.ffrecovery";
         std::ofstream out;
         out.exceptions(std::ios::failbit | std::ios::badbit);
-        out.open(pending.prepare(target.filename()),std::ios::binary);
+        out.open(prepared,std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size())); out.close();
-        return pending.install(false,error);
+        // Keep the old archive at its public name until the complete new file
+        // replaces it. A failed replacement retains the last successful snapshot.
+#ifdef _WIN32
+        if (!MoveFileExW(prepared.c_str(),target.c_str(),MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            throw std::system_error(int(GetLastError()),std::system_category(),"cannot publish recovery " + target.string());
+#else
+        fs::rename(prepared,target);
+#endif
+        return true;
     } catch (const std::exception& e) { error=e.what(); return false; }
 }
 
