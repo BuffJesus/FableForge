@@ -1,5 +1,39 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 recovery archive foundation (timer/UI still pending)
+
+Document::saveRecovery writes one staged CBOR archive containing TNG text,
+serialized LEV bytes and navigation-baseline bytes. It does not clear object,
+authoring or game dirty state, write game files, patch navigation or bake STB.
+The recovery LEV preserves independent camera flags, reversing the game saver's
+walkability OR on a private copy. Sound names, environment, shore and palettes
+travel with the LEV; unknown LEV bytes use the existing preservation writer.
+Document::recover validates version, name, world origin, map UID/grid and nav
+baseline before replacing the document. It retains original save baselines,
+invalidates stale terrain workers and adds one undo step. Recovery undo/redo
+stores private LEV/navigation copies so sound-list replacement is reversible;
+ordinary edit snapshots keep their compact representation. This is an editor
+archive format, not native backup filename compatibility.
+
+Native evidence (same FableWin SHA256 as the Budget section):
+`build/recovery-native.txt` confirms CreateBackupFile 0204b690 sets backup mode,
+calls SaveAllLevels(1,0), then clears it. SaveSingleLevel 0296e150 appends the
+strings at 04349e0c/04349e14; `build/recovery-native-strings.txt` independently
+reads both as `.backup`. The Update slice beginning 0296a8ba increments the
+counter, triggers at 0x34bc / 13,500 frames, resets it before checking enabled,
+and saves changed editable maps under names with `_a` inserted before the dot.
+This slice is not the complete Update function. No native runtime was used.
+
+The focused core executable passes recovery of placed objects, heights, shore,
+sound names/cells and walkable cells with authored Camera no; exact sound-name
+undo/redo; preserved game bytes and dirty baselines; stale-worker rejection;
+wrong-map, malformed navigation and truncated archive rejection; blocked
+publication; and active-stroke refusals. Full primary Release build, all 36
+CTest cases and documentation-command checks pass.
+Timed background saves, install-scoped archive paths, lifecycle cleanup and
+Recover/Discard UI are still pending. No user-facing crash recovery is claimed.
+
+
 ## 2026-10-02 continuation: Budget area survey
 
 Budget now has an Areas scope. Pick areas in view temporarily hides the report;

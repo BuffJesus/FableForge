@@ -1106,6 +1106,13 @@ or destination failure leaves both edits pending. See HANDOFF_WORLD_UI.
 World-tab pending edits and timed crash recovery remain separate follow-ups.
 
 #### No user backups (Create backup file) and no editor autosave
+2026-10-02 foundation: Document::saveRecovery / recover now use one staged
+editor archive, preserve independent camera flags and navigation baseline, and
+recover objects/terrain/sound names as one reversible edit. Native trigger and
+backup naming are checked in HANDOFF_WORLD_UI. Timer, path scoping, cleanup and
+recovery/snapshot UI remain pending. The proposal below predates this foundation;
+reuse the archive rather than adding independent lossy TNG/LEV loaders.
+
 *gap, effort M, value high*
 
 **Vanilla:** The toolbar BACKUP button calls CreateBackupFile 0x0204b690: SetSaveToBackupFiles(true) (CEditWorldMap+0x17d), SaveAllLevels(1,0), then the flag is cleared. CEditWorldMap::SaveSingleLevel 0x0296e150 then appends '.backup' to the .lev and .tng names (strings 0x4349e0c/0x4349e14), which gives a manual snapshot of every editable level. Autosave: console var EnableEditorAutosave binds CEditWorldMap+0x17c (ctor 0x0296a5d4). CEditWorldMap::Update counts frames in +0x178, and every 0x34BC (13,500) frames it saves each changed (vtable+0x2c) editable map through SaveSingleLevel under a name with '_a' inserted before the extension (0x0296a9bc-0x0296aa0e, 'Name_a.lev'). The real files are never overwritten. Whole-world snapshots also exist: CEditWorld::BackupWorldAndAllMapsToFile 0x0207f9a0 / Restore 0x0207fce0.

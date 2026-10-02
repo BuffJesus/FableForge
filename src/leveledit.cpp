@@ -474,6 +474,14 @@ std::optional<float> Document::groundHeight(float x, float y) const {
 
 Document::Snapshot Document::snapshot() const { return Snapshot{file_.serialize(), terrain_}; }
 
+Document::Snapshot Document::recoverySnapshot() const {
+    auto out = snapshot();
+    out.recoveryLevel = level_ ? std::make_shared<forge::lev::File>(*level_) : nullptr;
+    out.recoveryNav = navWalkable_;
+    out.recoverySoundListGrew = soundListGrew_;
+    return out;
+}
+
 void Document::pushUndo() {
     if (batchDepth_ > 0) {
         if (batchPushed_) return;
@@ -546,6 +554,15 @@ std::vector<size_t> Document::paste(const Fragment& fragment, const float at[3],
 void Document::restore(const Snapshot& s) {
     file_ = forge::tng::File::parseText(s.tng, mapName_ + ".tng");
     ++revision_;
+    if (s.recoveryLevel) {
+        level_ = std::make_shared<forge::lev::File>(*s.recoveryLevel);
+        terrain_ = s.terrain;
+        navWalkable_ = s.recoveryNav;
+        soundListGrew_ = s.recoverySoundListGrew;
+        terrainSession_ = std::make_shared<const uint8_t>(0);
+        ++terrainRev_; ++themeRev_;
+        return;
+    }
     if (s.terrain && s.terrain != terrain_) {
         const bool themes = s.terrain->themeIndex != terrain_->themeIndex || s.terrain->themeStrength != terrain_->themeStrength;
         terrain_ = s.terrain;
@@ -1630,6 +1647,74 @@ void Document::prepareTerrainLoose(const fs::path& prepared, std::shared_ptr<for
 fs::path Document::terrainDraftPath(const fs::path& gameRoot) const {
     const fs::path lev = external() ? externalLev_ : gameRoot / "data/Levels/FinalAlbion" / (mapName_ + ".lev");
     return fs::path(lev.string() + ".forge-draft");
+}
+
+bool Document::saveRecovery(const fs::path& path, std::string& error) const {
+    if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before taking a recovery snapshot"; return false; }
+    try {
+        const auto target = fs::absolute(path).lexically_normal();
+        detail::PendingBanks pending(target.parent_path(), ".forge-recovery-");
+        forge::TemporaryDirectory scratch(target.parent_path(), ".forge-recovery-lev-");
+        auto lev = *level_;
+        // Game serialization ORs camera flags with walkability. Recovery retains
+        // the authored channel independently, including extra boundary vertices.
+        for (int y=0; y<cellsY(); ++y) for (int x=0; x<cellsX(); ++x)
+            lev.setCameraPassableAt(x,y,terrain_->cameraPassable[size_t(y)*cellsX()+x] != 0);
+        const auto levPath = scratch.path()/"terrain.lev";
+        lev.save(levPath);
+        const auto levText = readFile(levPath);
+        const std::vector<uint8_t> levBytes(levText.begin(),levText.end());
+        const nlohmann::json archive = {
+            {"version",1}, {"map",mapName_}, {"world_x",worldX_}, {"world_y",worldY_},
+            {"tng",file_.serialize()}, {"lev",nlohmann::json::binary(levBytes)},
+            {"nav_walkable",nlohmann::json::binary(navWalkable_)}, {"sound_list_grew",soundListGrew_}
+        };
+        const auto bytes = nlohmann::json::to_cbor(archive);
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(pending.prepare(target.filename()),std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size())); out.close();
+        return pending.install(false,error);
+    } catch (const std::exception& e) { error=e.what(); return false; }
+}
+
+bool Document::recover(const fs::path& path, std::string& error) {
+    if (!hasTerrain() || stroke_ || batchDepth_) { error = "finish the active edit before recovering"; return false; }
+    try {
+        const auto bytes = readFile(path);
+        const auto archive = nlohmann::json::from_cbor(bytes.begin(),bytes.end());
+        if (archive.at("version").get<int>() != 1 || archive.at("map").get<std::string>() != mapName_ ||
+            archive.at("world_x").get<int>() != worldX_ || archive.at("world_y").get<int>() != worldY_)
+            throw std::runtime_error("recovery belongs to a different map or world origin");
+        auto things = forge::tng::File::parseText(archive.at("tng").get<std::string>(),mapName_+".tng");
+        const auto& levBytes = archive.at("lev").get_binary();
+        forge::TemporaryDirectory scratch(fs::temp_directory_path(),"FableForgeRecovery-");
+        const auto levPath = scratch.path()/"terrain.lev";
+        std::ofstream out;
+        out.exceptions(std::ios::failbit | std::ios::badbit);
+        out.open(levPath,std::ios::binary);
+        out.write(reinterpret_cast<const char*>(levBytes.data()),std::streamsize(levBytes.size())); out.close();
+        Document candidate;
+        if (!candidate.loadLevel(levPath,error)) return false;
+        if (candidate.cellsX()!=cellsX() || candidate.cellsY()!=cellsY() || candidate.level_->uid()!=level_->uid())
+            throw std::runtime_error("recovery belongs to a different map or grid");
+        const auto& navBytes = archive.at("nav_walkable").get_binary();
+        std::vector<uint8_t> nav(navBytes.begin(),navBytes.end());
+        if (nav.size()!=candidate.terrain_->walkable.size() ||
+            std::any_of(nav.begin(),nav.end(),[](uint8_t v){return v>1;}))
+            throw std::runtime_error("invalid recovery navigation baseline");
+        const bool sounds = archive.at("sound_list_grew").get<bool>();
+        auto before = recoverySnapshot();
+        undo_.push_back(std::move(before));
+        if (undo_.size()>kUndoDepth) undo_.erase(undo_.begin());
+        redo_.clear();
+        file_=std::move(things); level_=std::move(candidate.level_); terrain_=std::move(candidate.terrain_);
+        navWalkable_=std::move(nav); soundListGrew_=sounds;
+        terrainSession_=candidate.terrainSession_;
+        ++revision_; ++terrainRev_; ++themeRev_;
+        // original_, savedTerrain_ and draftTerrain_ remain the pre-recovery baselines.
+        return true;
+    } catch (const std::exception& e) { error=e.what(); return false; }
 }
 
 bool Document::saveDraftLoose(const fs::path& gameRoot, std::string& error, std::vector<std::string>* notes) {
@@ -3468,7 +3553,7 @@ size_t Document::removeWithOwned(const std::vector<size_t>& roots, bool includeO
 
 bool Document::undo() {
     if (undo_.empty() || stroke_) return false;
-    redo_.push_back(snapshot());
+    redo_.push_back(undo_.back().recoveryLevel ? recoverySnapshot() : snapshot());
     restore(undo_.back());
     undo_.pop_back();
     return true;
@@ -3476,7 +3561,7 @@ bool Document::undo() {
 
 bool Document::redo() {
     if (redo_.empty() || stroke_) return false;
-    undo_.push_back(snapshot());
+    undo_.push_back(redo_.back().recoveryLevel ? recoverySnapshot() : snapshot());
     restore(redo_.back());
     redo_.pop_back();
     return true;

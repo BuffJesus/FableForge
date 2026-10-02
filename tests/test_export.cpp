@@ -1346,6 +1346,66 @@ void testSoundBrushFootprint(const fs::path& dir) {
     CHECK(doc.terrain().sound == baseline.sound);   // unlisted sounds are refused
 }
 
+void testRecovery(const fs::path& dir) {
+    namespace ed=albion::editor;
+    forge::TemporaryDirectory scratch(dir,"recovery-");
+    const auto source=writeGameMapLev(scratch.path()/"Recovery.lev");
+    const auto sourceBytes=readAll(source);
+    const std::string original="Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n";
+    std::string err;
+    ed::Document doc;
+    CHECK(doc.openText("Recovery",original,err) && doc.loadLevel(source,err));
+    const auto bank=doc.savedTerrain();
+    forge::thingplacer::Placement object; object.definitionType="OBJECT_BARREL_01";
+    object.scriptName="Recovered"; object.position={1,2,3}; doc.place(object);
+    CHECK(doc.setVertexHeights({{4,4,12}},false));
+    ed::TerrainBrush b; b.x=4; b.y=4; b.radius=.25f;
+    b.mode=ed::TerrainBrush::Mode::Walkable;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    b.mode=ed::TerrainBrush::Mode::CameraBlock;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    b.mode=ed::TerrainBrush::Mode::ShoreSet;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    CHECK(doc.addSoundTheme("SOUND_RECOVERY",err)==3);
+    b.mode=ed::TerrainBrush::Mode::Sound; b.themeIndex=3;
+    doc.beginStroke(b); doc.applyBrush(b,0); doc.endStroke();
+    const auto wanted=doc.terrain(); const auto names=doc.level()->soundThemes();
+    const auto path=scratch.path()/"recovery.ffrecovery";
+    CHECK(doc.saveRecovery(path,err));
+    CHECK(doc.dirty() && doc.terrainDraftDirty() && doc.savedTerrain()==bank);
+    CHECK(readAll(source)==sourceBytes);
+    ed::Document reopened;
+    CHECK(reopened.openText("Recovery",original,err) && reopened.loadLevel(source,err));
+    const auto oldWrite=reopened.terrainWriteSnapshot();
+    const auto oldHeights=reopened.terrain().heights;
+    const auto oldNames=reopened.level()->soundThemes();
+    CHECK(reopened.recover(path,err));
+    CHECK(reopened.thingCount()==1 && reopened.dirty() && reopened.terrainDraftDirty() && reopened.terrainDirty());
+    CHECK(reopened.terrain().heights==wanted.heights && reopened.terrain().sound==wanted.sound &&
+          reopened.terrain().shorePoint==wanted.shorePoint && reopened.terrain().cameraPassable==wanted.cameraPassable);
+    CHECK(reopened.terrain().walkable[4*9+4] && !reopened.terrain().cameraPassable[4*9+4]);
+    CHECK(reopened.level()->soundThemes()==names && !reopened.acceptTerrainWrite(oldWrite));
+    CHECK(reopened.undo() && reopened.thingCount()==0 && !reopened.dirty() && !reopened.terrainDraftDirty());
+    CHECK(reopened.terrain().heights==oldHeights && reopened.level()->soundThemes()==oldNames);
+    CHECK(reopened.redo() && reopened.level()->soundThemes()==names && reopened.terrain().sound==wanted.sound);
+    // Wrong-map, truncated and malformed archives must leave the document and undo intact.
+    auto bytes=readAll(path); auto archive=json::from_cbor(bytes);
+    archive["map"]="Other";
+    auto invalid=json::to_cbor(archive);
+    const auto bad=scratch.path()/"bad.ffrecovery";
+    auto writeBad=[&]() { std::ofstream out(bad,std::ios::binary); out.write(reinterpret_cast<const char*>(invalid.data()),std::streamsize(invalid.size())); };
+    writeBad(); CHECK(!reopened.recover(bad,err) && reopened.terrain().heights==wanted.heights);
+    archive["map"]="Recovery"; archive["nav_walkable"]=json::binary(std::vector<uint8_t>{2});
+    invalid=json::to_cbor(archive); writeBad();
+    CHECK(!reopened.recover(bad,err) && reopened.thingCount()==1);
+    invalid.resize(8); writeBad(); CHECK(!reopened.recover(bad,err));
+    CHECK(reopened.undo() && reopened.thingCount()==0);
+    fs::create_directory(scratch.path()/"blocked");
+    CHECK(!doc.saveRecovery(scratch.path()/"blocked",err) && readAll(path)==bytes);
+    doc.beginStroke(b); CHECK(!doc.saveRecovery(path,err) && !doc.recover(path,err)); doc.endStroke();
+    CHECK(readAll(path)==bytes && readAll(source)==sourceBytes);
+}
+
 void testTerrainDraft(const fs::path& dir) {
     namespace ed=albion::editor;
     forge::TemporaryDirectory scratch(dir, "terrain-draft-");
@@ -3505,6 +3565,7 @@ int main() {
     testShorePoints(dir);
     testPassabilityPen(dir);
     testTerrainDraft(dir);
+    testRecovery(dir);
     testReplaceBrushFootprint(dir);
     testEnvironmentBrushFootprint(dir);
     testHeightPens();

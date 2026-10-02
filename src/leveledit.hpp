@@ -464,6 +464,9 @@ public:
     bool saveTerrainDraft(const std::filesystem::path& gameRoot, std::string& error,
                           std::vector<std::string>* notes = nullptr);
     bool loadTerrainDraft(const std::filesystem::path& gameRoot, std::string& error);
+    // Standalone editor recovery archive: never marks authoring/game baselines saved.
+    bool saveRecovery(const std::filesystem::path& path, std::string& error) const;
+    bool recover(const std::filesystem::path& path, std::string& error);
     bool themesDirty() const;          // ground-theme paint pending (needs the layer-mesh rebuild on deploy)
     uint64_t themeRevision() const { return themeRev_; }   // bumps when a theme stroke ends / undoes
     std::optional<float> terrainHeight(float x, float y) const;   // bilinear on the working copy
@@ -612,7 +615,16 @@ private:
     bool deployTerrainSteps(const std::filesystem::path& gameRoot, std::vector<std::string>& notes, std::string& error,
                             const forge::terraintex::ThemeLibrary* library,
                             const std::function<void(const std::string&)>& progress);
-    struct Snapshot { std::string tng; std::shared_ptr<const TerrainState> terrain; };
+    struct Snapshot {
+        std::string tng;
+        std::shared_ptr<const TerrainState> terrain;
+        // Recovery can replace sound names and navigation as well as editable cells.
+        // Ordinary edit snapshots retain the existing compact representation.
+        std::shared_ptr<const forge::lev::File> recoveryLevel;
+        std::vector<uint8_t> recoveryNav;
+        bool recoverySoundListGrew = false;
+    };
+    Snapshot recoverySnapshot() const;
     void pushUndo();
     void restore(const Snapshot& s);
     Snapshot snapshot() const;
