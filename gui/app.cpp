@@ -585,6 +585,15 @@ bool App::restoreAllBackups() {
     if (n) pushLog("restore: " + std::to_string(n) + " file(s) returned to their backups; reloading the map", 3);
     rescanBackups();
     if (n) {
+        // The archive on disk changed even when the install folder did not.
+        // Keep separately staged edits, but retire the loaded line and subtitle cache.
+        dialogueAudio_.reset();dialogueMotionPlaying_=false;dialogueLoaded_=false;
+        dialogueTime_=0;dialogueAudioDuration_=0;dialogueHeadLastTime_=-1;
+        dialogueSubtitles_.clear();dialogueError_.clear();dialogueExportMessage_.clear();
+        dialogueTextIndex_.reset();dialogueTextRoot_.clear();dialogueTextError_.clear();
+        dialogueSearchCacheKey_.clear();dialogueSearchResults_.clear();dialogueSearchGroups_.clear();
+        dialogueScratchLanguage_.clear();setDialogueEditing(false);
+        refreshModOrder();
         scanInstall(installPath_);
         selectedName_.clear(); docLoadedFor_.clear();
         previewLoadedFor_.clear(); foliageLoadedFor_.clear();
@@ -2894,7 +2903,7 @@ void App::drawActions(float width) {
     if (modsMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hintMore("The load order is kept next to Fable.exe; Undeploy restores the originals.", "The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. The Setup card's Restore covers FableForge's own edits, not a deployed order.");
+        theme::hintMore("The load order is kept next to Fable.exe; Undeploy restores the originals.", "The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. Setup's Restore also reverts the staged deployment and restores other tracked backups.");
         ImGui::PopFont();
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);

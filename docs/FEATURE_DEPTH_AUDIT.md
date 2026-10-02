@@ -2325,6 +2325,28 @@ eight retail exports, GUI pixels and literal-path mod workflow). Its SHA256 is
 The Ctrl+F follow-up requires the next development repackage. Published rc.3
 assets remain unchanged.
 
+## 2026-10-01 continuation: dialogue refresh after Setup restore
+
+A new scratch workflow reproduced stale loaded dialogue after a successful Setup
+restore: archive bytes were original, but the preview retained the deployed
+2-frame line until manual reload. Restore now stops dialogue playback, retires
+the loaded line/subtitle/search cache, returns to browsing and refreshes the mod
+report. Separately staged lip-sync edits survive. Corrected the Mods footer,
+which incorrectly claimed Setup Restore excludes staged deployments.
+
+The initial failing evidence is build/dialogue-restore-2vjt3duv. The final test
+at build/dialogue-restore-u8t9atq_ deploys a two-frame recipe into a copied retail
+archive, uses the real Setup confirmation controls, verifies exact original
+archive bytes and removal of the stage manifest, then loads the original
+45-frame line. A second compact/high-scale run inserts a staged third frame,
+restores the disk archive and verifies the staged three-frame edit survives.
+No writer or format algorithm changed; the live install remained byte-identical.
+The test is included in check_all.
+
+Additional head-layout checks pass at build/dialogue-layout-ciw588ik for
+1440x900, 1280x720/1.5 and 1024x600/1.5, including covered-eye and four visible
+mouth-pose pixel checks. Ctrl+F navigation evidence remains asset-search-iplat6d9.
+
 ## Audit rule
 
 For each row, record a concrete behavior, the tested map or asset, the saved

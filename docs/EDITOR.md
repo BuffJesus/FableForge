@@ -871,7 +871,9 @@ plain descriptions and can be added or removed; insert/delete frame actions
 sit below them. **Browse dialogue** or Escape returns to the tree; Ctrl+F also
 returns and focuses search. Changes remain
 staged while switching lines and banks. **Reset this line** discards that line's
-pending changes. **Export archive...** writes
+pending changes. Setup Restore refreshes the loaded bank and stops playback;
+separately staged lip-sync edits remain available when you reload their lines.
+**Export archive...** writes
 a new, verified `dialogue.big` for the selected language; Browse opens Save As,
 and existing archives are protected from overwriting.
 
