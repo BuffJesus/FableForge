@@ -1,5 +1,9 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Recovery snapshots can now be restored inside the open map from the File menu,
+with a capture time and undo/redo back to later edits. Actual menu workflows pass
+on stock/loose copies at normal/compact sizes; see HANDOFF_WORLD_UI.
+
 Recovery publication now uses one same-volume replacement, retains the prior
 archive on a locked-file failure, and preserves untouched camera bytes exactly.
 Focused core and stock/loose UI evidence follows the 102-check checkpoint in

@@ -1,7 +1,8 @@
 # GUI automation (`--auto <script>`)
 
 `tools/test_recovery.py --install <root>` checks process reopen, captured worker
-state, recovery undo/redo, real modal controls, timer enable/disable, successful
+state, in-session menu capture/restore, recovery undo/redo, real modal controls,
+capture-time visibility, timer enable/disable, successful
 save cleanup and failed-save retention at both sizes. It reads the install and
 writes archives/drafts only below its owned build directory.
 `set recovery_root <owned path>` isolates archives; `set recovery_prompt 1` and
@@ -10,8 +11,11 @@ writes archives/drafts only below its owned build directory.
 `autosave_now` starts a background capture, `wait_autosave` waits for completion,
 `autosave_due` advances the scheduler deadline, and `assert_autosave_exists 0|1`
 checks the current map's archive. States `recovery_pending`, `recovery_busy` and
-`autosave_enabled`, widgets `btn_recovery_recover` / `btn_recovery_discard` and
-`menu_autosave_now` expose the controls. Scripts require an owned recovery root;
+`autosave_enabled` expose the state. Widgets `btn_recovery_recover` /
+`btn_recovery_discard` expose modal actions; `menu_file`, `menu_recovery`,
+`menu_autosave_now` and `menu_recovery_restore` expose the real menus.
+`text_recovery_time` exposes the capture-time readout. Scripts need an owned
+recovery root;
 they do not use user-data archives or the automatic timer by default.
 
 `tools/test_budget_areas.py --install <root>` checks captured Budget object UIDs,

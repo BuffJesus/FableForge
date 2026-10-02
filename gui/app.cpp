@@ -2075,20 +2075,31 @@ void App::drawMenuBar() {
     if (!ImGui::BeginMenuBar()) { ImGui::PopStyleVar(); ImGui::PopStyleColor(); return; }
     ImGui::TextColored(theme::vec(theme::Accent), "FableForge");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("v" ALBION_VERSION "   Fable: The Lost Chapters level editor");
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::BeginMenu("Recovery snapshots")) {
+    const bool fileMenu = ImGui::BeginMenu("File");
+    auto_.registerWidget("menu_file");
+    if (fileMenu) {
+        if (ImGui::MenuItem("Open world (.wld)...", "Ctrl+Shift+O")) openWorldFile();
+        if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
+        ImGui::Separator();
+        const bool recoveryMenu = ImGui::BeginMenu("Recovery snapshots");
+        auto_.registerWidget("menu_recovery");
+        if (recoveryMenu) {
             if (ImGui::MenuItem("Automatic snapshots",nullptr,settings_.autosave)) { settings_.autosave=!settings_.autosave; saveSettings(); }
             for (int minutes : {1,5,10,30}) {
-                const std::string label="Every "+std::to_string(minutes)+" minute(s)";
+                const std::string label=minutes==1 ? "Every minute" : "Every "+std::to_string(minutes)+" minutes";
                 if (ImGui::MenuItem(label.c_str(),nullptr,settings_.autosaveMinutes==minutes)) { settings_.autosaveMinutes=minutes; saveSettings(); }
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Snapshot now",nullptr,false,documentLoaded() && !activeFileJob())) autosaveNow();
+            if (ImGui::MenuItem("Snapshot now",nullptr,false,documentLoaded() && !doc_.editActive() && !activeFileJob())) autosaveNow();
             auto_.registerWidget("menu_autosave_now");
+            std::error_code ec;
+            const bool available=documentLoaded() && (!auto_.active() || !recoveryRoot_.empty()) && fs::is_regular_file(recoveryPath(),ec);
+            if (ImGui::MenuItem("Recover latest snapshot...",nullptr,false,available && !doc_.editActive() && !activeFileJob())) {
+                cancelCarry(); recoveryPending_=recoveryPath();
+            }
+            auto_.registerWidget("menu_recovery_restore");
             ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("Open world (.wld)...", "Ctrl+Shift+O")) openWorldFile();
-        if (ImGui::MenuItem("Open level file (.lev)...", "Ctrl+O")) openLevelFile();
         ImGui::Separator();
         if (ImGui::MenuItem("Change install folder...")) changeInstall();
         if (ImGui::MenuItem("Setup check...")) setupOpen_ = true;

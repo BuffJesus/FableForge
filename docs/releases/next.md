@@ -7,8 +7,9 @@ version is chosen; validation is recorded at release time, not here.
 
 - **Crash recovery.** Unsaved objects and terrain are captured automatically every
   five minutes. File > Recovery snapshots changes the interval or captures now.
-  Reopening offers Recover or Discard; recovery supports undo, and failed saves
-  keep the snapshot. Archives are separate from game files and saved drafts.
+  Reopening offers Recover or Discard; Recover latest snapshot also works while
+  the map is open. The prompt shows the capture time. Recovery supports undo,
+  and failed saves keep the snapshot. Archives are separate from game files and saved drafts.
 
 - **Budget areas.** Drag boxes or click objects to survey their cost. Shift keeps
   earlier picks; highlighted areas and objects show what is included. Done

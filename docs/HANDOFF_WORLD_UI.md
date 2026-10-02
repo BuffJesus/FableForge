@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 continuation: restore a snapshot in the open map
+
+File > Recovery snapshots > Recover latest snapshot opens the same recovery
+prompt without closing the map. Snapshot now can therefore serve as a deliberate
+restore point. The prompt shows the archive's local capture date/time. Recover
+remains one undoable edit; undo restores the later object/terrain state, and redo
+returns to the capture. Snapshot now replaces the one rotating archive; this is
+not a dated history library. Open world/level retain their leading File-menu
+positions, and interval labels use normal singular/plural wording.
+
+Primary Release GUI rebuild passes. The expanded recovery harness clicks the
+actual File/submenu/Snapshot now/Recover latest controls, changes heights and
+object positions afterwards, checks capture-time visibility, and verifies both
+states through undo/redo and final Save draft cleanup. Stock and loose copies
+pass at both sizes: `build/recovery-ui-h6vcxdvr` / `build/recovery-ui-yihfmc26`.
+The compact dated prompt was visually inspected. Existing controls and selection
+UI regressions pass (`build/recovery-menu-controls-regression.log`,
+`recovery-menu-selection_actions-regression.log`). Documentation-command and
+Python syntax checks pass. Core and archive format are unchanged; the prior
+36-test result and scoped 102-check checkpoint retain their stated source scope.
+No live game writes, native runtime comparison, push or deployment.
+
+
 ## 2026-10-02 continuation: recovery publication and exact bytes
 
 Recovery now stages its complete archive in one owned sibling directory and

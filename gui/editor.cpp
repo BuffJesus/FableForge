@@ -3,6 +3,7 @@
 // layout, explorer, export and automation.
 
 #include <chrono>
+#include <ctime>
 #include "app.hpp"
 #include "vanilla_props.hpp"
 #include "modpack.hpp"
@@ -3960,6 +3961,18 @@ void App::drawRecoveryPrompt() {
     ImGui::OpenPopup("Recover unsaved edits");
     ImGui::SetNextWindowSize(ImVec2(S(390),0));
     if (ImGui::BeginPopupModal("Recover unsaved edits",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::error_code ec;
+        const auto written=fs::last_write_time(recoveryPending_,ec);
+        if (!ec) {
+            const auto systemTime=std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                written-fs::file_time_type::clock::now()+std::chrono::system_clock::now());
+            const auto stamp=std::chrono::system_clock::to_time_t(systemTime);
+            std::tm local{}; char text[32]{};
+            if (localtime_s(&local,&stamp)==0 && std::strftime(text,sizeof text,"%Y-%m-%d %H:%M",&local)) {
+                ImGui::TextColored(theme::vec(theme::Muted),"Captured %s",text);
+                auto_.registerWidget("text_recovery_time");
+            }
+        }
         ImGui::TextWrapped("%s has a recovery snapshot of objects and terrain. Recover it as an undoable edit, or discard it.",doc_.mapName().c_str());
         ImGui::BeginDisabled(activeFileJob()!=nullptr);
         if (theme::primaryButton("Recover",ImVec2(S(160),S(32)))) {

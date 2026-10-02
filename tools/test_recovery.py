@@ -55,7 +55,22 @@ def main():
         run('discard',base(timer)+['assert_state recovery_pending 1','snapshot_document','snapshot_heights',
             'click btn_recovery_discard','frames 4','assert_state recovery_pending 0',
             'assert_autosave_exists 0','assert_document_same','assert_heights_changed 0','quit'])
-        print('PASS recovery controls and timer',size,flush=True)
+        manual=case/'manual'; manual.mkdir()
+        menu=['click menu_file','frames 3','click menu_recovery','frames 3']
+        run('manual',base(manual)+['set autosave 0','terrain_set_all 30',
+            'set place_snap_grid 0','camera 10 10 30 0 1.5 20',
+            'place OBJECT_BARREL_BREAKABLE ManualRecovery']+menu+[
+            'click menu_autosave_now','frames 3','wait_autosave','assert_autosave_exists 1',
+            'terrain_set_all 31','select_script ManualRecovery','move_thing 5 0 0',
+            'assert_height 10 10 31','assert_selected_xy 15 10']+menu+[
+            'click menu_recovery_restore','frames 3','assert_state recovery_pending 1',
+            'assert_widget text_recovery_time',f'screenshot {(case/"manual-prompt.png").as_posix()}',
+            'click btn_recovery_recover','frames 4','wait_foliage','assert_height 10 10 30',
+            'select_script ManualRecovery','assert_selected_xy 10 10','undo',
+            'assert_height 10 10 31','select_script ManualRecovery','assert_selected_xy 15 10',
+            'redo','assert_height 10 10 30','select_script ManualRecovery','assert_selected_xy 10 10',
+            'save_draft','assert_autosave_exists 0','quit'])
+        print('PASS recovery controls, timer and in-session restore',size,flush=True)
 
 
 if __name__=='__main__':

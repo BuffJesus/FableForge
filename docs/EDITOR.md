@@ -1180,7 +1180,10 @@ unsaved objects and terrain. The default interval is five minutes; choose
 app-data files separated by install and map, without changing game files or
 your saved draft.
 
-On reopening a map, Recover restores its snapshot as one undoable edit. Save
+On reopening a map, Recover restores its snapshot as one undoable edit. You can
+also choose File > Recovery snapshots > Recover latest snapshot while the map
+is open. The prompt shows the capture time; undo returns to your later edits and
+redo restores the snapshot again. Save
 draft then keeps that work and removes the recovery archive. Discard removes
 the archive without changing the loaded map. Failed saves and failed recovery
 keep the archive. A snapshot holds completed edits; an active brush stroke
