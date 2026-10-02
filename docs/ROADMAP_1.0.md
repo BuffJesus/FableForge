@@ -1,5 +1,9 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+The Budget/recovery checkpoint at frozen source `22cbbd6` passes 102 integration
+checks with zero failures or skips. Evidence and the scoped publication /
+byte-preservation follow-ups are recorded in HANDOFF_WORLD_UI.
+
 Timed crash recovery now snapshots unsaved objects and terrain into an
 install-scoped app-data archive every five minutes, with configurable intervals
 and manual capture. Recover/Discard works on reopen; recovery is undoable, and

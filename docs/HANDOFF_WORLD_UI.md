@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 full checkpoint: Budget and crash recovery
+
+Frozen source `22cbbd6` and primary Release binaries passed
+`python -u tools/check_all.py --no-build`: 102 PASS, zero FAIL, exit 0 / ALL PASS.
+No checks were skipped. Evidence: `build/check_all_recovery_20261002.log`.
+All 36 CTest cases, new Budget/recovery harnesses, draft/terrain tools, retail
+and GUI workflows, world moves, loose/tall levels, imports, recipes, pack writes,
+backup/restore/install switching and documentation checks were exercised.
+Aeon/Controller, Freeroam, Seasons/AlbionSecrets, Dragon Cliff, Lost Content and
+Expanded Chapters corpora all ran. Lip-sync empty/non-type-1 entries are corpus
+exclusions, not skipped checks; 20,214 eligible entries remain byte exact.
+
+Source and binaries stayed frozen for the whole run. The publication review
+was confined to ignored scratch (`build/recovery-publication-review.txt`,
+`build/recovery-atomic-static-probe.txt`). Follow-up: replace the recovery
+archive with one filesystem operation instead of two renames, preserve an
+unchanged noncanonical camera byte, and strengthen the navigation-baseline
+fixture. These refinements are not covered by this checkpoint yet. No live game
+write, native runtime comparison, push, release or deployment was performed.
+
+
 ## 2026-10-02 continuation: timed crash recovery
 
 Automatic recovery snapshots default to every five minutes while the current
