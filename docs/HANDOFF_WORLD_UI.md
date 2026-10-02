@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-01 continuation: lip-sync Undo and Redo
+
+The editor has Undo/Redo buttons and Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z shortcuts.
+Each completed slider drag is one edit; add/remove shapes, insert/delete frames
+and Reset this line are undoable. Up to 64 edits are retained per line, including
+across line/bank switches. Undo restores frame data, duration bits, dictionary,
+selection time and whether the line was pending; playback pauses. Export keeps
+history. Save to pack clears that archive's pending history. Reloading a line
+whose disk baseline changed clears incompatible history while retaining staged
+edits. Install changes clear history. Reset clamps a playhead beyond the restored
+line's duration.
+
+Real UI checks pass at build/dialogue-undo-46adtlvv for normal/compact layouts:
+multi-move drag grouping, all shortcuts, frame/shape/reset undo, two-bank history,
+protected export retry and save boundaries. Independent archive/recipe reads
+verify the expected data and source SHA256. Restore/baseline invalidation passes
+at build/dialogue-restore-bs6d_w9k. Workspace, two-bank export/recipe composition
+and empty/full frame creation pass at build/dialogue-workspace-5_rc04j5,
+build/dialogue-edit-97pqme60 and build/dialogue-pack-create-cek1q5xu.
+The first undo harness run (build/dialogue-undo-q5k004ra) found unmapped Y/Z test
+keys; their real-input mappings were added and the workflow then passed.
+
+The user has requested stable 0.18.0 publication and stopping for the night once
+it is released. Scope is frozen after this edit; proceed with release checks and
+only fix failures needed for that release. Separate-machine validation was
+previously deferred; record its actual status rather than assuming it passed.
+
 ## 2026-10-01 continuation: clear lip-sync frame shape limits
 
 An empty frame explains that mouth shapes can be added. The Add mouth shape

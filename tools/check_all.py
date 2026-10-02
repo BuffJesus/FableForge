@@ -57,6 +57,8 @@ def main():
             ok &= run("retail head phoneme skin poses", [os.path.join("build", "fableforge_headpose_tests.exe"), graphics])
         ok &= run("retail dialogue frame edits, scratch export and pack recipe",
                   [sys.executable, "tools/test_dialogue_edit.py", "--install", install_root], capture_output=True)
+        ok &= run("dialogue gesture, frame/shape and line-history undo",
+                  [sys.executable, "tools/test_dialogue_undo.py", "--install", install_root], capture_output=True)
         ok &= run("create and save a mod pack from Dialogue",
                   [sys.executable, "tools/test_dialogue_pack_create.py", "--install", install_root], capture_output=True)
         ok &= run("dialogue deployment and Setup restore refresh",

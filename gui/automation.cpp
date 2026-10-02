@@ -212,6 +212,7 @@ bool Automation::tick(App& app) {
         static const std::map<std::string, ImGuiKey> keys = {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
             {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"H", ImGuiKey_H}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
+            {"Y", ImGuiKey_Y}, {"Z", ImGuiKey_Z},
             {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Enter", ImGuiKey_Enter}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},
             {"Left",ImGuiKey_LeftArrow}, {"Right",ImGuiKey_RightArrow}, {"Up",ImGuiKey_UpArrow}, {"Down",ImGuiKey_DownArrow},
             {"Comma",ImGuiKey_Comma}, {"Period",ImGuiKey_Period}, {"PageUp",ImGuiKey_PageUp}, {"PageDown",ImGuiKey_PageDown},

@@ -656,3 +656,10 @@ the selected frame. `combo_dialogue_add_phoneme` stays registered at the four-sh
 limit, where it is disabled. Its options use `dialogue_add_shape_<symbol>` (AH, EE,
 MM, OH, SZ, WW); shapes already present are omitted. The pack-creation check also
 covers empty/full frames, replacement, influence values and scratch export.
+
+Dialogue undo: `button_dialogue_undo` / `button_dialogue_redo` and real Y/Z key
+events exercise the current line's history. `dialogue_can_undo` /
+`dialogue_can_redo` expose availability. The existing `undo` / `redo` commands
+route to lip sync when its inline editor is open. `tools/test_dialogue_undo.py`
+checks gesture grouping, shortcuts, line switches, reset and pack-save boundaries
+against independently read archive/recipe data.

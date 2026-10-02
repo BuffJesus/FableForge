@@ -714,6 +714,7 @@ void App::scanInstall(const std::string& picked) {
         renderer_.clearModelPreview(); renderer_.clearHeadPreview();
         dialogueAudio_.reset();
         dialogueLoaded_=false;
+        dialogueEditGesture_.reset();dialogueEditHistory_.clear();
         dialogueExportMessage_.clear();
         dialogueScratchLanguage_.clear();
     }
@@ -1651,6 +1652,12 @@ std::vector<std::string> App::stateDump() const {
         dialogueSearchResults_.empty()?0:dialogueSearchResults_.front().soundId));
     v.push_back("dialogue_staged=" + std::to_string(dialogueStaged_.size()));
     v.push_back("dialogue_editor_open=" + std::string(dialogueToolsOpen_ ? "1" : "0"));
+    const auto dialogueHistory=dialogueEditHistory_.find(dialogueLoadedKey_);
+    v.push_back("dialogue_can_undo=" + std::to_string(dialogueLoaded_ &&
+        (dialogueEditGesture_.has_value() || (dialogueHistory!=dialogueEditHistory_.end() &&
+         !dialogueHistory->second.undo.empty()))));
+    v.push_back("dialogue_can_redo=" + std::to_string(dialogueLoaded_ &&
+        dialogueHistory!=dialogueEditHistory_.end() && !dialogueHistory->second.redo.empty()));
     v.push_back("dialogue_exported=" + std::to_string(dialogueExportMessage_.rfind("Wrote ",0)==0));
     v.push_back("dialogue_pack_added=" + std::to_string(dialogueExportMessage_.rfind("Added ",0)==0));
     v.push_back("dialogue_audio_available=" + std::to_string(dialogueLoaded_ && dialogueAudioDuration_>0));

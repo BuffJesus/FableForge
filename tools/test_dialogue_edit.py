@@ -3,6 +3,7 @@
 
 import argparse
 import contextlib
+import io
 import os
 import json
 import pathlib
@@ -26,7 +27,8 @@ def read_cstring(stream):
     return data.decode("ascii")
 
 
-def lip_frame_count(path, bank_name, sound_id, first_weight=False):
+def read_lip_entry(path, bank_name, sound_id):
+    """Read the stored dictionary, frames and duration independently of Forge."""
     with open(path, "rb") as stream:
         if stream.read(4) != b"BIGB":
             raise ValueError("expected retail BIGB archive")
@@ -50,33 +52,48 @@ def lip_frame_count(path, bank_name, sound_id, first_weight=False):
             read_u32(stream)  # magic
             record_id = read_u32(stream)
             read_u32(stream)  # type
-            read_u32(stream)  # payload length
+            length = read_u32(stream)
             payload = read_u32(stream)
             read_u32(stream)  # dev file type
             stream.seek(read_u32(stream), 1)  # name
             read_u32(stream)  # dev CRC
             for _ in range(read_u32(stream)):
                 stream.seek(read_u32(stream), 1)
-            stream.seek(read_u32(stream), 1)  # Info
+            info = stream.read(read_u32(stream))
             if record_id != sound_id:
                 continue
             stream.seek(payload)
-            for _ in range(read_u32(stream)):
-                if len(stream.read(1)) != 1:
+            entry = io.BytesIO(stream.read(length))
+            dictionary = []
+            for _ in range(read_u32(entry)):
+                viseme_id = entry.read(1)
+                if len(viseme_id) != 1:
                     raise ValueError("short viseme ID")
-                read_cstring(stream)
-            read_u32(stream)  # frames per second
-            count = read_u32(stream)
-            if first_weight:
-                keys = stream.read(1)
-                if keys == b"\x00" or not keys or len(stream.read(1)) != 1:
-                    raise ValueError("first lip sync frame has no key")
-                weight = stream.read(1)
-                if len(weight) != 1:
-                    raise ValueError("short first key weight")
-                return weight[0]
-            return count
+                dictionary.append({'id':viseme_id[0],'symbol':read_cstring(entry)})
+            fps = read_u32(entry)
+            frames = []
+            for _ in range(read_u32(entry)):
+                count = entry.read(1)
+                if len(count) != 1:
+                    raise ValueError("short lip sync frame")
+                keys = entry.read(count[0]*2)
+                if len(keys) != count[0]*2:
+                    raise ValueError("short lip sync keys")
+                frames.append([list(keys[i:i+2]) for i in range(0,len(keys),2)])
+            if len(info) != 4:
+                raise ValueError("expected lip sync duration")
+            return {'dictionary':dictionary,'fps':fps,'frames':frames,
+                    'durationBits':struct.unpack('<I',info)[0]}
         raise ValueError(f"missing {bank_name}/{sound_id}")
+
+
+def lip_frame_count(path, bank_name, sound_id, first_weight=False):
+    entry=read_lip_entry(path,bank_name,sound_id)
+    if first_weight:
+        if not entry['frames'] or not entry['frames'][0]:
+            raise ValueError("first lip sync frame has no key")
+        return entry['frames'][0][0][1]
+    return len(entry['frames'])
 
 
 def main():

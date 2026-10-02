@@ -872,8 +872,10 @@ plain descriptions and can be added or removed. Each frame supports up to four
 shapes; remove one to add another when it is full. Empty frames show an add-shape
 hint. Insert/delete frame actions sit below them. **Browse dialogue** or Escape returns to the tree; Ctrl+F also
 returns and focuses search. Changes remain
-staged while switching lines and banks. **Reset this line** discards that line's
-pending changes. Setup Restore refreshes the loaded bank and stops playback;
+staged while switching lines and banks. **Undo** (Ctrl+Z) and **Redo** (Ctrl+Y or
+Ctrl+Shift+Z) restore edits to the current line; each slider drag is one edit.
+History stays available when you switch lines, up to 64 edits per line.
+**Reset this line** discards that line's pending changes and can itself be undone. Setup Restore refreshes the loaded bank and stops playback;
 separately staged lip-sync edits remain available when you reload their lines.
 **Export archive...** writes
 a new, verified `dialogue.big` for the selected language; Browse opens Save As,
@@ -884,8 +886,8 @@ Dialogue editor. Use **Save to pack** to save edited Sound IDs as
 record recipes. Mods > Deploy composes them in load order: different lines and
 banks coexist, and the later pack wins if two packs edit the same line or one
 ships a whole `dialogue.big`. Mods > Check conflicts identifies the competing
-packs; reorder them to change the winner. Saving recipes clears pending changes
-for that language. Closing with staged edits offers **Review dialogue**, which
+packs; reorder them to change the winner. Saving recipes clears pending changes and their Undo/Redo history
+for that language. Exporting an archive keeps the pending edits and history. Closing with staged edits offers **Review dialogue**, which
 reopens the edit/save panel.
 
 ![Dialogue workspace with its speaker tree and preview controls](walkthrough/w13_dialogue_workspace.png)

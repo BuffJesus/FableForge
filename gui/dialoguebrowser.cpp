@@ -32,9 +32,62 @@ const char* mouthShapeLabel(const std::string& symbol) {
     return symbol.c_str();
 }
 
+bool sameLipSyncEntry(const forge::lipsync::Entry& a,const forge::lipsync::Entry& b) {
+    return a.durationBits==b.durationBits && forge::lipsync::encode(a)==forge::lipsync::encode(b);
+}
+
 } // namespace
 
+App::DialogueEditSnapshot App::dialogueEditSnapshot() const {
+    return {dialogueEntry_,dialogueTime_,dialogueStaged_.contains(dialogueLoadedKey_)};
+}
+
+void App::rememberDialogueEdit(DialogueEditSnapshot before) {
+    if(before.staged==dialogueStaged_.contains(dialogueLoadedKey_) &&
+       sameLipSyncEntry(before.entry,dialogueEntry_)) return;
+    auto [it,created]=dialogueEditHistory_.try_emplace(dialogueLoadedKey_);
+    auto& history=it->second;
+    if(created) history.original=dialogueOriginalEntry_;
+    // A drag is one snapshot; retain the latest 64 completed edits per line.
+    if(history.undo.size()>=64) history.undo.erase(history.undo.begin());
+    history.undo.push_back(std::move(before));
+    history.redo.clear();
+}
+
+void App::finishDialogueEditGesture() {
+    if(!dialogueEditGesture_) return;
+    auto before=std::move(*dialogueEditGesture_);
+    dialogueEditGesture_.reset();
+    rememberDialogueEdit(std::move(before));
+}
+
+bool App::undoDialogueEdit(bool redo) {
+    if(!dialogueLoaded_) return false;
+    finishDialogueEditGesture();
+    const auto it=dialogueEditHistory_.find(dialogueLoadedKey_);
+    if(it==dialogueEditHistory_.end()) return false;
+    auto& from=redo?it->second.redo:it->second.undo;
+    auto& to=redo?it->second.undo:it->second.redo;
+    if(from.empty()) return false;
+    to.push_back(dialogueEditSnapshot());
+    auto snapshot=std::move(from.back());from.pop_back();
+    dialogueEntry_=std::move(snapshot.entry);
+    dialogueTime_=std::clamp(snapshot.time,0.f,float(std::max(
+        dialogueAudioDuration_,double(dialogueEntry_.duration()))));
+    if(snapshot.staged) dialogueStaged_[dialogueLoadedKey_]=dialogueEntry_;
+    else dialogueStaged_.erase(dialogueLoadedKey_);
+    dialogueMotionPlaying_=false;
+    if(dialogueAudio_) {
+        dialogueAudio_->pause();
+        dialogueAudio_->seek(dialogueTime_,dialogueError_);
+    }
+    dialogueHeadLastTime_=-1;
+    dialogueExportMessage_.clear();
+    return true;
+}
+
 void App::setDialogueEditing(bool editing) {
+    if(!editing) finishDialogueEditGesture();
     dialogueToolsOpen_=editing;
     if(!editing) return;
     if(dialogueAudio_ && dialogueAudio_->playing()) {
@@ -47,6 +100,14 @@ void App::setDialogueEditing(bool editing) {
 }
 
 void App::frameDialoguePlayback() {
+    if(dialogueEditGesture_ && !ImGui::IsAnyItemActive()) finishDialogueEditGesture();
+    if(texturesMode_ && assetsTab_==4 && dialogueToolsOpen_ && dialogueLoaded_ &&
+       !ImGui::IsAnyItemActive() && !ImGui::GetIO().WantTextInput &&
+       !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+       ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt) {
+        if(ImGui::IsKeyPressed(ImGuiKey_Z)) undoDialogueEdit(ImGui::GetIO().KeyShift);
+        else if(ImGui::IsKeyPressed(ImGuiKey_Y)) undoDialogueEdit(true);
+    }
     if(!texturesMode_ || assetsTab_!=4) {
         if(dialogueAudio_ && (dialogueAudio_->playing() || dialogueAudio_->paused()))
             dialogueAudio_->stop();
@@ -252,6 +313,7 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
     auto_.registerWidget("button_dialogue_load");
     }
     if(loadRequested) {
+        finishDialogueEditGesture();
         dialogueAudio_.reset();
         dialogueMotionPlaying_=false;
         dialogueLoaded_=false;
@@ -282,6 +344,11 @@ void App::drawDialogueBrowser(float pad, float inner, float cardInner) {
             dialogueOriginalEntry_=dialogueEntry_;
             const auto key=std::make_tuple(archivePath().string(),pairing->lipsyncBank,
                                            uint32_t(dialogueId_));
+            dialogueLoadedKey_=key;
+            if(const auto history=dialogueEditHistory_.find(key);
+               history!=dialogueEditHistory_.end() &&
+               !sameLipSyncEntry(history->second.original,dialogueOriginalEntry_))
+                dialogueEditHistory_.erase(history);
             if(const auto staged=dialogueStaged_.find(key);staged!=dialogueStaged_.end())
                 dialogueEntry_=staged->second;
             if(ensureTextIndex(folder))
@@ -400,6 +467,21 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
             (dialogueAudio_ && dialogueAudio_->playing());
         if(playing) theme::hint("Pause playback to edit a frame.");
         ImGui::BeginDisabled(playing);
+        const auto history=dialogueEditHistory_.find(dialogueLoadedKey_);
+        const bool canUndo=dialogueEditGesture_.has_value() ||
+            (history!=dialogueEditHistory_.end() && !history->second.undo.empty());
+        const bool canRedo=history!=dialogueEditHistory_.end() && !history->second.redo.empty();
+        ImGui::BeginDisabled(!canUndo);
+        if(ImGui::SmallButton("Undo##lipsync")) undoDialogueEdit();
+        auto_.registerWidget("button_dialogue_undo");
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("Undo this line's last edit (Ctrl+Z). A slider drag is one edit.");
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!canRedo);
+        if(ImGui::SmallButton("Redo##lipsync")) undoDialogueEdit(true);
+        auto_.registerWidget("button_dialogue_redo");
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("Redo this line's last undone edit (Ctrl+Y or Ctrl+Shift+Z).");
+        ImGui::EndDisabled();
         if(!dialogueEntry_.frames.empty() && dialogueEntry_.fps) {
             const size_t frame=std::min(dialogueEntry_.frames.size()-1,
                 size_t(std::max(0.0f,dialogueTime_)*dialogueEntry_.fps));
@@ -441,19 +523,32 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                 float value=keyWeight.weight*100.f/255.f;
                 const float removeWidth=ImGui::CalcTextSize("Remove").x+ImGui::GetStyle().FramePadding.x*2;
                 ImGui::SetNextItemWidth(cardInner-removeWidth-ImGui::GetStyle().ItemSpacing.x);
-                if(ImGui::SliderFloat("##weight",&value,0,100,"%.0f%%")) {
-                    dialogueEntry_.frames[current][i].weight=uint8_t(std::lround(value*255.f/100.f));
-                    stage();
+                const bool changed=ImGui::SliderFloat("##weight",&value,0,100,"%.0f%%");
+                if(ImGui::IsItemActivated()) {
+                    finishDialogueEditGesture();
+                    dialogueEditGesture_=dialogueEditSnapshot();
                 }
+                if(changed) {
+                    const auto weight=uint8_t(std::lround(value*255.f/100.f));
+                    if(weight!=keyWeight.weight) {
+                        if(!dialogueEditGesture_) dialogueEditGesture_=dialogueEditSnapshot();
+                        dialogueEntry_.frames[current][i].weight=weight;
+                        stage();
+                    }
+                }
+                if(ImGui::IsItemDeactivated()) finishDialogueEditGesture();
                 auto_.registerWidget(("slider_dialogue_key_"+std::to_string(i)).c_str());
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("Influence on this frame: 0%% off, 100%% full mouth shape.");
                 ImGui::SameLine();
                 const bool remove=ImGui::SmallButton("Remove##remove");
                 auto_.registerWidget(("button_dialogue_remove_key_"+std::to_string(i)).c_str());
                 if(remove) {
+                    finishDialogueEditGesture();
+                    auto before=dialogueEditSnapshot();
                     dialogueEntry_.frames[current].erase(
                         dialogueEntry_.frames[current].begin()+i);
                     stage();
+                    rememberDialogueEdit(std::move(before));
                     ImGui::PopID();
                     break;
                 }
@@ -473,8 +568,11 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
                                 present|=keyWeight.id==viseme.id;
                     if(present) continue;
                     if(ImGui::Selectable(mouthShapeLabel(symbol))) {
+                        finishDialogueEditGesture();
+                        auto before=dialogueEditSnapshot();
                         forge::lipsync::setWeight(dialogueEntry_,current,symbol,255);
                         stage();
+                        rememberDialogueEdit(std::move(before));
                     }
                     auto_.registerWidget((std::string("dialogue_add_shape_")+symbol).c_str());
                 }
@@ -484,25 +582,37 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
             ImGui::EndDisabled();
             if(full) theme::hint("Four shapes per frame. Remove one to add another.");
             if(ImGui::SmallButton("Insert after##lipframe")) {
+                finishDialogueEditGesture();
+                auto before=dialogueEditSnapshot();
                 forge::lipsync::insertFrameAfter(dialogueEntry_,frame);
                 stage();jump(frame+1);
+                rememberDialogueEdit(std::move(before));
             }
             auto_.registerWidget("button_dialogue_insert_frame");
             ImGui::SameLine();
             ImGui::BeginDisabled(dialogueEntry_.frames.size()<=1);
             if(ImGui::SmallButton("Delete##lipframe")) {
+                finishDialogueEditGesture();
+                auto before=dialogueEditSnapshot();
                 forge::lipsync::eraseFrame(dialogueEntry_,frame);
                 stage();jump(std::min(frame,dialogueEntry_.frames.size()-1));
+                rememberDialogueEdit(std::move(before));
             }
             auto_.registerWidget("button_dialogue_delete_frame");
             ImGui::EndDisabled();
         }
         if(dialogueStaged_.contains(key)) {
             if(theme::ghostButton("Reset this line",ImVec2(cardInner,theme::S(26)))) {
+                finishDialogueEditGesture();
+                auto before=dialogueEditSnapshot();
                 dialogueEntry_=dialogueOriginalEntry_;
+                dialogueTime_=std::min(dialogueTime_,float(std::max(
+                    dialogueAudioDuration_,double(dialogueEntry_.duration()))));
+                if(dialogueAudio_) dialogueAudio_->seek(dialogueTime_,dialogueError_);
                 dialogueHeadLastTime_=-1;
                 dialogueStaged_.erase(key);
                 dialogueExportMessage_.clear();
+                rememberDialogueEdit(std::move(before));
             }
             auto_.registerWidget("button_dialogue_reset_line");
         }
@@ -547,6 +657,7 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
     ImGui::BeginDisabled(!stagedCount || packDest_.empty() ||
                          !modpack::isPack(packDest_));
     if(ImGui::Button("Save to pack##dialogue",ImVec2(cardInner,0)) && !fileWriteBlocked("lip sync pack")) {
+        finishDialogueEditGesture();
         std::vector<forge::lipsync::ArchiveEdit> edits;
         for(const auto& [key,value]:dialogueStaged_)
             if(std::get<0>(key)==archivePath().string())
@@ -554,6 +665,9 @@ void App::drawDialogueTools(float pad,float inner,float cardInner) {
         std::string error;
         if(modpack::addLipSync(packDest_,dialogueLanguage_,edits,error)) {
             std::erase_if(dialogueStaged_,[&](const auto& item) {
+                return std::get<0>(item.first)==archivePath().string();
+            });
+            std::erase_if(dialogueEditHistory_,[&](const auto& item) {
                 return std::get<0>(item.first)==archivePath().string();
             });
             dialogueExportMessage_="Added "+std::to_string(edits.size())+

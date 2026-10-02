@@ -70,9 +70,10 @@ def main():
     body=body.replace('setup 1\n',
         'reveal button_dialogue_edit\nframes 3\nclick button_dialogue_edit\nframes 3\n'
         'reveal button_dialogue_insert_frame\nframes 3\nclick button_dialogue_insert_frame\nframes 3\n'
-        'assert_state dialogue_frames 3\nassert_state dialogue_staged 1\nsetup 1\n',1)
+        'assert_state dialogue_frames 3\nassert_state dialogue_staged 1\nassert_state dialogue_can_undo 1\nsetup 1\n',1)
     body=body.replace('assert_state dialogue_loaded 0\n','assert_state dialogue_loaded 0\nassert_state dialogue_staged 1\n')
-    body=body.replace(f'assert_state dialogue_frames {original_frames}\n','assert_state dialogue_frames 3\n')
+    body=body.replace(f'assert_state dialogue_frames {original_frames}\n',
+        'assert_state dialogue_frames 3\nassert_state dialogue_can_undo 0\n')
     body=body.replace('/restored.png','/restored-staged.png')
     draft.write_text(body,encoding='utf-8')
     result=subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(root),'--auto',str(draft),'--size','800x600'],

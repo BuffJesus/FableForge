@@ -2247,8 +2247,14 @@ void App::applyOwnedDelete(bool includeOwned) {
     ownedDeleteRoots_.clear(); ownedDeleteSelection_.clear(); ownedDeleteCount_=0;
 }
 
-void App::editUndo() { if (documentLoaded()) doc_.undo(); }
-void App::editRedo() { if (documentLoaded()) doc_.redo(); }
+void App::editUndo() {
+    if(texturesMode_ && assetsTab_==4 && dialogueToolsOpen_) {undoDialogueEdit();return;}
+    if(documentLoaded()) doc_.undo();
+}
+void App::editRedo() {
+    if(texturesMode_ && assetsTab_==4 && dialogueToolsOpen_) {undoDialogueEdit(true);return;}
+    if(documentLoaded()) doc_.redo();
+}
 
 void App::frameSelected() {
     if (selectedThing_ < 0) { frameMap(); return; }

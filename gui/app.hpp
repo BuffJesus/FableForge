@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <tuple>
@@ -885,7 +886,24 @@ public:
     bool dialogueLoaded_ = false;
     forge::lipsync::Entry dialogueEntry_;
     forge::lipsync::Entry dialogueOriginalEntry_;
-    std::map<std::tuple<std::string,std::string,uint32_t>,forge::lipsync::Entry> dialogueStaged_;
+    using DialogueKey = std::tuple<std::string,std::string,uint32_t>;
+    DialogueKey dialogueLoadedKey_;
+    std::map<DialogueKey,forge::lipsync::Entry> dialogueStaged_;
+    struct DialogueEditSnapshot {
+        forge::lipsync::Entry entry;
+        float time = 0;
+        bool staged = false;
+    };
+    struct DialogueEditHistory {
+        forge::lipsync::Entry original;
+        std::vector<DialogueEditSnapshot> undo, redo;
+    };
+    std::map<DialogueKey,DialogueEditHistory> dialogueEditHistory_;
+    std::optional<DialogueEditSnapshot> dialogueEditGesture_;
+    DialogueEditSnapshot dialogueEditSnapshot() const;
+    void rememberDialogueEdit(DialogueEditSnapshot before);
+    void finishDialogueEditGesture();
+    bool undoDialogueEdit(bool redo = false);
     std::array<char,512> dialogueScratchPath_{};
     std::string dialogueScratchLanguage_, dialogueExportMessage_;
     double dialogueAudioDuration_ = 0;
