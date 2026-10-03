@@ -1,5 +1,47 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 symbolic linker validation and bounded legacy scope
+
+Choice review's implementation checkpoint is 0fe88d8. The following reviewed
+changes clarify diagnostics and acceptance before primary integration:
+
+- Final rebuilt 38-core suite: all pass (28.70 s). The last diagnostic-only change
+  strips a repeated FMP-links prefix; the two affected native tests pass afterward.
+- build/fmp-links-kx2612cf/result.json: all three 14-reference audits pass again,
+  four competing-mod choices preserve the independent field, all unmodified
+  records and non-reference bytes survive, and malformed/missing selected links
+  preserve existing outputs. Unused missing links do not defeat another winner.
+- build/mods-corpus-3osg3xyf/result.json: revised legacy smoke passes 48 commands,
+  including UFP, eight Special Melee links, text changes, level/WAD composition,
+  EgoCore definitions/DLL/resources, complete deploy/undeploy restoration, TNG
+  conflict choices, FSE registry union, partial TNG edits and real Mods GUI actions.
+  Crucially it now EXPECTS F2 definition metadata refusal and verifies unchanged
+  root/output inventories first. It disables that unsupported definition layer
+  for subsequent merge/rollback probes; the separate F2 level tree is only a
+  fixture, not a valid playable F2 installation. The old 95-added-record assertion
+  measured raw payload import, not proper F2 linking, and has been removed.
+- build/mod-action-error-c4v3t9qd: unsupported F2 redeploy refusal passes both
+  1440x900 and 800x600 at scale 1.5. Error persists across panel reopen/rescan,
+  copied files and original FMP are unchanged, removing the package allows retry,
+  and undeploy restores the exact inventory. Compact screenshot visually checked:
+  the full named-record/path diagnostic wraps within the action card. The earlier
+  znhuynar screenshot had a button tooltip over part of the diagnostic; the fixture
+  now moves the pointer away before capturing it.
+- Documentation command check passes (32 forge, 37 forge-tools). Guide requires
+  a development application build containing 0fe88d8 and retains the offline-only
+  runtime/Android boundary. A release-page ZIP is not assumed to contain this fix.
+
+Remaining format boundary is explicit: one named target per key, clean scalar
+and flat-vector fields, and known CDef listing words. Nested/multi-target asset
+metadata, adding arbitrary names-offset targets and other banks are not covered.
+F2 metadata repeats identical paths for different members (e.g. two flourish
+particle targets and paired weapon trails); legacy NameValueCollection lookup
+joins them into one string. Supporting this needs structural member/destination
+facts and asset importing, not a guess based on numeric IDs or target order.
+No change to real installs, no gameplay launch, no published release. Next:
+create and validate an extracted development package, then fast-forward the clean
+primary worktree after the acceptance evidence is complete.
+
 ## 2026-10-03 isolated symbolic FMP linker checkpoint
 
 Primary remains clean at 0d5d0c6 (product 39bdf32); this implementation is

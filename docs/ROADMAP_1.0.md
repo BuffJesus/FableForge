@@ -930,6 +930,15 @@ records/assets and supported fields, persist compatibility choices, and validate
 dependencies across FMPs and overhauls. Includes the historic FMP corpus as fixtures;
 design proposal, not shipped functionality.
 
+2026-10-03 reference correction: Controller Support's named FMP game links now
+resolve against final composed identities and follow the selected field source.
+Independent retail/Aeon/composed audits check all 14 references with zero
+mismatches; the old raw importer had 12 wrong. Unsupported nested/multi-target
+or asset metadata refuses before definition output is written. F2 Melee's
+definition package remains unsupported; its earlier added-record counts did
+not prove correct linking. See [FMP format and limits](modding/FMP_FORMAT.md).
+Runtime compatibility remains unverified.
+
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff
 `.patch`, in argument order = load order; field-level `game.bin` merge, loose-TNG thing merge by

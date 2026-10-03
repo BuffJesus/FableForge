@@ -28,8 +28,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp'], default='redeploy')
+    parser.add_argument('--fmp', type=Path, help='Unsupported metadata fixture for --mode fmp')
     args = parser.parse_args()
+    if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
+    deployment_case = args.mode in ('redeploy', 'fmp')
+    fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-action-error-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
@@ -61,7 +65,7 @@ def main():
         make_install(other, 'OtherAction', 4)
         other_before = snapshot(other)
         selected_gui = gui
-        if args.mode != 'redeploy':
+        if not deployment_case:
             app = case/'application'
             app.mkdir()
             shutil.copyfile(gui, app/'FableForge.exe')
@@ -72,7 +76,7 @@ def main():
             shutil.copyfile(repo/'docs/re_reference/def_schema.json', schema)
             selected_gui = app/'FableForge.exe'
         payload = Path('data/Misc/action.txt')
-        if args.mode == 'redeploy':
+        if deployment_case:
             (root/payload).parent.mkdir(parents=True)
             (root/payload).write_bytes(b'original owned file')
             pack = case/'SmallFilePack'
@@ -83,17 +87,19 @@ def main():
             added = subprocess.run([str(gui.with_name('forge-tools.exe')), 'mods', 'add', str(root),
                 str(pack), '--name', 'SmallFilePack'], cwd=cwd, capture_output=True, timeout=45)
             assert added.returncode == 0, (added.stdout+added.stderr).decode('utf-8', errors='replace')
-            bad = case/'game.bin.patch'
-            bad.write_bytes(b'not a BSDIFF patch'+b'x'*64)
+            bad = case/('UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
+            if args.mode == 'fmp': shutil.copyfile(args.fmp, bad)
+            else: bad.write_bytes(b'not a BSDIFF patch'+b'x'*64)
             pack_before = snapshot(pack)
         before = snapshot(root)
         failed = case/'failed.png'
         script = case/'actions.txt'
         lines = ['wait_maps', 'wait_ready', f'set uiscale {scale}', 'mods_tab 1', 'frames 3']
-        if args.mode == 'redeploy':
+        if deployment_case:
             lines += button('btn_mods_deploy')+['assert_log mods deploy: done',
                 f'mod_add {bad.as_posix()} BrokenPatch', 'frames 3']
-            lines += button('btn_mods_deploy')+['assert_log mods deploy: FAILED', 'assert_log bad magic']
+            lines += button('btn_mods_deploy')+['assert_log mods deploy: FAILED',
+                'assert_log unsupported target list' if args.mode == 'fmp' else 'assert_log bad magic']
         else:
             lines += button('btn_mods_conflicts')
             if args.mode == 'report': lines += ['assert_log mods conflicts: FAILED']
@@ -103,11 +109,12 @@ def main():
             'assert_state mod_action_failed 1', 'clear_toasts',
             'reveal mods_action_error', 'frames 3', 'reveal mods_action_error', 'frames 3',
             'assert_widget mods_action_error', 'dump_widget mods_action_error', 'dump_log',
+            'mouse_move 20 20', 'frames 3',
             f'screenshot {failed.as_posix()}', 'frames 300']
         if scale > 1:
             lines += [f'set saveroot {other.as_posix()}', 'assert_state mod_action_failed 0',
                       f'set saveroot {root.as_posix()}', 'assert_state mod_action_failed 0']
-        if args.mode == 'redeploy':
+        if deployment_case:
             lines += ['mod_remove BrokenPatch', 'frames 3']+button('btn_mods_deploy')
             lines += ['assert_log mods deploy: done', 'assert_state mod_action_failed 0']
             lines += button('btn_mods_undeploy')+['assert_log mods undeploy: done']
@@ -127,7 +134,7 @@ def main():
                     time.sleep(0.01)
                 assert failed.exists(), 'GUI did not reach failure checkpoint'
                 after = snapshot(root)
-                if args.mode == 'redeploy':
+                if deployment_case:
                     assert {k:v for k,v in after.items() if k != 'forge_mods.json'} == \
                            {k:v for k,v in before.items() if k != 'forge_mods.json'}
                     assert len(json.loads((root/'forge_mods.json').read_text(encoding='utf-8'))['mods']) == 2
@@ -140,7 +147,7 @@ def main():
                     process.terminate(); process.wait(timeout=10)
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
         assert snapshot(root) == before and snapshot(other) == other_before
-        if args.mode == 'redeploy': assert snapshot(pack) == pack_before
+        if deployment_case: assert snapshot(pack) == pack_before
         assert rc == 0 and 'RESULT PASS' in log, log[-4500:]
         bounds = re.search(r'widget_rect mods_action_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)', log)
         assert bounds
@@ -149,6 +156,7 @@ def main():
             assert 0 <= left < right <= picture.width and 0 <= top < bottom <= picture.height
         print(size, args.mode, 'persistent error, preserved files and same-process retry: PASS', flush=True)
     assert {p: digest(p) for p in sources} == source_hashes
+    if args.fmp: assert digest(args.fmp) == fmp_hash
     print('Mods action error lifecycle and recovery: PASS')
 
 

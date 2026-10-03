@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The mod load order, offline, on a scratch root: forge-tools mods add / list / move /
 disable / build over three corpus packs of three shapes (a bsdiff .patch that needs the pristine
-game.bin, a Fable Explorer v459 .fmp, a ChocolateBox v510 .fmp + its loose-TNG tree). Skips when
+game.bin, a supported Fable Explorer v459 .fmp, refusal of a ChocolateBox v510
+.fmp with unsupported nested/asset links, and its separate loose-TNG test tree). Skips when
 the corpus (work/nexus_mods/_peek) or the install is missing. Nothing touches the install.
 Each run owns build/mods-corpus-*; command logs remain there, and --keep retains fixtures.
 
-  python tools/test_mods.py [--root <fable install>] [--keep]
+  python tools/test_mods.py [--root <fable install>] [--corpus <folder>] [--keep]
 """
 import argparse, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -34,10 +35,19 @@ def find_root(explicit: str) -> str:
 
 
 def main() -> int:
+    global PEEK, UFP, SPECIAL, F2, F2FMP, CONTROLLER, WADER
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--corpus", type=Path, default=Path(PEEK))
     a = ap.parse_args()
+    PEEK = str(a.corpus.resolve())
+    UFP = os.path.join(PEEK, "UnofficialFablePatch", "Patches", "game.bin.patch")
+    SPECIAL = os.path.join(PEEK, "SpecialMelee", "SpecialMeleeAbilities.fmp")
+    F2 = os.path.join(PEEK, "F2MeleeWeapons")
+    F2FMP = os.path.join(F2, "F2MeleeWeaponPack.fmp")
+    CONTROLLER = os.path.join(PEEK, "FableControllerSupport", "Mods", "FableControllerSupport")
+    WADER = os.path.join(PEEK, "WaterWader", "Mods", "WaterWader")
     root = find_root(a.root)
     if not root or not all(os.path.exists(p) for p in (UFP, SPECIAL, F2FMP)):
         print("mods test skipped (no install or no corpus under work/nexus_mods/_peek)"); return 0
@@ -109,13 +119,31 @@ def main() -> int:
     run("mods", "enable", scratch, "1")
     out = os.path.join(work, "ui_mods_out")
     remove_owned(out)
+    # F2's metadata repeats a path for distinct nested/asset members. The old
+    # importer silently ignored all symbols; its 95-added-record count proved
+    # container composition only, not a valid installation. Refuse this scope
+    # without touching the source root or an existing output, then continue the
+    # supported load-order/deploy checks with its separate level tree.
+    import hashlib
+    def files_at(folder):
+        return {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in Path(folder).rglob('*') if p.is_file()}
+    before_refusal = files_at(scratch)
+    os.makedirs(out)
+    marker = Path(out)/'prior-result.txt'; marker.write_bytes(b'preserve prior build')
+    out_before = files_at(out)
+    refused = run("mods", "build", scratch, out, expect=1)
+    if ("FMP links:" not in refused.stderr or "unsupported target list" not in refused.stderr or
+            files_at(scratch) != before_refusal or files_at(out) != out_before):
+        print("unsupported F2 link metadata was not safely refused:", refused.stderr[-600:]); ok = False
+    run("mods", "disable", scratch, "F2 Melee (defs)")
+    remove_owned(out)
     r = run("mods", "build", scratch, out)
     import re as _re
     m = _re.search(r"(\d+) changes applied \((\d+) new records\)", r.stdout)
-    # The corpus must add 95 records and apply its existing-record edits. A
-    # customized base may need additional replacements; its changed-record total
-    # is not a fixed stock golden value. Content and rollback checks follow.
-    if not m or int(m.group(2)) != 95 or int(m.group(1)) < 110:
+    # UFP and Special Melee replace existing definitions; the unsupported F2
+    # definition package is disabled, while its independent level tree is active.
+    if not m or int(m.group(2)) != 0 or int(m.group(1)) < 9:
         print("build output unexpected:", r.stdout[-800:]); ok = False
     bak = os.path.join(defs, "game.bin.retail-bak")
     resaved = os.path.exists(bak) and open(bak, "rb").read() != open(os.path.join(defs, "game.bin"), "rb").read()
@@ -134,7 +162,7 @@ def main() -> int:
         r2 = run("wad", "list", os.path.join(out, "data", "Levels", "FinalAlbion.wad"))
         if "BarrowFields.tng" not in r2.stdout: print("repacked WAD unreadable"); ok = False
     r = run("defs", "list", out, "game.bin", "F2_RUSTY")
-    if "CInventoryItemDef_F2_RUSTY_LONGSWORD" not in r.stdout: print("F2 record missing from the merged defs"); ok = False
+    if "CInventoryItemDef_F2_RUSTY_LONGSWORD" in r.stdout: print("disabled F2 definition package leaked into output"); ok = False
     # the Fable Explorer package's Text bank reaches text.big (Special Melee shortens this tooltip)
     merged_text = os.path.join(out, "data", "lang", "English", "text.big")
     if os.path.exists(os.path.join(scratch, "data", "lang", "English", "text.big")):
@@ -333,6 +361,7 @@ def main() -> int:
         if os.path.exists(os.path.join(scratch, 'forge_mods.json')): os.remove(os.path.join(scratch, 'forge_mods.json'))   # the tab starts from an empty order
         script = Path(work) / "mods.txt"
         commands = (Path(ROOT) / "tests/ui/mods.txt").read_text(encoding='utf-8')
+        commands = commands.replace("work/nexus_mods/_peek", Path(PEEK).as_posix())
         commands = commands.replace("build/ui_mods_root", (Path(work) / "ui_mods_root").as_posix())
         commands = commands.replace("build/ui/", (Path(work) / "ui").as_posix() + "/")
         script.write_text(commands, encoding='utf-8')

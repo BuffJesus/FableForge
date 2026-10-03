@@ -208,7 +208,9 @@ RecordLinks readGameLinks(const big::File& package) {
             if (entry.name.empty() || result.contains(entry.name)) fail("unnamed or duplicate metadata entry");
             try { result.emplace(entry.name, readMetadata(package.entryData(entry))); }
             catch (const std::runtime_error& e) {
-                fail(entry.name + ": " + e.what());
+                std::string reason = e.what();
+                if (reason.starts_with("FMP links: ")) reason.erase(0, 11);
+                fail(entry.name + ": " + reason);
             }
         }
     }

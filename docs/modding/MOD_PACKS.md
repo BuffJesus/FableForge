@@ -342,13 +342,19 @@ text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records
 by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
 the whole-file game.bin instead of failing on it.
 
-Aeon Edition + Controller Support (2026-09-30): the author-provided install
+Aeon Edition + Controller Support (updated 2026-10-03): the author-provided install
 sequence is Aeon first, Controller Support `.fmp` through a legacy package
 editor, then only `FableControllerSupport.dll` in
 `Mods/FableControllerSupport/`, enabled through EgoCore. EgoCore's optional WAD
 decompile step should be skipped for this combination. Forge's equivalent
 scratch order is the Aeon tree, `ControllerSupport.fmp`, then a DLL-only EgoCore
-folder. `python tools/test_aeon_controller.py` builds this order over retail:
+folder. The importer now reads the FMP's named game-definition links and carries
+them through field choices to the final composed entry identities. The old raw
+import resolved 12 of 14 controller references incorrectly, including the PC
+combat camera; binding counts alone missed this. `tools/test_fmp_links.py` checks
+all 14 references independently on retail, Aeon and the composed output, with
+zero mismatches, payload preservation and conflict-choice/refusal cases.
+`python tools/test_aeon_controller.py` also checks all 14 in its full build over retail:
 1,392 definition changes (854 added), two records merged per field, zero field
 or whole-record conflicts; the controller scheme is Aeon's 70 bindings before
 the package and 141 after it. The DLL is byte-identical in output and registered
@@ -369,6 +375,13 @@ same definitions against the retail graphics bank alone reports 243 absent IDs,
 which shows why checking an incomplete Aeon extraction gives a false alarm.
 This audit checks direct `Graphic` references in `game.bin`; it does not prove
 that map scenery, scripted visibility, meshes or textures render correctly.
+
+FMP support remains bounded. Supported scalar, flat reference-vector and CDef
+listing paths resolve by name; malformed, unsupported or selected missing links
+refuse before writing definition banks. F2 Melee's nested/multi-target asset
+metadata remains unsupported and its definition package is refused. The load
+order smoke explicitly verifies that refusal, then exercises its separate level
+tree as a merge/rollback fixture. That fixture is not a playable F2 installation.
 
 The Mods tab's **Check conflicts** dry run also checks these direct model
 references before deploy. Its report uses the composed definitions and the

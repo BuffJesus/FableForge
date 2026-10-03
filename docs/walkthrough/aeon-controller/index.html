@@ -8,7 +8,7 @@
 <main>
 <p class="eyebrow">FABLEFORGE · A GUIDE FOR PERODIS</p>
 <h1>Aeon Edition + Controller Support</h1>
-<p class="note"><strong>Known linking failure in the current Forge importer.</strong> The controller FMP carries named link metadata, but Forge currently copies its numeric references without applying that metadata. A PC combat-camera link therefore resolves to the wrong definition even after a successful build. The instructions below are retained as preparation reference while a linking fix is reviewed; the earlier binding, level and model checks do not establish a compatible installation.</p>
+<p class="note"><strong>Use the development build with the FMP linking fix.</strong> Builds containing commit <code>0fe88d8</code> resolve the controller package’s 14 named definition references against the composed banks. Earlier builds that skipped link metadata could report success while the PC combat-camera link pointed to the wrong record. The updated build passes offline reference, level, binding and model checks; gameplay still needs verification.</p>
 <p>Prepare the modded game on a <strong>Windows PC</strong>, then copy it to your Retroid setup. Forge applies the controller FMP, so you do not need Chocolate Box or Fable Explorer for this route.</p>
 <p class="note">This guide assumes you have access to a Windows PC. Forge’s composed files have been checked offline; this is <strong>not a verified fix for a Retroid crash</strong>. Forge is a Windows x64 application. This build has not been tested on the Pocket 5 or its Windows compatibility environment.</p>
 
@@ -31,7 +31,7 @@
 <p class="note"><strong>Why add the DLL to Forge if EgoCore loads it?</strong> Forge installs the DLL in the right folder and enables it in <code>Mods.ini</code>. EgoCore loads that installed DLL when you play. It is installed once and loaded once. You can instead copy the DLL and enable it manually in EgoCore; in that case, omit the DLL entry from Forge’s order. This walkthrough uses Forge to manage all three installation sources.</p></section>
 
 <section><h2><span class="step">3</span>Open Forge and choose the game copy</h2>
-<p>Download <a href="https://github.com/BuffJesus/FableForge/releases/tag/v0.18.0">FableForge’s Windows ZIP from GitHub</a>, extract it completely and open <code>FableForge.exe</code>. Keep its companion files and folders together. The small guide-only ZIP contains this walkthrough and its images; download the application separately.</p>
+<p>Use the <strong>development application ZIP supplied alongside this guide</strong>, with the linking fix described above. Extract it completely and open <code>FableForge.exe</code>. Keep its companion files and folders together. The small guide-only ZIP contains this walkthrough and its images; it does not contain the application. Check the build before substituting a ZIP from <a href="https://github.com/BuffJesus/FableForge/releases">GitHub releases</a>.</p>
 <p>In <strong>Setup → Choose the install folder…</strong>, select your clean game folder containing <code>Fable.exe</code>. Setup also opens from the install status in the header. Confirm the selected path is your intended game copy, then open the <strong>Mods</strong> tab.</p></section>
 
 <section><h2><span class="step">4</span>Add the mods in this order</h2>

@@ -2,21 +2,20 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
-2026-10-03 confirmed limitation in the main development build: the importer skips link metadata.
-Controller Support's camera payload IDs do not match even the normalized retail
-output. Mapping record names and counting controller bindings is insufficient:
-its PC combat-camera target resolves to an unrelated record. A symbolic linking
-fix and stronger regressions are under review; see HANDOFF_WORLD_UI.
-
-The isolated linker review now resolves the Controller Support package's 14
+2026-10-03 linking correction: the importer previously skipped link metadata.
+Controller Support's raw camera IDs did not match even normalized retail output;
+12 of its 14 named references were wrong. Record names and binding counts alone
+did not establish a valid import. The linker now resolves the package's 14
 named references through retail, Aeon 5.03 and their composed banks. Its bounded
 NRBF reader treats class names as inert data. Supported game-index scalar and
 flat-vector paths and CDef listing references change only their four-byte words;
 the composer carries symbols with the source chosen for each field. Unsupported
-metadata is refused before definition output is written. This review is not yet
-promoted: F2 Melee's multi-target lists, nested structures and asset destinations
-need separate format coverage. The older corpus smoke cannot currently pass
-unchanged under the stricter importer. Offline linking is not gameplay proof.
+metadata is refused before definition output is written. F2 Melee's multi-target
+lists, nested structures and asset destinations still need separate format
+coverage; its definition package is now refused instead of silently ignoring
+those links. The corpus smoke checks that refusal and continues supported
+load-order/rollback checks with its separate level fixture. This does not prove
+a playable F2 installation. Offline linking is not gameplay proof.
 
 Reversed from a real sample (`ControllerSupport.fmp`, 46,852 bytes) 2026-07-19.
 The `.fmp` is the community's mod distribution format (created/loaded by Fable

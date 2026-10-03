@@ -57,6 +57,7 @@ def package_guide(root, output=None):
             archive.write(guide_dir / shot, shot)
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
+            "Use the application build specified in the guide; the FMP linking fix is required.\n"
             "Download FableForge separately from:\n"
             f"{download}\n\n"
             "This ZIP contains only the illustrated guide, not the application or mods.\n")
