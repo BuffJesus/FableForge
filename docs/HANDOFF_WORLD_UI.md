@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted endpoint/Add/linker package accepted in review
+
+Product 7f771b7 passes SIX focused extracted-package workflows in
+build/dialogue-endpoint-package-focus-pm8bzw1k/result.json: Add locked/invalid,
+replacement locked/invalid (small real-bank fixtures), expanded dialogue
+workspace and named FMP links including another source's relocated target.
+All UI workflows exercise normal/compact sizes; the dialogue evidence is
+v1m2umy4. The application runs under a literal percent-token/ampersand path,
+dialogue and CLI checks explicitly use an unrelated working directory. The
+schema is byte-identical to d2c1100; CLI files differ only in PE timestamp and
+checksum fields, with all other bytes compared. 116 document links/four guide
+images resolve. This is not the full 38-workflow extracted package suite.
+
+Review-only dist/development/20261003-7f771b7/FableForge-0.18.0-dev-win64.zip:
+SHA256 81aa4239127e9b0addb27ce6ab4123769cb65efbb9dabd5849a5704e4c520ffc.
+The guide-only ZIP is alongside it. Neither archive is published. docs commands
+pass (32 forge/37 tools). Primary remains unchanged b1eb3b9 until its active
+source gate completes; one frozen dialogue failure has been investigated and
+reproduced/fixed as documented below. No other completed failure is known at
+this checkpoint, but a complete gate result is still pending.
+
 ## 2026-10-03 dialogue end-position rounding regression
 
 The frozen primary b1eb3b9 gate has one dialogue workspace playback failure
