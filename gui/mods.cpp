@@ -581,6 +581,11 @@ void App::refreshAfterMods() {
     stopWorldTiles();
     modsRefreshPending_ = false;
     foliageexport::closeMeshBank();
+    texturesLoaded_ = false;
+    texRows_.clear(); texBanks_.clear(); texSelected_.clear();
+    texPreviewFor_.clear(); texPreview_ = nullptr;
+    texThumbFile_.reset();
+    renderer_.clearListThumbs();
     thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
     envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
     newLevelDonor_.clear();

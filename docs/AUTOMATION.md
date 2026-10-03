@@ -1,5 +1,11 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_asset_refresh_ui.py --install <root>` loads asset views, then
+clicks Mods deploy/undeploy for a cube recipe. Both sizes check retired selections,
+one added/removed model and texture, definition users and exact bank recovery.
+`--separate-root` writes to a copied save folder while preserving the selected
+install's whole inventory. `--gui`/`--cwd` support extracted-package checks.
+
 The Setup recovery fixtures below accept `--gui <exe>` and `--cwd <directory>`
 for extracted-package checks; their scratch files and app-data remain owned
 under this checkout's build directory. The stage fixture uses forge-tools beside

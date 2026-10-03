@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 Mods asset refresh at a separate save root
+
+Baseline build/mod-asset-refresh-hha_pqmv restores all four copied banks on
+undeploy and refreshes model views, but its already-loaded texture list misses
+the recipe texture when the save root differs from the selected install.
+That refresh branch reloads context without scanInstall's texture invalidation.
+refreshAfterMods now retires texture rows, banks, selection, preview and thumbnail
+cache before either branch reloads its assets. Core composition/staging behavior
+and the selected install's map list are unchanged.
+
+Owned Release GUI build passes. build/mod-asset-refresh-4rk6fu4e (separate root)
+and build/mod-asset-refresh-27rk4zic (selected install) pass actual deploy/undeploy
+buttons at both sizes with asset views loaded. Model/texture counts go 3294/6325
+to 3295/6326 and back, the cube has 24 vertices/12 triangles/one definition user,
+and stale selections retire. Four banks restore exactly, stage recovery records
+are consumed, level files stay unchanged, and retail source hashes stay unchanged.
+The separate-root case also preserves the selected install's whole inventory.
+Normal separate-root texture screenshot reviewed. Both variants are wired into
+check_all and future package checks (21 runtime workflows). The tested 7336194
+ZIP predates this fix and is unchanged; no new extracted package or whole gate
+is claimed for the latest source.
+Existing Ctrl+F asset searches/hidden panel recovery pass both sizes in
+build/asset-search-xyrj5n16, including retained staged dialogue edits.
+
 ## 2026-10-03 extracted current recovery package checkpoint
 
 Source 7336194 is packaged locally at
