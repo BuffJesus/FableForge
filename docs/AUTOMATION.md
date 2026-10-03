@@ -1,5 +1,11 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_restore_failure_ui.py` locks an owned LEV, clicks Setup Restore,
+checks the persistent wrapped `setup_restore_error` message with toasts cleared,
+then releases the lock and retries in the same hidden process. Both sizes check
+unchanged failed-write bytes, temp cleanup and exact recovery; the compact case
+also checks error clearing on a folder switch. State: `setup_restore_failed`.
+
 `tools/test_setup_asset_restore.py --install <root>` imports a cube into copied
 graphics/textures/game/names banks, then uses Setup's Restore buttons at both
 panel sizes. It checks retired model/texture selections and counts, refreshed

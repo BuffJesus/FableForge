@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 persistent Setup restore failures and retry
+
+Locked-target baseline build/setup-restore-failure-3cn619bi preserved the LEV
+and successfully retried after unlocking in the same process, but Setup had no
+durable failure result: only Activity/transient toasts contained the reason.
+The new inline wrapped error identifies the target and filesystem failure.
+It remains after toast dismissal, clears on successful retry or an accepted
+folder switch, and also records existing busy/invalid-install refusals. File
+restore/backup policy is unchanged; partial failures retain their error after
+the existing map reload. This does not claim an all-file atomic restore.
+
+Owned Release GUI build passes. build/setup-restore-failure-wlsuijho passes
+normal/compact actual buttons, failure-message bounds/wrapping with toasts
+cleared, exact current/original bytes while locked, temp cleanup, same-process
+retry and recovered heights/bytes. Compact also switches folders and verifies
+the other install remains unchanged. Compact failed/retried screenshots were
+reviewed. Existing Setup success/13-backup/created-preview and install-switch
+fixtures pass, with separate app-data directories. The failure fixture is wired
+into check_all. Core source/binaries are unchanged from the afe9e55 110-check
+checkpoint; no fresh whole gate is claimed for this UI increment. The 9745443
+development archive predates this latest message and remains unchanged.
+
 ## 2026-10-03 Setup restore after a real asset-bank write
 
 The feature-depth audit asked whether Setup restores a modded definition bank

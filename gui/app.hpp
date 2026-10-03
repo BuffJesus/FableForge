@@ -355,6 +355,7 @@ private:
     bool helpOpen_ = false;          // the shortcut cheat-sheet (? / F1, or the header button)
     void drawHelpOverlay();
     bool confirmRestore_ = false;
+    std::string restoreError_;
     std::vector<backups::Entry> backupList_;
     double backupsScannedAt_ = -1;
 public:

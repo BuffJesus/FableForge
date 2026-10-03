@@ -550,6 +550,14 @@ void App::drawSetupPanel() {
                 }
                 ImGui::PopFont();
                 ImGui::EndChild();
+                if (!restoreError_.empty()) {
+                    ImGui::PushFont(fontSmall_);
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
+                    ImGui::TextColored(theme::vec(theme::Error), "Restore did not finish: %s", restoreError_.c_str());
+                    auto_.registerWidget("setup_restore_error");
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopFont();
+                }
                 if (!confirmRestore_) {
                     if (changed) {
                         if (theme::dangerButton("Restore backed-up files", ImVec2(contentWidth, S(28)))) confirmRestore_ = true;
@@ -604,13 +612,19 @@ bool App::compactBank() {
 }
 
 bool App::restoreAllBackups() {
-    if (!installValid_) return false;
+    restoreError_.clear();
+    if (!installValid_) {
+        restoreError_ = "The selected folder is missing required game data.";
+        pushLog("restore: " + restoreError_, 2);
+        return false;
+    }
     if (previewFuture_.valid() || foliageFuture_.valid() || neighbourFuture_.valid() || ctxFuture_.valid() ||
         terrainDeployFuture_.valid() || worldFuture_.valid() || newLevelFuture_.valid() || compactFuture_.valid() ||
         meshImportFuture_.valid() || modsBusy() || exportFuture_.valid() || fitFuture_.valid() ||
         worldDetailFuture_.valid() ||
         std::any_of(worldTileWorkers_.begin(),worldTileWorkers_.end(),[](const auto& job){ return job.valid(); })) {
-        pushLog("restore: a load or write is still running; try again when it finishes", 1);
+        restoreError_ = "A load or write is still running; try again when it finishes.";
+        pushLog("restore: " + restoreError_, 1);
         return false;
     }
     std::vector<std::string> notes; std::string err;
@@ -641,6 +655,7 @@ bool App::restoreAllBackups() {
         worldLoaded_ = false; worldLoadedFrom_.clear(); newLevelDonor_.clear();
         if (findEntry(selected)) selectMap(selected);
     }
+    restoreError_ = err;
     return err.empty();
 }
 
@@ -781,6 +796,7 @@ void App::scanInstall(const std::string& picked) {
             return;
         }
         mapViews_.clear(); sessionCamera_.reset(); sessionMap_.clear();
+        restoreError_.clear();
         selectedName_.clear(); docLoadedFor_.clear(); previewLoadedFor_.clear();
         foliageLoadedFor_.clear(); previewPendingName_.clear(); foliagePendingName_.clear();
         neighboursFor_.clear(); lastFramedFor_.clear();
@@ -1607,6 +1623,7 @@ std::vector<std::string> App::stateDump() const {
     { const InstallHealth h = installHealth(); v.push_back("install_textures=" + std::string(h.texturesBig ? "1" : "0")); v.push_back("install_fse=" + std::string(h.fse ? "1" : "0")); v.push_back("setup_open=" + std::string(setupOpen_ ? "1" : "0")); }
     if (installValid_) { size_t d = 0; for (const auto& e : backupList_) d += e.differs; v.push_back("backups_differ=" + std::to_string(d)); }
     v.push_back("maps=" + std::to_string(maps_.size()));
+    v.push_back("setup_restore_failed=" + std::to_string(!restoreError_.empty()));
     v.push_back("selected=" + selectedName_);
     v.push_back("settings_scroll=" + std::to_string(int(settingsScroll_)));
     v.push_back(std::string("settings_scrolled=") + (settingsScroll_ > 0.5f ? "1" : "0"));
