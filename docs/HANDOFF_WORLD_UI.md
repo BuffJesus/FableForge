@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 asset views after failed Mods redeploy
+
+No further product change was needed after texture invalidation. The fixture's
+--failed-redeploy mode first deploys and browses the cube, adds an invalid
+game.bin.patch, and attempts redeploy through the actual button. The previous
+stage reverts before the broken build is rejected. Its failure and refresh note
+stay in the log; imported model/texture selections retire and counts return to
+the baseline. build/mod-asset-refresh-i5uwd88k (separate save root) and
+build/mod-asset-refresh-r57iznon (selected install) pass both sizes. Four copied
+banks restore exactly, loose-level bytes and retail source hashes stay unchanged,
+and the separate-root selected install's whole inventory stays unchanged.
+Both variants are wired into check_all and future extracted-package checks
+(23 runtime workflows). The 7336194 ZIP and frozen whole-gate boundary are
+unchanged. Next review: texture browser state when only the save folder changes.
+
 ## 2026-10-03 Mods asset refresh at a separate save root
 
 Baseline build/mod-asset-refresh-hha_pqmv restores all four copied banks on

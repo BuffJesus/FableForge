@@ -215,6 +215,10 @@ def main():
         ok &= run("Mods asset refresh at a separate save root with selected install preserved",
                   [sys.executable, "tools/test_mod_asset_refresh_ui.py", "--install", install_root,
                    "--separate-root"], capture_output=True)
+        for options, label in [([], "selected install"), (["--separate-root"], "separate save root")]:
+            ok &= run("Mods failed redeploy asset refresh at " + label,
+                      [sys.executable, "tools/test_mod_asset_refresh_ui.py", "--install", install_root,
+                       "--failed-redeploy", *options], capture_output=True)
         stock_wad = os.path.join(install_root, "data", "Levels", "FinalAlbion.wad")
         if os.path.isfile(stock_wad):
             ok &= run("Setup missing stock-WAD recovery and running-game guard",

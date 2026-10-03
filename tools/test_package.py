@@ -102,7 +102,9 @@ def main():
              ['--wad', args.root.resolve() / 'data/Levels/FinalAlbion.wad'])):
         run(label, [sys.executable, repo / 'tools' / script, '--gui', package / 'FableForge.exe',
             '--cwd', cwd, *options])
-    for label, options in [('mod_asset_refresh', []), ('mod_asset_separate_root', ['--separate-root'])]:
+    for label, options in [('mod_asset_refresh', []), ('mod_asset_separate_root', ['--separate-root']),
+                           ('mod_asset_failed', ['--failed-redeploy']),
+                           ('mod_asset_failed_separate', ['--failed-redeploy', '--separate-root'])]:
         run(label, [sys.executable, repo / 'tools/test_mod_asset_refresh_ui.py', '--gui',
             package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve(), *options])
     with archive.open('rb') as stream:
