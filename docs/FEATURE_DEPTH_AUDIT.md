@@ -1,5 +1,11 @@
 # Feature depth audit — started 2026-09-30
 
+2026-10-03: corrected CDefString comparison values to signed four-byte name-table
+references rather than inline strings. Long-value fixtures now use actual
+CCharString and Vector_J fields plus reference conflicts. Both panel sizes,
+exact merged bytes, source hashes, retail Sword of Aeons decode and 37/37 core
+tests pass; see HANDOFF_WORLD_UI for evidence and the earlier fixture limitation.
+
 This is the working checklist for reviewing Forge's existing features as complete
 user workflows. The inventory comes from `docs/EDITOR.md`, `docs/ROADMAP_1.0.md`,
 the active GUI, and the 2026-09-28 UI review. A passing unit or UI script proves

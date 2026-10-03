@@ -262,7 +262,9 @@ std::string formatValue(const DecodedField& f) {
         if (v.size() == 1) return v[0] ? "true" : "false";
         return hex();
     }
-    if (f.type == "int32" && v.size() == 4) {
+    // CDefString stores a signed name-table reference (including -1 for no
+    // string), not inline text. Resolution needs the owning names.bin table.
+    if ((f.type == "int32" || f.type == "CDefString") && v.size() == 4) {
         int32_t x;
         std::memcpy(&x, v.data(), 4);
         std::snprintf(buf, sizeof(buf), "%d", x);
@@ -282,7 +284,7 @@ std::string formatValue(const DecodedField& f) {
         std::snprintf(buf, sizeof(buf), "%g", x);
         return buf;
     }
-    if (f.type == "CCharString" || f.type == "CDefString") {
+    if (f.type == "CCharString") {
         std::string s = "\"";
         for (uint8_t b : v) {
             if (b == 0) break;

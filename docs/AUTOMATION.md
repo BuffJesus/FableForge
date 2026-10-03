@@ -1,7 +1,7 @@
 # GUI automation (`--auto <script>`)
 
-`tools/test_mod_long_values.py --install <root>` checks long Vector_J/CDefString
-baseline, current and contributor values at both sizes, exact byte escapes,
+`tools/test_mod_long_values.py --install <root>` checks long Vector_J/CCharString
+and signed CDefString reference baseline, current and contributor values at both sizes, exact byte escapes,
 independent merged payload bytes and source hashes. Value targets:
 `mod_field_value_<row>_<field>`, `mod_field_base_<row>_<field>` and
 `mod_field_source_<row>_<field>_<source>`.

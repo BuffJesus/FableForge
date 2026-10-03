@@ -11,9 +11,10 @@ import subprocess
 import tempfile
 from test_mod_field_details import tag, write_bank
 
-FIELDS = ('AvailableCarrySlots', 'OverriddenDummyObject')
+FIELDS = ('TimeOfSummon', 'BaseSummonCreatureName', 'FadeInTime', 'FadeOutTime',
+          'ResetCreatureManaCost', 'SummonTintColour', 'EyeLeftDummyPointName', 'EyeRightDummyPointName')
 RECORD = 'LONG_VALUE_COMPARISON_TEST'
-TYPE = 'CCarryingDef'
+TYPE = 'SPECIAL_ABILITIES_SUMMON_SPELL_DEF'
 
 def value_widget(part, field):
     if part.startswith('source_'): return f'mod_field_source_0_{field}_{part[-1]}'
@@ -37,10 +38,12 @@ def main():
     for index,label in enumerate(('Baseline','LongPackA','LongPackB')):
         folder = root if index == 0 else work/label
         vector = struct.pack('<I16I',16,*range(1000000000+index*100,1000000016+index*100))
-        text = (f'{label} weapon dummy object with a long value and exact byte escapes '.encode('ascii')+
+        text = (f'{label} eye dummy point with a long value and exact byte escapes '.encode('ascii')+
             b'\xff\x01"\\ end\0')
-        write_bank(folder,(vector,text),definition=TYPE,record=RECORD,fields=FIELDS)
-        expected[label] = (vector,text)
+        values = (struct.pack('<I',0), struct.pack('<i',-1 if index == 0 else index*256),
+                  0, 0, 0, vector, text, b'RIGHT_EYE\0')
+        write_bank(folder,values,definition=TYPE,record=RECORD,fields=FIELDS)
+        expected[label] = tuple(struct.pack('<i',v) if isinstance(v,int) else v for v in values)
         if index: sources.append(folder)
     baseline = {p:hashlib.sha256(p.read_bytes()).hexdigest()
         for source in (root,*sources) for p in source.rglob('*.bin')}
@@ -53,8 +56,11 @@ def main():
     for pack in sources: cli('add-'+pack.name,'mods','add',root,pack,'--name',pack.name)
     report = json.loads(cli('report','mods','conflicts',root,'--json'))
     fields = report['defs']['conflicts'][0]['field_conflicts']
-    assert [(f['field'],f['type']) for f in fields] == [(FIELDS[0],'Vector_J'),(FIELDS[1],'CDefString')]
-    assert '\\xff\\x01\\"\\\\' in fields[1]['values'][1]['value']
+    assert [(f['field'],f['type']) for f in fields] == [
+        (FIELDS[1],'CDefString'),(FIELDS[5],'Vector_J'),(FIELDS[6],'CCharString')]
+    assert fields[0]['base_value'] == '-1'
+    assert [v['value'] for v in fields[0]['values']] == ['256','512']
+    assert '\\xff\\x01\\"\\\\' in fields[2]['values'][1]['value']
     output = work/'merged'
     cli('merge','mods','build',root,output,'--json')
     import zlib
@@ -67,9 +73,9 @@ def main():
         case = work/size
         case.mkdir()
         lines = ['wait_maps','wait_ready',f'set saveroot {root.as_posix()}',f'set uiscale {scale}',
-            'mods_tab 1','frames 2','mods_conflicts','wait_mods','frames 2','assert_state mods_field_conflicts 2',
+            'mods_tab 1','frames 2','mods_conflicts','wait_mods','frames 2','assert_state mods_field_conflicts 3',
             'reveal mod_fields_0','frames 3','reveal mod_fields_0','frames 3','click mod_fields_0','frames 3']
-        for field in range(2):
+        for field in range(3):
             for part in ('value','base','source_0','source_1'):
                 widget = value_widget(part,field)
                 lines += [f'reveal {widget}','frames 3',f'reveal {widget}','frames 3',
@@ -84,7 +90,7 @@ def main():
         (case/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
         assert result.returncode == 0 and 'RESULT PASS' in log,log[-4000:]
-        for field in range(2):
+        for field in range(3):
             for part in ('value','base','source_0','source_1'):
                 widget = value_widget(part,field)
                 bounds = re.search(r'widget_rect '+widget+r' ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
@@ -93,8 +99,9 @@ def main():
                 png = (case/(str(field)+'-'+part+'.png')).read_bytes()
                 width,height = struct.unpack_from('>II',png,16)
                 assert 0 <= left < right <= width and 0 <= top < bottom <= height,(widget,bounds.groups())
-                assert bottom-top >= 20*scale,(widget,'long value did not wrap')
-        print(size,'wrapped baseline, result and each contributor: PASS',flush=True)
+                if field > 0:
+                    assert bottom-top >= 20*scale,(widget,'long value did not wrap')
+        print(size,'reference values and wrapped vector/text comparisons: PASS',flush=True)
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p,digest in baseline.items())
     print('Exact merged payload and unchanged source banks: PASS',flush=True)
 

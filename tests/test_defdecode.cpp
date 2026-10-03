@@ -8,7 +8,7 @@ int main() {
     auto check = [&](bool okay, const char* label) {
         if (!okay) { ++failures; std::fprintf(stderr, "def value: %s\n", label); }
     };
-    for (const auto* type : {"CCharString", "CDefString"}) {
+    for (const auto* type : {"CCharString"}) {
         forge::defdecode::DecodedField field;
         field.type = type;
         field.value = {'A', '"', '\\', '\n', '\r', '\t', 1, 0x7f, 0xff, 0, 'Z'};
@@ -36,6 +36,14 @@ int main() {
     number.type = "int32";
     number.value = {0xff, 0xff, 0xff, 0xff};
     check(forge::defdecode::formatValue(number) == "-1", "typed scalar unchanged");
+    number.type = "CDefString";
+    check(forge::defdecode::formatValue(number) == "-1", "absent name-table reference");
+    number.value = {0x00, 0x01, 0x00, 0x00};
+    check(forge::defdecode::formatValue(number) == "256", "reference with embedded zero bytes");
+    number.value = {0xff, 0xff, 0xff, 0x7f};
+    check(forge::defdecode::formatValue(number) == "2147483647", "largest signed reference");
+    number.value = {0x41, 0x42, 0x43};
+    check(forge::defdecode::formatValue(number) == "414243", "malformed reference retains raw bytes");
     forge::defdecode::Decoded base;
     base.allTagsOk = true;
     base.prefix = {1};

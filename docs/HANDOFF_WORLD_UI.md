@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 correct CDefString reference presentation
+
+The byte-safe presentation increment avoided a JSON failure but incorrectly
+treated CDefString as inline text. Forge's existing defedit encoder identifies
+it as a four-byte reference; the locally referenced fable-defs source confirms
+signed i32 TablePos in packages/defs/src/wire.rs, with an empty-string -1
+sentinel in packages/def-compiler/src/lower.rs::eval_def_string. The formatter
+now displays that signed reference, retaining raw hex for malformed widths.
+It does not resolve names.bin or change decoding, merging or serialized bytes.
+CCharString retains the exact byte escapes introduced earlier.
+
+The former long-value CCarryingDef fixture used artificial inline CDefString
+bytes, so its passed checks did not establish native type correctness. It now
+uses SPECIAL_ABILITIES_SUMMON_SPELL_DEF with actual Vector_J/CCharString fields
+and a separate CDefString conflict (-1 baseline, 256/512 references). Synthetic
+reference offsets are display fixtures, not valid name-table/runtime claims.
+build/mod-long-values-22ue6tvb passes both sizes, per-value bounds/wrapping,
+independently expected merged bytes and unchanged source-bank hashes. Compact
+reference and escaped-text screenshots were reviewed. Full Release build and
+37/37 CTest pass (21.77s). Retail Sword of Aeons DefaultScriptName/Data now
+display -1 at build/sword_aeons_reference_decode_20261003.json; source game.bin
+SHA256 remains a0cc28242e6c3fc572143af4ba3cdd93f205d85edfa3fe85e1035e0932e66f2c.
+The earlier development ZIP remains unchanged and predates this correction.
+
 ## 2026-10-03 local development package and document closure
 
 Local archive under dist/development/20261003-096f7d8 initially failed extracted
@@ -53,6 +77,8 @@ than one field group's visible area can be reached and assessed separately.
 The existing indented TextWrapped layout already handles long values; no layout
 rewrite was needed. Tiny schema-aligned CCarryingDef fixtures exercise Vector_J
 and CDefString, including exact non-UTF-8/control/quote/backslash escapes. The
+later reference-presentation correction above replaces this artificial inline
+CDefString coverage with actual CCharString fields and signed references. The
 independent writer's scalar path is unchanged; it can now accept raw test values
 and explicit definition/field identities for this fixture.
 
