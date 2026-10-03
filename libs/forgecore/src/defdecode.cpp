@@ -285,7 +285,23 @@ std::string formatValue(const DecodedField& f) {
         std::string s = "\"";
         for (uint8_t b : v) {
             if (b == 0) break;
-            s += char(b);
+            // These are game bytes, without a guaranteed text encoding. Keep
+            // their display exact and JSON-safe rather than replacing invalid
+            // UTF-8 or interpreting high bytes as a guessed code page.
+            switch (b) {
+            case '"': s += "\\\""; break;
+            case '\\': s += "\\\\"; break;
+            case '\n': s += "\\n"; break;
+            case '\r': s += "\\r"; break;
+            case '\t': s += "\\t"; break;
+            default:
+                if (b < 0x20 || b >= 0x7f) {
+                    std::snprintf(buf, sizeof(buf), "\\x%02x", b);
+                    s += buf;
+                } else {
+                    s += char(b);
+                }
+            }
         }
         s += "\"";
         return s;

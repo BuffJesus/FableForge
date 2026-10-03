@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 byte-safe definition value presentation
+
+An actual `defs decode ... OBJECT_SWORD_OF_AEONS game.bin --json` failed
+in the 330d4b5 primary binary with invalid UTF-8 byte 0xff. `formatValue`
+copied CCharString/CDefString bytes directly into a display string; strict JSON
+serialization therefore rejected some valid game records. Presentation now
+escapes quotes, backslashes, newline/carriage-return/tab and remaining control
+or high bytes as exact ASCII byte escapes. NUL termination and printable ASCII
+remain unchanged. This infers no encoding and changes no payload or writer.
+
+The new fableforge_defdecode_tests first reproduced the failure for both string
+types, then passed explicit escapes/termination, all non-NUL bytes and strict
+JSON round-trip checks. The owning Release tools/GUI build passed. Retail
+Sword of Aeons now produces parseable JSON at isolated
+build/sword_aeons_decode_20261003.json; the scratch source game.bin SHA256 is
+unchanged. This is formatting evidence, not an expansion of decoder coverage.
+
 ## 2026-10-03 isolated continuation: inspect mod field conflicts
 
 Owned checkout D:/Code/FableForge-field-review, branch

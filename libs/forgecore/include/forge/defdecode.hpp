@@ -109,6 +109,8 @@ FieldMerge mergeFields(const Decoded& base,
 // Human-readable rendering of a field value using its type
 // (e.g. "391" for int32, "\"GATEWAY_IDLE_01\"" for CCharString,
 // "[2820]" for Vector_VCDefIndex__). Falls back to hex for unknown types.
+// Strings stop at NUL and escape quotes, backslashes, controls and non-ASCII
+// bytes (\xNN); no text encoding is inferred from the underlying game bytes.
 std::string formatValue(const DecodedField& field);
 
 } // namespace forge::defdecode
