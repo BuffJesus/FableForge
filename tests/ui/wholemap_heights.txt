@@ -9,6 +9,8 @@ edit 1
 frames 2
 edit_tab 1
 frames 2
+reveal btn_wholemap_toggle
+frames 3
 click btn_wholemap_toggle
 frames 3
 assert_widget btn_wholemap_raise

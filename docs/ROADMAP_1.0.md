@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+The pin/camera checkpoint at frozen source b132d50 exercised all 105 integration
+checks: 104 passed and one off-screen whole-map button fixture failed. Scrolling
+to that button fixes the workflow; its focused rerun passes stock/loose and
+normal/compact. No checks were skipped. See HANDOFF_WORLD_UI for precise scope.
+
+
 Map revisits now restore each map's camera, FOV and rendering mode, including
 after restart. New maps use normal framing; views are scoped to the current
 install. Stock/loose normal/compact round-trip and malformed-data checks pass.

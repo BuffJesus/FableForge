@@ -1,6 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
 
+## 2026-10-02 checkpoint: pinning and per-map camera views
+
+Frozen source b132d50 / primary Release binaries: tools/check_all.py --no-build
+completed with **104 PASS, 1 FAIL, 0 skipped integration checks**. Evidence:
+build/check_all_pin_camera_20261002.log (PowerShell UTF-16 capture). All 36 CTest
+cases pass, all available mod corpora were exercised, and all new pin/session/FOV
+checks pass. Lipsync's 291 empty/non-type-1 records remain internal exclusions,
+not skipped integration checks. Source/binaries stayed fixed through the run.
+
+The one failure was tests/ui/wholemap_heights.txt clicking the whole-map toggle
+below the visible panel after the new terrain hint moved it down. The test now
+uses the existing reveal command to scroll before clicking. The actual window's
+Raise-with-objects, Scale, Set and exact Undo assertions pass on stock/loose,
+normal/compact layouts; evidence build/wholemap-reveal-cc9tf3o7. The full gate was
+not rerun after this focused fixture correction; its initial failure is retained.
+
+F1 help now includes Space pin, Ctrl+B snapshot, sculpt Ctrl-drag height sampling
+and fixed-point -/= keys. Compact help open/reveal/close checks pass in the same
+evidence directory, and its screenshot was reviewed. No core behavior changed
+in this follow-up. No live-game runtime verification, push, merge or release.
+
+
+
 ## 2026-10-02 continuation: retain each map's view
 
 Returning to a visited map now restores its complete camera (eye, yaw/pitch,
