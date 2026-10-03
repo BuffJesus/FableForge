@@ -197,6 +197,8 @@ def main():
               [sys.executable, "tools/test_setup_restore_failure_ui.py"], capture_output=True)
     ok &= run("Setup partial restore, selected-map refresh and remaining locked target retry",
               [sys.executable, "tools/test_setup_restore_failure_ui.py", "--partial"], capture_output=True)
+    ok &= run("Setup ambiguous recovery records, all-file preservation and resolved retry",
+              [sys.executable, "tools/test_setup_restore_ambiguity_ui.py"], capture_output=True)
     ok &= run("Setup missing-bank recovery, Data folder normalization and running-game guard",
               [sys.executable, "tools/test_setup_missing_bank_ui.py"], capture_output=True)
     ok &= run("Setup missing loose-level recovery and running-game guard",

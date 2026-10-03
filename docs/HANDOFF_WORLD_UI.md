@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 ambiguous restore records through Setup
+
+No product change was needed. build/setup-restore-ambiguity-hwm01za1 passes
+normal and compact actual controls for different .atlas-orig/.forge-orig
+originals and for .forge-created plus .forge-orig. Preflight refuses before
+changing any file, including an independent modified LEV. The persistent error
+identifies the conflicting records and asks for an intended baseline; compact
+duplicate-original screenshot reviewed and error bounds checked in every case.
+The fixture explicitly preserves the conflicting record outside the install,
+then retries in the same GUI process. Both maps restore exactly; originals,
+other files and the preserved conflict stay byte-identical. This checks manual
+resolution, not an automatic choice or a new GUI baseline selector. The fixture
+is wired into check_all. Whole-gate and archive boundaries remain unchanged.
+
 ## 2026-10-03 partial restore and absent level-container coverage
 
 No additional product changes were needed after missing-bank recovery.

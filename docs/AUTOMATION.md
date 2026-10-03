@@ -1,5 +1,11 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_restore_ambiguity_ui.py` clicks Setup Restore with either
+different legacy/current originals or a creation marker plus an original.
+Both sizes verify a visible refusal and unchanged whole-install inventory,
+including an unrelated edited map. The fixture moves the conflicting record
+outside the install, preserving its bytes, then retries in the same process.
+
 `tools/test_setup_missing_bank_ui.py` restores an absent game.bin from its
 tracked original. `--missing-levels` instead restores the only loose LEV;
 `--wad <source.wad>` copies a stock WAD as the tracked original and verifies its
