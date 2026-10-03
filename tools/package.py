@@ -4,9 +4,33 @@ README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 
   python tools/package.py [--version 0.1.0] [--no-check] [--guide-only] [--output-dir dist]
 """
-import argparse, os, re, shutil, subprocess, sys, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
 from urllib.parse import unquote
+
+
+def write_package_identity(root, stage, version):
+    """Identify shipped bytes; checkout metadata is not executable provenance."""
+    checkout = {'commit': None, 'tracked_changes': None}
+    try:
+        commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root,
+                                capture_output=True, text=True, check=True).stdout.strip()
+        status = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'],
+                                cwd=root, capture_output=True, text=True, check=True).stdout
+        if re.fullmatch(r'[0-9a-f]{40,64}', commit):
+            checkout = {'commit': commit, 'tracked_changes': bool(status.strip())}
+    except (OSError, subprocess.CalledProcessError):
+        pass  # Source archives and machines without Git still package normally.
+    files = {}
+    for path in sorted(stage.rglob('*')):
+        if path.is_file() and path.name != 'PACKAGE_INFO.json':
+            files[path.relative_to(stage).as_posix()] = {
+                'bytes': path.stat().st_size,
+                'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+    (stage / 'PACKAGE_INFO.json').write_text(json.dumps({
+        'format': 1, 'version': version, 'packaging_checkout': checkout,
+        'checkout_scope': 'Checkout at packaging time; executable build provenance is not verified.',
+        'files': files}, indent=2) + '\n', encoding='utf-8')
 
 
 def copy_document_dependencies(root, stage):
@@ -150,6 +174,7 @@ def main():
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
     copy_document_dependencies(root, Path(stage))
+    write_package_identity(root, Path(stage), a.version)
     zpath = output / (name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for folder, _, files in os.walk(stage):

@@ -34,6 +34,13 @@ records, active/orphaned stages, confirmation cancellation and absent bank,
 loose-level and stock-WAD recovery. Recovery fixtures accept `--gui` and `--cwd`
 so the executable and working directory both belong to the extracted check.
 
+Application ZIPs include `PACKAGE_INFO.json`: sizes and SHA256 hashes for all
+shipped files after stripping, plus the version and packaging checkout commit /
+tracked-change status when Git is available. The manifest excludes itself.
+Checkout metadata identifies the packaging source tree; it does not verify the
+source revision used to build existing executables. Record the archive hash and
+actual check results alongside it when reporting development-build acceptance.
+
 ## Final release checklist
 
 1. Game closed (`Fable.exe` not running from the install: every writer and the suite's
