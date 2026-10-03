@@ -983,6 +983,10 @@ Failed texture replacements keep the bank and recovery records unchanged and
 show a wrapped error below Replace. Fix or unlock the image and retry; changing
 the selected texture or destination clears the message. Closing and reopening
 the replacement form retains it.
+Failed Add imports also keep the bank and recovery records unchanged. The
+draft name and image stay in the form, with a wrapped error below Add. Fix the
+image or unlock it and retry. Editing the name, image or format, or changing
+destination, clears that error; browsing another texture retains the draft.
 Failed PNG exports keep the previous output and show a wrapped error next to
 Export PNG. The error identifies the output and a short reason; Activity keeps
 the complete diagnostic. Retry or changing the texture/bank clears the message.

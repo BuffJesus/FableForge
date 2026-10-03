@@ -1084,7 +1084,7 @@ private:
     std::vector<texbrowse::TextureRow> texRows_;
     std::vector<std::string> texBanks_;
     std::string texBank_, texSelected_, texPreviewFor_, lastTexturePng_;
-    std::string texExportError_, texReplaceError_;
+    std::string texExportError_, texReplaceError_, texAddError_;
     ID3D11ShaderResourceView* texPreview_ = nullptr;
     ImVec2 texPreviewSize_ = ImVec2(1, 1);
     // list thumbnails: one open textures.big (index only), reopened when the file changes

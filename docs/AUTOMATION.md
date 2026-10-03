@@ -8,6 +8,16 @@ same-process retry, independently decoded blue export pixels and exact Restore.
 Selecting a different texture clears state `texture_replace_failed`. Input images
 and source banks stay unchanged; `--gui <exe>` selects extracted-package binaries.
 
+`--add` and `--add --invalid` exercise the actual Add form with a small valid
+bank containing one retail record and two native seed textures. They check
+`texture_add_failed`, `texture_add_name` and `texture_add_error`: a failed draft
+survives asset-tab/browser-selection changes, edits clear its error, an accepted
+destination change clears it, retry selects the added texture and clears its
+name, decoded pixels are correct, and Restore returns the complete inventory.
+`--small-bank` selects that fixture for replacement checks too; replacement
+defaults still use the full copied retail bank. Compact input steps reveal the
+field twice and assert the entered name before attempting Add.
+
 `tools/test_mod_action_error_ui.py --install <root> --mode redeploy|report|missing`
 checks actual Mods buttons at normal/compact sizes. A bad patch after a successful
 deploy restores the baseline before failing; malformed or incomplete exit-zero
@@ -17,6 +27,8 @@ and widget `mods_action_error` expose the error. Changing the save folder clears
 it; fixing the input/helper and retrying succeeds in the same process. Complete
 copied-install inventories, source pack/bank hashes and unrelated files remain
 preserved. `--gui <exe>` supports extracted-package checks.
+`--mode fmp --fmp <package>` uses unsupported named-link metadata to exercise
+the same refusal, persistent feedback, unchanged inputs and retry lifecycle.
 
 `tools/test_egocore_unicode_paths.py --install <root>` compiles an owned failure
 helper and checks its actual argv through Unicode application, compiler-env,

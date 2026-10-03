@@ -1,5 +1,78 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 Add texture error feedback validated in isolated review
+
+Choice review feat/forge-texture-add-feedback-review-20261003 is based on primary
+b1eb3b9. The durable Add feedback described below is now built and passes:
+- build/texture-replace-failure-_rcmh4xh: Add with a sharing-locked image,
+  both 1440x900 and 800x600 at scale 1.5.
+- build/texture-replace-failure-avhokn25: Add with invalid input, both sizes,
+  including clearing on image/name edits and accepted destination changes.
+- build/texture-replace-failure-3zqroceo and aj5q5ty0: replacement locked/invalid
+  regressions, both sizes, using --small-bank on the updated GUI.
+
+Each checks the durable wrapped widget after toast dismissal, draft retention,
+complete fixture inventory preservation at failure, same-process retry, blue
+64x64 export pixels independently decoded and exact Restore --forget. Inputs,
+source banks and the separate save-folder fixture stay unchanged. Successful
+Add clears the draft name and selects the new entry. Compact screenshots were
+inspected; the error wraps below Add without clipping. No parser/writer changed.
+
+For Add the fixture independently rebuilds a small BIG containing one actual
+retail texture payload/subheader, then seeds two entries with the native writer.
+An empty main bank was unsuitable: the importer needs a template record and
+refused it, preserved at build/texture-replace-failure-uz2zkki7. This is UI/lifecycle
+coverage over a valid bank, not a whole-retail preservation claim. Full copied
+retail replacement/Unicode workflows passed in the running primary source gate;
+that implementation's writers are unchanged by this UI review.
+
+The first compact Add run awlt33kq failed because one reveal left the name input
+at a stale scroll position: name stayed empty and Add was not attempted. A
+second reveal plus an explicit entered-name assertion fixes the fixture. The
+corrected locked/invalid checks above pass; do not count awlt33kq as a product
+refusal failure or a successful Add check. Existing replacement modes now use
+this stable input helper too. State/key changes and Add-only paths are documented.
+check_all and test_package register both Add modes; the full source gate RUNNING
+on frozen primary b1eb3b9 excludes these not-yet-integrated registrations.
+
+Next: commit this isolated result, package and exercise extracted Add/replacement
+UI workflows, then integrate after the primary b1eb3b9 gate completes. Preserve
+its exact frozen boundary and report any failure/skip. Do not claim a full gate
+or full package for Add feedback; no live game/install writes or publication.
+
+## 2026-10-03 primary linker integrated; Add texture feedback review
+
+Primary feat/editor-ui-shell is clean at b1eb3b9, product d2c1100, after a clean
+fast-forward of the isolated symbolic linker and rebuilt Release targets. The
+validated d2c1100 development application/guide ZIPs were copied from review to
+primary dist/development/20261003-d2c1100; application SHA256 remains
+c89ad79819c7fadaa7735cdedf58c623b70595423f1c4ac9d0e97f1c30c8cd97.
+No publication or live install writes. Eight extracted focus checks and all
+reference/level/binding boundaries below still apply; not a full-package claim.
+A new broad source gate is RUNNING on frozen primary b1eb3b9, log
+build/check_all_fmp_b1eb3b9_20261003.log; no final result yet. It includes the
+new named-link audit and explicit unsupported-F2 refusal. Do not count startup
+or partial log PASS lines as full-gate completion.
+
+Choice review has moved to feat/forge-texture-add-feedback-review-20261003,
+based on b1eb3b9. Baseline build/texture-replace-failure-twkx4bbf uses the archived
+Add-form fixture against the old GUI: a sharing-locked image keeps copied files
+unchanged, unlocked retry selects the correctly added texture, but no durable
+Add error widget/state exists and the test fails accordingly. The earlier
+r56izauh fixture was restored into tools/test_texture_replace_failure_ui.py,
+with --add / --add --invalid modes; existing replacement modes remain supported.
+
+Dirty GUI review adds texAddError_, texture_add_failed/name automation state,
+wrapped feedback below Add, decoder/write-guard failures in both Activity and
+form, clearing on next attempt or edited name/image/format, accepted destination
+change/bank invalidation and success. It retains a failed draft across panel
+closure/asset-tab/browser-selection changes. No texture parser/writer changes.
+Release GUI rebuilt in this review, but post-change Add tests are pending. Avoid
+concurrent bank-heavy UI tests while primary's broad gate runs; previous texture
+checks established I/O-contention timeout risk. Next: inspect gate progress,
+finish independent review, then run Add locked/invalid and relevant replacement
+checks serially, inspect both sizes, commit/promote/package only after passing.
+
 ## 2026-10-03 extracted symbolic-linker development package
 
 Product checkpoint d2c1100 packages the bounded FMP linker and updated guide.

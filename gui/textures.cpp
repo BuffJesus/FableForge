@@ -32,7 +32,7 @@ std::filesystem::path App::texturesBigPath() const {
 void App::invalidateTextureViews() {
     texturesLoaded_ = false;
     texRows_.clear(); texBanks_.clear(); texSelected_.clear();
-    texExportError_.clear(); texReplaceError_.clear();
+    texExportError_.clear(); texReplaceError_.clear(); texAddError_.clear();
     texPreviewFor_.clear(); texPreview_ = nullptr;
     texThumbFile_.reset();
     renderer_.clearListThumbs();
@@ -155,9 +155,17 @@ bool App::replaceSelectedTexture(const std::string& image) {
 }
 
 bool App::addTexture(const std::string& name, const std::string& image, const std::string& bank, const std::string& format) {
-    if (gameWriteBlocked("textures")) return false;
+    texAddError_.clear();
+    if (gameWriteBlocked("textures")) {
+        texAddError_ = "Texture import is blocked. See Activity for details.";
+        return false;
+    }
     std::vector<std::string> notes; std::string err; uint32_t id = 0;
-    if (!texbrowse::addTexture(saveRoot(), bank, name, image, format, id, notes, err)) { for (const auto& n : notes) pushLog("textures: " + n, 1); pushLog("textures: " + err, 2); return false; }
+    if (!texbrowse::addTexture(saveRoot(), bank, name, image, format, id, notes, err)) {
+        texAddError_ = err;
+        for (const auto& n : notes) pushLog("textures: " + n, 1);
+        pushLog("textures: " + err, 2); return false;
+    }
     for (const auto& n : notes) pushLog("textures: " + n, 3);
     pushLog("reference the new texture by id " + std::to_string(id) + " (a def's Graphic / theme texture field)", 0);
     refreshTextures();
@@ -375,12 +383,12 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
     theme::label("Add a texture");
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
     ImGui::SetNextItemWidth(cardInner);
-    ImGui::InputTextWithHint("##texaddname", "Name, e.g. MY_BARREL_01", texAddName_, sizeof texAddName_, ImGuiInputTextFlags_CharsUppercase);
+    if (ImGui::InputTextWithHint("##texaddname", "Name, e.g. MY_BARREL_01", texAddName_, sizeof texAddName_, ImGuiInputTextFlags_CharsUppercase)) texAddError_.clear();
     auto_.registerWidget("input_tex_add_name");
-    drawPathInput("texaddpath", "Path to a PNG / JPG / TGA", texAddPath_, sizeof texAddPath_,
-                  cardInner, PathField::Image, "input_tex_add_image");
+    if (drawPathInput("texaddpath", "Path to a PNG / JPG / TGA", texAddPath_, sizeof texAddPath_,
+                  cardInner, PathField::Image, "input_tex_add_image")) texAddError_.clear();
     ImGui::PopStyleVar();
-    theme::segmented("##texaddfmt", texAddFormat_, {"DXT1", "DXT3 (alpha)", "ARGB8888"}, cardInner);
+    if (theme::segmented("##texaddfmt", texAddFormat_, {"DXT1", "DXT3 (alpha)", "ARGB8888"}, cardInner)) texAddError_.clear();
     ImGui::PushFont(fontSmall_);
     theme::hintMore("Adds a texture a def or theme can use; nothing is replaced.", "Appended to GBANK_MAIN_PC with a new id (shown in the log) that a def or theme can reference. Nothing retail is replaced.");
     ImGui::PopFont();
@@ -389,6 +397,14 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         if (addTexture(texAddName_, texAddPath_, "GBANK_MAIN_PC", fmts[std::clamp(texAddFormat_, 0, 2)])) texAddName_[0] = 0;
     }
     auto_.registerWidget("btn_tex_add");
+    if (!texAddError_.empty()) {
+        ImGui::PushFont(fontSmall_);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::TextColored(theme::vec(theme::Error), "Texture import failed: %s", texAddError_.c_str());
+        auto_.registerWidget("texture_add_error");
+        ImGui::PopTextWrapPos();
+        ImGui::PopFont();
+    }
     theme::endCard();
 }
 
