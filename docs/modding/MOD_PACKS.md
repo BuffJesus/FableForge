@@ -179,6 +179,16 @@ For structured records (game.bin defs) the diff goes to the FIELD level using
 different *fields* of the same def are field-merged, with only same-field edits
 conflicting. See "Status" below.
 
+The Mods card expands residual field conflicts into the type, baseline value,
+each actual contributor's value and the value selected by the current record
+choice. These values come from the last conflict check. Choosing a mod resolves
+only contested fields that it changed; other contested fields follow load order.
+Vanilla restores contested fields while independent edits still merge. JSON
+reports include `part_index` (zero for the prefix, otherwise field index plus
+one), `type`, `base_value` and `values` alongside the existing field/winner data.
+String presentation escapes non-ASCII/control bytes without guessing an encoding.
+This does not add individual field picks or source fingerprint validation.
+
 ### 5. Compose / build
 Produce the final containers by applying, per record, the winning mod's version
 over the base — a merged `game.bin`, a repacked WAD, merged registries. Emit via

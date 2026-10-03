@@ -23,8 +23,9 @@ only after checking those paths against the current build.
 
 ## Terrain/foliage change in this pass
 
-2026-10-03: the Mods card now exposes field-conflict names, contributors and
-current winners, with record-choice scope and unchanged-field fallback explained.
+2026-10-03: the Mods card now exposes field-conflict names, types, baseline and
+contributor values, plus current winning values. Record-choice scope and
+unchanged-field fallback are explained.
 A three-mod synthetic definition fixture verifies UI updates at both sizes and
 independent merged-bank values, including preserved non-conflicting edits under
 a vanilla choice. Primary gate source remains fixed; details are in HANDOFF_WORLD_UI.

@@ -91,6 +91,7 @@ struct FieldMerge {
         std::vector<std::string> mods;   // mods that set differing values
         std::string winner;              // mod whose value was applied,
                                          // or "vanilla"
+        size_t partIndex = 0;             // 0 = prefix, otherwise field index + 1
     };
     std::vector<Conflict> conflicts;     // parts >1 mod changed to differing
                                          // values (load-order/pick decided)

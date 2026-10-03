@@ -36,5 +36,25 @@ int main() {
     number.type = "int32";
     number.value = {0xff, 0xff, 0xff, 0xff};
     check(forge::defdecode::formatValue(number) == "-1", "typed scalar unchanged");
+    forge::defdecode::Decoded base;
+    base.allTagsOk = true;
+    base.prefix = {1};
+    for (uint32_t tag : {1u, 2u}) {
+        forge::defdecode::DecodedField field;
+        field.type = "bool"; field.tag = tag; field.tagOk = true; field.value = {1};
+        base.fields.push_back(field);
+    }
+    auto first = base, last = base;
+    first.prefix = {2}; last.prefix = {3};
+    first.fields[0].value = {2}; last.fields[0].value = {3};
+    first.fields[1].value = {4}; last.fields[1].value = {5};
+    const auto merged = forge::defdecode::mergeFields(base, {{"first",first},{"last",last}});
+    check(merged.ok && merged.conflicts.size() == 3, "prefix and duplicate unnamed conflicts retained");
+    if (merged.conflicts.size() == 3) {
+        check(merged.conflicts[0].partIndex == 0 && merged.conflicts[1].partIndex == 1 &&
+              merged.conflicts[2].partIndex == 2, "conflict identity does not depend on display name");
+    }
+    check(merged.payload == std::vector<uint8_t>({3,1,0,0,0,3,2,0,0,0,5}),
+          "conflict identity preserves merged payload");
     return failures ? 1 : 0;
 }

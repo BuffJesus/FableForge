@@ -998,7 +998,8 @@ with the winner the load order gives it and a combo to pick another mod or *vani
 live in `forge_mods_picks.txt` next to the order and deploy applies them. Choices
   change in the UI only after the file is saved or removed successfully; a failed
   write preserves the previous choice and reports the error. Field-merged records
-  offer **Conflicting fields**, listing each field's actual contributors and winner.
+  offer **Conflicting fields**, listing each field's type, baseline, contributor
+  values and current winning value. These reflect the last conflict check.
   The choice resolves contested fields while independent edits keep merging.
   A mod only wins fields it changed; otherwise the field retains its load-order
   winner with an explanation. Vanilla restores contested fields in this mode.

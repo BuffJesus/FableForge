@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 field conflict value comparisons
+
+The composer report now includes each residual field's type, baseline and
+actual contributor values. A numeric part index identifies prefix and repeated
+unnamed fields without a name lookup. Core merge behavior and output bytes are
+unchanged. The GUI retains optional values (older reports remain supported) and
+shows baseline/contributors plus the value selected by the current record pick,
+including fallback and vanilla. These are snapshots from the last conflict
+check; there is no new per-field policy, source freshness check or decoder.
+
+Owning Release tools/GUI/core test builds pass. Core tests cover prefix and
+duplicate unnamed identities and an independent expected merged payload;
+the existing core suite also passes (two CTest targets). Expanded synthetic
+workflow at build/mod-field-details-dge1kznp passes both sizes, exact CLI
+baseline/contributor values, current winner values across picks/vanilla/reset,
+and independently decoded output banks/source hashes. Compact last-field capture
+inspected: all values fit and every field remains scroll-accessible. Initial
+attempt build/mod-field-details-kfl8ul5q passed CLI assertions but GUI launch was
+blocked by concurrent executable relinking; completed build was awaited before
+the passing rerun. Primary gate remains against its frozen 330d4b5 version.
+Final reviewed-source rerun: build/mod-field-details-psnyrym6. The existing
+saved-winner/dropdown-reset/deploy check passes at build/mod-winner-refresh-8ek50z_x;
+docs-command and whitespace checks pass. The original conflict list is retained
+for text reports and row filtering alongside the new JSON comparison details.
+
 ## 2026-10-03 byte-safe definition value presentation
 
 An actual `defs decode ... OBJECT_SWORD_OF_AEONS game.bin --json` failed

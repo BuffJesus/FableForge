@@ -75,6 +75,10 @@ def main():
         (FIELDS[0],['PackA','PackB'],'PackB'),(FIELDS[1],['PackA','PackC'],'PackC'),
         (FIELDS[2],['PackB','PackC'],'PackC')]
     assert report['defs']['summary']['auto_merged_fields']==1
+    assert [(f['part_index'],f['type'],f['base_value'],f['values']) for f in row['field_conflicts']]==[
+        (1,'int32','1',[{'mod':'PackA','value':'10'},{'mod':'PackB','value':'11'}]),
+        (2,'int32','2',[{'mod':'PackA','value':'20'},{'mod':'PackC','value':'21'}]),
+        (3,'int32','3',[{'mod':'PackB','value':'30'},{'mod':'PackC','value':'31'}])]
     for size,scale in [('1440x900',1),('800x600',1.5)]:
         case=work/size;case.mkdir()
         lines=['wait_maps','wait_ready',f'set saveroot {root.as_posix()}',f'set uiscale {scale}',
@@ -84,11 +88,16 @@ def main():
         for index,winner in enumerate(('PackB','PackC','PackC')):
             lines += [f'assert_state mods_first_field_{index} {FIELDS[index]}',
                 f'assert_state mods_first_field_winner_{index} {winner}']
+        for index,value in enumerate((11,21,31)):
+            lines += [f'assert_state mods_first_field_base_{index} {index+1}',
+                f'assert_state mods_first_field_value_{index} {value}']
         lines += ['clear_toasts',f'screenshot {(case/"load-order.png").as_posix()}',
             'reveal mod_field_0_2','frames 3','assert_widget mod_field_0_2',
             f'screenshot {(case/"last-field.png").as_posix()}','mod_pick * PackA','frames 2']
         for index,winner in enumerate(('PackA','PackA','PackC')):
             lines += [f'assert_state mods_first_field_winner_{index} {winner}']
+        for index,value in enumerate((10,20,31)):
+            lines += [f'assert_state mods_first_field_value_{index} {value}']
         lines += ['reveal mod_field_0_2','frames 3',
             f'screenshot {(case/"picked.png").as_posix()}',
             'reveal mod_winner_0','frames 3','reveal mod_winner_0','frames 3',
@@ -96,6 +105,7 @@ def main():
             f'screenshot {(case/"vanilla-choice.png").as_posix()}',
             'click mod_vanilla_0','frames 2']
         for index in range(3): lines += [f'assert_state mods_first_field_winner_{index} vanilla']
+        for index in range(3): lines += [f'assert_state mods_first_field_value_{index} {index+1}']
         lines += ['mod_pick * -','frames 2']
         for index,winner in enumerate(('PackB','PackC','PackC')):
             lines += [f'assert_state mods_first_field_winner_{index} {winner}']

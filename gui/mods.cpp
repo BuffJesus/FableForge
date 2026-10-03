@@ -365,8 +365,14 @@ std::string App::modFieldWinner(const ModConflict& conflict, const ModFieldConfl
     return field.mods.empty() ? field.winner : field.mods.back();
 }
 
-// the conflict report: every row a thing several enabled mods want differently, with the winner the
-// load order (or a pick) gives it
+std::string App::modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const {
+    const auto winner = modFieldWinner(conflict, field);
+    if (winner == "vanilla") return field.baseline;
+    for (const auto& [mod, value] : field.values) if (mod == winner) return value;
+    return {};
+}
+
+// Conflict rows retain contributors in load order and the reported winner.
 static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
     using nlohmann::json;
     auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
@@ -374,8 +380,15 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
         for (const auto& c : rep["defs"].value("conflicts", json::array())) {
             rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
             if (rows.back().fieldMerged)
-                for (const auto& field : c.value("field_conflicts",json::array()))
+                for (const auto& field : c.value("field_conflicts",json::array())) {
                     rows.back().fields.push_back({field.value("field",""),mods(field["mods"]),field.value("winner","")});
+                    auto& detail = rows.back().fields.back();
+                    detail.hasValues = field.contains("base_value");
+                    detail.type = field.value("type", "");
+                    detail.baseline = field.value("base_value", "");
+                    for (const auto& value : field.value("values", json::array()))
+                        detail.values.emplace_back(value.value("mod", ""), value.value("value", ""));
+                }
         }
     if (rep.contains("tng"))
         for (const auto& l : rep["tng"].value("levels", json::array()))
@@ -773,6 +786,13 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                             ImGui::TextWrapped("%s",field.field.c_str());
                             const std::string winner=modFieldWinner(c,field);
                             ImGui::TextWrapped("Winner: %s",winner.c_str());
+                            if (field.hasValues) {
+                                ImGui::TextWrapped("Value: %s",modFieldValue(c,field).c_str());
+                                theme::hint(("Type: "+field.type).c_str());
+                                ImGui::TextWrapped("Baseline: %s",field.baseline.c_str());
+                                for (const auto& [mod,value] : field.values)
+                                    ImGui::TextWrapped("%s: %s",mod.c_str(),value.c_str());
+                            }
                             std::string contributors;
                             for (const auto& mod : field.mods) contributors+=(contributors.empty()?"":", ")+mod;
                             theme::hint(("Changed by: "+contributors).c_str());

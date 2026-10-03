@@ -6,6 +6,8 @@ clearing choices and independently decoded merged banks at both window sizes.
 `mod_fields_<row>` expands details; `mod_field_<row>_<field>` reveals one field.
 `mods_field_conflicts` counts retained field rows. `mods_first_field_<index>` and
 `mods_first_field_winner_<index>` expose the first record's current field winners.
+`mods_first_field_base_<index>` and `mods_first_field_value_<index>` expose its
+baseline and current winning values when the report contains value comparisons.
 
 `tools/test_ground_smear.py --install <root>` checks Ground Paint/Smear controls,
 strict vertex cursors, frozen neighbour blends, Repeat, undo and draft reopen

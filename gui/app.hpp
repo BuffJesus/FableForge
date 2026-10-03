@@ -1041,12 +1041,15 @@ private:
     // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:
-    struct ModFieldConflict { std::string field; std::vector<std::string> mods; std::string winner; };
+    struct ModFieldConflict { std::string field; std::vector<std::string> mods; std::string winner;
+        std::string type, baseline; std::vector<std::pair<std::string, std::string>> values;
+        bool hasValues = false; };
     struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
                          std::string winner; bool overridden = false, pickable = true, fieldMerged = false;
                          std::vector<ModFieldConflict> fields; };
     std::string modConflictWinner(const ModConflict& conflict) const;
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
+    std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
 private:
     std::vector<ModConflict> modConflicts_;
     std::map<std::string, std::string> modPicks_;

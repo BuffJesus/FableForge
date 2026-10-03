@@ -1865,6 +1865,10 @@ std::vector<std::string> App::stateDump() const {
         for (size_t i=0;i<first.fields.size();++i) {
             v.push_back("mods_first_field_"+std::to_string(i)+"="+first.fields[i].field);
             v.push_back("mods_first_field_winner_"+std::to_string(i)+"="+modFieldWinner(first,first.fields[i]));
+            if (first.fields[i].hasValues) {
+                v.push_back("mods_first_field_base_"+std::to_string(i)+"="+first.fields[i].baseline);
+                v.push_back("mods_first_field_value_"+std::to_string(i)+"="+modFieldValue(first,first.fields[i]));
+            }
         }
     }
     v.push_back("mods_missing_models=" + std::to_string(modNewMissingMeshes_.size()));

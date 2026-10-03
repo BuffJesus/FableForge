@@ -4777,6 +4777,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         std::string winner;               // whole-record winner, or "field-merged"
         bool fieldMerged = false;
         std::vector<forge::defdecode::FieldMerge::Conflict> fieldConflicts;
+        json fieldDetails = json::array();
     };
     std::vector<Conflict> conflicts;
     size_t applied = 0, addedTotal = 0, overridden = 0;
@@ -4828,6 +4829,27 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                     fieldConflictParts += fm.conflicts.size();
                     c.fieldMerged = true;
                     c.fieldConflicts = fm.conflicts;
+                    if (jsonOutput || reportOut) {
+                        for (const auto& field : fm.conflicts) {
+                            auto valueOf = [&](const forge::defdecode::Decoded& decoded) {
+                                if (field.partIndex) return decoded.fields.at(field.partIndex - 1);
+                                forge::defdecode::DecodedField prefix;
+                                prefix.type = "bytes";
+                                prefix.value = decoded.prefix;
+                                return prefix;
+                            };
+                            const auto baseline = valueOf(baseDec);
+                            json values = json::array();
+                            for (const auto& [mod, decoded] : dvs) {
+                                if (std::find(field.mods.begin(), field.mods.end(), mod) != field.mods.end())
+                                    values.push_back({{"mod", mod}, {"value", forge::defdecode::formatValue(valueOf(decoded))}});
+                            }
+                            c.fieldDetails.push_back({{"field", field.part}, {"mods", field.mods},
+                                {"winner", field.winner}, {"part_index", field.partIndex},
+                                {"type", baseline.type}, {"base_value", forge::defdecode::formatValue(baseline)},
+                                {"values", values}});
+                        }
+                    }
                     c.winner = fm.conflicts.empty() ? "field-merged (clean)"
                                                     : "field-merged";
                     didFieldMerge = true;
@@ -4871,14 +4893,10 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     if (jsonOutput || reportOut) {
         json conflictRows = json::array();
         for (const auto& c : conflicts) {
-            json fc = json::array();
-            for (const auto& f : c.fieldConflicts)
-                fc.push_back({{"field", f.part}, {"mods", f.mods},
-                              {"winner", f.winner}});
             conflictRows.push_back({{"record", c.record}, {"mods", c.mods},
                                     {"winner", c.winner},
                                     {"field_merged", c.fieldMerged},
-                                    {"field_conflicts", fc},
+                                    {"field_conflicts", c.fieldDetails},
                                     {"overridden", picks.count(c.record) > 0}});
         }
         json labels = json::array();

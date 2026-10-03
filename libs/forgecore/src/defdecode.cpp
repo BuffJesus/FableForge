@@ -179,7 +179,7 @@ FieldMerge mergeFields(
 
     // Merge one part given its base value and each version's value for it.
     // Applies the result into `dst`; records auto-merge / conflict in `r`.
-    auto mergePart = [&](const std::string& partName,
+    auto mergePart = [&](size_t partIndex, const std::string& partName,
                          const std::vector<uint8_t>& baseVal,
                          const std::vector<std::vector<uint8_t>>& modVals,
                          std::vector<uint8_t>& dst) {
@@ -206,6 +206,7 @@ FieldMerge mergeFields(
         // True conflict: pick override, else load order (last changer wins).
         FieldMerge::Conflict c;
         c.part = partName;
+        c.partIndex = partIndex;
         c.mods = changers;
         if (!pick.empty()) {
             if (keepBase) { dst = baseVal; c.winner = "vanilla"; }
@@ -229,12 +230,12 @@ FieldMerge mergeFields(
     {
         std::vector<std::vector<uint8_t>> modVals;
         for (const auto& [n, d] : versions) modVals.push_back(d.prefix);
-        mergePart("<prefix>", base.prefix, modVals, merged.prefix);
+        mergePart(0, "<prefix>", base.prefix, modVals, merged.prefix);
     }
     for (size_t i = 0; i < base.fields.size(); ++i) {
         std::vector<std::vector<uint8_t>> modVals;
         for (const auto& [n, d] : versions) modVals.push_back(d.fields[i].value);
-        mergePart(base.fields[i].name.empty() ? "<unnamed>"
+        mergePart(i + 1, base.fields[i].name.empty() ? "<unnamed>"
                                               : base.fields[i].name,
                   base.fields[i].value, modVals, merged.fields[i].value);
     }
