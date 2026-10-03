@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_texture_unicode_ui.py --install <root>` checks Unicode PNG inputs
+with CLI add/export and GUI replacement/export at both sizes. Invalid and
+sharing-locked inputs preserve the bank inventory; valid red/blue images are
+decoded independently, and Restore returns the complete copied install exactly.
+Image inputs and source bank hashes stay unchanged. `--gui <exe>` selects
+extracted-package binaries; all working files remain under the owned build tree.
+
 `tools/test_unicode_paths.py --install <root>` checks Windows CLI arguments and
 packaged GUI helper/schema lookup with accented, Greek and CJK characters,
 literal percent/ampersand characters and an unrelated working directory.

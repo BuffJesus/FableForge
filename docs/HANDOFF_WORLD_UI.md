@@ -1,5 +1,33 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated Unicode image opening
+
+Baseline build/texture-unicode-ufuv_2o5 used stripped e65d532 package binaries.
+An ASCII PNG add passed and an invalid input preserved the complete bank
+inventory, but a valid PNG in an accented/Greek/CJK folder failed with can't
+fopen. The CLI arguments already preserved the path; stb's optional Unicode
+filename handling is gated on MSVC in the vendored header, excluding MinGW.
+
+texturewrite::loadImage now opens the native Windows path with _wfopen and
+passes that read-only stream to the existing stb decoder. POSIX uses fopen.
+The stream closes through RAII. Texture formats, mip generation, BIG framing,
+write routing, backups and recovery policy are unchanged.
+
+build/texture-unicode-5zuixs_4 passes Unicode CLI add/export plus GUI
+replace/export at both sizes, independently decoded red/blue 64x64 pixels,
+invalid/sharing-locked input preservation, successful retry, exact complete
+scratch-install Restore and unchanged source/image hashes. The existing texture
+CLI input/refusal and add/replace/export/Restore regression passes at
+build/texture-cli-inputs-ly38mm97. All owned review Release targets build and all 37 CTest targets
+pass (26.18 seconds); this is not a completed full gate at the review source.
+
+The earlier e65d532 development ZIP is retained under the review checkout's
+dist/development/20261003-e65d532, SHA-256
+1e39ab52ed59e7a7a260fc65cd8c2ea251632c91dae03010ab0ba3d4cf37d775.
+Its extracted build/unicode-package-bsfmx5vg binaries pass all 19 Unicode
+process/file-pack cases at build/unicode-paths-qj4exido. That focused ZIP check
+predates this image-reader fix and is not a 26-workflow package result.
+
 ## 2026-10-03 isolated Windows Unicode process paths
 
 The owned review checkout D:/Code/FableForge-choice-review, branch

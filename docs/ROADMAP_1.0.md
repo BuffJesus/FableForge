@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 isolated image follow-up: MinGW texture imports open Unicode PNG
+paths natively before using the existing decoder. CLI add/export and GUI
+replace/export verify exact red/blue pixels and complete Restore at both sizes;
+37 core tests pass. Promotion/package validation remains pending, outside the
+frozen e7cb37b full gate. See HANDOFF_WORLD_UI for evidence and boundaries.
+
 2026-10-03 isolated follow-up: Windows CLI arguments, GUI helper launch and
 default schema lookup preserve Unicode paths. ASCII/Unicode controls and actual
 normal/compact file-pack deploy/undeploy recover exact scratch inventories.

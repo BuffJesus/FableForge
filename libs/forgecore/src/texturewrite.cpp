@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 
 #include "forge/lzo.hpp"
 
@@ -115,7 +118,16 @@ void blockPixels(const Image& img, int bx, int by, int px[16][3], int alpha[16])
 Image loadImage(const std::string& path, std::string& error) {
     Image out;
     int w = 0, h = 0, n = 0;
-    unsigned char* data = stbi_load(path.c_str(), &w, &h, &n, 4);
+    // stb's UTF-8 filename support is MSVC-only. Open a native Windows path
+    // ourselves so the MinGW build reads the same image as the folder picker.
+#ifdef _WIN32
+    FILE* opened = _wfopen(std::filesystem::path(path).c_str(), L"rb");
+#else
+    FILE* opened = std::fopen(path.c_str(), "rb");
+#endif
+    if (!opened) { error = "cannot read image " + path + ": cannot open file"; return out; }
+    const std::unique_ptr<FILE, decltype(&std::fclose)> input(opened, &std::fclose);
+    unsigned char* data = stbi_load_from_file(input.get(), &w, &h, &n, 4);
     if (!data) { error = std::string("cannot read image ") + path + ": " + (stbi_failure_reason() ? stbi_failure_reason() : "unknown"); return out; }
     out.width = w; out.height = h;
     out.rgba.assign(data, data + size_t(w) * size_t(h) * 4);
