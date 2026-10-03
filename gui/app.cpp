@@ -40,6 +40,26 @@ std::string lower(std::string s) {
     return s;
 }
 
+std::optional<Camera> readCamera(const nlohmann::json& c) {
+    try {
+        if (!c.is_object() || !c.contains("pos") || !c["pos"].is_array() || c["pos"].size()!=3) return {};
+        Camera view;
+        view.posX=c["pos"][0].get<float>(); view.posY=c["pos"][1].get<float>(); view.posZ=c["pos"][2].get<float>();
+        view.yaw=c.at("yaw").get<float>(); view.pitch=c.at("pitch").get<float>(); view.distance=c.at("distance").get<float>();
+        view.fovY=c.value("fov",view.fovY); view.flySpeed=c.value("speed",view.flySpeed);
+        if (std::isfinite(view.posX) && std::isfinite(view.posY) && std::isfinite(view.posZ) && std::isfinite(view.yaw) &&
+            std::isfinite(view.pitch) && std::isfinite(view.distance) && std::isfinite(view.fovY) && std::isfinite(view.flySpeed) &&
+            view.distance>0 && view.fovY>0 && view.fovY<3.14f && view.flySpeed>0 && std::fabs(view.pitch)<1.571f)
+            return view;
+    } catch (...) {}
+    return {};
+}
+
+nlohmann::json writeCamera(const Camera& camera) {
+    return {{"pos",{camera.posX,camera.posY,camera.posZ}}, {"yaw",camera.yaw}, {"pitch",camera.pitch},
+            {"distance",camera.distance}, {"fov",camera.fovY}, {"speed",camera.flySpeed}};
+}
+
 std::string groupOf(const std::string& name) {
     const size_t us = name.find('_');
     if (us == std::string::npos) {
@@ -227,6 +247,7 @@ bool App::init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd,
         scanInstall(root);
         std::error_code ecA,ecB;
         const auto active=fs::weakly_canonical(root,ecA), saved=fs::weakly_canonical(sessionInstall_,ecB);
+        if (sessionInstall_.empty() || ecA || ecB || lower(active.string())!=lower(saved.string())) mapViews_.clear();
         if (!sessionMap_.empty() && !sessionInstall_.empty() && !ecA && !ecB && lower(active.string())==lower(saved.string()) && findEntry(sessionMap_)) {
             selectMap(sessionMap_);
             if (documentLoaded()) { setEditMode(sessionEdit_); setEditTab(editTab_); }
@@ -649,20 +670,19 @@ void App::loadSettings(std::string& savedInstall) {
         sessionMap_=j.value("lastMap","");
         sessionEdit_=j.value("editMode",false);
         terrainMode_=std::clamp(j.value("terrainMode",terrainMode_),0,18);
-        try { if (j.contains("camera") && j["camera"].is_object()) {
-            const auto& c=j["camera"];
-            if (c.value("map","")==sessionMap_ && c.contains("pos") && c["pos"].is_array() && c["pos"].size()==3) {
-                Camera view;
-                view.posX=c["pos"][0].get<float>(); view.posY=c["pos"][1].get<float>(); view.posZ=c["pos"][2].get<float>();
-                view.yaw=c.at("yaw").get<float>(); view.pitch=c.at("pitch").get<float>(); view.distance=c.at("distance").get<float>();
-                view.fovY=c.value("fov",view.fovY); view.flySpeed=c.value("speed",view.flySpeed);
-                if (std::isfinite(view.posX) && std::isfinite(view.posY) && std::isfinite(view.posZ) && std::isfinite(view.yaw) &&
-                    std::isfinite(view.pitch) && std::isfinite(view.distance) && std::isfinite(view.fovY) && std::isfinite(view.flySpeed) &&
-                    view.distance>0 && view.fovY>0 && view.fovY<3.14f && view.flySpeed>0 && std::fabs(view.pitch)<1.571f)
-                    sessionCamera_=view;
+        try {
+            if (j.contains("camera") && j["camera"].is_object() && j["camera"].value("map","")==sessionMap_)
+                sessionCamera_=readCamera(j["camera"]);
+        } catch (...) { sessionCamera_.reset(); }
+        if (j.contains("mapViews") && j["mapViews"].is_object()) {
+            for (const auto& [name,data] : j["mapViews"].items()) {
+                try {
+                    const auto view=readCamera(data);
+                    const int mode=data.value("mode",0);
+                    if (view && mode>=0 && mode<=int(ViewMode::Height)) mapViews_[name]={*view,ViewMode(mode)};
+                } catch (...) {} // One malformed view does not discard the others.
             }
         }
-        } catch (...) { sessionCamera_.reset(); }
         settings_.outDir = j.value("out_dir", settings_.outDir);
         settings_.autosave = j.value("autosave",settings_.autosave);
         settings_.autosaveMinutes = std::clamp(j.value("autosaveMinutes",settings_.autosaveMinutes),1,30);
@@ -713,10 +733,17 @@ void App::saveSettings() const {
             {"effectBackground", {effectBackground_[0],effectBackground_[1],effectBackground_[2]}},
             {"effectShowGrid", effectShowGrid_},
         };
-        if (previewLoaded() && documentLoaded()) j["camera"]={
-            {"map",selectedName_}, {"pos",{camera_.posX,camera_.posY,camera_.posZ}},
-            {"yaw",camera_.yaw}, {"pitch",camera_.pitch}, {"distance",camera_.distance},
-            {"fov",camera_.fovY}, {"speed",camera_.flySpeed}};
+        auto views=mapViews_;
+        if (previewLoaded() && documentLoaded() && lastFramedFor_==selectedName_) {
+            views[selectedName_]={camera_,mode_};
+            j["camera"]=writeCamera(camera_);
+            j["camera"]["map"]=selectedName_;
+        }
+        j["mapViews"]=nlohmann::json::object();
+        for (const auto& [name,view] : views) {
+            j["mapViews"][name]=writeCamera(view.camera);
+            j["mapViews"][name]["mode"]=int(view.mode);
+        }
         std::ofstream(settingsPath()) << j.dump(2);
     } catch (...) {}
 }
@@ -749,6 +776,7 @@ void App::scanInstall(const std::string& picked) {
             pushLog("install: a load or write is still running; try again when it finishes", 1);
             return;
         }
+        mapViews_.clear(); sessionCamera_.reset(); sessionMap_.clear();
         selectedName_.clear(); docLoadedFor_.clear(); previewLoadedFor_.clear();
         foliageLoadedFor_.clear(); previewPendingName_.clear(); foliagePendingName_.clear();
         neighboursFor_.clear(); lastFramedFor_.clear();
@@ -984,6 +1012,7 @@ void App::selectMap(const std::string& nameOrKey) {
     auto it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.key == nameOrKey; });
     if (it == maps_.end()) it = std::find_if(maps_.begin(), maps_.end(), [&](const MapEntry& m) { return m.name == nameOrKey; });
     if (it == maps_.end()) return;
+    if (previewLoaded() && documentLoaded() && lastFramedFor_==selectedName_) mapViews_[selectedName_]={camera_,mode_};
     if (it->key!=sessionMap_) sessionCamera_.reset();
     selectedName_ = it->key;
     scrollToSelected_ = true;
@@ -1289,8 +1318,11 @@ void App::pollWorkers() {
             pushLog("Preview failed for " + r.name + ": " + r.error, 2);
         } else if (r.name == selectedName_) {
             // Re-bakes of the same map (gain change, textures arriving) keep the camera.
+            const auto remembered=mapViews_.find(r.name);
+            const bool restoreView=lastFramedFor_!=r.name && remembered!=mapViews_.end() && documentLoaded();
             const bool restoreCamera=sessionCamera_.has_value() && r.name==sessionMap_ && documentLoaded();
-            renderer_.upload(r.scene, camera_, !restoreCamera && lastFramedFor_ != r.name);
+            renderer_.upload(r.scene, camera_, !restoreCamera && !restoreView && lastFramedFor_ != r.name);
+            if (restoreView) { camera_=remembered->second.camera; mode_=remembered->second.mode; }
             if (restoreCamera) { camera_=*sessionCamera_; sessionCamera_.reset(); }
             lastFramedFor_ = r.name;
             previewScene_ = std::move(r.scene);

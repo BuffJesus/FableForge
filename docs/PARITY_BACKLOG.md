@@ -1751,8 +1751,8 @@ Effort S. Value med.
 
 2026-10-02: last-map camera/session persistence and View > Map camera FOV
 control are implemented. Slider limits, typed degrees, reset and exact restart
-restoration pass stock/loose at normal/compact sizes. Camera bookmarks and a
-per-map view library remain open. Native degrees-to-turn setter and Forge's
+restoration pass stock/loose at normal/compact sizes. Each map now retains its complete camera and rendering mode across
+revisits and restart, scoped to the current install. Named bookmarks remain open. Native degrees-to-turn setter and Forge's
 radian conversion are recorded separately in HANDOFF_WORLD_UI.
 
 *gap, effort S, value low*

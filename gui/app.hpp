@@ -341,6 +341,8 @@ private:
     bool settingsEnabled() const;
     std::string sessionMap_, sessionInstall_;
     std::optional<Camera> sessionCamera_;
+    struct MapView { Camera camera; ViewMode mode=ViewMode::Textured; };
+    std::map<std::string,MapView> mapViews_;
     bool sessionEdit_ = false;
     // what the chosen folder offers: each false switches a feature off with a reason
     // levels = FinalAlbion.wad or the loose FinalAlbion\*.lev files (modders' extracted installs);

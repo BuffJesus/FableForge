@@ -13,7 +13,8 @@ version is chosen; validation is recorded at release time, not here.
   its painting controls. The pinned cursor is labeled in the viewport.
 
 - **Remembered editor session.** Reopening the same install returns to the last
-  map, camera, View/Edit mode, editing tab and terrain tool.
+  map, camera, View/Edit mode, editing tab and terrain tool. Each visited map
+  retains its own camera and rendering mode across revisits and restart.
 
 - **Saved snapshots.** Ctrl+B or Create dated snapshot keeps a restore point for
   the current map's objects and terrain. Saved snapshots lists captures with

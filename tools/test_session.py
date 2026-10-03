@@ -45,34 +45,57 @@ def main():
             'mouse_move slider_camera_fov','key_down Ctrl','click slider_camera_fov','key_up Ctrl',
             'input_text 82','key_down Enter','key_up Enter','frames 3',
             'assert_state_min camera_fov_degrees 81.99','assert_state_max camera_fov_degrees 82.01',
-            'assert_state doc_dirty 0','assert_state terrain_draft_dirty 0','mouse_move 20 20','frames 3',
+            'mode Height','assert_state doc_dirty 0','assert_state terrain_draft_dirty 0','mouse_move 20 20','frames 3',
             f'screenshot {(case/"camera-fov.png").as_posix()}',
             'key_down Escape','key_up Escape','frames 3','key_down Escape','key_up Escape','frames 3','quit'])
         assert first['lastMap']=='TeleporterGreatwood' and first['terrainMode']==16
         second=run('restore',['wait_maps','wait_ready','wait_loaded','wait_foliage',
             'assert_state selected TeleporterGreatwood','assert_state edit_mode 1',
-            'assert_state edit_tab 1','assert_state terrain_mode 16',
+            'assert_state edit_tab 1','assert_state terrain_mode 16','assert_state mode Height',
             'assert_state_min camera_fov_degrees 81.99','assert_state_max camera_fov_degrees 82.01','quit'])
         assert second['camera']==first['camera'],(first['camera'],second['camera'])
         default=run('default-auto',['wait_maps','wait_ready','assert_state selected','quit'],False)
         assert default==second
         malformed=copy.deepcopy(first);malformed['camera']['pos'][0]='bad'
+        malformed['mapViews']['TeleporterGreatwood']['pos'][0]='bad'
         settings.write_text(json.dumps(malformed),encoding='utf-8')
         invalid=run('invalid-camera',['wait_maps','wait_ready','wait_loaded','wait_foliage',
             'assert_state selected TeleporterGreatwood','assert_state edit_mode 1','quit'])
         assert isinstance(invalid['camera']['pos'][0],(int,float))
+        assert invalid['camera']!=first['camera']
         different=dict(first);different['install']=str(case/'other-install')
         settings.write_text(json.dumps(different),encoding='utf-8')
-        run('install-mismatch',['wait_maps','wait_ready','assert_state selected','quit'])
+        mismatch=run('install-mismatch',['wait_maps','wait_ready','assert_state selected','quit'])
+        assert mismatch['mapViews']=={}
         missing=dict(first);missing['lastMap']='MissingMap'
         settings.write_text(json.dumps(missing),encoding='utf-8')
-        run('missing-map',['wait_maps','wait_ready','assert_state selected','quit'])
+        missing_last=run('missing-map',['wait_maps','wait_ready','assert_state selected',
+            'select TeleporterGreatwood','wait_loaded','wait_foliage','assert_state mode Height','quit'])
+        assert missing_last['camera']==first['camera']
         settings.write_text(json.dumps(first),encoding='utf-8')
         switched=run('switch',['wait_maps','wait_ready','wait_loaded','wait_foliage',
-            'select LookoutPoint','wait_loaded','wait_foliage','quit'])
+            'snapshot_camera','select LookoutPoint','wait_loaded','wait_foliage',
+            'camera 21 22 35 0.3 0.5 18','mode Wireframe',
+            'select TeleporterGreatwood','wait_loaded','wait_foliage','assert_camera_back',
+            'assert_state mode Height','assert_state_min camera_fov_degrees 81.99',
+            'assert_state_max camera_fov_degrees 82.01',
+            'select LookoutPoint','wait_loaded','wait_foliage','assert_state mode Wireframe','quit'])
         assert switched['lastMap']=='LookoutPoint' and switched['camera']['map']=='LookoutPoint'
         assert switched['camera']!=first['camera']
-        print('PASS session capture, restore, invalid camera and install/map isolation',size,flush=True)
+        assert switched['mapViews']['TeleporterGreatwood']==first['mapViews']['TeleporterGreatwood']
+        returned=run('return-after-restart',['wait_maps','wait_ready','wait_loaded','wait_foliage',
+            'assert_state selected LookoutPoint','assert_state mode Wireframe',
+            'select TeleporterGreatwood','wait_loaded','wait_foliage','assert_state mode Height','quit'])
+        assert returned['camera']==first['camera'],(returned['camera'],first['camera'])
+        broken=copy.deepcopy(switched)
+        broken['mapViews']['LookoutPoint']['mode']='bad'
+        broken['camera']['map']=12
+        settings.write_text(json.dumps(broken),encoding='utf-8')
+        valid_other=run('invalid-view-isolation',['wait_maps','wait_ready','wait_loaded','wait_foliage',
+            'assert_state selected LookoutPoint','assert_state edit_mode 1',
+            'select TeleporterGreatwood','wait_loaded','wait_foliage','assert_state mode Height','quit'])
+        assert valid_other['camera']==first['camera']
+        print('PASS session/FOV, per-map views, restart and invalid/install isolation',size,flush=True)
 
 
 if __name__=='__main__':

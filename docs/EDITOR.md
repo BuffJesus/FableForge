@@ -1203,6 +1203,9 @@ crash-recovery archive described above.
 The editor remembers the last map and its camera, View/Edit mode, editing tab
 and terrain tool on exit. Reopening the same install restores that session.
 If the map is missing or camera data is invalid, it uses the normal fallback.
+Each visited map also remembers its own camera and rendering mode when you
+switch away and return, including after restart. These views belong to the
+current install; changing installs starts a fresh set.
 This remembers your view; use Save draft or snapshots to keep edits.
 
 **View > Map camera** adjusts vertical field of view from 30 to 100 degrees.

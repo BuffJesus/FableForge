@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Map revisits now restore each map's camera, FOV and rendering mode, including
+after restart. New maps use normal framing; views are scoped to the current
+install. Stock/loose normal/compact round-trip and malformed-data checks pass.
+See HANDOFF_WORLD_UI.
+
+
 View > Map camera now adjusts vertical FOV in degrees, with typed input and reset.
 Stock/loose normal/compact controls and restart restoration pass; session metadata
 stores the view without editing the map. See HANDOFF_WORLD_UI.

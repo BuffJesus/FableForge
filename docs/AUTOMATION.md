@@ -12,7 +12,9 @@ States `brush_pinned`, `brush_pin_x` / `brush_pin_y` expose the latch;
 `menu_view` / `menu_map_camera` expose the FOV submenu; `slider_camera_fov`
 and `button_camera_fov_reset` exercise its real controls. `camera_fov_degrees`
 reports the vertical angle. Session checks cover limits, typed input, reset,
-clean document state and process restoration.
+clean document state and process restoration. They also check per-map camera /
+render-mode retention across revisits and restart, malformed-view isolation and
+install scoping.
 
 `tools/test_session.py --install <root>` checks exact camera and map/tab/tool
 restoration across processes, malformed camera fallback, missing maps,

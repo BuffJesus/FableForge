@@ -1,6 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
 
+## 2026-10-02 continuation: retain each map's view
+
+Returning to a visited map now restores its complete camera (eye, yaw/pitch,
+focus distance, FOV and fly speed) and Textured/Wireframe/Walkable/Height mode.
+A new map still uses normal framing. Texture arrivals and terrain rebakes keep
+the active view. Capture happens only for the selected, loaded document and
+matching uploaded preview; an old camera is never attributed to a pending map.
+Map views persist as settings metadata scoped to the current install. Accepted
+install switches clear them; a different startup install ignores them. Default
+scripted runs still skip settings I/O, while in-process map revisits retain views.
+
+Camera JSON validation is shared with the previous session reader. One malformed
+view is ignored without dropping valid peers or unrelated settings. Missing
+last-map keys still allow surviving views to be used on later map selection.
+The older single-camera record remains readable. This per-map convenience extends
+native current-view SaveSettings behavior; no native per-map-library claim.
+
+Expanded tools/test_session.py passes stock/loose at normal/compact sizes;
+final evidence build/session-ui-ii2y2a5p / build/session-ui-k2s6qjx4. It verifies
+camera/FOV/render-mode round trips, exact camera retention after restart,
+first-visit framing, malformed legacy and per-map records, surviving valid peer
+views, missing last maps, install isolation and the prior FOV input checks.
+Core unchanged. Named bookmarks and World-tab session state remain open.
+
+
+
 ## 2026-10-02 continuation: map-camera field of view
 
 View > Map camera now provides a vertical FOV slider in degrees (30-100),
