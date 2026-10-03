@@ -23,7 +23,7 @@ def write_package_identity(root, stage, version):
         pass  # Source archives and machines without Git still package normally.
     files = {}
     for path in sorted(stage.rglob('*')):
-        if path.is_file() and path.name != 'PACKAGE_INFO.json':
+        if path.is_file() and path != stage / 'PACKAGE_INFO.json':
             files[path.relative_to(stage).as_posix()] = {
                 'bytes': path.stat().st_size,
                 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}

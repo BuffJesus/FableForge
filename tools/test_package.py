@@ -13,6 +13,23 @@ import zipfile
 from urllib.parse import unquote
 
 
+def verify_package_identity(package):
+    manifest = package / 'PACKAGE_INFO.json'
+    if not manifest.exists():
+        return None  # Older validated archives predate package identities.
+    info = json.loads(manifest.read_text(encoding='utf-8'))
+    assert info['format'] == 1
+    assert package.name == f"FableForge-{info['version']}-win64"
+    actual = {p.relative_to(package).as_posix(): p for p in package.rglob('*')
+              if p.is_file() and p != manifest}
+    assert set(info['files']) == set(actual), 'package inventory differs from manifest'
+    for name, path in actual.items():
+        data = path.read_bytes()
+        assert len(data) == info['files'][name]['bytes'], name
+        assert hashlib.sha256(data).hexdigest() == info['files'][name]['sha256'], name
+    return len(actual)
+
+
 def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -36,6 +53,9 @@ def main():
     packages = [path for path in unpack.iterdir() if path.is_dir()]
     assert len(packages) == 1
     package = packages[0]
+    identity_files = verify_package_identity(package)
+    if identity_files is not None:
+        print('packaged file identities: PASS', identity_files, flush=True)
     for name in ('FableForge.exe', 'forge.exe', 'forge-tools.exe', 'README.md', 'LICENSE',
                  'docs/re_reference/def_schema.json', 'presets'):
         assert (package / name).exists(), name
