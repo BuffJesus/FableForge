@@ -6,7 +6,8 @@ native Windows paths. Normal/compact deploy/undeploy and pixel/Restore checks,
 locked/missing compiler retry and matching real compile outputs pass. Primary
 Release builds and the documentation checker pass at product source 6387b06;
 the owned review passes 37 core tests. The d5347ea package passes 27 extracted
-workflows. Frozen e7cb37b passes all 126 runtime checks with one separate prose
+workflows; the 6387b06 compiler package passes 28 plus real bundled-compiler
+Unicode compiles. Frozen e7cb37b passes all 126 runtime checks with one separate prose
 documentation failure; it excludes the Unicode increments. See HANDOFF_WORLD_UI.
 
 2026-10-03 promoted follow-up: saved choices outside the latest conflict report

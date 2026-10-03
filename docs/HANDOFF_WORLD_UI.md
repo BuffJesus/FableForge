@@ -18,7 +18,14 @@ The owned field review passes all 37 CTest targets at the same product source
 (21.66 seconds; build/core_unicode_compiler_20261003.log).
 
 The d5347ea extracted package passes all 27 runtime workflows as recorded below.
-The 6387b06 compiler package is under extracted validation in the field review.
+The 6387b06 compiler package passes all 28 extracted workflows in
+D:/Code/FableForge-field-review/build/package-smoke-sxik2p4w/result.json,
+with 115 Markdown links and four guide images checked. Its retained application
+ZIP at dist/development/20261003-6387b06 has SHA-256
+394939d8e632bdea68bb25d54814dc738ff6d6e171db48f8fc138928829f19c5.
+The stripped packaged tool and bundled defc also pass the real Unicode
+Controller Support workflow at build/egocore-workspace-0tgdr1tw in that review;
+all normalized output hashes match the prior ASCII/Unicode results exactly.
 Current product source is outside the frozen e7cb37b full-gate boundary; its
 Unicode changes have the focused/real-compile checks documented below. No game
 was launched, live bank written, asset published or prior package replaced.

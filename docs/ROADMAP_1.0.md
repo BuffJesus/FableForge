@@ -5,7 +5,8 @@ checks, zero skipped integration checks and one prose-triggered documentation
 failure. That wording is corrected and the checker passes after promotion to
 6387b06. Primary Release targets build; Unicode process, image and compiler
 changes have focused, real-compile and 37-core-test coverage. The d5347ea
-extracted package passes 27 workflows; compiler-package validation is ongoing.
+extracted package passes 27 workflows; the 6387b06 compiler package passes all
+28 and its bundled compiler passes real Unicode Controller Support compiles.
 See HANDOFF_WORLD_UI for exact source and test boundaries.
 
 2026-10-03: all 27 extracted runtime checks pass for the d5347ea Unicode
