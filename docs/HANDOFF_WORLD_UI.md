@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 primary integration checkpoint
+
+Primary feat/editor-ui-shell through 169608b integrates the reviewed isolated
+smoke correction, field details, byte-safe string formatting, field values and
+conflict search. The pre-existing content-override proposal/links were preserved
+through a scoped stash and clean restoration. Its audit now distinguishes the
+starting implementation from the delivered increments and remaining backlog.
+
+Frozen 330d4b5 broad gate: 105 passing checks, one failed ui-smoke pixel fixture,
+no skipped integration checks. Log: build/check_all_ground_smear_write_labels_20261003.log.
+Failure evidence build/ui-smoke-pcd0wpzn has walkability/height differences 0.22/
+0.23 against unchanged 0.25 thresholds because foliage occluded the terrain.
+The fixture waits for foliage and hides the object/foliage layers for mode
+comparisons; dedicated layer workflows retain their coverage. The original
+whole run remains recorded as SOME CHECKS FAILED, not relabelled ALL PASS.
+
+After integration: owning full Release build passes, 37/37 CTest targets pass
+(22.10 s), corrected ui smoke passes at build/ui-smoke-lvkc987a with GLB/pixel
+checks. Field values/search/picks/independent merged bytes pass normal/compact
+at build/mod-field-details-qxbzinie; 401-file search/choice/reset/source hashes
+pass at build/mod-conflict-search-1pfa029e. Existing saved-winner/reset/deploy
+passes at build/mod-winner-refresh-18gk5mpr. Docs-command checks pass (32 forge,
+37 tools). Retail Sword of Aeons JSON at build/sword_aeons_decode_20261003.json
+parses and source game.bin SHA256 is unchanged. This is focused post-integration
+coverage, not a fresh whole-gate run for the newer source. No live-game writes,
+runtime validation, publication or native-format coverage expansion occurred.
+
 ## 2026-10-03 searchable mod conflicts
 
 Conflicts now have case-insensitive search over identity/label, kind, contributor

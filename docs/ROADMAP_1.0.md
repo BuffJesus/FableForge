@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03: Mods now compares residual field baseline/contributor/winner values
+and searches conflicts before the display cap. The frozen 330d4b5 gate passed
+105 checks with one foliage-occluded smoke fixture failure; corrected smoke and
+focused integrated workflows pass, alongside 37/37 CTest targets. Exact source
+and validation boundaries are in HANDOFF_WORLD_UI. Per-field choices/profiles
+remain in the linked content-override backlog.
+
 Ground now offers Smear: frozen-neighbour blending into three distinct themes,
 one application per click and optional Repeat. Theme-only saves preserve
 passability bytes. Core and stock/loose normal/compact workflows pass; native
@@ -843,6 +850,12 @@ Corpus for testing: `work/nexus_mods/CATALOGUE.md` (2026-09-19; 19 small mods he
 ones in `D:/Downloads`: Aeon Edition, Lost Content, Project Seasons, AlbionSecrets Modpack, Expanded
 Chapters, Dragon Cliff). What a Fable mod *is*, by archive contents: `.fmp` (dominant), loose
 game-root trees, bsdiff `.patch`, `.qst`, EgoCore `Mods/<Name>/` folders, whole-file GB packs.
+
+Investigation backlog (2026-10-02): [fine-grained content overrides](modding/CONTENT_OVERRIDES.md)
+for large mod stacks: compare baseline/contributors/result, select components,
+records/assets and supported fields, persist compatibility choices, and validate
+dependencies across FMPs and overhauls. Includes the historic FMP corpus as fixtures;
+design proposal, not shipped functionality.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

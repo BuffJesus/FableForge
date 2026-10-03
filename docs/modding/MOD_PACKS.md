@@ -2,6 +2,10 @@
 
 # Mod packs, load order, and conflict resolution
 
+Future investigation: [fine-grained content overrides](CONTENT_OVERRIDES.md)
+describes choosing contributions within FMPs and large overhauls, item/field
+comparison, persistent compatibility choices, and dependency validation.
+
 EgoCore text compilation uses a separate temporary workspace per normalization,
 including concurrent builds of the same mod into different outputs. Workspaces
 are cleaned on success and compiler failure. This does not enable concurrent
