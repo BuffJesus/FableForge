@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 external named-target regression (test only)
+
+Choice review moved to feat/forge-fmp-external-target-review-20261003 based on
+359a048; the accepted Add-feedback branch remains separately available there.
+No product code changes in this follow-up. tools/test_fmp_links.py now creates an
+independent provider bank with one extra named camera definition. The FMP names
+that target but cannot find it during initial normalization. Both sources append
+a record, so the provider's source ID 14764 relocates to final ID 14765. An explicit
+FMP field choice must resolve to the provider's final named identity, preserving
+its entire payload. This exercises deferred lookup across sources, not just an
+unused missing target or an FMP's own new entry.
+
+build/fmp-links-u8bd01kr passes on the review CLI; zfx37ctq/result.json passes
+with the d2c1100 extracted CLI from its literal-token/ampersand package path and
+unrelated working directory. All existing standalone retail/Aeon/composed,
+choice, byte-preservation and missing-target cases still pass. The independent
+fixture writer now supports appended identities/names and recomputes occurrence
+indices correctly. Real source inputs remain unchanged. The standard gate will
+exercise this expanded audit after integration; the RUNNING frozen primary
+b1eb3b9 gate uses the earlier committed audit. No new full-gate claim.
+
 ## 2026-10-03 extracted Add-feedback package, integration pending
 
 Choice review product eecf69d passes the FOUR focused extracted small-bank UI

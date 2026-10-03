@@ -48,15 +48,26 @@ def rewrite_bank(original, output, entries):
     """Independent fixture writer: preserve the identity table, replace chunks."""
     defs = output/'data/CompiledDefs'; defs.mkdir(parents=True)
     source = original/'data/CompiledDefs'
-    shutil.copyfile(source/'names.bin', defs/'names.bin')
     raw = (source/'game.bin').read_bytes(); chunks = []; offsets = []; total = 0
-    assert u32(raw, 9) == len(entries)
+    old_count = u32(raw, 9); assert old_count <= len(entries)
+    names = bytearray((source/'names.bin').read_bytes())
+    main_table = bytearray(raw[13:13+old_count*12])
+    for index,entry in enumerate(entries[old_count:], old_count):
+        matches = [i for i,e in enumerate(entries[:old_count]) if e['definition'] == entry['definition']]
+        assert matches, 'new fixture row must use an existing definition type'
+        name_offset = len(names)-20+4
+        names += struct.pack('<I', crc0(entry['name']))+entry['name'].encode('ascii')+b'\0'
+        main_table += struct.pack('<III', u32(raw, 13+matches[0]*12), name_offset,
+                                  sum(e['definition'] == entry['definition'] for e in entries[:index]))
+    struct.pack_into('<I', names, 8, u32(names, 8)+len(entries)-old_count)
+    struct.pack_into('<I', names, 12, len(names)-24)
+    (defs/'names.bin').write_bytes(names)
     for index, entry in enumerate(entries):
         block = zlib.compress(struct.pack('<H', 2)+entry['data'])
         offsets.append((index, total)); chunks.append(block); total += len(block)
     offsets.append((len(entries), total))
     table = b''.join(struct.pack('<II', *item) for item in offsets)
-    (defs/'game.bin').write_bytes(raw[:13+len(entries)*12]+struct.pack('<I', len(offsets))+
+    (defs/'game.bin').write_bytes(raw[:9]+struct.pack('<I', len(entries))+main_table+struct.pack('<I', len(offsets))+
         table+struct.pack('<I', total)+b''.join(chunks))
 
 
@@ -274,12 +285,39 @@ def main():
     assert all(p.read_bytes() == data for p,data in preserved_out.items())
     reports['composed_missing'] = {'unused_version_allowed': True, 'selected_version_refused': True,
                                    'prior_output_preserved': True}
+    # Another source may provide a named target absent during FMP normalization.
+    # Both packages add an entry, so its final ID also differs from the provider's.
+    provider = work/'Provider'
+    supplied_name = 'Z'*len(target)
+    supplied_entry = next(e for e in entries if e['name'] == 'CAMERA_MANAGER_PC_MAIN')
+    provider_entries = entries+[dict(supplied_entry, name=supplied_name)]
+    rewrite_bank(base, provider, provider_entries)
+    provider_base = work/'provider-base'; shutil.copytree(base, provider_base)
+    for source in (missing_fmp, provider):
+        added = subprocess.run([str(tool), 'mods', 'add', str(provider_base), str(source)],
+                               capture_output=True, timeout=60)
+        assert added.returncode == 0, added.stderr
+    provider_out = work/'provider-output'
+    result = subprocess.run([str(tool), 'mods', 'build', str(provider_base), str(provider_out),
+                             '--fields', str(schema), '--picks', str(selected_picks)], capture_output=True, timeout=120)
+    (work/'provided-target.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode == 0, result.stderr
+    final_entries = read_bank(provider_out)
+    final_ids = {e['name']:i for i,e in enumerate(final_entries) if e['name']}
+    provided_payload = final_entries[final_ids[owner]]['data']
+    actual = u32(provided_payload, provided_payload.index(struct.pack('<I', crc0(field)))+4)
+    assert actual == final_ids[supplied_name]
+    assert actual != len(entries), 'fixture must exercise a relocated provider ID'
+    assert final_entries[actual]['data'] == supplied_entry['data']
+    reports['external_target'] = {'source_id': len(entries), 'final_id': actual,
+                                   'resolved_name': supplied_name, 'provider_payload_preserved': True}
     assert {p:digest(p) for p in sources}==before
     (work/'result.json').write_text(json.dumps(reports,indent=2),encoding='utf-8')
     for label in ('retail', 'aeon', 'merged'):
         report = reports[label]; print(label,report['checked'],'references checked;',len(report['errors']),'mismatches',flush=True)
     assert all(not reports[label]['errors'] for label in ('retail', 'aeon', 'merged')),'FMP named references do not resolve to their intended targets; see result.json'
     print('Four conflict choices, payload preservation and malformed-output refusal: PASS', flush=True)
+    print('External target relocation and selected/unused missing-target checks: PASS', flush=True)
 
 
 if __name__=='__main__': main()
