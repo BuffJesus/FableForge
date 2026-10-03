@@ -16,7 +16,7 @@ object-texture and model-texture controls). File writer/staging policy is unchan
 
 Owned Release GUI build and build/texture-export-failure-pt79fvv0 pass both sizes:
 actual buttons, error bounds/wrapping after toast dismissal, exact old-output and
-unrelated-output preservation while locked, no leaked staging paths, same-process
+unrelated-output preservation while locked, no leaked staging workspaces, same-process
 unlock/retry and decoded green PNG pixels. Compact also clears the error by
 selecting another texture. Source hashes and GUI install banks stay unchanged.
 Compact failed screenshot reviewed. Related destination preview/export pixels
