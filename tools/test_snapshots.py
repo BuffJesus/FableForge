@@ -64,6 +64,13 @@ def main():
             'assert_state snapshot_count 0','quit'])
         remaining=list((case/'snapshots').rglob('*.ffsnapshot'))
         assert len(remaining)==1 and remaining[0].read_bytes()==history[remaining[0]]
+        run('isolated',['wait_maps','wait_ready','select TeleporterGreatwood','wait_loaded',
+            'wait_foliage','edit 1','tour -1','set autosave 0','terrain_set_all 42',
+            'key_down Ctrl','key_down B','frames 3','key_up B','key_up Ctrl',
+            'assert_state recovery_busy 0']+menu+['click menu_snapshot_create','frames 3',
+            'assert_state recovery_busy 0','key_down Escape','key_up Escape','frames 2',
+            'key_down Escape','key_up Escape','frames 2']+menu+['click menu_snapshots','frames 4',
+            'assert_state snapshots_open 0','assert_state snapshot_count 0','quit'])
         print('PASS dated snapshot capture, reopen, restore, undo and deletion',size,flush=True)
 
 

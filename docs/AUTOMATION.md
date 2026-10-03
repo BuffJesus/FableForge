@@ -13,7 +13,9 @@ the File menu, process reopen, restore/undo/redo, retention after Save draft,
 cancel without removing recovery, Escape cancellation and confirmed deletion
 at normal and compact sizes. It uses an owned recovery root and sibling
 snapshots directory. States `snapshots_open` / `snapshot_count` expose the
-library. Menu widgets are `menu_snapshot_create` / `menu_snapshots`; library
+library. Both snapshot menu items and the library require an owned recovery
+root in scripted runs; the harness also checks that unconfigured scripts cannot
+open the library or capture via either shortcut/menu path. Menu widgets are `menu_snapshot_create` / `menu_snapshots`; library
 widgets are `btn_snapshot_create`, `btn_snapshots_refresh`,
 `btn_snapshot_restore_<index>`, `btn_snapshot_delete_<index>` and
 `btn_snapshot_delete_confirm_<index>`. Historical restore shares the recovery

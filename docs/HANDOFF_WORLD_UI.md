@@ -1,5 +1,20 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 follow-up: isolate scripted snapshot browsing
+
+Scripted runs now need an explicit owned recovery root before either manual
+snapshot menu item can act. The library also closes and clears pending Delete
+when the root is absent or its tool context closes. This matches the existing
+capture and rotating-archive isolation guards and avoids implicit app-data
+history browsing by default scripts.
+
+Release GUI rebuild and expanded snapshot harness pass stock/loose at both
+sizes (`build/snapshots-ui-aeb70h4f` / `build/snapshots-ui-j9f0e4z7`). The new
+unconfigured-script case checks Ctrl+B, both menu paths, no worker and no open
+library. All prior owned capture/restore/delete cases pass. Core unchanged;
+the full 104-check checkpoint remains scoped to source a987019.
+
+
 ## 2026-10-02 full checkpoint: snapshots and restored sessions
 
 Frozen source `a987019`, primary Release binaries: `tools/check_all.py --no-build`

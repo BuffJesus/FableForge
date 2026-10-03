@@ -3974,8 +3974,9 @@ void App::refreshSnapshots() {
 }
 
 void App::drawSnapshotsWindow() {
-    if (!documentLoaded() || texturesMode_ || worldMode_ || modsMode_) { snapshotsOpen_=false; return; }
-    if (!snapshotsOpen_) { snapshotDeletePending_.clear(); return; }
+    if (!snapshotsOpen_ || !documentLoaded() || texturesMode_ || worldMode_ || modsMode_ || (auto_.active() && recoveryRoot_.empty())) {
+        snapshotsOpen_=false; snapshotDeletePending_.clear(); return;
+    }
     if (snapshotsFor_!=snapshotDirectory()) refreshSnapshots();
     using theme::S;
     const std::string sub=doc_.mapName()+" / Saved restore points for objects and terrain.";

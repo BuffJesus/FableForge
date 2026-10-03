@@ -2147,9 +2147,10 @@ void App::drawMenuBar() {
             }
             auto_.registerWidget("menu_recovery_restore");
             ImGui::Separator();
-            if (ImGui::MenuItem("Create dated snapshot","Ctrl+B",false,documentLoaded() && !doc_.editActive() && !activeFileJob())) createSnapshot();
+            const bool snapshotAllowed=documentLoaded() && (!auto_.active() || !recoveryRoot_.empty());
+            if (ImGui::MenuItem("Create dated snapshot","Ctrl+B",false,snapshotAllowed && !doc_.editActive() && !activeFileJob())) createSnapshot();
             auto_.registerWidget("menu_snapshot_create");
-            if (ImGui::MenuItem("Saved snapshots...",nullptr,false,documentLoaded())) { snapshotsOpen_=true; snapshotsFor_.clear(); }
+            if (ImGui::MenuItem("Saved snapshots...",nullptr,false,snapshotAllowed)) { snapshotsOpen_=true; snapshotsFor_.clear(); }
             auto_.registerWidget("menu_snapshots");
             ImGui::EndMenu();
         }
