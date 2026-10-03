@@ -40,6 +40,13 @@ that several enabled mods change differently. Edits that agree are not
 conflicts. For each conflict you can keep the load-order winner, pick another
 mod, or pick *vanilla*. Your picks are saved and applied by the next deploy.
 
+For records merged by field, expand **Conflicting fields** to see each field's
+winner and the mods that changed it. The record choice resolves contested fields;
+other edits still merge. A selected mod only wins fields it changed. If it left
+a field unchanged, the last mod that changed that field wins instead, with an
+explanation beside the field. **Vanilla for conflicting fields** restores those
+contested fields and keeps independent edits from the other mods.
+
 ## Deploy and undeploy
 
 **Build and deploy into the game** undoes the previous deploy, builds the whole

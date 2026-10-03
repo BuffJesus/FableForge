@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_field_details.py --install <root>` uses a three-mod synthetic
+definition stack to check field details, contributor fallback, vanilla scope,
+clearing choices and independently decoded merged banks at both window sizes.
+`mod_fields_<row>` expands details; `mod_field_<row>_<field>` reveals one field.
+`mods_field_conflicts` counts retained field rows. `mods_first_field_<index>` and
+`mods_first_field_winner_<index>` expose the first record's current field winners.
+
 `tools/test_ground_smear.py --install <root>` checks Ground Paint/Smear controls,
 strict vertex cursors, frozen neighbour blends, Repeat, undo and draft reopen
 on owned stock/loose copies at normal/compact sizes. `chip_ground_paint` /

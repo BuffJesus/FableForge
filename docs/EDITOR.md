@@ -996,9 +996,14 @@ one row per record / thing / quest / string / file that several enabled mods wan
 (agreeing edits are not conflicts; records that differ in different fields merge per field),
 with the winner the load order gives it and a combo to pick another mod or *vanilla*; picks
 live in `forge_mods_picks.txt` next to the order and deploy applies them. Choices
-change in the UI only after the file is saved or removed successfully; a failed
-write preserves the previous choice and reports the error. A deploy also
-leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
+  change in the UI only after the file is saved or removed successfully; a failed
+  write preserves the previous choice and reports the error. Field-merged records
+  offer **Conflicting fields**, listing each field's actual contributors and winner.
+  The choice resolves contested fields while independent edits keep merging.
+  A mod only wins fields it changed; otherwise the field retains its load-order
+  winner with an explanation. Vanilla restores contested fields in this mode.
+  A deploy also
+  leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
 the Edit tab badges those things in *Objects in this map*, *Placed by* filters the list
 (everyone / retail only / one mod) and *Back to retail* on a selected thing writes a vanilla
 pick for the next deploy. *Build and deploy*

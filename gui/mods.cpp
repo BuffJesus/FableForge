@@ -7,6 +7,7 @@
 #include "dialogueaudio.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -352,14 +353,30 @@ std::string App::modConflictWinner(const ModConflict& conflict) const {
     return conflict.winner;
 }
 
+std::string App::modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const {
+    const auto pick=modPicks_.find(conflict.key);
+    if (pick!=modPicks_.end()) {
+        const auto& winner=pick->second;
+        if (winner=="vanilla" || winner=="base" || winner=="none" || winner=="-") return "vanilla";
+        // A record choice wins only fields it actually changed from baseline.
+        if (std::find(field.mods.begin(),field.mods.end(),winner)!=field.mods.end()) return winner;
+    }
+    // Recompute after clearing a choice; the cached report may contain its old winner.
+    return field.mods.empty() ? field.winner : field.mods.back();
+}
+
 // the conflict report: every row a thing several enabled mods want differently, with the winner the
 // load order (or a pick) gives it
 static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
     using nlohmann::json;
     auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
     if (rep.contains("defs"))
-        for (const auto& c : rep["defs"].value("conflicts", json::array()))
+        for (const auto& c : rep["defs"].value("conflicts", json::array())) {
             rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
+            if (rows.back().fieldMerged)
+                for (const auto& field : c.value("field_conflicts",json::array()))
+                    rows.back().fields.push_back({field.value("field",""),mods(field["mods"]),field.value("winner","")});
+        }
     if (rep.contains("tng"))
         for (const auto& l : rep["tng"].value("levels", json::array()))
             for (const auto& c : l.value("conflicts", json::array())) {
@@ -734,11 +751,43 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
                 auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
                 for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
-                if (ImGui::Selectable("vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
+                if (ImGui::Selectable(c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
+                auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());
                 ImGui::EndCombo();
             }
             auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shown.c_str());
+            if (c.fieldMerged) {
+                ImGui::PushFont(fontSmall_);
+                theme::hint("This choice resolves conflicting fields. Other edits still merge.");
+                ImGui::PopFont();
+                if (!c.fields.empty()) {
+                    const bool open=ImGui::TreeNodeEx("##fields",ImGuiTreeNodeFlags_SpanAvailWidth,
+                        "Conflicting fields (%zu)",c.fields.size());
+                    auto_.registerWidget(("mod_fields_"+std::to_string(i)).c_str());
+                    if (open) {
+                        ImGui::PushFont(fontSmall_);
+                        for (size_t fieldIndex=0;fieldIndex<c.fields.size();++fieldIndex) {
+                            const auto& field=c.fields[fieldIndex];
+                            ImGui::BeginGroup();
+                            ImGui::TextWrapped("%s",field.field.c_str());
+                            const std::string winner=modFieldWinner(c,field);
+                            ImGui::TextWrapped("Winner: %s",winner.c_str());
+                            std::string contributors;
+                            for (const auto& mod : field.mods) contributors+=(contributors.empty()?"":", ")+mod;
+                            theme::hint(("Changed by: "+contributors).c_str());
+                            const auto pick=modPicks_.find(c.key);
+                            if (pick!=modPicks_.end() && winner!="vanilla" && winner!=pick->second)
+                                theme::hint("The selected mod has no changed value for this field; load order applies.");
+                            ImGui::EndGroup();
+                            auto_.registerWidget(("mod_field_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                            ImGui::Spacing();
+                        }
+                        ImGui::PopFont();
+                        ImGui::TreePop();
+                    }
+                }
+            }
             ImGui::PopID();
         }
         if (modConflicts_.size() > 400) ImGui::TextColored(theme::vec(theme::Faint), "... %zu more (forge-tools mods conflicts --json lists them all)", modConflicts_.size() - 400);

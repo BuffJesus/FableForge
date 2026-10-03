@@ -1,5 +1,52 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated continuation: inspect mod field conflicts
+
+Owned checkout D:/Code/FableForge-field-review, branch
+feat/forge-field-conflicts-20261003 from 330d4b5. Primary Forge's broad gate runs
+against its fixed source/binaries; no primary code or game-install files were
+changed by this tranche. The primary content-override proposal's source audit
+identified that composer reports already contain field conflicts, but the UI
+dropped those rows and left the scope of a record choice unexplained.
+
+The Mods card now retains/expands those field names, actual contributors and
+current winners. Record choices resolve contested fields; independent edits
+still merge. A chosen mod only wins fields it changed. A field that the selected
+mod did not change displays its load-order winner and an explanation. Vanilla
+is labelled for conflicting fields. Clearing a choice recomputes winners from
+actual contributors, avoiding a stale cached report. Existing persistence and
+composition are reused. This does not implement individual field choices,
+baseline/contributor values, component policies or source fingerprinting.
+
+Clean owning Release configuration/build completed; source root in CMakeCache
+is this checkout. Baseline field fixture at build/mod-field-details-jct8f7ik
+confirmed three real CLI field conflicts but failed the missing UI states and
+widgets. Final candidate at build/mod-field-details-xddy71xf passes normal/compact
+controls and scrolling, picks/vanilla/reset/recheck, plus independently decoded
+merged-bank values for load order, PackA and vanilla. The fourth, independent
+field remains merged even with vanilla chosen. Baseline and all source mod
+banks remain byte-identical. First candidate run: build/mod-field-details-8zjnemnt.
+Normal/compact expanded and fallback captures inspected; every field is
+scroll-accessible. The actual vanilla dropdown selection is tested and its
+compact capture inspected. Earlier complete scrolling run:
+build/mod-field-details-n1pw0p4y. The test is wired into check_all and documented
+in the guide. Docs-command and diff checks pass after building this lane's forge.
+
+Existing winner-reset/deploy and locked-add/remove tests pass at
+build/mod-winner-refresh-k2yh3b6q and build/mod-pick-recovery-zcrmz01c. External-
+edit/locked-read preservation passes at build/mod-pick-refresh-0u_374eb.
+
+Separate fixture correction: tests/ui/smoke.txt waits for foliage completion
+and hides objects/foliage during terrain colour-mode comparisons. The unchanged
+25% pixel threshold was obscured by trees in the primary gate's failing captures;
+both Height and Walkable actually rendered correctly. The revised script passes
+on the primary 330d4b5 binary (build/ui-smoke-m2lgqnz_) and this checkout's baseline
+binary (build/ui-smoke-af2pztar) and final field UI binary (build/ui-smoke-jsnyxhws);
+core CTest 1/1 passes here. Original primary
+failure remains in its broad-gate log. No full-gate result is reclassified.
+
+Next: integrate these reviewed commits after the primary broad gate completes.
+
 ## 2026-10-03 continuation: readable write actions at compact sizes
 
 Ground Smear was committed as 0d1161e. Its compact captures exposed clipped
