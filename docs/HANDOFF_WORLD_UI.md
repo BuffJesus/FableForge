@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 Setup confirmation scope and cancellation
+
+Baseline build/setup-confirmation-wachucng proves Restore remained globally
+pending after Continue closed Setup and after accepted valid/invalid folder
+changes. Enter already left the confirmation pending and Escape already
+cancelled without closing Setup. Pending Restore now clears whenever Setup is
+closed and on accepted folder changes after the existing unsaved/busy guards.
+A same-root rescan retains it; no file-write behavior changed.
+
+Owned Release GUI build and build/setup-confirmation-f67lhy5u pass both sizes:
+Enter ignored, Escape cancels, Continue clears pending state, valid/invalid
+switches clear it, and a Data-folder rescan of the same root retains it. Whole
+inventories of both scratch installs stay unchanged. Existing install-switch
+and orphan-preserve/recovered-manifest retry (build/setup-stage-restore-gayegfng)
+pass. The confirmation fixture is wired into check_all. No fresh whole gate or
+archive is claimed; the core checkpoint and previous development ZIP are unchanged.
+
 ## 2026-10-03 staged restore and orphan-backup status
 
 Baseline build/setup-stage-restore-ps2k5wcy confirms a .forgebak without its

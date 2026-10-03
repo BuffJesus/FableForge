@@ -1,5 +1,10 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_confirmation_ui.py` checks Enter leaves Restore pending,
+Escape cancels without closing Setup, and Continue or an accepted folder change
+cancels the pending Restore. Rescanning the same root through Data preserves the
+confirmation. Both sizes verify both installs' entire inventories are unchanged.
+
 `tools/test_setup_stage_restore_ui.py` stages an owned LEV and takes an editor
 original after staging, then checks Setup rebases and restores the older baseline.
 `--orphan` preserves the manifest outside the install: Restore leaves all files

@@ -481,7 +481,7 @@ void App::drawToolWindows() {
 }
 
 void App::drawSetupPanel() {
-    if (!setupOpen_) return;
+    if (!setupOpen_) { confirmRestore_ = false; return; }
     using theme::S;
     ImGui::OpenPopup("Setup");
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -807,6 +807,7 @@ void App::scanInstall(const std::string& picked) {
             return;
         }
         mapViews_.clear(); sessionCamera_.reset(); sessionMap_.clear();
+        confirmRestore_ = false;
         restoreError_.clear();
         selectedName_.clear(); docLoadedFor_.clear(); previewLoadedFor_.clear();
         foliageLoadedFor_.clear(); previewPendingName_.clear(); foliagePendingName_.clear();

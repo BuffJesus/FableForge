@@ -203,6 +203,8 @@ def main():
               [sys.executable, "tools/test_setup_stage_restore_ui.py"], capture_output=True)
     ok &= run("Setup orphaned stage backup visibility, preserved files and recovered-manifest retry",
               [sys.executable, "tools/test_setup_stage_restore_ui.py", "--orphan"], capture_output=True)
+    ok &= run("Setup confirmation Enter/Escape, closing panel and install-switch cancellation",
+              [sys.executable, "tools/test_setup_confirmation_ui.py"], capture_output=True)
     ok &= run("Setup missing-bank recovery, Data folder normalization and running-game guard",
               [sys.executable, "tools/test_setup_missing_bank_ui.py"], capture_output=True)
     ok &= run("Setup missing loose-level recovery and running-game guard",
