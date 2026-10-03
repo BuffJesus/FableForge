@@ -1051,6 +1051,8 @@ public:
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
     std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
     bool modConflictMatches(const ModConflict& conflict) const;
+    struct ModOutcomes { std::vector<std::string> won, lost; };
+    std::map<std::string, ModOutcomes> modConflictOutcomes() const;
 private:
     std::vector<ModConflict> modConflicts_;
     char modConflictSearch_[192] = {};

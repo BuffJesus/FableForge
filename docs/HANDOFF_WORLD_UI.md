@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 field-aware wins/loses badges
+
+Baseline GUI at bdd5955 showed every mod losing the synthetic field-merged
+record, because its record winner was the literal "field-merged". Reproduction
+script/capture: build/review_field_badges_before_20261003.txt and
+build/field-badges-before-20261003.png. The shared badge/state calculation now
+counts each actual contested field contributor against the current field winner;
+whole-record/file and other families retain their per-row counts. A mod can win
+and lose different fields. Tooltips name the affected record/field; independent
+auto-merged edits are not counted as conflicts. No composer or choice writes changed.
+
+Owning Release GUI build passes. Extended normal/compact fixture at
+build/mod-field-details-s8nvlafc verifies all three mods' win/loss counts under
+load order, PackA, vanilla and reset; merged-bank/source-byte checks still pass.
+Normal/compact mixed-badge tooltip captures inspected. The 401-file fixture
+at build/mod-conflict-search-vs89q84e verifies preserved whole-file counts and
+filter independence. Docs-command and diff checks pass. Prior core/whole-gate
+coverage remains scoped to the checkpoint below; no repeat whole-gate run.
+
 ## 2026-10-03 primary integration checkpoint
 
 Primary feat/editor-ui-shell through 169608b integrates the reviewed isolated

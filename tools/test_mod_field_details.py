@@ -91,6 +91,11 @@ def main():
         for index,value in enumerate((11,21,31)):
             lines += [f'assert_state mods_first_field_base_{index} {index+1}',
                 f'assert_state mods_first_field_value_{index} {value}']
+        for index,(wins,losses) in enumerate(((0,2),(1,1),(2,0))):
+            lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
+        lines += ['reveal mod_wins_1','frames 3','reveal mod_wins_1','frames 3',
+            'assert_widget mod_wins_1','assert_widget mod_losses_1','mouse_move mod_wins_1','frames 80',
+            'clear_toasts',f'screenshot {(case/"mixed-badges.png").as_posix()}']
         lines += ['reveal input_mod_conflict_search','frames 3','click input_mod_conflict_search',
             'input_text rAnDoMbAnDiT','frames 3','assert_state mods_conflicts_matching 1',
             'reveal mods_show_all_conflicts','frames 3','click mods_show_all_conflicts','frames 2']
@@ -101,6 +106,8 @@ def main():
             lines += [f'assert_state mods_first_field_winner_{index} {winner}']
         for index,value in enumerate((10,20,31)):
             lines += [f'assert_state mods_first_field_value_{index} {value}']
+        for index,(wins,losses) in enumerate(((2,0),(0,2),(1,1))):
+            lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
         lines += ['reveal mod_field_0_2','frames 3',
             f'screenshot {(case/"picked.png").as_posix()}',
             'reveal mod_winner_0','frames 3','reveal mod_winner_0','frames 3',
@@ -109,9 +116,13 @@ def main():
             'click mod_vanilla_0','frames 2']
         for index in range(3): lines += [f'assert_state mods_first_field_winner_{index} vanilla']
         for index in range(3): lines += [f'assert_state mods_first_field_value_{index} {index+1}']
+        for index in range(3):
+            lines += [f'assert_state mods_wins_{index} 0',f'assert_state mods_losses_{index} 2']
         lines += ['mod_pick * -','frames 2']
         for index,winner in enumerate(('PackB','PackC','PackC')):
             lines += [f'assert_state mods_first_field_winner_{index} {winner}']
+        for index,(wins,losses) in enumerate(((0,2),(1,1),(2,0))):
+            lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
         lines += ['mods_conflicts','wait_mods','frames 2','assert_state mods_field_conflicts 3','quit']
         script=case/'fields.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
         result=subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(args.install),

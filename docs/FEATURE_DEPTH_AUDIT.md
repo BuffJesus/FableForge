@@ -23,6 +23,10 @@ only after checking those paths against the current build.
 
 ## Terrain/foliage change in this pass
 
+2026-10-03: wins/loses badges now count actual contested fields rather than
+marking every contributor as losing a field-merged record. Partial wins, picks,
+vanilla/reset and unchanged whole-file counts pass at both sizes. See HANDOFF_WORLD_UI.
+
 2026-10-03: conflict search now filters before the 400-row limit. A real 401-file
 fixture reaches/chooses/resets the last row at both sizes; saved-choice and
 name/mod/field searches pass without changing source bytes. See HANDOFF_WORLD_UI.

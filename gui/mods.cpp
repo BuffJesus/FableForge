@@ -387,6 +387,27 @@ bool App::modConflictMatches(const ModConflict& conflict) const {
     return false;
 }
 
+std::map<std::string, App::ModOutcomes> App::modConflictOutcomes() const {
+    std::map<std::string, ModOutcomes> outcomes;
+    if (!modReportLoaded_) return outcomes;
+    for (const auto& conflict : modConflicts_) {
+        if (conflict.key.empty()) continue;
+        if (conflict.fieldMerged) {
+            for (const auto& field : conflict.fields) {
+                const auto winner = modFieldWinner(conflict, field);
+                const auto label = conflict.label + " / " + field.field;
+                for (const auto& mod : field.mods)
+                    (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(label);
+            }
+        } else {
+            const auto winner = modConflictWinner(conflict);
+            for (const auto& mod : conflict.mods)
+                (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(conflict.label);
+        }
+    }
+    return outcomes;
+}
+
 // Conflict rows retain contributors in load order and the reported winner.
 static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConflict>& rows) {
     using nlohmann::json;
@@ -589,14 +610,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     int enableIndex = -1;
     bool enableValue = false, requireValue = false;
     std::string requireMod, requireMaster;
-    // the last conflict report per mod: rows it wins, rows it loses
-    std::map<std::string, std::pair<std::vector<std::string>, std::vector<std::string>>> wl;
-    if (modReportLoaded_)
-        for (const auto& c : modConflicts_) {
-            if (c.key.empty()) continue;
-            const std::string win = modConflictWinner(c);
-            for (const auto& m : c.mods) (m == win ? wl[m].first : wl[m].second).push_back(c.label);
-        }
+    // Count each contested field separately; an auto-merged record has no
+    // single winning mod. Non-field families retain their row-based counts.
+    const auto wl = modConflictOutcomes();
     auto listTip = [](const char* head, const std::vector<std::string>& v) {
         std::string t = head;
         for (size_t k = 0; k < v.size() && k < 12; ++k) t += "\n  " + v[k];
@@ -688,14 +704,16 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         ImGui::TextWrapped("%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
         ImGui::PopStyleColor();
         if (const auto it = wl.find(e.name); it != wl.end()) {
-            if (!it->second.first.empty()) {
-                ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.first.size());
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Wins over the other mods on:", it->second.first).c_str());
+            if (!it->second.won.empty()) {
+                ImGui::TextColored(theme::vec(theme::Success), "wins %zu", it->second.won.size());
+                auto_.registerWidget(("mod_wins_"+std::to_string(i)).c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Conflicts won (records or fields):", it->second.won).c_str());
             }
-            if (!it->second.second.empty()) {
-                if (!it->second.first.empty()) ImGui::SameLine(0, S(6));
-                ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.second.size());
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Overridden by a later mod (or a pick) on:", it->second.second).c_str());
+            if (!it->second.lost.empty()) {
+                if (!it->second.won.empty()) ImGui::SameLine(0, S(6));
+                ImGui::TextColored(theme::vec(theme::Warn), "loses %zu", it->second.lost.size());
+                auto_.registerWidget(("mod_losses_"+std::to_string(i)).c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", listTip("Conflicts lost (records or fields):", it->second.lost).c_str());
             }
         }
         for (const auto& pr : info.problems) {

@@ -1,5 +1,10 @@
 # GUI automation (`--auto <script>`)
 
+`mods_wins_<mod index>` / `mods_losses_<mod index>` report current contested
+part counts. Visible badge widgets use `mod_wins_<mod index>` /
+`mod_losses_<mod index>`; a zero count has no badge. The field-details and
+401-file search fixtures check partial field wins and unchanged whole-file counts.
+
 `tools/test_mod_conflict_search.py --install <root>` builds 401 synthetic file
 conflicts and checks real typing, case-insensitive search, last-row choice/reset
 and saved-choice filtering at both sizes, with source-byte preservation.

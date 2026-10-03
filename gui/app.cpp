@@ -1853,6 +1853,14 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("textures_mode=" + std::string(texturesMode_ ? "1" : "0"));
     v.push_back("mods_mode=" + std::string(modsMode_ ? "1" : "0"));
     v.push_back("mods_count=" + std::to_string(modOrder_.mods.size()));
+    const auto modOutcomes = modConflictOutcomes();
+    for (size_t i = 0; i < modOrder_.mods.size(); ++i) {
+        const auto outcome = modOutcomes.find(modOrder_.mods[i].name);
+        v.push_back("mods_wins_"+std::to_string(i)+"="+
+            std::to_string(outcome == modOutcomes.end() ? 0 : outcome->second.won.size()));
+        v.push_back("mods_losses_"+std::to_string(i)+"="+
+            std::to_string(outcome == modOutcomes.end() ? 0 : outcome->second.lost.size()));
+    }
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
