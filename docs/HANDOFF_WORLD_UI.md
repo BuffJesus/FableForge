@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 destination-specific texture preview and export pixels
+
+No product change was needed after bank-path invalidation. The destination
+fixture now gives ROOT_SHARED_TEST red pixels in the selected bank and blue
+pixels in the alternate bank, alongside the alternate-only marker. Actual
+Export PNG buttons write to owned directories outside the target installs.
+build/texture-destination-3ojqt8yn passes both sizes: screenshot pixels and
+independently decoded 64x64 exports are red for selected/fallback and blue for
+alternate, including the same entry name across banks. Existing count, selection,
+same-bank retention, complete target-inventory and source-hash assertions pass.
+This verifies the effective bank supplies pixels, not just refreshed names.
+Future package workflow count stays 24; the old ZIP and full-suite boundary
+remain unchanged. Next review: export failure preservation and feedback.
+
 ## 2026-10-03 texture views follow save-folder changes
 
 Baseline build/texture-destination-vowk1tik confirms the open browser keeps

@@ -5,6 +5,9 @@ changing the save folder. Both sizes check row/preview refresh for a different
 bank, selection retention for the same bank and fallback to the selected install.
 The fixture prepares copied banks first; GUI navigation changes no target files.
 `--gui`/`--cwd` support extracted-package checks.
+It gives the same texture name red pixels in the selected bank and blue pixels
+in the other bank. Actual Export PNG buttons and screenshot pixels verify the
+preview and export follow the selected, alternate and fallback bank.
 
 `tools/test_mod_asset_refresh_ui.py --install <root>` loads asset views, then
 clicks Mods deploy/undeploy for a cube recipe. Both sizes check retired selections,
