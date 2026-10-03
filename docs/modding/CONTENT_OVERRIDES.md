@@ -224,3 +224,33 @@ inventory. Values are snapshots from the last check. Individual field choices,
 bank-qualified/stable source identities, fingerprint-based stale-content review,
 component policies, portable profiles and the mixed-FMP/overhaul acceptance
 sequence remain backlog. The existing picks transaction/composer remain in use.
+
+## 2026-10-03 changed-source choice audit
+
+At primary checkpoint 27755ec, an independent tiny file-pack audit in the owning
+choice-review checkout demonstrates the existing contract: choose PackA's
+data/Misc/shared.txt, change that source from version 1 to version 2, then build.
+The saved label selects the new bytes. The order/choice files remain byte-exact;
+mods list still reports the SHA256 captured at registration, not a fresh hash.
+build/source-choice-audit-n_jm3p5h/result.json retains both independently computed
+folder hashes and before/after composer reports. No live/corpus files changed.
+
+This is label-based selection, not evidence of fingerprint validation. The
+registration hash supports source deduplication; buildSources reclassifies
+current source contents and resolves paths without comparing that hash. Current
+whole-file conflict rows show source labels and the winner but no content digest.
+The choice file has no choose-time baseline/source-content snapshot, so existing
+data cannot distinguish an update before the user chose from an update afterward.
+Rehashing a whole source against registration would also flag unrelated changes;
+the actual Expanded Chapters registration reads 2.49 GB and took over seven
+minutes in the frozen gate. Avoid promising cheap, precise stale-choice review
+from a whole-folder hash alone.
+
+A bounded next increment is current whole-file comparison evidence (actual
+contributor bytes/hashes and baseline identity) for contested files. This can
+support a later choose-time content snapshot without hashing an entire overhaul
+again. It must remain visibly a snapshot, preserve existing label-based choices,
+and not claim automatic stale-content detection. Definition fields require
+separate stable symbolic-reference/schema evidence; their raw relocated IDs are
+not sufficient fingerprint identities. Per-field choices/profiles and validation
+of changed selected content remain the broader backlog above.

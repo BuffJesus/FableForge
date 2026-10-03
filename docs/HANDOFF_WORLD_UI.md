@@ -1,5 +1,19 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 saved-source choice follow-up (read-only audit)
+
+Choice review moved cleanly to feat/forge-source-choice-review-20261003 at
+primary 27755ec. build/source-choice-audit-n_jm3p5h independently creates two
+tiny file packs and a synthetic bank, chooses PackA, changes its selected source
+file and builds again. The new bytes win under the same saved label; order/picks
+stay byte-exact while the registered source SHA stays old. Before/after source
+hashes/reports are retained. This is the existing label contract, not a new
+fingerprint validation claim. No product changes or active process remain yet.
+The content-override backlog records why whole-source registration hashes cannot
+identify whether a change predates a choice or affects its selected content.
+Next investigation: current whole-file contributor/baseline identity evidence,
+preserving existing picks; automatic stale-content/profile validation stays separate.
+
 ## 2026-10-03 primary integration checkpoint
 
 Primary feat/editor-ui-shell fast-forwarded clean b1eb3b9 to 0a7887e after the
