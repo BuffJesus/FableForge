@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03: Setup restores tracked backups even when game.bin or all level
+containers are missing. Partial failures remain visible through map reload,
+ambiguous originals refuse before writes, orphaned stage backups stay preserved
+with an explanation, and closing Setup or changing installs cancels Restore.
+All 19 runtime workflows pass in the extracted 7336194 development package;
+the whole-gate boundary is still afe9e55. See HANDOFF_WORLD_UI for exact evidence.
+
 2026-10-03: the frozen afe9e55 checkpoint passes all 110 integration checks,
 zero failures or skipped integration checks, including the corrected smoke,
 37 core tests, current mod comparisons and every available corpus. Saved choices

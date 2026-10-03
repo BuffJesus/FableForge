@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted current recovery package checkpoint
+
+Source 7336194 is packaged locally at
+dist/development/20261003-7336194/FableForge-0.18.0-dev-win64.zip (34.8 MB),
+SHA-256 2665872f3349cc0ad8f6e78d8412cad0f2de03555581d0734dce5b6765428fc0.
+The guide ZIP is beside it. Older archives remain unchanged; nothing was
+published. build/package-smoke-h_h0u27z/result.json records all 19 extracted
+runtime workflows passing with 115 Markdown links and four guide images checked.
+Executables run from a path containing literal percent/ampersand characters,
+using an unrelated working directory. Existing retail exports/GUI pixels/mod
+reviews pass alongside real-bank asset restoration and every new Setup recovery
+variant. This verifies stripped packaged binaries, not just the build directory.
+
+The previous preparation section describes its pre-extraction state; this is
+the completed result. The whole-suite checkpoint remains frozen afe9e55 with
+110 passing checks; no fresh whole gate or actual game validation is claimed for
+7336194. Next depth review: asset views across Mods deploy/undeploy transitions.
+
 ## 2026-10-03 current recovery package preparation
 
 All Release targets are current (bounded -j2 build, no work remaining). Setup
