@@ -12368,7 +12368,8 @@ int main(int argc, char** argv) {
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
                     const auto order = mo::load(root);
                     const auto sources = mo::buildSources(order, root);
-                    if (sources.empty()) { std::fprintf(stderr, "mods conflicts: the order has no enabled mods\n"); return 1; }
+                    // An empty order still has a valid dry-run report. The GUI
+                    // needs it to review saved choices after the last mod is removed.
                     const std::string picksPath = picksOverride.value_or(modsPicksDefault(root));
                     const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
                     const auto& scratch = workspace.path();

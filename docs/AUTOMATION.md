@@ -3,7 +3,9 @@
 `tools/test_mod_unreported_choices.py --install <root>` checks saved choices
 absent from the latest report, including missing targets and uncontested edits.
 Both panel sizes cover search and read-only preservation; real Clear buttons
-cover individual removal and a zero-conflict report. States:
+cover individual removal, locked-save failure and a zero-conflict report. It
+also removes every mod and verifies an empty-order report and search beyond
+400 saved choices without changing source files. States:
 `mods_unreported_choices`, `mods_unreported_matching`. Widgets:
 `mods_unreported_help`, `mod_unreported_choice_<index>`,
 `mod_clear_unreported_<index>`. It accepts `--gui`/`--cwd` and owns its app-data

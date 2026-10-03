@@ -139,9 +139,17 @@ def main():
     assert not picks.exists()
     bulk = ''.join(f'file:data/misc/unreported{i:03}.txt\tRemovedPack\n' for i in range(401)).encode('ascii')
     picks.write_bytes(bulk)
+    lines = start(1.5)+['mod_remove 1', 'frames 2', 'mod_remove 0', 'frames 2',
+        'mods_conflicts', 'wait_mods', 'frames 2', 'assert_state mods_count 0',
+        'assert_state mods_conflicts 0', 'assert_state mods_unreported_choices 401']
+    run(work/'empty-order', '800x600', lines)
+    empty = json.loads(cli('empty-report', 'mods', 'conflicts', root, '--json'))
+    assert empty['summary']['sources'] == 0
+    assert all(value == 0 for value in empty['summary'].values())
     for size, scale in [('1440x900', 1), ('800x600', 1.5)]:
         case = work/('bulk-'+size)
-        lines = start(scale)+['assert_state mods_conflicts 0', 'assert_state mods_unreported_choices 401']
+        lines = start(scale)+['assert_state mods_count 0', 'assert_state mods_conflicts 0',
+                             'assert_state mods_unreported_choices 401']
         lines += reveal('input_mod_conflict_search')+['click input_mod_conflict_search',
             'input_text UnRePoRtEd400', 'frames 3', 'assert_state mods_unreported_matching 1']
         lines += reveal('mod_clear_unreported_400')+['assert_widget mod_clear_unreported_400',
@@ -151,7 +159,10 @@ def main():
     # Only the explicitly changed mod-order file may differ from its initial state.
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p, digest in hashes.items()
                if p != root/'forge_mods.json')
-    print('Individual clearing, expected next-build change, zero conflicts and search beyond 400: PASS', flush=True)
+    retained = {p for source in (root, *sources) for p in source.rglob('*') if p.is_file()
+                and p not in (picks, root/'forge_mods.json')}
+    assert retained == set(hashes)-{root/'forge_mods.json'}
+    print('Individual clearing, expected next-build change, empty-order report and search beyond 400: PASS', flush=True)
 
 
 if __name__ == '__main__':

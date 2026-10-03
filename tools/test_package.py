@@ -84,7 +84,8 @@ def main():
     for label, script in (('field_details', 'test_mod_field_details.py'),
                           ('long_values', 'test_mod_long_values.py'),
                           ('conflict_search', 'test_mod_conflict_search.py'),
-                          ('unavailable_choices', 'test_mod_unavailable_choice.py')):
+                          ('unavailable_choices', 'test_mod_unavailable_choice.py'),
+                          ('unreported_choices', 'test_mod_unreported_choices.py')):
         run(label, [sys.executable, repo / 'tools' / script, '--gui', package / 'FableForge.exe',
             '--install', args.root.resolve(), '--cwd', cwd])
     with archive.open('rb') as stream:

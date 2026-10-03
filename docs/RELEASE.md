@@ -26,7 +26,8 @@ Packaging follows local Markdown links from the shipped user guides and adds
 missing document/assets/licence dependencies from docs/vendor. Broken or escaping
 links stop packaging before the ZIP is written. `tools/test_package.py <zip>`
 checks extracted links and runs retail/GUI plus field-comparison, long-value,
-search and unavailable-choice workflows from an unrelated working directory.
+search, unavailable-choice and unreported-choice workflows from an unrelated
+working directory.
 
 ## Final release checklist
 

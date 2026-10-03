@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 empty mod order keeps saved-choice review available
+
+The added empty-order boundary exposed a real gap in the review increment:
+mods conflicts rejected zero enabled sources, so removing the final mod left
+no loaded report and hid all saved choices. Reproduction is isolated
+build/mod-unreported-choices-n4v77tdf. The command now passes an empty source
+list through its existing dry-run/report pipeline. Build/deploy behavior is
+unchanged; the report is read-only and uses the same summary/asset-check logic.
+
+Isolated Release tools rebuild and build/mod-unreported-choices-q6z0uatp pass.
+The fixture now removes both mods, independently checks a zero-source/all-zero
+summary, then reaches saved choice 401 through search at both panel sizes.
+Exact source hashes and file inventories remain unchanged apart from the
+explicitly edited order/choices files. The previous individual clear/locked-save/
+next-build tests also pass. Packaged runtime checks now include this fixture;
+the next development archive still needs generation/extraction validation.
+The primary afe9e55 whole gate remains frozen and running separately.
+
+Additional retail presentation check in this worktree decodes Fireheart entry
+10516: MoonFX is "GATEWAY_IDLE_01", SunFX is "FLOURISH_WISP_SHORT_01" at
+build/retail_typed_value_10516_20261003.json. This agrees with FableTLC
+docs/formats/DEFS.md's native/byte evidence for NUL-terminated CCharString and
+confirms the signed-reference correction preserves actual inline strings.
+
 ## 2026-10-03 review saved choices outside the conflict report
 
 The frozen primary afe9e55 gate is running separately. This increment is in the
