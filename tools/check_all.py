@@ -80,6 +80,8 @@ def main():
         ok &= run("model import form, pack retry and next-draft preservation",
                   [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
+            ok &= run("Unicode CLI arguments, packaged helper/schema lookup and GUI deploy recovery",
+                      [sys.executable, "tools/test_unicode_paths.py", "--install", install_root], capture_output=True)
             ok &= run("invalid mod inputs preserve the previous deployment",
                       [sys.executable, "tools/test_mod_picks_inputs.py", "--root", install_root], capture_output=True)
     else:

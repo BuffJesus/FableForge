@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated Windows Unicode process paths
+
+The owned review checkout D:/Code/FableForge-choice-review, branch
+feat/forge-unicode-path-review-20261003, started at e7cb37b while the primary
+full gate stayed frozen. Baseline build/unicode-paths-m7xi344z used the tested
+a3b030b extracted binaries: ASCII CLI and GUI controls passed; both CLIs failed
+on Unicode install arguments, and the GUI terminated during helper lookup from
+a Unicode application folder. Read-only installs stayed unchanged.
+
+Both CLIs now decode the wide Windows command line as UTF-8 rather than using
+ANSI CRT argv. The GUI locates its sibling helper with GetModuleFileNameW and
+launches its existing quoted argument string with CreateProcessW. Default CLI
+schema lookup also uses the wide executable path. Quoting remains independent
+of a shell, including trailing backslashes and literal percent/ampersand bytes.
+The shared helper frees CommandLineToArgvW storage on exceptions; Windows CLI
+targets link Shell32. Existing POSIX argv handling remains direct.
+
+build/unicode-paths-zr_usuup passes all 19 ASCII/Unicode cases: list and conflicts, default
+schema lookup from copied application folders, GUI checks with Unicode module
+and install paths, and actual Mods conflict/deploy/undeploy buttons at both
+sizes. Unicode payload paths recover their exact complete install inventory;
+pack and source definition hashes stay unchanged. Unicode mod names and their
+source paths are retained exactly in forge_mods.json. The existing literal-path
+choice/deploy/undeploy and decoy-preservation fixture passes at
+build/mod-gui-paths-w2i9634r. No game was launched or live bank written.
+
+The documentation checker also exposed a pre-existing prose ambiguity:
+"forge-tools beside" was interpreted as a command. Review commit 2f716a0 spells
+out the executable filename; the checker passes with 32/37 command families.
+The ongoing primary e7cb37b gate still contains the old prose. These review
+changes have focused coverage and await primary promotion and a new extracted
+package; they are outside that frozen full-gate boundary.
+
 ## 2026-10-03 extracted asset/recovery package checkpoint
 
 Source a3b030b is packaged locally at

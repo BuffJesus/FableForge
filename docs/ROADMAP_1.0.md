@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 isolated follow-up: Windows CLI arguments, GUI helper launch and
+default schema lookup preserve Unicode paths. ASCII/Unicode controls and actual
+normal/compact file-pack deploy/undeploy recover exact scratch inventories.
+This review change awaits promotion/package validation; the primary full gate
+remains frozen at e7cb37b. See HANDOFF_WORLD_UI for evidence and boundaries.
+
 2026-10-03: loaded asset views refresh across Mods writes at either destination,
 including failed redeploy. Texture browsing follows the effective save-folder
 bank; same-name preview/export pixels and persistent locked-output errors are

@@ -83,6 +83,7 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #endif
+#include "windowsprocess.hpp"
 
 using nlohmann::json;
 
@@ -4263,10 +4264,8 @@ std::string defaultDefSchemaPath() {
     std::vector<fs::path> cands = {"docs/re_reference/def_schema.json", "../docs/re_reference/def_schema.json"};
 #ifdef _WIN32
     {   // the release zip: docs/re_reference next to the exe (the GUI runs forge-tools from its own folder)
-        char buf[MAX_PATH];
-        const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-        if (n > 0 && n < MAX_PATH) {
-            const fs::path exeDir = fs::path(std::string(buf, n)).parent_path();
+        const fs::path exeDir = albion::process::executableDirectory();
+        if (!exeDir.empty()) {
             cands.push_back(exeDir / "docs" / "re_reference" / "def_schema.json");
             cands.push_back(exeDir / ".." / "docs" / "re_reference" / "def_schema.json");
         }
@@ -10172,9 +10171,8 @@ int sceneAuditAll(const std::filesystem::path& root,
 } // namespace
 
 int main(int argc, char** argv) {
-    const std::vector<std::string> args(argv + 1, argv + argc);
-
     try {
+        const auto args = albion::process::arguments(argc, argv);
         if (args.size() >= 3 && args[0] == "save" && args[1] == "read") {
             const bool asJson = !args.empty() && args.back() == "--json";
             return saveRead(args[2], asJson);

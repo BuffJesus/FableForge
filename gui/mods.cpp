@@ -23,6 +23,7 @@
 
 #include "backups.hpp"
 #include "pendingbanks.hpp"
+#include "windowsprocess.hpp"
 #include "forge/modorder.hpp"
 #include "modpack.hpp"
 #include "nlohmann/json.hpp"
@@ -37,9 +38,7 @@ namespace {
 
 fs::path exeDir() {
 #ifdef _WIN32
-    char buf[MAX_PATH];
-    const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH) return fs::path(std::string(buf, n)).parent_path();
+    return process::executableDirectory();
 #endif
     return fs::current_path();
 }
@@ -226,14 +225,14 @@ void App::launchModsCommand(const std::string& cmd) {
         input.value = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
             &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (input.value == INVALID_HANDLE_VALUE) { failed("cannot open mod command input"); return r; }
-        STARTUPINFOA startup{};
+        STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         startup.dwFlags = STARTF_USESTDHANDLES;
         startup.hStdInput = input.value;
         startup.hStdOutput = startup.hStdError = write.value;
         PROCESS_INFORMATION child{};
-        std::string command = cmd;
-        if (!CreateProcessA(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+        std::wstring command = process::wide(cmd);
+        if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
                 nullptr, nullptr, &startup, &child)) {
             failed("cannot start forge-tools.exe"); return r;
         }

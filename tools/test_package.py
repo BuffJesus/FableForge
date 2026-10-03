@@ -81,6 +81,8 @@ def main():
         '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
+    run('unicode_paths', [sys.executable, repo / 'tools/test_unicode_paths.py', '--gui', package / 'FableForge.exe',
+        '--install', args.root.resolve()])
     for label, script in (('field_details', 'test_mod_field_details.py'),
                           ('long_values', 'test_mod_long_values.py'),
                           ('conflict_search', 'test_mod_conflict_search.py'),

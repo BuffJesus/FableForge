@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_unicode_paths.py --install <root>` checks Windows CLI arguments and
+packaged GUI helper/schema lookup with accented, Greek and CJK characters,
+literal percent/ampersand characters and an unrelated working directory.
+It copies only required definition banks into owned loose-level installs.
+Actual Mods buttons deploy and undeploy an owned Unicode-path file pack at
+normal/compact sizes, with complete inventory recovery and unchanged source
+pack/bank hashes. `--gui <exe>` selects extracted-package binaries.
+
 `tools/test_texture_export_failure_ui.py --install <root>` clicks Export PNG
 while its existing output is held with a Windows sharing lock. Both sizes check
 the wrapped `texture_export_error` after toast dismissal, unchanged output and

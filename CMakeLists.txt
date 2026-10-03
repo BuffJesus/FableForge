@@ -244,6 +244,10 @@ add_custom_command(TARGET FableForge POST_BUILD
 add_executable(forge-tools tools/forge-cli/main.cpp)
 # fableforge too: the mod composer re-runs FableForge packs' recipes (src/modpack: model / theme imports)
 target_link_libraries(forge-tools PRIVATE fableforge)
+if(WIN32)
+    target_link_libraries(forge PRIVATE shell32)
+    target_link_libraries(forge-tools PRIVATE shell32)
+endif()
 
 add_executable(fableforge_containerlist_tests tests/test_containerlists.cpp)
 target_link_libraries(fableforge_containerlist_tests PRIVATE fableforge)
