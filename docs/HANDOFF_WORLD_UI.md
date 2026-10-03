@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 searchable mod conflicts
+
+Conflicts now have case-insensitive search over identity/label, kind, contributor
+names and field names, plus Saved choices only and Show all conflicts. The cap
+applies after filtering; a matching row beyond index 399 can now be chosen in
+the UI. Counts/no-match messages explain the result. Filtering changes no picks
+and resets when the destination changes. Existing row indices/widget identities
+remain stable; lip-sync and informational rows retain their existing policies.
+
+Owning Release GUI build passes. Real 401-file two-pack fixture at
+build/mod-conflict-search-r50eca8f passes normal/compact real typing, mixed-case
+search, contributor search, row-400 vanilla choice and dropdown reset, saved-
+choice/no-match filtering and reset. Source mods and baseline bytes are unchanged.
+Compact last-row capture inspected. Initial build/mod-conflict-search-chdujmm3
+passed normal but missed the first compact checkbox click; revealing it again
+after scrolling and asserting the checkbox state fixes the fixture. Field-name
+search and unchanged value/merge checks pass at build/mod-field-details-6n_q1npr.
+The search check is wired into check_all; no new whole-gate run was claimed.
+
 ## 2026-10-03 field conflict value comparisons
 
 The composer report now includes each residual field's type, baseline and

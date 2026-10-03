@@ -1050,8 +1050,11 @@ public:
     std::string modConflictWinner(const ModConflict& conflict) const;
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
     std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
+    bool modConflictMatches(const ModConflict& conflict) const;
 private:
     std::vector<ModConflict> modConflicts_;
+    char modConflictSearch_[192] = {};
+    bool modChoicesOnly_ = false;
     std::map<std::string, std::string> modPicks_;
     bool modReportLoaded_ = false;
     std::string modReportSummary_;

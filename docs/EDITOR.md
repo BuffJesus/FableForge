@@ -1003,6 +1003,10 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   The choice resolves contested fields while independent edits keep merging.
   A mod only wins fields it changed; otherwise the field retains its load-order
   winner with an explanation. Vanilla restores contested fields in this mode.
+  Search conflicts by name, kind, mod or field; **Saved choices only** shows
+  explicit choices. Filtering precedes the 400-row display limit so later rows
+  remain reachable. **Show all conflicts** clears both filters without changing
+  choices. Filters reset when the install/save destination changes.
   A deploy also
   leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
 the Edit tab badges those things in *Objects in this map*, *Placed by* filters the list

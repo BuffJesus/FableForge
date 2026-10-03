@@ -1856,6 +1856,15 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
+    size_t matchingConflicts = 0;
+    std::string firstMatchingConflict;
+    for (const auto& conflict : modConflicts_) if (modConflictMatches(conflict)) {
+        if (!matchingConflicts) firstMatchingConflict = conflict.key;
+        ++matchingConflicts;
+    }
+    v.push_back("mods_conflicts_matching="+std::to_string(matchingConflicts));
+    v.push_back("mods_first_matching_conflict="+firstMatchingConflict);
+    v.push_back("mods_choices_only="+std::to_string(modChoicesOnly_));
     v.push_back("mods_first_winner=" + (modConflicts_.empty() ? std::string() : modConflictWinner(modConflicts_.front())));
     size_t fieldConflicts=0;
     for (const auto& conflict : modConflicts_) fieldConflicts+=conflict.fields.size();

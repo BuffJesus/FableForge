@@ -1,5 +1,11 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_conflict_search.py --install <root>` builds 401 synthetic file
+conflicts and checks real typing, case-insensitive search, last-row choice/reset
+and saved-choice filtering at both sizes, with source-byte preservation.
+Widgets: `input_mod_conflict_search`, `mods_choices_only`, `mods_show_all_conflicts`.
+States: `mods_conflicts_matching`, `mods_first_matching_conflict`, `mods_choices_only`.
+
 `tools/test_mod_field_details.py --install <root>` uses a three-mod synthetic
 definition stack to check field details, contributor fallback, vanilla scope,
 clearing choices and independently decoded merged banks at both window sizes.

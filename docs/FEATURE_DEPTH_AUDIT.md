@@ -23,6 +23,10 @@ only after checking those paths against the current build.
 
 ## Terrain/foliage change in this pass
 
+2026-10-03: conflict search now filters before the 400-row limit. A real 401-file
+fixture reaches/chooses/resets the last row at both sizes; saved-choice and
+name/mod/field searches pass without changing source bytes. See HANDOFF_WORLD_UI.
+
 2026-10-03: the Mods card now exposes field-conflict names, types, baseline and
 contributor values, plus current winning values. Record-choice scope and
 unchanged-field fallback are explained.

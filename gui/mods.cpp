@@ -87,6 +87,7 @@ void App::resetModDestination() {
     meshImportSuccess_.clear();
     packDest_.clear(); packDestChosen_ = false;
     modConflicts_.clear(); modReportSummary_.clear();
+    modConflictSearch_[0] = 0; modChoicesOnly_ = false;
     modsVerb_.clear();
     thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
     refreshModOrder();
@@ -370,6 +371,20 @@ std::string App::modFieldValue(const ModConflict& conflict, const ModFieldConfli
     if (winner == "vanilla") return field.baseline;
     for (const auto& [mod, value] : field.values) if (mod == winner) return value;
     return {};
+}
+
+bool App::modConflictMatches(const ModConflict& conflict) const {
+    if (modChoicesOnly_ && !modPicks_.contains(conflict.key)) return false;
+    const std::string_view needle(modConflictSearch_);
+    if (needle.empty()) return true;
+    auto contains = [&](std::string_view text) {
+        return std::search(text.begin(), text.end(), needle.begin(), needle.end(),
+            [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
+    };
+    if (contains(conflict.key) || contains(conflict.label) || contains(conflict.kind)) return true;
+    for (const auto& mod : conflict.mods) if (contains(mod)) return true;
+    for (const auto& field : conflict.fields) if (contains(field.field)) return true;
+    return false;
 }
 
 // Conflict rows retain contributors in load order and the reported winner.
@@ -729,6 +744,23 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently. Reorder packs to choose a lip sync winner. Other winner picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
         if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
+        else {
+            ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputTextWithHint("##conflictsearch", "Search name, mod or field", modConflictSearch_, sizeof modConflictSearch_);
+            auto_.registerWidget("input_mod_conflict_search");
+            ImGui::Checkbox("Saved choices only", &modChoicesOnly_);
+            auto_.registerWidget("mods_choices_only");
+            if (theme::ghostButton("Show all conflicts", ImVec2(cardInner, S(28)))) {
+                modConflictSearch_[0] = 0; modChoicesOnly_ = false;
+            }
+            auto_.registerWidget("mods_show_all_conflicts");
+        }
+        const size_t matches = std::count_if(modConflicts_.begin(), modConflicts_.end(),
+            [&](const ModConflict& conflict) { return modConflictMatches(conflict); });
+        if (!modConflicts_.empty()) {
+            ImGui::TextWrapped("%zu of %zu conflicts", matches, modConflicts_.size());
+            if (!matches) theme::hint("No conflicts match these filters.");
+        }
         // one row = the kind and the label (ellipsised to the card), then the winner combo
         auto fit = [](const std::string& text, float width) {
             if (ImGui::CalcTextSize(text.c_str()).x <= width) return text;
@@ -737,8 +769,11 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             return t + "...";
         };
         const float comboW = std::min(S(170), cardInner);
-        for (size_t i = 0; i < modConflicts_.size() && i < 400; ++i) {
+        size_t shownRows = 0;
+        for (size_t i = 0; i < modConflicts_.size() && shownRows < 400; ++i) {
             const auto& c = modConflicts_[i];
+            if (!modConflictMatches(c)) continue;
+            ++shownRows;
             ImGui::PushID(int(i));
             if (i) ImGui::Dummy(ImVec2(0, S(2)));
             ImGui::PushFont(fontSmall_);
@@ -810,7 +845,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             }
             ImGui::PopID();
         }
-        if (modConflicts_.size() > 400) ImGui::TextColored(theme::vec(theme::Faint), "... %zu more (forge-tools mods conflicts --json lists them all)", modConflicts_.size() - 400);
+        if (matches > shownRows) theme::hint("Showing the first 400 matches. Narrow the search to see other conflicts.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
     }

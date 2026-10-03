@@ -67,6 +67,8 @@ def main():
                   [sys.executable, "tools/test_mod_winner_refresh.py", "--root", install_root], capture_output=True)
         ok &= run("mod field details, actual contributors, choice scope and independent merged values",
                   [sys.executable, "tools/test_mod_field_details.py", "--install", install_root], capture_output=True)
+        ok &= run("mod conflict search beyond 400 rows, saved choices and reset",
+                  [sys.executable, "tools/test_mod_conflict_search.py", "--install", install_root], capture_output=True)
         ok &= run("active asset search and hidden panel keyboard recovery",
                   [sys.executable, "tools/test_asset_search.py", "--install", install_root], capture_output=True)
         ok &= run("model import form, pack retry and next-draft preservation",

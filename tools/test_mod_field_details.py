@@ -91,6 +91,9 @@ def main():
         for index,value in enumerate((11,21,31)):
             lines += [f'assert_state mods_first_field_base_{index} {index+1}',
                 f'assert_state mods_first_field_value_{index} {value}']
+        lines += ['reveal input_mod_conflict_search','frames 3','click input_mod_conflict_search',
+            'input_text rAnDoMbAnDiT','frames 3','assert_state mods_conflicts_matching 1',
+            'reveal mods_show_all_conflicts','frames 3','click mods_show_all_conflicts','frames 2']
         lines += ['clear_toasts',f'screenshot {(case/"load-order.png").as_posix()}',
             'reveal mod_field_0_2','frames 3','assert_widget mod_field_0_2',
             f'screenshot {(case/"last-field.png").as_posix()}','mod_pick * PackA','frames 2']
