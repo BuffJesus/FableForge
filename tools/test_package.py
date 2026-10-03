@@ -80,6 +80,8 @@ def main():
         '--count', '8', '--install', args.root.resolve(), '--out', work / 'exports'])
     run('gui', [sys.executable, repo / 'tools/ui_smoke.py', '--exe', package / 'FableForge.exe',
         '--install', args.root.resolve(), '--cwd', cwd])
+    run('dialogue_workspace', [sys.executable, repo / 'tools/test_dialogue_workspace.py',
+        '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
     for mode in ('redeploy', 'report', 'missing'):

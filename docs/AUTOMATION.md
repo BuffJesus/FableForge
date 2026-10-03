@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_dialogue_workspace.py --install <root>` checks the Dialogue picker,
+head preview, playback, scrubbing, staged edits and independently read exports
+at normal/compact sizes. A stopped seek to the slider's right edge must set
+`dialogue_at_end`; explicit Play must restart. The slider displays two decimals
+without rounding its stored position. `--gui <exe> --cwd <directory>` exercises
+an extracted package from an unrelated directory. Exports stay in owned scratch.
+
 `tools/test_texture_replace_failure_ui.py --install <root>` clicks the actual
 replacement form with a sharing-locked PNG; `--invalid` uses undecodable input.
 Both sizes verify a persistent `texture_replace_error` after toast dismissal and

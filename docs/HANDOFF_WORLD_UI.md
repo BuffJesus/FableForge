@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 dialogue end-position rounding regression
+
+The frozen primary b1eb3b9 gate has one dialogue workspace playback failure
+(zio8y5jk, two dialogue_playing assertions). Its initial edit/export checks pass.
+Unchanged focused reruns pass both sizes in primary 07yso7bl and review h8oh8ouk;
+this does not erase the frozen failure. Investigation found the actual retail
+5080 clip ends at 7.743854875 seconds; lip sync/float duration is 7.743854999.
+The slider's two-decimal format rounds its stored right-edge value to 7.74.
+A stopped seek leaves a tiny remainder; explicit Play plays that remainder and
+ends instead of restarting. The original playing-seek sequence could mask this
+when the remainder completed before its assertion. The expanded stopped-seek
+case reliably fails the unchanged slider in jl6t5cf6 (dialogue_at_end and Play).
+
+Choice review feat/forge-dialogue-endpoint-review-20261003 descends accepted
+c5bb1fb. NoRoundToFormat preserves the actual slider position while retaining
+the same display. The GUI exposes dialogue_at_end to automation; the real form
+checks both stopped and playing end seeks, restart, all prior scrub/mute/edit
+and byte-independent frame export checks. pn625v2d passes both sizes after the
+fix. test_dialogue_workspace.py accepts --gui/--cwd; the extracted package suite
+now includes this workflow (38 registered runtime workflows, not yet all run).
+Primary remains frozen while the gate continues; integration/package acceptance
+for this endpoint change remains pending. No live game or install writes.
+
 ## 2026-10-03 controller GUI asset identity audit (read only)
 
 The supplied Discord account blames GUI linking as well as FMP IDs; the repaired

@@ -13,7 +13,10 @@ def main():
     repo=Path(__file__).resolve().parents[1]
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',type=Path,default=Path(r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters'))
+    parser.add_argument('--gui',type=Path,default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
+    args.install=args.install.resolve();args.gui=args.gui.resolve();args.cwd=args.cwd.resolve()
     work=Path(tempfile.mkdtemp(prefix='dialogue-workspace-',dir=repo/'build')).resolve()
     print('evidence retained at',work,flush=True)
     source=args.install/'data/lang/English/dialogue.big'
@@ -31,12 +34,18 @@ def main():
             'click dialogue_search_result_0','frames 3','assert_state dialogue_loaded 1',
             'assert_state dialogue_bank 2','assert_state dialogue_id 5080',
             'click combo_dialogue_preset','frames 2','click dialogue_character_3','frames 3',
-            'assert_state dialogue_head_ready 1','click button_dialogue_play_pause','frames 10',
+            'assert_state dialogue_head_ready 1','click button_dialogue_stop',
+            'mouse_move slider_dialogue_time','mouse_down left','mouse_delta 10000 0',
+            'mouse_up left','frames 2','assert_state dialogue_playing 0',
+            'assert_state dialogue_at_end 1','click button_dialogue_play_pause',
+            'frames 3','assert_state dialogue_playing 1','click button_dialogue_stop',
+            'click button_dialogue_play_pause','frames 10',
             'assert_state dialogue_playing 1','click button_dialogue_play_pause',
             'click button_dialogue_play_pause','frames 2',
             'mouse_move slider_dialogue_time','mouse_down left','mouse_delta 10000 0',
             'mouse_up left','frames 5','assert_state dialogue_playing 0',
-            'assert_state dialogue_scrubbed 1','click button_dialogue_play_pause',
+            'assert_state dialogue_scrubbed 1','assert_state dialogue_at_end 1',
+            'click button_dialogue_play_pause',
             'frames 3','assert_state dialogue_playing 1','click button_dialogue_play_pause',
             'click checkbox_dialogue_mute','click button_dialogue_play_pause','frames 3',
             'assert_state dialogue_playing 1','mouse_move slider_dialogue_time','mouse_down left','frames 3',
@@ -70,8 +79,8 @@ def main():
             f'dialogue_export_path {dest/"dialogue.big"}',
             'reveal input_dialogue_scratch_path','frames 3','reveal button_dialogue_export',
             'click button_dialogue_export','frames 2','assert_state dialogue_exported 1','quit','']),encoding='utf-8')
-        result=subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(args.install),
-            '--auto',str(script),'--size',size],cwd=repo,capture_output=True,text=True,timeout=180,
+        result=subprocess.run([str(args.gui),'--install',str(args.install),
+            '--auto',str(script),'--size',size],cwd=args.cwd,capture_output=True,text=True,timeout=180,
             env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1'))
         (dest/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
         log=Path(str(script)+'.log').read_text(encoding='utf-8')

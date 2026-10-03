@@ -1819,6 +1819,8 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("dialogue_pack_added=" + std::to_string(dialogueExportMessage_.rfind("Added ",0)==0));
     v.push_back("dialogue_audio_available=" + std::to_string(dialogueLoaded_ && dialogueAudioDuration_>0));
     v.push_back("dialogue_scrubbed=" + std::to_string(dialogueLoaded_ && dialogueTime_>0));
+    v.push_back("dialogue_at_end=" + std::to_string(dialogueLoaded_ &&
+        dialogueTime_>=float(std::max(dialogueAudioDuration_,double(dialogueEntry_.duration())))));
     v.push_back("dialogue_playing=" + std::to_string(dialogueMotionPlaying_ ||
         (dialogueAudio_ && dialogueAudio_->playing())));
     v.push_back("dialogue_audio_muted=" + std::to_string(dialogueAudioMuted_));
