@@ -89,6 +89,8 @@ def main():
                   [sys.executable, "tools/test_wholemap_cameras.py", "--install", install_root], capture_output=True)
         ok &= run("Ctrl-drag height picking across sculpt tools at normal/compact sizes",
                   [sys.executable, "tools/test_height_pick.py", "--install", install_root], capture_output=True)
+        ok &= run("Held brush pin, moved rays, release, Shift, survey and exact undo",
+                  [sys.executable, "tools/test_brush_pin.py", "--install", install_root], capture_output=True)
         ok &= run("fixed-point sculpt height keys, other tools unchanged and undo",
                   [sys.executable, "tools/test_height_keys.py", "--install", install_root], capture_output=True)
         ok &= run("sculpt and height-key cursor vertices at normal/compact sizes",

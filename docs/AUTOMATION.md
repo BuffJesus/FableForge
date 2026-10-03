@@ -1,5 +1,14 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_brush_pin.py --install <root>` checks Space-held brush pinning against
+moving rays/cameras, release, Shift inversion, Escape and Ctrl cancellation,
+clipboard exclusions, tool/map reset and exact stroke undo at both sizes.
+States `brush_pinned`, `brush_pin_x` / `brush_pin_y` expose the latch;
+`brush_pin_point_valid`, `brush_pin_held` and `viewport_hovered` report input context.
+`key_down Space` / `key_up Space` exercise the real binding. `assert_shore x y
+0|1` checks a vertex's authored shore flag, alongside snapshot/change checks.
+
+
 `tools/test_session.py --install <root>` checks exact camera and map/tab/tool
 restoration across processes, malformed camera fallback, missing maps,
 install mismatch and default automation isolation at both sizes. An explicit

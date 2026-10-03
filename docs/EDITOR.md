@@ -1204,3 +1204,11 @@ The editor remembers the last map and its camera, View/Edit mode, editing tab
 and terrain tool on exit. Reopening the same install restores that session.
 If the map is missing or camera data is invalid, it uses the normal fallback.
 This remembers your view; use Save draft or snapshots to keep edits.
+
+
+Hold Space over the terrain viewport to pin the brush at its last valid ground
+point. The cursor shows Pinned (Space); moving the pointer or camera keeps the
+pen there. Release Space to follow the pointer again. Shift keeps its existing
+Raise/Lower, Walkable/Blocked and Shore inversion. Escape, Ctrl/Alt, text entry,
+a popup, switching tools or maps clears the pin. Copy/Paste region tools use
+their existing drag controls.

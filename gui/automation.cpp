@@ -219,7 +219,7 @@ bool Automation::tick(App& app) {
             {"W", ImGuiKey_W}, {"A", ImGuiKey_A}, {"B", ImGuiKey_B}, {"S", ImGuiKey_S}, {"D", ImGuiKey_D}, {"Q", ImGuiKey_Q},
             {"E", ImGuiKey_E}, {"F", ImGuiKey_F}, {"H", ImGuiKey_H}, {"Shift", ImGuiKey_LeftShift}, {"Alt", ImGuiKey_LeftAlt},
             {"Y", ImGuiKey_Y}, {"Z", ImGuiKey_Z}, {"F6", ImGuiKey_F6}, {"F7", ImGuiKey_F7},
-            {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Enter", ImGuiKey_Enter}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},
+            {"Space", ImGuiKey_Space}, {"Ctrl", ImGuiKey_LeftCtrl}, {"L", ImGuiKey_L}, {"Enter", ImGuiKey_Enter}, {"Escape", ImGuiKey_Escape}, {"Minus", ImGuiKey_Minus}, {"Equal", ImGuiKey_Equal},
             {"Left",ImGuiKey_LeftArrow}, {"Right",ImGuiKey_RightArrow}, {"Up",ImGuiKey_UpArrow}, {"Down",ImGuiKey_DownArrow},
             {"Comma",ImGuiKey_Comma}, {"Period",ImGuiKey_Period}, {"PageUp",ImGuiKey_PageUp}, {"PageDown",ImGuiKey_PageDown},
             {"LBracket",ImGuiKey_LeftBracket}, {"RBracket",ImGuiKey_RightBracket}, {"Delete",ImGuiKey_Delete}};
@@ -1361,6 +1361,18 @@ bool Automation::tick(App& app) {
                 camera+=terrain->cameraPassable[i]!=passabilitySnap_->camera[i];
             }
             if(walk!=expectedWalk || camera!=expectedCamera) fail(line+" (walk="+std::to_string(walk)+", camera="+std::to_string(camera)+")");
+            else note("ok   "+line);
+        }
+        ++pc_;
+    }
+    else if (cmd == "assert_shore") {
+        int x=0,y=0,expected=0; std::istringstream input(rest);
+        if (!(input>>x>>y>>expected) || !app.doc_.hasTerrain() || x<0 || y<0 || x>=app.doc_.cellsX() || y>=app.doc_.cellsY())
+            fail("assert_shore: invalid coordinate or no terrain");
+        else {
+            const auto& flags=app.doc_.terrain().shorePoint;
+            const size_t index=size_t(y)*app.doc_.cellsX()+x;
+            if (index>=flags.size() || bool(flags[index])!=bool(expected)) fail(line+" (shore flag differs)");
             else note("ok   "+line);
         }
         ++pc_;

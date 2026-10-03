@@ -619,6 +619,14 @@ Effort S, user value low.
 Effort: M (copy mode plus UI card about 1 day; the lock toggle is S). Value: high, because every edge sculpt currently produces a visible in-game seam.
 
 #### Shift does a different job: vanilla Shift freezes the pen on the last point, FableForge Shift swaps raise and lower
+
+2026-10-02: last-point pinning implemented on Space, preserving Forge's Shift
+inversion/theme bindings. Native Update confirms successful hover refreshes the
+stored point. Stock/loose normal/compact held-pin, moved-camera height/shore,
+release, context cancellation and undo checks pass. The original binding proposal
+below is superseded: Alt is already used for viewport orbit. Map-local XY/cursor
+height differs from native stored XYZ. See HANDOFF_WORLD_UI for evidence.
+
 *weakness, effort S, value med*
 
 **Vanilla:** CEditInputProcessPaintMap::ProcessInput 0x0294dbe0 checks DIK_LSHIFT/RSHIFT (0x2a/0x36) on every event and calls PaintInputStickWithLastPoint(1) 0x02991680, which sets CEditControlCentre+0xaf8. While that is set, GetCurrentPointedAtPos 0x0204b2d0 returns the stored last point (+0x8dc) and does not ray-cast. The pen stays on one spot while the mouse moves or the ground rises under it. Releasing Shift calls Stick(0). The same Shift flag (+0x2c) is passed to PaintInputPaintMap (river) and PaintInputPickupTheme (Ctrl+Shift picks the theme to replace).

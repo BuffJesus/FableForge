@@ -1,5 +1,37 @@
 # World view and UI continuation - 2026-09-29
 
+
+## 2026-10-02 continuation: hold Space to pin terrain brushes
+
+Space now latches the last valid map ground point in terrain mode and skips the
+moving ray until release. Painting follows that point through camera movement
+and viewport drags. The cursor shows an amber pin and "Pinned (Space)". No prior
+hit means no pin. Escape, Ctrl/Alt, text/popup context, tool/map changes and leaving
+terrain editing cancel it; Copy/Paste modes consume Space without pinning.
+Existing Shift inversion and theme replacement remain available. This deliberately
+uses Space rather than vanilla Shift; Alt already owns viewport orbit.
+
+Read-only FableWin SHA256 remains A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845.
+ProcessInput 0294dbe0 checks held Shift; Stick 02991680 writes centre+af8;
+GetCurrentPointedAtPos 0204b2d0 returns centre+8dc without a ray while stuck.
+Update 02035ac0 refreshes that stored point after successful unpinned hover.
+Exports are build/terrain-pin-native.txt, terrain-pin-map-native.txt and
+terrain-pin-update-native.txt. Forge keeps map-local XY and resamples cursor
+height; native stores XYZ. No native runtime equivalence claim.
+
+Release GUI rebuild and tools/test_brush_pin.py pass on stock/loose installs,
+each at 1440x900 and 800x600 / scale 1.5. Evidence: build/brush-pin-pgm0wzlf
+and build/brush-pin-7aq9u_t6. Assertions distinguish pinned from moving-ray
+height/shore writes, Shift inversion, no-hit, release, Escape/Ctrl cancellation,
+clipboard/tool/map changes and exact undo. Compact screenshot reviewed.
+Input ownership prevents Space activating a nav-focused viewport control;
+physical key state preserves the pin when a drag claims keyboard ownership.
+Existing controls and selection_actions scripts also pass against the final GUI
+(build/brush-pin-final-controls.log and brush-pin-final-selection_actions.log).
+Docs-command, Python compile and diff checks pass. Core code is unchanged.
+The harness joins check_all; the 104-check full gate remains scoped to a987019.
+
+
 ## 2026-10-02 follow-up: isolate scripted snapshot browsing
 
 Scripted runs now need an explicit owned recovery root before either manual

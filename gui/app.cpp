@@ -1578,6 +1578,12 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("context_ready=" + std::string(ctx_.ready() ? "1" : "0"));
     v.push_back("mode=" + std::string(kModeNames[int(mode_)]));
     v.push_back("rule_notice=" + (ruleKey_.empty() ? std::string("-") : ruleKey_));
+    v.push_back("brush_pin_point_valid=" + std::to_string(brushPinHaveLast_));
+    v.push_back("brush_pin_held=" + std::to_string(brushPinHeld_));
+    v.push_back("viewport_hovered=" + std::to_string(viewportHovered_));
+    v.push_back("brush_pinned=" + std::to_string(brushPinned_));
+    v.push_back("brush_pin_x=" + std::to_string(brushPinPoint_[0]));
+    v.push_back("brush_pin_y=" + std::to_string(brushPinPoint_[1]));
     v.push_back("terrain_mode=" + std::to_string(terrainMode_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);
@@ -2607,7 +2613,7 @@ void App::drawViewport(float width) {
         ImGui::SetCursorScreenPos(origin);
         ImGui::Image((ImTextureID)(intptr_t)srv, size);
         viewportOrigin_ = origin; viewportSize_ = size;
-        viewportHovered_ = ImGui::IsItemHovered();
+        viewportHovered_ = ImGui::IsItemHovered(ImGuiHoveredFlags_NoNavOverride);
         // The controls are drawn later in this child. Keep their clicks from
         // selecting terrain or clearing the current thing underneath them.
         if (viewportHovered_) {

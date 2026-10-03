@@ -784,6 +784,9 @@ private:
     void drawViewportEdges();
     bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
+    bool brushPinned_ = false, brushPinHeld_ = false, brushPinHaveLast_ = false;
+    int brushPinTool_ = -1;
+    float brushPinPoint_[2] = {0,0}, brushLastPoint_[2] = {0,0};
     size_t brushCursorVertices_ = 0;  // affected vertex dots visible for a small exact pen
     size_t brushCursorSoundCells_ = 0;  // outlined sound cells for a small brush
     size_t brushCursorEnvironmentCells_ = 0;

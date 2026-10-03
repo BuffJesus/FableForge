@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Terrain brushes now pin their last valid ground point while Space is held, with
+an explicit cursor marker and existing Shift inversion retained. Stock/loose,
+normal/compact movement, painting, cancellation and undo checks pass. Native
+last-point evidence and the deliberate binding difference are in HANDOFF_WORLD_UI.
+
+
 The dated-snapshot/session checkpoint at frozen source `a987019` passes **104
 integration checks, zero failures or skipped checks**. Core, UI, scratch installs,
 imports/recipes, world/level packs and every available mod corpus were exercised.

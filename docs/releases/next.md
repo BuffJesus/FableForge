@@ -5,6 +5,10 @@ version is chosen; validation is recorded at release time, not here.
 
 ## Changes
 
+- **Pinned terrain brush.** Hold Space to keep the pen at its last ground point
+  while moving the pointer or camera. Release to resume pointing; Shift keeps
+  its painting controls. The pinned cursor is labeled in the viewport.
+
 - **Remembered editor session.** Reopening the same install returns to the last
   map, camera, View/Edit mode, editing tab and terrain tool.
 

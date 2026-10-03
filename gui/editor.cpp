@@ -27,6 +27,7 @@
 #include <sstream>
 
 #include "ImGuizmo.h"
+#include "imgui_internal.h"
 #include "theme.hpp"
 
 namespace fs = std::filesystem;
@@ -58,6 +59,7 @@ float yawDegrees(const editor::Frame& f) {
 void App::openDocument() {
     if (modFilesBusy()) return;
     cancelCarry();
+    brushPinned_=brushPinHeld_=brushPinHaveLast_=false; brushPinTool_=-1;
     recoveryPending_.clear();
     snapshotsOpen_=snapshotRestore_=false; snapshots_.clear(); snapshotsFor_.clear(); snapshotDeletePending_.clear();
     clearBudgetAreas(); budgetHasReport_ = budgetPicking_ = false;
@@ -2810,17 +2812,44 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
     if (!editMode_ || gizmoOp_ != 4 || !documentLoaded() || !doc_.hasTerrain() || (budgetOpen_ && budgetScope_ == 3 && budgetPicking_)) {
         if (doc_.strokeActive()) doc_.endStroke();
         keyStroke_ = false;
+        brushPinned_=brushPinHaveLast_=false; brushPinTool_=-1;
+        brushPinHeld_=ImGui::IsKeyDown(ImGuiKey_Space);
         return;
     }
     ImGuiIO& io = ImGui::GetIO();
-    if (size.x <= 0 || size.y <= 0) return;
+    if (brushPinTool_!=terrainMode_) { brushPinned_=brushPinHaveLast_=false; brushPinTool_=terrainMode_; }
+    const bool pinAllowed=!io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && terrainMode_!=14 && terrainMode_!=15 &&
+        !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+        !ImGui::IsKeyPressed(ImGuiKey_Escape,false);
+    const bool pinHover=viewportHovered_ ||
+        (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+         ImGui::IsMouseHoveringRect(origin,ImVec2(origin.x+size.x,origin.y+size.y)) &&
+         io.MousePos.y < origin.y+size.y-ImGui::GetFrameHeight()-theme::S(16)-viewportControlsLift());
+    const ImGuiID pinKey=ImGui::GetID("##terrain_pin_key");
+    // Reserve Space in the terrain viewport before a nav-focused control can
+    // activate it. Clipboard modes consume the key without starting a pin.
+    if (pinHover && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt &&
+        !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel))
+        ImGui::SetKeyOwner(ImGuiKey_Space,pinKey,ImGuiInputFlags_LockThisFrame);
+    // A viewport drag may claim all keyboard keys; keep the held pin tied
+    // to physical Space state while the gating above protects text and popups.
+    const bool space=ImGui::GetKeyData(ImGuiKey_Space)->Down;
+    if (!space || !pinAllowed) brushPinned_=false;
+    if (space && !brushPinHeld_ && pinAllowed && brushPinHaveLast_ && pinHover) {
+        brushPinPoint_[0]=brushLastPoint_[0]; brushPinPoint_[1]=brushLastPoint_[1]; brushPinned_=true;
+    }
+    brushPinHeld_=space;
+    if (size.x <= 0 || size.y <= 0) { brushPinned_=brushPinHaveLast_=false; return; }
     const float u = (io.MousePos.x - origin.x) / size.x, v = (io.MousePos.y - origin.y) / size.y;
-    if (viewportHovered_ || doc_.strokeActive()) {
+    if (brushPinned_) {
+        brushHit_=true; brushFable_[0]=brushPinPoint_[0]; brushFable_[1]=brushPinPoint_[1];
+    } else if (viewportHovered_ || doc_.strokeActive()) {
         float o[3], d[3], hit[3];
         renderer_.screenRay(u, v, o, d);
         if (renderer_.rayTerrain(o, d, hit)) {
             brushHit_ = true;
             brushFable_[0] = hit[0]; brushFable_[1] = -hit[2];
+            brushLastPoint_[0]=brushFable_[0]; brushLastPoint_[1]=brushFable_[1]; brushPinHaveLast_=true;
         }
     }
     editor::TerrainBrush b;
@@ -2853,6 +2882,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
             if (!keyStroke_) { doc_.beginStroke(k); keyStroke_ = true; }
             doc_.applyBrush(k, 0.0f);
             brushFable_[0] = keyAnchor_[0]; brushFable_[1] = keyAnchor_[1];
+            brushLastPoint_[0]=keyAnchor_[0]; brushLastPoint_[1]=keyAnchor_[1]; brushPinHaveLast_=true;
             brushHit_ = true;
         }
         if (keyStroke_) return;
@@ -3196,6 +3226,15 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
             if (renderer_.project(p, lu, lv)) line[m++] = ImVec2(origin.x + lu * size.x, origin.y + lv * size.y);
         }
         if (m > 1) dl->AddPolyline(line, m, col, ImDrawFlags_None, theme::S(3.0f));
+    }
+    if (brushPinned_) {
+        const float p[3]={brushPinPoint_[0],doc_.terrainHeight(brushPinPoint_[0],brushPinPoint_[1]).value_or(0.f)+0.1f,-brushPinPoint_[1]};
+        float u,v;
+        if (renderer_.project(p,u,v)) {
+            const ImVec2 at(origin.x+u*size.x,origin.y+v*size.y);
+            dl->AddCircle(at,theme::S(7),theme::col(theme::Warn),16,theme::S(2));
+            dl->AddText(ImVec2(at.x+theme::S(10),at.y+theme::S(8)),theme::col(theme::Text),"Pinned (Space)");
+        }
     }
     // centre dot
     const auto hc = doc_.terrainHeight(centreX, centreY);
@@ -4571,6 +4610,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             auto_.registerWidget("slider_strength");
         }
         // how to use the brush, per tool (Shift only inverts raise/lower and walkable/blocked; Replace has its own hint above)
+        if (terrainMode_!=14 && terrainMode_!=15) theme::hint("Hold Space to pin the brush at its last ground point.");
         const char* how = nullptr;
         if ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_) how = "Click or drag: every block under the brush moves by the step once per stroke (a terrace). Shift swaps raise and lower. One undo step per stroke.";
         else if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
