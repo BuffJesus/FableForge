@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-02 full checkpoint: snapshots and restored sessions
+
+Frozen source `a987019`, primary Release binaries: `tools/check_all.py --no-build`
+completed ALL PASS / exit 0 with **104 PASS, 0 FAIL, 0 skipped checks**.
+Log: `build/check_all_snapshots_session_20261002.log`. All 36 CTest cases pass.
+The two new dated-snapshot and session harnesses run in the broad gate; focused
+stock/loose evidence remains in their preceding entries. Coverage includes all
+terrain/draft/recovery/Budget and editor UI workflows, retail exports/dialogue,
+scratch new levels/world moves, textures, imports/recipes, loose installs,
+backups/restore/install switching and level/world pack writes.
+
+All available mod corpora were exercised: Aeon + Controller Support, Freeroam,
+Project Seasons + AlbionSecrets, Dragon Cliff, Lost Content and Expanded
+Chapters. Lipsync checks 20,214 entries byte exactly; its 291 empty/non-type-1
+records are exclusions within an exercised check, not skipped gate checks.
+Source and binaries stayed fixed for the entire run. No live-game runtime check,
+push, merge, deployment or release was performed.
+
+While the gate ran, read-only native brush-pin evidence was exported to
+`build/terrain-pin-native.txt`, `terrain-pin-map-native.txt` and
+`terrain-pin-update-native.txt`; findings are in `build/terrain-pin-findings.md`.
+Update 02035ac0 refreshes centre+8dc from successful pointed positions when
++af8 is false; Stick 02991680 only sets that flag; GetCurrentPointedAtPos
+0204b2d0 returns the stored point without a ray cast when stuck. Binding remains
+an implementation choice: Alt inversion would conflict with Alt-drag orbit.
+An owned incomplete snapshot-directory probe passed without hiding valid points
+(`build/snapshots-ui-tcxgd2d2/1440x900/partial-directory-probe.txt.log`).
+
+
 ## 2026-10-02 continuation: restore the last map and camera session
 
 Normal startup now reopens the last known map in the same install, remembers

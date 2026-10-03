@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+The dated-snapshot/session checkpoint at frozen source `a987019` passes **104
+integration checks, zero failures or skipped checks**. Core, UI, scratch installs,
+imports/recipes, world/level packs and every available mod corpus were exercised.
+Evidence and native brush-pin follow-up findings are in HANDOFF_WORLD_UI.
+
+
 The editor now reopens the last map and camera in the same install, with its
 View/Edit mode, editing tab and terrain tool. Invalid camera data or missing
 maps fall back safely; stock/loose process tests pass at both sizes. Session
