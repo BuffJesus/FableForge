@@ -1,6 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
 
+## 2026-10-02 follow-up: readable compact shortcut sheet
+
+Visual review of the new shortcut entries exposed an older fixed-column issue:
+the help sheet clipped descriptions horizontally at 800x600 / scale 1.5. Groups
+now use full-width two-column tables with wrapped keys and actions, stacked in
+one scrollable sheet. Normal and compact captures show readable camera/object
+rows and the full bottom section including Ctrl+B, panel controls and Close.
+The editor fixture reveals Close before clicking, so it also handles taller
+help content without depending on its initial viewport position.
+
+Release rebuild, normal/compact help open/reveal/close and the full editor
+workflow pass (build/help-wrap-7nt4f951). Top and bottom compact screenshots
+reviewed. Docs-command and diff checks pass. Text/layout only; the preceding
+104-pass/one-fixture-failure full run is not reclassified as a clean full gate.
+
+
+
 ## 2026-10-02 checkpoint: pinning and per-map camera views
 
 Frozen source b132d50 / primary Release binaries: tools/check_all.py --no-build

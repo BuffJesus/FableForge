@@ -360,26 +360,30 @@ void App::drawHelpOverlay() {
         {"World tab", {{"Drag a map", "move it (snaps to 32)"}, {"Arrow keys", "nudge the selected map by 32"}, {"Wheel / right drag", "zoom / pan"}, {"F  or  Home", "fit the world"}}},
         {"Everywhere", {{"1  2  3  4", "objects / terrain / actors / level"}, {"Ctrl + F", "search the current browser"}, {"Ctrl + B", "save a dated snapshot of the current map"}, {"Ctrl + E", "export the selected map"}, {"Ctrl + O  /  Ctrl + Shift + O", "open a .lev / a world (.wld)"}, {"Ctrl + [  /  Ctrl + ]", "hide / show the side panels"}, {"Drop a .lev / .tng / .wld", "open a loose file or a world"}}},
     };
-    const float colW = S(190);
-    ImGui::Columns(2, "##helpcols", false);
-    ImGui::SetColumnWidth(0, std::min(S(720), vp->Size.x - S(40)) * 0.5f);
-    int i = 0;
     for (const Group& g : groups) {
-        if (i == 3) ImGui::NextColumn();
         ImGui::PushFont(fontBold_);
         ImGui::TextColored(theme::vec(theme::Accent), "%s", g.title);
         ImGui::PopFont();
         ImGui::PushFont(fontSmall_);
-        for (const Row& r : g.rows) {
-            ImGui::TextColored(theme::vec(theme::Text), "%s", r.keys);
-            ImGui::SameLine(colW);
-            ImGui::TextColored(theme::vec(theme::Muted), "%s", r.what);
+        if (ImGui::BeginTable(g.title, 2, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Keys", ImGuiTableColumnFlags_WidthFixed, std::min(S(220), ImGui::GetContentRegionAvail().x * 0.4f));
+            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthStretch);
+            for (const Row& r : g.rows) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::PushTextWrapPos(0);
+                ImGui::TextColored(theme::vec(theme::Text), "%s", r.keys);
+                ImGui::PopTextWrapPos();
+                ImGui::TableNextColumn();
+                ImGui::PushTextWrapPos(0);
+                ImGui::TextColored(theme::vec(theme::Muted), "%s", r.what);
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::EndTable();
         }
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, S(8)));
-        ++i;
     }
-    ImGui::Columns(1);
     ImGui::Dummy(ImVec2(0, S(4)));
     if (theme::ghostButton("Close", ImVec2(S(120), S(28)))) helpOpen_ = false;
     auto_.registerWidget("btn_help_close");

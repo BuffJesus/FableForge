@@ -35,6 +35,8 @@ help 1
 frames 2
 assert_state help_open 1
 assert_widget btn_help_close
+reveal btn_help_close
+frames 3
 click btn_help_close
 frames 4
 assert_state help_open 0
