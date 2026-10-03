@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted Add-feedback package, integration pending
+
+Choice review product eecf69d passes the FOUR focused extracted small-bank UI
+workflows in build/texture-add-package-focus-lbxs6vli/result.json: Add locked,
+Add invalid, replacement locked and replacement invalid, all at normal/compact
+sizes with retry, decoded pixels and exact Restore. It also passes 116 local
+document links and four guide images. This is not the complete 37-workflow
+package suite. Archive dist/development/20261003-eecf69d/
+FableForge-0.18.0-dev-win64.zip SHA256:
+86d476ec25e341b7d56e30e07995b9e17702c17bf636af23fac64de297d6550d.
+The guide-only ZIP is alongside it, unpublished. Extracted executables run under
+a literal percent-token/ampersand path from an unrelated working directory.
+
+The packaged schema is byte-identical to validated linker package d2c1100.
+forge.exe and forge-tools.exe differ ONLY in their PE timestamp and checksum
+fields (four changed bytes total per file): GNU strip rewrites those headers at
+packaging. The focus runner explicitly normalizes only those two four-byte
+fields and compares every other byte. Do not call the original executable files
+byte-identical. This accounts for the initial wrbme589 comparison failure; no
+product binary or linker behavior changed. The corrected four UI checks pass.
+
+Primary is still frozen, clean b1eb3b9 during the full source gate, log
+build/check_all_fmp_b1eb3b9_20261003.log. The new linker, unsupported FMP lifecycle,
+real-bank replacement and Unicode workflows have passed there; the gate has not
+completed yet. eecf69d remains isolated until that result is reviewed. No active
+Add/package test or review build remains. No live-install writes/game launch.
+
 ## 2026-10-03 Add texture error feedback validated in isolated review
 
 Choice review feat/forge-texture-add-feedback-review-20261003 is based on primary
