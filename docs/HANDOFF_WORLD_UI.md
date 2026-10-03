@@ -31,8 +31,15 @@ was doing large bank copies. Preserve this failure evidence; I/O contention is
 an inference, not an established cause. The serial rerun passes every case at
 build/texture-unicode-yhwlqvl3 (log build/texture_unicode_replace_serial_20261003.log),
 including Unicode CLI inputs, invalid/locked refusal, both GUI sizes, decoded
-pixels and exact Restore. Promotion and focused extracted-package checks are
-pending. The e4a2807 package passes all 31 workflows;
+pixels and exact Restore. Primary was fast-forwarded to 39bdf32 and its Release GUI rebuilt. The stripped
+39bdf32 ZIP passes four focused extracted texture workflows (locked replacement,
+invalid replacement, Unicode image inputs and locked export), run sequentially
+in build/texture-package-focus-nge7kqg0/result.json; log
+build/package_texture_feedback_20261003.log. Its SHA-256 is
+2f1b5968a5395dfd297b7c4a1e6a0e4593e9821c84620e147a50dcb41421e1ca.
+The application and guide ZIPs remain in dist/development/20261003-39bdf32.
+This is focused coverage, not an execution of the entire new 33-workflow suite.
+The e4a2807 package passes all 31 workflows;
 neither increment is included in the frozen e7cb37b broad gate. Writes remain in
 owned scratch roots; no game launch or live-install changes occurred.
 

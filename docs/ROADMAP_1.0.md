@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary texture checkpoint: 39bdf32 is promoted and rebuilt. Its
+stripped development ZIP passes four focused texture workflows sequentially,
+including new locked/invalid replacement recovery and existing Unicode inputs /
+locked exports. The full 33-workflow package suite was not rerun; the preceding
+e4a2807 package passes all 31. See HANDOFF_WORLD_UI for the exact boundaries.
+
 2026-10-03 primary Mods checkpoint: e4a2807 is promoted and rebuilt; its stripped
 development ZIP passes all 31 runtime workflows, 115 Markdown links and four
 guide images. Mods failure feedback and same-process recovery pass at both sizes.
