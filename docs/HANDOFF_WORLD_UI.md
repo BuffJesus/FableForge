@@ -1,6 +1,33 @@
 # World view and UI continuation - 2026-09-29
 
 
+## 2026-10-02 continuation: map-camera field of view
+
+View > Map camera now provides a vertical FOV slider in degrees (30-100),
+Ctrl+click typed input with the same bounds and reset to Camera's 0.9-radian
+default. The submenu is disabled outside a loaded map view. Existing map-scoped
+session settings persist the chosen angle; no map-document writes are involved.
+Automation registers menu_view, menu_map_camera, slider_camera_fov and
+button_camera_fov_reset, with camera_fov_degrees state.
+
+Native ConsoleEditSetCameraFOV 02053730 accepts one integer and calls
+SetCameraFOV 0204f3a0. That divides the value by the confirmed double constant
+360.0 at 0402a5e8 before CCamera::SetFOV, using native turn units. Forge's renderer
+uses radians and converts the degrees control accordingly; no native FOV range
+or camera-point serialization equivalence is asserted. Read-only exports:
+build/camera-fov-native.txt and build/camera-fov-setter-native.txt; FableWin identity
+matches the preceding pin investigation.
+
+Expanded tools/test_session.py checks both slider limits, reset, typed 82-degree
+input, clean object/terrain document state and exact process-restored camera,
+plus prior invalid-camera/missing-map/install-isolation cases at both sizes.
+Final stock/loose evidence: build/session-ui-msr1_i_h / build/session-ui-oaot1_3p.
+Compact menu screenshot reviewed. Core unchanged; no new full-gate claim.
+Camera bookmarks, per-map view libraries and World-tab session restoration
+remain separate follow-ups.
+
+
+
 ## 2026-10-02 continuation: hold Space to pin terrain brushes
 
 Space now latches the last valid map ground point in terrain mode and skips the

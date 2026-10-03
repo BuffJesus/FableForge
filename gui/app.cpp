@@ -1584,6 +1584,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("brush_pinned=" + std::to_string(brushPinned_));
     v.push_back("brush_pin_x=" + std::to_string(brushPinPoint_[0]));
     v.push_back("brush_pin_y=" + std::to_string(brushPinPoint_[1]));
+    v.push_back("camera_fov_degrees=" + std::to_string(camera_.fovY * (180.f / 3.14159265358979323846f)));
     v.push_back("terrain_mode=" + std::to_string(terrainMode_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);
@@ -2167,7 +2168,9 @@ void App::drawMenuBar() {
         if (ImGui::MenuItem("Exit", "Alt+F4")) requestClose();
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("View")) {
+    const bool viewMenu=ImGui::BeginMenu("View");
+    auto_.registerWidget("menu_view");
+    if (viewMenu) {
         ImGui::BeginDisabled(standaloneAssetPreview());
         if (ImGui::MenuItem("Map list", "Ctrl+[", settings_.showExplorer)) { settings_.showExplorer = !settings_.showExplorer; saveSettings(); }
         ImGui::EndDisabled();
@@ -2175,6 +2178,20 @@ void App::drawMenuBar() {
             ImGui::SetTooltip("The map list returns when you leave this asset preview.");
         if (ImGui::MenuItem("Tool panel", "Ctrl+]", settings_.showActions)) { settings_.showActions = !settings_.showActions; saveSettings(); }
         ImGui::Separator();
+        const bool cameraMenu=ImGui::BeginMenu("Map camera", documentLoaded() && !worldMode_ && !texturesMode_ && !modsMode_);
+        auto_.registerWidget("menu_map_camera");
+        if (cameraMenu) {
+            ImGui::TextUnformatted("Vertical field of view");
+            float degrees=camera_.fovY * (180.f / 3.14159265358979323846f);
+            ImGui::SetNextItemWidth(theme::S(220));
+            if (ImGui::SliderFloat("##camera_fov", &degrees, 30.f, 100.f, "%.1f deg", ImGuiSliderFlags_AlwaysClamp))
+                camera_.fovY=degrees * (3.14159265358979323846f / 180.f);
+            auto_.registerWidget("slider_camera_fov");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Narrower views zoom in; wider views show more of the map. Ctrl+click to type degrees.");
+            if (ImGui::Button("Reset field of view")) camera_.fovY=Camera{}.fovY;
+            auto_.registerWidget("button_camera_fov_reset");
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Text size")) {
             // on top of the display DPI and the window size
             for (const float z : {0.8f, 0.9f, 1.0f, 1.1f, 1.25f, 1.5f}) {

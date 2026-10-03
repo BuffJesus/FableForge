@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+View > Map camera now adjusts vertical FOV in degrees, with typed input and reset.
+Stock/loose normal/compact controls and restart restoration pass; session metadata
+stores the view without editing the map. See HANDOFF_WORLD_UI.
+
+
 Terrain brushes now pin their last valid ground point while Space is held, with
 an explicit cursor marker and existing Shift inversion retained. Stock/loose,
 normal/compact movement, painting, cancellation and undo checks pass. Native

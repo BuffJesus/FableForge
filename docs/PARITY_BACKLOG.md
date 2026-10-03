@@ -1748,6 +1748,13 @@ Effort S. Value med.
 **Fix:** 1) State: add `std::set<std::string> hiddenKinds_` to App (app.hpp, next to hiddenSections_ at app.hpp:403), holding upper-case thing types: CREATURE, BUILDING, OBJECT, HOLY_SITE, VILLAGE. Vanilla groups types this way; switches, markers and other kinds stay under OBJECT unless SetThingDrawing at 0x02036ee0 shows another mapping, so disassemble that function first to confirm which type ids each menu item covers. 2) Rule: widen thingHiddenBySection (editor.cpp:1415), or add thingHidden(per,t) that wraps it, so it also returns true when `hiddenKinds_.count(doc_.summary(t).type)`. Point every caller at it: applySectionVisibility (editor.cpp:795), trackNodeAt (editor.cpp:815) and the selected_visible probe (app.cpp:1339). Set sectionsDirty_=true on every toggle so applySectionVisibility runs again. Hidden kinds then stop being drawn and picked through the existing instance.visible path, with no renderer change. 3) UI: keep the 'Objects' chip as the master toggle and give it a small right-click popover (or a caret next to it) at app.cpp:1933, with checkboxes Creatures / Buildings / Objects / Holy sites / Villages. Call auto_.registerWidget for each checkbox, and when any kind is hidden, show a partial state on the chip, such as 'Objects (3/5)'. 4) Persistence: write the set into the settings key/value dump (the pattern at app.cpp:1264, e.g. `hidden_kinds=CREATURE,VILLAGE`) and read it back on load, as vanilla's ShowingX settings keys do. Never write it into the level. 5) Automation: add a `show_kind <TYPE> 0|1` command in automation.cpp beside the section-visibility command at automation.cpp:292. Effort S, value low.
 
 #### The camera view is not remembered between sessions; no camera bookmarks and no FOV control
+
+2026-10-02: last-map camera/session persistence and View > Map camera FOV
+control are implemented. Slider limits, typed degrees, reset and exact restart
+restoration pass stock/loose at normal/compact sizes. Camera bookmarks and a
+per-map view library remain open. Native degrees-to-turn setter and Forge's
+radian conversion are recorded separately in HANDOFF_WORLD_UI.
+
 *gap, effort S, value low*
 
 **Vanilla:** SaveSettings 0x0203d9c0 / LoadSettings 0x0203cdc0 persist CamPos, CamViewDir, EditMode, ViewMode and the grid/snap/show flags (StartEditorSettings ... EndEditorSettings). The console has EditSetCameraPos, EditSetCameraToFace, EditSetCameraFOV and EditLoadCamera. The CameraPoint tab can take a camera from the clipboard (c:\cameras.bin), so a framed view can be reused as a camera point.

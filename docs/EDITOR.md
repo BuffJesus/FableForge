@@ -1205,6 +1205,10 @@ and terrain tool on exit. Reopening the same install restores that session.
 If the map is missing or camera data is invalid, it uses the normal fallback.
 This remembers your view; use Save draft or snapshots to keep edits.
 
+**View > Map camera** adjusts vertical field of view from 30 to 100 degrees.
+Drag the slider or Ctrl+click to type; Reset field of view restores the default.
+The view is remembered on exit and changing it does not edit the map.
+
 
 Hold Space over the terrain viewport to pin the brush at its last valid ground
 point. The cursor shows Pinned (Space); moving the pointer or camera keeps the

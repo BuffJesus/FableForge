@@ -32,11 +32,27 @@ def main():
             return json.loads(settings.read_text(encoding='utf-8')) if settings.exists() else None
         first=run('capture',['wait_maps','wait_ready','select TeleporterGreatwood','wait_loaded','wait_foliage',
             'tour -1',f'set uiscale {scale}','edit 1','edit_tab 1','terrain_mode 16',
-            'camera 11 13 45 0.4 0.7 25','quit'])
+            'camera 11 13 45 0.4 0.7 25',
+            'click menu_view','frames 3','click menu_map_camera','frames 3',
+            'mouse_move slider_camera_fov','mouse_down Left','mouse_delta -400 0','frames 3',
+            'mouse_up Left','frames 3','assert_state_min camera_fov_degrees 29.99',
+            'assert_state_max camera_fov_degrees 30.01',
+            'mouse_move slider_camera_fov','mouse_down Left','mouse_delta 400 0','frames 3',
+            'mouse_up Left','frames 3','assert_state_min camera_fov_degrees 99.99',
+            'assert_state_max camera_fov_degrees 100.01',
+            'click button_camera_fov_reset','frames 3',
+            'assert_state_min camera_fov_degrees 51.56','assert_state_max camera_fov_degrees 51.58',
+            'mouse_move slider_camera_fov','key_down Ctrl','click slider_camera_fov','key_up Ctrl',
+            'input_text 82','key_down Enter','key_up Enter','frames 3',
+            'assert_state_min camera_fov_degrees 81.99','assert_state_max camera_fov_degrees 82.01',
+            'assert_state doc_dirty 0','assert_state terrain_draft_dirty 0','mouse_move 20 20','frames 3',
+            f'screenshot {(case/"camera-fov.png").as_posix()}',
+            'key_down Escape','key_up Escape','frames 3','key_down Escape','key_up Escape','frames 3','quit'])
         assert first['lastMap']=='TeleporterGreatwood' and first['terrainMode']==16
         second=run('restore',['wait_maps','wait_ready','wait_loaded','wait_foliage',
             'assert_state selected TeleporterGreatwood','assert_state edit_mode 1',
-            'assert_state edit_tab 1','assert_state terrain_mode 16','quit'])
+            'assert_state edit_tab 1','assert_state terrain_mode 16',
+            'assert_state_min camera_fov_degrees 81.99','assert_state_max camera_fov_degrees 82.01','quit'])
         assert second['camera']==first['camera'],(first['camera'],second['camera'])
         default=run('default-auto',['wait_maps','wait_ready','assert_state selected','quit'],False)
         assert default==second
