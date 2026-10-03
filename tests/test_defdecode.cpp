@@ -64,5 +64,17 @@ int main() {
     }
     check(merged.payload == std::vector<uint8_t>({3,1,0,0,0,3,2,0,0,0,5}),
           "conflict identity preserves merged payload");
+    check(merged.sourceVersions == std::vector<std::optional<size_t>>({1,1,1}),
+          "last changing source owns each selected conflicting part");
+    const auto vanilla = forge::defdecode::mergeFields(base, {{"first",first},{"last",last}}, "vanilla");
+    check(vanilla.sourceVersions == std::vector<std::optional<size_t>>(3),
+          "vanilla conflicting parts carry no mod symbols");
+    auto independent = last; independent.fields[0] = base.fields[0];
+    const auto chosen = forge::defdecode::mergeFields(base, {{"first",first},{"last",independent}}, "last");
+    check(chosen.sourceVersions == std::vector<std::optional<size_t>>({1,0,1}),
+          "choice owns conflicts; independent edit retains its actual source");
+    const auto agreement = forge::defdecode::mergeFields(base, {{"first",first},{"last",first}});
+    check(agreement.sourceVersions == std::vector<std::optional<size_t>>({0,0,0}),
+          "agreeing changed parts retain their first equivalent source");
     return failures ? 1 : 0;
 }

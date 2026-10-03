@@ -176,6 +176,7 @@ FieldMerge mergeFields(
                           pick == "none" || pick == "-";
 
     Decoded merged = base;  // tags + shape from base; values overwritten below
+    r.sourceVersions.resize(base.fields.size() + 1);
 
     // Merge one part given its base value and each version's value for it.
     // Applies the result into `dst`; records auto-merge / conflict in `r`.
@@ -185,10 +186,12 @@ FieldMerge mergeFields(
                          std::vector<uint8_t>& dst) {
         std::vector<std::string> changers;   // mods that differ from base
         std::vector<const std::vector<uint8_t>*> changerVals;
+        std::vector<size_t> changerIndices;
         for (size_t m = 0; m < versions.size(); ++m) {
             if (modVals[m] != baseVal) {
                 changers.push_back(versions[m].first);
                 changerVals.push_back(&modVals[m]);
+                changerIndices.push_back(m);
             }
         }
         if (changers.empty()) { dst = baseVal; return; }
@@ -200,6 +203,7 @@ FieldMerge mergeFields(
         if (changers.size() == 1 || allSame) {
             dst = *changerVals[0];
             r.autoMerged.push_back(partName);
+            r.sourceVersions[partIndex] = changerIndices.front();
             return;
         }
 
@@ -208,14 +212,15 @@ FieldMerge mergeFields(
         c.part = partName;
         c.partIndex = partIndex;
         c.mods = changers;
+        std::optional<size_t> selected = changerIndices.back();
         if (!pick.empty()) {
-            if (keepBase) { dst = baseVal; c.winner = "vanilla"; }
+            if (keepBase) { dst = baseVal; c.winner = "vanilla"; selected.reset(); }
             else {
                 dst = *changerVals.back();
                 c.winner = changers.back();
                 for (size_t m = 0; m < versions.size(); ++m) {
                     if (versions[m].first == pick && modVals[m] != baseVal) {
-                        dst = modVals[m]; c.winner = pick; break;
+                        dst = modVals[m]; c.winner = pick; selected = m; break;
                     }
                 }
             }
@@ -223,6 +228,7 @@ FieldMerge mergeFields(
             dst = *changerVals.back();
             c.winner = changers.back();
         }
+        r.sourceVersions[partIndex] = selected;
         r.conflicts.push_back(std::move(c));
     };
 

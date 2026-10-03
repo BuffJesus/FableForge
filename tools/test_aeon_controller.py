@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from test_fmp_links import audit
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -23,9 +24,17 @@ DLL = CORPUS / "ControllerSupportFMP" / "FableControllerSupport.dll"
 
 
 def main():
+    global CORPUS, RETAIL, AEON, FMP, DLL, TOOL
     parser = argparse.ArgumentParser()
     parser.add_argument("--keep", action="store_true", help="keep the scratch input and output")
+    parser.add_argument("--corpus", type=Path, default=CORPUS)
+    parser.add_argument("--install", type=Path, default=RETAIL)
+    parser.add_argument("--tool", type=Path, default=TOOL)
     args = parser.parse_args()
+    CORPUS, RETAIL, TOOL = args.corpus.resolve(), args.install.resolve(), args.tool.resolve()
+    AEON = CORPUS / "AeonEdition"
+    FMP = CORPUS / "ControllerSupportFMP" / "ControllerSupport.fmp"
+    DLL = CORPUS / "ControllerSupportFMP" / "FableControllerSupport.dll"
     required = [TOOL, AEON / "Data" / "CompiledDefs" / "game.bin",
                 AEON / "Data" / "graphics" / "graphics.big",
                 AEON / "Data" / "graphics" / "pc" / "textures.big",
@@ -124,6 +133,9 @@ def main():
         # Aeon's replacement has 70; the FMP intentionally wins this field.
         assert (aeon_count, merged_count) == (70, 141), (aeon_count, merged_count)
         assert "0 field conflicts, 0 whole-record conflicts" in result, result[-1200:]
+        named_links = audit(out)
+        assert named_links['checked'] == 14 and not named_links['errors'], named_links
+        (work/'named-links.json').write_text(json.dumps(named_links, indent=2), encoding='utf-8')
         wad_summary = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, 47 new level file\(s\) appended", result)
         assert wad_summary and int(wad_summary.group(1)) == loose_overrides - 47, result[-1200:]
         mesh_audit = json.loads(run("assets", "missing-mesh", out,
@@ -133,6 +145,7 @@ def main():
         print("PASS: Aeon Edition -> Controller Support FMP -> EgoCore DLL")
         print("  order:", ", ".join(m["kind"] for m in order))
         print(f"  controller binding count: Aeon {aeon_count} -> merged {merged_count}; DLL registered in Mods.ini")
+        print("  named controller definition references: 14 checked, 0 mismatches")
         print(f"  FinalAlbion.wad: all {len(aeon_levels) + len(root_levels)} Aeon level payloads match the effective build ({loose_overrides} loose overrides); {len(source_differences)} differ from the source")
         for name in source_differences[:8]:
             print("    source delta:", name)

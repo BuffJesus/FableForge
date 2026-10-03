@@ -25,6 +25,7 @@
 // interpretation is provided for the known scalar/string types.
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -86,6 +87,9 @@ struct FieldMerge {
     std::vector<uint8_t> payload;        // merged payload (valid iff ok)
     std::vector<std::string> autoMerged; // parts exactly one mod changed (or
                                          // several changed identically)
+    // Prefix, then each field: the selected version index; null means base.
+    // Symbols carried by a source must follow the part actually selected.
+    std::vector<std::optional<size_t>> sourceVersions;
     struct Conflict {
         std::string part;                // field name, or "<prefix>"
         std::vector<std::string> mods;   // mods that set differing values

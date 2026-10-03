@@ -22,6 +22,43 @@ def crc0(name):
     return crc
 
 
+def package_records(path):
+    """Read BIG entry tables independently, retaining each raw payload and offset."""
+    data = path.read_bytes(); pos = u32(data, 8); count = u32(data, pos); pos += 4
+    banks = {}
+    for _ in range(count):
+        end = next(i for i in range(pos, len(data)) if data[i] in (0, 255))
+        name = data[pos:end].decode('ascii'); pos = end+1
+        _, entries, start, _, _ = struct.unpack_from('<5I', data, pos); pos += 20
+        cursor = start+4+u32(data, start)*8; records = {}
+        for _ in range(entries):
+            _, _, _, length, offset, _, size = struct.unpack_from('<7I', data, cursor); cursor += 28
+            record = data[cursor:cursor+size].decode('ascii'); cursor += size+4
+            sources = u32(data, cursor); cursor += 4
+            for _ in range(sources):
+                size = u32(data, cursor); cursor += 4+size
+            size = u32(data, cursor); cursor += 4+size
+            records[record] = (data[offset:offset+length], offset)
+        banks[name] = records
+    return banks
+
+
+def rewrite_bank(original, output, entries):
+    """Independent fixture writer: preserve the identity table, replace chunks."""
+    defs = output/'data/CompiledDefs'; defs.mkdir(parents=True)
+    source = original/'data/CompiledDefs'
+    shutil.copyfile(source/'names.bin', defs/'names.bin')
+    raw = (source/'game.bin').read_bytes(); chunks = []; offsets = []; total = 0
+    assert u32(raw, 9) == len(entries)
+    for index, entry in enumerate(entries):
+        block = zlib.compress(struct.pack('<H', 2)+entry['data'])
+        offsets.append((index, total)); chunks.append(block); total += len(block)
+    offsets.append((len(entries), total))
+    table = b''.join(struct.pack('<II', *item) for item in offsets)
+    (defs/'game.bin').write_bytes(raw[:13+len(entries)*12]+struct.pack('<I', len(offsets))+
+        table+struct.pack('<I', total)+b''.join(chunks))
+
+
 def read_bank(root):
     folder = root/'data/CompiledDefs'
     names_data = (folder/'names.bin').read_bytes()
@@ -96,10 +133,11 @@ def main():
     parser.add_argument('--install',type=Path,required=True)
     parser.add_argument('--fmp',type=Path,required=True)
     parser.add_argument('--aeon',type=Path,required=True)
+    parser.add_argument('--tool',type=Path,default=repo/'build/forge-tools.exe')
     args=parser.parse_args()
     work=Path(tempfile.mkdtemp(prefix='fmp-links-',dir=repo/'build')).resolve()
     print('Evidence retained at',work,flush=True)
-    tool=repo/'build/forge-tools.exe'; schema=repo/'docs/re_reference/def_schema.json'
+    tool=args.tool.resolve(); schema=repo/'docs/re_reference/def_schema.json'
     sources=[args.fmp]+[root/'data/CompiledDefs'/name for root in (args.install,args.aeon) for name in ('game.bin','names.bin')]
     def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
     before={p:digest(p) for p in sources}
@@ -110,6 +148,27 @@ def main():
         (work/(label+'.log')).write_bytes(result.stdout+result.stderr)
         assert result.returncode==0,(result.stdout+result.stderr).decode('utf-8',errors='replace')
         reports[label]=audit(output)
+        # Every unmentioned record and every non-reference FMP byte survives.
+        before_entries = read_bank(base); after_entries = read_bank(output)
+        raw_records = package_records(args.fmp)['GameBINEntries']
+        after_by_name = {e['name']:e for e in after_entries if e['name']}
+        for index, entry in enumerate(before_entries):
+            if entry['name'] not in raw_records:
+                assert after_entries[index] == entry, (label, index, entry['name'])
+        refs = reports[label]['references']
+        for name, (payload, _) in raw_records.items():
+            expected = bytearray(payload)
+            for ref in refs:
+                if ref['record'] != name: continue
+                field = ref['field']
+                if field.startswith('CDefs'): offset = 13
+                else:
+                    stem = field.split('[')[0]; offset = payload.index(struct.pack('<I', crc0(stem)))+4
+                    if '[' in field: offset += 4+int(field.split('[')[1][:-1])*4
+                struct.pack_into('<I', expected, offset, ref['expected_id'])
+            assert after_by_name[name]['data'] == expected, (label, name, 'unexpected payload byte change')
+        reports[label]['preserved_existing_records'] = len(before_entries)-sum(e['name'] in raw_records for e in before_entries)
+        reports[label]['preserved_fmp_payloads'] = len(raw_records)
     base,aeon=work/'base',work/'aeon-source'
     for original,copy in [(args.install,base),(args.aeon,aeon)]:
         for name in ('game.bin','names.bin'):
@@ -120,10 +179,101 @@ def main():
     (work/'merged.log').write_bytes(result.stdout+result.stderr)
     assert result.returncode==0,(result.stdout+result.stderr).decode('utf-8',errors='replace')
     reports['merged']=audit(merged)
+
+    # A competing camera field plus an independent edit: picks must apply only
+    # to the conflicting field, and the FMP symbols must follow that choice.
+    entries = read_bank(base); ids = {e['name']:i for i,e in enumerate(entries) if e['name']}
+    owner = 'CAMERA_MANAGER_SET_TEMPLATE'; field = 'CameraManagerPCCombat'
+    rival = work/'Rival'; payload = bytearray(entries[ids[owner]]['data'])
+    base_reference = u32(payload, payload.index(struct.pack('<I', crc0(field)))+4)
+    for changed, target in [(field, 'CAMERA_PC_NORMAL'), ('CameraManagerMain', 'CAMERA_PC_FAR')]:
+        offset = payload.index(struct.pack('<I', crc0(changed)))+4
+        struct.pack_into('<I', payload, offset, ids[target])
+    entries[ids[owner]] = dict(entries[ids[owner]], data=bytes(payload))
+    rewrite_bank(base, rival, entries)
+    choices = {}
+    for label, pick, reverse in [('last', None, False), ('controller', args.fmp.stem, False),
+                                  ('vanilla', 'vanilla', False), ('reversed', None, True)]:
+        output = work/('choice-'+label); options = []
+        if pick:
+            picks = work/(label+'.txt'); picks.write_text(owner+'\t'+pick+'\n', encoding='utf-8')
+            options += ['--picks', str(picks)]
+        sources_order = [rival, args.fmp] if reverse else [args.fmp, rival]
+        choice_base = work/('choice-base-'+label)
+        shutil.copytree(base, choice_base)
+        for source in sources_order:
+            added = subprocess.run([str(tool), 'mods', 'add', str(choice_base), str(source)],
+                                   capture_output=True, timeout=60)
+            assert added.returncode == 0, added.stderr
+        argv = [str(tool), 'mods', 'build', str(choice_base), str(output), '--fields', str(schema)]
+        result = subprocess.run(argv+options, capture_output=True, timeout=120)
+        (work/('choice-'+label+'.log')).write_bytes(result.stdout+result.stderr)
+        assert result.returncode == 0, (result.stdout+result.stderr).decode('utf-8', errors='replace')
+        actual_entries = read_bank(output); by_name = {e['name']:i for i,e in enumerate(actual_entries) if e['name']}
+        result_payload = actual_entries[by_name[owner]]['data']
+        def value(name): return u32(result_payload, result_payload.index(struct.pack('<I', crc0(name)))+4)
+        expected = (base_reference if label == 'vanilla' else
+                    by_name['CAMERA_MANAGER_PC_MAIN_COMBAT'] if label in ('controller', 'reversed') else ids['CAMERA_PC_NORMAL'])
+        assert value(field) == expected, (label, value(field), expected)
+        assert value('CameraManagerMain') == ids['CAMERA_PC_FAR'], (label, 'independent field lost')
+        choices[label] = {'selected_reference': value(field), 'independent_field_retained': True}
+    reports['choices'] = choices
+
+    # Corrupt an owned metadata copy and ensure failed application keeps prior
+    # output bytes intact, rather than emitting a successfully imported bank.
+    bad_fmp = work/'malformed.fmp'; bad_data = bytearray(args.fmp.read_bytes())
+    _, meta_offset = package_records(args.fmp)['GameBINLinkMetaData'][owner]
+    bad_data[meta_offset] = 21; bad_fmp.write_bytes(bad_data)
+    protected = work/'protected/data/CompiledDefs'; protected.mkdir(parents=True)
+    for name in ('game.bin', 'names.bin'): (protected/name).write_bytes(b'prior output '+name.encode())
+    old_output = {p:p.read_bytes() for p in protected.iterdir()}
+    result = subprocess.run([str(tool), 'fmp', 'apply', str(base), str(bad_fmp), str(protected.parents[1])],
+                            capture_output=True, timeout=60)
+    (work/'malformed.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode != 0 and b'FMP links:' in result.stderr, result.stderr
+    assert all(p.read_bytes() == data for p,data in old_output.items())
+    reports['malformed'] = {'refused': True, 'prior_output_preserved': True}
+    missing_fmp = work/'missing-target.fmp'; missing_data = bytearray(args.fmp.read_bytes())
+    metadata, meta_offset = package_records(args.fmp)['GameBINLinkMetaData'][owner]
+    target = b'CAMERA_MANAGER_PC_MAIN_COMBAT'
+    assert metadata.count(target) == 1
+    offset = meta_offset+metadata.index(target)
+    missing_data[offset:offset+len(target)] = b'Z'*len(target)
+    missing_fmp.write_bytes(missing_data)
+    result = subprocess.run([str(tool), 'fmp', 'apply', str(base), str(missing_fmp), str(protected.parents[1])],
+                            capture_output=True, timeout=60)
+    (work/'missing-target.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode != 0 and b'missing target' in result.stderr, result.stderr
+    assert all(p.read_bytes() == data for p,data in old_output.items())
+    reports['missing_target'] = {'refused': True, 'prior_output_preserved': True}
+    unused_base = work/'unused-missing-base'; shutil.copytree(base, unused_base)
+    for source in (missing_fmp, rival):
+        added = subprocess.run([str(tool), 'mods', 'add', str(unused_base), str(source)],
+                               capture_output=True, timeout=60)
+        assert added.returncode == 0, added.stderr
+    unused_out = work/'unused-missing-output'
+    result = subprocess.run([str(tool), 'mods', 'build', str(unused_base), str(unused_out),
+                             '--fields', str(schema)], capture_output=True, timeout=120)
+    (work/'unused-missing.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode == 0, result.stderr
+    unused_entry = next(e for e in read_bank(unused_out) if e['name'] == owner)['data']
+    assert u32(unused_entry, unused_entry.index(struct.pack('<I', crc0(field)))+4) == ids['CAMERA_PC_NORMAL']
+    selected_picks = work/'selected-missing.txt'
+    selected_picks.write_text(owner+'\t'+missing_fmp.stem+'\n', encoding='utf-8')
+    preserved_out = {p:p.read_bytes() for p in (unused_out/'data/CompiledDefs').iterdir()}
+    result = subprocess.run([str(tool), 'mods', 'build', str(unused_base), str(unused_out),
+                             '--fields', str(schema), '--picks', str(selected_picks)], capture_output=True, timeout=120)
+    (work/'selected-missing.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode != 0 and b'missing target' in result.stderr, result.stderr
+    assert all(p.read_bytes() == data for p,data in preserved_out.items())
+    reports['composed_missing'] = {'unused_version_allowed': True, 'selected_version_refused': True,
+                                   'prior_output_preserved': True}
     assert {p:digest(p) for p in sources}==before
     (work/'result.json').write_text(json.dumps(reports,indent=2),encoding='utf-8')
-    for label,report in reports.items(): print(label,report['checked'],'references checked;',len(report['errors']),'mismatches',flush=True)
-    assert all(not report['errors'] for report in reports.values()),'FMP named references do not resolve to their intended targets; see result.json'
+    for label in ('retail', 'aeon', 'merged'):
+        report = reports[label]; print(label,report['checked'],'references checked;',len(report['errors']),'mismatches',flush=True)
+    assert all(not reports[label]['errors'] for label in ('retail', 'aeon', 'merged')),'FMP named references do not resolve to their intended targets; see result.json'
+    print('Four conflict choices, payload preservation and malformed-output refusal: PASS', flush=True)
 
 
 if __name__=='__main__': main()

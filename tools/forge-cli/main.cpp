@@ -43,6 +43,7 @@
 #include "forge/gamedata.hpp"
 #include "forge/questproject.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/fmplinks.hpp"
 #include "forge/defedit.hpp"
 #include "forge/defschema.hpp"
 #include "forge/fse.hpp"
@@ -4722,7 +4723,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               bool jsonOutput,
               json* reportOut = nullptr,                                     // `mods merge --json`: the report goes here, nothing is printed
               const std::map<std::string, std::string>* picksMap = nullptr,  // picks already parsed (the mods family), else picksPath
-              const std::vector<std::string>* rootLabels = nullptr) {        // mod labels parallel to modRoots, else the folder names
+              const std::vector<std::string>* rootLabels = nullptr,         // mod labels parallel to modRoots, else the folder names
+              const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4750,7 +4752,11 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     }
 
     // Gather every mod version that changes/adds each record, in load order.
-    struct Version { std::string mod, definition; std::vector<uint8_t> data; };
+    struct Version {
+        std::string mod, definition;
+        std::vector<uint8_t> data;
+        std::vector<forge::fmplinks::Link> links;
+    };
     std::map<std::string, std::vector<Version>> changes;
     std::vector<std::string> order;  // first-seen order for stable output
     for (size_t mi = 0; mi < modRoots.size(); ++mi) {
@@ -4764,9 +4770,49 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             const bool isChange = !isAdd && me.data != bit->second;
             if (!isAdd && !isChange) continue;  // identical to vanilla
             if (changes.find(me.name) == changes.end()) order.push_back(me.name);
-            changes[me.name].push_back({modName, me.definition, me.data});
+            std::vector<forge::fmplinks::Link> links;
+            if (rootLinks) {
+                if (rootLinks->size() != modRoots.size()) throw std::runtime_error("FMP links: source count mismatch");
+                const auto found = rootLinks->at(mi).find(me.name);
+                if (found != rootLinks->at(mi).end()) links = found->second;
+            }
+            changes[me.name].push_back({modName, me.definition, me.data, std::move(links)});
         }
     }
+
+    auto chooseWhole = [&](const std::vector<Version>& versions, const std::string& pick) -> const Version* {
+        bool agree = true;
+        for (const auto& v : versions)
+            if (v.data != versions.front().data || v.definition != versions.front().definition) agree = false;
+        if (versions.size() == 1 || (agree && pick.empty())) return &versions.front();
+        if (pick == "vanilla" || pick == "base" || pick == "none" || pick == "-") return nullptr;
+        const Version* winner = nullptr;
+        for (const auto& v : versions) if (v.mod == pick) winner = &v;
+        return winner ? winner : &versions.back();
+    };
+    bool hasLinks = false;
+    for (const auto& [name, versions] : changes)
+        for (const auto& version : versions) if (!version.links.empty()) hasLinks = true;
+    if (hasLinks) {
+        if (!schema) schema = forge::defschema::Schema::load(defaultDefSchemaPath());
+        // Plan added identities in the same first-seen order and with the same
+        // whole-record selection as the writer. Existing identities stay fixed.
+        auto identities = merged;
+        for (const auto& name : order) {
+            if (baseData.contains(name)) continue;
+            const auto pk = picks.find(name);
+            const auto* winner = chooseWhole(changes.at(name), pk == picks.end() ? "" : pk->second);
+            if (winner) identities.addEntry(winner->definition, name, winner->data);
+        }
+        // Compare final identities, rather than an FMP's temporary added IDs.
+        // Only selected missing targets will refuse in the final pass below.
+        for (auto& [name, versions] : changes) for (auto& version : versions) {
+            if (version.links.empty()) continue;
+            forge::bin::Entry entry{version.definition, name, 0, version.data};
+            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links, true);
+        }
+    }
+    forge::fmplinks::RecordLinks selectedLinks;
 
     // A residual conflict = a record (or a field within one) decided by load
     // order / a pick because >1 mod changed the same thing incompatibly.
@@ -4799,6 +4845,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             else { nameToIndex[name] = merged.addEntry(v.definition, name, v.data);
                    ++addedTotal; }
             ++applied;
+            if (!v.links.empty()) selectedLinks[name] = v.links;
             continue;
         }
 
@@ -4822,6 +4869,14 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                 const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick);
                 if (fm.ok) {
                     merged.setEntryData(idx->second, fm.payload);
+                    for (size_t vi = 0; vi < vers.size(); ++vi) {
+                        if (vers[vi].links.empty()) continue;
+                        const forge::bin::Entry entry{vers[vi].definition, name, 0, vers[vi].data};
+                        for (const auto& link : vers[vi].links) {
+                            const auto part = forge::fmplinks::locate(entry, *schema, link).part;
+                            if (fm.sourceVersions.at(part) == vi) selectedLinks[name].push_back(link);
+                        }
+                    }
                     ++applied;
                     ++fieldMergedRecords;
                     autoFields += fm.autoMerged.size();
@@ -4858,13 +4913,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
 
         if (!didFieldMerge) {
             // Whole-record resolution by pick override, else load order.
-            const bool keepBase = pick == "vanilla" || pick == "base" ||
-                                  pick == "none" || pick == "-";
-            const Version* win = nullptr;
-            if (!pick.empty() && !keepBase) {
-                for (const auto& v : vers) if (v.mod == pick) win = &v;
-            }
-            if (win == nullptr && !keepBase) win = &vers.back();  // load order
+            const Version* win = chooseWhole(vers, pick);
             if (win != nullptr) {
                 if (inBase) merged.setEntryData(idx->second, win->data);
                 else { nameToIndex[name] = merged.addEntry(win->definition, name,
@@ -4872,6 +4921,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                        ++addedTotal; }
                 ++applied;
                 c.winner = win->mod;
+                if (!win->links.empty()) selectedLinks[name] = win->links;
             } else {
                 c.winner = "vanilla";  // keepBase: leave base untouched
             }
@@ -4881,6 +4931,13 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         // Only surface records with residual (undecided-by-content) conflicts:
         // whole-record conflicts, or field-merges that still had a field clash.
         if (!c.fieldMerged || !c.fieldConflicts.empty()) conflicts.push_back(c);
+    }
+
+    for (const auto& [name, links] : selectedLinks) {
+        const auto* entry = merged.find(name);
+        if (!entry) throw std::runtime_error("FMP links: selected owner is absent: " + name);
+        auto data = forge::fmplinks::relink(*entry, merged, *schema, links);
+        merged.setEntryData(size_t(entry - merged.entries().data()), std::move(data));
     }
 
     // Write a game-root layout (<outDir>/data/CompiledDefs/) so the result is a
@@ -7904,24 +7961,25 @@ int bigList(const std::string& path, const std::string& nameFilter, bool jsonOut
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
 // diff/merge pipeline consumes: each .fmp entry (name, definition, raw payload)
 // replaces or adds the matching compiled-def record.
-// NOTE: the .fmp's *LinkMetaData banks (names.bin offset / cross-bin ID fixups)
-// are NOT applied here — for a same-vanilla base the raw records line up, and
-// record/field-level merge only needs the payloads. Full link fixup + names.bin
-// merge is a follow-up for producing a directly-playable install from an .fmp.
+// Resolve supported symbolic game links after all package records are present.
+// The composer carries these symbols onward to its final definition identities.
 int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
-             const std::string& outRoot, bool quiet = false) {
+             const std::string& outRoot, bool quiet = false,
+             const std::string& schemaPath = {},
+             forge::fmplinks::RecordLinks* symbolicLinks = nullptr) {
     namespace fs = std::filesystem;
     const auto pkg = forge::big::File::open(fmpPath);
+    const auto links = forge::fmplinks::readGameLinks(pkg);
 
     const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
     const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
-    fs::create_directories(defsOut);
 
     // game.bin gets the GameBINEntries records; its save() rewrites names.bin
     // preserving existing offsets and appending any new record names, so the
     // copied script/frontend bins still resolve against it.
     auto game = openDefs(baseRoot, "game.bin");
     size_t replaced = 0, added = 0, skippedUntyped = 0;
+    std::set<std::string> importedNames;
     // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
     // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
     // package (contentType 459: banks Settings / Objects / ObjectLinks / Text, entries
@@ -7938,15 +7996,36 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 game.setEntryData((size_t)(existing - game.entries().data()),
                                   std::move(data));
                 ++replaced;
+                importedNames.insert(e.name);
             } else if (!e.definition.empty() && e.definition != "-") {
                 game.addEntry(e.definition, e.name, std::move(data));
                 ++added;
+                importedNames.insert(e.name);
             } else {
                 std::fprintf(stderr, "  warning: %s: new record %s has no def type in this package; not added\n", bankName, e.name.c_str());
                 ++skippedUntyped;
             }
         }
     }
+    std::optional<forge::defschema::Schema> linkSchema;
+    size_t linked = 0;
+    for (const auto& [name, recordLinks] : links) {
+        if (recordLinks.empty()) continue;
+        if (!importedNames.contains(name))
+            throw std::runtime_error("FMP links: metadata owner was not imported: " + name);
+        if (!linkSchema) linkSchema = forge::defschema::Schema::load(
+            schemaPath.empty() ? defaultDefSchemaPath() : schemaPath);
+        const auto* entry = game.find(name);
+        if (!entry) throw std::runtime_error("FMP links: metadata owner is absent: " + name);
+        const auto index = size_t(entry - game.entries().data());
+        auto data = forge::fmplinks::relink(*entry, game, *linkSchema, recordLinks,
+                                          symbolicLinks != nullptr);
+        game.setEntryData(index, std::move(data));
+        linked += recordLinks.size();
+    }
+    if (!quiet && linked) std::printf("  resolved %zu named definition link(s)\n", linked);
+    if (symbolicLinks) *symbolicLinks = links;
+    fs::create_directories(defsOut);
     game.save(defsOut / "names.bin", defsOut / "game.bin");
     // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
     // applied to every language's text.big the base install has (the package names none)
@@ -8258,6 +8337,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
 
     std::vector<std::string> roots;
     std::vector<std::string> rootLabels;   // parallel to roots
+    std::vector<forge::fmplinks::RecordLinks> rootLinks;
     std::vector<std::string> contentRoots = sources; // .fmp WAD banks become staged trees
     std::vector<std::string> egoFolders;
     std::vector<size_t> forgePacks;   // FableForge packs (forge_pack.json): their recipes run after the layers below
@@ -8270,15 +8350,19 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const std::string ext = fs::path(s).extension().string();
         if (ext == ".fmp" || ext == ".FMP") {
             const std::string root = tmpRoot(i);
-            fmpApply(baseRoot, s, root, jsonOutput);
+            forge::fmplinks::RecordLinks links;
+            fmpApply(baseRoot, s, root, jsonOutput, fieldSchema, &links);
             contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
+            rootLinks.push_back(std::move(links));
         } else if (ext == ".patch" || ext == ".PATCH") {
             const std::string root = tmpRoot(i);
             patchToRoot(baseRoot, s, root, jsonOutput);
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
+            rootLinks.emplace_back();
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
             roots.push_back(s); rootLabels.push_back(srcLabel(i));  // already a game-root
+            rootLinks.emplace_back();
         } else if (fs::is_directory(s) && fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) {
             // an EgoCore mod folder: the DLL goes into Mods/ below; its .def text becomes a defs layer now
             egoFolders.push_back(s);
@@ -8288,6 +8372,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string root = tmpRoot(i);
             if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, erep)) {
                 roots.push_back(root); rootLabels.push_back(srcLabel(i));
+                rootLinks.emplace_back();
                 if (jsonOutput) rep["egocore_defs"].push_back({{"mod", erep.modName}, {"def_files", erep.defFiles}, {"records_changed", erep.recordsChanged}, {"fields", erep.fieldsApplied}, {"new", erep.recordsNew}, {"skipped", erep.recordsSkipped}});
                 if (!jsonOutput) std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
                             erep.modName.c_str(), erep.defFiles, erep.blocksReplaced, erep.blocksAdded, erep.recordsChanged, erep.fieldsApplied, erep.recordsNew, erep.recordsSkipped);
@@ -8316,7 +8401,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
-                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels);
+                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 

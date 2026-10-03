@@ -1,5 +1,62 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated symbolic FMP linker checkpoint
+
+Primary remains clean at 0d5d0c6 (product 39bdf32); this implementation is
+isolated in choice review feat/forge-aeon-link-review-20261003, based on f353792.
+Do not describe it as packaged or promoted. No live install or gameplay was used.
+
+forgecore/fmplinks parses a bounded, inert NRBF object graph without .NET
+instantiation. Limits cover bytes, strings, objects, records, recursion and array
+counts. It validates NameValueCollection/ArrayList shapes, paths and targets.
+Legacy decimal Control.ID reverses the runtime field-tag byte order. Scalar
+references, known flat four-byte reference vectors (including descriptive leaf
+labels), and CDef-listing words resolve against named identities. CDefName is a
+class CRC, not a names offset. Unsupported shapes, duplicate offsets, missing
+selected targets and unclean decodes refuse. No blanket integer replacement.
+
+fmpApply validates metadata before creating output; adds all records before
+linking; only imported owners may receive metadata. Standalone missing targets
+refuse. Normalization for composition defers missing targets until selection.
+mergeDefs plans final appended identities, canonicalizes reference values before
+field comparison, and uses FieldMerge.sourceVersions to apply only the selected
+prefix/field source's links against final identities. Vanilla and another mod's
+choices retain their own references. Unselected missing targets do not block the
+build, while selected missing targets refuse before replacing existing banks.
+
+Evidence retained in this review:
+- build/fmp-links-glutg3c7/result.json: standalone retail, standalone Aeon and thin
+  Aeon+FMP merge each check 14 references, with zero mismatches (baseline was
+  12 wrong in each). Every existing non-FMP payload survives; all five imported
+  FMP payloads match the original bytes except independently identified link
+  words. Four conflict-choice cases preserve an independent field edit.
+  Malformed metadata and missing selected targets preserve prior output;
+  an unused missing-target version is allowed. Source hashes remain unchanged.
+- build/aeon_controller_038xlhgt/named-links.json: full Aeon tree + FMP + DLL
+  build passes all 14 named references, 70 -> 141 controls, DLL registration,
+  843 level payload comparisons, WAD repack (547 replacement + 47 new), and zero
+  missing direct model references against Aeon's graphics bank. This run preceded
+  the subsequent missing-target deferral/diagnostic improvements; those have
+  focused regression coverage. No runtime or Android compatibility assertion.
+- All 38 CTests passed (22.40 s) after initial implementation. Subsequent small
+  parser guards and descriptive-vector coverage need the final rebuilt core run.
+- build/fmp-link-corpus-71f3w8rz: Special Melee initially refused its descriptive
+  flat-vector leaf label, now imports with eight named links resolved. F2 Melee
+  refuses multi-target metadata rather than pretending it linked successfully.
+  Its nested weapon structures, text/texture/mesh destinations and class enums
+  require evidence-backed coverage before broad legacy-corpus acceptance.
+  Do not claim the existing tools/test_mods.py gate passes with this linker.
+
+New test tools/test_fmp_links.py accepts --tool for extracted-package validation;
+test_aeon_controller.py accepts --corpus, --install and --tool, and now checks
+named references in addition to its original archive/binding checks. Core tests
+cover truncation prefixes, malformed roots/counts/endings, disallowed records,
+scalar/vector byte preservation, descriptive labels, prefix inheritance, missing
+targets, invalid paths and source attribution in field merges. Remaining work:
+resolve the known legacy-corpus scope, complete final tests/docs, then promote and
+validate an extracted development package. The previous guide warning remains
+accurate for the main build; update it only alongside a concrete validated build.
+
 ## 2026-10-03 new Discord evidence: confirmed FMP camera links are wrong
 
 The user supplied a further Perodis/Aeon conversation: Aeon 5.03 alone boots,
