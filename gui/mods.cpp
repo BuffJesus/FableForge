@@ -867,10 +867,16 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                             ImGui::TextWrapped("Winner: %s",winner.c_str());
                             if (field.hasValues) {
                                 ImGui::TextWrapped("Value: %s",modFieldValue(c,field).c_str());
+                                auto_.registerWidget(("mod_field_value_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
                                 theme::hint(("Type: "+field.type).c_str());
                                 ImGui::TextWrapped("Baseline: %s",field.baseline.c_str());
-                                for (const auto& [mod,value] : field.values)
+                                auto_.registerWidget(("mod_field_base_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                for (size_t sourceIndex=0;sourceIndex<field.values.size();++sourceIndex) {
+                                    const auto& [mod,value]=field.values[sourceIndex];
                                     ImGui::TextWrapped("%s: %s",mod.c_str(),value.c_str());
+                                    auto_.registerWidget(("mod_field_source_"+std::to_string(i)+"_"+
+                                        std::to_string(fieldIndex)+"_"+std::to_string(sourceIndex)).c_str());
+                                }
                             }
                             std::string contributors;
                             for (const auto& mod : field.mods) contributors+=(contributors.empty()?"":", ")+mod;

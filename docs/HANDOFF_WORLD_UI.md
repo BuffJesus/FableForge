@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 long field comparison validation
+
+Added individual baseline/result/contributor automation anchors so values larger
+than one field group's visible area can be reached and assessed separately.
+The existing indented TextWrapped layout already handles long values; no layout
+rewrite was needed. Tiny schema-aligned CCarryingDef fixtures exercise Vector_J
+and CDefString, including exact non-UTF-8/control/quote/backslash escapes. The
+independent writer's scalar path is unchanged; it can now accept raw test values
+and explicit definition/field identities for this fixture.
+
+Owning Release GUI build passes. Baseline build/mod-long-values-3y_t1raz confirms
+valid CLI values and exact merged payload, but lacks per-value GUI anchors.
+Final build/mod-long-values-hflwah34 passes both sizes, each baseline/result/
+contributor's wrapping and screenshot bounds, independent expected merged
+payload bytes and unchanged source bank hashes. This validates the recently
+added comparison view, not native runtime coverage for these artificial values.
+The fixture is wired into check_all; no new whole-gate/core run is claimed.
+
 ## 2026-10-03 unavailable saved-choice review
 
 The async-order/destination audit found existing active-job guards already block

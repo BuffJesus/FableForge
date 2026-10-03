@@ -21,15 +21,17 @@ def tag(name):
         for _ in range(8): value=(value>>1)^(0xEDB88320 if value&1 else 0)
     return value
 
-def write_bank(root,values):
+def write_bank(root,values,*,definition=TYPE,record=RECORD,fields=FIELDS):
     defs=root/'data/CompiledDefs';defs.mkdir(parents=True)
     names=bytearray(); offsets=[]
-    for name in (TYPE,RECORD):
+    for name in (definition,record):
         offsets.append(len(names)+4)
         names+=struct.pack('<I',zlib.crc32(name.encode('ascii')))+name.encode('ascii')+b'\0'
     header=struct.pack('<5I',0,0xA8E36C34,2,len(names)-4,0)
     (defs/'names.bin').write_bytes(header+names)
-    payload=b'\x01\0\x01'+b''.join(struct.pack('<Ii',tag(name),value) for name,value in zip(FIELDS,values))
+    payload=b'\x01\0\x01'+b''.join(struct.pack('<I',tag(name))+
+        (struct.pack('<i',value) if isinstance(value,int) else bytes(value))
+        for name,value in zip(fields,values))
     chunk=zlib.compress(struct.pack('<H',2)+payload)
     bank=bytes(9)+struct.pack('<IiiiI5I',1,*offsets,0,2,0,0,1,len(chunk),len(chunk))+chunk
     (defs/'game.bin').write_bytes(bank)

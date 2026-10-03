@@ -67,6 +67,8 @@ def main():
                   [sys.executable, "tools/test_mod_winner_refresh.py", "--root", install_root], capture_output=True)
         ok &= run("mod field details, actual contributors, choice scope and independent merged values",
                   [sys.executable, "tools/test_mod_field_details.py", "--install", install_root], capture_output=True)
+        ok &= run("long mod field values, each baseline/contributor/result and exact merged payload",
+                  [sys.executable, "tools/test_mod_long_values.py", "--install", install_root], capture_output=True)
         ok &= run("mod conflict search beyond 400 rows, saved choices and reset",
                   [sys.executable, "tools/test_mod_conflict_search.py", "--install", install_root], capture_output=True)
         ok &= run("unavailable saved mod choices, actual winner, preservation and recovery",
