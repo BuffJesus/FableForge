@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated development package with saved-choice review
+
+Built from isolated source 9745443 after focused validation, with owned Release
+GUI/forge/forge-tools binaries. Archive at this worktree's
+dist/development/20261003-9745443/FableForge-0.18.0-dev-win64.zip is 34.8 MB;
+SHA256 7a6ef9eb2ceafa4586a6eae60bedf27f9230b67410992e7ca442547ace93277d.
+The separate illustrated guide ZIP is also generated. Expanded extraction check
+build/package-smoke-cbjqubd9 passes all nine runtime workflows plus 115 local
+Markdown links and guide images: defs, eight retail maps, GUI pixels/GLB,
+literal-path mod operations, field details, actual long CCharString/vector and
+CDefString references, 401-conflict search, unavailable contributors and
+unreported saved choices including an empty order and failed saves. Executables
+run from a path with spaces, percent signs and an ampersand, from unrelated cwd.
+App-data for this package test is owned by the isolated worktree.
+
+This package supersedes the earlier 096f7d8 development artifact for current
+typed-value/choice workflows; that earlier ZIP remains unchanged. The primary
+whole gate at afe9e55 is still running independently. No tag, push, publication
+or live-install writes are part of this package check.
+
 ## 2026-10-03 empty mod order keeps saved-choice review available
 
 The added empty-order boundary exposed a real gap in the review increment:
