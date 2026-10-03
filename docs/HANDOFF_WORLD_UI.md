@@ -1,5 +1,17 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 independent-only contributor boundary
+
+Extended the field fixture with PackD, which leaves every contested field at
+baseline and contributes the same independent RegionDangerLevel edit as PackB.
+Its record contribution is present, but field-conflict contributors exclude it
+and its contested wins/losses stay zero. Choosing PackD leaves all contested
+fields at their actual load-order winners while its independent edit survives;
+vanilla still restores only the three contested fields. Independently decoded
+merged-bank values verify load order, PackA, PackD and vanilla with source hashes
+preserved. Both sizes pass at build/mod-field-details-6f3joc3b; compact fallback
+capture inspected. This extends boundary coverage; no implementation/build changed.
+
 ## 2026-10-03 field-aware wins/loses badges
 
 Baseline GUI at bdd5955 showed every mod losing the synthetic field-merged

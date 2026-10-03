@@ -57,7 +57,8 @@ def main():
     print('Evidence retained at',work,flush=True)
     root=work/'install';write_bank(root,(1,2,3,4))
     sources=[]
-    for label,values in [('PackA',(10,20,3,4)),('PackB',(11,2,30,5)),('PackC',(1,21,31,4))]:
+    for label,values in [('PackA',(10,20,3,4)),('PackB',(11,2,30,5)),('PackC',(1,21,31,4)),
+                         ('PackD',(1,2,3,5))]:
         pack=work/label;write_bank(pack,values);sources.append(pack)
     baseline={p:hashlib.sha256(p.read_bytes()).hexdigest() for source in (root,*sources)
         for p in source.rglob('*.bin')}
@@ -71,6 +72,7 @@ def main():
     report=json.loads(cli('report','mods','conflicts',root,'--json'))
     row=report['defs']['conflicts'][0]
     assert row['record']==RECORD and row['field_merged']
+    assert row['mods']==['PackA','PackB','PackC','PackD']
     assert [(f['field'],f['mods'],f['winner']) for f in row['field_conflicts']]==[
         (FIELDS[0],['PackA','PackB'],'PackB'),(FIELDS[1],['PackA','PackC'],'PackC'),
         (FIELDS[2],['PackB','PackC'],'PackC')]
@@ -84,6 +86,7 @@ def main():
         lines=['wait_maps','wait_ready',f'set saveroot {root.as_posix()}',f'set uiscale {scale}',
             'mods_tab 1','frames 2','mods_conflicts','wait_mods','frames 2',
             'assert_state mods_conflicts 1','assert_state mods_field_conflicts 3',
+            'assert_state mods_count 4','assert_state mods_wins_3 0','assert_state mods_losses_3 0',
             'reveal mod_fields_0','frames 3','reveal mod_fields_0','frames 3','click mod_fields_0','frames 3']
         for index,winner in enumerate(('PackB','PackC','PackC')):
             lines += [f'assert_state mods_first_field_{index} {FIELDS[index]}',
@@ -108,6 +111,13 @@ def main():
             lines += [f'assert_state mods_first_field_value_{index} {value}']
         for index,(wins,losses) in enumerate(((2,0),(0,2),(1,1))):
             lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
+        lines += ['mod_pick * PackD','frames 2','assert_state mods_first_winner PackD',
+            'assert_state mods_wins_3 0','assert_state mods_losses_3 0']
+        for index,(winner,value) in enumerate(zip(('PackB','PackC','PackC'),(11,21,31))):
+            lines += [f'assert_state mods_first_field_winner_{index} {winner}',
+                f'assert_state mods_first_field_value_{index} {value}']
+        lines += ['reveal mod_field_0_2','frames 3',
+            f'screenshot {(case/"independent-choice.png").as_posix()}','mod_pick * PackA','frames 2']
         lines += ['reveal mod_field_0_2','frames 3',
             f'screenshot {(case/"picked.png").as_posix()}',
             'reveal mod_winner_0','frames 3','reveal mod_winner_0','frames 3',
@@ -133,7 +143,8 @@ def main():
         assert result.returncode==0 and 'RESULT PASS' in log,log[-5000:]
         print(size,'field rows, actual changers, vanilla scope and clearing picks: PASS',flush=True)
     picks=root/'forge_mods_picks.txt'
-    for choice,expected in [('',(11,21,31,5)),('PackA',(10,20,31,5)),('vanilla',(1,2,3,5))]:
+    for choice,expected in [('',(11,21,31,5)),('PackA',(10,20,31,5)),
+                            ('PackD',(11,21,31,5)),('vanilla',(1,2,3,5))]:
         if choice: picks.write_text(RECORD+'\t'+choice+'\n',encoding='utf-8')
         elif picks.exists(): picks.unlink()
         output=work/('merged-'+(choice or 'order'))

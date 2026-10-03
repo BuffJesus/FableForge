@@ -11,9 +11,11 @@ and saved-choice filtering at both sizes, with source-byte preservation.
 Widgets: `input_mod_conflict_search`, `mods_choices_only`, `mods_show_all_conflicts`.
 States: `mods_conflicts_matching`, `mods_first_matching_conflict`, `mods_choices_only`.
 
-`tools/test_mod_field_details.py --install <root>` uses a three-mod synthetic
+`tools/test_mod_field_details.py --install <root>` uses a four-mod synthetic
 definition stack to check field details, contributor fallback, vanilla scope,
 clearing choices and independently decoded merged banks at both window sizes.
+The fourth mod contributes only a matching independent edit; it has no contested
+field wins/losses and choosing it retains actual-changer fallback for every conflict.
 `mod_fields_<row>` expands details; `mod_field_<row>_<field>` reveals one field.
 `mods_field_conflicts` counts retained field rows. `mods_first_field_<index>` and
 `mods_first_field_winner_<index>` expose the first record's current field winners.
