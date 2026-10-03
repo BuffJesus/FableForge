@@ -2,6 +2,12 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-03 confirmed limitation: the current importer skips link metadata.
+Controller Support's camera payload IDs do not match even the normalized retail
+output. Mapping record names and counting controller bindings is insufficient:
+its PC combat-camera target resolves to an unrelated record. A symbolic linking
+fix and stronger regressions are under review; see HANDOFF_WORLD_UI.
+
 Reversed from a real sample (`ControllerSupport.fmp`, 46,852 bytes) 2026-07-19.
 The `.fmp` is the community's mod distribution format (created/loaded by Fable
 Explorer / ShadowNet). It is a **structured record-delta package**: it stores the

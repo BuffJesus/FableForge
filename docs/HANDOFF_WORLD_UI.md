@@ -1,5 +1,87 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 new Discord evidence: confirmed FMP camera links are wrong
+
+The user supplied a further Perodis/Aeon conversation: Aeon 5.03 alone boots,
+then applying ControllerSupport.fmp through Cbox makes loading crash; the author
+identifies numeric definition references from a different author bank. Image
+placeholders have no attached images, so their prompts cannot be diagnosed.
+This steers the continuation toward definition linking, before more texture UI.
+
+Primary is clean at 0d5d0c6 (product 39bdf32). The preceding texture archive passes
+all four focused extracted checks, as recorded below. Choice review is clean at
+that same source on feat/forge-aeon-link-review-20261003. The unfinished Add-form
+fixture extension was preserved at build/texture-replace-failure-r56izauh/fixture.py
+and restored from HEAD; no Add-form product changes exist. That baseline shows
+Activity-only failure, preserved files and successful unlocked retry, but fails
+on absent add-error state/widgets. Resume it after linking if useful.
+
+The critical importer finding is real: tools/forge-cli/main.cpp fmpApply explicitly
+skips GameBINLinkMetaData. ControllerSupport.fmp has five game records and five
+metadata records; the two camera metadata entries contain named target links.
+The existing tools/test_aeon_controller.py checks 70 -> 141 controls, 843 level
+payloads, DLL registration and direct model references, but never verifies these
+camera targets. Its success is not evidence of correct definition linking.
+
+Read-only source corpus is D:/Code/FableForge/work/nexus_mods/_peek; no sibling
+projects are edited or executed. Scratch evidence in the choice review is
+build/aeon-link-evidence-20261003. Metadata extraction and standalone fmp apply
+use retail as a read-only base. Raw CAMERA_MANAGER_SET_TEMPLATE references are
+857,860,858,859, while metadata names resolve to 856,858,857,14764 in that output.
+Thus PC combat currently points at CAMERA_MANAGER_COMBAT_MAIN_FAR (#859), not
+the newly appended CAMERA_MANAGER_PC_MAIN_COMBAT (#14764).
+raw-camera-reference-mismatch.json retains all eight named/numeric resolutions.
+The guide now states this confirmed limitation and no longer treats its old
+limited offline checks as a compatible-install proof. No gameplay was launched.
+
+Reference source (read-only): D:/Code/Fable/ChocolateBox/ChocolateBox/
+DecompiledDLLs/FableMod.ContentManagement/FableMod/ContentManagement/ModPackage.cs
+CreateLinks / ApplyLinks. Metadata is a serialized NameValueCollection with
+keys like decimal control-ID + member/array path and named targets. DefinitionType.cs
+confirms CDef listing count is u16 at offset 3, rows are 12 bytes at offset 5:
+CDefName (names enum / class CRC), CDefDataEntry (game index), InheritedEntryID
+(game index). CDefName is NOT a names offset. Existing forgecore gamedata.cpp
+confirms that layout. Existing bin.cpp verifies runtime name CRC uses seed zero,
+no final XOR; use defdecode::fieldTag, not the legacy SilverChest CRC formula.
+The local def.xml at src/SilverChest.Modern/bin/Debug/net8.0-windows/def.xml maps
+camera control CRCs to direct game-index members and four-byte vector items.
+
+Implementation is pending. Planned approach: a bounded inert NRBF reader for
+NameValueCollection (never instantiate .NET objects), resolve supported scalar,
+vector and CDef-listing paths against clean schema decodes, and reject malformed
+or unsupported links before writing. Standalone FMP apply must resolve all
+records after adding them; composed output must resolve against final entry
+identities before field merging, including new entries appended by Aeon and
+choice/vanilla behavior. Carry symbolic links alongside FMP versions, rather
+than hardcoding camera IDs or blindly changing every matching integer. Preserve
+unrelated payload bytes. Add independent name-target regression checks for retail,
+Aeon and reordered/synthetic banks, plus malformed metadata/preservation cases.
+Do not claim a playable compatibility fix without runtime evidence.
+
+The new independent tools/test_fmp_links.py parses both banks in Python and
+resolves the 14 metadata-backed references by name. Baseline
+build/fmp-links-l54b2klc/result.json records 12 mismatches for each of standalone
+retail, standalone Aeon and the thin Aeon+FMP composition. Source hashes stay
+unchanged; no levels/graphics/DLL are needed for this focused bank audit.
+The scratch-only inert NRBF prototype nrbf_probe.py decodes all five metadata
+collections into decoded-metadata.json, confirming all expected targets, including
+empty link lists for the three non-camera records. It does not instantiate .NET
+classes and is not production code.
+
+Refined merge plan: expose the actual source of each prefix/field part from
+forge::defdecode::mergeFields (base, first agreeing changer, or selected conflicting
+changer). Carry links with FMP versions, plan final appended identities in the
+existing stable order, canonicalize available reference values before field
+comparison, then apply only the selected part's symbolic links to final output.
+Missing targets in unused versions should not defeat a vanilla/other-source
+choice; selected dangling links must refuse. This avoids reintroducing FMP links
+into fields the user chose from another mod or vanilla. Preserve scalar/vector
+boundaries and retain unsupported-path refusals instead of guessing layouts.
+
+Primary protocol reference: [MS-NRBF record types](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nrbf/954a0657-b901-4813-9398-4ec732fe8b32),
+[class records](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nrbf/847b0b6a-86af-4203-8ed0-f84345f845b9),
+[array records](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nrbf/982b2f50-6367-402a-aaf2-44ee96e2a5e0).
+
 ## 2026-10-03 isolated texture replacement feedback
 
 Choice review feat/forge-texture-replace-review-20261003 starts at e4a2807.
