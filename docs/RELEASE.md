@@ -29,6 +29,10 @@ checks extracted links and runs retail/GUI plus field-comparison, long-value,
 search, unavailable-choice and unreported-choice workflows from an unrelated
 working directory. The asset-restore fixture also exercises packaged mesh import
 and Setup restoration of real copied banks.
+Extracted-package checks also cover locked/partial writes, ambiguous recovery
+records, active/orphaned stages, confirmation cancellation and absent bank,
+loose-level and stock-WAD recovery. Recovery fixtures accept `--gui` and `--cwd`
+so the executable and working directory both belong to the extracted check.
 
 ## Final release checklist
 

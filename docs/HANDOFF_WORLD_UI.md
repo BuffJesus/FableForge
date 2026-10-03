@@ -1,5 +1,16 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 current recovery package preparation
+
+All Release targets are current (bounded -j2 build, no work remaining). Setup
+recovery fixtures now accept --gui/--cwd; the stage fixture uses forge-tools
+beside the selected GUI. test_package includes nine more recovery variants,
+for 19 runtime workflows including the existing asset-bank restore.
+Unrelated-cwd confirmation (build/setup-confirmation-g9jx0bms), active-stage
+restore (build/setup-stage-restore-1uu4mkty) and missing-bank recovery
+(build/setup-missing-bank-qan313wm) pass both sizes. The forthcoming local ZIP
+still needs extraction verification; this section does not claim that result.
+
 ## 2026-10-03 Setup confirmation scope and cancellation
 
 Baseline build/setup-confirmation-wachucng proves Restore remained globally

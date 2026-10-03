@@ -18,6 +18,7 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
     parser.add_argument('--partial', action='store_true',
         help='also restore a second selected map while the first target stays locked')
     args = parser.parse_args()
@@ -84,7 +85,7 @@ def main():
         unlocked = False
         with (case/'output.log').open('w', encoding='utf-8') as output:
             process = subprocess.Popen([str(args.gui.resolve()), '--install', str(root), '--size', size,
-                '--auto', str(script)], cwd=repo, stdout=output, stderr=subprocess.STDOUT,
+                '--auto', str(script)], cwd=args.cwd.resolve(), stdout=output, stderr=subprocess.STDOUT,
                 env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
                          APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata')))
             try:

@@ -20,6 +20,7 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
     layout = parser.add_mutually_exclusive_group()
     layout.add_argument('--missing-levels', action='store_true',
         help='restore the only loose level instead of the definition bank')
@@ -73,7 +74,7 @@ def main():
         def run(path):
             with Path(str(path)+'.output.log').open('w', encoding='utf-8') as output:
                 result = subprocess.run([str(args.gui.resolve()), '--install', str(root/'data' if pick_data else root),
-                    '--size', size, '--auto', str(path)], cwd=repo, stdout=output,
+                    '--size', size, '--auto', str(path)], cwd=args.cwd.resolve(), stdout=output,
                     stderr=subprocess.STDOUT, timeout=90,
                     env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
                              APPDATA=str(case/'appdata'), LOCALAPPDATA=str(case/'localappdata')))

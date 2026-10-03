@@ -89,6 +89,19 @@ def main():
                           ('setup_asset_restore', 'test_setup_asset_restore.py')):
         run(label, [sys.executable, repo / 'tools' / script, '--gui', package / 'FableForge.exe',
             '--install', args.root.resolve(), '--cwd', cwd])
+    for label, script, options in (
+            ('setup_locked', 'test_setup_restore_failure_ui.py', []),
+            ('setup_partial', 'test_setup_restore_failure_ui.py', ['--partial']),
+            ('setup_ambiguity', 'test_setup_restore_ambiguity_ui.py', []),
+            ('setup_stage', 'test_setup_stage_restore_ui.py', []),
+            ('setup_orphan', 'test_setup_stage_restore_ui.py', ['--orphan']),
+            ('setup_confirmation', 'test_setup_confirmation_ui.py', []),
+            ('setup_missing_bank', 'test_setup_missing_bank_ui.py', []),
+            ('setup_missing_loose', 'test_setup_missing_bank_ui.py', ['--missing-levels']),
+            ('setup_missing_wad', 'test_setup_missing_bank_ui.py',
+             ['--wad', args.root.resolve() / 'data/Levels/FinalAlbion.wad'])):
+        run(label, [sys.executable, repo / 'tools' / script, '--gui', package / 'FableForge.exe',
+            '--cwd', cwd, *options])
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,

@@ -1,5 +1,10 @@
 # GUI automation (`--auto <script>`)
 
+The Setup recovery fixtures below accept `--gui <exe>` and `--cwd <directory>`
+for extracted-package checks; their scratch files and app-data remain owned
+under this checkout's build directory. The stage fixture uses forge-tools beside
+the selected GUI executable. The package check exercises all recovery variants.
+
 `tools/test_setup_confirmation_ui.py` checks Enter leaves Restore pending,
 Escape cancels without closing Setup, and Continue or an accepted folder change
 cancels the pending Restore. Rescanning the same root through Data preserves the

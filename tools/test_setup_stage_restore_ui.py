@@ -12,6 +12,8 @@ from test_setup_restore_ui import level
 def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
     parser.add_argument('--orphan', action='store_true')
     args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='setup-stage-restore-', dir=repo/'build')).resolve()
@@ -30,8 +32,8 @@ def main():
         overlay = case/'overlay/data/Levels/FinalAlbion'
         overlay.mkdir(parents=True)
         (overlay/'StageRestore.lev').write_bytes(level(9))
-        stage = subprocess.run([str(repo/'build/forge-tools.exe'), 'stage', str(root),
-            str(case/'overlay')], cwd=repo, capture_output=True, text=True, timeout=30)
+        stage = subprocess.run([str(args.gui.resolve().parent/'forge-tools.exe'), 'stage', str(root),
+            str(case/'overlay')], cwd=args.cwd.resolve(), capture_output=True, text=True, timeout=30)
         (case/'stage.log').write_text(stage.stdout+stage.stderr)
         assert stage.returncode == 0, stage.stdout+stage.stderr
         staged_backup = Path(str(target)+'.forgebak')
@@ -68,13 +70,13 @@ def main():
         script = case/'restore.txt'
         script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
         with (case/'output.log').open('w', encoding='utf-8') as output:
-            command = [str(repo/'build/FableForge.exe'), '--install', str(root),
+            command = [str(args.gui.resolve()), '--install', str(root),
                 '--size', size, '--auto', str(script)]
             env = dict(os.environ,
                     FABLEFORGE_AUTOMATION_HIDDEN='1', APPDATA=str(case/'appdata'),
                     LOCALAPPDATA=str(case/'localappdata'))
             if args.orphan:
-                process = subprocess.Popen(command, cwd=repo, stdout=output,
+                process = subprocess.Popen(command, cwd=args.cwd.resolve(), stdout=output,
                     stderr=subprocess.STDOUT, env=env)
                 try:
                     deadline = time.monotonic()+60
@@ -88,7 +90,7 @@ def main():
                     if process.poll() is None:
                         process.terminate(); process.wait(timeout=10)
             else:
-                rc = subprocess.run(command, cwd=repo, stdout=output,
+                rc = subprocess.run(command, cwd=args.cwd.resolve(), stdout=output,
                     stderr=subprocess.STDOUT, env=env, timeout=60).returncode
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
         assert rc == 0 and 'RESULT PASS' in log, log[-5000:]

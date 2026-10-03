@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Setup confirmations cancel on Escape, closing Setup and changing installs."""
+import argparse
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,10 @@ from test_setup_restore_ui import level
 
 def main():
     repo = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
+    args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='setup-confirmation-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
     for size, scale in [('1440x900', 1), ('800x600', 1.5)]:
@@ -43,8 +48,8 @@ def main():
         script = case/'confirm.txt'
         script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
         with (case/'output.log').open('w', encoding='utf-8') as output:
-            result = subprocess.run([str(repo/'build/FableForge.exe'), '--install', str(first),
-                '--size', size, '--auto', str(script)], cwd=repo, stdout=output,
+            result = subprocess.run([str(args.gui.resolve()), '--install', str(first),
+                '--size', size, '--auto', str(script)], cwd=args.cwd.resolve(), stdout=output,
                 stderr=subprocess.STDOUT, timeout=60, env=dict(os.environ,
                     FABLEFORGE_AUTOMATION_HIDDEN='1', APPDATA=str(case/'appdata'),
                     LOCALAPPDATA=str(case/'localappdata')))
