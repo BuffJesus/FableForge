@@ -27,7 +27,7 @@ baseline while the failure stays in the log. Both destination variants are check
 
 The Setup recovery fixtures below accept `--gui <exe>` and `--cwd <directory>`
 for extracted-package checks; their scratch files and app-data remain owned
-under this checkout's build directory. The stage fixture uses forge-tools beside
+under this checkout's build directory. The stage fixture uses `forge-tools.exe` beside
 the selected GUI executable. The package check exercises all recovery variants.
 
 `tools/test_setup_confirmation_ui.py` checks Enter leaves Restore pending,
