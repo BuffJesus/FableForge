@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 Setup recovery with a missing game bank
+
+Baseline build/setup-missing-bank-5i0v7hvt proves the backup section and restore
+buttons were hidden when game.bin was missing; the fixture then timed out waiting
+for maps. Setup now scans tracked backups in the selected existing folder even
+when required game data is missing. Restore requires tracked backups rather than
+a currently valid install. Core restore policy and its running-game guard are
+unchanged. Data-folder normalization uses the CompiledDefs directory, so a missing
+game.bin does not leave the guard pointed at the Data subfolder.
+
+Owned Release GUI build and build/setup-missing-bank-e1jrqxg_ pass at 1440x900
+and 800x600 / 1.5 scale. Actual buttons restore an absent game.bin exactly from
+its retained original, preserve all other files and reload the loose map. The
+compact case selects Data directly. Both cases also refuse while an owned
+sleeping helper named Fable.exe runs in the install root, preserve all bytes,
+and succeed after that helper exits. No actual game was launched. Compact
+restored screenshot reviewed. Existing Setup success/13-backup/created-preview,
+locked failure/retry (build/setup-restore-failure-_ljy3rw2), and install-switch
+fixtures pass. The new fixture is wired into check_all. No new full gate or
+development archive is claimed; the afe9e55 core checkpoint and 9745443 archive
+remain the earlier validation boundaries. Partial restore remains to review.
+
 ## 2026-10-03 persistent Setup restore failures and retry
 
 Locked-target baseline build/setup-restore-failure-3cn619bi preserved the LEV

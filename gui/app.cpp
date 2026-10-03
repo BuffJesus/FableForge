@@ -529,10 +529,12 @@ void App::drawSetupPanel() {
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
         // backups: everything FableForge has touched, and the way back
-        if (installValid_) {
+        if (!installPath_.empty() && fs::is_directory(installPath_)) {
             if (backupsScannedAt_ < 0 || ImGui::GetTime() - backupsScannedAt_ > 5.0) {
                 backupList_ = backups::scan(installPath_); backupsScannedAt_ = ImGui::GetTime();
-                try { bankReport_ = stbcompact::measure(installPath_); bankReportOk_ = true; } catch (const std::exception&) { bankReportOk_ = false; }
+                if (installValid_) {
+                    try { bankReport_ = stbcompact::measure(installPath_); bankReportOk_ = true; } catch (const std::exception&) { bankReportOk_ = false; }
+                }
             }
             size_t changed = 0; for (const auto& e : backupList_) changed += e.differs;
             ImGui::Dummy(ImVec2(0, S(10)));
@@ -613,8 +615,8 @@ bool App::compactBank() {
 
 bool App::restoreAllBackups() {
     restoreError_.clear();
-    if (!installValid_) {
-        restoreError_ = "The selected folder is missing required game data.";
+    if (installPath_.empty() || !fs::is_directory(installPath_) || backups::scan(installPath_).empty()) {
+        restoreError_ = "Choose a folder with tracked backups to restore.";
         pushLog("restore: " + restoreError_, 2);
         return false;
     }
@@ -773,7 +775,7 @@ void App::scanInstall(const std::string& picked) {
     {
         const fs::path p(picked);
         std::error_code ec;
-        if (!fs::exists(p / "data", ec) && fs::exists(p / "CompiledDefs" / "game.bin", ec) && p.has_parent_path()) {
+        if (!fs::exists(p / "data", ec) && fs::is_directory(p / "CompiledDefs", ec) && p.has_parent_path()) {
             root = p.parent_path().string();
             pushLog("that is the install's Data folder; using " + root, 1);
         }

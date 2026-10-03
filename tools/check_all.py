@@ -195,6 +195,8 @@ def main():
     ok &= run("Setup restore (scratch loose level, GUI reload)", [sys.executable, "tools/test_setup_restore_ui.py"], capture_output=True)
     ok &= run("Setup locked-write error visibility, preserved bytes and same-process retry",
               [sys.executable, "tools/test_setup_restore_failure_ui.py"], capture_output=True)
+    ok &= run("Setup missing-bank recovery, Data folder normalization and running-game guard",
+              [sys.executable, "tools/test_setup_missing_bank_ui.py"], capture_output=True)
     if dialogue:
         ok &= run("Setup restore after model import, refreshed asset views and exact banks",
                   [sys.executable, "tools/test_setup_asset_restore.py", "--install", install_root], capture_output=True)
