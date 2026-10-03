@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03: loaded asset views refresh across Mods writes at either destination,
+including failed redeploy. Texture browsing follows the effective save-folder
+bank; same-name preview/export pixels and persistent locked-output errors are
+verified. All 25 runtime workflows pass in the extracted a3b030b development ZIP.
+The last completed full gate is still afe9e55; see HANDOFF_WORLD_UI for boundaries.
+
 2026-10-03: Setup restores tracked backups even when game.bin or all level
 containers are missing. Partial failures remain visible through map reload,
 ambiguous originals refuse before writes, orphaned stage backups stay preserved

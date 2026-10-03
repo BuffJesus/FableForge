@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted asset/recovery package checkpoint
+
+Source a3b030b is packaged locally at
+dist/development/20261003-a3b030b/FableForge-0.18.0-dev-win64.zip (34.8 MB),
+SHA-256 7d924ef8bd3af0e054dfba8b9ce58f17d1a94cdbf1ec00e0e939f207002d9908.
+The guide ZIP is beside it. build/package-smoke-r6gexbxy/result.json records all
+25 extracted runtime workflows passing, alongside 115 Markdown links and four
+guide images. Paths contain literal percent/ampersand characters and the working
+directory is unrelated to the package. New coverage includes same/separate-root
+Mods deploy/undeploy and failed redeploy, destination-specific texture preview
+and actual export pixels, and locked-output preservation/visible retry.
+Earlier packages are unchanged; nothing was published.
+
+All Release targets are current. This is an extracted-package checkpoint, not
+a new whole-suite result. The frozen full-gate boundary remains afe9e55 with
+110 passing checks. A fresh full gate is next, with the primary source frozen
+while any further investigation stays in an owned isolated checkout.
+
 ## 2026-10-03 persistent PNG export failure and retry
 
 Baseline build/texture-export-failure-tuwdirll preserves the old output while
