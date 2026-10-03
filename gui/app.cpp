@@ -1621,6 +1621,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("brush_pin_x=" + std::to_string(brushPinPoint_[0]));
     v.push_back("brush_pin_y=" + std::to_string(brushPinPoint_[1]));
     v.push_back("camera_fov_degrees=" + std::to_string(camera_.fovY * (180.f / 3.14159265358979323846f)));
+    v.push_back("ground_smear=" + std::to_string(paintSmear_));
     v.push_back("terrain_mode=" + std::to_string(terrainMode_));
     v.push_back("edit_tab=" + std::to_string(editTab_));
     v.push_back("palette_definition="+placeDef_);

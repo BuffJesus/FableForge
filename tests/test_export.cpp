@@ -1646,6 +1646,74 @@ void testShorePoints(const fs::path& dir) {
     CHECK(legacy.undo() && !legacy.terrain().shorePoint[size_t(4)*9+4]);
 }
 
+void testGroundThemeSmear(const fs::path& dir) {
+    namespace terrain=forge::terrain;
+    using Slots=std::array<uint8_t,3>;
+    std::array<bool,256> allowed{}; allowed[1]=allowed[2]=allowed[3]=true;
+    std::vector<Slots> indices{{1,0,0},{1,0,0},{2,0,0},{2,0,0},{2,0,0},{3,0,0},{0,0,0},{0,0,0},{0,0,0}};
+    std::vector<Slots> strengths{{250,0,5},{250,0,5},{233,0,22},{233,0,22},{234,0,21},{100,0,155},{255,0,0},{255,0,0},{255,0,0}};
+    const auto originalIndices=indices,originalStrengths=strengths;
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{1,1}},allowed)==1);
+    // Native duplicates class 1 here; Forge retains all three distinct themes.
+    CHECK((indices[4]==Slots{2,1,3}));
+    CHECK((strengths[4]==Slots{137,98,20}));
+    for (size_t i=0;i<9;++i) if (i!=4) CHECK(indices[i]==originalIndices[i] && strengths[i]==originalStrengths[i]);
+    indices={{1,0,0},{1,0,0},{2,0,0}}; strengths.assign(3,{255,0,0});
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,1,{{1,0},{2,0},{2,0},{-1,0}},allowed)==2);
+    CHECK((indices[1]==Slots{1,2,0} && strengths[1]==Slots{170,85,0}));
+    CHECK((indices[2]==Slots{1,2,0} && strengths[2]==Slots{128,127,0})); // frozen neighbour; in-place would be 85/170
+    indices.assign(9,{3,0,0}); strengths.assign(9,{255,0,0});
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{0,0},{1,1},{2,2}},allowed)==0);
+    allowed.fill(false);
+    CHECK(terrain::smearThemeBlends(indices,strengths,3,3,{{1,1}},allowed)==0); // empty eligible neighbourhood
+    const auto saved=indices;
+    bool rejected=false;
+    try { terrain::smearThemeBlends(indices,strengths,4,3,{{1,1}},allowed); } catch (const std::invalid_argument&) { rejected=true; }
+    CHECK(rejected && indices==saved);
+
+    const auto path=writeGameMapLev(dir / "ground_smear.lev",20,20);
+    auto level=forge::lev::File::open(path);
+    level.setGroundTheme(1,"GROUND_A",17); level.setGroundTheme(2,"GROUND_B",23);
+    for (int y=0;y<level.cellsY();++y) for(int x=0;x<level.cellsX();++x)
+        level.setThemeBlendAt(x,y,{uint8_t(x<4?1:2),0,0},{255,0,0});
+    level.save(path); const auto originalBytes=readAll(path);
+    albion::editor::Document doc; std::string error;
+    CHECK(doc.openText("GroundSmear","Version 2;\r\nXXXSectionStart NULL;\r\nXXXSectionEnd;\r\n",error));
+    CHECK(doc.loadLevel(path,error)); const auto baseline=doc.terrain(); const auto objectText=doc.file().serialize();
+    albion::editor::TerrainBrush brush; brush.mode=albion::editor::TerrainBrush::Mode::ThemeSmear;
+    brush.x=4.9f;brush.y=4.9f;brush.radius=.25f;brush.strength=0;
+    doc.beginStroke(brush);doc.applyBrush(brush,0);doc.endStroke();
+    const size_t vertex=size_t(4)*doc.cellsX()+4;
+    CHECK((doc.terrain().themeIndex[vertex]==Slots{2,1,0} && doc.terrain().themeStrength[vertex]==Slots{170,85,0}));
+    for (size_t i=0;i<baseline.themeIndex.size();++i) if(i!=vertex)
+        CHECK(doc.terrain().themeIndex[i]==baseline.themeIndex[i] && doc.terrain().themeStrength[i]==baseline.themeStrength[i]);
+    CHECK(doc.terrain().heights==baseline.heights && doc.terrain().walkable==baseline.walkable &&
+        doc.terrain().cameraPassable==baseline.cameraPassable && doc.terrain().shorePoint==baseline.shorePoint &&
+        doc.terrain().sound==baseline.sound && doc.terrain().atmosIndex==baseline.atmosIndex &&
+        doc.terrain().atmosStrength==baseline.atmosStrength && doc.file().serialize()==objectText);
+    const auto root=dir / "ground_smear_root";
+    CHECK(doc.saveTerrainLoose(root,error));
+    const auto reloaded=forge::lev::File::open(root / "data/Levels/FinalAlbion/GroundSmear.lev");
+    for(int slot=0;slot<3;++slot) CHECK(reloaded.themeIndexAt(4,4,slot)==doc.terrain().themeIndex[vertex][slot] &&
+        reloaded.themeStrengthAt(4,4,slot)==doc.terrain().themeStrength[vertex][slot]);
+    auto expectedBytes=originalBytes;
+    const size_t blendOffset=level.cellDataOffset()+vertex*21;
+    // Only the five stored theme bytes may change (third strength is implicit).
+    // In particular, the fixture has
+    // walkable=true/camera=false: theme-only writes must not apply the saver OR.
+    for (size_t slot=0;slot<3;++slot) {
+        expectedBytes[blendOffset+slot+10]=doc.terrain().themeIndex[vertex][slot];
+        if (slot<2) expectedBytes[blendOffset+slot+13]=doc.terrain().themeStrength[vertex][slot];
+    }
+    CHECK(readAll(root / "data/Levels/FinalAlbion/GroundSmear.lev")==expectedBytes);
+    CHECK(doc.undo());doc.level()->save(dir / "ground_smear_undo.lev");
+    CHECK(readAll(dir / "ground_smear_undo.lev")==originalBytes);
+    CHECK(doc.redo());
+    brush.x=10;brush.y=10;
+    doc.beginStroke(brush);doc.applyBrush(brush,0);doc.endStroke(); // uniform no-op drops its undo entry
+    CHECK(doc.undo() && doc.terrain().themeIndex==baseline.themeIndex && doc.terrain().themeStrength==baseline.themeStrength);
+}
+
 void testAtmosSmear(const fs::path& dir) {
     namespace terrain = forge::terrain;
     using Slots = std::array<uint8_t, 3>;
@@ -3599,6 +3667,7 @@ int main() {
     testSurveyOverlay(dir);
     testSoundBrushFootprint(dir);
     testGroundThemeStamp(dir);
+    testGroundThemeSmear(dir);
     testAtmosSmear(dir);
     testShorePoints(dir);
     testPassabilityPen(dir);

@@ -592,16 +592,26 @@ void Document::writeTerrainToLevel() {
         if (pal[i].name != terrain_->palette[i].name || pal[i].value != terrain_->palette[i].value)
             level_->setGroundTheme(i, terrain_->palette[i].name, terrain_->palette[i].value);
     const int cx = level_->cellsX(), cy = level_->cellsY();
+    bool passabilityChanged=false;
+    if (!terrain_->cameraPassable.empty())
+        for (int y=0;y<cy && !passabilityChanged;++y) for(int x=0;x<cx;++x) {
+            const size_t vertex=size_t(y)*cx+x;
+            if (level_->walkableAt(x,y)!=(terrain_->walkable[vertex]!=0) ||
+                level_->cameraPassableAt(x,y)!=(terrain_->cameraPassable[vertex]!=0)) { passabilityChanged=true;break; }
+        }
     for (int y = 0; y < cy; ++y)
         for (int x = 0; x < cx; ++x) {
             const size_t i = size_t(y) * cx + x;
             if (level_->heightAt(x, y) != terrain_->heights[i]) level_->setHeightAt(x, y, terrain_->heights[i]);
-            if (level_->walkableAt(x, y) != (terrain_->walkable[i] != 0)) level_->setWalkableAt(x, y, terrain_->walkable[i] != 0);
+            const bool walkChanged=level_->walkableAt(x,y)!=(terrain_->walkable[i]!=0);
+            if (walkChanged) level_->setWalkableAt(x,y,terrain_->walkable[i]!=0);
             if (!terrain_->shorePoint.empty() && level_->shorePointAt(x, y) != (terrain_->shorePoint[i] != 0))
                 level_->setShorePointAt(x, y, terrain_->shorePoint[i] != 0);
-            if (!terrain_->cameraPassable.empty()) {
-                const bool cam = terrain_->cameraPassable[i] != 0 || terrain_->walkable[i] != 0;   // the saver's OR
-                if (level_->cameraPassableAt(x, y) != cam) level_->setCameraPassableAt(x, y, cam);
+            // Preserve untouched camera bytes, including noncanonical retail data.
+            // Explicit walkability/camera edits retain the native saver's OR rule.
+            if (passabilityChanged) {
+                const bool cam=terrain_->cameraPassable[i]!=0 || terrain_->walkable[i]!=0;
+                if (level_->cameraPassableAt(x,y)!=cam) level_->setCameraPassableAt(x,y,cam);
             }
             bool sameTheme = true;
             for (int k = 0; k < 3; ++k) sameTheme = sameTheme && level_->themeIndexAt(x, y, k) == terrain_->themeIndex[i][k] && level_->themeStrengthAt(x, y, k) == terrain_->themeStrength[i][k];
@@ -653,6 +663,25 @@ void Document::applyBrush(const TerrainBrush& brush, float dt) {
             if (value != next) { value = next; changed = true; }
         }
         if (changed) ++terrainRev_;
+        return;
+    }
+    if (brush.mode == Mode::ThemeSmear) {
+        std::array<bool,256> allowed{};
+        for (size_t slot=1;slot<working_->palette.size() && slot<allowed.size();++slot)
+            allowed[slot]=!working_->palette[slot].name.empty() && working_->palette[slot].name!="X0-NULL Theme";
+        const auto vertices=themeBrushVertices(brush.x,brush.y,std::trunc(std::max(brush.radius,1.f)));
+        const size_t changed=forge::terrain::smearThemeBlends(working_->themeIndex,working_->themeStrength,cx,cy,vertices,allowed);
+        if (changed) {
+            for (const auto [x,y] : vertices) {
+                const size_t vertex=size_t(y)*cx+x;
+                bool same=true;
+                for (size_t slot=0;slot<3;++slot)
+                    same=same && level_->themeIndexAt(x,y,int(slot))==working_->themeIndex[vertex][slot] &&
+                        level_->themeStrengthAt(x,y,int(slot))==working_->themeStrength[vertex][slot];
+                if (!same) level_->setThemeBlendAt(x,y,working_->themeIndex[vertex],working_->themeStrength[vertex]);
+            }
+            ++terrainRev_;
+        }
         return;
     }
     if (brush.mode == Mode::Theme) {

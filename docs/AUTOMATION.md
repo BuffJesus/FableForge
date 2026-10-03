@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_ground_smear.py --install <root>` checks Ground Paint/Smear controls,
+strict vertex cursors, frozen neighbour blends, Repeat, undo and draft reopen
+on owned stock/loose copies at normal/compact sizes. `chip_ground_paint` /
+`chip_ground_smear` switch modes; `ground_smear` reports the selection.
+`assert_theme_blend x y t0 t1 t2 w0 w1 w2` checks exact palette slots and all
+three effective strengths (the third strength is implicit in saved LEV data).
+
 `tools/test_brush_pin.py --install <root>` checks Space-held brush pinning against
 moving rays/cameras, release, Shift inversion, Escape and Ctrl cancellation,
 clipboard exclusions, tool/map reset and exact stroke undo at both sizes.

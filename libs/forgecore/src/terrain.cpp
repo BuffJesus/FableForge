@@ -127,6 +127,40 @@ ThemeBlend projectMaterialWeights(const std::vector<float>& weights,
     return out;
 }
 
+size_t smearThemeBlends(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int width, int height,
+    const std::vector<std::pair<int, int>>& footprint, const std::array<bool, 256>& allowedThemes) {
+    if (width<=0 || height<=0 || indices.size()!=size_t(width)*size_t(height) || strengths.size()!=indices.size())
+        throw std::invalid_argument("terrain: invalid theme smear grid");
+    if (footprint.empty()) return 0;
+    const auto beforeIndices=indices, beforeStrengths=strengths;
+    std::vector<float> weights(256);
+    std::vector<uint8_t> mapping(256);
+    std::iota(mapping.begin(),mapping.end(),uint8_t(0));
+    size_t changed=0;
+    for (const auto [x,y] : footprint) {
+        if (x<0 || y<0 || x>=width || y>=height) continue;
+        std::fill(weights.begin(),weights.end(),0.f);
+        bool any=false;
+        for (int ny=std::max(0,y-1); ny<=std::min(height-1,y+1); ++ny)
+            for (int nx=std::max(0,x-1); nx<=std::min(width-1,x+1); ++nx) {
+                const size_t neighbour=size_t(ny)*size_t(width)+nx;
+                for (size_t slot=0; slot<3; ++slot) {
+                    const auto theme=beforeIndices[neighbour][slot];
+                    const auto weight=beforeStrengths[neighbour][slot];
+                    if (!allowedThemes[theme] || !weight) continue;
+                    weights[theme]+=weight; any=true;
+                }
+            }
+        if (!any) continue;
+        const auto blend=projectMaterialWeights(weights,mapping);
+        const size_t vertex=size_t(y)*size_t(width)+x;
+        if (indices[vertex]==blend.indices && strengths[vertex]==blend.strengths) continue;
+        indices[vertex]=blend.indices; strengths[vertex]=blend.strengths; ++changed;
+    }
+    return changed;
+}
+
 float sampleMaterialWeight(const std::vector<float>& raster,
                            int rasterWidth, int rasterHeight,
                            float worldX, float worldY,

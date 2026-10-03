@@ -634,6 +634,7 @@ private:
     // 10 paint environment (atmos), 11 paint sound -- the .lev's 4x4 game-map grid
     int terrainMode_ = 0;
     int paintTheme_ = 0;             // LEV palette slot painted (6) / put in (7, 8)
+    bool paintSmear_ = false;        // Ground: corrected three-theme neighbour blending
     bool paintStamp_ = false;        // Ground: full native stamp instead of soft blending
     int replaceFrom_ = -1;           // LEV palette slot taken out (7, 8); Ctrl+Shift+click samples it
     int envSlot_ = 0;                // 10: atmos palette slot painted (0 = the "no environment" slot)
@@ -784,7 +785,7 @@ private:
     void fillPen(editor::TerrainBrush& b) const;
     void drawPenControls(float cardInner);
     void drawViewportEdges();
-    bool isVanillaPen(int mode) const { return mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
+    bool isVanillaPen(int mode) const { return (mode == 6 && paintSmear_) || mode == 2 || mode == 3 || mode == 16 || ((mode == 0 || mode == 1) && penExactStep_); }
     bool brushHit_ = false;
     bool brushPinned_ = false, brushPinHeld_ = false, brushPinHaveLast_ = false;
     int brushPinTool_ = -1;

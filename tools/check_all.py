@@ -103,6 +103,8 @@ def main():
                   [sys.executable, "tools/test_replace_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Ground full stamp, strict vertex cursor, real paint and exact undo",
                   [sys.executable, "tools/test_ground_stamp.py", "--install", install_root], capture_output=True)
+        ok &= run("Ground Smear, frozen blends, repeat, draft reopen and stock/loose preservation",
+                  [sys.executable, "tools/test_ground_smear.py", "--install", install_root], capture_output=True)
         ok &= run("Environment strict cell pen, cursor, clear, sample and undo at both sizes",
                   [sys.executable, "tools/test_environment_cursor.py", "--install", install_root], capture_output=True)
         ok &= run("Crash recovery reopen, captured workers, timer and normal/compact controls",

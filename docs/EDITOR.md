@@ -295,6 +295,12 @@ item and info display components; absent components are not added.
   Ground's **Full stamp** option uses the same strict truncated disc and sets
   every considered vertex fully to the theme in one application. Small cursors
   show the vertices. Strength is hidden; switch Full stamp off for soft blending.
+  Ground's **Smear** blends existing themes from a frozen 3x3 neighbourhood at
+  each considered vertex. It keeps the three strongest distinct themes and
+  normalizes their strengths. No target theme is needed. Radius rounds down to
+  a whole cell, with a minimum of 1; small cursors show the strict-disc vertices.
+  Each click applies once; **Repeat while held** keeps blending. Ctrl+Z undoes
+  the whole stroke. Smear works within the current map.
   Environ. maps that strict truncated vertex pen to 4x4 game cells and sets each
   touched cell fully to the chosen environment; Strength and time do not scale
   it. Small cursors outline the cells. Picking no environment clears them.

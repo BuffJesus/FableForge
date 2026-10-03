@@ -1329,6 +1329,21 @@ bool Automation::tick(App& app) {
         }
         ++pc_;
     }
+    else if (cmd == "assert_theme_blend") {
+        int x=-1,y=-1;std::array<int,3> themes{},weights{};std::istringstream input(rest);
+        bool valid=bool(input>>x>>y);
+        for (auto& theme : themes) valid=valid && bool(input>>theme) && theme>=0 && theme<=255;
+        for (auto& weight : weights) valid=valid && bool(input>>weight) && weight>=0 && weight<=255;
+        valid=valid && app.doc_.hasTerrain() && x>=0 && y>=0 && x<app.doc_.cellsX() && y<app.doc_.cellsY();
+        if (!valid) fail("assert_theme_blend: invalid coordinate/blend or no terrain");
+        else {
+            const auto& terrain=app.doc_.liveTerrain(); const size_t vertex=size_t(y)*app.doc_.cellsX()+x;
+            bool same=true;
+            for (size_t slot=0;slot<3;++slot) same=same && terrain.themeIndex[vertex][slot]==themes[slot] && terrain.themeStrength[vertex][slot]==weights[slot];
+            if (!same) fail(line+" (theme blend differs)"); else note("ok   "+line);
+        }
+        ++pc_;
+    }
     else if (cmd == "assert_theme_stamp") {
         int x = -1, y = -1, theme = -1; std::istringstream input(rest);
         if (!(input >> x >> y >> theme) || !app.doc_.hasTerrain() || x < 0 || y < 0 ||

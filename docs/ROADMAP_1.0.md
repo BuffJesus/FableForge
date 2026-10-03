@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+Ground now offers Smear: frozen-neighbour blending into three distinct themes,
+one application per click and optional Repeat. Theme-only saves preserve
+passability bytes. Core and stock/loose normal/compact workflows pass; native
+compatibility boundaries and evidence are in HANDOFF_WORLD_UI.
+
 The pin/camera checkpoint at frozen source b132d50 exercised all 105 integration
 checks: 104 passed and one off-screen whole-map button fixture failed. Scrolling
 to that button fixes the workflow; its focused rerun passes stock/loose and

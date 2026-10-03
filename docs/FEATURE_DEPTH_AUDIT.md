@@ -23,6 +23,14 @@ only after checking those paths against the current build.
 
 ## Terrain/foliage change in this pass
 
+2026-10-03: Ground Smear's frozen 3x3 blend, distinct top-three projection,
+minimum-one truncated strict disc, repeated application and draft reopen pass
+on owned stock/loose copies at normal/compact sizes. Full saved-LEV comparisons
+verify theme-only deltas preserve passability, and all 36 CTest cases pass.
+Controls/cursor captures were inspected; see HANDOFF_WORLD_UI for exact evidence.
+The corrected projection differs from native duplicate/overflow behavior;
+cross-map blending and live game output remain unverified.
+
 - `Document::endStroke` and `setVertexHeights` move grounded, unlocked placed
   objects with the height change in its existing undo step. Owned descendants
   follow the parent's delta, even when the child is floating or locked. Unrelated

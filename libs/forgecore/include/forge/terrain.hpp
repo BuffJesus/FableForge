@@ -107,6 +107,14 @@ struct ThemeBlend {
 ThemeBlend projectMaterialWeights(const std::vector<float>& weights,
                                   const std::vector<uint8_t>& themeIndices);
 
+// Forge ground-theme smear: freeze the input for a 3x3 neighbourhood pass,
+// merge allowed palette weights, then use projectMaterialWeights to keep three
+// distinct themes with strengths totaling 255. Empty neighbourhoods stay intact.
+// This is corrected Forge blending, not the native duplicate-selection algorithm.
+size_t smearThemeBlends(std::vector<std::array<uint8_t, 3>>& indices,
+    std::vector<std::array<uint8_t, 3>>& strengths, int width, int height,
+    const std::vector<std::pair<int, int>>& footprint, const std::array<bool, 256>& allowedThemes);
+
 // Bilinear row-major sampling of one normalized material raster. World bounds
 // are inclusive at both ends, matching the Fable2RE preview export contract.
 float sampleMaterialWeight(const std::vector<float>& raster,

@@ -1,5 +1,48 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 continuation: Ground Smear validation
+
+Resumed at the user's request to continue Forge work until stopped. Active
+checkout D:/Code/FableForge, feat/editor-ui-shell at 463893a. Preserved the
+uncommitted content-override proposal and the separate FableTLC lanes.
+
+Ground Smear's existing WIP uses a frozen 3x3 neighbourhood per application,
+merges eligible palette weights, retains three distinct strongest themes and
+projects strengths to exactly 255. Empty/NULL slots are excluded; an empty
+eligible neighbourhood is a no-op. Radius is truncated with a minimum of 1,
+using the strict vertex disc; no target, Strength or elapsed-time input is
+required. Repeat applies on held frames; the stroke remains one undo step.
+This is corrected Forge behavior, not native duplicate/overflow compatibility.
+Native evidence and the 610 selection-block comparisons remain recorded in
+the historical bedtime section below. Neighbouring maps are outside its scope.
+
+Reviewed the passability serializer guard: theme-only changes preserve camera
+bytes rather than imposing walkability's OR; explicit passability changes retain
+the existing saver rule. Added an independent full-LEV byte comparison: only
+the three theme indices and two stored strengths change, including on a fixture
+with walkable=true/camera=false. Existing adverse, frozen-neighbour, uniform
+no-op, channel preservation and Undo/Redo tests pass.
+
+Release targets FableForge, forge-tools and fableforge_tests rebuilt.
+ctest --test-dir build --output-on-failure: 36/36 passed, 153.32 seconds.
+tools/test_ground_smear.py now uses owned stock/loose copies at 1440x900 / scale 1
+and 800x600 / scale 1.5; checks real clicks, repeat, 1/9-vertex cursors, exact
+blends, undo, draft reopen and unchanged install hashes. First complete run:
+build/ground-smear-o65fq577, all four workflows passed. Loading notices were
+cleared for later visual captures; final run build/ground-smear-u782iq_x passes
+all four workflows and both layout captures were inspected.
+Normal and compact controls/cursor captures inspected. Scratch fixtures omit
+graphics.big, so placed mesh/foliage preview is not exercised by this harness.
+
+Walkable/Blocked/CameraPass/CameraBlock UI checks pass both sizes on the loose
+copy at build/passability-cursor-4583lg97 and the stock copy at
+build/passability-cursor-kn_aue45: rounded pens, Shift, channel preservation,
+cursor and exact undo. Docs-command and diff checks pass. Smear is wired into
+check_all and documented in the editor reference and painting guide.
+No broad gate, in-game test, package refresh, push or release claimed yet.
+Next: fix the compact combined-write label exposed during visual review, then
+run the broad gate on the completed changes.
+
 
 ## 2026-10-02 bedtime checkpoint: stopped at user request
 

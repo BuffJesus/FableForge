@@ -39,6 +39,13 @@ application. It uses a strict disc centred on a truncated vertex; small cursors
 show the vertices. Strength is hidden while Full stamp is on. Switch it off to
 keep soft blending.
 
+Choose Ground's **Smear** to soften boundaries between existing ground themes.
+No theme selection is needed: each vertex blends its 3x3 neighbourhood and
+keeps the three strongest distinct themes. Click to apply once, or enable
+**Repeat while held** to keep blending. The whole stroke is one undo step.
+Radius rounds down to a whole cell, with a minimum of 1. Small cursors show
+the affected vertices; Smear stays within the current map.
+
 Hide **Foliage** in the chips at the bottom of the view to see the ground under
 trees. Your own picture can become a theme too: *Your own ground texture...*
 opens **Assets > Ground themes**.

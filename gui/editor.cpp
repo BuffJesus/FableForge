@@ -2922,7 +2922,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
         }
         return;
     }
-    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) {
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !(terrainMode_==6 && paintSmear_) && !paintableSlot(paintTheme_)) {
         if (press) pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1);
         return;
     }
@@ -2986,6 +2986,7 @@ void App::terrainInput(const ImVec2& origin, const ImVec2& size) {
 }
 
 void App::fillPen(editor::TerrainBrush& b) const {
+    if (b.mode == editor::TerrainBrush::Mode::Theme && paintSmear_) b.mode = editor::TerrainBrush::Mode::ThemeSmear;
     if (b.mode == editor::TerrainBrush::Mode::Environment && envSmear_) b.mode = editor::TerrainBrush::Mode::EnvironmentSmear;
     if (b.mode == editor::TerrainBrush::Mode::ShoreSet && !shoreSet_) b.mode = editor::TerrainBrush::Mode::ShoreClear;
     b.themeStamp = paintStamp_;
@@ -2999,7 +3000,13 @@ void App::fillPen(editor::TerrainBrush& b) const {
 void App::drawPenControls(float cardInner) {
     using theme::S;
     const int m = terrainMode_;
-    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 9 && m != 16) return;
+    if (m != 0 && m != 1 && m != 2 && m != 3 && m != 9 && m != 16 && !(m==6 && paintSmear_)) return;
+    if (m==6 && paintSmear_) {
+        ImGui::Checkbox("Repeat while held##pspray", &penSpray_);
+        auto_.registerWidget("check_pen_spray");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On: blends again every held frame. Off: one application per click.");
+        return;
+    }
     const float labelW = S(110);
     auto row = [&](const char* label) {
         ImGui::AlignTextToFramePadding();
@@ -3071,7 +3078,7 @@ void App::drawPenControls(float cardInner) {
 
 void App::terrainStroke(float x, float y, float seconds) {
     if (!documentLoaded() || !doc_.hasTerrain()) return;
-    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !paintableSlot(paintTheme_)) { pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1); return; }
+    if (terrainMode_ >= 6 && terrainMode_ <= 8 && !(terrainMode_==6 && paintSmear_) && !paintableSlot(paintTheme_)) { pushLog("paint: pick a ground theme to paint first (the list under the tool, or Ctrl+click the ground)", 1); return; }
     editor::TerrainBrush b;
     b.mode = brushModeFor(terrainMode_);
     b.x = x; b.y = y; b.radius = brushRadius_; b.strength = brushStrength_;
@@ -3109,24 +3116,25 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     const bool surveyDisc = terrainMode_ == 4 || terrainMode_ == 5 || terrainMode_ == 12 || terrainMode_ == 13 || terrainMode_ == 17;
     const bool roundedDisc = !keyStroke_ &&
         (terrainMode_ == 2 || ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_));
+    const bool groundSmearDisc = terrainMode_ == 6 && paintSmear_;
     const bool smearDisc = !keyStroke_ && terrainMode_ == 3;
     const bool keyDisc = keyStroke_;
     const bool replaceDisc = terrainMode_ == 7;
-    const bool stampDisc = terrainMode_ == 6 && paintStamp_;
-    const bool vertexDisc = roundedDisc || smearDisc || keyDisc || replaceDisc || stampDisc || surveyDisc;
+    const bool stampDisc = terrainMode_ == 6 && !paintSmear_ && paintStamp_;
+    const bool vertexDisc = roundedDisc || smearDisc || groundSmearDisc || keyDisc || replaceDisc || stampDisc || surveyDisc;
     const bool noiseSquare = !keyStroke_ && terrainMode_ == 16;
     const bool soundDisc = terrainMode_ == 11;
     const bool environmentDisc = terrainMode_ == 10;
     const bool environmentSmearDisc = environmentDisc && envSmear_;
     const float centreX = surveyDisc ? std::nearbyint(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
         : environmentSmearDisc ? std::trunc(float(doc_.worldX()) + brushFable_[0]) - float(doc_.worldX())
-        : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[0])
+        : replaceDisc || stampDisc || groundSmearDisc || environmentDisc ? std::trunc(brushFable_[0])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[0]) : brushFable_[0];
     const float centreY = surveyDisc ? std::nearbyint(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
         : environmentSmearDisc ? std::trunc(float(doc_.worldY()) + brushFable_[1]) - float(doc_.worldY())
-        : replaceDisc || stampDisc || environmentDisc ? std::trunc(brushFable_[1])
+        : replaceDisc || stampDisc || groundSmearDisc || environmentDisc ? std::trunc(brushFable_[1])
         : vertexDisc || noiseSquare || soundDisc ? std::nearbyint(brushFable_[1]) : brushFable_[1];
-    const float radius = smearDisc ? std::trunc(std::max(brushRadius_, 1.0f))
+    const float radius = (smearDisc || groundSmearDisc) ? std::trunc(std::max(brushRadius_, 1.0f))
                                   : brushRadius_ + (roundedDisc || soundDisc || surveyDisc ? 0.5f : 0.0f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 col = terrainMode_ == 10 ? IM_COL32(120, 220, 200, 230) : terrainMode_ == 11 ? IM_COL32(120, 170, 255, 230)
@@ -3181,8 +3189,8 @@ void App::drawBrushCursor(const ImVec2& origin, const ImVec2& size) {
     if (vertexDisc && brushRadius_ <= 4.0f) {
         const auto vertices = surveyDisc ? doc_.surveyBrushVertices(brushFable_[0], brushFable_[1], brushRadius_) : keyDisc
             ? forge::heightpen::heightAdditionFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
-            : replaceDisc || stampDisc
-            ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], brushRadius_)
+            : replaceDisc || stampDisc || groundSmearDisc
+            ? doc_.themeBrushVertices(brushFable_[0], brushFable_[1], groundSmearDisc ? radius : brushRadius_)
             : smearDisc
             ? forge::heightpen::smearFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_)
             : forge::heightpen::discFootprint(doc_.cellsX(), doc_.cellsY(), brushFable_[0], brushFable_[1], brushRadius_);
@@ -4501,6 +4509,14 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
             ImGui::PopFont();
         }
         if (terrainMode_ == 6) {
+            if (theme::chip("Paint", !paintSmear_)) paintSmear_=false;
+            auto_.registerWidget("chip_ground_paint");
+            ImGui::SameLine();
+            if (theme::chip("Smear", paintSmear_)) paintSmear_=true;
+            auto_.registerWidget("chip_ground_smear");
+            if (paintSmear_) theme::hint("Blend the existing ground themes with their neighbours. No target theme is needed.");
+        }
+        if (terrainMode_ == 6 && !paintSmear_) {
             ImGui::Checkbox("Full stamp", &paintStamp_);
             auto_.registerWidget("check_paint_stamp");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sets every considered vertex fully to this theme in one application. Switch off for soft blending.");
@@ -4595,6 +4611,8 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes outline affected environment cells.");
                 else if (terrainMode_ == 11)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nEach touched vertex paints its containing 4x4 sound cell. Small brushes outline those cells.");
+                else if (terrainMode_ == 6 && paintSmear_)
+                    ImGui::SetTooltip("Average a frozen 3x3 neighbourhood into three distinct themes. Minimum radius 1; the fractional radius is truncated. Small brushes show affected vertices.");
                 else if ((terrainMode_ == 6 && paintStamp_) || terrainMode_ == 7)
                     ImGui::SetTooltip("Drag left for precise edits, right for broad strokes; [ and ] change size.\nThe pen uses a truncated vertex and strict radius. Small brushes show considered vertices.");
                 else if (terrainMode_ <= 3 || terrainMode_ == 9 || terrainMode_ == 16)
@@ -4613,6 +4631,7 @@ void App::drawEditPanel(float pad, float inner, float cardInner) {
         if (terrainMode_!=14 && terrainMode_!=15) theme::hint("Hold Space to pin the brush at its last ground point.");
         const char* how = nullptr;
         if ((terrainMode_ == 0 || terrainMode_ == 1) && penExactStep_) how = "Click or drag: every block under the brush moves by the step once per stroke (a terrace). Shift swaps raise and lower. One undo step per stroke.";
+        else if (terrainMode_ == 6 && paintSmear_) how = "Click or drag to blend neighbouring ground themes. One application per click; Repeat while held blends again. One undo step per stroke.";
         else if (terrainMode_ == 0 || terrainMode_ == 1) how = "Hold LMB on the ground to sculpt; Shift swaps raise and lower. Each stroke is one undo step.";
         else if (terrainMode_ == 2) how = "Hold LMB: the ground under the brush moves toward the target height, never past it. Ctrl+drag samples the target. One undo step per stroke.";
         else if (terrainMode_ == 3) how = "Hold LMB: bumps and pits move toward their neighbours; straight slopes stay. One undo step per stroke.";
