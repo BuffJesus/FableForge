@@ -118,6 +118,9 @@ def main():
             package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve(), *options])
     run('texture_destination', [sys.executable, repo / 'tools/test_texture_destination_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
+    for label, options in [('texture_replace_locked', []), ('texture_replace_invalid', ['--invalid'])]:
+        run(label, [sys.executable, repo / 'tools/test_texture_replace_failure_ui.py',
+            '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), *options])
     run('texture_export_failure', [sys.executable, repo / 'tools/test_texture_export_failure_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
     with archive.open('rb') as stream:

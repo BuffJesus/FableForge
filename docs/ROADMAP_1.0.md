@@ -1,10 +1,22 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary Mods checkpoint: e4a2807 is promoted and rebuilt; its stripped
+development ZIP passes all 31 runtime workflows, 115 Markdown links and four
+guide images. Mods failure feedback and same-process recovery pass at both sizes.
+The isolated texture replacement follow-up below is excluded from this archive;
+see HANDOFF_WORLD_UI for the retained hash and exact validation boundaries.
+
+2026-10-03 isolated texture follow-up: invalid and sharing-locked replacements
+retain wrapped errors beside Replace. Actual form input, complete failure
+preservation, same-process retry, exact exported blue pixels and Restore pass
+at both sizes. Promotion and extracted-package checks remain pending;
+see HANDOFF_WORLD_UI for source and evidence boundaries.
+
 2026-10-03 isolated Mods recovery follow-up: failed redeploy, invalid reports and
 missing tools retain actionable errors beside compact-safe buttons. Same-process
 retry, destination changes, same-install rescans and exact inventory recovery
-pass at both sizes; existing field-details checks pass. Promotion and the new
-31-workflow package validation are pending. See HANDOFF_WORLD_UI.
+pass at both sizes; existing field-details checks pass. Promoted e4a2807 passes
+all 31 extracted workflows. See HANDOFF_WORLD_UI.
 
 2026-10-03 primary checkpoint: the e7cb37b gate completes with 126 passing
 checks, zero skipped integration checks and one prose-triggered documentation

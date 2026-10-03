@@ -86,6 +86,7 @@ void App::setSaveRoot(const std::string& root) {
 
 void App::resetModDestination() {
     modsActionError_.clear();
+    texReplaceError_.clear();
     meshImportError_.clear(); customThemeError_.clear();
     meshImportSuccess_.clear();
     packDest_.clear(); packDestChosen_ = false;

@@ -1,5 +1,13 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_texture_replace_failure_ui.py --install <root>` clicks the actual
+replacement form with a sharing-locked PNG; `--invalid` uses undecodable input.
+Both sizes verify a persistent `texture_replace_error` after toast dismissal and
+closing/reopening the form, complete copied-install preservation, unlocked/fixed
+same-process retry, independently decoded blue export pixels and exact Restore.
+Selecting a different texture clears state `texture_replace_failed`. Input images
+and source banks stay unchanged; `--gui <exe>` selects extracted-package binaries.
+
 `tools/test_mod_action_error_ui.py --install <root> --mode redeploy|report|missing`
 checks actual Mods buttons at normal/compact sizes. A bad patch after a successful
 deploy restores the baseline before failing; malformed or incomplete exit-zero

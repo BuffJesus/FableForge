@@ -32,7 +32,7 @@ std::filesystem::path App::texturesBigPath() const {
 void App::invalidateTextureViews() {
     texturesLoaded_ = false;
     texRows_.clear(); texBanks_.clear(); texSelected_.clear();
-    texExportError_.clear();
+    texExportError_.clear(); texReplaceError_.clear();
     texPreviewFor_.clear(); texPreview_ = nullptr;
     texThumbFile_.reset();
     renderer_.clearListThumbs();
@@ -98,7 +98,7 @@ bool App::selectTexture(const std::string& nameOrLabel) {
     if (!texturesLoaded_) refreshTextures();
     for (const auto& r : texRows_)
         if (r.name == nameOrLabel || r.label == nameOrLabel || (nameOrLabel.size() < 10 && std::to_string(r.id) == nameOrLabel)) {
-            if (texSelected_ != r.name) texExportError_.clear();
+            if (texSelected_ != r.name) { texExportError_.clear(); texReplaceError_.clear(); }
             texSelected_ = r.name; return true;
         }
     pushLog("textures: no texture named " + nameOrLabel, 1);
@@ -132,12 +132,20 @@ bool App::exportSelectedTexture(const std::string& outPath) {
 }
 
 bool App::replaceSelectedTexture(const std::string& image) {
+    texReplaceError_.clear();
     const auto* r = selectedTexture();
-    if (!r) { pushLog("textures: nothing selected", 1); return false; }
-    if (gameWriteBlocked("textures")) return false;
+    if (!r) { texReplaceError_ = "Choose a texture first."; pushLog("textures: " + texReplaceError_, 1); return false; }
+    if (gameWriteBlocked("textures")) {
+        texReplaceError_ = "Texture replacement is blocked. See Activity for details.";
+        return false;
+    }
     std::vector<std::string> notes; std::string err;
     const std::string name = r->name;
-    if (!texbrowse::replaceTexture(saveRoot(), name, image, notes, err)) { for (const auto& n : notes) pushLog("textures: " + n, 1); pushLog("textures: " + err, 2); return false; }
+    if (!texbrowse::replaceTexture(saveRoot(), name, image, notes, err)) {
+        texReplaceError_ = err;
+        for (const auto& n : notes) pushLog("textures: " + n, 1);
+        pushLog("textures: " + err, 2); return false;
+    }
     for (const auto& n : notes) pushLog("textures: " + n, 3);
     // the preview and the context caches decode from the file: reload both
     refreshTextures();
@@ -153,7 +161,7 @@ bool App::addTexture(const std::string& name, const std::string& image, const st
     for (const auto& n : notes) pushLog("textures: " + n, 3);
     pushLog("reference the new texture by id " + std::to_string(id) + " (a def's Graphic / theme texture field)", 0);
     refreshTextures();
-    texExportError_.clear();
+    texExportError_.clear(); texReplaceError_.clear();
     texSelected_ = name;
     startContextLoad(saveRoot());
     return true;
@@ -348,6 +356,14 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             ImGui::PopFont();
             if (theme::primaryButton("Replace this texture", ImVec2(cardInner, S(30)), texImagePath_[0] != 0)) replaceSelectedTexture(texImagePath_);
             auto_.registerWidget("btn_tex_replace");
+            if (!texReplaceError_.empty()) {
+                ImGui::PushFont(fontSmall_);
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+                ImGui::TextColored(theme::vec(theme::Error), "Replacement failed: %s", texReplaceError_.c_str());
+                auto_.registerWidget("texture_replace_error");
+                ImGui::PopTextWrapPos();
+                ImGui::PopFont();
+            }
         }
     }
     theme::endCard();

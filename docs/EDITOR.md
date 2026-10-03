@@ -979,6 +979,10 @@ leave bank bytes and recovery metadata unchanged; unrelated temporary files are
 preserved, and locked replacement leaves the previous bank intact. CLI: `FableForge
 textures [filter]`, `texture-export`, `texture-replace`, `texture-add`.
 Texture commands reject unknown or incomplete options and extra arguments.
+Failed texture replacements keep the bank and recovery records unchanged and
+show a wrapped error below Replace. Fix or unlock the image and retry; changing
+the selected texture or destination clears the message. Closing and reopening
+the replacement form retains it.
 Failed PNG exports keep the previous output and show a wrapped error next to
 Export PNG. The error identifies the output and a short reason; Activity keeps
 the complete diagnostic. Retry or changing the texture/bank clears the message.

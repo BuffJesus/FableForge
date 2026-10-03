@@ -1941,6 +1941,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("texture_thumbs_made=" + std::to_string(texThumbsMade_));
     v.push_back("texture_search=" + std::string(texSearch_));
     v.push_back("texture_export_failed=" + std::to_string(!texExportError_.empty()));
+    v.push_back("texture_replace_failed=" + std::to_string(!texReplaceError_.empty()));
     v.push_back("tool_panel_visible=" + std::to_string(settings_.showActions));
     { const auto* t = selectedTexture(); v.push_back("texture_selected=" + (t ? t->label : std::string("-"))); }
     v.push_back("world_loaded=" + std::string(worldLoaded_ ? "1" : "0"));

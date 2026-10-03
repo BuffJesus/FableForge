@@ -1,5 +1,41 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated texture replacement feedback
+
+Choice review feat/forge-texture-replace-review-20261003 starts at e4a2807.
+Baseline build/texture-replace-failure-5mw8_pzl clicks the real replacement form
+with a sharing-locked PNG: the copied install remains unchanged and unlocked
+retry succeeds, but no error stays beside Replace after toast dismissal. The
+fixture fails on the absent error widget/state; screenshots retain that baseline.
+
+Replacement errors now wrap below Replace. Decoder/writer diagnostics stay in
+Activity and the form; write-guard refusal also directs users to Activity. The
+next attempt, different texture, bank invalidation or accepted destination change
+clears the error. Closing/reopening the form retains it. A successful add selecting
+a new texture clears the preceding replacement error. Format readers, preparation,
+backup and write/restore policies are unchanged.
+
+build/texture-replace-failure-a2tnr4ht (locked input) and -vl3na88t (invalid input)
+pass at 1440x900 / scale 1 and 800x600 / scale 1.5. Actual path fields and buttons
+preserve complete copied-install inventories on failure; input images and source
+banks remain unchanged. Unlocking/fixing the input recovers in the same process,
+independent exported pixels are exactly blue, and Restore --forget returns the
+complete install to its baseline. Closing/reopening the form retains the visible
+error; compact selection changes clear it. Screenshots show wrapped diagnostics
+and the action within the compact card. The two variants join the Windows/retail
+gate and package suite (33 runtime workflows).
+
+The initial existing Unicode regression build/texture-unicode-vziqi4n7 timed out
+at the unchanged CLI's red-image add (120 seconds) while the 31-workflow package
+was doing large bank copies. Preserve this failure evidence; I/O contention is
+an inference, not an established cause. The serial rerun passes every case at
+build/texture-unicode-yhwlqvl3 (log build/texture_unicode_replace_serial_20261003.log),
+including Unicode CLI inputs, invalid/locked refusal, both GUI sizes, decoded
+pixels and exact Restore. Promotion and focused extracted-package checks are
+pending. The e4a2807 package passes all 31 workflows;
+neither increment is included in the frozen e7cb37b broad gate. Writes remain in
+owned scratch roots; no game launch or live-install changes occurred.
+
 ## 2026-10-03 isolated Mods action error recovery
 
 The owned choice review, feat/forge-mod-action-review-20261003, starts from
@@ -28,11 +64,17 @@ confirm wrapped error bounds and visible action labels. Existing field-details
 regression build/mod-field-details-x4asv9ms passes both sizes and exact merged
 values/source preservation. The docs-command checker passes (32/37 families).
 
-The three modes are wired into the Windows/retail broad gate and extracted
-package check, increasing that package suite to 31 runtime workflows. Promotion
-and the new package run remain pending; previous source/gate/package boundaries
-below remain unchanged. All writes are confined to owned scratch trees; no game
-launch or live-install writes occurred.
+Primary feat/editor-ui-shell was fast-forwarded to e4a2807 and its Release GUI
+rebuilt. The three modes join the Windows/retail gate and extracted package suite.
+All 31 runtime workflows pass in primary build/package-smoke-ntt74hyq/result.json
+(log build/package_mod_action_20261003.log), with 115 Markdown links and all four
+guide images checked. The stripped application ZIP is retained under
+primary dist/development/20261003-e4a2807, SHA-256
+bbd1ab7caf8c932938c5d7b9ee5bd2e2fa5eecaf22eae5baeb65557cac2fa744.
+This source includes the Unicode increments and Mods feedback, outside the frozen
+e7cb37b broad gate. The following isolated texture increment is excluded from
+this archive. All writes remain in owned scratch roots; no game launch, live
+install write or publication occurred.
 
 ## 2026-10-03 primary gate and Unicode promotion checkpoint
 

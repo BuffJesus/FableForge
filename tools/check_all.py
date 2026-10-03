@@ -80,6 +80,10 @@ def main():
         ok &= run("model import form, pack retry and next-draft preservation",
                   [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
+            for options in ([], ["--invalid"]):
+                ok &= run("Texture replacement refusal, persistent error, retry and exact Restore " + str(options),
+                          [sys.executable, "tools/test_texture_replace_failure_ui.py", "--install", install_root,
+                           *options], capture_output=True)
             for mode in ("redeploy", "report", "missing"):
                 ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
                           [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
