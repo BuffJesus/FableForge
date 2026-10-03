@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary checkpoint: the e7cb37b gate completes with 126 passing
+checks, zero skipped integration checks and one prose-triggered documentation
+failure. That wording is corrected and the checker passes after promotion to
+6387b06. Primary Release targets build; Unicode process, image and compiler
+changes have focused, real-compile and 37-core-test coverage. The d5347ea
+extracted package passes 27 workflows; compiler-package validation is ongoing.
+See HANDOFF_WORLD_UI for exact source and test boundaries.
+
 2026-10-03: all 27 extracted runtime checks pass for the d5347ea Unicode
 process/image package. A further isolated EgoCore review preserves native
 compiler/environment/temp paths, verifies startup refusal and retry, and produces

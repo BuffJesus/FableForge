@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 primary gate and Unicode promotion checkpoint
+
+The frozen e7cb37b gate completed at build/check_all_asset_recovery_20261003.log:
+126 checks passed, no integration checks skipped, and one documentation-check
+failure. The validator mistook prose "forge-tools beside" for a subcommand.
+build/check_all_asset_recovery_summary_20261003.json records this boundary.
+Every runtime check, including the newer recovery/asset-view workflows and all
+available mod corpora, passed. This run is not an ALL PASS result.
+
+Primary feat/editor-ui-shell was fast-forwarded to reviewed source 6387b06,
+including the executable-name prose correction and all three Unicode increments
+below. All primary Release targets rebuild successfully. The documentation check
+now passes (32/37 command families), and build/egocore-unicode-r2hqcrc1 passes
+all eight compiler invocation/refusal/retry cases with the primary binaries.
+The owned field review passes all 37 CTest targets at the same product source
+(21.66 seconds; build/core_unicode_compiler_20261003.log).
+
+The d5347ea extracted package passes all 27 runtime workflows as recorded below.
+The 6387b06 compiler package is under extracted validation in the field review.
+Current product source is outside the frozen e7cb37b full-gate boundary; its
+Unicode changes have the focused/real-compile checks documented below. No game
+was launched, live bank written, asset published or prior package replaced.
+
 ## 2026-10-03 isolated EgoCore compiler process paths
 
 The owned D:/Code/FableForge-field-review checkout, branch
