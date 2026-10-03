@@ -1,5 +1,43 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 primary integration checkpoint
+
+Primary feat/editor-ui-shell fast-forwarded clean b1eb3b9 to 0a7887e after the
+frozen source gate exited. Release all-target build completes. The exact frozen
+result is 136 PASS / 1 FAIL across 137 checks, no skipped integration checks:
+build/check_all_fmp_b1eb3b9_20261003.log, exit 1 / SOME CHECKS FAILED. The sole
+failure is dialogue workspace playback, independently reproduced as end-slider
+rounding and fixed at 7f771b7. The skipped 291 empty/non-type-1 retail lip-sync
+records are input categories, not skipped integration checks. All available
+large corpora, Aeon/Controller, named links, unsupported-FMP recovery, real-bank
+textures and the 38-core-test checkpoint are covered by this frozen run.
+
+Post-integration focused primary checks pass:
+- build/dialogue-workspace-zt4bx9cz: stopped/playing end seeks, exact end state,
+  explicit restart, normal/compact browse/scrub/mute/edit/export workflow.
+- build/texture-replace-failure-rti8ttf1: locked Add at both sizes, persistent
+  error/draft, unchanged failure inventory, same-process retry, decoded blue
+  pixels and exact Restore.
+- build/fmp-links-5f4a6d49: all standalone retail/Aeon/merged 14 named targets,
+  choice and payload preservation/refusal cases, and the added external target
+  relocation case (provider 14764 becomes merged 14765).
+No newer completed full-gate result is claimed; no full gate was repeated after
+these focused checks resolved the one identified failure. There is no active
+test/build process at this checkpoint. No live-install writes or game launch.
+
+Accepted archives were copied unchanged from review into primary dist/development:
+20261003-7f771b7 application SHA256
+81aa4239127e9b0addb27ce6ab4123769cb65efbb9dabd5849a5704e4c520ffc:
+SIX focused extracted runtime checks, not all 38 registered package workflows.
+20261003-package-identity-review application SHA256
+dbde03f7153a0e66cec0ce3613ead353677025f39bda87f5e80d87c27b1dad48:
+103 shipped identities verified, size-changing and same-size scratch corruption
+refused, restored inventory reverified; no new runtime suite. Three Forge
+executables match the six-workflow package except strip's PE timestamp/checksum;
+defc/schema are byte-identical. Both guide-only ZIPs were copied and independently
+hash-compared too. All remain local and unpublished. The GUI 511 texture / 43
+effect identity audit below remains offline evidence, not gameplay validation.
+
 ## 2026-10-03 package identity follow-up (packaging only)
 
 Review feat/forge-package-identity-review-20261003 descends accepted endpoint

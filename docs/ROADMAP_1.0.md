@@ -1,5 +1,14 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary linker/Add/dialogue checkpoint: reviewed changes are integrated
+at 0a7887e and all Release targets build. The frozen b1eb3b9 source gate finishes
+136 PASS / 1 dialogue playback FAIL with no skipped integration checks. The
+exact slider-end rounding defect is reproduced and fixed; focused rebuilt-primary
+dialogue, Add recovery and expanded named-link audits pass. The 7f771b7 package
+passes SIX focused extracted runtime workflows; the packaging-only follow-up
+verifies 103 shipped identities. Neither is a complete 38-workflow package-suite
+claim. Local archives/hashes and precise boundaries are in HANDOFF_WORLD_UI.
+
 2026-10-03 primary texture checkpoint: 39bdf32 is promoted and rebuilt. Its
 stripped development ZIP passes four focused texture workflows sequentially,
 including new locked/invalid replacement recovery and existing Unicode inputs /
