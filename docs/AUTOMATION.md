@@ -1,5 +1,14 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_unreported_choices.py --install <root>` checks saved choices
+absent from the latest report, including missing targets and uncontested edits.
+Both panel sizes cover search and read-only preservation; real Clear buttons
+cover individual removal and a zero-conflict report. States:
+`mods_unreported_choices`, `mods_unreported_matching`. Widgets:
+`mods_unreported_help`, `mod_unreported_choice_<index>`,
+`mod_clear_unreported_<index>`. It accepts `--gui`/`--cwd` and owns its app-data
+directory for hidden-process isolation.
+
 `tools/test_mod_long_values.py --install <root>` checks long Vector_J/CCharString
 and signed CDefString reference baseline, current and contributor values at both sizes, exact byte escapes,
 independent merged payload bytes and source hashes. Value targets:

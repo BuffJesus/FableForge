@@ -6,6 +6,15 @@ Future investigation: [fine-grained content overrides](CONTENT_OVERRIDES.md)
 describes choosing contributions within FMPs and large overhauls, item/field
 comparison, persistent compatibility choices, and dependency validation.
 
+After **Check conflicts**, the Mods panel also lists **Other saved choices**:
+choices absent from that check's conflict report. They may belong to inactive
+mods, missing targets or edits that are no longer contested. A saved choice can
+still affect a build without a conflict. Search by the
+target or saved contributor, and use **Clear choice** to remove one saved
+selection. Viewing this list preserves the choices; clearing changes the saved
+selection for future builds without deploying anything. Run Check conflicts
+again after changing the enabled mods or their order to review the new report.
+
 EgoCore text compilation uses a separate temporary workspace per normalization,
 including concurrent builds of the same mod into different outputs. Workspaces
 are cleaned on success and compiler failure. This does not enable concurrent

@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 review saved choices outside the conflict report
+
+The frozen primary afe9e55 gate is running separately. This increment is in the
+owned D:/Code/FableForge-choice-review worktree, based on that checkpoint.
+Previously saved choices absent from residual conflict rows were invisible;
+baseline fixture build/mod-unreported-choices-v7g1jwdo confirms missing review
+widgets in the primary binary. Other saved choices now lists those entries,
+searches target/contributor before its 400-row cap and clears each through the
+existing guarded PendingBanks transaction. Choices are snapshotted before
+rendering so a successful clear cannot invalidate the loop. Zero-conflict
+reports retain the search and review controls; their summary now wraps.
+
+Absence from a conflict report does not prove a choice is inactive. Independent
+file-composer evidence shows a single-contributor vanilla choice can suppress
+that file despite no reported conflict. The initial fixture expectation was
+wrong (build/mod-unreported-choices-mxsehjo4); the final message explains this,
+and the fixture independently checks the expected next-build change after
+clearing it. No deployment occurs. Existing reported choices remain intact.
+
+Isolated Release GUI/tools builds pass. build/mod-unreported-choices-1hotw3xe
+passes normal/compact missing/uncontested review, choice-name search, exact
+read-only preservation, individually clicked clears, a locked-choice-file
+failure with unchanged disk/display state and no leaked pending directory,
+zero-conflict recovery, and 401-choice last-match access at both sizes. Compact
+help/long-name screenshots were reviewed at the preceding r3wew08p run; its UI
+binary is unchanged. Existing field details (mod-field-details-fmhw_ij7) and
+401-file conflict search (mod-conflict-search-au1bzhlo) pass both sizes with
+source preservation. Test processes own separate app-data directories.
+No new whole-gate/core pass is claimed for this isolated UI increment.
+
 ## 2026-10-03 correct CDefString reference presentation
 
 The byte-safe presentation increment avoided a JSON failure but incorrectly

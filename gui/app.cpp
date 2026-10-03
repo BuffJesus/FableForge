@@ -1867,6 +1867,15 @@ std::vector<std::string> App::stateDump() const {
     if (modReportLoaded_)
         for (const auto& conflict : modConflicts_) unavailableChoices += modChoiceUnavailable(conflict);
     v.push_back("mods_unavailable_choices="+std::to_string(unavailableChoices));
+    const auto unreportedChoices = modUnreportedChoices();
+    v.push_back("mods_unreported_choices="+std::to_string(unreportedChoices.size()));
+    size_t matchingUnreportedChoices = 0;
+    for (const auto& [key, winner] : unreportedChoices) {
+        ModConflict choice;
+        choice.kind = "saved choice"; choice.key = key; choice.label = key;
+        matchingUnreportedChoices += modConflictMatches(choice);
+    }
+    v.push_back("mods_unreported_matching="+std::to_string(matchingUnreportedChoices));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
     size_t matchingConflicts = 0;
     std::string firstMatchingConflict;

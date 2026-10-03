@@ -1052,6 +1052,7 @@ public:
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
     std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
     bool modConflictMatches(const ModConflict& conflict) const;
+    std::vector<std::pair<std::string, std::string>> modUnreportedChoices() const;
     struct ModOutcomes { std::vector<std::string> won, lost; };
     std::map<std::string, ModOutcomes> modConflictOutcomes() const;
 private:

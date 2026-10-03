@@ -204,6 +204,12 @@ Field-aware badges count actual contested wins/losses, excluding independent
 edits. A saved choice absent from a current conflict's contributors is now
 identified for review while its displayed result follows the composer fallback;
 the saved choice is preserved and can be found by its name or cleared in the UI.
+Other saved choices also exposes selections whose targets are absent from the
+latest conflict report, with search and individual clearing. Such selections
+can still affect builds: a single-contributor file baseline choice can suppress
+that file without creating a conflict row. This review does not infer missing
+source identities or fingerprint validity. CDefString values display signed
+name-table references; only inline CCharString bytes use text/byte escapes.
 
 Implementation through 169608b was reviewed in an isolated owning checkout:
 synthetic three-mod banks independently verify contributor/result values,

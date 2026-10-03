@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <set>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -408,6 +409,16 @@ bool App::modConflictMatches(const ModConflict& conflict) const {
     return false;
 }
 
+std::vector<std::pair<std::string, std::string>> App::modUnreportedChoices() const {
+    std::vector<std::pair<std::string, std::string>> choices;
+    if (!modReportLoaded_) return choices;
+    std::set<std::string> reported;
+    for (const auto& conflict : modConflicts_) reported.insert(conflict.key);
+    for (const auto& choice : modPicks_)
+        if (!reported.contains(choice.first)) choices.push_back(choice);
+    return choices;
+}
+
 std::map<std::string, App::ModOutcomes> App::modConflictOutcomes() const {
     std::map<std::string, ModOutcomes> outcomes;
     if (!modReportLoaded_) return outcomes;
@@ -758,6 +769,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     ImGui::Dummy(ImVec2(0, S(8)));
 
     if (modReportLoaded_) {
+        const auto unreportedChoices = modUnreportedChoices();
         ImGui::SetCursorPosX(pad);
         theme::beginCard("##modconflicts", inner);
         theme::label("Conflicts");
@@ -782,8 +794,12 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         auto_.registerWidget("mods_asset_status");
         if (!modConflicts_.empty()) theme::hintMore("Things several mods change differently: the load order decides unless you pick.", "Each row is one thing several mods want differently. Reorder packs to choose a lip sync winner. Other winner picks are kept in forge_mods_picks.txt and applied by Build and deploy.");
         ImGui::PopFont();
-        if (modConflicts_.empty()) ImGui::TextColored(theme::vec(theme::Faint), "the enabled mods do not contest anything");
-        else {
+        if (modConflicts_.empty()) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextColored(theme::vec(theme::Faint), "The enabled mods do not contest anything.");
+            ImGui::PopTextWrapPos();
+        }
+        if (!modConflicts_.empty() || !unreportedChoices.empty()) {
             ImGui::SetNextItemWidth(cardInner);
             ImGui::InputTextWithHint("##conflictsearch", "Search name, mod or field", modConflictSearch_, sizeof modConflictSearch_);
             auto_.registerWidget("input_mod_conflict_search");
@@ -905,6 +921,38 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         if (matches > shownRows) theme::hint("Showing the first 400 matches. Narrow the search to see other conflicts.");
         theme::endCard();
         ImGui::Dummy(ImVec2(0, S(8)));
+        if (!unreportedChoices.empty()) {
+            ImGui::SetCursorPosX(pad);
+            theme::beginCard("##modotherchoices", inner);
+            theme::label("Other saved choices");
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextWrapped("These choices are absent from the latest conflict check. They may be inactive or no longer contested. A choice can still affect builds without a conflict. They stay saved until you clear them.");
+            auto_.registerWidget("mods_unreported_help");
+            size_t shown = 0, matching = 0;
+            for (size_t i = 0; i < unreportedChoices.size(); ++i) {
+                const auto& [key, winner] = unreportedChoices[i];
+                ModConflict choice;
+                choice.kind = "saved choice"; choice.key = key; choice.label = key;
+                if (!modConflictMatches(choice)) continue;
+                ++matching;
+                if (shown++ >= 400) continue;
+                ImGui::PushID(key.c_str());
+                ImGui::TextWrapped("%s", key.c_str());
+                ImGui::TextWrapped("Saved choice: %s", winner.c_str());
+                auto_.registerWidget(("mod_unreported_choice_"+std::to_string(i)).c_str());
+                if (theme::ghostButton("Clear choice", ImVec2(cardInner, S(28)))) {
+                    if (setModPick(key, "-")) pushLog("mods: cleared saved choice for " + key, 0);
+                }
+                auto_.registerWidget(("mod_clear_unreported_"+std::to_string(i)).c_str());
+                ImGui::PopID();
+                ImGui::Spacing();
+            }
+            if (!matching) theme::hint("No other saved choices match the search.");
+            if (matching > 400) theme::hint("Showing the first 400 matches. Narrow the search to see other choices.");
+            ImGui::PopTextWrapPos();
+            theme::endCard();
+            ImGui::Dummy(ImVec2(0, S(8)));
+        }
     }
 
     ImGui::SetCursorPosX(pad);

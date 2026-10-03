@@ -73,6 +73,8 @@ def main():
                   [sys.executable, "tools/test_mod_conflict_search.py", "--install", install_root], capture_output=True)
         ok &= run("unavailable saved mod choices, actual winner, preservation and recovery",
                   [sys.executable, "tools/test_mod_unavailable_choice.py", "--install", install_root], capture_output=True)
+        ok &= run("saved choices outside the conflict report, preservation and individual clearing",
+                  [sys.executable, "tools/test_mod_unreported_choices.py", "--install", install_root], capture_output=True)
         ok &= run("active asset search and hidden panel keyboard recovery",
                   [sys.executable, "tools/test_asset_search.py", "--install", install_root], capture_output=True)
         ok &= run("model import form, pack retry and next-draft preservation",
