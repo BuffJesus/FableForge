@@ -837,8 +837,7 @@ void App::scanInstall(const std::string& picked) {
     effectBrowserThumbnails_.clear(); effectBrowserError_.clear();
     effectSimulation_.reset({}); effectRenderer_.clear(); effectTexturesReady_=false; effectMeshesReady_=false;
     effectTextureWarnings_.clear();
-    texturesLoaded_ = false; texRows_.clear(); texBanks_.clear(); texSelected_.clear();
-    texPreviewFor_.clear(); texPreview_ = nullptr;
+    invalidateTextureViews();
     levels_ = forge::levelstore::detect(root);
     const bool hasDefs = fs::exists(fs::path(root) / "data" / "CompiledDefs" / "game.bin");
     installValid_ = hasDefs && levels_.valid();

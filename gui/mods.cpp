@@ -79,8 +79,10 @@ void App::setSaveRoot(const std::string& root) {
     const fs::path previous = fs::path(saveRoot()).lexically_normal();
     const fs::path next = fs::path(root.empty() ? installPath_ : root).lexically_normal();
     if (previous != next && fileWriteBlocked("save folder")) return;
+    const fs::path previousTextures = texturesBigPath().lexically_normal();
     saveRoot_ = root;
     if (previous != fs::path(saveRoot()).lexically_normal()) resetModDestination();
+    if (previousTextures != texturesBigPath().lexically_normal()) invalidateTextureViews();
 }
 
 void App::resetModDestination() {
@@ -581,11 +583,7 @@ void App::refreshAfterMods() {
     stopWorldTiles();
     modsRefreshPending_ = false;
     foliageexport::closeMeshBank();
-    texturesLoaded_ = false;
-    texRows_.clear(); texBanks_.clear(); texSelected_.clear();
-    texPreviewFor_.clear(); texPreview_ = nullptr;
-    texThumbFile_.reset();
-    renderer_.clearListThumbs();
+    invalidateTextureViews();
     thumbBankOpen_ = false; defThumbs_.clear(); defList_.clear(); themeGroupOf_.clear();
     envDefs_.clear(); soundDefs_.clear(); familyNames_.clear(); issuesRev_ = ~0ull;
     newLevelDonor_.clear();

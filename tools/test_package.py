@@ -107,6 +107,8 @@ def main():
                            ('mod_asset_failed_separate', ['--failed-redeploy', '--separate-root'])]:
         run(label, [sys.executable, repo / 'tools/test_mod_asset_refresh_ui.py', '--gui',
             package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve(), *options])
+    run('texture_destination', [sys.executable, repo / 'tools/test_texture_destination_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,

@@ -210,6 +210,8 @@ def main():
     ok &= run("Setup missing loose-level recovery and running-game guard",
               [sys.executable, "tools/test_setup_missing_bank_ui.py", "--missing-levels"], capture_output=True)
     if dialogue:
+        ok &= run("Texture browser destination changes, same-bank retention and fallback",
+                  [sys.executable, "tools/test_texture_destination_ui.py", "--install", install_root], capture_output=True)
         ok &= run("Mods loaded model/texture views across deploy and undeploy",
                   [sys.executable, "tools/test_mod_asset_refresh_ui.py", "--install", install_root], capture_output=True)
         ok &= run("Mods asset refresh at a separate save root with selected install preserved",

@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 texture views follow save-folder changes
+
+Baseline build/texture-destination-vowk1tik confirms the open browser keeps
+its old rows after changing to a save folder with a different bank: the new
+texture exists on disk but cannot be selected. setSaveRoot now compares the
+effective texture-bank paths and invalidates views when the bank changes.
+The shared helper also serves install scans and Mods refresh, retiring rows,
+selection, preview and thumbnail resources consistently. Selecting the same
+root or another destination using the same fallback bank retains the view.
+Texture writes and model-context behavior are unchanged.
+
+Owned bounded Release GUI build passes. Final fixture
+build/texture-destination-iymj5n91 uses copied real definitions/names/textures
+and a synthetic loose map. Both sizes pass different-bank row/preview refresh,
+same-root selection retention, fallback clearing and same-bank retention when
+returning from an empty destination to the selected install. Counts go 6326 to
+6327 and back; source hashes and all three GUI target inventories stay unchanged.
+The earlier compact bank-switch preview in build/texture-destination-ec6lmo9x
+was reviewed (that earlier fixture used stub definitions). Related Ctrl+F/hidden
+asset panels pass in build/asset-search-oqwyev94. Separate-root actual Mods
+deploy/undeploy remains passing in build/mod-asset-refresh-qa070cr0 at both sizes,
+with exact four-bank recovery and source preservation. The destination fixture
+is wired into check_all and future package checks (24 runtime workflows).
+The 7336194 development ZIP and afe9e55 full-suite boundary remain unchanged.
+
 ## 2026-10-03 asset views after failed Mods redeploy
 
 No further product change was needed after texture invalidation. The fixture's

@@ -888,6 +888,7 @@ public:
     void setTexturesMode(bool on);
     bool texturesMode() const { return texturesMode_; }
     void refreshTextures();
+    void invalidateTextureViews();
     std::filesystem::path texturesBigPath() const;
     std::filesystem::path graphicsBigPath() const;
     bool selectTexture(const std::string& nameOrLabel);

@@ -963,8 +963,12 @@ reopens the edit/save panel.
 The Assets panel holds *Textures* (below), *Models* (the browser and import above),
 *Effects* (inspection), *Dialogue* (preview and lip sync editing) and *Ground themes*
 (a PNG into `textures.big` + a new `ENGINE_THEME` copied from a donor theme; with a map
-open it joins that map's palette ready to paint). *Textures* browses `data/graphics/pc/textures.big` (every bank, search by
-name or id), previews an entry, exports it as PNG, replaces it from any image (the slot
+open it joins that map's palette ready to paint). *Textures* browses the save
+folder's `data/graphics/pc/textures.big` when present, otherwise the selected
+install's bank. Switching between banks refreshes its rows and clears the old
+selection and preview; destinations using the same bank retain them.
+It lists every bank, supports search by
+name or id, previews an entry, exports it as PNG, replaces it from any image (the slot
 keeps its allocated size and pixel format, mips are rebuilt, the entry is validated
 against the retail contract) or adds a new entry to `GBANK_MAIN_PC`. With an object
 selected in the editor its mesh's diffuse textures are listed on top, so retexturing a

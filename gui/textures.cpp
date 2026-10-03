@@ -29,6 +29,14 @@ std::filesystem::path App::texturesBigPath() const {
     return std::filesystem::path(installPath_) / "data" / "graphics" / "pc" / "textures.big";
 }
 
+void App::invalidateTextureViews() {
+    texturesLoaded_ = false;
+    texRows_.clear(); texBanks_.clear(); texSelected_.clear();
+    texPreviewFor_.clear(); texPreview_ = nullptr;
+    texThumbFile_.reset();
+    renderer_.clearListThumbs();
+}
+
 void App::refreshTextures() {
     if (modFilesBusy()) return;
     std::string err;
