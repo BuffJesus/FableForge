@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 full 110-check checkpoint and saved-choice promotion
+
+Frozen primary source afe9e55 completes tools/check_all.py --no-build with
+110 PASS, zero failures and ALL PASS. Evidence:
+build/check_all_current_20261003.log (PowerShell UTF-16 log). All available
+integration checks and corpora were exercised; no integration check was skipped.
+The 291 empty/non-type-1 lipsync records remain a data-scope exclusion, not a
+skipped check. This includes the corrected foliage-isolated smoke fixture,
+37 core tests, the four recent comparison/search/choice workflows, stock/loose
+terrain, world edits, imports, recipes and large mod corpora. Preserve the older
+330d4b5 failure report below as historical evidence.
+
+After the gate exited, clean primary received reviewed isolated commits as
+d63e6fd (saved-choice review), 7fe93db (empty-order reports) and 7e99017
+(package evidence). The combined primary Release build passes. Focused primary
+build/mod-unreported-choices-xc4pw1tj passes both panel sizes, exact preservation,
+locked-save refusal, individual clearing/expected next-build output, empty-order
+reporting and choice 401 access. build/mod-field-details-ro7hxd3b passes both
+sizes and independent merged-bank values. Docs commands pass (32 forge,
+37 forge-tools) and whitespace checks pass. No core source changed after afe9e55;
+the 110-check statement applies to afe9e55, not these later UI/CLI increments.
+Isolated source/validation evidence is recorded in the following sections.
+
+The validated 9745443 application/guide archives were copied without overwrite
+to primary dist/development/20261003-9745443/. Application ZIP SHA256 remains
+7a6ef9eb2ceafa4586a6eae60bedf27f9230b67410992e7ca442547ace93277d.
+Its nine extracted workflows and 115 links passed in the isolated worktree;
+the archive was built from the promoted code, and its docs record
+the package-time checkpoint. No publication or live-game writes occurred.
+
 ## 2026-10-03 isolated development package with saved-choice review
 
 Built from isolated source 9745443 after focused validation, with owned Release

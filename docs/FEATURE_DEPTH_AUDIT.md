@@ -1,10 +1,13 @@
 # Feature depth audit — started 2026-09-30
 
-2026-10-03 isolated follow-up: saved choices outside the latest conflict report
+2026-10-03 promoted follow-up: saved choices outside the latest conflict report
 are reviewable/searchable and can be cleared individually, including when no
 conflicts remain. Uncontested choices can still affect composition. Both sizes,
 locked-save preservation, zero-conflict recovery and search beyond 400 pass;
-existing field/conflict-search regressions pass. See HANDOFF_WORLD_UI for scope.
+existing field/conflict-search regressions pass. Combined primary Release build,
+choice/field fixtures and a nine-workflow extracted development ZIP pass. The
+frozen afe9e55 whole gate passes 110 checks; later increments have focused
+coverage. See HANDOFF_WORLD_UI for exact source and validation scope.
 
 2026-10-03: corrected CDefString comparison values to signed four-byte name-table
 references rather than inline strings. Long-value fixtures now use actual

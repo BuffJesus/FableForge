@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03: the frozen afe9e55 checkpoint passes all 110 integration checks,
+zero failures or skipped integration checks, including the corrected smoke,
+37 core tests, current mod comparisons and every available corpus. Saved choices
+outside the latest report are now reviewable/searchable and clear individually;
+even an empty order returns a dry-run report. CDefString displays signed
+name-table references. Focused review and a nine-workflow extracted development
+package pass; exact source/validation boundaries are in HANDOFF_WORLD_UI.
+
 2026-10-03: Mods now compares residual field baseline/contributor/winner values
 and searches conflicts before the display cap. The frozen 330d4b5 gate passed
 105 checks with one foliage-occluded smoke fixture failure; corrected smoke and
