@@ -23,6 +23,12 @@ only after checking those paths against the current build.
 
 ## Terrain/foliage change in this pass
 
+2026-10-03: write actions now wrap at narrow widths, including long pack names.
+Confirmation buttons share enough height for their wrapped captions. Normal/
+compact visual checks and six combined-write/failure/Escape workflows pass;
+scratch WAD hashes remain identical after failed or cancelled writes. Exact
+evidence and full-build boundary are in HANDOFF_WORLD_UI.
+
 2026-10-03: Ground Smear's frozen 3x3 blend, distinct top-three projection,
 minimum-one truncated strict disc, repeated application and draft reopen pass
 on owned stock/loose copies at normal/compact sizes. Full saved-LEV comparisons

@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 continuation: readable write actions at compact sizes
+
+Ground Smear was committed as 0d1161e. Its compact captures exposed clipped
+combined-write text, especially with long pack names. Footer write actions now
+wrap their labels and grow vertically to fit. Confirmation rows likewise wrap
+Yes/Cancel and share the larger required height. Default button rendering stays
+unchanged outside callers requesting wrapping; hidden ImGui ID suffixes remain
+hidden. Existing actions, enabled-state handling and confirmations are reused.
+
+Full Release rebuild succeeded with cmake --build build -j 2. Final normal/
+compact visual checks at build/write-labels-gpbbo7_y pass game and long-pack
+labels, increasing button heights, real confirmation clicks and Escape. Both
+layouts and compact confirmation captures were inspected; all captions fit.
+Earlier captures before confirmation wrapping: build/write-labels-07tjak0w.
+The owned review helper is work/review_write_labels_20261003.py.
+
+Final success/failure/keyboard checks at build/write-routes-apm765ez pass all six
+cases: write_both, write_both_fail and confirm_escape at 1440x900 / scale 1 and
+800x600 / scale 1.5. Failed terrain writes preserve the scratch WAD; Escape
+preserves selection and dirty state, and Enter does not confirm. Helper:
+work/review_write_routes_20261003.py. Earlier tools/test_overworld.py --keep
+passed relocation, terrain, combined-write/failure, theme and custom-theme
+workflows on its owned build/ui_overworld_install copy.
+
+Next: run the broad gate on this completed source. Content-override source audit
+is recorded in docs/modding/CONTENT_OVERRIDES.md; its next useful increment is
+showing existing field-conflict details and explaining choice scope. No live
+game mutation, package refresh, push or release performed.
+
 ## 2026-10-03 continuation: Ground Smear validation
 
 Resumed at the user's request to continue Forge work until stopped. Active

@@ -1541,11 +1541,15 @@ int App::confirmRow(const char* question, const char* yes, float width, float he
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
     const float half = (width - S(6)) * 0.5f;
+    const auto padding=ImGui::GetStyle().FramePadding;
+    const float labelWidth=std::max(1.f,half-2*padding.x);
+    height=std::max(height,std::max(ImGui::CalcTextSize(yes,nullptr,true,labelWidth).y,
+        ImGui::CalcTextSize("Cancel  (Esc)",nullptr,true,labelWidth).y)+2*padding.y);
     int r = 0;
-    if (theme::primaryButton(yes, ImVec2(half, height))) r = 1;
+    if (theme::primaryButton(yes, ImVec2(half, height), true, true)) r = 1;
     auto_.registerWidget(widget);
     ImGui::SameLine(0, S(6));
-    if (theme::ghostButton("Cancel  (Esc)", ImVec2(half, height))) r = -1;
+    if (theme::ghostButton("Cancel  (Esc)", ImVec2(half, height), true)) r = -1;
     // Escape backs out of a pending write; Enter deliberately does not confirm one
     if (r == 0 && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) r = -1;
     return r;

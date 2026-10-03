@@ -32,8 +32,8 @@ void hintMore(const char* text, const char* details);
 void labelValue(const char* text, const char* value, float width);
 
 // Widgets. All return true when activated / changed.
-bool primaryButton(const char* label, const ImVec2& size, bool enabled = true);
-bool ghostButton(const char* label, const ImVec2& size);
+bool primaryButton(const char* label, const ImVec2& size, bool enabled = true, bool wrap = false);
+bool ghostButton(const char* label, const ImVec2& size, bool wrap = false);
 // A ghost button with red text and hover: deletes, removals, undoing an install.
 bool dangerButton(const char* label, const ImVec2& size);
 bool chip(const char* label, bool active);

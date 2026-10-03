@@ -5119,7 +5119,7 @@ void App::drawEditFooter(float pad, float inner) {
     const bool toPack = !packDest_.empty();
     // with the combined write on offer, the single writes are the secondary choice
     const bool both = dirty && doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid();
-    auto writeButton = [&](const std::string& label, ImVec2 size) { return both ? theme::ghostButton(label.c_str(), size) : theme::primaryButton(label.c_str(), size); };
+    auto writeButton = [&](const std::string& label, ImVec2 size) { return both ? theme::ghostButton(label.c_str(), size, true) : theme::primaryButton(label.c_str(), size, true, true); };
     if (doc_.hasTerrain() && doc_.terrainDirty() && !terrainDeployFuture_.valid()) {
         // Repair objects stranded by a draft from before automatic terrain following.
         ImGui::SetCursorPosX(pad);
@@ -5132,10 +5132,10 @@ void App::drawEditFooter(float pad, float inner) {
             // one action for the common case: the ground and the objects standing on it changed together
             ImGui::SetCursorPosX(pad);
             if (toPack) {
-                if (theme::primaryButton(("Write terrain and objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)))) startWriteBoth();
+                if (theme::primaryButton(("Write terrain and objects into pack " + packLabel(packDest_)).c_str(), ImVec2(inner, S(42)), true, true)) startWriteBoth();
                 auto_.registerWidget("btn_write_both");
             } else if (!confirmWriteBoth_) {
-                if (theme::primaryButton("Write terrain and objects into the game", ImVec2(inner, S(42)))) confirmWriteBoth_ = true;
+                if (theme::primaryButton("Write terrain and objects into the game", ImVec2(inner, S(42)), true, true)) confirmWriteBoth_ = true;
                 auto_.registerWidget("btn_write_both");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the terrain first, then the placed objects once the terrain write succeeded.\nIf the terrain write fails, nothing else is written and both edits stay in the draft.");
             } else {
@@ -5151,7 +5151,7 @@ void App::drawEditFooter(float pad, float inner) {
         }
         ImGui::SetCursorPosX(pad);
         if (terrainDeployFuture_.valid()) {
-            theme::primaryButton(jobLabel(writeObjectsAfterTerrain_ ? "Saving terrain, then objects" : "Saving terrain").c_str(), ImVec2(inner, S(36)), false);
+            theme::primaryButton(jobLabel(writeObjectsAfterTerrain_ ? "Saving terrain, then objects" : "Saving terrain").c_str(), ImVec2(inner, S(36)), false, true);
         } else if (toPack) {
             // into a pack nothing in the game changes: no confirmation
             if (writeButton("Write terrain into pack " + packLabel(packDest_), ImVec2(inner, S(36)))) startTerrainDeploy();

@@ -120,7 +120,31 @@ void applyTheme() {
     c[ImGuiCol_NavCursor] = vec(Accent);
 }
 
-bool primaryButton(const char* label, const ImVec2& size, bool enabled) {
+namespace {
+bool buttonWithLabel(const char* label, ImVec2 size, bool wrap) {
+    if (!wrap) return ImGui::Button(label, size);
+    const ImVec2 padding=ImGui::GetStyle().FramePadding;
+    if (size.x<=0) size.x=ImGui::GetContentRegionAvail().x;
+    const float textWidth=std::max(1.f,size.x-2*padding.x);
+    const char* textEnd=ImGui::FindRenderedTextEnd(label);
+    const ImVec2 textSize=ImGui::CalcTextSize(label,textEnd,false,textWidth);
+    size.y=std::max(size.y,textSize.y+2*padding.y);
+    ImGui::PushID(label);
+    const bool pressed=ImGui::Button("##wrapped",size);
+    ImGui::PopID();
+    if (ImGui::IsItemVisible()) {
+        const ImVec2 min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();
+        const ImVec2 at(min.x+(size.x-textSize.x)*.5f,min.y+(size.y-textSize.y)*.5f);
+        auto* draw=ImGui::GetWindowDrawList();
+        draw->PushClipRect(ImVec2(min.x+padding.x,min.y),ImVec2(max.x-padding.x,max.y),true);
+        draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),at,ImGui::GetColorU32(ImGuiCol_Text),label,textEnd,textWidth);
+        draw->PopClipRect();
+    }
+    return pressed;
+}
+}
+
+bool primaryButton(const char* label, const ImVec2& size, bool enabled, bool wrap) {
     ImGui::PushStyleColor(ImGuiCol_Button, enabled ? vec(Accent) : vec(Bg2));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, enabled ? vec(AccentHover) : vec(Bg2));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, enabled ? vec(AccentActive) : vec(Bg2));
@@ -128,19 +152,19 @@ bool primaryButton(const char* label, const ImVec2& size, bool enabled) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, S(8.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     if (!enabled) ImGui::BeginDisabled();
-    const bool pressed = ImGui::Button(label, size);
+    const bool pressed = buttonWithLabel(label, size, wrap);
     if (!enabled) ImGui::EndDisabled();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
     return pressed && enabled;
 }
 
-bool ghostButton(const char* label, const ImVec2& size) {
+bool ghostButton(const char* label, const ImVec2& size, bool wrap) {
     ImGui::PushStyleColor(ImGuiCol_Button, vec(Bg3));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x34, 0x31, 0x44));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, vec(AccentSoft));
     ImGui::PushStyleColor(ImGuiCol_Text, vec(Text));
-    const bool pressed = ImGui::Button(label, size);
+    const bool pressed = buttonWithLabel(label, size, wrap);
     ImGui::PopStyleColor(4);
     return pressed;
 }
