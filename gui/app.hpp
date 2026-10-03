@@ -104,7 +104,7 @@ public:
     // script asked to quit.
     bool tick(class App& app);
     void registerWidget(const char* id);   // records the last item's rect
-    void registerRect(const char* id, const ImVec4& rect) { if (active_) widgets_[id] = rect; }
+    void registerRect(const char* id, const ImVec4& rect) { if (active_) { widgets_[id] = rect; widgetClips_.erase(id); } }
     bool takeScreenshot(std::string& path); // host polls this after rendering
     // The scripted mouse position, re-applied by the host every frame so the
     // Win32 backend's real-cursor fallback cannot override it.
@@ -151,6 +151,7 @@ private:
     int dragPhase_ = 0;
     float dragX0_ = 0, dragY0_ = 0;
     std::map<std::string, ImVec4> widgets_;
+    std::map<std::string, ImVec4> widgetClips_;
     std::vector<std::string> failures_;
     std::vector<std::string> log_;
     bool quit_ = false;
@@ -1047,9 +1048,13 @@ public:
     struct ModFieldConflict { std::string field; std::vector<std::string> mods; std::string winner;
         std::string type, baseline; std::vector<std::pair<std::string, std::string>> values;
         bool hasValues = false; };
+    struct ModFileContent { std::string mod; bool present = false; uint64_t bytes = 0;
+                            std::string sha256; };
     struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
                          std::string winner; bool overridden = false, pickable = true, fieldMerged = false;
-                         std::vector<ModFieldConflict> fields; };
+                         std::vector<ModFieldConflict> fields;
+                         bool hasFileContent = false; ModFileContent fileBaseline;
+                         std::vector<ModFileContent> fileVersions; };
     std::string modConflictWinner(const ModConflict& conflict) const;
     bool modChoiceUnavailable(const ModConflict& conflict) const;
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;

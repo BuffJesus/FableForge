@@ -8803,7 +8803,24 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 ++contested;
                 json mods = json::array();
                 for (const auto& c : who) mods.push_back(c.label);
-                fileRows.push_back({{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label}, {"overridden", overridden}});
+                json row={{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label}, {"overridden", overridden}};
+                if (jsonOutput) {
+                    // Raw source-file snapshots, not the later recipe/resource result
+                    // and not choose-time fingerprints for persisted label picks.
+                    auto content=[](const fs::path& path) -> json {
+                        if (!fs::is_regular_file(path)) return {{"present",false}};
+                        return {{"present",true},{"bytes",fs::file_size(path)},
+                                {"sha256",forge::modorder::sha256Of(path)}};
+                    };
+                    json versions=json::array();
+                    for (const auto& c:who) {
+                        json version=content(c.src);version["mod"]=c.label;
+                        versions.push_back(std::move(version));
+                    }
+                    row["file_content"]={{"baseline",content(fs::path(baseRoot)/win->rel)},
+                                         {"versions",std::move(versions)}};
+                }
+                fileRows.push_back(std::move(row));
             }
             if (keepBase) continue;
             // keep the source's own spelling for the output path

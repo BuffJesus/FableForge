@@ -254,3 +254,32 @@ and not claim automatic stale-content detection. Definition fields require
 separate stable symbolic-reference/schema evidence; their raw relocated IDs are
 not sufficient fingerprint identities. Per-field choices/profiles and validation
 of changed selected content remain the broader backlog above.
+
+## 2026-10-03 isolated raw-file comparison prototype
+
+Contested whole-file rows in JSON reports now include file_content with a current
+baseline snapshot and source versions (mod, present, bytes and SHA256). This is
+raw source-file evidence: recipe/resource edits can change the built file later.
+Only contested files in JSON reports are hashed; non-JSON composition and the
+existing choice format/selection semantics stay in use. This does not store
+choose-time fingerprints or detect stale choices automatically. Baseline means
+the supplied composition root, not proof of a clean retail installation.
+
+The Mods File versions tree displays these snapshots, marks the currently
+selected source and updates that mark when choices change. It accepts older
+reports without snapshots. Complete names, byte counts, digests and missing-file
+messages wrap inside the card. Test automation now centres reveal in the actual
+clipped region and dumps that clipping rectangle, so screenshots can verify
+visibility rather than only screen bounds.
+
+Owned review evidence: build/mod-file-content-6vbo30q0 passes normal/compact
+real controls, independently computed hashes, an absent baseline, identical
+contributor bytes, same-size source refresh, preserved picks and exact output
+bytes. Compact source names/hashes were visually inspected. Existing field,
+long-value, unreported-choice and dialogue workflows all pass in
+build/file-content-regressions-thcoz76f. One local 128 MiB source-file comparison
+in build/file-content-perf-jthne9fm took 0.297 s before and 0.740 s with snapshots;
+this warmed-cache sample is not a large-corpus performance guarantee.
+The source/package gates register the new workflow (39 package runtime checks).
+This prototype remains isolated until extracted-package validation/promotion;
+no new whole-gate result or gameplay compatibility claim.

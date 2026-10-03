@@ -1921,8 +1921,18 @@ std::vector<std::string> App::stateDump() const {
     size_t fieldConflicts=0;
     for (const auto& conflict : modConflicts_) fieldConflicts+=conflict.fields.size();
     v.push_back("mods_field_conflicts="+std::to_string(fieldConflicts));
+    v.push_back("mods_file_content_rows="+std::to_string(std::count_if(modConflicts_.begin(),modConflicts_.end(),
+        [](const ModConflict& conflict) { return conflict.hasFileContent; })));
     if (!modConflicts_.empty()) {
         const auto& first=modConflicts_.front();
+        if (first.hasFileContent) {
+            v.push_back("mods_first_file_base_present="+std::to_string(first.fileBaseline.present));
+            v.push_back("mods_first_file_base_sha256="+first.fileBaseline.sha256);
+            const auto winner=modConflictWinner(first);
+            const ModFileContent* selected=winner=="vanilla" ? &first.fileBaseline : nullptr;
+            for (const auto& version:first.fileVersions) if (version.mod==winner) selected=&version;
+            v.push_back("mods_first_file_selected_sha256="+(selected ? selected->sha256 : std::string()));
+        }
         for (size_t i=0;i<first.fields.size();++i) {
             v.push_back("mods_first_field_"+std::to_string(i)+"="+first.fields[i].field);
             v.push_back("mods_first_field_winner_"+std::to_string(i)+"="+modFieldWinner(first,first.fields[i]));

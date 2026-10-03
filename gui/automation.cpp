@@ -49,14 +49,19 @@ void Automation::registerWidget(const char* id) {
     if (!active_) return;
     const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
     widgets_[id] = ImVec4(a.x, a.y, b.x, b.y);
+    const auto* draw=ImGui::GetWindowDrawList();
+    const auto clipMin=draw->GetClipRectMin(),clipMax=draw->GetClipRectMax();
+    widgetClips_[id]=ImVec4(clipMin.x,clipMin.y,clipMax.x,clipMax.y);
     if (!revealTarget_.empty() && revealTarget_ == id) {
         // cards are child windows inside the scrolling panel: bring the item into view in each window up
         // the chain, moving its rect by every scroll already requested (ScrollToItem alone stops at the first)
         // the first window up the chain that can scroll: centre the item in it
         for (ImGuiWindow* w = ImGui::GetCurrentWindow(); w; w = (w->Flags & ImGuiWindowFlags_ChildWindow) ? w->ParentWindow : nullptr) {
             if (w->ScrollMax.y < 1.0f) continue;   // an auto-sized card reports a float crumb
+            if (w->ClipRect.Min.y>=w->ClipRect.Max.y) continue;
             const float centre = (a.y + b.y) * 0.5f;
-            ImGui::SetScrollY(w, std::clamp(w->Scroll.y + centre - (w->Pos.y + w->Size.y * 0.5f), 0.0f, w->ScrollMax.y));
+            const float visibleCentre=(w->ClipRect.Min.y+w->ClipRect.Max.y)*0.5f;
+            ImGui::SetScrollY(w, std::clamp(w->Scroll.y + centre - visibleCentre, 0.0f, w->ScrollMax.y));
             break;
         }
         revealTarget_.clear();
@@ -1519,6 +1524,11 @@ bool Automation::tick(App& app) {
             const auto& r = it->second;
             note("widget_rect " + rest + " " + std::to_string(r.x) + " " +
                  std::to_string(r.y) + " " + std::to_string(r.z) + " " + std::to_string(r.w));
+            if (const auto clip=widgetClips_.find(rest);clip!=widgetClips_.end()) {
+                const auto& c=clip->second;
+                note("widget_clip_rect "+rest+" "+std::to_string(c.x)+" "+std::to_string(c.y)+" "+
+                     std::to_string(c.z)+" "+std::to_string(c.w));
+            }
         }
         ++pc_;
     }

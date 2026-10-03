@@ -493,8 +493,19 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             rows.push_back({"fse id", "", "id " + std::to_string(c.value("id", 0LL)) + ": " + c.value("quest", "") + " (" + c.value("mod", "") + ") also " + c.value("also", ""), {}, "", false});
     }
     if (rep.contains("files"))
-        for (const auto& c : rep["files"].value("contested", json::array()))
+        for (const auto& c : rep["files"].value("contested", json::array())) {
             rows.push_back({"file", "file:" + c.value("path", ""), c.value("path", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+            if (c.contains("file_content")) {
+                const auto& content=c["file_content"];
+                auto read=[](const json& value) -> App::ModFileContent {
+                    return {value.value("mod",""),value.value("present",false),
+                            value.value("bytes",uint64_t(0)),value.value("sha256","")};
+                };
+                auto& row=rows.back();row.hasFileContent=true;
+                row.fileBaseline=read(content.at("baseline"));
+                for (const auto& version:content.at("versions")) row.fileVersions.push_back(read(version));
+            }
+        }
     if (rep.contains("lip_sync"))
         for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
             const std::string language=c.value("language",""),bank=c.value("bank","");
@@ -944,6 +955,34 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                         ImGui::PopFont();
                         ImGui::TreePop();
                     }
+                }
+            }
+            if (c.hasFileContent) {
+                const float wrapRight=ImGui::GetCursorPosX()+cardInner;
+                const bool open=ImGui::TreeNodeEx("##filecontent",0,"File versions");
+                auto_.registerWidget(("mod_file_content_"+std::to_string(i)).c_str());
+                if (open) {
+                    ImGui::PushFont(fontSmall_);
+                    ImGui::PushTextWrapPos(wrapRight);
+                    ImGui::TextColored(theme::vec(theme::Faint),"Source bytes from the last check. Other edits can still change the built file.");
+                    auto draw=[&](const ModFileContent& version,const std::string& label,const std::string& widget) {
+                        ImGui::BeginGroup();
+                        ImGui::TextWrapped("%s",label.c_str());
+                        if (version.present) {
+                            ImGui::TextWrapped("%llu bytes",static_cast<unsigned long long>(version.bytes));
+                            ImGui::TextWrapped("SHA256: %s",version.sha256.c_str());
+                        } else ImGui::TextColored(theme::vec(theme::Faint),"File absent from the current baseline.");
+                        ImGui::EndGroup();auto_.registerWidget(widget.c_str());
+                    };
+                    const auto winner=modConflictWinner(c);
+                    draw(c.fileBaseline,"Current baseline"+(winner=="vanilla" ? std::string(" (selected)") : std::string()),
+                         "mod_file_base_"+std::to_string(i));
+                    for (size_t si=0;si<c.fileVersions.size();++si) {
+                        const auto& version=c.fileVersions[si];
+                        draw(version,version.mod+(winner==version.mod ? " (selected)" : ""),
+                             "mod_file_source_"+std::to_string(i)+"_"+std::to_string(si));
+                    }
+                    ImGui::PopTextWrapPos();ImGui::PopFont();ImGui::TreePop();
                 }
             }
             ImGui::PopID();

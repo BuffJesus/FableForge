@@ -1,5 +1,14 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_file_content.py --install <root>` independently verifies raw-file
+baseline/contributor sizes and SHA256, identical edits, absent baselines and
+composition under existing label choices. Normal/compact cards show the complete
+name/hash inside their actual clipping rectangle. A same-size source update
+leaves the cached snapshot alone until Check conflicts refreshes it; refreshing
+does not rewrite choices. `--gui <exe> --cwd <directory>` supports packages.
+`dump_widget` records `widget_clip_rect` for ordinary registered items as well
+as their bounds; `reveal` centres in the window's visible clipped region.
+
 `tools/test_dialogue_workspace.py --install <root>` checks the Dialogue picker,
 head preview, playback, scrubbing, staged edits and independently read exports
 at normal/compact sizes. A stopped seek to the slider's right edge must set

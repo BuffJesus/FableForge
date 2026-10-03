@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated whole-file comparison validated
+
+Review source-choice branch adds raw file_content snapshots to contested JSON
+rows and a Mods File versions tree: baseline presence, per-source size/SHA256,
+and a selected marker following existing choices. Hashing is limited to
+contested JSON file rows; record merging, picks storage and non-JSON semantics
+are unchanged. Values describe raw inputs at the last check, not the composed
+recipe/resource result or choose-time/stale-choice validation.
+
+build/mod-file-content-6vbo30q0 passes both sizes, exact independent digests,
+absent/identical contributions, same-size update with cached-then-refreshed
+hashes, unchanged choices, composed bytes and original source/root inventory.
+Compact long contributor/hash captures are inspected and fully inside the
+actual clipping rectangle. The earlier _r9cb7qm compact run exposed the tree's
+oversized hit rectangle. Removing SpanAvailWidth and shortening the title fixed
+clicking. The 7ckgzf39 run passed screen bounds but visual review exposed clipping;
+explicit card wrapping (including hint text) and reveal's clipped-region centre
+fix it. Ordinary dump_widget now emits widget_clip_rect; registerRect avoids
+carrying stale clip data. l2tzeh8t first failed on a fixture assertion that parsed
+only the first word of a long label; it uses dump_state/exact text now.
+
+All four existing field-details, long-values, unreported-choice and dialogue
+workflows pass in file-content-regressions-thcoz76f. A local warmed-cache 128 MiB
+two-source comparison takes 0.297 s before / 0.740 s with snapshots (jthne9fm);
+not a corpus performance guarantee. Release targets build; the source/package
+gates register the new workflow, now 39 package runtime checks. Extraction and
+promotion remain pending; primary stays clean 27755ec, last whole gate frozen
+b1eb3b9 136 PASS / 1 identified/fixed dialogue FAIL. No game/real-install writes.
+
 ## 2026-10-03 saved-source choice follow-up (read-only audit)
 
 Choice review moved cleanly to feat/forge-source-choice-review-20261003 at
