@@ -1,6 +1,68 @@
 # World view and UI continuation - 2026-09-29
 
 
+## 2026-10-02 bedtime checkpoint: stopped at user request
+
+The user asked to update docs and stop for tonight. No further feature work is
+running. Last completed implementation commit is 38d9056. This continuation
+committed snapshot/session recovery, Space-held brush pinning (c8d0ef3), the
+camera FOV control (cdecfab), per-map camera/render-mode retention (b132d50),
+the whole-map fixture correction (91615e9), and compact help wrapping (38d9056).
+
+The latest broad gate remains the frozen b132d50 run: **104 PASS, 1 FAIL,
+0 skipped integration checks**, including all 36 passing CTest cases. The one
+whole-map UI fixture failure was corrected and its complete workflow passed
+stock/loose at normal/compact sizes. No full gate was rerun afterward; do not
+reclassify the original result. Details and evidence are below.
+
+### Ground Smear is preserved as uncommitted work in progress
+
+Modified paths: gui/app.cpp, gui/app.hpp, gui/automation.cpp, gui/editor.cpp,
+libs/forgecore/include/forge/terrain.hpp, libs/forgecore/src/terrain.cpp,
+src/leveledit.cpp, src/leveledit.hpp, tests/test_export.cpp; new untracked
+harness tools/test_ground_smear.py. These edits are deliberately outside the
+completed implementation commits. Primary Release binaries currently include
+this WIP and must not be treated as binaries built from stable HEAD.
+
+The proposed Forge behavior blends a frozen 3x3 neighborhood, merges palette
+weights, chooses three distinct eligible themes, and projects exactly 255 total
+strength. Empty/NULL theme slots are excluded; no eligible weights is a no-op.
+It uses the existing integer, minimum-one-radius, strict-disc footprint. The UI
+adds Paint/Smear chips, no target requirement for Smear, and optional Repeat.
+This is corrected Forge behavior, not a claim of native bug compatibility.
+
+Native investigation executed the actual x86 selection/normalization block
+0297c94e..0297cd32 with narrowly stubbed lookup calls in Unicorn: 305 cases with
+identity and reversed global IDs, **610 comparisons passed** against the literal
+model. The native algorithm can select duplicate classes and overflow raw
+strengths; its second pass reads their low bytes. This probe does not verify the
+full native neighborhood loop or live-game behavior. Evidence is owned scratch
+build/theme_smear_native_probe.py and build/theme-smear-emulated-probe.txt;
+static exports are build/theme-smear-native-full.txt,
+build/theme-smear-native-evidence.txt and build/theme-smear-offsets-native.txt.
+FableWin SHA256: A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845.
+
+The Release rebuild completed. Final bedtime check of the current WIP:
+ctest --test-dir build -R '^fableforge_tests$' --output-on-failure passed (1/1).
+It includes frozen-neighborhood projection, no-op/malformed-input cases,
+independent saved-LEV reads, unchanged neighboring arrays/TNG, and exact Undo.
+The latest serializer guard preserves untouched camera-passability bytes for
+theme-only edits while retaining existing OR behavior when passability changes.
+That guard needs focused UI review before promotion.
+
+The stock Smear GUI harness passed normal/compact layouts against the preceding
+serializer iteration (build/ground-smear-gwfokm4x). It has not been rerun against
+the final guard; loose-install Smear checks and visual review are outstanding.
+The harness is not wired into check_all, and user-facing documentation/release
+notes have not been updated for this unfinished feature.
+
+On resumption: review the passability guard, run focused passability and Smear
+GUI checks on stock/loose at both sizes, inspect screenshots, document the
+corrected contract, wire the harness into the gate, and commit only once ready.
+Do not infer a clean broad gate or retail equivalence from these focused checks.
+No push, merge, release, or live-game mutation was performed.
+
+
 ## 2026-10-02 follow-up: readable compact shortcut sheet
 
 Visual review of the new shortcut entries exposed an older fixed-column issue:
