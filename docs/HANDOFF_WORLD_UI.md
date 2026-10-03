@@ -1,5 +1,39 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted symbolic-linker development package
+
+Product checkpoint d2c1100 packages the bounded FMP linker and updated guide.
+Choice review archive dist/development/20261003-d2c1100/
+FableForge-0.18.0-dev-win64.zip has SHA256
+c89ad79819c7fadaa7735cdedf58c623b70595423f1c4ac9d0e97f1c30c8cd97.
+Guide-only ZIP is alongside it. These are local development artifacts, unpublished.
+
+build/fmp-package-focus-sa4dipyk/result.json records EIGHT focused extracted
+workflows passing, not the complete 35-workflow package suite: named FMP links,
+unsupported FMP UI refusal, field details, long values, conflict search,
+unavailable choices, unreported choices, and full Aeon/controller composition.
+The archive passes 116 local documentation links and all four guide images.
+Executables were extracted under a literal percent-token/ampersand path and run
+from an unrelated working directory. The audit tests prefer the extracted schema
+beside the executable; source files remain read-only. The final full build retains
+build/aeon_controller_pudslx8h/named-links.json: 14/14 named references correct,
+70 -> 141 bindings, DLL registered, all 843 level payload comparisons, 547 WAD
+replacements + 47 additions, zero direct missing models. No runtime validation.
+
+Test fixtures now accept --cwd for packaged checks. check_all.py registers the
+named-link/choice/preservation audit and unsupported-FMP UI refusal when their
+corpora exist, explicitly reporting SKIP otherwise. test_package.py accepts
+--corpus and registers those two extracted workflows, recording unavailable
+corpus checks separately instead of silently counting them as exercised passes.
+Those registration-only changes are not product-binary changes. The earlier
+complete package evidence remains e4a2807: 31 checks; 39bdf32 has four texture
+focus checks. Do not label d2c1100 as a full-package or full-gate pass.
+
+This archive and reviewed source are ready for clean fast-forward integration;
+the primary build and a new broad source gate remain to be run afterward. The
+previous full source gate is still e7cb37b (126 runtime/docs checks, one docs
+prose failure later corrected). No newer full-gate result is claimed here.
+
 ## 2026-10-03 symbolic linker validation and bounded legacy scope
 
 Choice review's implementation checkpoint is 0fe88d8. The following reviewed

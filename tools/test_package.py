@@ -19,6 +19,7 @@ def main():
     parser.add_argument('archive', type=Path)
     parser.add_argument('--root', type=Path, default=Path(os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters')))
+    parser.add_argument('--corpus', type=Path, default=repo/'work/nexus_mods/_peek')
     args = parser.parse_args()
     archive = args.archive.resolve()
     work = Path(tempfile.mkdtemp(prefix='package-smoke-', dir=repo / 'build')).resolve()
@@ -84,6 +85,21 @@ def main():
     for mode in ('redeploy', 'report', 'missing'):
         run('mod_action_' + mode, [sys.executable, repo / 'tools/test_mod_action_error_ui.py',
             '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--mode', mode])
+    skipped = []
+    corpus = args.corpus.resolve()
+    controller_fmp = corpus/'ControllerSupportFMP/ControllerSupport.fmp'
+    aeon = corpus/'AeonEdition'
+    if controller_fmp.is_file() and (aeon/'Data/CompiledDefs/game.bin').is_file():
+        run('fmp_named_links', [sys.executable, repo/'tools/test_fmp_links.py', '--tool',
+            package/'forge-tools.exe', '--cwd', cwd, '--install', args.root.resolve(),
+            '--fmp', controller_fmp, '--aeon', aeon])
+    else: skipped.append('fmp_named_links: controller/Aeon corpus unavailable')
+    f2_fmp = corpus/'F2MeleeWeapons/F2MeleeWeaponPack.fmp'
+    if f2_fmp.is_file():
+        run('fmp_refusal_ui', [sys.executable, repo/'tools/test_mod_action_error_ui.py', '--gui',
+            package/'FableForge.exe', '--install', args.root.resolve(), '--mode', 'fmp', '--fmp', f2_fmp])
+    else: skipped.append('fmp_refusal_ui: F2 corpus unavailable')
+    for reason in skipped: print('SKIP:', reason, flush=True)
     run('unicode_paths', [sys.executable, repo / 'tools/test_unicode_paths.py', '--gui', package / 'FableForge.exe',
         '--install', args.root.resolve()])
     run('unicode_images', [sys.executable, repo / 'tools/test_texture_unicode_ui.py', '--gui', package / 'FableForge.exe',
@@ -126,7 +142,7 @@ def main():
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,
-        'package': str(package), 'checks': checks, 'passed': True}, indent=2), encoding='utf-8')
+        'package': str(package), 'checks': checks, 'skipped': skipped, 'passed': True}, indent=2), encoding='utf-8')
     print('Extracted package, retail exports, GUI pixels and literal-path mod workflow: PASS')
 
 

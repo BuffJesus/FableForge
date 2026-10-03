@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -134,10 +135,15 @@ def main():
     parser.add_argument('--fmp',type=Path,required=True)
     parser.add_argument('--aeon',type=Path,required=True)
     parser.add_argument('--tool',type=Path,default=repo/'build/forge-tools.exe')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
     work=Path(tempfile.mkdtemp(prefix='fmp-links-',dir=repo/'build')).resolve()
     print('Evidence retained at',work,flush=True)
-    tool=args.tool.resolve(); schema=repo/'docs/re_reference/def_schema.json'
+    tool=args.tool.resolve()
+    args.install, args.fmp, args.aeon = args.install.resolve(), args.fmp.resolve(), args.aeon.resolve()
+    schema=tool.parent/'docs/re_reference/def_schema.json'
+    if not schema.exists(): schema=repo/'docs/re_reference/def_schema.json'
+    os.chdir(args.cwd.resolve())
     sources=[args.fmp]+[root/'data/CompiledDefs'/name for root in (args.install,args.aeon) for name in ('game.bin','names.bin')]
     def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
     before={p:digest(p) for p in sources}

@@ -88,6 +88,22 @@ def main():
                 ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
                           [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
                            "--mode", mode], capture_output=True)
+            corpus = os.path.join(ROOT, "work", "nexus_mods", "_peek")
+            controller_fmp = os.path.join(corpus, "ControllerSupportFMP", "ControllerSupport.fmp")
+            aeon = os.path.join(corpus, "AeonEdition")
+            f2_fmp = os.path.join(corpus, "F2MeleeWeapons", "F2MeleeWeaponPack.fmp")
+            if os.path.isfile(controller_fmp) and os.path.isfile(os.path.join(aeon, "Data", "CompiledDefs", "game.bin")):
+                ok &= run("FMP named references, payload preservation, choices and missing-target refusal",
+                          [sys.executable, "tools/test_fmp_links.py", "--install", install_root,
+                           "--fmp", controller_fmp, "--aeon", aeon], capture_output=True)
+            else:
+                print("[SKIP] named FMP reference audit (controller/Aeon corpus unavailable)")
+            if os.path.isfile(f2_fmp):
+                ok &= run("unsupported FMP refusal, persistent Mods error and exact redeploy recovery",
+                          [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
+                           "--mode", "fmp", "--fmp", f2_fmp], capture_output=True)
+            else:
+                print("[SKIP] unsupported FMP UI refusal (F2 corpus unavailable)")
             ok &= run("EgoCore Unicode compiler paths, startup refusal, retry and failed-output preservation",
                       [sys.executable, "tools/test_egocore_unicode_paths.py", "--install", install_root], capture_output=True)
             ok &= run("Unicode PNG inputs, locked/invalid preservation, decoded pixels and GUI replacement",

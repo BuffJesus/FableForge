@@ -30,8 +30,11 @@ def main():
     parser.add_argument("--corpus", type=Path, default=CORPUS)
     parser.add_argument("--install", type=Path, default=RETAIL)
     parser.add_argument("--tool", type=Path, default=TOOL)
+    parser.add_argument("--cwd", type=Path, default=REPO)
     args = parser.parse_args()
     CORPUS, RETAIL, TOOL = args.corpus.resolve(), args.install.resolve(), args.tool.resolve()
+    schema = TOOL.parent/'docs/re_reference/def_schema.json'
+    if not schema.exists(): schema = REPO/'docs/re_reference/def_schema.json'
     AEON = CORPUS / "AeonEdition"
     FMP = CORPUS / "ControllerSupportFMP" / "ControllerSupport.fmp"
     DLL = CORPUS / "ControllerSupportFMP" / "FableControllerSupport.dll"
@@ -66,7 +69,7 @@ def main():
         shutil.copyfile(DLL, controller / DLL.name)
 
         def run(*argv):
-            proc = subprocess.run([str(TOOL), *map(str, argv)], cwd=REPO,
+            proc = subprocess.run([str(TOOL), *map(str, argv)], cwd=args.cwd.resolve(),
                                   capture_output=True, text=True)
             if proc.returncode:
                 raise AssertionError(f"{' '.join(map(str, argv))}\n{proc.stdout[-1200:]}\n{proc.stderr[-1200:]}")
@@ -75,7 +78,7 @@ def main():
         run("mods", "add", root, AEON, "--name", "Aeon Edition")
         aeon_out = work / "aeon_only"
         run("mods", "build", root, aeon_out)
-        aeon_decoded = run("defs", "decode", aeon_out, "docs/re_reference/def_schema.json",
+        aeon_decoded = run("defs", "decode", aeon_out, schema,
                            "FABLE_XBOX_CONTROL_SCHEME_BASE")
         aeon_count = int(re.search(r"Controls\s+Vector_VCActionInputControl__ count=(\d+)", aeon_decoded).group(1))
         run("mods", "add", root, FMP, "--name", "Controller Support FMP")
@@ -126,7 +129,7 @@ def main():
         assert graphics.is_file() and graphics.stat().st_size > 200_000_000
         assert (out / "data" / "Levels" / "FinalAlbion_RT.stb").is_file()
         assert (out / "data" / "Bones" / "bandit_short.bncfg").read_bytes() == (AEON / "Data" / "Bones" / "bandit_short.bncfg").read_bytes()
-        decoded = run("defs", "decode", out, "docs/re_reference/def_schema.json",
+        decoded = run("defs", "decode", out, schema,
                       "FABLE_XBOX_CONTROL_SCHEME_BASE")
         merged_count = int(re.search(r"Controls\s+Vector_VCActionInputControl__ count=(\d+)", decoded).group(1))
         # Controller Support's FMP ships a full 141-entry keyboard/pad scheme.
@@ -139,7 +142,7 @@ def main():
         wad_summary = re.search(r"FinalAlbion\.wad rebuilt: (\d+) level file\(s\) repacked, 47 new level file\(s\) appended", result)
         assert wad_summary and int(wad_summary.group(1)) == loose_overrides - 47, result[-1200:]
         mesh_audit = json.loads(run("assets", "missing-mesh", out,
-                                    "docs/re_reference/def_schema.json", "--json"))
+                                    schema, "--json"))
         assert mesh_audit["unparsed_defs"] == 0, mesh_audit["unparsed_defs"]
         assert not mesh_audit["missing"], mesh_audit["missing"][:12]
         print("PASS: Aeon Edition -> Controller Support FMP -> EgoCore DLL")
