@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_asset_restore.py --install <root>` imports a cube into copied
+graphics/textures/game/names banks, then uses Setup's Restore buttons at both
+panel sizes. It checks retired model/texture selections and counts, refreshed
+definition users, exact bank hashes, retained original backups and unchanged
+source/loose-level bytes. `--gui`/`--cwd` support extracted-package checks; app-data
+is owned by the fixture. `dump_state` writes state lines into the automation log.
+
 `tools/test_mod_unreported_choices.py --install <root>` checks saved choices
 absent from the latest report, including missing targets and uncontested edits.
 Both panel sizes cover search and read-only preservation; real Clear buttons

@@ -27,7 +27,8 @@ missing document/assets/licence dependencies from docs/vendor. Broken or escapin
 links stop packaging before the ZIP is written. `tools/test_package.py <zip>`
 checks extracted links and runs retail/GUI plus field-comparison, long-value,
 search, unavailable-choice and unreported-choice workflows from an unrelated
-working directory.
+working directory. The asset-restore fixture also exercises packaged mesh import
+and Setup restoration of real copied banks.
 
 ## Final release checklist
 

@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 Setup restore after a real asset-bank write
+
+The feature-depth audit asked whether Setup restores a modded definition bank
+and refreshes active asset views. Source already retires caches through
+scanInstall/startContextLoad; a real mesh-import/Setup workflow now validates
+that path without a product-code change. tools/test_setup_asset_restore.py
+copies four source banks and creates an owned tiny loose level, imports a cube,
+opens its texture/model, then clicks Setup Restore and confirmation at normal
+and compact sizes. Model/texture rows each drop by one, the removed model preview
+clears, texture selection retires, and the restored barrel shows 96 vertices,
+188 triangles and two definition users. All four bank hashes return exactly to
+their copied originals; original backups are retained and hash-identical.
+Loose-level and source-install bytes stay unchanged.
+
+Primary build/setup-asset-restore-pbveasuo passes both sizes; compact imported/
+restored screenshots were reviewed. Earlier harness runs correctly passed the
+GUI but exposed two test assumptions: Setup keeps backups (keepBackup=true),
+and dump_state logs state rather than writing a supplied filename. The final
+fixture checks those actual contracts. build/setup-asset-restore-7m4qmn28 also
+passes both sizes against the stripped 9745443 package extracted under the
+percent/ampersand path, from its unrelated cwd. This is additional coverage of
+that same archive, separate from its original nine-check result.json; no archive
+was regenerated or changed. New fixture is wired into check_all and future
+package checks. Frozen afe9e55 still supplies the 110-check whole-gate scope.
+The remaining Setup audit item is GUI write-failure/retry visibility.
+
 ## 2026-10-03 full 110-check checkpoint and saved-choice promotion
 
 Frozen primary source afe9e55 completes tools/check_all.py --no-build with
