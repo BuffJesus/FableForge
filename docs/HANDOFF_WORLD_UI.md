@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 package identity follow-up (packaging only)
+
+Review feat/forge-package-identity-review-20261003 descends accepted endpoint
+10500bf. c988232/e252bd2 add PACKAGE_INFO.json after stripping and copying docs:
+version, packaging checkout commit/tracked-change status (null without Git),
+and sizes/SHA256 for all other shipped files. The manifest explicitly states
+that packaging checkout metadata does not verify executable build provenance.
+test_package verifies the complete extracted inventory and hashes when present;
+older archives without this metadata remain supported. Runtime suite size stays
+38; this is a static package check, not an additional runtime workflow.
+
+build/package-identity-ifpi9zff verifies all 103 files in the actual review ZIP,
+rejects a changed scratch README, and passes after restoring its bytes. Metadata
+records clean e252bd2248982fadf13cc614314410f032f3a33d. Comparing the three shipped
+Forge executables with the six-workflow 7f771b7 archive gives identical bytes
+except strip's PE timestamp/checksum fields; defc and schema are byte-identical.
+No runtime suite was rerun for this packaging-only follow-up.
+
+dist/development/20261003-package-identity-review/FableForge-0.18.0-dev-win64.zip
+SHA256 dbde03f7153a0e66cec0ce3613ead353677025f39bda87f5e80d87c27b1dad48.
+Review-only, unpublished; primary still frozen b1eb3b9 during its source gate.
+
 ## 2026-10-03 extracted endpoint/Add/linker package accepted in review
 
 Product 7f771b7 passes SIX focused extracted-package workflows in
