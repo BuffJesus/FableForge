@@ -1891,6 +1891,7 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
+    v.push_back("mod_action_failed=" + std::to_string(!modsActionError_.empty()));
     size_t unavailableChoices = 0;
     if (modReportLoaded_)
         for (const auto& conflict : modConflicts_) unavailableChoices += modChoiceUnavailable(conflict);
@@ -3198,7 +3199,7 @@ void App::drawActions(float width) {
     if (modsMode_) {
         ImGui::SetCursorPosX(pad);
         ImGui::PushFont(fontSmall_);
-        theme::hintMore("The load order is kept next to Fable.exe; Undeploy restores the originals.", "The order lives in forge_mods.json next to Fable.exe. Deploy writes the merged files with .forgebak originals; Undeploy restores them. Setup's Restore also reverts the staged deployment and restores other tracked backups.");
+        theme::hintMore("The load order is kept in the save folder; Undeploy restores its originals.", "The order lives in forge_mods.json in the save folder. Deploy writes merged files there and keeps originals; Undeploy restores those originals. Setup's Restore manages backups for the install currently selected in Setup.");
         ImGui::PopFont();
     } else if (texturesMode_) {
         ImGui::SetCursorPosX(pad);

@@ -1,5 +1,15 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_mod_action_error_ui.py --install <root> --mode redeploy|report|missing`
+checks actual Mods buttons at normal/compact sizes. A bad patch after a successful
+deploy restores the baseline before failing; malformed or incomplete exit-zero
+reports and missing tools retain a wrapped error after dismissing toasts,
+reopening Mods and rescanning the same Data folder. State `mod_action_failed`
+and widget `mods_action_error` expose the error. Changing the save folder clears
+it; fixing the input/helper and retrying succeeds in the same process. Complete
+copied-install inventories, source pack/bank hashes and unrelated files remain
+preserved. `--gui <exe>` supports extracted-package checks.
+
 `tools/test_egocore_unicode_paths.py --install <root>` compiles an owned failure
 helper and checks its actual argv through Unicode application, compiler-env,
 text-env and temporary paths. Its nonzero exit refuses even with both partial

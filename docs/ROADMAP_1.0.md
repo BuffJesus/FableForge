@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 isolated Mods recovery follow-up: failed redeploy, invalid reports and
+missing tools retain actionable errors beside compact-safe buttons. Same-process
+retry, destination changes, same-install rescans and exact inventory recovery
+pass at both sizes; existing field-details checks pass. Promotion and the new
+31-workflow package validation are pending. See HANDOFF_WORLD_UI.
+
 2026-10-03 primary checkpoint: the e7cb37b gate completes with 126 passing
 checks, zero skipped integration checks and one prose-triggered documentation
 failure. That wording is corrected and the checker passes after promotion to

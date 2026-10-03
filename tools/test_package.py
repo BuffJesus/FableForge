@@ -81,6 +81,9 @@ def main():
         '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
+    for mode in ('redeploy', 'report', 'missing'):
+        run('mod_action_' + mode, [sys.executable, repo / 'tools/test_mod_action_error_ui.py',
+            '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--mode', mode])
     run('unicode_paths', [sys.executable, repo / 'tools/test_unicode_paths.py', '--gui', package / 'FableForge.exe',
         '--install', args.root.resolve()])
     run('unicode_images', [sys.executable, repo / 'tools/test_texture_unicode_ui.py', '--gui', package / 'FableForge.exe',

@@ -80,6 +80,10 @@ def main():
         ok &= run("model import form, pack retry and next-draft preservation",
                   [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
+            for mode in ("redeploy", "report", "missing"):
+                ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
+                          [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
+                           "--mode", mode], capture_output=True)
             ok &= run("EgoCore Unicode compiler paths, startup refusal, retry and failed-output preservation",
                       [sys.executable, "tools/test_egocore_unicode_paths.py", "--install", install_root], capture_output=True)
             ok &= run("Unicode PNG inputs, locked/invalid preservation, decoded pixels and GUI replacement",

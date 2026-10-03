@@ -85,6 +85,7 @@ void App::setSaveRoot(const std::string& root) {
 }
 
 void App::resetModDestination() {
+    modsActionError_.clear();
     meshImportError_.clear(); customThemeError_.clear();
     meshImportSuccess_.clear();
     packDest_.clear(); packDestChosen_ = false;
@@ -183,9 +184,14 @@ bool App::runModsTool(const std::string& verb) {
     if (modsFuture_.valid()) { pushLog("mods: still busy", 1); return false; }
     if (fileWriteBlocked("mods")) return false;
     if (batchActive()) { pushLog("mods: wait for the batch export to finish", 1); return false; }
+    modsActionError_.clear();
     const fs::path tool = findForgeTools();
-    if (tool.empty()) { pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false; }
+    if (tool.empty()) {
+        modsActionError_ = "Mod tools were not found. Extract the complete Forge package, then retry.";
+        pushLog("mods: forge-tools.exe not found next to FableForge.exe", 2); return false;
+    }
     if (verb != "conflicts" && backups::gameRunningIn(saveRoot())) {
+        modsActionError_ = "Fable is running from this install. Quit to the desktop before deploying or undeploying.";
         pushLog("mods: Fable is running from this install; quit to the desktop before deploying", 2);
         return false;
     }
@@ -514,11 +520,16 @@ void App::pollModsTool() {
     }
     if (!modsFuture_.valid() || modsFuture_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     const ModsToolResult r = modsFuture_.get();
+    bool invalidReport = false;
     if (modsVerb_ == "conflicts" && r.rc == 0) {
         std::string text;
         for (const auto& l : r.lines) { text += l; text += '\n'; }
         try {
-            const auto rep = nlohmann::json::parse(text.substr(text.find('{')));
+            const auto start = text.find('{');
+            if (start == std::string::npos) throw std::runtime_error("no JSON conflict report returned");
+            const auto rep = nlohmann::json::parse(text.substr(start));
+            if (!rep.is_object() || !rep.contains("summary") || !rep["summary"].is_object())
+                throw std::runtime_error("conflict report is missing its summary");
             modConflicts_.clear();
             collectConflicts(rep, modConflicts_);
             modNewMissingMeshes_.clear();
@@ -546,6 +557,8 @@ void App::pollModsTool() {
             pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
             return;
         } catch (const std::exception& e) {
+            invalidReport = true;
+            modsActionError_ = "Checking conflicts failed: the tool did not return a valid report. See Activity for details.";
             pushLog(std::string("mods conflicts: report not readable: ") + e.what(), 2);
         }
     }
@@ -553,7 +566,20 @@ void App::pollModsTool() {
         const bool warn = l.find("warning") != std::string::npos || l.find("conflict") != std::string::npos;
         pushLog("mods " + modsVerb_ + ": " + l, warn ? 1 : 0);
     }
-    pushLog("mods " + modsVerb_ + (r.rc == 0 ? ": done" : ": FAILED (rc " + std::to_string(r.rc) + ")"), r.rc == 0 ? 0 : 2);
+    const bool succeeded = r.rc == 0 && !invalidReport;
+    if (r.rc != 0) {
+        const std::string prefix = "mods " + modsVerb_ + ": ";
+        std::string reason = r.lines.empty() ? "No diagnostic returned; see Activity for details." : r.lines.front();
+        // stderr can precede buffered stdout. Select the action's diagnostic,
+        // rather than the last progress line from a failed build.
+        for (const auto& line : r.lines) {
+            if (line.rfind(prefix, 0) == 0) { reason = line.substr(prefix.size()); break; }
+            if (line.rfind("error: ", 0) == 0) { reason = line.substr(7); break; }
+        }
+        const char* action = modsVerb_ == "deploy" ? "Build and deploy" : modsVerb_ == "undeploy" ? "Undeploy" : "Checking conflicts";
+        modsActionError_ = std::string(action) + " failed: " + reason;
+    }
+    pushLog("mods " + modsVerb_ + (succeeded ? ": done" : invalidReport ? ": FAILED (invalid report)" : ": FAILED (rc " + std::to_string(r.rc) + ")"), succeeded ? 0 : 2);
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") backupsScannedAt_ = 0;   // the Setup card re-scans
     refreshModOrder();
     if (modsVerb_ == "deploy" || modsVerb_ == "undeploy") {
@@ -983,12 +1009,19 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     const bool busy = modsFuture_.valid();
     if (theme::ghostButton(busy && modsVerb_ == "conflicts" ? "Checking..." : "Check conflicts", ImVec2(cardInner, S(28))) && !busy) runModsTool("conflicts");
     auto_.registerWidget("btn_mods_conflicts");
-    if (theme::primaryButton(busy && modsVerb_ == "deploy" ? "Deploying..." : "Build and deploy into the game", ImVec2(cardInner, S(32)), !busy && !modOrder_.mods.empty())) runModsTool("deploy");
+    if (theme::primaryButton(busy && modsVerb_ == "deploy" ? "Deploying..." : "Build and deploy", ImVec2(cardInner, S(32)), !busy && !modOrder_.mods.empty())) runModsTool("deploy");
     auto_.registerWidget("btn_mods_deploy");
-    if (theme::dangerButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy (back to the retail files)", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
+    if (theme::dangerButton(busy && modsVerb_ == "undeploy" ? "Undeploying..." : "Undeploy", ImVec2(cardInner, S(28))) && !busy) runModsTool("undeploy");
     auto_.registerWidget("btn_mods_undeploy");
     ImGui::PushFont(fontSmall_);
-    theme::hintMore("Deploy builds the whole list into the game; Undeploy puts the originals back.", "Deploy reverts the previous deploy first, builds the whole order with your picks and stages it (originals kept as .forgebak; Undeploy puts them back). Refused while Fable runs, and on an install EgoCore has deployed to (restore vanilla there first).");
+    theme::hintMore("Deploy builds the list into the save folder; Undeploy restores its originals.", "Deploy first reverts the save folder's previous deployment, builds the whole order with your picks and stages it while keeping originals. Undeploy restores those originals. Refused while Fable runs from the destination, and on an install EgoCore has deployed to (restore vanilla there first).");
+    if (!modsActionError_.empty()) {
+        ImGui::Spacing();
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::TextColored(theme::vec(theme::Error), "%s", modsActionError_.c_str());
+        auto_.registerWidget("mods_action_error");
+        ImGui::PopTextWrapPos();
+    }
     ImGui::PopFont();
     theme::endCard();
 }

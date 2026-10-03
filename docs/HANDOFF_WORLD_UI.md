@@ -1,5 +1,39 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated Mods action error recovery
+
+The owned choice review, feat/forge-mod-action-review-20261003, starts from
+42ac94c. Baselines build/mod-action-error-7400w_0o (bad patch), -m8esfmdq
+(invalid report) and -tx8qon4q (missing helper) reproduce Activity-only failures.
+An exit-zero unreadable report was incorrectly followed by a done message.
+
+Mods now retains a wrapped error beside its actions. Tool failures select the
+actual diagnostic even when buffered progress arrives later; invalid JSON or a
+missing summary is failed, including when the child exits zero. Missing tools
+explain how to repair the package. The next attempt or accepted destination
+change clears the error; reopening Mods and rescanning the same install retain
+it. Build and deploy / Undeploy labels fit the compact card, and hints/guide
+accurately identify the save folder and restored originals. The process launcher,
+build/stage/restore implementation and backup policies are unchanged.
+
+Final strengthened fixtures build/mod-action-error-0rf0w7t7 (redeploy),
+-26a0s47a (report) and -640i0l8e (missing) pass at 1440x900 / scale 1 and
+800x600 / scale 1.5. They use actual buttons, inspect errors after toast dismissal,
+reopen Mods, rescan Data, switch the compact destination, fix the input/helper
+and retry in the same GUI. Complete inventories recover exactly; source banks,
+pack bytes and the alternate install stay unchanged. Bad redeploy first reverts
+the preceding stage, then refuses the malformed patch with no stage left behind.
+Report controls cover non-JSON and a JSON object missing its summary. Screenshots
+confirm wrapped error bounds and visible action labels. Existing field-details
+regression build/mod-field-details-x4asv9ms passes both sizes and exact merged
+values/source preservation. The docs-command checker passes (32/37 families).
+
+The three modes are wired into the Windows/retail broad gate and extracted
+package check, increasing that package suite to 31 runtime workflows. Promotion
+and the new package run remain pending; previous source/gate/package boundaries
+below remain unchanged. All writes are confined to owned scratch trees; no game
+launch or live-install writes occurred.
+
 ## 2026-10-03 primary gate and Unicode promotion checkpoint
 
 The frozen e7cb37b gate completed at build/check_all_asset_recovery_20261003.log:

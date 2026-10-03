@@ -49,11 +49,12 @@ contested fields and keeps independent edits from the other mods.
 
 ## Deploy and undeploy
 
-**Build and deploy into the game** undoes the previous deploy, builds the whole
-order onto the retail files and installs the result, keeping the originals.
-**Undeploy** puts the retail files back. Both refuse while Fable runs. The
-Activity log shows the build's progress and any refused input; an invalid mod is
-rejected before the previous deployment is replaced.
+**Build and deploy** first undoes the save folder's previous deployment, then
+builds the whole order and installs the result, keeping the originals.
+**Undeploy** restores those originals. Both refuse while Fable runs from that
+destination. Failures stay visible beside the actions; Activity contains the
+full diagnostics. If the new build fails after reverting a previous deployment,
+the destination remains restored to its original files. Fix the input and retry.
 
 After a deploy, the Edit tab marks objects that a mod placed or changed.
 *Placed by* filters the object list by mod, and *Back to retail* on a selected

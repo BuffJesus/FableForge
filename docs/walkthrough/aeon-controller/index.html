@@ -42,7 +42,7 @@
 
 <section><h2><span class="step">5</span>Check, then build and deploy</h2>
 <p>Click <strong>Check conflicts</strong> and wait for it to finish. Review the report and Activity log. The checked versions produced zero definition field conflicts and no missing direct model references. A different result deserves investigation before deploying.</p>
-<p>Click <strong>Build and deploy into the game</strong>. Wait for the Activity log to report <code>mods deploy: done</code>. If it reports an error, stop at that error; do not proceed as though installation succeeded.</p>
+<p>Click <strong>Build and deploy</strong>. Wait for the Activity log to report <code>mods deploy: done</code>. If it reports an error, stop at that error; do not proceed as though installation succeeded.</p>
 <figure><a href="03-check.png"><img src="03-check.png" alt="Forge Mods install controls after checking conflicts"></a><figcaption>Check conflicts first, then use Build and deploy.</figcaption></figure>
 <p>Forge writes the composed <code>FinalAlbion.wad</code>, applies the FMP changes, copies the DLL to <code>Mods/FableControllerSupport/</code>, and enables that DLL in <code>Mods.ini</code>. Originals are retained for Forge’s <strong>Undeploy</strong> action.</p>
 <figure><a href="04-deploy.png"><img src="04-deploy.png" alt="Forge after successful deployment to the scratch game folder"></a><figcaption>Actual GUI deployment, checked against the independently built output.</figcaption></figure></section>

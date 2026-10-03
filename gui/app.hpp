@@ -1040,6 +1040,7 @@ private:
     struct ModsToolResult { std::vector<std::string> lines; int rc = 0; };
     std::future<ModsToolResult> modsFuture_;
     std::string modsVerb_;
+    std::string modsActionError_;
     // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:
