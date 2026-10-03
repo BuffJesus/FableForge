@@ -6,6 +6,40 @@ README, LICENSE and third-party notices. Runs check_all first unless --no-check.
 """
 import argparse, os, re, shutil, subprocess, sys, zipfile
 from pathlib import Path
+from urllib.parse import unquote
+
+
+def copy_document_dependencies(root, stage):
+    """Complete local Markdown links reachable from packaged user documentation."""
+    root, stage = root.resolve(), stage.resolve()
+    pending = [stage / name for name in ('README.md', 'FIRST_LEVEL.md', 'EDITOR.md',
+        'ENGINE_RULES.md', 'AUTOMATION.md', 'THIRD_PARTY.md')]
+    visited = set()
+    copied = []
+    while pending:
+        document = pending.pop()
+        if document in visited: continue
+        visited.add(document)
+        for link in re.findall(r'\]\(([^)]+)\)', document.read_text(encoding='utf-8')):
+            link = link.split('#')[0]
+            if not link or re.match(r'[A-Za-z]+:', link): continue
+            target = (document.parent / unquote(link)).resolve()
+            if not target.is_relative_to(stage):
+                raise RuntimeError(f'Packaged document link escapes staging: {document.name}: {link}')
+            if not target.is_file():
+                source = (root / target.relative_to(stage)).resolve()
+                if not source.is_relative_to(root) or not source.is_file():
+                    raise RuntimeError(f'Packaged document dependency missing: {document.name}: {link}')
+                # Local links may supply docs/assets/licences, never build/work
+                # scratch trees or executable dependencies by accident.
+                if (not (source.is_relative_to(root / 'docs') or source.is_relative_to(root / 'vendor')) or
+                    source.suffix.lower() not in {'.md', '.txt', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.html', '.json', '.pdf'}):
+                    raise RuntimeError(f'Unsupported packaged document dependency: {source}')
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(source, target)
+                copied.append(str(target.relative_to(stage)))
+            if target.suffix.lower() == '.md': pending.append(target)
+    print(f'  local document dependencies: {len(copied)} added, {len(visited)} pages checked')
 
 def package_guide(root, output=None):
     guide_dir = root / "docs/walkthrough/aeon-controller"
@@ -114,6 +148,7 @@ def main():
     shutil.copytree(os.path.join("docs", "screenshots"), os.path.join(stage, "docs", "screenshots"))
     for screenshot in (root / "docs").glob("screenshot_*.png"):
         shutil.copy(screenshot, os.path.join(stage, "docs", screenshot.name))
+    copy_document_dependencies(root, Path(stage))
     zpath = output / (name + ".zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
         for folder, _, files in os.walk(stage):

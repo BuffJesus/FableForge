@@ -14,7 +14,10 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
+    parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
     args = parser.parse_args()
+    gui, cwd = args.gui.resolve(), args.cwd.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-conflict-search-', dir=repo/'build')).resolve()
     assert work.parent == (repo/'build').resolve()
     print('Evidence retained at', work, flush=True)
@@ -30,8 +33,8 @@ def main():
         for index in range(401):
             (files/f'choice{index:03}.txt').write_text(label, encoding='utf-8')
         sources.append(pack)
-        result = subprocess.run([str(repo/'build/forge-tools.exe'), 'mods', 'add',
-            str(root), str(pack), '--name', label], cwd=repo, capture_output=True, text=True)
+        result = subprocess.run([str(gui.with_name('forge-tools.exe')), 'mods', 'add',
+            str(root), str(pack), '--name', label], cwd=cwd, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout+result.stderr
     baseline = {p: hashlib.sha256(p.read_bytes()).hexdigest()
         for source in (root, *sources) for p in source.rglob('*') if p.is_file()}
@@ -72,8 +75,8 @@ def main():
             'assert_state mods_conflicts_matching 401', 'quit']
         script = case/'search.txt'
         script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
-        result = subprocess.run([str(repo/'build/FableForge.exe'), '--install', str(args.install),
-            '--size', size, '--auto', str(script)], cwd=repo, capture_output=True, text=True,
+        result = subprocess.run([str(gui), '--install', str(args.install),
+            '--size', size, '--auto', str(script)], cwd=cwd, capture_output=True, text=True,
             timeout=180, env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1'))
         (case/'output.log').write_text(result.stdout+result.stderr, encoding='utf-8')
         log = Path(str(script)+'.log').read_text(encoding='utf-8')

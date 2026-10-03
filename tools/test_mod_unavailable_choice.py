@@ -16,7 +16,10 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
+    parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd', type=Path, default=repo)
     args = parser.parse_args()
+    gui, cwd = args.gui.resolve(), args.cwd.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-unavailable-choice-', dir=repo/'build')).resolve()
     assert work.parent == (repo/'build').resolve()
     print('Evidence retained at', work, flush=True)
@@ -24,8 +27,8 @@ def main():
     write_bank(root, (1, 2, 3, 4))
     sources = []
     def cli(label, *arguments):
-        result = subprocess.run([str(repo/'build/forge-tools.exe'), *map(str, arguments)],
-            cwd=repo, capture_output=True, text=True, timeout=60)
+        result = subprocess.run([str(gui.with_name('forge-tools.exe')), *map(str, arguments)],
+            cwd=cwd, capture_output=True, text=True, timeout=60)
         (work/(label+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
         assert result.returncode == 0, result.stdout+result.stderr
         return result.stdout
@@ -66,8 +69,8 @@ def main():
             'clear_toasts', f'screenshot {(case/"unavailable.png").as_posix()}', 'quit']
         script = case/'unavailable.txt'
         script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
-        result = subprocess.run([str(repo/'build/FableForge.exe'), '--install', str(args.install),
-            '--size', size, '--auto', str(script)], cwd=repo, capture_output=True, text=True,
+        result = subprocess.run([str(gui), '--install', str(args.install),
+            '--size', size, '--auto', str(script)], cwd=cwd, capture_output=True, text=True,
             timeout=180, env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1'))
         (case/'output.log').write_text(result.stdout+result.stderr, encoding='utf-8')
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
@@ -97,8 +100,8 @@ def main():
         'assert_state mods_first_winner PackB','assert_state mods_unavailable_choices 1',
         'mod_pick * -','frames 2',
         'assert_state mods_picks 0','assert_state mods_first_winner PackB','quit'])+'\n',encoding='utf-8')
-    result = subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(args.install),
-        '--size','800x600','--auto',str(recovery)],cwd=repo,capture_output=True,text=True,
+    result = subprocess.run([str(gui),'--install',str(args.install),
+        '--size','800x600','--auto',str(recovery)],cwd=cwd,capture_output=True,text=True,
         timeout=180,env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1'))
     (work/'recovery.log').write_text(result.stdout+result.stderr,encoding='utf-8')
     log = Path(str(recovery)+'.log').read_text(encoding='utf-8')

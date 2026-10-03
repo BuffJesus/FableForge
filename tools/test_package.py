@@ -81,6 +81,12 @@ def main():
         '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
+    for label, script in (('field_details', 'test_mod_field_details.py'),
+                          ('long_values', 'test_mod_long_values.py'),
+                          ('conflict_search', 'test_mod_conflict_search.py'),
+                          ('unavailable_choices', 'test_mod_unavailable_choice.py')):
+        run(label, [sys.executable, repo / 'tools' / script, '--gui', package / 'FableForge.exe',
+            '--install', args.root.resolve(), '--cwd', cwd])
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,

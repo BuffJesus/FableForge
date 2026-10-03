@@ -5,6 +5,9 @@ baseline, current and contributor values at both sizes, exact byte escapes,
 independent merged payload bytes and source hashes. Value targets:
 `mod_field_value_<row>_<field>`, `mod_field_base_<row>_<field>` and
 `mod_field_source_<row>_<field>_<source>`.
+The field-details, long-value, conflict-search and unavailable-choice fixtures
+accept `--gui <exe> --cwd <directory>` for extracted-package checks; scratch
+evidence still belongs to the script's checkout.
 
 `tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
 winner matches independently built output for an absent saved contributor.

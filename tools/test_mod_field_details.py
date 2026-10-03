@@ -53,7 +53,10 @@ def main():
     repo=Path(__file__).resolve().parents[1]
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',type=Path,required=True)
+    parser.add_argument('--gui',type=Path,default=repo/'build/FableForge.exe')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
+    gui=args.gui.resolve();cwd=args.cwd.resolve()
     work=Path(tempfile.mkdtemp(prefix='mod-field-details-',dir=repo/'build')).resolve()
     assert work.parent==(repo/'build').resolve()
     print('Evidence retained at',work,flush=True)
@@ -64,9 +67,9 @@ def main():
         pack=work/label;write_bank(pack,values);sources.append(pack)
     baseline={p:hashlib.sha256(p.read_bytes()).hexdigest() for source in (root,*sources)
         for p in source.rglob('*.bin')}
-    tool=repo/'build/forge-tools.exe'
+    tool=gui.with_name('forge-tools.exe')
     def cli(label,*args):
-        result=subprocess.run([str(tool),*map(str,args)],cwd=repo,capture_output=True,text=True,timeout=120)
+        result=subprocess.run([str(tool),*map(str,args)],cwd=cwd,capture_output=True,text=True,timeout=120)
         (work/(label+'.log')).write_text(result.stdout+result.stderr,encoding='utf-8')
         assert result.returncode==0,result.stdout+result.stderr
         return result.stdout
@@ -149,8 +152,8 @@ def main():
             lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
         lines += ['mods_conflicts','wait_mods','frames 2','assert_state mods_field_conflicts 3','quit']
         script=case/'fields.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
-        result=subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(args.install),
-            '--size',size,'--auto',str(script)],cwd=repo,capture_output=True,text=True,timeout=240,
+        result=subprocess.run([str(gui),'--install',str(args.install),
+            '--size',size,'--auto',str(script)],cwd=cwd,capture_output=True,text=True,timeout=240,
             env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1'))
         (case/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
         log=Path(str(script)+'.log').read_text(encoding='utf-8')

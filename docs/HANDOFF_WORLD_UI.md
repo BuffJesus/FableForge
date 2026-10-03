@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 local development package and document closure
+
+Local archive under dist/development/20261003-096f7d8 initially failed extracted
+link checks: the newly linked content-override proposal pointed to the absent
+ROADMAP_1.0.md (build/package-smoke-c0u89imq). The packaging step now follows
+reachable local Markdown links from the user guides and copies missing docs/
+vendor document/assets/licence dependencies at their relative locations. It
+rejects missing, escaping or unsupported dependencies before writing the ZIP.
+Existing exported/rewritten pages are retained. Current closure adds eight
+documents and checks 34 pages rather than copying unrelated work/build trees.
+
+Development archive dist/development/20261003-package-docs/
+FableForge-0.18.0-dev-win64.zip is 34.8 MB, SHA256
+a6827a4aafe1f2f589891be17f7be83bc3ae3bb7b589776550e8abc1b624c872.
+The separate illustrated guide is also generated. Extracted package smoke passes
+at build/package-smoke-sqyw6lyg: 115 Markdown links, guide images, retail defs,
+eight exported maps, GUI GLB/pixels and literal-path mods under an extraction
+directory containing spaces, percent signs and an ampersand. The field fixtures
+now accept --gui/--cwd so the package check also proves schema/value/search/
+choice behavior from that unrelated cwd. Expanded run at
+build/package-smoke-e7_mdsoq passes all four new feature workflows with the
+stripped packaged executables; the archive hash is unchanged. No release/tag/
+push/publication or live-game writes occurred. Whole-gate scope remains the
+frozen checkpoint recorded below; this is extraction/runtime-resource coverage.
+
 ## 2026-10-03 composer-specific baseline aliases
 
 Writer audit found the unavailable-choice increment at 416d23c normalized
