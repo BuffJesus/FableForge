@@ -18,6 +18,8 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--partial', action='store_true',
+        help='also restore a second selected map while the first target stays locked')
     args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='setup-restore-failure-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
@@ -40,6 +42,14 @@ def main():
         current, original = level(9), level(4)
         target.write_bytes(current); backup.write_bytes(original)
         (levels/'RestoreFailureWithLongReadableName.tng').write_bytes(b'Version 2;\r\n')
+        selected = 'RestoreFailureWithLongReadableName'
+        partial_target = None
+        if args.partial:
+            selected = 'PartialRestoreVisible'
+            partial_target = levels/(selected+'.lev')
+            partial_target.write_bytes(current)
+            Path(str(partial_target)+'.forge-orig').write_bytes(original)
+            (levels/(selected+'.tng')).write_bytes(b'Version 2;\r\n')
         other = case/'other-install'
         make_install(other, 'OtherRestoreFolder', 4)
         other_bytes = {p: p.read_bytes() for p in other.rglob('*') if p.is_file()}
@@ -49,9 +59,13 @@ def main():
             return reveal('btn_restore_all')+['click btn_restore_all', 'frames 3']+\
                 reveal('btn_restore_confirm')+['click btn_restore_confirm', 'frames 3']
         failed = case/'failed.png'
-        lines = ['wait_maps', 'wait_ready', 'select RestoreFailureWithLongReadableName',
+        lines = ['wait_maps', 'wait_ready', f'select {selected}',
             'wait_loaded', f'set uiscale {scale}', 'setup 1', 'frames 3', 'clear_toasts']
-        lines += restore_buttons()+['assert_state backups_differ 1', 'assert_state terrain_center_height 9.000',
+        lines += restore_buttons()
+        if args.partial:
+            lines += ['wait_maps', 'wait_ready', 'wait_loaded', 'assert_log 1 file(s) returned']
+        lines += ['assert_state backups_differ 1',
+            f'assert_state terrain_center_height {"4.000" if args.partial else "9.000"}',
             'assert_log cannot replace', 'assert_state setup_restore_failed 1']
         lines += reveal('setup_restore_error')+['assert_widget setup_restore_error',
             'dump_widget setup_restore_error', 'clear_toasts', f'screenshot {failed.as_posix()}',
@@ -59,7 +73,7 @@ def main():
         if scale > 1:
             lines += [f'scan_install {other.as_posix()}', 'wait_maps', 'wait_ready',
                 'assert_state setup_restore_failed 0', f'scan_install {root.as_posix()}',
-                'wait_maps', 'wait_ready', 'select RestoreFailureWithLongReadableName',
+                'wait_maps', 'wait_ready', f'select {selected}',
                 'wait_loaded', 'frames 3']
         lines += restore_buttons()+['wait_maps', 'wait_ready', 'wait_loaded', 'frames 3',
             'assert_state setup_restore_failed 0', 'assert_state backups_differ 0',
@@ -79,6 +93,9 @@ def main():
                     time.sleep(0.01)
                 assert failed.exists(), 'GUI did not reach the locked-failure checkpoint'
                 assert target.read_bytes() == current and backup.read_bytes() == original
+                if partial_target:
+                    assert partial_target.read_bytes() == original
+                    assert Path(str(partial_target)+'.forge-orig').read_bytes() == original
                 assert not Path(str(target)+'.forge-restore').exists()
                 assert kernel.CloseHandle(handle)
                 unlocked = True
@@ -96,9 +113,13 @@ def main():
         assert 0 <= left < right <= width and 0 <= top < bottom <= height, bounds.groups()
         assert bottom-top >= 20*scale, 'long restore error did not wrap'
         assert target.read_bytes() == backup.read_bytes() == original
+        if partial_target:
+            assert partial_target.read_bytes() == original
+            assert Path(str(partial_target)+'.forge-orig').read_bytes() == original
         assert not Path(str(target)+'.forge-restore').exists()
         assert all(p.read_bytes() == value for p, value in other_bytes.items())
-        print(size, 'visible locked-write failure, preserved bytes and same-process retry: PASS', flush=True)
+        print(size, 'partial restore and refreshed selected map;' if args.partial else '',
+            'visible locked-write failure, preserved bytes and same-process retry: PASS', flush=True)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 partial restore and absent level-container coverage
+
+No additional product changes were needed after missing-bank recovery.
+test_setup_restore_failure_ui.py --partial passes both sizes in
+build/setup-restore-failure-1l0lmxzy: a second selected LEV restores from height
+9 to 4 and reloads while the locked LEV and its original remain unchanged.
+The durable error survives the reload and toast dismissal; unlocking and
+retrying restores the remaining file. Compact failed screenshot reviewed.
+
+test_setup_missing_bank_ui.py --missing-levels passes both sizes in
+build/setup-missing-bank-6p02baze, restoring the only loose LEV when no levels
+were initially discoverable. --wad against a read-only retail source passes
+both sizes in build/setup-missing-bank-jopkg517, restoring the absent stock
+FinalAlbion.wad exactly and loading Greatwood_1 through the WAD route. Original
+backups, unrelated files and the retail source hash stay unchanged. Both
+variants also exercise target-root running-process refusal before repair,
+including the compact Data-folder selection. Helpers are owned sleeping
+executables, not actual game launches. All variants are wired into check_all;
+stock coverage requires its existing retail-install availability condition.
+These are focused checks, not a rerun of the frozen whole gate or a new archive.
+
 ## 2026-10-03 Setup recovery with a missing game bank
 
 Baseline build/setup-missing-bank-5i0v7hvt proves the backup section and restore

@@ -1,10 +1,20 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_missing_bank_ui.py` restores an absent game.bin from its
+tracked original. `--missing-levels` instead restores the only loose LEV;
+`--wad <source.wad>` copies a stock WAD as the tracked original and verifies its
+unchanged source hash. Both sizes click actual Setup buttons; compact selects
+Data directly. Each case first checks refusal while an owned sleeping process
+named Fable.exe runs at the install root, then recovery after it exits.
+
 `tools/test_setup_restore_failure_ui.py` locks an owned LEV, clicks Setup Restore,
 checks the persistent wrapped `setup_restore_error` message with toasts cleared,
 then releases the lock and retries in the same hidden process. Both sizes check
 unchanged failed-write bytes, temp cleanup and exact recovery; the compact case
 also checks error clearing on a folder switch. State: `setup_restore_failed`.
+`--partial` adds a second selected map that restores and reloads while the locked
+target remains unchanged. The inline error survives that reload and retry
+finishes the remaining target; every original is retained.
 
 `tools/test_setup_asset_restore.py --install <root>` imports a cube into copied
 graphics/textures/game/names banks, then uses Setup's Restore buttons at both
