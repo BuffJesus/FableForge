@@ -1863,6 +1863,10 @@ std::vector<std::string> App::stateDump() const {
     }
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
+    size_t unavailableChoices = 0;
+    if (modReportLoaded_)
+        for (const auto& conflict : modConflicts_) unavailableChoices += modChoiceUnavailable(conflict);
+    v.push_back("mods_unavailable_choices="+std::to_string(unavailableChoices));
     v.push_back("mods_conflicts=" + std::to_string(modConflicts_.size()));
     size_t matchingConflicts = 0;
     std::string firstMatchingConflict;

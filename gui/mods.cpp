@@ -347,11 +347,24 @@ bool App::modPick(const std::string& key, const std::string& winner) {
 std::string App::modConflictWinner(const ModConflict& conflict) const {
     if (!conflict.pickable) return conflict.winner;
     const auto pick = modPicks_.find(conflict.key);
-    if (pick != modPicks_.end()) return pick->second;
+    if (pick != modPicks_.end()) {
+        const auto& winner = pick->second;
+        if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-") return "vanilla";
+        if (std::find(conflict.mods.begin(), conflict.mods.end(), winner) != conflict.mods.end()) return winner;
+    }
     // The report's winner may include a choice that has since been cleared.
     // Contributors are reported in load order; field merges retain their label.
     if (!conflict.fieldMerged && !conflict.mods.empty()) return conflict.mods.back();
     return conflict.winner;
+}
+
+bool App::modChoiceUnavailable(const ModConflict& conflict) const {
+    if (!conflict.pickable) return false;
+    const auto pick = modPicks_.find(conflict.key);
+    if (pick == modPicks_.end()) return false;
+    const auto& winner = pick->second;
+    if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-") return false;
+    return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
 }
 
 std::string App::modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const {
@@ -382,6 +395,7 @@ bool App::modConflictMatches(const ModConflict& conflict) const {
             [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
     };
     if (contains(conflict.key) || contains(conflict.label) || contains(conflict.kind)) return true;
+    if (const auto pick = modPicks_.find(conflict.key); pick != modPicks_.end() && contains(pick->second)) return true;
     for (const auto& mod : conflict.mods) if (contains(mod)) return true;
     for (const auto& field : conflict.fields) if (contains(field.field)) return true;
     return false;
@@ -810,8 +824,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             }
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
             const bool picked = modPicks_.contains(c.key);
+            const bool unavailable = modChoiceUnavailable(c);
             const std::string current = modConflictWinner(c);
-            const std::string shown = (picked ? "* " : "") + current;
+            const std::string shown = (unavailable ? "! " : picked ? "* " : "") + current;
             ImGui::SetNextItemWidth(comboW);
             if (ImGui::BeginCombo("##winner", shown.c_str())) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
@@ -823,6 +838,17 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             }
             auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shown.c_str());
+            // A combo action may have just removed or replaced the saved choice.
+            if (modChoiceUnavailable(c)) {
+                ImGui::PushFont(fontSmall_);
+                const auto message = "Saved choice " + modPicks_.at(c.key) +
+                    " has no contribution here; load order applies.";
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+                ImGui::TextColored(theme::vec(theme::Warn), "%s", message.c_str());
+                ImGui::PopTextWrapPos();
+                auto_.registerWidget(("mod_unavailable_choice_"+std::to_string(i)).c_str());
+                ImGui::PopFont();
+            }
             if (c.fieldMerged) {
                 ImGui::PushFont(fontSmall_);
                 theme::hint("This choice resolves conflicting fields. Other edits still merge.");

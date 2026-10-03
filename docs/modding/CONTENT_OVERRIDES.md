@@ -200,6 +200,10 @@ Conflict search covers names/identities, kinds, contributors and field names,
 and Saved choices only filters explicit choices. Filtering happens before the
 400-row cap, so later matching conflicts can be reached and chosen. Neither
 filter edits choices; changing the destination resets the filters.
+Field-aware badges count actual contested wins/losses, excluding independent
+edits. A saved choice absent from a current conflict's contributors is now
+identified for review while its displayed result follows the composer fallback;
+the saved choice is preserved and can be found by its name or cleared in the UI.
 
 Implementation through 169608b was reviewed in an isolated owning checkout:
 synthetic three-mod banks independently verify contributor/result values,
@@ -211,6 +215,6 @@ integration checks live in [HANDOFF_WORLD_UI](../HANDOFF_WORLD_UI.md).
 
 This is a residual-conflict comparison, not a complete contributed-content
 inventory. Values are snapshots from the last check. Individual field choices,
-bank-qualified/stable source identities, fingerprints/stale-selection review,
+bank-qualified/stable source identities, fingerprint-based stale-content review,
 component policies, portable profiles and the mixed-FMP/overhaul acceptance
 sequence remain backlog. The existing picks transaction/composer remain in use.

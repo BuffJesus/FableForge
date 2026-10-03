@@ -1048,6 +1048,7 @@ public:
                          std::string winner; bool overridden = false, pickable = true, fieldMerged = false;
                          std::vector<ModFieldConflict> fields; };
     std::string modConflictWinner(const ModConflict& conflict) const;
+    bool modChoiceUnavailable(const ModConflict& conflict) const;
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
     std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
     bool modConflictMatches(const ModConflict& conflict) const;

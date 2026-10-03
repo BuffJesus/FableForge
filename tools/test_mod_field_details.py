@@ -112,12 +112,20 @@ def main():
         for index,(wins,losses) in enumerate(((2,0),(0,2),(1,1))):
             lines += [f'assert_state mods_wins_{index} {wins}',f'assert_state mods_losses_{index} {losses}']
         lines += ['mod_pick * PackD','frames 2','assert_state mods_first_winner PackD',
-            'assert_state mods_wins_3 0','assert_state mods_losses_3 0']
+            'assert_state mods_wins_3 0','assert_state mods_losses_3 0',
+            'assert_state mods_unavailable_choices 0']
         for index,(winner,value) in enumerate(zip(('PackB','PackC','PackC'),(11,21,31))):
             lines += [f'assert_state mods_first_field_winner_{index} {winner}',
                 f'assert_state mods_first_field_value_{index} {value}']
         lines += ['reveal mod_field_0_2','frames 3',
-            f'screenshot {(case/"independent-choice.png").as_posix()}','mod_pick * PackA','frames 2']
+            'mouse_move viewport','frames 3','clear_toasts',
+            f'screenshot {(case/"independent-choice.png").as_posix()}',
+            'mod_pick * RemovedPack','frames 2','assert_state mods_unavailable_choices 1',
+            'assert_state mods_first_winner field-merged']
+        for index,(winner,value) in enumerate(zip(('PackB','PackC','PackC'),(11,21,31))):
+            lines += [f'assert_state mods_first_field_winner_{index} {winner}',
+                f'assert_state mods_first_field_value_{index} {value}']
+        lines += ['mod_pick * PackA','frames 2','assert_state mods_unavailable_choices 0']
         lines += ['reveal mod_field_0_2','frames 3',
             f'screenshot {(case/"picked.png").as_posix()}',
             'reveal mod_winner_0','frames 3','reveal mod_winner_0','frames 3',

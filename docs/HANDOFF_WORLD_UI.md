@@ -1,5 +1,39 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 unavailable saved-choice review
+
+The async-order/destination audit found existing active-job guards already block
+changes during conflict checks. A different reproduced mismatch remained:
+an external saved whole-file winner absent from the reported contributors made
+the GUI display RemovedPack and mark both actual contributors as losing, while
+the composer independently built PackB's file. Baseline fixture:
+build/mod-unavailable-choice-fwurpman.
+
+Display now falls back to the actual contributor (or field-merged result) and
+identifies the absent saved choice with ! and an explanation. The choice stays
+persisted for review; search includes saved choice names. Baseline aliases
+display as vanilla. This uses the last report's contributor membership, not
+fingerprints, and does not detect changed content from a still-present source
+or choices for records omitted from the residual-conflict report. Composer and
+choice-write behavior are unchanged.
+
+Owning Release GUI build passes. Final long-name fixture at
+build/mod-unavailable-choice-56zcdwoo passes both sizes: independent composer
+output, actual GUI winner/badges, preserved source/baseline/choice bytes, search,
+actual dropdown clear and baseline alias handling. Message rectangle bounds and
+wrapping are checked; normal/compact captures inspected. Extended field fixture
+at build/mod-field-details-9rlx0sac verifies unavailable record choices, actual
+field fallback and no false flag for an independent-only contributor. Existing
+winner/reset/deploy check passes at build/mod-winner-refresh-66mxvbvo.
+
+Intermediate build/mod-unavailable-choice-n1vzg0v4 caught a new map::at crash
+when clearing a choice because the explanation used its pre-combo availability
+flag; availability is now rechecked after the action. That recovery path passes.
+Earlier 0zvsp8c8/u8c7etd4 captures showed default/available-width wrapping clipping
+the message; explicit card-width wrapping fixes it, and the final long-name
+geometry assertions prevent recurrence. Docs-command/diff checks pass. The new
+fixture is wired into check_all; no new whole-gate/core run is claimed.
+
 ## 2026-10-03 independent-only contributor boundary
 
 Extended the field fixture with PackD, which leaves every contested field at
