@@ -109,6 +109,8 @@ def main():
             package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve(), *options])
     run('texture_destination', [sys.executable, repo / 'tools/test_texture_destination_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
+    run('texture_export_failure', [sys.executable, repo / 'tools/test_texture_export_failure_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
     with archive.open('rb') as stream:
         archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,

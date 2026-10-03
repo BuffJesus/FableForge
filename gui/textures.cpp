@@ -32,6 +32,7 @@ std::filesystem::path App::texturesBigPath() const {
 void App::invalidateTextureViews() {
     texturesLoaded_ = false;
     texRows_.clear(); texBanks_.clear(); texSelected_.clear();
+    texExportError_.clear();
     texPreviewFor_.clear(); texPreview_ = nullptr;
     texThumbFile_.reset();
     renderer_.clearListThumbs();
@@ -96,7 +97,10 @@ bool App::selectTexture(const std::string& nameOrLabel) {
     if (modFilesBusy()) { fileWriteBlocked("texture preview"); return false; }
     if (!texturesLoaded_) refreshTextures();
     for (const auto& r : texRows_)
-        if (r.name == nameOrLabel || r.label == nameOrLabel || (nameOrLabel.size() < 10 && std::to_string(r.id) == nameOrLabel)) { texSelected_ = r.name; return true; }
+        if (r.name == nameOrLabel || r.label == nameOrLabel || (nameOrLabel.size() < 10 && std::to_string(r.id) == nameOrLabel)) {
+            if (texSelected_ != r.name) texExportError_.clear();
+            texSelected_ = r.name; return true;
+        }
     pushLog("textures: no texture named " + nameOrLabel, 1);
     return false;
 }
@@ -107,11 +111,21 @@ const texbrowse::TextureRow* App::selectedTexture() const {
 }
 
 bool App::exportSelectedTexture(const std::string& outPath) {
+    texExportError_.clear();
     const auto* r = selectedTexture();
-    if (!r) { pushLog("textures: nothing selected", 1); return false; }
+    if (!r) { texExportError_ = "Nothing is selected."; pushLog("textures: " + texExportError_, 1); return false; }
     std::filesystem::path png = outPath.empty() ? std::filesystem::path(outDirBuf_) / (r->label + ".png") : std::filesystem::path(outPath);
     std::string err;
-    if (!texbrowse::exportPng(texturesBigPath(), r->name, png, err)) { pushLog("textures: " + err, 2); return false; }
+    if (!texbrowse::exportPng(texturesBigPath(), r->name, png, err)) {
+        std::string reason = err;
+        const std::string filesystemPrefix = "filesystem error: ";
+        if (reason.starts_with(filesystemPrefix)) {
+            reason.erase(0, filesystemPrefix.size());
+            if (const auto paths = reason.find(" ["); paths != std::string::npos) reason.resize(paths);
+        }
+        texExportError_ = png.string() + ": " + reason;
+        pushLog("textures: " + err, 2); return false;
+    }
     pushLog("wrote " + png.string() + " (" + std::to_string(r->width) + "x" + std::to_string(r->height) + ")", 3);
     lastTexturePng_ = png.string();
     return true;
@@ -139,6 +153,7 @@ bool App::addTexture(const std::string& name, const std::string& image, const st
     for (const auto& n : notes) pushLog("textures: " + n, 3);
     pushLog("reference the new texture by id " + std::to_string(id) + " (a def's Graphic / theme texture field)", 0);
     refreshTextures();
+    texExportError_.clear();
     texSelected_ = name;
     startContextLoad(saveRoot());
     return true;
@@ -196,7 +211,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             const texbrowse::TextureRow* row = nullptr;
             for (const auto& r : texRows_) if (r.id == id && r.bank == "GBANK_MAIN_PC") { row = &r; break; }
             char lbl[160]; std::snprintf(lbl, sizeof lbl, "%u  %s##tt%u", id, row ? row->label.c_str() : "(not in textures.big)", id);
-            if (ImGui::Selectable(lbl, row && row->name == texSelected_) && row) texSelected_ = row->name;
+            if (ImGui::Selectable(lbl, row && row->name == texSelected_) && row) selectTexture(row->name);
         }
         ImGui::PopFont();
         theme::endCard();
@@ -249,7 +264,7 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
             const auto& r = texRows_[size_t(rows[size_t(k)])];
             const ImVec2 at = ImGui::GetCursorScreenPos();
             char id[32]; std::snprintf(id, sizeof id, "##tx%zu", size_t(rows[size_t(k)]));
-            if (ImGui::Selectable(id, r.name == texSelected_, 0, ImVec2(0, rowH))) texSelected_ = r.name;
+            if (ImGui::Selectable(id, r.name == texSelected_, 0, ImVec2(0, rowH))) selectTexture(r.name);
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const ImVec2 b0(at.x + S(2), at.y + (rowH - box) * 0.5f), b1(b0.x + box, b0.y + box);
             dl->AddRectFilled(b0, b1, theme::col(theme::Bg2));
@@ -315,6 +330,14 @@ void App::drawTexturesPanel(float pad, float inner, float cardInner) {
         if (!stackActions) ImGui::SameLine(0, S(6));
         if (theme::ghostButton("Replace from image...", ImVec2(actionWidth, S(28)))) texReplaceOpen_ = !texReplaceOpen_;
         auto_.registerWidget("btn_tex_replace_toggle");
+        if (!texExportError_.empty()) {
+            ImGui::PushFont(fontSmall_);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+            ImGui::TextColored(theme::vec(theme::Error), "PNG export failed: %s", texExportError_.c_str());
+            auto_.registerWidget("texture_export_error");
+            ImGui::PopTextWrapPos();
+            ImGui::PopFont();
+        }
         if (texReplaceOpen_) {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S(10), S(6)));
             drawPathInput("texreplacepath", "Image file", texImagePath_, sizeof texImagePath_,
@@ -469,7 +492,7 @@ void App::drawModelBrowser(float pad, float inner, float cardInner) {
                 const auto row = std::find_if(texRows_.begin(), texRows_.end(), [&](const auto& t) { return t.id == uint32_t(id) && t.bank == "GBANK_MAIN_PC"; });
                 const std::string caption = std::string(label) + " " + std::to_string(id);
                 ImGui::BeginDisabled(row == texRows_.end());
-                if (ImGui::SmallButton(caption.c_str()) && row != texRows_.end()) { texSelected_ = row->name; assetsTab_ = 0; }
+                if (ImGui::SmallButton(caption.c_str()) && row != texRows_.end()) { selectTexture(row->name); assetsTab_ = 0; }
                 auto_.registerWidget(("model_texture_" + std::to_string(i) + "_" + label).c_str());
                 ImGui::EndDisabled();
                 if (row != texRows_.end() && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", row->label.c_str());

@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 persistent PNG export failure and retry
+
+Baseline build/texture-export-failure-tuwdirll preserves the old output while
+locked and retries to a valid 64x64 green PNG, but the failure is limited to
+Activity. The harness initially assumed a particular failure phrase; the actual
+filesystem rename diagnostic reports Input/output error. It now records Activity
+and checks the failed rename rather than assuming a permission-code mapping.
+
+PNG export now stores a wrapped error beside its button, with the output path
+and short reason; full filesystem diagnostics remain in Activity. Internal
+staging paths are omitted from the inline filesystem reason. A retry clears the
+message, as do bank changes or selecting another texture (including actual list,
+object-texture and model-texture controls). File writer/staging policy is unchanged.
+
+Owned Release GUI build and build/texture-export-failure-pt79fvv0 pass both sizes:
+actual buttons, error bounds/wrapping after toast dismissal, exact old-output and
+unrelated-output preservation while locked, no leaked staging paths, same-process
+unlock/retry and decoded green PNG pixels. Compact also clears the error by
+selecting another texture. Source hashes and GUI install banks stay unchanged.
+Compact failed screenshot reviewed. Related destination preview/export pixels
+pass in build/texture-destination-rn7ofthb; Ctrl+F/hidden panel recovery and staged
+dialogue retention pass in build/asset-search-886z98r7. The fixture is wired into
+check_all and future package checks (25 runtime workflows). The 7336194 archive
+and afe9e55 whole-gate boundary remain unchanged; no new package/gate is claimed.
+
 ## 2026-10-03 destination-specific texture preview and export pixels
 
 No product change was needed after bank-path invalidation. The destination

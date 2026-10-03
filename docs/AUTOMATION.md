@@ -1,5 +1,12 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_texture_export_failure_ui.py --install <root>` clicks Export PNG
+while its existing output is held with a Windows sharing lock. Both sizes check
+the wrapped `texture_export_error` after toast dismissal, unchanged output and
+unrelated files, staging cleanup, and same-process retry with decoded green pixels.
+Compact also verifies a different texture selection clears the error. State:
+`texture_export_failed`. `--gui`/`--cwd` support extracted-package checks.
+
 `tools/test_texture_destination_ui.py --install <root>` opens Textures before
 changing the save folder. Both sizes check row/preview refresh for a different
 bank, selection retention for the same bank and fallback to the selected install.
