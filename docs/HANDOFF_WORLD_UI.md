@@ -1,5 +1,52 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated EgoCore compiler process paths
+
+The owned D:/Code/FableForge-field-review checkout, branch
+feat/forge-compiler-path-review-20261003, starts at d5347ea while the primary
+e7cb37b full gate and the other review's extracted package remain frozen.
+Baseline build/egocore-unicode-kztacive uses stripped e65d532 binaries: the
+ASCII control reaches an owned exit-7 helper, but Unicode module, compiler-env,
+temporary and text-env cases fail before reaching it. Installs, previous output
+and unrelated temporary files stay unchanged.
+
+EgoCore now reads FORGE_DEFC/FORGE_DEFS_TEXT and locates sibling defc.exe through
+wide Windows APIs. Executable compilers launch with CreateProcessW, native input
+and output arguments and an owned log file, without shell expansion. The handle
+list limits inheritance to compiler input/output; RAII retires handles and process
+attributes on every return. Non-executable/script compilers retain their existing
+route. Definition parsing, field reconciliation, backups and running-game guards
+are unchanged. Windows API contracts were checked against Microsoft's
+[handle-list documentation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+and [wide environment API](https://learn.microsoft.com/en-us/windows/win32/api/processenv/nf-processenv-getenvironmentvariablew).
+
+build/egocore-unicode-dwsxxnj5 passes all eight invocation/refusal/retry cases.
+Actual helper argv identifies the selected compiler, including an explicit
+Unicode environment path. Exit 7 refuses even after the helper emits both partial
+bank files. Locked/missing executables report startup failure; unlocked retry
+reaches the helper. Complete install, previous-output and unrelated-workspace
+inventories remain unchanged, with no owned temporary files left behind.
+
+Real Controller Support normalization passes concurrently at Unicode paths in
+build/egocore-workspace-bkcbm6zi and at ASCII paths in
+build/egocore-workspace-yydcl9h0. Both runs exercise build/deploy/conflicts failure
+refusal, malformed definitions and DLL-only compatibility. All four successful
+normalized game/names output hashes match exactly across modes. Source retail
+banks retain their original hashes; text inputs and the mod corpus are read only.
+Both EgoCore CTest targets pass. This focused review awaits promotion and a new
+package; no game was launched and no live bank was written.
+
+## 2026-10-03 extracted Unicode process/image package checkpoint
+
+The d5347ea package is retained under D:/Code/FableForge-choice-review at
+dist/development/20261003-d5347ea/FableForge-0.18.0-dev-win64.zip,
+SHA-256 dbb4d2314a2e224852f97112685e2f9f86c9333cfd76d41ce19e02a42b4938b0.
+build/package-smoke-gn5qmz49/result.json records all 27 runtime checks passing,
+115 Markdown links and four guide images. Both Unicode process/file-pack and
+image/pixel/recovery fixtures pass with stripped extracted binaries. Earlier
+packages stay unchanged; nothing was published. This package predates the
+EgoCore compiler increment above and does not replace the frozen e7cb37b gate.
+
 ## 2026-10-03 isolated Unicode image opening
 
 Baseline build/texture-unicode-ufuv_2o5 used stripped e65d532 package binaries.

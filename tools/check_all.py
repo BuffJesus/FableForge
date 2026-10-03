@@ -80,6 +80,8 @@ def main():
         ok &= run("model import form, pack retry and next-draft preservation",
                   [sys.executable, "tools/test_model_import_form.py", "--install", install_root], capture_output=True)
         if os.name == "nt":
+            ok &= run("EgoCore Unicode compiler paths, startup refusal, retry and failed-output preservation",
+                      [sys.executable, "tools/test_egocore_unicode_paths.py", "--install", install_root], capture_output=True)
             ok &= run("Unicode PNG inputs, locked/invalid preservation, decoded pixels and GUI replacement",
                       [sys.executable, "tools/test_texture_unicode_ui.py", "--install", install_root], capture_output=True)
             ok &= run("Unicode CLI arguments, packaged helper/schema lookup and GUI deploy recovery",

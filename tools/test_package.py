@@ -85,6 +85,8 @@ def main():
         '--install', args.root.resolve()])
     run('unicode_images', [sys.executable, repo / 'tools/test_texture_unicode_ui.py', '--gui', package / 'FableForge.exe',
         '--install', args.root.resolve()])
+    run('unicode_compiler', [sys.executable, repo / 'tools/test_egocore_unicode_paths.py', '--exe', package / 'forge-tools.exe',
+        '--install', args.root.resolve()])
     for label, script in (('field_details', 'test_mod_field_details.py'),
                           ('long_values', 'test_mod_long_values.py'),
                           ('conflict_search', 'test_mod_conflict_search.py'),

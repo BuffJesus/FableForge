@@ -1,5 +1,17 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_egocore_unicode_paths.py --install <root>` compiles an owned failure
+helper and checks its actual argv through Unicode application, compiler-env,
+text-env and temporary paths. Its nonzero exit refuses even with both partial
+bank files present. Missing/locked compiler startup and unlocked retry preserve
+the complete install/output and unowned workspace inventories. `--exe <tool>`
+supports extracted-package checks; the helper is built with this checkout's GCC.
+`tools/test_egocore_workspace.py --unicode --mod <ControllerSupport-folder>`
+checks concurrent real compiles at Unicode/metacharacter compiler, install,
+output and temporary paths. It also checks failed build/deploy/conflicts,
+malformed inputs and DLL-only compatibility. The legacy batch failure helper
+uses a separate ASCII temporary tree in this mode.
+
 `tools/test_texture_unicode_ui.py --install <root>` checks Unicode PNG inputs
 with CLI add/export and GUI replacement/export at both sizes. Invalid and
 sharing-locked inputs preserve the bank inventory; valid red/blue images are

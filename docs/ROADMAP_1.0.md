@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03: all 27 extracted runtime checks pass for the d5347ea Unicode
+process/image package. A further isolated EgoCore review preserves native
+compiler/environment/temp paths, verifies startup refusal and retry, and produces
+identical real Controller Support output hashes across ASCII/Unicode concurrent
+compiles. It awaits promotion/package validation; the primary gate remains
+frozen at e7cb37b. See HANDOFF_WORLD_UI for exact evidence.
+
 2026-10-03 isolated image follow-up: MinGW texture imports open Unicode PNG
 paths natively before using the existing decoder. CLI add/export and GUI
 replace/export verify exact red/blue pixels and complete Restore at both sizes;
