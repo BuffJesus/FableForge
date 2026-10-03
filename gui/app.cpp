@@ -658,7 +658,16 @@ bool App::restoreAllBackups() {
         if (findEntry(selected)) selectMap(selected);
     }
     restoreError_ = err;
-    return err.empty();
+    if (restoreError_.empty()) {
+        for (const auto& e : backups::scan(installPath_)) {
+            if (e.kind != backups::Kind::Staged || !e.differs) continue;
+            if (!restoreError_.empty()) restoreError_ += "\n";
+            restoreError_ += "Stage backup needs its deployment manifest: " +
+                fs::relative(e.backup, installPath_).string() +
+                ". Preserve it and recover the manifest before retrying.";
+        }
+    }
+    return restoreError_.empty();
 }
 
 bool App::settingsEnabled() const {

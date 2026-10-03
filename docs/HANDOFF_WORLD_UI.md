@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 staged restore and orphan-backup status
+
+Baseline build/setup-stage-restore-ps2k5wcy confirms a .forgebak without its
+manifest is left unchanged and logged, but Setup did not report a persistent
+incomplete result. After core restore, the GUI now checks for differing staged
+backups that remain and explains that their deployment manifest is needed.
+The action returns an incomplete result while such backups remain; this only
+changes GUI status. Core restore policy, CLI behavior and file writes are unchanged.
+
+Owned Release GUI build passes. build/setup-stage-restore-szdne3qq passes both
+sizes: actual buttons preserve the whole install with the manifest absent,
+show the warning after toast dismissal, then restore exactly in the same process
+after the fixture returns its preserved manifest. Compact orphan screenshot
+reviewed. build/setup-stage-restore-uq2asiur passes both sizes with an editor
+original taken on top of staging: the original rebases to the older staged
+baseline, the open map reloads from height 7 to 4, and stage recovery files are
+consumed as intended. Partial locked restore/retry remains passing in
+build/setup-restore-failure-lruk5mm3. Both stage variants are wired into check_all.
+No new whole gate or archive is claimed; earlier frozen boundaries still apply.
+
 ## 2026-10-03 ambiguous restore records through Setup
 
 No product change was needed. build/setup-restore-ambiguity-hwm01za1 passes

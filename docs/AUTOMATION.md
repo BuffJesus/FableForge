@@ -1,5 +1,11 @@
 # GUI automation (`--auto <script>`)
 
+`tools/test_setup_stage_restore_ui.py` stages an owned LEV and takes an editor
+original after staging, then checks Setup rebases and restores the older baseline.
+`--orphan` preserves the manifest outside the install: Restore leaves all files
+unchanged and shows a persistent warning. The fixture returns that exact manifest
+and retries in the same process. Both variants cover normal and compact panels.
+
 `tools/test_setup_restore_ambiguity_ui.py` clicks Setup Restore with either
 different legacy/current originals or a creation marker plus an original.
 Both sizes verify a visible refusal and unchanged whole-install inventory,
