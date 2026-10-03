@@ -8,8 +8,9 @@ independent merged payload bytes and source hashes. Value targets:
 
 `tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
 winner matches independently built output for an absent saved contributor.
-It checks preservation, choice-name search, real dropdown clearing and baseline
-alias handling. `mods_unavailable_choices` counts reported choices absent from
+It checks preservation, choice-name search, real dropdown clearing, an ordinary
+contributor named base and an absent none choice. Definition baseline aliases
+are checked in the field-details fixture. `mods_unavailable_choices` counts reported choices absent from
 their contributors; `mod_unavailable_choice_<row>` reveals the explanation.
 
 `mods_wins_<mod index>` / `mods_losses_<mod index>` report current contested

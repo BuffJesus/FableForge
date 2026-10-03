@@ -1015,7 +1015,9 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   A saved contributor absent from the current conflict gets a **!** marker and
   an explanation; the displayed winner follows load order. Its saved choice
   remains available for review or clearing through the winner menu. Search
-  includes saved choice names. Baseline aliases display as vanilla. This checks
+  includes saved choice names. Definition baseline aliases display as vanilla;
+  other families reserve only vanilla, so a contributor named base remains a
+  normal source choice. This checks
   the last report's contributors, not source content fingerprints.
   A deploy also
   leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):

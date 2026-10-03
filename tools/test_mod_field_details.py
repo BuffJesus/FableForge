@@ -138,6 +138,10 @@ def main():
         for index in range(3): lines += [f'assert_state mods_first_field_value_{index} {index+1}']
         for index in range(3):
             lines += [f'assert_state mods_wins_{index} 0',f'assert_state mods_losses_{index} 2']
+        for alias in ('base','none'):
+            lines += [f'mod_pick * {alias}','frames 2','assert_state mods_first_winner vanilla',
+                'assert_state mods_unavailable_choices 0']
+            for index in range(3): lines += [f'assert_state mods_first_field_value_{index} {index+1}']
         lines += ['mod_pick * -','frames 2']
         for index,winner in enumerate(('PackB','PackC','PackC')):
             lines += [f'assert_state mods_first_field_winner_{index} {winner}']
@@ -154,7 +158,8 @@ def main():
         print(size,'field rows, actual changers, vanilla scope and clearing picks: PASS',flush=True)
     picks=root/'forge_mods_picks.txt'
     for choice,expected in [('',(11,21,31,5)),('PackA',(10,20,31,5)),
-                            ('PackD',(11,21,31,5)),('vanilla',(1,2,3,5))]:
+                            ('PackD',(11,21,31,5)),('base',(1,2,3,5)),
+                            ('none',(1,2,3,5)),('-',(1,2,3,5)),('vanilla',(1,2,3,5))]:
         if choice: picks.write_text(RECORD+'\t'+choice+'\n',encoding='utf-8')
         elif picks.exists(): picks.unlink()
         output=work/('merged-'+(choice or 'order'))

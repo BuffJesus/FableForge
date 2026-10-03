@@ -344,12 +344,19 @@ bool App::modPick(const std::string& key, const std::string& winner) {
     return true;
 }
 
+static bool isModBaselineChoice(const App::ModConflict& conflict, const std::string& winner) {
+    // Only the definitions composer reserves these aliases. In other families
+    // a mod may actually be named "base" or "none".
+    return winner == "vanilla" || (conflict.kind == "record" &&
+        (winner == "base" || winner == "none" || winner == "-"));
+}
+
 std::string App::modConflictWinner(const ModConflict& conflict) const {
     if (!conflict.pickable) return conflict.winner;
     const auto pick = modPicks_.find(conflict.key);
     if (pick != modPicks_.end()) {
         const auto& winner = pick->second;
-        if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-") return "vanilla";
+        if (isModBaselineChoice(conflict, winner)) return "vanilla";
         if (std::find(conflict.mods.begin(), conflict.mods.end(), winner) != conflict.mods.end()) return winner;
     }
     // The report's winner may include a choice that has since been cleared.
@@ -363,7 +370,7 @@ bool App::modChoiceUnavailable(const ModConflict& conflict) const {
     const auto pick = modPicks_.find(conflict.key);
     if (pick == modPicks_.end()) return false;
     const auto& winner = pick->second;
-    if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-") return false;
+    if (isModBaselineChoice(conflict, winner)) return false;
     return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
 }
 

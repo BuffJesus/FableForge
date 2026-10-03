@@ -29,7 +29,7 @@ def main():
         (work/(label+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
         assert result.returncode == 0, result.stdout+result.stderr
         return result.stdout
-    for label in ('PackA', 'PackB'):
+    for label in ('PackA', 'base', 'PackB'):
         pack = work/label
         (pack/'data/Misc').mkdir(parents=True)
         (pack/'forge_pack.json').write_text(json.dumps({'version': 1, 'name': label,
@@ -55,8 +55,9 @@ def main():
             'wait_mods', 'frames 2', 'assert_state mods_conflicts 1',
             'assert_state mods_picks 1', 'assert_state mods_first_winner PackB',
             'assert_state mods_unavailable_choices 1', 'assert_state mods_wins_0 0',
-            'assert_state mods_losses_0 1', 'assert_state mods_wins_1 1',
-            'assert_state mods_losses_1 0', 'reveal mod_unavailable_choice_0', 'frames 3',
+            'assert_state mods_losses_0 1', 'assert_state mods_wins_1 0',
+            'assert_state mods_losses_1 1', 'assert_state mods_wins_2 1',
+            'assert_state mods_losses_2 0', 'reveal mod_unavailable_choice_0', 'frames 3',
             'reveal input_mod_conflict_search', 'frames 3', 'click input_mod_conflict_search',
             'input_text removedpack', 'frames 3', 'assert_state mods_conflicts_matching 1',
             'reveal mod_unavailable_choice_0', 'frames 3', 'mouse_move viewport', 'frames 3',
@@ -90,8 +91,11 @@ def main():
         'reveal mod_winner_0','frames 3','click mod_winner_0','frames 2',
         'click mod_load_order_0','frames 2','assert_state mods_picks 0',
         'assert_state mods_unavailable_choices 0','assert_state mods_first_winner PackB',
-        'mod_pick * base','frames 2','assert_state mods_first_winner vanilla',
-        'assert_state mods_unavailable_choices 0','mod_pick * -','frames 2',
+        'mod_pick * base','frames 2','assert_state mods_first_winner base',
+        'assert_state mods_wins_1 1','assert_state mods_losses_1 0',
+        'assert_state mods_unavailable_choices 0','mod_pick * none','frames 2',
+        'assert_state mods_first_winner PackB','assert_state mods_unavailable_choices 1',
+        'mod_pick * -','frames 2',
         'assert_state mods_picks 0','assert_state mods_first_winner PackB','quit'])+'\n',encoding='utf-8')
     result = subprocess.run([str(repo/'build/FableForge.exe'),'--install',str(args.install),
         '--size','800x600','--auto',str(recovery)],cwd=repo,capture_output=True,text=True,
@@ -100,9 +104,19 @@ def main():
     log = Path(str(recovery)+'.log').read_text(encoding='utf-8')
     assert result.returncode == 0 and 'RESULT PASS' in log,log[-4000:]
     assert not picks.exists()
+    picks.write_bytes(b'file:data/misc/shared.txt\tbase\n')
+    report = json.loads(cli('base-source-report','mods','conflicts',root,'--json'))
+    assert report['files']['contested'][0]['winner'] == 'base'
+    base_output = work/'base-source-built'
+    cli('base-source-build','mods','build',root,base_output,'--json')
+    assert (base_output/'data/Misc/shared.txt').read_bytes() == b'base'
+    picks.write_bytes(b'file:data/misc/shared.txt\tnone\n')
+    report = json.loads(cli('unavailable-alias-report','mods','conflicts',root,'--json'))
+    assert report['files']['contested'][0]['winner'] == 'PackB'
+    picks.unlink()
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest
         for p,digest in baseline.items() if p != picks)
-    print('Actual dropdown clear, baseline alias and source preservation: PASS',flush=True)
+    print('Actual dropdown clear, ordinary base source, unavailable none and preserved sources: PASS',flush=True)
 
 
 if __name__ == '__main__':

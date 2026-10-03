@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 composer-specific baseline aliases
+
+Writer audit found the unavailable-choice increment at 416d23c normalized
+base/none/- to vanilla for every conflict family. That was too broad: definitions
+reserve those aliases, whereas TNG/text/FSE/file composers recognize vanilla
+and otherwise look for an actual contributor. The original baseline-alias GUI
+check lacked an independent file-composer assertion and therefore missed this.
+
+Display/availability now use conflict-family-specific baseline semantics. A
+whole-file contributor actually named base remains an ordinary source; absent
+none falls back and is flagged for review. Definition aliases still display
+vanilla and preserve the field-merge scope. Composer/persistence remain unchanged.
+Owning Release GUI build passes. Final unavailable-choice fixture at
+build/mod-unavailable-choice-3q0_4ck0 verifies a real base contributor's displayed
+winner/badges and independently built bytes, absent none's CLI fallback, plus
+normal/compact view preservation, search/wrapping and dropdown clearing. The
+extended field fixture at build/mod-field-details-n4sw2tua checks base/none GUI
+values and independent merged banks for base/none/- as well as vanilla; all
+three contested fields restore while the independent fourth survives. Source
+bank hashes remain unchanged. No new whole-gate/core run is claimed.
+
 ## 2026-10-03 long field comparison validation
 
 Added individual baseline/result/contributor automation anchors so values larger
