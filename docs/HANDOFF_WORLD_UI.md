@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 controller GUI asset identity audit (read only)
+
+The supplied Discord account blames GUI linking as well as FMP IDs; the repaired
+14 camera links alone cannot establish the two GUI records' asset dependencies.
+Independent scratch readers checked raw ControllerSupport.fmp PLAYER_GUI_PC and
+PLAYER_GUI_DEFAULT payloads against retail/Aeon asset identity tables. Existing
+legacy def.xml annotations identify MainTextureID/EffectID fields; Forge's
+schema supplies runtime tags and layouts. No legacy editor code was executed or
+copied into the product. Exact unique tags, flat-vector ends, and all six nested
+AbilityButtons member tags/strides were checked before interpreting values.
+
+Results under choice-review build/aeon-link-evidence-20261003:
+- gui-texture-identity-audit.json: PC 260 and default 251 nonzero texture
+  references, all 511 resolving to the same named GBANK_MAIN_PC identities in
+  retail and Aeon. No ambiguous tags or unexamined annotated nested fields.
+- gui-effect-identity-audit.json: PC 22 and default 21 nonzero effect references,
+  all 43 resolving to named effects. This archive supplies no replacement for
+  data/Misc/pc/effects.big, so the retail effects table remains the applicable
+  table in the scratch composition. The evidence records its SHA256.
+
+The inert readers gui_asset_audit.py and gui_effect_audit.py remain scratch
+evidence, not portable regression tests: they require a local annotation XML
+and actual corpus paths. These results cover annotated texture/effect IDs in
+these two exact FMP GUI payloads, not their entire runtime dependency graph,
+rendering behavior, game launch, controller lock-on, Android or Winlator. No
+asset repair was indicated by these identity checks; no product code, corpus,
+live install or FableTLC checkout changed. The frozen primary b1eb3b9 full source
+gate is still running and has not yet supplied a complete acceptance result.
+
 ## 2026-10-03 external named-target regression (test only)
 
 Choice review moved to feat/forge-fmp-external-target-review-20261003 based on
