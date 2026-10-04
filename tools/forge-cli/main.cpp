@@ -260,7 +260,8 @@ int usage() {
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
         "  forge assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n"
         "  forge fmp list <file.fmp> [--json]\n"
-        "  forge fmp links <file.fmp> [--graphics] [--json]   (named game or graphics link metadata)\n"
+        "  forge fmp links <file.fmp> [--graphics] [--groups] [--json]   (named game or graphics link metadata; --groups keeps multi-target lists)\n"
+        "  forge fmp decode <file.fmp> <record> [--json]   (decode a raw GameBINEntries record)\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
@@ -4817,7 +4818,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               json* reportOut = nullptr,                                     // `mods merge --json`: the report goes here, nothing is printed
               const std::map<std::string, std::string>* picksMap = nullptr,  // picks already parsed (the mods family), else picksPath
               const std::vector<std::string>* rootLabels = nullptr,         // mod labels parallel to modRoots, else the folder names
-              const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr) {
+              const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr,
+              const std::map<std::string, uint32_t>* meshIds = nullptr) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4903,7 +4905,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         for (auto& [name, versions] : changes) for (auto& version : versions) {
             if (version.links.empty()) continue;
             forge::bin::Entry entry{version.definition, name, 0, version.data};
-            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links, true);
+            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links, true, meshIds);
         }
     }
     forge::fmplinks::RecordLinks selectedLinks;
@@ -5050,7 +5052,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     for (const auto& [name, links] : selectedLinks) {
         const auto* entry = merged.find(name);
         if (!entry) throw std::runtime_error("FMP links: selected owner is absent: " + name);
-        auto data = forge::fmplinks::relink(*entry, merged, *schema, links);
+        auto data = forge::fmplinks::relink(*entry, merged, *schema, links, false, meshIds);
         merged.setEntryData(size_t(entry - merged.entries().data()), std::move(data));
     }
 
@@ -8246,6 +8248,15 @@ void validateFmpGraphicLinks(const forge::big::File& package,
     }
 }
 
+std::map<std::string, uint32_t> meshIdentityMap(const std::filesystem::path& file) {
+    std::map<std::string, uint32_t> result;
+    if (!std::filesystem::exists(file)) return result;
+    const auto graphics = forge::big::File::open(file);
+    if (const auto* bank = graphics.findBank("MBANK_ALLMESHES"))
+        for (const auto& entry : bank->entries) result[entry.name] = entry.id;
+    return result;
+}
+
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
 // diff/merge pipeline consumes: each .fmp entry (name, definition, raw payload)
@@ -8347,6 +8358,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         }
     }
     std::optional<forge::defschema::Schema> linkSchema;
+    std::optional<std::map<std::string, uint32_t>> meshIds;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
@@ -8357,8 +8369,16 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         const auto* entry = game.find(name);
         if (!entry) throw std::runtime_error("FMP links: metadata owner is absent: " + name);
         const auto index = size_t(entry - game.entries().data());
+        if (!meshIds && std::any_of(recordLinks.begin(), recordLinks.end(),
+                [](const auto& link) { return link.path.ends_with(".Model ID"); })) {
+            meshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
+            if (const auto* packageMeshes = pkg.findBank("graphics"))
+                for (const auto& mesh : packageMeshes->entries)
+                    (*meshIds)[mesh.name] = mesh.id;
+        }
         auto data = forge::fmplinks::relink(*entry, game, *linkSchema, recordLinks,
-                                          symbolicLinks != nullptr);
+                                          symbolicLinks != nullptr,
+                                          meshIds ? &*meshIds : nullptr);
         game.setEntryData(index, std::move(data));
         linked += recordLinks.size();
     }
@@ -8972,8 +8992,36 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (fs::is_directory(contentRoots[i])) requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
+    std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
+    const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
+        for (const auto& [name, links] : records)
+            for (const auto& link : links)
+                if (link.path.ends_with(".Model ID")) return true;
+        return false;
+    });
+    if (hasNamedMeshLinks) {
+        const fs::path graphicsRel = fs::path("data") / "graphics" / "graphics.big";
+        plannedMeshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
+        for (const auto& source : sources) {
+            if (lowered(fs::path(source).extension().string()) == ".fmp") {
+                const auto pkg = openFmpPackage(source);
+                if (const auto* bank = pkg.findBank("graphics"))
+                    for (const auto& entry : bank->entries)
+                        (*plannedMeshIds)[entry.name] = entry.id;
+                continue;
+            }
+            for (const auto& dataName : {"data", "Data"}) {
+                const fs::path bank = fs::path(source) / dataName / "graphics" / "graphics.big";
+                if (fs::exists(bank)) {
+                    *plannedMeshIds = meshIdentityMap(bank);
+                    break;
+                }
+            }
+        }
+    }
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
-                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks);
+                             schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
+                             plannedMeshIds ? &*plannedMeshIds : nullptr);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 
@@ -10060,8 +10108,31 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     return 0;
 }
 
-int fmpLinks(const std::string& path, bool jsonOutput, bool graphics = false) {
+int fmpLinks(const std::string& path, bool jsonOutput, bool graphics = false,
+             bool groups = false) {
     const auto package = openFmpPackage(path);
+    if (groups) {
+        json records = json::array();
+        const std::vector<std::string> banks = graphics ?
+            std::vector<std::string>{"graphicsLinkMetaData"} :
+            std::vector<std::string>{"GameBINLinkMetaData", "ObjectLinks"};
+        for (const auto& bankName : banks) {
+            const auto* bank = package.findBank(bankName);
+            if (!bank) continue;
+            for (const auto& entry : bank->entries) {
+                json items = json::array();
+                for (const auto& group : forge::fmplinks::readMetadataGroups(package.entryData(entry))) {
+                    items.push_back({{"path", group.path}, {"targets", group.targets}});
+                    if (!jsonOutput)
+                        std::printf("%s: %s -> %s\n", entry.name.c_str(), group.path.c_str(),
+                                    json(group.targets).dump().c_str());
+                }
+                records.push_back({{"record", entry.name}, {"bank", bankName}, {"groups", items}});
+            }
+        }
+        if (jsonOutput) std::puts(json{{"file", path}, {"records", records}}.dump(2).c_str());
+        return 0;
+    }
     forge::fmplinks::RecordLinks links;
     if (graphics) {
         if (const auto* bank = package.findBank("graphicsLinkMetaData"))
@@ -10085,6 +10156,40 @@ int fmpLinks(const std::string& path, bool jsonOutput, bool graphics = false) {
     }
     if (jsonOutput) std::puts(json{{"file", path}, {"bank", graphics ? "graphicsLinkMetaData" : "GameBINLinkMetaData"},
                                     {"records", records}}.dump(2).c_str());
+    return 0;
+}
+
+int fmpDecode(const std::string& path, const std::string& which, bool jsonOutput) {
+    const auto package = openFmpPackage(path);
+    const auto* bank = package.findBank("GameBINEntries");
+    if (!bank) throw std::runtime_error("FMP decode: GameBINEntries is absent");
+    const auto source = std::find_if(bank->entries.begin(), bank->entries.end(),
+        [&](const forge::big::Entry& e) { return e.name == which; });
+    if (source == bank->entries.end())
+        throw std::runtime_error("FMP decode: record is absent: " + which);
+    const auto data = package.entryData(*source);
+    const auto schema = forge::defschema::Schema::load(defaultDefSchemaPath());
+    const auto* def = forge::defdecode::resolveType(schema, source->definition, data);
+    if (!def) throw std::runtime_error("FMP decode: no clean schema for " + source->definition);
+    const auto decoded = forge::defdecode::decode(data, *def);
+    json fields = json::array();
+    for (const auto& field : decoded.fields) {
+        std::string bytes;
+        static constexpr char digits[] = "0123456789abcdef";
+        for (const uint8_t byte : field.value) {
+            bytes += digits[byte >> 4]; bytes += digits[byte & 15];
+        }
+        fields.push_back({{"name", field.name}, {"type", field.type},
+                          {"value", forge::defdecode::formatValue(field)},
+                          {"raw_hex", bytes}});
+    }
+    const json report{{"record", source->name}, {"definition", source->definition},
+                      {"prefix_len", decoded.prefixLen}, {"clean", decoded.clean()},
+                      {"fields", fields}};
+    if (jsonOutput) std::puts(report.dump(2).c_str());
+    else for (const auto& field : fields)
+        std::printf("%s (%s): %s\n", field["name"].get<std::string>().c_str(),
+                    field["type"].get<std::string>().c_str(), field["value"].get<std::string>().c_str());
     return 0;
 }
 
@@ -11385,8 +11490,11 @@ int main(int argc, char** argv) {
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "links") {
             const bool asJson = std::find(args.begin() + 3, args.end(), "--json") != args.end();
             const bool graphics = std::find(args.begin() + 3, args.end(), "--graphics") != args.end();
-            return fmpLinks(args[2], asJson, graphics);
+            const bool groups = std::find(args.begin() + 3, args.end(), "--groups") != args.end();
+            return fmpLinks(args[2], asJson, graphics, groups);
         }
+        if (args.size() >= 4 && args[0] == "fmp" && args[1] == "decode")
+            return fmpDecode(args[2], args[3], std::find(args.begin() + 4, args.end(), "--json") != args.end());
         if (args.size() >= 5 && args[0] == "fmp" && args[1] == "apply") {
             return fmpApply(args[2], args[3], args[4]);
         }

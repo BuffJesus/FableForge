@@ -292,3 +292,21 @@ untouched output on refusal and unchanged source hashes. The scratch Mods GUI
 check in `tools/test_fmp_graphics_picks_ui.py` shows the named mesh conflict and
 persists its winner. New `OBJECT_*` definitions still need a compatible mesh
 and other referenced assets; in-game rendering remains unverified.
+
+Named game link inspection now preserves complete target lists through
+`forge-tools fmp links <package> --groups --json`. The read-only corpus audit
+`tools/audit_named_fmp_links.py` decoded metadata from all 897 packages carrying
+game or object links. It counted 345,785 single-target groups and 17,007 groups
+with two to six targets across 219 packages. The writer still refuses these
+multi-target fields until each field's byte layout is established; for example,
+an augmentation effect list and a flourish effect list have distinct layouts.
+The audit is `build/named-fmp-link-audit.json`.
+
+The `CEngineGraphic.Model ID` named link now resolves against the planned
+`MBANK_ALLMESHES` entries when applying or merging FMPs. It changes only the
+four-byte model id inside the field. `tools/test_fmp_named_mesh_refs.py` merged
+the archived `Huge Mushroom.fmp` into a scratch install and independently
+checked all seven `OBJECT_*` fields against the seven exact mesh entries in the
+output BIG. No new missing assets were reported, and the source archive and
+install files were unchanged. This establishes offline object-to-mesh linkage;
+the objects have not been placed in a map or checked in the viewport or game.

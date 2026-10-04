@@ -28,6 +28,19 @@ Bytes metadata() {
     b.push_back(16); word(b, 6); word(b, 4); string(b, 7, "TARGET"); b.insert(b.end(), {13, 3, 11});
     return b;
 }
+Bytes metadataTwo() {
+    Bytes b{0}; word(b, 1); word(b, UINT32_MAX); word(b, 1); word(b, 0);
+    b.push_back(4); word(b, 1); text(b, "System.Collections.Specialized.NameValueCollection");
+    word(b, 3); text(b, "Count"); text(b, "Keys"); text(b, "Values");
+    b.insert(b.end(), {0, 6, 5, 8}); word(b, 1); ref(b, 2); ref(b, 3);
+    b.push_back(17); word(b, 2); word(b, 1); string(b, 4, "123._");
+    b.push_back(16); word(b, 3); word(b, 1); ref(b, 5);
+    b.push_back(4); word(b, 5); text(b, "System.Collections.ArrayList"); word(b, 3);
+    text(b, "_items"); text(b, "_size"); text(b, "_version"); b.insert(b.end(), {5, 0, 0, 8, 8});
+    ref(b, 6); word(b, 2); word(b, 0);
+    b.push_back(16); word(b, 6); word(b, 2); string(b, 7, "FIRST"); string(b, 8, "SECOND"); b.push_back(11);
+    return b;
+}
 }
 
 int main() {
@@ -39,6 +52,12 @@ int main() {
     const auto valid = metadata();
     const auto links = forge::fmplinks::readMetadata(valid);
     check(links.size() == 1 && links[0].path == "123._" && links[0].target == "TARGET", "forward refs, arrays and null padding");
+    const auto groups = forge::fmplinks::readMetadataGroups(metadataTwo());
+    check(groups.size() == 1 && groups[0].path == "123._" &&
+          groups[0].targets == std::vector<std::string>({"FIRST", "SECOND"}),
+          "two-target metadata is available for inspection");
+    rejects([&] { forge::fmplinks::readMetadata(metadataTwo()); },
+            "writer keeps unsupported two-target references guarded");
     for (size_t size = 0; size < valid.size(); ++size)
         rejects([&] { forge::fmplinks::readMetadata(std::span(valid).first(size)); }, "every truncated prefix refuses");
     auto bad = valid; bad.push_back(0);
@@ -102,6 +121,30 @@ int main() {
     broken = owner; broken.data[17] = 100;
     references = {{vector, "B"}};
     rejects([&] { forge::fmplinks::relink(broken, targets, schema, references); }, "reference vector count must fit field bytes");
+
+    const auto objectSchema = forge::defschema::Schema::loadText(
+        R"({"OBJECT":{"prefix_len":3,"fields":[{"name":"Graphic","type":"CEngineGraphic"}]}})");
+    forge::defdecode::Decoded objectDecoded;
+    objectDecoded.prefix = {1, 0, 0}; objectDecoded.prefixLen = 3; objectDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField graphic;
+    graphic.name = "Graphic"; graphic.type = "CEngineGraphic";
+    graphic.tag = forge::defdecode::fieldTag(graphic.name); graphic.tagOk = true;
+    word(graphic.value, 5); word(graphic.value, 77);
+    graphic.value.insert(graphic.value.end(), {0, 0, 0, 0, 0, 0, 128, 63, 0});
+    objectDecoded.fields = {graphic};
+    forge::bin::Entry object{"OBJECT", "OBJECT_PROBE", 0, forge::defdecode::encode(objectDecoded)};
+    const auto originalObject = object.data;
+    const std::map<std::string, uint32_t> meshIds{{"MESH_PROBE", 8133}};
+    references = {{"3361958702.Model ID", "MESH_PROBE"}};
+    const auto linkedObject = forge::fmplinks::relink(object, targets, objectSchema,
+                                                     references, false, &meshIds);
+    auto expectedObject = originalObject;
+    expectedObject[11] = 0xc5; expectedObject[12] = 0x1f;
+    expectedObject[13] = expectedObject[14] = 0;
+    check(linkedObject == expectedObject && object.data == originalObject,
+          "CEngineGraphic Model ID changes only its four-byte mesh reference");
+    rejects([&] { forge::fmplinks::relink(object, targets, objectSchema, references); },
+            "mesh link without an identity map refuses");
 
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);

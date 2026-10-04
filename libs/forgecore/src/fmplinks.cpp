@@ -152,7 +152,7 @@ public:
     explicit Reader(std::span<const uint8_t> bytes): bytes_(bytes) {
         if (bytes.size() > 16 * 1024 * 1024) fail("metadata too large");
     }
-    std::vector<Link> links() {
+    std::vector<LinkGroup> groups() {
         if (byte() != 0) fail("missing NRBF stream header");
         auto root = integer(); integer();
         if (integer() != 1 || integer() != 0) fail("unsupported NRBF version");
@@ -166,21 +166,29 @@ public:
         if (!keys.is_array() || !values.is_array() || keys.size() != values.size() ||
             !m.at("Count").is_number_integer() || m.at("Count").get<int64_t>() != int64_t(keys.size()))
             fail("invalid NameValueCollection dimensions");
-        std::set<std::string> paths; std::vector<Link> result;
+        std::set<std::string> paths; std::vector<LinkGroup> result;
         for (size_t i = 0; i < keys.size(); ++i) {
             const auto& key = resolve(keys[i]); const auto& array = resolve(values[i]);
             if (!key.is_string() || !array.is_object() || array.value("class", "") != "System.Collections.ArrayList")
                 fail("invalid link pair");
             const auto& list = array.at("members"); const auto& items = resolve(list.at("_items"));
-            if (!items.is_array() || items.empty() || list.at("_size") != 1)
-                fail("unsupported target list for " + key.get<std::string>() + "; expected one target");
-            const auto& target = resolve(items[0]);
-            if (!target.is_string()) fail("link target is not a string");
-            Link link{key.get<std::string>(), target.get<std::string>()};
-            if (link.path.empty() || link.target.empty() || link.path.find('\0') != std::string::npos ||
-                link.target.find('\0') != std::string::npos || !paths.insert(link.path).second)
-                fail("empty, duplicate or invalid link");
-            result.push_back(std::move(link));
+            if (!items.is_array() || !list.at("_size").is_number_integer())
+                fail("invalid target list for " + key.get<std::string>());
+            const auto count = list.at("_size").get<int64_t>();
+            if (count < 0 || count > 4096 || size_t(count) > items.size())
+                fail("invalid target count for " + key.get<std::string>());
+            LinkGroup group{key.get<std::string>(), {}};
+            if (group.path.empty() || group.path.find('\0') != std::string::npos ||
+                !paths.insert(group.path).second)
+                fail("empty, duplicate or invalid link path");
+            for (size_t j = 0; j < size_t(count); ++j) {
+                const auto& target = resolve(items[j]);
+                if (!target.is_string() || target.get<std::string>().empty() ||
+                    target.get<std::string>().find('\0') != std::string::npos)
+                    fail("empty or invalid link target");
+                group.targets.push_back(target.get<std::string>());
+            }
+            result.push_back(std::move(group));
         }
         return result;
     }
@@ -197,7 +205,23 @@ uint32_t read32(std::span<const uint8_t> bytes, size_t offset) {
 } // namespace
 
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
-    try { return Reader(bytes).links(); }
+    std::vector<Link> result;
+    for (const auto& group : readMetadataGroups(bytes)) {
+        if (group.targets.size() != 1) {
+            std::string detail;
+            for (const auto& target : group.targets) {
+                if (!detail.empty()) detail += ", ";
+                detail += target.substr(0, 120);
+            }
+            fail("unsupported target list for " + group.path + "; expected one target, got size " +
+                 std::to_string(group.targets.size()) + ": " + detail);
+        }
+        result.push_back({group.path, group.targets.front()});
+    }
+    return result;
+}
+std::vector<LinkGroup> readMetadataGroups(std::span<const uint8_t> bytes) {
+    try { return Reader(bytes).groups(); }
     catch (const nlohmann::json::exception& e) { fail(std::string("invalid metadata shape: ") + e.what()); }
 }
 RecordLinks readGameLinks(const big::File& package) {
@@ -270,6 +294,13 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     Destination::NameOffset : Destination::GameEntry;
                 return {offset + 4 + index * 4, i + 1, destination};
             }
+            // CEngineGraphic is [u32 kind][u32 modelId][opaque tail]. The
+            // same +4 modelId slot is used by Forge's uidef importer and the
+            // retail OBJECT/CREATURE records. Only the named Model ID link
+            // may alter it; the kind and tail remain byte-for-byte intact.
+            if (parts.size() == 2 && parts[1] == "Model ID" &&
+                field.type == "CEngineGraphic" && field.value.size() >= 8)
+                return {offset + 4, i + 1, Destination::MeshEntry};
             // CThingComponentSet: count, 9-byte {CTC name offset, param, flag}
             // records, then an opaque retail tail. The creature schema calls
             // this field '?' but its decoded value has the same record layout.
@@ -297,7 +328,8 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
 
 std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                            const defschema::Schema& schema, std::span<const Link> links,
-                           bool deferMissing) {
+                           bool deferMissing,
+                           const std::map<std::string, uint32_t>* meshIds) {
     auto data = entry.data; std::set<size_t> offsets;
     for (const auto& link : links) {
         const auto location = locate(entry, schema, link);
@@ -306,6 +338,11 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
         if (location.destination == Destination::GameEntry) {
             const auto* found = targets.find(link.target);
             if (found) target = uint32_t(found - targets.entries().data());
+        } else if (location.destination == Destination::MeshEntry) {
+            if (meshIds) {
+                const auto found = meshIds->find(link.target);
+                if (found != meshIds->end()) target = found->second;
+            }
         } else {
             const auto name = targets.originalNameOffset(link.target);
             if (name) target = location.destination == Destination::NameCrc ? defdecode::fieldTag(link.target) : *name;
