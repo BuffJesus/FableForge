@@ -26,8 +26,8 @@ untested. The transfer guide now names the deployed game folder and
 merge preserves all product/test bytes from the 46-workflow-tested review branch
 and passes an all-target Release build, 38 core cases and the focused
 installer/refusal gates. The local development ZIP and illustrated guide are
-validated but unpublished. Direct `mods merge` late-read output atomicity and
-live PC/Retroid gameplay remain open. See HANDOFF_WORLD_UI.
+validated but unpublished. At that checkpoint, direct `mods merge` late-read
+output atomicity and live PC/Retroid gameplay remained open. See HANDOFF_WORLD_UI.
 
 2026-10-03 primary scalar/Aeon checkpoint: review 9bc1f1d is integrated through
 801e733; all Release targets build, 38 core tests and rebuilt-primary named-link /
@@ -47,7 +47,7 @@ four new captures from the passing run. All Release targets, 38 core tests,
 14 install, 29 bank and 16 FMP cases pass. An extracted local development ZIP
 passes all 46 workflows with zero skips, 103 identities and 117 links. The
 old rc.3 package is unchanged; game/Retroid behavior is untested. Direct
-`mods merge` late-read failure can leave prepared files in its requested output;
+At that checkpoint, `mods merge` late-read failure could leave prepared files in its requested output;
 managed Deploy prepares in scratch. Exact evidence, hashes and continuation are
 in HANDOFF_WORLD_UI.
 
@@ -97,13 +97,18 @@ The bounded `HERO_ABILITY` and `HERO_STATS` text-reference paths now resolve
 existing `text.big` names, with hero HUD icons resolved through `textures.big`.
 The archived `EXP And Hero Mod.fmp` applies directly and through the one-mod
 composer with byte-identical definition banks and 217 resolved named links.
-The current full small-bank scan accepts 375/577, 15 more than the prior
-360/577 scan; 183 link refusals remain. New FMP Text IDs now resolve after
+The current full small-bank scan accepts 381/577, six more than the prior
+375/577 scan after bounded `OBJECT_FAMILY` reward-list links; 177 link
+refusals remain. New FMP Text IDs now resolve after
 text-only sources, load order and picks are composed; cross-language ID
 validation and a 13-case synthetic archived-hero regression pass offline.
 Runtime behavior still requires separate validation. The proposed successor
 package shape, including complete-data baseline profiles and EgoCore DLL
 components, is in `docs/modding/PACKAGE_V2_PROPOSAL.md`.
+The direct non-staging `mods merge` path now composes in scratch before copying
+to its requested output, so late source-read failures leave existing output
+alone. The final copy is not a transactional directory swap and can still
+partially fail on destination I/O errors.
 
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover

@@ -360,6 +360,22 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("special effects reference index out of range");
                 return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
             }
+            // OBJECT_FAMILY reward entries are a counted list of eight-byte
+            // {game.bin object index, float weight} pairs. The link names the
+            // first word; preserve the weight and every other entry byte.
+            if (entry.definition == "OBJECT_FAMILY" &&
+                field.name == "Objects" && field.type == "Vector_VCObjectFamilyEntry__" &&
+                parts.size() == 4 && parts[1] == "Reward Object List" &&
+                parts[3] == "RewardObjectID") {
+                if (field.value.size() < 4) fail("invalid reward object list");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 8 ||
+                    field.value.size() != 4 + count * 8)
+                    fail("unsupported reward object list layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("reward object index out of range");
+                return {offset + 4 + index * 8, i + 1, Destination::GameEntry};
+            }
             // The archived hero sound map's "Default Fire Effect" is the
             // name offset in the second word of a criteria pair. The first
             // word is a criterion hash; accept only the verified no-single

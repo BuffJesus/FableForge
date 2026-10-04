@@ -470,3 +470,17 @@ its named texture list. Undeploy restores the original banks byte for byte.
 The editor shows skinned LOD0 in bind pose; animation and gameplay are still
 unverified. Other creature layouts and texture/mesh winner picks need separate
 coverage.
+
+2026-10-04 reward-object follow-up: `OBJECT_FAMILY.Objects` is a counted array
+of eight-byte object-index/weight pairs. The legacy
+`Reward Object List.{i}.RewardObjectID` link now changes only the first word after validating the count,
+entry width, and index. `tools/test_fmp_reward_object_links.py` checks the
+original 1Mil Guard Drop and Archon's Battle Armor Guard Drop packages in
+direct apply and one-mod composition, both two-mod load orders, a deliberately
+wrong source ID corrected through its symbolic target, and malformed-count
+refusal without output changes. The full eligible small-bank scan at
+`build/named-fmp-coverage-a7tcq2qv/result.json` accepts 381/577, six more than
+the prior 375; 177 link refusals remain and 244 large-bank packages remain
+deferred. Obsidian Edge Rock Troll Spawn passes this field but still lacks its
+`OBJECT_OBSIDIAN_EDGE` target in the selected baseline. These are offline
+composition checks, not runtime or gameplay validation.

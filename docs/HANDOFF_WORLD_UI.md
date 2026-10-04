@@ -8501,3 +8501,26 @@ all 583 emitted loose payloads match extraction, 579 entries are replaced
 and four appended (two new maps). Its own graphics bank resolves every
 direct Graphic model ID in the composed definitions. This is file-level
 evidence; no game install was changed and in-game behavior is untested.
+
+## 2026-10-04 reward-object FMP continuation
+
+`OBJECT_FAMILY.Objects` now resolves the bounded legacy
+`Reward Object List.{i}.RewardObjectID` path through final `game.bin` identities.
+The writer changes only the object ID word of each eight-byte entry, retaining
+its float weight and other payload bytes. The original 1Mil Guard Drop and
+Archon's Battle Armor Guard Drop packages pass direct and composed bank checks;
+both two-mod orders yield the expected last source. A deliberately wrong
+numeric ID is corrected from the named link, and a bad count refuses without
+touching prior output. `tools/test_fmp_reward_object_links.py` passes six
+checks; `ctest -R fableforge_fmplinks_tests` passes. Evidence is in
+`build/fmp-reward-links-6dafr0h0/result.json`.
+
+The full named eligible archive scan at
+`build/named-fmp-coverage-a7tcq2qv/result.json` accepts 381 of 577 attempted
+small-bank FMPs, up from 375; 177 still refuse on links and 244 large-bank
+packages remain deferred. Four additional reward packages newly pass; Obsidian
+Edge Rock Troll Spawn progresses to a missing target error for
+`OBJECT_OBSIDIAN_EDGE`. The source archive and installed `game.bin` and
+`names.bin` hashes are unchanged. No gameplay test was performed. Direct
+non-staging `mods merge` already prepares in scratch; its final copy may still
+partially fail on destination I/O errors.
