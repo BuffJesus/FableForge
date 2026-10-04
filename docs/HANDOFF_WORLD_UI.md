@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 direct mod-build publication rollback
+
+Non-staged `mods merge` and registered `mods build` now publish their completed
+scratch tree through `PendingBanks` on the destination filesystem. A late locked
+target rolls back earlier replacements and removes newly installed files. Existing
+unrelated output files remain. Shared source traversal retains its symlink and
+recovery-path checks. Staged commands and power-loss recovery are outside this
+change's scope.
+
+`tools/test_mod_output_publish.py` first reproduced the partial overwrite on the
+previous CLI in `build/mod-output-publish-y4mi5xi5`. The corrected Release CLI
+passes six merge/build locked-target, directory-collision and unlocked-retry
+cases in `build/mod-output-publish-8ko24_j3`; complete prior file inventories
+and input hashes are checked. The existing 27 bank refusal/carry cases also
+pass in `build/mod-bank-refusal-moez1r4u`. No live install was written.
+
+The historical late-read entry below predates this publication fix.
+
 ## 2026-10-04 direct mod-build late-read preservation
 
 Direct `forge-tools mods merge` and registered `mods build` without `--stage` now

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "modpack.hpp"
+#include "pendingbanks.hpp"
 #include "temporarydirectory.hpp"
 #include "forge/bin.hpp"
 #include "forge/themepalette.hpp"
@@ -8830,8 +8831,8 @@ bool completeDataSource(const std::filesystem::path& source) {
         forge::modorder::hasCompleteData(source);
 }
 
-void copyInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
-                     bool overwrite) {
+template<class Visit>
+void visitInstallFiles(const std::filesystem::path& source, Visit visit) {
     namespace fs = std::filesystem;
     if (!fs::is_directory(source)) return;
     for (const auto& item : fs::recursive_directory_iterator(source)) {
@@ -8841,11 +8842,31 @@ void copyInstallTree(const std::filesystem::path& source, const std::filesystem:
         for (const auto& part : relative)
             if (part == ".." || part.string().ends_with(".forgebak"))
                 throw std::runtime_error("mod installation contains a recovery or unsafe path: " + relative.string());
-        const auto destination = target / relative;
-        if (!overwrite && fs::exists(destination)) continue;
-        fs::create_directories(destination.parent_path());
-        fs::copy_file(item.path(), destination, fs::copy_options::overwrite_existing);
+        visit(item.path(), relative);
     }
+}
+
+void copyInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
+                     bool overwrite) {
+    namespace fs = std::filesystem;
+    visitInstallFiles(source, [&](const fs::path& path, const fs::path& relative) {
+        const auto destination = target / relative;
+        if (!overwrite && fs::exists(destination)) return;
+        fs::create_directories(destination.parent_path());
+        fs::copy_file(path, destination, fs::copy_options::overwrite_existing);
+    });
+}
+
+void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target) {
+    // Prepare on the output filesystem, then use the existing bank transaction
+    // to restore previous files if any later destination cannot be renamed.
+    albion::detail::PendingBanks pending(target, ".forge-mod-output-");
+    visitInstallFiles(source, [&](const auto& path, const auto& relative) {
+        std::filesystem::copy_file(path, pending.prepare(relative));
+    });
+    std::string error;
+    if (!pending.install(false, error))
+        throw std::runtime_error("cannot publish mod build: " + error);
 }
 
 void copyInstallBaseline(const std::filesystem::path& base, const std::filesystem::path& effective) {
@@ -10432,7 +10453,7 @@ int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
                              nullptr, allowCompleteData,
                              jsonOutput ? &report : nullptr);
     if (rc != 0) return rc;
-    copyInstallTree(workspace.path(), outDir, true);
+    publishInstallTree(workspace.path(), outDir);
     if (jsonOutput) std::puts(report.dump(2).c_str());
     return 0;
 }

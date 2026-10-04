@@ -103,7 +103,10 @@ EgoCore file copies, resource/header reads and output writes report I/O failures
 An unreadable existing source bank also fails the build. Direct `mods merge` and
 registered `mods build` prepare composition in an owned temporary directory before
 publishing to the requested output. Composition/read failures preserve existing
-output; a failure during the final copy can still leave partial published files.
+output. Non-staged merge/build publication prepares files on the destination
+filesystem and rolls back earlier replacements if a later replacement fails.
+This handles reported file errors; crash recovery and staged publication have
+separate guarantees.
 Deploy does not stage an incomplete composition. Missing target banks and
 unsupported resource locations still report skipped overrides.
 
