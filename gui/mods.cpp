@@ -368,7 +368,7 @@ bool App::modPick(const std::string& key, const std::string& winner) {
         if (row) break;
     }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
-    if (!row->pickable) { pushLog("mods: reorder packs to choose this lip sync winner", 1); return false; }
+    if (!row->pickable) { pushLog("mods: reorder packs to change this " + row->kind + " winner", 1); return false; }
     if (!setModPick(selectedField ? selectedField->choiceKey : row->key, winner)) return false;
     pushLog("mods: " + row->label + (selectedField ? " / " + selectedField->field : "") + " -> " +
         (winner == "-" ? selectedField ? "record / load order" : "load order" : winner) +
@@ -564,6 +564,11 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                 for (const auto& version:content.at("versions")) row.fileVersions.push_back(read(version));
             }
         }
+    if (rep.contains("maintextures"))
+        for (const auto& c : rep["maintextures"].value("conflicts", json::array()))
+            rows.push_back({"texture", "texture:" + c.value("entry", ""),
+                            c.value("entry", ""), mods(c["mods"]),
+                            c.value("winner", ""), false, false});
     if (rep.contains("lip_sync"))
         for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
             const std::string language=c.value("language",""),bank=c.value("bank","");
@@ -609,6 +614,12 @@ void App::pollModsTool() {
                     " first, then applies the following mods.";
             if (rep.contains("runtime_plan") && !rep["runtime_plan"].empty())
                 modInstallSummary_ += " Controller runtime: DLL only; the FMP supplies its game data.";
+            if (rep.contains("maintextures")) {
+                const auto masked = rep["maintextures"].value("masked", nlohmann::json::array());
+                if (!masked.empty())
+                    modInstallSummary_ += " " + std::to_string(masked.size()) +
+                        " FMP texture pack(s) load before a later whole texture bank; those texture entries are masked.";
+            }
             modNewMissingMeshes_.clear();
             modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
             modAssetStatus_.clear(); modAssetError_.clear();
@@ -626,9 +637,10 @@ void App::pollModsTool() {
             modReportLoaded_ = true;
             const auto& sm = rep.value("summary", nlohmann::json::object());
             char buf[256];
-            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu lip sync",
+            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu texture, %zu lip sync",
                           modConflicts_.size(), size_t(sm.value("sources", 0)), size_t(sm.value("defs_conflicts", 0)), size_t(sm.value("tng_conflicts", 0)),
                           size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)),
+                          size_t(sm.value("maintextures_conflicts", 0)),
                           size_t(sm.value("lip_sync_contested", 0)));
             modReportSummary_ = buf;
             pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
@@ -967,7 +979,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (!c.pickable) {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
                 ImGui::TextUnformatted(fit(c.winner, comboW).c_str());
-                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nReorder packs to change this lip sync winner", c.winner.c_str());
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nReorder packs to change this %s winner", c.winner.c_str(), c.kind.c_str());
                 ImGui::PopID();
                 continue;
             }

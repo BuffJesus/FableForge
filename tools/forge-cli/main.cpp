@@ -8134,6 +8134,44 @@ int bigList(const std::string& path, const std::string& nameFilter, bool jsonOut
     return 0;
 }
 
+// Apply a ChocolateBox maintextures bank to the matching retail sub-bank.
+// Numeric ids are game references: a replacement must retain its id, and a
+// new entry must not take an existing id. Leave the other texture banks alone.
+size_t patchFmpMainTextures(forge::big::File& textures,
+                            const forge::big::File& package) {
+    const auto* changes = package.findBank("maintextures");
+    if (!changes || changes->entries.empty()) return 0;
+    auto* bank = textures.findBank("GBANK_MAIN_PC");
+    if (!bank) throw std::runtime_error("FMP maintextures: GBANK_MAIN_PC is absent");
+    std::set<std::string> seen;
+    for (const auto& source : changes->entries) {
+        if (source.name.empty() || !seen.insert(source.name).second ||
+            source.subHeader.size() != 34 || source.length == 0)
+            throw std::runtime_error("FMP maintextures: invalid or duplicate entry " + source.name);
+        auto byName = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == source.name; });
+        auto byId = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.id == source.id; });
+        if (byName != bank->entries.end()) {
+            if (byName->id != source.id || byName->type != source.type)
+                throw std::runtime_error("FMP maintextures: identity mismatch for " + source.name);
+            byName->data = package.entryData(source);
+            byName->length = uint32_t(byName->data.size());
+            byName->subHeader = source.subHeader;
+        } else {
+            if (byId != bank->entries.end())
+                throw std::runtime_error("FMP maintextures: id " + std::to_string(source.id) +
+                    " already belongs to " + byId->name + "; cannot add " + source.name);
+            forge::big::Entry added = source;
+            added.magic = bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.data = package.entryData(source);
+            added.length = uint32_t(added.data.size());
+            bank->entries.push_back(std::move(added));
+        }
+    }
+    return changes->entries.size();
+}
+
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
 // diff/merge pipeline consumes: each .fmp entry (name, definition, raw payload)
@@ -8143,7 +8181,8 @@ int bigList(const std::string& path, const std::string& nameFilter, bool jsonOut
 int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
              const std::string& outRoot, bool quiet = false,
              const std::string& schemaPath = {},
-             forge::fmplinks::RecordLinks* symbolicLinks = nullptr) {
+             forge::fmplinks::RecordLinks* symbolicLinks = nullptr,
+             bool deferMainTextures = false) {
     namespace fs = std::filesystem;
     const auto pkg = openFmpPackage(fmpPath);
     for (const char* bankName : {"ScriptBINEntries", "FrontEndBINEntries"}) {
@@ -8154,7 +8193,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     }
     const auto links = forge::fmplinks::readGameLinks(pkg);
     const std::set<std::string> supportedBanks{"GameBINEntries", "GameBINLinkMetaData",
-        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD"};
+        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD", "maintextures"};
     for (const auto& bank : pkg.banks()) {
         if (!bank.entries.empty() && !supportedBanks.contains(bank.name))
             throw std::runtime_error("FMP banks: " + bank.name +
@@ -8163,6 +8202,17 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
 
     const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
     const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
+
+    std::optional<forge::big::File> textures;
+    size_t textureEntries = 0;
+    const fs::path textureRel = fs::path("data") / "graphics" / "pc" / "textures.big";
+    if (!deferMainTextures) {
+        const auto* bank = pkg.findBank("maintextures");
+        if (bank && !bank->entries.empty()) {
+            textures.emplace(forge::big::File::open(fs::path(baseRoot) / textureRel));
+            textureEntries = patchFmpMainTextures(*textures, pkg);
+        }
+    }
 
     // game.bin gets the GameBINEntries records; its save() rewrites names.bin
     // preserving existing offsets and appending any new record names, so the
@@ -8223,6 +8273,11 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     if (symbolicLinks) *symbolicLinks = links;
     fs::create_directories(defsOut);
     game.save(defsOut / "names.bin", defsOut / "game.bin");
+    if (textures) {
+        const fs::path dst = fs::path(outRoot) / textureRel;
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), textures->serialize());
+    }
     // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
     // applied to every language's text.big the base install has (the package names none)
     if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty()) {
@@ -8285,8 +8340,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         }
     }
 
-    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu)\n",
-                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels);
+    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu; textures: %zu)\n",
+                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels, textureEntries);
     return 0;
 }
 
@@ -8756,7 +8811,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         if (ext == ".fmp" || ext == ".FMP") {
             const std::string root = tmpRoot(i);
             forge::fmplinks::RecordLinks links;
-            fmpApply(baseRoot, s, root, jsonOutput, fieldSchema, &links);
+            fmpApply(baseRoot, s, root, jsonOutput, fieldSchema, &links,
+                     /*deferMainTextures*/ true);
             contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
             rootLinks.push_back(std::move(links));
@@ -9162,6 +9218,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     struct WorldCarrier { std::string label; fs::path wld, bwd; };
     std::vector<WorldCarrier> worldCarriers;   // mods shipping FinalAlbion.wld / .bwd, in load order (merged per record below)
     std::map<std::string, size_t> dialogueWholeFileAt; // final raw archive layer for each language
+    std::optional<size_t> texturesWholeFileAt;
     {
         struct Carrier { std::string label; fs::path src; std::string rel; size_t sourceIndex; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
@@ -9241,6 +9298,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             fs::path outPath = fs::path(outDir) / win->rel;
             fs::create_directories(outPath.parent_path());
             fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
+            if (lower == "data/graphics/pc/textures.big") texturesWholeFileAt = win->sourceIndex;
             if(lower.rfind("data/lang/",0)==0 && lower.ends_with("/dialogue.big"))
                 dialogueWholeFileAt[lower]=win->sourceIndex;
         }
@@ -9249,6 +9307,91 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             if (!jsonOutput) std::printf("whole-file layers: %zu file(s) copied (last source wins), %zu carried by more than one source, %zu identical to the install skipped\n", carriers.size(), contested, unchanged);
         for (const auto& l : settingsSkipped) if (!jsonOutput) std::printf("  %s ships userst.ini: not applied (your settings stay yours)\n", l.c_str());
         for (const auto& l : parkedWad) if (!jsonOutput) std::printf("  %s parks the retail WAD as _FinalAlbion.wad: skipped, its loose levels are repacked into FinalAlbion.wad instead\n", l.c_str());
+    }
+    // FMP texture entries are independent layers. Build one bank from the
+    // selected whole-file texture source (or retail), then apply later FMP
+    // entries in order. An earlier FMP is masked by a later whole-file layer.
+    // This preserves disjoint texture edits from multiple FMPs.
+    {
+        struct Version {
+            std::string mod;
+            size_t sourceIndex;
+            uint32_t id, type;
+            std::vector<uint8_t> payload, header;
+        };
+        std::map<std::string, std::vector<Version>> touched;
+        json masked = json::array();
+        std::optional<forge::big::File> textures;
+        const fs::path rel = fs::path("data") / "graphics" / "pc" / "textures.big";
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (lowered(fs::path(sources[si]).extension().string()) != ".fmp") continue;
+            const auto pkg = openFmpPackage(sources[si]);
+            const auto* bank = pkg.findBank("maintextures");
+            if (!bank || bank->entries.empty()) continue;
+            if (texturesWholeFileAt && si < *texturesWholeFileAt) {
+                masked.push_back({{"mod", srcLabel(si)}, {"by", srcLabel(*texturesWholeFileAt)},
+                                  {"entries", bank->entries.size()}});
+                continue;
+            }
+            if (!textures) {
+                const fs::path built = fs::path(outDir) / rel;
+                textures.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / rel));
+            }
+            patchFmpMainTextures(*textures, pkg);
+            for (const auto& e : bank->entries)
+                touched[e.name].push_back({srcLabel(si), si, e.id, e.type,
+                                           pkg.entryData(e), e.subHeader});
+        }
+        // EgoCore .resource banks are currently applied after this pass. If
+        // such a texture source loads earlier than an FMP changing the same
+        // entry, that timing would reverse the requested winner: refuse it.
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (std::find(egoFolders.begin(), egoFolders.end(), sources[si]) == egoFolders.end())
+                continue;
+            fs::path data = fs::path(sources[si]) / "Data";
+            if (!fs::is_directory(data)) data = fs::path(sources[si]) / "data";
+            if (!fs::is_directory(data)) continue;
+            for (const auto& de : fs::recursive_directory_iterator(data)) {
+                if (!de.is_regular_file() || lowered(de.path().extension().string()) != ".resource") continue;
+                const std::string path = lowered(de.path().generic_string());
+                if (path.find("/textures.big/") == std::string::npos ||
+                    lowered(de.path().parent_path().filename().string()) == "gbank_gui_pc") continue;
+                const std::string resourceName = lowered(de.path().stem().string());
+                for (const auto& [entry, versions] : touched) {
+                    if (lowered(entry) != resourceName) continue;
+                    for (const auto& version : versions)
+                        if (si < version.sourceIndex)
+                            throw std::runtime_error("FMP maintextures: " + srcLabel(si) +
+                                " has an earlier EgoCore .resource for " + entry +
+                                " than " + version.mod + "; this mixed asset order is not supported yet");
+                }
+            }
+        }
+        if (textures) {
+            const fs::path dst = fs::path(outDir) / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), textures->serialize());
+        }
+        json conflicts = json::array(), entries = json::array();
+        for (const auto& [name, versions] : touched) {
+            json mods = json::array();
+            bool differs = false;
+            for (const auto& version : versions) {
+                mods.push_back(version.mod);
+                if (version.id != versions.front().id || version.type != versions.front().type ||
+                    version.payload != versions.front().payload || version.header != versions.front().header)
+                    differs = true;
+            }
+            json row{{"entry", name}, {"id", versions.back().id},
+                     {"mods", mods}, {"winner", versions.back().mod}};
+            entries.push_back(row);
+            if (versions.size() > 1 && differs) conflicts.push_back(row);
+        }
+        if (jsonOutput) rep["maintextures"] = {{"entries", entries},
+            {"conflicts", conflicts}, {"masked", masked}};
+        else if (!touched.empty() || !masked.empty())
+            std::printf("FMP maintextures: %zu entry layer(s), %zu contested, %zu package(s) masked by a later whole-file bank\n",
+                touched.size(), conflicts.size(), masked.size());
     }
     for (const auto& folder : egoFolders) {
         forge::egocore::Report erep;
@@ -9620,6 +9763,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const size_t defsConflicts = rep.contains("defs") ? rep["defs"]["summary"]["record_conflicts"].get<size_t>() : 0;
         rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
                           {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
+                          {"maintextures_conflicts", rep.contains("maintextures") ? rep["maintextures"]["conflicts"].size() : 0},
                           {"lip_sync_contested", lipSyncConflicts},
                           {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
         if (reportOut) *reportOut = rep;

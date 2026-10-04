@@ -1021,16 +1021,26 @@ not prove correct linking. See [FMP format and limits](modding/FMP_FORMAT.md).
 Runtime compatibility remains unverified.
 
 2026-10-04 named historic FMP audit: the original 1,142-package archive has
-577 packages with nonempty banks on the current importer allowlist. An offline
-apply sweep against the installed TLC data accepts 117 and refuses 450; 556
-packages need other bank types, and nine have no recognized entries. A verified
+746 packages with nonempty banks on the current importer allowlist. An offline
+apply sweep against the installed TLC data accepts 117 non-texture packages,
+refuses 450, and reserves 169 texture-capable packages for a large-bank check;
+387 need other bank types, and nine have no recognized entries. A verified
 `Vector_VCDefString__` names-offset linker added 16 accepted spell packages;
 a verified `CThingComponentSet` name-offset linker added No Quiver.
 The real Berserk Scale/Small Berserk pair composes in both orders with one
 reported `BerserkScale` conflict and different output banks. The Oak Vale bed
 package composes a WAD TNG entry with five provenance UIDs. See
 `docs/modding/FMP_FORMAT.md` for the commands and limits. In-game checks remain
-open, as do nested creature/weapon links and graphics/texture bank integration.
+open, as do nested creature/weapon links and remaining graphics/texture bank
+integration. The `maintextures` entry composer now replaces/adds texture entries
+by stable id, preserves disjoint FMP edits, reports same-entry conflicts and
+whole-file masking, and surfaces conflicts in the Mods UI. The named texture
+metadata audit finds 165/169 identity-compatible packages (838 replacement and
+34 added entries); four collide with retail ids. Direct, disjoint, overlap in
+both orders, whole-file ordering and refusal scratch tests pass. Runtime and
+combined EgoCore resource ordering remain unverified/open; the overlapping
+earlier-EgoCore/later-FMP case now refuses before stage rather than reversing
+the requested winner.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

@@ -185,8 +185,9 @@ The 14-case run at `build/named-fmp-stack-syhvax35/result.json` establishes:
   `BerserkScale`. Both orders compose; the reported field winner follows the last
   package, and the output `game.bin` hashes differ. This is a real named-package
   check of field-level load order, not a synthetic conflict.
-- The other selected packages refuse cleanly: Ghost Sword variants need verified
-  nested weapon references; Young Hero Retexture needs `maintextures` support;
+- The other selected packages originally refused: Ghost Sword variants need verified
+  nested weapon references; Young Hero Retexture needed `maintextures` support
+  (now added and checked below);
   Working Stick needs `FrontEndBINEntries`; the staff package has an unresolved
   multi-target link; 0 Silver Keys has ambiguous link metadata. Refused packages
   leave the requested output untouched.
@@ -195,14 +196,15 @@ This is an offline compatibility sample, not an in-game validation or a claim
 that every package in the archive is supported. New `OBJECT_*` definitions still
 need their graphics bank entries before the editor can show their thumbnails.
 
-The full importer scan in `tools/audit_named_fmp_coverage.py` classifies all
-1,142 catalogue rows by bank support and then tries every eligible package in
-scratch. With the 2026-10-04 linker, 577 had nonempty banks on the current
-allowlist; 117 imported offline, 450 refused on metadata/reference or schema
-constraints. Another 556 carry unsupported bank types, and nine have no
-recognized entries. This is importer coverage, not a claim that 117 packages
-have been composed in stacks or played. The result is at
-`build/named-fmp-coverage-b8woptao/result.json` in this checkout.
+The importer scan in `tools/audit_named_fmp_coverage.py` classifies all
+1,142 catalogue rows by bank support. With `maintextures` added, 746 have
+nonempty banks on the current allowlist: 117 non-texture packages import
+offline, 450 refuse on metadata/reference or schema constraints, and 169
+texture-capable packages are reserved for the large-bank audit below. Another
+387 carry unsupported bank types, and nine have no recognized entries. The
+report is `build/named-fmp-coverage-km2oevq6/result.json` in this checkout.
+The earlier pre-texture importer scan is
+`build/named-fmp-coverage-b8woptao/result.json` (117/577 accepted).
 
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
@@ -223,3 +225,28 @@ and byte-for-byte preservation of every parameter, flag and tail byte. This
 raised eligible importer coverage from 116 to 117. Ghost Sword packages still
 refuse on separate nested weapon references after passing the component field;
 their unresolved links are not silently omitted.
+
+`maintextures` now maps to `data/graphics/pc/textures.big/GBANK_MAIN_PC` by
+entry name and numeric id. Replacements require the retail id and type; new
+entries require an unused id. Payload and 34-byte texture header come from the
+FMP; other entries retain their original payloads. In a mod stack, FMP entries
+compose in load order over the selected whole-file texture bank. Disjoint edits
+survive together; different edits to one entry are reported as texture conflicts
+with the later winner. An FMP before a later whole-file bank is reported as
+masked. The Mods conflict list shows texture conflicts, with order as the
+current way to choose their winner.
+
+`tools/test_fmp_texture_layers.py` checked direct replacement from Young Hero
+Retexture, four new entries from Blue Ass Beta Textures, disjoint Apprentice
+plus Young Hero changes, both orders of a two-entry Apprentice conflict,
+whole-file masking, an id-mismatch refusal, and unchanged source bytes. The
+output BIG entries were read independently. `tools/audit_named_fmp_textures.py`
+checks metadata for all 169 texture-capable packages without writing 169 copies
+of a 533 MB bank: 165 have compatible identities (838 replacements, 34
+additions in total); four claim a retail-occupied id for a new name and must
+refuse. These 165 are metadata-compatible candidates, not 165 completed builds
+or gameplay tests. When an earlier EgoCore `.resource` and a later FMP target
+the same texture, the current composer refuses that mixed order instead of
+silently giving the EgoCore layer the last write; the scratch test covers this
+and preserves prior output. Full mixed-source ordering and per-entry manual
+picks remain open.
