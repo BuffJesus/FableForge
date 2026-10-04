@@ -322,6 +322,49 @@ int main() {
     rejects([&] { forge::fmplinks::locate(unsupportedSound, soundSchema, fireLink); },
             "unverified sound-map singles layout refuses");
 
+    const auto heroSchema = forge::defschema::Schema::loadText(
+        R"({"HERO_ABILITY":{"prefix_len":3,"fields":[{"name":"Name","type":"?"},{"name":"LevDescription","type":"?"}]}})");
+    forge::defdecode::Decoded heroDecoded;
+    heroDecoded.prefix = {1, 0, 0}; heroDecoded.prefixLen = 3; heroDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField heroName;
+    heroName.name = "Name"; heroName.type = "?";
+    heroName.tag = forge::defdecode::fieldTag(heroName.name); heroName.tagOk = true;
+    word(heroName.value, 1);
+    forge::defdecode::DecodedField heroLevels;
+    heroLevels.name = "LevDescription"; heroLevels.type = "?";
+    heroLevels.tag = forge::defdecode::fieldTag(heroLevels.name); heroLevels.tagOk = true;
+    word(heroLevels.value, 2); word(heroLevels.value, 3); word(heroLevels.value, 4);
+    heroDecoded.fields = {heroName, heroLevels};
+    forge::bin::Entry heroAbility{"HERO_ABILITY", "ABILITY_PROBE", 0,
+                                  forge::defdecode::encode(heroDecoded)};
+    const auto originalHero = heroAbility.data;
+    const std::map<std::string, uint32_t> textIds{{"TEXT_NAME", 10677}, {"TEXT_LEVEL", 15106}};
+    references = {{"604919263.GUIDescription1ID", "TEXT_NAME"},
+                  {"2555713587.HAtextArray.1.Hero Ability Text Description", "TEXT_LEVEL"}};
+    const auto linkedHero = forge::fmplinks::relink(heroAbility, targets, heroSchema, references,
+                                                    false, nullptr, nullptr, nullptr, &textIds);
+    auto expectedHero = originalHero;
+    const auto nameSlot = forge::fmplinks::locate(heroAbility, heroSchema, references[0]);
+    const auto levelSlot = forge::fmplinks::locate(heroAbility, heroSchema, references[1]);
+    const uint32_t nameId = 10677, levelId = 15106;
+    std::memcpy(expectedHero.data() + nameSlot.offset, &nameId, 4);
+    std::memcpy(expectedHero.data() + levelSlot.offset, &levelId, 4);
+    check(linkedHero == expectedHero && heroAbility.data == originalHero,
+          "hero ability text links rewrite exactly the two addressed IDs");
+    auto malformedHero = heroAbility;
+    malformedHero.data[levelSlot.offset - 8] = 3;
+    rejects([&] { forge::fmplinks::relink(malformedHero, targets, heroSchema, references,
+                                         false, nullptr, nullptr, nullptr, &textIds); },
+            "hero ability text count must match the bounded field");
+    references = {{"2555713587.HAtextArray.2.Hero Ability Text Description", "TEXT_LEVEL"}};
+    rejects([&] { forge::fmplinks::relink(heroAbility, targets, heroSchema, references,
+                                         false, nullptr, nullptr, nullptr, &textIds); },
+            "hero ability text index outside the array refuses");
+    references = {{"604919263.GUIDescription1ID", "MISSING_TEXT"}};
+    rejects([&] { forge::fmplinks::relink(heroAbility, targets, heroSchema, references,
+                                         false, nullptr, nullptr, nullptr, &textIds); },
+            "missing text target refuses");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

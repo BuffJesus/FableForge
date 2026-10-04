@@ -305,6 +305,20 @@ accepts 360 of 577 attempted small-bank packages, five more than before.
 Two other packages with this link still refuse later unsupported references.
 The scan still defers 244 large-bank packages and does not verify gameplay.
 
+2026-10-04 hero text follow-up: native `HERO_ABILITY` fields use texture IDs
+for the HUD icon and `text.big` IDs for the name, level descriptions, and
+maxed-out description. `HERO_STATS.StatLevels` has a bounded nested array of
+ability descriptions and final-level text IDs. Forge resolves these symbolic
+targets from the baseline English `text.big`, checks the array counts and
+field tags, and refuses a missing target. The archived `EXP And Hero Mod.fmp`
+resolves 217 named links in direct apply; its direct and one-mod merged
+`game.bin` and `names.bin` files match byte-for-byte. The full eligible scan
+at `build/named-fmp-coverage-ry3g5gyz/result.json` accepts 375/577 attempted
+small-bank packages, 15 more than before, with 183 link refusals remaining.
+The 244 large-bank packages remain deferred. Newly added text targets need
+cross-language ID planning and are not supported by this linker path yet;
+these results do not establish gameplay compatibility.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16

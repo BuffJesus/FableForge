@@ -4822,6 +4822,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::map<std::string, uint32_t>* meshIds = nullptr,
               const std::map<std::string, uint32_t>* textureIds = nullptr,
               const std::map<std::string, uint32_t>* effectIds = nullptr,
+              const std::map<std::string, uint32_t>* textIds = nullptr,
               const std::vector<bool>* numericFmpRoots = nullptr) {
     namespace fs = std::filesystem;
 
@@ -4921,7 +4922,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             if (version.links.empty()) continue;
             forge::bin::Entry entry{version.definition, name, 0, version.data};
             version.data = forge::fmplinks::relink(entry, identities, *schema, version.links,
-                                                  true, meshIds, textureIds, effectIds);
+                                                  true, meshIds, textureIds, effectIds, textIds);
         }
     }
     forge::fmplinks::RecordLinks selectedLinks;
@@ -5072,7 +5073,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, merged, *schema, links,
-                                           false, meshIds, textureIds, effectIds);
+                                            false, meshIds, textureIds, effectIds, textIds);
         merged.setEntryData(found->second, std::move(data));
     }
 
@@ -8289,6 +8290,17 @@ std::map<std::string, uint32_t> textureIdentityMap(const std::filesystem::path& 
 std::map<std::string, uint32_t> effectIdentityMap(const std::filesystem::path& file) {
     return assetIdentityMap(file, "PARTICLE_MAIN_PC");
 }
+std::map<std::string, uint32_t> textIdentityMap(const std::filesystem::path& gameRoot) {
+    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
+    if (!std::filesystem::exists(path))
+        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+    std::map<std::string, uint32_t> result;
+    const auto file = forge::big::File::open(path);
+    for (const auto& bank : file.banks())
+        for (const auto& entry : bank.entries)
+            if (!entry.name.empty()) result[entry.name] = entry.id;
+    return result;
+}
 
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
@@ -8403,6 +8415,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     std::optional<std::map<std::string, uint32_t>> meshIds;
     std::optional<std::map<std::string, uint32_t>> textureIds;
     std::optional<std::map<std::string, uint32_t>> effectIds;
+    std::optional<std::map<std::string, uint32_t>> textIds;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
@@ -8423,7 +8436,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         }
         if (!textureIds && std::any_of(recordLinks.begin(), recordLinks.end(),
                 [](const auto& link) { return link.path.ends_with(".TorsoMainTextureID") ||
-                                             link.path.starts_with("3734701334.Texture Morph List."); })) {
+                                             link.path.starts_with("3734701334.Texture Morph List.") ||
+                                             link.path.ends_with(".Hero Ability Hud Icon ID"); })) {
             textureIds.emplace(textureIdentityMap(fs::path(baseRoot) / textureRel));
             if (const auto* packageTextures = pkg.findBank("maintextures"))
                 for (const auto& texture : packageTextures->entries)
@@ -8452,13 +8466,22 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             }))
             effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
                 "data" / "Misc" / "pc" / "effects.big"));
+        if ((entry->definition == "HERO_ABILITY" || entry->definition == "HERO_STATS") && !textIds &&
+            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
+                return link.path.ends_with(".GUIDescription1ID") ||
+                       link.path.ends_with(".GUIDescription2ID") ||
+                       link.path.starts_with("2555713587.HAtextArray.") ||
+                       link.path.ends_with(".HeroAbilityMasteredTextGUI_ID") ||
+                       link.path.starts_with("54218450.Spells/Attribute Levels.");
+            })) textIds.emplace(textIdentityMap(baseRoot));
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
                                           symbolicLinks != nullptr,
                                           meshIds ? &*meshIds : nullptr,
                                           textureIds ? &*textureIds : nullptr,
-                                          effectIds ? &*effectIds : nullptr);
+                                          effectIds ? &*effectIds : nullptr,
+                                          textIds ? &*textIds : nullptr);
         game.setEntryData(index, std::move(data));
         linked += recordLinks.size();
     }
@@ -9081,6 +9104,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
     std::optional<std::map<std::string, uint32_t>> plannedTextureIds;
     std::optional<std::map<std::string, uint32_t>> plannedEffectIds;
+    std::optional<std::map<std::string, uint32_t>> plannedTextIds;
     const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
@@ -9091,7 +9115,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (const auto& [name, links] : records)
             for (const auto& link : links)
                 if (link.path.ends_with(".TorsoMainTextureID") ||
-                    link.path.starts_with("3734701334.Texture Morph List.")) return true;
+                    link.path.starts_with("3734701334.Texture Morph List.") ||
+                    link.path.ends_with(".Hero Ability Hud Icon ID")) return true;
         return false;
     });
     const bool hasNamedEffectLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
@@ -9136,11 +9161,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (hasNamedEffectLinks)
         plannedEffectIds.emplace(planAssetIds(fs::path("Misc") / "pc" / "effects.big",
                                               "PARTICLE_MAIN_PC", "effects"));
+    const bool hasNamedTextLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
+        for (const auto& [name, links] : records)
+            for (const auto& link : links)
+                if (link.path.ends_with(".GUIDescription1ID") ||
+                    link.path.ends_with(".GUIDescription2ID") ||
+                    link.path.starts_with("2555713587.HAtextArray.") ||
+                    link.path.ends_with(".HeroAbilityMasteredTextGUI_ID") ||
+                    link.path.starts_with("54218450.Spells/Attribute Levels.")) return true;
+        return false;
+    });
+    if (hasNamedTextLinks) plannedTextIds.emplace(textIdentityMap(baseRoot));
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
                              schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
                              plannedMeshIds ? &*plannedMeshIds : nullptr,
                              plannedTextureIds ? &*plannedTextureIds : nullptr,
-                             plannedEffectIds ? &*plannedEffectIds : nullptr, &numericFmpRoots);
+                             plannedEffectIds ? &*plannedEffectIds : nullptr,
+                             plannedTextIds ? &*plannedTextIds : nullptr, &numericFmpRoots);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 

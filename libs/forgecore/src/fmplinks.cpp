@@ -314,6 +314,17 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             if (parts.size() == 2 && !parts[1].empty() && field.value.size() == 4) {
                 if (field.type == "CDefString") return {offset, i + 1, Destination::NameOffset};
+                if (entry.definition == "HERO_ABILITY" && field.type == "?") {
+                    if (field.name == "IconGraphicIndex" && parts[1] == "Hero Ability Hud Icon ID")
+                        return {offset, i + 1, Destination::TextureEntry};
+                    if ((field.name == "Name" && parts[1] == "GUIDescription1ID") ||
+                        (field.name == "Description" && parts[1] == "GUIDescription2ID") ||
+                        (field.name == "MaxedOutDescription" &&
+                         parts[1] == "HeroAbilityMasteredTextGUI_ID"))
+                        return {offset, i + 1, Destination::TextEntry};
+                    if (field.name == "DummyObject" && parts[1] == "DummyObjectID")
+                        return {offset, i + 1, Destination::GameEntry};
+                }
                 // ChocolateBox calls this path "unknown", but its CChestDef
                 // control 2A902FA0 is OpenParticleEffect -> EffectID. The
                 // retail value agrees with the named effects.big entry ID.
@@ -430,6 +441,59 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("texture morph reference index out of range");
                 return {offset + 4 + index * 24 + (parts[3] == "Base Texture" ? 12u : 16u),
                         i + 1, Destination::TextureEntry};
+            }
+            if (entry.definition == "HERO_ABILITY" && field.name == "LevDescription" &&
+                field.type == "?" && parts.size() == 4 && parts[1] == "HAtextArray" &&
+                parts[3] == "Hero Ability Text Description") {
+                if (field.value.size() < 4) fail("invalid hero ability text array");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 4 ||
+                    field.value.size() != 4 + count * 4)
+                    fail("unsupported hero ability text array layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("hero ability text index out of range");
+                return {offset + 4 + index * 4, i + 1, Destination::TextEntry};
+            }
+            if (entry.definition == "HERO_STATS" && field.name == "StatLevels" &&
+                field.type == "vector<CAbilityTrackDef>" &&
+                parts[1] == "Spells/Attribute Levels" &&
+                ((parts.size() == 4 && parts[3] == "Final Ability Level") ||
+                 (parts.size() == 6 && parts[3] == "unknown" && parts[5] == "Ability Text"))) {
+                if (field.value.size() < 4) fail("invalid hero stat levels");
+                const size_t count = read32(field.value, 0), wanted = number(parts[2]);
+                if (count > 4096 || wanted >= count) fail("hero stat level index out of range");
+                size_t cursor = 4;
+                std::optional<size_t> targetOffset;
+                for (size_t stat = 0; stat < count; ++stat) {
+                    if (cursor > field.value.size() || field.value.size() - cursor < 16 ||
+                        read32(field.value, cursor) != defdecode::fieldTag("ExperienceStat") ||
+                        read32(field.value, cursor + 8) != defdecode::fieldTag("Abilities"))
+                        fail("unsupported hero stat level layout");
+                    const size_t abilities = read32(field.value, cursor + 12);
+                    cursor += 16;
+                    if (abilities > 4096 || abilities > (field.value.size() - cursor) / 24)
+                        fail("invalid hero stat ability count");
+                    for (size_t ability = 0; ability < abilities; ++ability) {
+                        if (read32(field.value, cursor) != defdecode::fieldTag("ExperienceCost") ||
+                            read32(field.value, cursor + 8) != defdecode::fieldTag("AbilityUnlocked") ||
+                            read32(field.value, cursor + 16) != defdecode::fieldTag("Description"))
+                            fail("unsupported hero stat ability layout");
+                        if (stat == wanted && parts.size() == 6 && ability == number(parts[4]))
+                            targetOffset = offset + cursor + 20;
+                        cursor += 24;
+                    }
+                    if (parts.size() == 6 && stat == wanted && !targetOffset)
+                        fail("hero stat ability index out of range");
+                    if (field.value.size() - cursor < 8 ||
+                        read32(field.value, cursor) != defdecode::fieldTag("MaxedOutDescription"))
+                        fail("unsupported hero stat final ability layout");
+                    if (stat == wanted && parts.size() == 4)
+                        targetOffset = offset + cursor + 4;
+                    cursor += 8;
+                }
+                if (cursor != field.value.size() || !targetOffset)
+                    fail("hero stat level layout has trailing bytes or missing target");
+                return {*targetOffset, i + 1, Destination::TextEntry};
             }
             if (entry.definition == "CHeroMorphDef" &&
                 field.name == "SkeletalMorphs" && field.type == "CSkeletalMorphs" &&
@@ -552,7 +616,8 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                            bool deferMissing,
                            const std::map<std::string, uint32_t>* meshIds,
                            const std::map<std::string, uint32_t>* textureIds,
-                           const std::map<std::string, uint32_t>* effectIds) {
+                           const std::map<std::string, uint32_t>* effectIds,
+                           const std::map<std::string, uint32_t>* textIds) {
     auto data = entry.data; std::set<size_t> offsets;
     for (const auto& link : links) {
         const auto location = locate(entry, schema, link);
@@ -575,6 +640,11 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
             if (effectIds) {
                 const auto found = effectIds->find(link.target);
                 if (found != effectIds->end()) target = found->second;
+            }
+        } else if (location.destination == Destination::TextEntry) {
+            if (textIds) {
+                const auto found = textIds->find(link.target);
+                if (found != textIds->end()) target = found->second;
             }
         } else {
             const auto name = targets.originalNameOffset(link.target);
