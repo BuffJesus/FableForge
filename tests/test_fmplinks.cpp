@@ -296,6 +296,32 @@ int main() {
                                          references, false, nullptr, nullptr, &effectIds); },
             "truncated special effects record refuses");
 
+    const auto soundSchema = forge::defschema::Schema::loadText(
+        R"({"CEntitySoundDef":{"prefix_len":3,"fields":[{"name":"SoundMap","type":"CSoundMap"}]}})");
+    forge::defdecode::Decoded soundDecoded;
+    soundDecoded.prefix = {1, 0, 0}; soundDecoded.prefixLen = 3; soundDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField soundField;
+    soundField.name = "SoundMap"; soundField.type = "CSoundMap";
+    soundField.tag = forge::defdecode::fieldTag(soundField.name); soundField.tagOk = true;
+    word(soundField.value, 0); word(soundField.value, 1);
+    word(soundField.value, 0x96cee596u); word(soundField.value, 301315);
+    soundDecoded.fields = {soundField};
+    forge::bin::Entry soundMap{"CEntitySoundDef", "SOUND_MAP_PROBE", 0,
+                               forge::defdecode::encode(soundDecoded)};
+    const forge::fmplinks::Link fireLink{
+        "1791516475.unknown.0.Default Fire Effect", "ON_FIRE"};
+    const auto location = forge::fmplinks::locate(soundMap, soundSchema, fireLink);
+    check(location.offset == 19 && location.destination == forge::fmplinks::Destination::NameOffset,
+          "sound-map criteria link addresses its name-offset word");
+    auto malformedSound = soundMap;
+    malformedSound.data.pop_back();
+    rejects([&] { forge::fmplinks::locate(malformedSound, soundSchema, fireLink); },
+            "truncated sound-map criteria refuses");
+    auto unsupportedSound = soundMap;
+    unsupportedSound.data[7] = 1;
+    rejects([&] { forge::fmplinks::locate(unsupportedSound, soundSchema, fireLink); },
+            "unverified sound-map singles layout refuses");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

@@ -349,6 +349,24 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("special effects reference index out of range");
                 return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
             }
+            // The archived hero sound map's "Default Fire Effect" is the
+            // name offset in the second word of a criteria pair. The first
+            // word is a criterion hash; accept only the verified no-single
+            // layout until other native forms have been checked.
+            if (entry.definition == "CEntitySoundDef" &&
+                field.name == "SoundMap" && field.type == "CSoundMap" &&
+                parts.size() == 4 && parts[1] == "unknown" &&
+                parts[3] == "Default Fire Effect") {
+                if (field.value.size() < 8 || read32(field.value, 0) != 0)
+                    fail("unsupported sound map singles layout");
+                const size_t count = read32(field.value, 4);
+                if (count > 4096 || count > (field.value.size() - 8) / 8 ||
+                    field.value.size() != 8 + count * 8)
+                    fail("unsupported sound map criteria layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("sound map reference index out of range");
+                return {offset + 8 + index * 8 + 4, i + 1, Destination::NameOffset};
+            }
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
             if (parts.size() >= 4 && !parts.back().empty() && !parts[1].empty() &&

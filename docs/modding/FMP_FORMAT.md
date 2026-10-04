@@ -292,6 +292,19 @@ on other link constraints, 11 on schema availability and eight on record
 identity. The 244 large-bank packages remain deferred. Several packages with
 this field now pass it but still need separate link types such as SoundMap.
 
+2026-10-04 sound-map follow-up: `CEntitySoundDef.SoundMap` in the archived
+hero packages has zero single mappings, then one eight-byte criteria pair.
+The metadata path `1791516475.unknown.0.Default Fire Effect` addresses the
+second word of that pair, a `names.bin` offset for `ON_FIRE`. Forge accepts
+only that verified no-single layout and checks its count, size and index.
+`tools/test_fmp_sound_map_links.py` verifies the original archived `Full Hero
+JOB Playable Set (Variant 4).fmp` through direct apply and composition: both
+definition banks are byte-identical and the patched offset resolves to
+`ON_FIRE`. The full eligible scan at `build/named-fmp-coverage-mb94v1xt/result.json`
+accepts 360 of 577 attempted small-bank packages, five more than before.
+Two other packages with this link still refuse later unsupported references.
+The scan still defers 244 large-bank packages and does not verify gameplay.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16
