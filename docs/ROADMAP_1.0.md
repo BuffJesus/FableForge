@@ -1,5 +1,14 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-04 release checkpoint: the Forge-managed Aeon/controller route is
+published as prerelease `v0.18.1-rc.1` at tagged source `f5c763a` with green
+Windows CI, a versioned application ZIP, updated illustrated guide and four
+direct screenshot assets. The extracted candidate passed 46/46 workflows with
+zero skips before a final screenshot-only repack; archive identities and links
+were checked after repacking. The Discord message is drafted but unsent. Live
+gameplay/Retroid remain untested and direct `mods merge` late-read output
+atomicity remains open. See HANDOFF_WORLD_UI.
+
 2026-10-04 complete-Data installer integration: the isolated primary-based
 merge preserves all product/test bytes from the 46-workflow-tested review branch
 and passes an all-target Release build, 38 core cases and the focused

@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 Aeon/controller prerelease published
+
+`v0.18.1-rc.1` tags `f5c763a` and is published as a GitHub prerelease:
+https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.1 . The exact
+tag's Windows CI run 37215295140 succeeded. Stable `v0.18.0` remains Latest.
+The tag includes the Forge-managed three-source installer, seven illustrated
+guide screenshots (three from actual Windows Browse selections), and versioned
+application/guide ZIPs. Four of those screenshots are separate release assets
+for a step-by-step message to Perodis; no Discord message was sent.
+
+The candidate application ZIP SHA256 is
+`93651ad44f5fb57beee543672a6b44c376735f9db5e8ca23aed3e821478bda5b`;
+the guide ZIP is
+`a8b3985631c2acf8caeb8a7d33006206846797124e28a0ec3fa80b2376b5a81e`.
+Before the final screenshot-only repack, the extracted candidate passed all
+46 package workflows with zero skips, including the real Aeon/Controller corpus.
+The final repack's archive CRCs, 107 package file identities, seven linked
+images in both ZIPs, and release links passed. Local 38/38 CTest and original
+three-source GUI Add/Check/Deploy/redeploy/Undeploy passed. Live PC gameplay and
+Retroid operation are still untested. Direct `forge-tools mods merge` late-read
+output atomicity remains open; managed GUI Deploy composes in scratch first.
+
 ## 2026-10-04 primary integration checkpoint
 
 The accepted complete-Data review was reconciled with primary's separately
