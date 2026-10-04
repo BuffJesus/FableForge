@@ -8714,7 +8714,7 @@ Original Aging Slowdown, Fire Teleport and Lightning Teleport pass 42 asset
 word checks, direct/composed definition-bank parity and preservation of all
 non-reference bytes. A selected TrackGraphic with a missing named model refuses
 both routes without replacing prior output. Evidence:
-`build/fmp-global-links-fqzvxx5a/result.json`. Link CTest and the original
+`build/fmp-global-links-khbe451s/result.json`. Link CTest and the original
 20-link weapon/both-order regression pass (`build/fmp-weapon-links-vtbnu1wv`).
 Checks use `build/forge-tools-next.exe`, linked from the owning primary objects
 and updated core library. The in-flight full-corpus importer remains unchanged

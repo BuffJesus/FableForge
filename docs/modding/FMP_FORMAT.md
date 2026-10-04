@@ -582,6 +582,6 @@ texture IDs; the two teleport particle scalars are effect IDs. Exact legacy
 paths and schema fields bind each domain. Original Aging Slowdown, Fire Teleport
 and Lightning Teleport independently verify 42 asset words and unchanged
 non-reference bytes, direct/composed bank parity and safe missing-model refusal.
-Evidence: `build/fmp-global-links-fqzvxx5a/result.json`, using the separate
+Evidence: `build/fmp-global-links-khbe451s/result.json`, using the separate
 candidate CLI while the previous binary's full 821-package bank-write sweep
 continues. These fixtures establish offline import/composition, not gameplay.

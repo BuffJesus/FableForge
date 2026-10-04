@@ -8,7 +8,7 @@ import struct
 import tempfile
 import zipfile
 
-from test_fmp_links import package_records, read_bank
+from test_fmp_links import package_records, read_bank, crc0
 from test_fmp_texture_layers import entries
 from test_fmp_weapon_links import run, field_start
 
@@ -60,7 +60,9 @@ def main():
             run(args.tool, 'mods', 'merge', args.install, merged, '--with', package)
             for bank in ('game.bin', 'names.bin'):
                 assert digest(direct/'data/CompiledDefs'/bank) == digest(merged/'data/CompiledDefs'/bank)
-            built = next(e['data'] for e in read_bank(direct) if e['name'] == 'DEFAULT_GLOBAL_DEFS')
+            bank = read_bank(direct)
+            game_ids = {e['name']: i for i, e in enumerate(bank) if e['name']}
+            built = next(e['data'] for e in bank if e['name'] == 'DEFAULT_GLOBAL_DEFS')
             expected = bytearray(source)
             for family, identities, member_offset in ((model_paths, models, 4),
                                                        (texture_paths, textures, 0),
@@ -71,16 +73,24 @@ def main():
                     value = identities[paths[path]]['id']
                     assert struct.unpack_from('<I', built, at)[0] == value
                     struct.pack_into('<I', expected, at, value)
-            # Other symbolic game/name links may be relocated too. Exclude their
-            # addressed words using the independently retained source markers.
+            # Independently verify the remaining game/component references too,
+            # so every other byte, including the component header, stays exact.
             for path, target in paths.items():
-                if path in model_paths + texture_paths + effect_paths or path.startswith('.'):
+                if path in model_paths + texture_paths + effect_paths:
                     continue
-                at = field_start(source, int(path.split('.')[0]).to_bytes(4, 'big').hex())
-                expected[at:at+4] = built[at:at+4]
-            # Component references can move as names.bin is reserialized.
-            prefix = field_start(source, (4248625128).to_bytes(4, 'big').hex()) - 4
-            expected[:prefix] = built[:prefix]
+                if path.startswith('.CDefs.'):
+                    _, _, component, member = path.split('.')
+                    at = 5 + int(component) * 12
+                    if member == 'CDefName':
+                        value = crc0(target)
+                    else:
+                        assert member in ('CDefDataEntry', 'InheritedEntryID')
+                        at += 4 if member == 'CDefDataEntry' else 8
+                        value = game_ids[target]
+                else:
+                    at = field_start(source, int(path.split('.')[0]).to_bytes(4, 'big').hex())
+                    value = game_ids[target]
+                struct.pack_into('<I', expected, at, value)
             assert bytes(expected) == built, 'GLOBAL bytes outside linked words changed'
             checks.append({'member': member, 'asset_links': len(model_paths + texture_paths + effect_paths),
                            'direct_merge_equal': True})
