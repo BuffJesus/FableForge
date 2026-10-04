@@ -373,6 +373,24 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                      (field.name == "AttachedContinuousEffect" &&
                       link.path == "3914204730.Shot Projectile Trail Effect ID")))
                     return {offset, i + 1, Destination::EffectEntry};
+                if (entry.definition == "GLOBAL" && field.type == "int32") {
+                    if ((field.name == "PhysicsTexture" && link.path == "27438103.Texture") ||
+                        (field.name == "GraphicWeaponTrail" && link.path == "252835944.Texture") ||
+                        (field.name == "GraphicWeaponTrail2" && link.path == "11796568.Texture") ||
+                        (field.name == "GraphicWeaponTrailArrow" && link.path == "3411202723.Texture") ||
+                        (field.name == "EditorCircleSprite" && link.path == "74968592.Texture") ||
+                        (field.name == "EditorSecondaryCircleSprite" && link.path == "200353817.Texture") ||
+                        (field.name == "OpinionDebugIndicatorIcon" && link.path == "2746605571.HUD Items") ||
+                        (field.name == "WifeLoveIndicatorIcon" && link.path == "3332655214.HUD Items") ||
+                        (field.name == "WifeEngagedIndicatorIcon" && link.path == "2943773648.HUD Items") ||
+                        (field.name == "WifeMarriedIndicatorIcon" && link.path == "2118074272.HUD Items") ||
+                        (field.name == "ExpressionIndicatorIcon" && link.path == "1721504732.HUD Items") ||
+                        (field.name == "FollowerIndicatorIcon" && link.path == "3439341061.HUD Items"))
+                        return {offset, i + 1, Destination::TextureEntry};
+                    if ((field.name == "TeleportOutParticleEffect" && link.path == "3316004677.Teleport Out") ||
+                        (field.name == "TeleportInParticleEffect" && link.path == "1775054305.Teleport In"))
+                        return {offset, i + 1, Destination::EffectEntry};
+                }
                 if (entry.definition == "CObjectAugmentationsDef") {
                     if (field.name == "EmptySlotName" && field.type == "uint32" &&
                         link.path == "3513435638.TEXT_AUG_SLOT")
@@ -411,12 +429,13 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     link.path == "301428501.unknown")
                     return {offset, i + 1, Destination::GameEntry};
             }
-            // CGlobalDef.SwitchGraphic is a 17-byte CEngineGraphic. Its
+            // CGlobalDef.SwitchGraphic/TrackGraphic are 17-byte CEngineGraphics. Their
             // second word names the graphics.big model; the legacy metadata
             // calls this control's sole linked member "unknown".
             if (entry.definition == "GLOBAL" &&
-                field.name == "SwitchGraphic" && field.type == "CEngineGraphic" &&
-                field.value.size() == 17 && link.path == "1020994168.unknown")
+                field.type == "CEngineGraphic" && field.value.size() == 17 &&
+                ((field.name == "SwitchGraphic" && link.path == "1020994168.unknown") ||
+                 (field.name == "TrackGraphic" && link.path == "1267143265.unknown")))
                 return {offset + 4, i + 1, Destination::MeshEntry};
             // ChocolateBox's CExperienceDef 1D81A73B control stores a
             // count followed by {experience threshold, EffectID} pairs.

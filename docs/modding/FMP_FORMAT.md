@@ -575,3 +575,13 @@ Evidence: `build/fmp-particle-links-3q24flxm/result.json`.
 Full small-bank scan `build/named-fmp-coverage-cdm_68h9/result.json` accepts
 436/577, five more than before, without regressions. The 244 large-bank
 packages remain deferred at this checkpoint; runtime behavior is unverified.
+
+2026-10-04 GLOBAL follow-up: TrackGraphic's second CEngineGraphic word is a
+model ID. Six HUD icons and the physics/trail/editor graphic scalars are main
+texture IDs; the two teleport particle scalars are effect IDs. Exact legacy
+paths and schema fields bind each domain. Original Aging Slowdown, Fire Teleport
+and Lightning Teleport independently verify 42 asset words and unchanged
+non-reference bytes, direct/composed bank parity and safe missing-model refusal.
+Evidence: `build/fmp-global-links-fqzvxx5a/result.json`, using the separate
+candidate CLI while the previous binary's full 821-package bank-write sweep
+continues. These fixtures establish offline import/composition, not gameplay.

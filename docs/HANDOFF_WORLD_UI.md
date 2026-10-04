@@ -8685,3 +8685,39 @@ Full small-bank scan `build/named-fmp-coverage-cdm_68h9/result.json` accepts
 Fable Reloaded, and No Need for XP. Remaining: 122 link refusals, 11 unavailable
 schemas, eight record-identity refusals and 244 deferred large-bank packages.
 Input archive/baseline hashes are unchanged. Runtime behavior is unverified.
+
+## 2026-10-04 corpus audit checkpoint preservation
+
+`tools/audit_named_fmp_coverage.py` now atomically checkpoints completed rows
+after each package, with processed/eligible totals, explicit completion state,
+large-bank flags and the importer SHA256. Only the final archive, baseline and
+binary identity checks mark a report complete. An interrupted/failed run keeps
+partial evidence without claiming a completed gate. The original 821-package
+large-bank run at `build/named-fmp-coverage-y_urs7oy` was already running and
+continues with its original loaded script and binary; this change does not
+retroactively add checkpoints to it. A two-package real archive check passes
+at `build/named-fmp-coverage-cjwi8fb2/result.json`; diff and Python syntax pass.
+
+## 2026-10-04 GLOBAL asset destinations
+
+The exact GLOBAL TrackGraphic CEngineGraphic model member, six HUD icon fields,
+six physics/trail/editor texture fields and two teleport particle fields now
+resolve through graphics.big, textures.big and effects.big rather than game.bin.
+Bindings require the definition, schema field/type and exact legacy path.
+The physics/trail/editor source words independently match their six named
+retail texture IDs (23, 10, 12, 16, 5538, 5539); local ChocolateBox controls
+confirm the model/HUD/teleport layouts. Its newer physics/trail/editor controls
+still say needslinking, so their meaning is established by the named metadata
+and asset-bank identities, not an asserted XML Link declaration.
+
+Original Aging Slowdown, Fire Teleport and Lightning Teleport pass 42 asset
+word checks, direct/composed definition-bank parity and preservation of all
+non-reference bytes. A selected TrackGraphic with a missing named model refuses
+both routes without replacing prior output. Evidence:
+`build/fmp-global-links-fqzvxx5a/result.json`. Link CTest and the original
+20-link weapon/both-order regression pass (`build/fmp-weapon-links-vtbnu1wv`).
+Checks use `build/forge-tools-next.exe`, linked from the owning primary objects
+and updated core library. The in-flight full-corpus importer remains unchanged
+at SHA256 `9f887c2a31b23a4e5fe6f533cf220d0871a34f4e4d46bd2dee44ac349b62a625`.
+Full-corpus counts and normal CLI rebuild await that run's completion; no
+runtime compatibility claim.

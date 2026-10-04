@@ -63,6 +63,7 @@ def main():
     work = Path(tempfile.mkdtemp(prefix='named-fmp-coverage-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
     archive_hash = digest(args.archive)
+    tool_hash = digest(args.tool)
     baseline = args.install/'data/CompiledDefs'
     baseline_hashes = {name: digest(baseline/name) for name in ('game.bin', 'names.bin')}
     results = []
@@ -71,6 +72,23 @@ def main():
         eligible = [r for r in catalogue if r['banks'] and set(r['banks']) <= SUPPORTED_BANKS]
         if args.limit:
             eligible = eligible[:args.limit]
+        def checkpoint(complete=False):
+            # Retain completed rows even if a later package or the process fails.
+            # A partial checkpoint is never presented as a completed corpus gate.
+            report = {
+                'archive': str(args.archive.resolve()), 'archive_sha256': archive_hash,
+                'baseline': str(args.install.resolve()), 'tool': str(args.tool.resolve()),
+                'tool_sha256': tool_hash, 'baseline_sha256': baseline_hashes,
+                'eligible_total': len(eligible), 'all_catalogue_total': len(catalogue),
+                'processed_total': len(results), 'complete': complete,
+                'apply_textures': args.apply_textures, 'apply_graphics': args.apply_graphics,
+                'status_counts': dict(collections.Counter(r['category'] for r in results)),
+                'rows': results, 'gameplay_tested': False,
+            }
+            temporary = work/'result.json.tmp'
+            temporary.write_text(json.dumps(report, indent=2), encoding='utf-8')
+            temporary.replace(work/'result.json')
+        checkpoint()
         for index, record in enumerate(eligible):
             payload = archive.read(record['file'])
             assert hashlib.sha256(payload).hexdigest() == record['sha256'], record['file']
@@ -86,6 +104,7 @@ def main():
                                 'reason': 'Use the matching --apply-textures/--apply-graphics flags '
                                           'for a full scratch apply; the named asset audits inspect '
                                           'entry metadata without writing the large banks.'})
+                checkpoint()
                 continue
             source = work/'current.fmp'
             source.write_bytes(payload)
@@ -99,22 +118,16 @@ def main():
                    'category': 'accepted' if result.returncode == 0 else category(stderr),
                    'reason': stderr[-1500:] if result.returncode else ''}
             results.append(row)
+            checkpoint()
             checked_remove(output, work)
             source.unlink()
             if (index + 1) % 50 == 0 or index + 1 == len(eligible):
                 print(index + 1, '/', len(eligible),
                       dict(collections.Counter(r['category'] for r in results)), flush=True)
     assert digest(args.archive) == archive_hash
+    assert digest(args.tool) == tool_hash, 'Importer binary changed during the corpus audit'
     assert {name: digest(baseline/name) for name in baseline_hashes} == baseline_hashes
-    report = {
-        'archive': str(args.archive.resolve()), 'archive_sha256': archive_hash,
-        'baseline': str(args.install.resolve()), 'tool': str(args.tool.resolve()),
-        'baseline_sha256': baseline_hashes,
-        'eligible_total': len(eligible), 'all_catalogue_total': len(catalogue),
-        'status_counts': dict(collections.Counter(r['category'] for r in results)),
-        'rows': results, 'gameplay_tested': False,
-    }
-    (work/'result.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+    checkpoint(complete=True)
     print('Result:', work/'result.json', flush=True)
 
 

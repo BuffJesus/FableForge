@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-04 named GLOBAL candidate: Aging Slowdown, Fire Teleport and Lightning
+Teleport pass 42 independently checked model/texture/effect words, byte
+preservation, direct/composed parity and safe missing-model refusal. The full
+821-package texture/graphics write sweep remains in progress with its previous
+fixed importer. See HANDOFF_WORLD_UI for exact candidate and corpus boundaries.
+
 2026-10-04 release checkpoint: the Forge-managed Aeon/controller route is
 published as prerelease `v0.18.1-rc.1` at tagged source `f5c763a` with green
 Windows CI, a versioned application ZIP, updated illustrated guide and four
