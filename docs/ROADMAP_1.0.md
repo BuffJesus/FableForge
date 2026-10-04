@@ -6,8 +6,21 @@ Windows CI, a versioned application ZIP, updated illustrated guide and four
 direct screenshot assets. The extracted candidate passed 46/46 workflows with
 zero skips before a final screenshot-only repack; archive identities and links
 were checked after repacking. The Discord message is drafted but unsent. Live
-gameplay/Retroid remain untested and direct `mods merge` late-read output
+gameplay/Retroid remained untested at the release checkpoint and direct `mods merge` late-read output
 atomicity remains open. See HANDOFF_WORLD_UI.
+
+2026-10-04 external Windows check after release: Perodis installed the
+three-source Aeon 5.03 + Controller Support FMP/DLL order through the released
+Forge build and launched through EgoCore on a second Windows PC. Aeon signs
+appeared in-game, an Xbox controller worked, and target lock did not crash.
+The wired Nintendo Switch Pro Controller did not respond in Fable; Steam's
+controller test worked, while Windows' raw `joy.cpl` properties showed many
+buttons lit. This is evidence for the PC install/runtime path with one XInput
+controller, not for the Switch Pro input path or Retroid. GameNative's source
+has per-game Steam Input/XInput/DirectInput switches and forwards Android
+controller state to the Wine process; the Fable/EgoCore route there is still
+untested. The transfer guide now names the deployed game folder and
+`FSE_Launcher.exe` explicitly.
 
 2026-10-04 complete-Data installer integration: the isolated primary-based
 merge preserves all product/test bytes from the 46-workflow-tested review branch
