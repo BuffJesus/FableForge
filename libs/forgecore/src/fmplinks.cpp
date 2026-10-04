@@ -252,6 +252,10 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (field.type == "CDefString") return {offset, i + 1, Destination::NameOffset};
                 if (field.type == "int32" || field.type == "uint32" || field.type == "CDefIndex" || field.type == "J")
                     return {offset, i + 1, Destination::GameEntry};
+                // CREATURE's schema leaves GroupDef unresolved; the donor and
+                // retail payload identify this one four-byte game.bin index.
+                if (field.name == "GroupDef" && field.type == "?")
+                    return {offset, i + 1, Destination::GameEntry};
             }
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
@@ -265,6 +269,24 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 const auto destination = field.type == "Vector_VCDefString__" ?
                     Destination::NameOffset : Destination::GameEntry;
                 return {offset + 4 + index * 4, i + 1, destination};
+            }
+            // CThingComponentSet: count, 9-byte {CTC name offset, param, flag}
+            // records, then an opaque retail tail. The creature schema calls
+            // this field '?' but its decoded value has the same record layout.
+            // Only the first u32 of the addressed record is a named link.
+            if (field.name == "Components" &&
+                (field.type == "CThingComponentSet" || field.type == "?") &&
+                parts.size() == 4 && parts[1] == "CTC List" && parts[3] == "CTC Name") {
+                if (field.value.size() < 8) fail("invalid component reference path");
+                const size_t count = read32(field.value, 0);
+                if (count > (field.value.size() - 4) / 9 || count > 4096)
+                    fail("invalid component record count");
+                const size_t tail = field.value.size() - 4 - count * 9;
+                if (tail != 4 && tail != 104)
+                    fail("unsupported component tail layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("component reference index out of range");
+                return {offset + 4 + index * 9, i + 1, Destination::NameOffset};
             }
             fail("unsupported reference field " + entry.name + ": " + field.name);
         }

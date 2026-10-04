@@ -185,8 +185,8 @@ The 14-case run at `build/named-fmp-stack-syhvax35/result.json` establishes:
   `BerserkScale`. Both orders compose; the reported field winner follows the last
   package, and the output `game.bin` hashes differ. This is a real named-package
   check of field-level load order, not a synthetic conflict.
-- The other selected packages refuse cleanly: Ghost Sword variants need a verified
-  `Components` reference layout; Young Hero Retexture needs `maintextures` support;
+- The other selected packages refuse cleanly: Ghost Sword variants need verified
+  nested weapon references; Young Hero Retexture needs `maintextures` support;
   Working Stick needs `FrontEndBINEntries`; the staff package has an unresolved
   multi-target link; 0 Silver Keys has ambiguous link metadata. Refused packages
   leave the requested output untouched.
@@ -198,11 +198,11 @@ need their graphics bank entries before the editor can show their thumbnails.
 The full importer scan in `tools/audit_named_fmp_coverage.py` classifies all
 1,142 catalogue rows by bank support and then tries every eligible package in
 scratch. With the 2026-10-04 linker, 577 had nonempty banks on the current
-allowlist; 116 imported offline, 451 refused on metadata/reference or schema
+allowlist; 117 imported offline, 450 refused on metadata/reference or schema
 constraints. Another 556 carry unsupported bank types, and nine have no
-recognized entries. This is importer coverage, not a claim that 116 packages
+recognized entries. This is importer coverage, not a claim that 117 packages
 have been composed in stacks or played. The result is at
-`build/named-fmp-coverage-w1tmlt99/result.json` in this checkout.
+`build/named-fmp-coverage-b8woptao/result.json` in this checkout.
 
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
@@ -211,3 +211,15 @@ resolved targets in the output names table; the package also completed the
 full one-mod composer. This change raised the eligible importer count from
 100 to 116. `forge-tools fmp links <package> --json` exposes the decoded named
 link metadata for further corpus investigation.
+
+The `Components` link field has a narrower verified path too. Native format
+notes in `D:/Documents/FableTLC/docs/engine/HERO_APPEARANCE.md` describe the
+counted nine-byte CTC records: a `names.bin` offset, four-byte parameter and
+one-byte flag, followed by an opaque tail. The linker now changes only the
+name-offset word for `CTC List.<index>.CTC Name` and accepts the observed
+four- or 104-byte tail lengths. `No Quiver.fmp` passes a full one-mod compose;
+`tools/test_fmp_component_links.py` checked all five referenced component names
+and byte-for-byte preservation of every parameter, flag and tail byte. This
+raised eligible importer coverage from 116 to 117. Ghost Sword packages still
+refuse on separate nested weapon references after passing the component field;
+their unresolved links are not silently omitted.
