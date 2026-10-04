@@ -194,3 +194,20 @@ The 14-case run at `build/named-fmp-stack-syhvax35/result.json` establishes:
 This is an offline compatibility sample, not an in-game validation or a claim
 that every package in the archive is supported. New `OBJECT_*` definitions still
 need their graphics bank entries before the editor can show their thumbnails.
+
+The full importer scan in `tools/audit_named_fmp_coverage.py` classifies all
+1,142 catalogue rows by bank support and then tries every eligible package in
+scratch. With the 2026-10-04 linker, 577 had nonempty banks on the current
+allowlist; 116 imported offline, 451 refused on metadata/reference or schema
+constraints. Another 556 carry unsupported bank types, and nine have no
+recognized entries. This is importer coverage, not a claim that 116 packages
+have been composed in stacks or played. The result is at
+`build/named-fmp-coverage-w1tmlt99/result.json` in this checkout.
+
+One verified expansion is `Vector_VCDefString__`: its four-byte values are
+offsets into `names.bin`, including the sound arrays in Divine and Unholy
+Powers. `tools/test_fmp_string_vector_links.py` independently checked 16
+resolved targets in the output names table; the package also completed the
+full one-mod composer. This change raised the eligible importer count from
+100 to 116. `forge-tools fmp links <package> --json` exposes the decoded named
+link metadata for further corpus investigation.

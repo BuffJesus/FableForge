@@ -260,6 +260,7 @@ int usage() {
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
         "  forge assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n"
         "  forge fmp list <file.fmp> [--json]\n"
+        "  forge fmp links <file.fmp> [--json]   (named game-link metadata)\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
@@ -9627,6 +9628,24 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     return 0;
 }
 
+int fmpLinks(const std::string& path, bool jsonOutput) {
+    const auto links = forge::fmplinks::readGameLinks(openFmpPackage(path));
+    json records = json::array();
+    for (const auto& [record, pairs] : links) {
+        json items = json::array();
+        for (const auto& link : pairs)
+            items.push_back({{"path", link.path}, {"target", link.target}});
+        records.push_back({{"record", record}, {"links", items}});
+        if (!jsonOutput) {
+            std::printf("%s: %zu link(s)\n", record.c_str(), pairs.size());
+            for (const auto& link : pairs)
+                std::printf("  %s -> %s\n", link.path.c_str(), link.target.c_str());
+        }
+    }
+    if (jsonOutput) std::puts(json{{"file", path}, {"records", records}}.dump(2).c_str());
+    return 0;
+}
+
 // A direct build may encounter an unreadable source after its definitions were
 // already written. Keep the caller's output untouched until composition succeeds.
 int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
@@ -10920,6 +10939,10 @@ int main(int argc, char** argv) {
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "list") {
             const bool asJson = !args.empty() && args.back() == "--json";
             return fmpList(args[2], asJson);
+        }
+        if (args.size() >= 3 && args[0] == "fmp" && args[1] == "links") {
+            const bool asJson = !args.empty() && args.back() == "--json";
+            return fmpLinks(args[2], asJson);
         }
         if (args.size() >= 5 && args[0] == "fmp" && args[1] == "apply") {
             return fmpApply(args[2], args[3], args[4]);

@@ -1020,6 +1020,17 @@ definition package remains unsupported; its earlier added-record counts did
 not prove correct linking. See [FMP format and limits](modding/FMP_FORMAT.md).
 Runtime compatibility remains unverified.
 
+2026-10-04 named historic FMP audit: the original 1,142-package archive has
+577 packages with nonempty banks on the current importer allowlist. An offline
+apply sweep against the installed TLC data accepts 116 and refuses 451; 556
+packages need other bank types, and nine have no recognized entries. A verified
+`Vector_VCDefString__` names-offset linker added 16 accepted spell packages.
+The real Berserk Scale/Small Berserk pair composes in both orders with one
+reported `BerserkScale` conflict and different output banks. The Oak Vale bed
+package composes a WAD TNG entry with five provenance UIDs. See
+`docs/modding/FMP_FORMAT.md` for the commands and limits. In-game checks remain
+open, as do complex Components links and graphics/texture bank integration.
+
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff
 `.patch`, in argument order = load order; field-level `game.bin` merge, loose-TNG thing merge by

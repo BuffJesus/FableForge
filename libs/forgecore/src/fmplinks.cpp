@@ -256,11 +256,15 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
             if (parts.size() >= 4 && !parts.back().empty() && !parts[1].empty() &&
-                (field.type == "Vector_J" || field.type == "Vector_VCDefIndex__")) {
+                (field.type == "Vector_J" || field.type == "Vector_VCDefIndex__" ||
+                 field.type == "Vector_VCDefString__")) {
+                if (field.value.size() < 4) fail("invalid reference vector path");
                 const size_t count = read32(field.value, 0), index = number(parts[parts.size() - 2]);
                 if (count > (field.value.size() - 4) / 4 || field.value.size() != 4 + count * 4 || index >= count)
                     fail("invalid reference vector path");
-                return {offset + 4 + index * 4, i + 1, Destination::GameEntry};
+                const auto destination = field.type == "Vector_VCDefString__" ?
+                    Destination::NameOffset : Destination::GameEntry;
+                return {offset + 4 + index * 4, i + 1, destination};
             }
             fail("unsupported reference field " + entry.name + ": " + field.name);
         }
