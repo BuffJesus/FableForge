@@ -1,5 +1,14 @@
 > Based on FableForge-legacy `docs/MOD_PACKS.md`, ported on 2026-09-19 as the design reference for milestone 0.20 (Mod packs v1) in `docs/ROADMAP_1.0.md`. Current Forge additions are documented below. The commands live in `forge-tools.exe` (`tools/forge-cli/main.cpp`; spelled `forge-tools` below, while the legacy repo called that exe `forge`).
 
+The proposed successor package, with typed edits, baseline profiles and
+EgoCore runtime components, is in [Forge package v2 proposal](PACKAGE_V2_PROPOSAL.md).
+
+A content-only source containing `data/lang/<language>/text.big` now joins the
+text union even when it has no `game.bin`. Forge plans final TextIDs from the
+selected load order and text picks before relinking named FMP references. A
+selected definition link that resolves to different IDs across available
+languages refuses the build.
+
 # Mod packs, load order, and conflict resolution
 
 Compiled-definition composition refuses sources carrying changed or new unnamed
