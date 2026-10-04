@@ -5,6 +5,8 @@ a speaker tree and inline lip-sync editor with Undo/Redo, native Browse controls
 a stable camera compass, terrain props that follow slopes, and clearer effect previews.
 See the [release notes](docs/releases/0.18.0.md) for changes and validation limits.
 
+**Aeon Edition + Controller Support preview:** [0.18.1-rc.1](https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.1) fixes complete Data installation. See the [candidate notes](docs/releases/0.18.1-rc.1.md) and [illustrated guide](docs/walkthrough/aeon-controller/index.html).
+
 *Until 0.16 this was **Albion Atlas**; same tool, new name (the old FableForge's core
 library lives on inside it as `libs/forgecore`). Settings and presets carry over.*
 

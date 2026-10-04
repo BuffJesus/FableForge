@@ -9,7 +9,7 @@
 <h1>Aeon Edition + Controller Support</h1>
 <p class="note"><strong>Forge installs all three sources.</strong> Give it the extracted Aeon Edition folder, the controller FMP and the controller runtime folder. Forge prepares the complete overhaul, applies the controller changes and deploys the result.</p>
 <p>This route uses Forge for the game-data installation and EgoCore to load the controller DLL during play. Chocolate Box, Fable Explorer and a separate FreeRoam step are unnecessary for this checked route.</p>
-<p class="note">Use the development application supplied with this updated guide. The old <code>0.18.0-rc.3</code> application predates these installer corrections. File preservation checks have passed; gameplay, Android, Winlator and GameNative remain untested.</p>
+<p class="note">Use <a href="https://github.com/BuffJesus/FableForge/releases/tag/v0.18.1-rc.1">FableForge 0.18.1-rc.1</a> with this guide. The old <code>0.18.0-rc.3</code> application predates these installer corrections. File preservation checks have passed; gameplay, Android, Winlator and GameNative remain untested.</p>
 <section><h2><span class="step">1</span>Choose the game copy to prepare</h2>
 <p>Start with a clean copy of <strong>Fable: The Lost Chapters (2005)</strong> and keep your saves backed up. Forge will install the mods into the game folder you choose in step 3.</p>
 <p>Keep the downloaded mod sources outside that game folder so Forge can rebuild and remove the installation later.</p></section>
@@ -23,7 +23,7 @@
 <p>These are paths you select in Forge. After extraction, continue to steps 3 and 4 to add them. Forge handles copying them into the selected game installation.</p>
 <p>When the controller FMP is present, Forge installs the controller runtime DLL without its alternate Data overrides. That prevents the runtime package from overwriting the relinked FMP result. The original downloaded folder stays unchanged.</p></section>
 <section><h2><span class="step">3</span>Select the game folder in Forge</h2>
-<p>Extract the complete development application ZIP supplied with this guide and open <code>FableForge.exe</code>. Keep its companion files together. The guide-only ZIP does not contain the application.</p>
+<p>Download and extract the complete FableForge 0.18.1-rc.1 application ZIP, then open <code>FableForge.exe</code>. Keep its companion files together. The guide-only ZIP does not contain the application.</p>
 <p>In <strong>Setup &rarr; Choose the install folder&hellip;</strong>, select the game folder containing <code>Fable.exe</code>. For Steam, this is the <code>Fable The Lost Chapters</code> folder. Close Fable and EgoCore while Forge writes files, then open <strong>Mods</strong>.</p></section>
 <section><h2><span class="step">4</span>Add all three sources</h2>
 <p>Under <strong>Add a mod</strong>, click <strong>Browse&hellip;</strong>. Use <strong>Choose mod folder&hellip;</strong> for Aeon and the runtime, and <strong>Choose mod file&hellip;</strong> for the FMP. Select the source and click <strong>Add to the order</strong>. Repeat until these enabled entries appear from top to bottom:</p>

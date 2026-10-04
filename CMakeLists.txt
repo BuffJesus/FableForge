@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FableForge VERSION 0.18.0 LANGUAGES C CXX)
+project(FableForge VERSION 0.18.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,7 +55,7 @@ target_include_directories(forgecore_slice PUBLIC
 )
 
 # "-dev" until the release is tagged (docs/RELEASE.md step 5 clears it)
-set(FORGE_VERSION_SUFFIX "-dev")
+set(FORGE_VERSION_SUFFIX "-rc.1")
 add_compile_definitions(ALBION_VERSION="${PROJECT_VERSION}${FORGE_VERSION_SUFFIX}")
 add_library(fableforge STATIC src/terrainexport.cpp src/foliageexport.cpp src/thingsexport.cpp src/stbterrain.cpp src/effects.cpp src/leveledit.cpp src/vanilla_props.cpp src/worldedit.cpp src/overworld.cpp src/stbrelocate.cpp src/lodbake.cpp src/stitch.cpp src/livelink.cpp src/backups.cpp src/navlines.cpp src/worldtiles.cpp
     src/stbcompact.cpp src/presets.cpp src/gtg.cpp src/texturebrowse.cpp src/meshimport.cpp src/modpack.cpp)
