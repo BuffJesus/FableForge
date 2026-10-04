@@ -45,6 +45,10 @@ public:
     // This describes the loaded bank, not a subsequently saved/reordered table.
     std::optional<uint32_t> originalNameOffset(std::string_view name) const;
 
+    // Offset this File::save() will assign after appending names for added
+    // definition records in entry order. Existing offsets remain unchanged.
+    std::optional<uint32_t> savedNameOffset(std::string_view name) const;
+
     // --- Write path. Mutate payloads (or add entries), then save both files.
     // Saving re-chunks and re-compresses, so output is not byte-identical to
     // the input; the guarantee is a semantic round-trip (same definitions,

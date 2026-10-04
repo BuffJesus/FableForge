@@ -97,9 +97,9 @@ The bounded `HERO_ABILITY` and `HERO_STATS` text-reference paths now resolve
 existing `text.big` names, with hero HUD icons resolved through `textures.big`.
 The archived `EXP And Hero Mod.fmp` applies directly and through the one-mod
 composer with byte-identical definition banks and 217 resolved named links.
-The current full small-bank scan accepts 391/577, ten more than the prior
-381/577 scan after bounded `CAppearanceModifierDef.Graphics` mesh links;
-167 link refusals remain. New FMP Text IDs now resolve after
+The current full small-bank scan accepts 405/577, 14 more than the prior
+391/577 scan after bounded BRAIN behaviour and summon-brain links; 153 link
+refusals remain. New FMP Text IDs now resolve after
 text-only sources, load order and picks are composed; cross-language ID
 validation and a 13-case synthetic archived-hero regression pass offline.
 Runtime behavior still requires separate validation. The proposed successor

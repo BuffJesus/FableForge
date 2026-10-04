@@ -501,3 +501,29 @@ small-bank FMPs, ten more than before; 167 link refusals and 244 deferred
 large-bank packages remain. Four appearance packages still refuse on missing
 mesh names or another unsupported reference. This does not verify game
 rendering or gameplay.
+
+2026-10-04 brain-link follow-up: `BRAIN.Behaviours` is a counted array of
+12-byte entries. The legacy `CreatureActionList.{i}.CreatureAction` target is
+the first word's `names.bin` offset; the other two words remain intact. The
+importer checks the full field size and index. `CSummonableCreatureDef`'s
+four-byte `SummonedBrain` field is ChocolateBox's `Brain To Use` control and
+also stores a `names.bin` offset. `bin::File::savedNameOffset()` now plans
+offsets for names of newly added definition records in the same append order
+as `save()`, while preserving original offsets for loaded names. This lets a
+summon definition point to a brain introduced by the same FMP.
+
+`tools/test_fmp_brain_behaviour_links.py` checks 17 action links in the
+original Brain Earth Troll New and Necropolis Drunken Louts packages, with
+direct/merged bank parity, exact action-word deltas and malformed-list
+refusal. `tools/test_fmp_summon_brain_links.py` checks five existing/new brain
+targets from Ghost Sword - Summoner, Summoner summon and Troll Summon,
+including the emitted `names.bin` offsets, direct/merged parity, and a missing
+new-name refusal before output writes. The 510-record No body Rots regression
+and `fableforge_fmplinks_tests` still pass after the saved-name change.
+
+The exact final-binary full eligible scan is
+`build/named-fmp-coverage-20ypy0yg/result.json`: 405/577 attempted small-bank
+FMPs accepted, up from 391; 153 refuse on links, 11 on schema availability and
+eight on record identity. Another 244 packages with large texture/graphics
+banks remain deferred from apply testing. These are offline import checks, not
+gameplay or runtime compatibility evidence.

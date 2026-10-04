@@ -97,6 +97,9 @@ int main() {
     const auto original = owner.data;
     forge::bin::File targets;
     targets.addEntry("TARGET", "A", {0}); targets.addEntry("TARGET", "B", {0});
+    check(!targets.originalNameOffset("B") && targets.savedNameOffset("A") == 15 &&
+          targets.savedNameOffset("B") == 21,
+          "new entry names receive the same offsets as the save writer");
     // Legacy big-endian control IDs for Alpha/Beta, independently computed.
     const std::string alphaId = "1944126423", betaId = "1098180366";
     const std::string scalar = alphaId + "._";

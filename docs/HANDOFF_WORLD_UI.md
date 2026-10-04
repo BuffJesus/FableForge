@@ -8547,3 +8547,32 @@ Full named small-bank coverage at
 Ten previously refused appearance packages pass. Four progress to separate
 missing-mesh or unsupported-link refusals. The archive and installed input
 hashes are unchanged. No rendering or gameplay was tested.
+
+## 2026-10-04 brain links and newly saved name offsets
+
+`BRAIN.Behaviours` now resolves the legacy indexed `CreatureAction` path to
+the first `names.bin` offset word in each 12-byte row. The count and full
+stride are validated; the other row words are preserved. The four-byte
+`CSummonableCreatureDef.SummonedBrain` control also resolves a name offset,
+following the local ChocolateBox `Brain To Use` definition.
+
+The `bin::File` saved-name planner covers names of newly added records in the
+same order as the writer. This is needed when a summon FMP adds a BRAIN entry
+and links it from a summon definition. Original-name lookups retain their
+loaded offsets; the large No body Rots package passes after a fast path for
+those existing names.
+
+`tools/test_fmp_brain_behaviour_links.py` passes 17 archived action links,
+direct/merge parity, exact byte deltas and malformed-list refusal. Evidence:
+`build/fmp-brain-links-jmc6dvvz/result.json`.
+`tools/test_fmp_summon_brain_links.py` passes five existing/new brain links,
+checks their emitted `names.bin` offsets and refuses a missing new name
+without altering prior output. Evidence:
+`build/fmp-summon-brain-mqdziun1/result.json`. The `No body Rots.fmp`
+regression and `fableforge_fmplinks_tests` also pass.
+
+The exact final binary's named eligible scan at
+`build/named-fmp-coverage-20ypy0yg/result.json` accepts 405 of 577 attempted
+small-bank FMPs, up from 391; 153 link, 11 schema and eight record-identity
+refusals remain. The 244 large-bank packages remain deferred. Original archive
+and install hashes were unchanged; no gameplay or Retroid test was performed.

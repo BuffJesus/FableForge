@@ -208,6 +208,35 @@ std::optional<uint32_t> File::originalNameOffset(std::string_view name) const {
     return std::nullopt;
 }
 
+std::optional<uint32_t> File::savedNameOffset(std::string_view name) const {
+    if (const auto loaded = originalNameOffset(name)) return loaded;
+    uint64_t offset = 4;
+    std::map<std::string, uint32_t> seen;
+    auto visit = [&](const std::string& value) -> std::optional<uint32_t> {
+        if (seen.contains(value)) return std::nullopt;
+        if (offset > UINT32_MAX) throw std::runtime_error("names.bin: offset overflow");
+        const auto assigned = static_cast<uint32_t>(offset);
+        seen.emplace(value, assigned);
+        offset += value.size() + 5;
+        return value == name ? std::optional<uint32_t>(assigned) : std::nullopt;
+    };
+    // save() writes all loaded names, including duplicates, before appending
+    // missing definition and entry names. The first duplicate owns lookups.
+    for (const auto& [crc, value] : names_) {
+        if (const auto found = seen.find(value); found != seen.end()) {
+            offset += value.size() + 5;
+            continue;
+        }
+        if (const auto result = visit(value)) return result;
+    }
+    for (const auto& entry : entries_) {
+        if (const auto result = visit(entry.definition)) return result;
+        if (!entry.name.empty())
+            if (const auto result = visit(entry.name)) return result;
+    }
+    return std::nullopt;
+}
+
 const Entry* File::find(std::string_view name) const {
     for (const Entry& entry : entries_) {
         if (entry.name == name) return &entry;

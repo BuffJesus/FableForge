@@ -338,6 +338,13 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 // retail payload identify this one four-byte game.bin index.
                 if (field.name == "GroupDef" && field.type == "?")
                     return {offset, i + 1, Destination::GameEntry};
+                // ChocolateBox's CSummonableCreatureDef control CE75850F
+                // calls this slot "Brain To Use" and links to NamesBINOffset.
+                // The schema has the exact four-byte field but no scalar type.
+                if (entry.definition == "CSummonableCreatureDef" &&
+                    field.name == "SummonedBrain" && field.type == "?" &&
+                    link.path == "3463808271.Brain To Use")
+                    return {offset, i + 1, Destination::NameOffset};
             }
             if (entry.definition == "CREATURE" &&
                 link.path == "706745797.Weapon3ID" &&
@@ -375,6 +382,21 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 const size_t index = number(parts[2]);
                 if (index >= count) fail("reward object index out of range");
                 return {offset + 4 + index * 8, i + 1, Destination::GameEntry};
+            }
+            // BRAIN.Behaviours stores a counted list of 12-byte action rows.
+            // The first word is a names.bin offset for an SG_* action name;
+            // the remaining two words are behavior parameters.
+            if (entry.definition == "BRAIN" && field.name == "Behaviours" &&
+                field.type == "Vector_VCBrainBehaviour__" && parts.size() == 4 &&
+                parts[1] == "CreatureActionList" && parts[3] == "CreatureAction") {
+                if (field.value.size() < 4) fail("invalid brain behaviour list");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 12 ||
+                    field.value.size() != 4 + count * 12)
+                    fail("unsupported brain behaviour layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("brain behaviour index out of range");
+                return {offset + 4 + index * 12, i + 1, Destination::NameOffset};
             }
             // CAppearanceModifierGraphics is a counted array of 24-byte
             // entries. The third u32 is the worn mesh's graphics.big ID;
@@ -679,7 +701,7 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                 if (found != textIds->end()) target = found->second;
             }
         } else {
-            const auto name = targets.originalNameOffset(link.target);
+            const auto name = targets.savedNameOffset(link.target);
             if (name) target = location.destination == Destination::NameCrc ? defdecode::fieldTag(link.target) : *name;
         }
         if (!target) {
