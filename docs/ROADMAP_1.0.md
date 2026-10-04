@@ -1031,7 +1031,7 @@ The real Berserk Scale/Small Berserk pair composes in both orders with one
 reported `BerserkScale` conflict and different output banks. The Oak Vale bed
 package composes a WAD TNG entry with five provenance UIDs. See
 `docs/modding/FMP_FORMAT.md` for the commands and limits. In-game checks remain
-open, as do nested creature/weapon links and remaining graphics/texture bank
+open, as do nested creature/weapon links and remaining asset bank
 integration. The `maintextures` entry composer now replaces/adds texture entries
 by stable id, preserves disjoint FMP edits, reports same-entry conflicts and
 whole-file masking, and surfaces conflicts in the Mods UI. The named texture
@@ -1044,6 +1044,13 @@ the requested winner. Per-entry FMP texture winners can now be saved in the Mods
 conflict list (or supplied to `mods merge --picks`); an existing install-baseline
 entry or absence of a newly added entry can be selected with `vanilla`. Picks
 survive reordering, with an unavailable contributor reported and load order used.
+The graphics entry composer now provides the same guarded replacement/addition,
+whole-file masking, conflict report and saved per-mesh winner behavior for
+`graphics.big/MBANK_ALLMESHES`. The named archive audit found 261/314 packages
+with compatible mesh identities, 186 also having available texture names and
+compatible texture identities. Direct and layered scratch tests pass; texture/mesh
+reference remapping for collided ids, broader corpus builds, and in-game
+viewport checks remain open. See `docs/modding/FMP_FORMAT.md`.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

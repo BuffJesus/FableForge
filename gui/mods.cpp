@@ -569,6 +569,11 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             rows.push_back({"texture", "texture:" + c.value("entry", ""),
                             c.value("entry", ""), mods(c["mods"]),
                             c.value("winner", ""), c.value("overridden", false), true});
+    if (rep.contains("graphics"))
+        for (const auto& c : rep["graphics"].value("conflicts", json::array()))
+            rows.push_back({"mesh", "mesh:" + c.value("entry", ""),
+                            c.value("entry", ""), mods(c["mods"]),
+                            c.value("winner", ""), c.value("overridden", false), true});
     if (rep.contains("lip_sync"))
         for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
             const std::string language=c.value("language",""),bank=c.value("bank","");
@@ -620,6 +625,12 @@ void App::pollModsTool() {
                     modInstallSummary_ += " " + std::to_string(masked.size()) +
                         " FMP texture pack(s) load before a later whole texture bank; those texture entries are masked.";
             }
+            if (rep.contains("graphics")) {
+                const auto masked = rep["graphics"].value("masked", nlohmann::json::array());
+                if (!masked.empty())
+                    modInstallSummary_ += " " + std::to_string(masked.size()) +
+                        " FMP mesh pack(s) load before a later whole graphics bank; those mesh entries are masked.";
+            }
             modNewMissingMeshes_.clear();
             modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
             modAssetStatus_.clear(); modAssetError_.clear();
@@ -637,10 +648,11 @@ void App::pollModsTool() {
             modReportLoaded_ = true;
             const auto& sm = rep.value("summary", nlohmann::json::object());
             char buf[256];
-            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu texture, %zu lip sync",
+            std::snprintf(buf, sizeof buf, "%zu conflict(s) across %zu mod(s): %zu record, %zu thing, %zu quest, %zu string, %zu file, %zu texture, %zu mesh, %zu lip sync",
                           modConflicts_.size(), size_t(sm.value("sources", 0)), size_t(sm.value("defs_conflicts", 0)), size_t(sm.value("tng_conflicts", 0)),
                           size_t(sm.value("qst_conflicts", 0)), size_t(sm.value("text_contested", 0)), size_t(sm.value("files_contested", 0)),
                           size_t(sm.value("maintextures_conflicts", 0)),
+                          size_t(sm.value("graphics_conflicts", 0)),
                           size_t(sm.value("lip_sync_contested", 0)));
             modReportSummary_ = buf;
             pushLog("mods conflicts: " + modReportSummary_, modConflicts_.empty() ? 0 : 1);
@@ -993,7 +1005,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
                 auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
                 for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
-                const char* baselineLabel = c.kind == "texture" ? "install baseline" :
+                const char* baselineLabel = c.kind == "texture" || c.kind == "mesh" ? "install baseline" :
                     c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)";
                 if (ImGui::Selectable(baselineLabel, current == "vanilla")) modPick(c.key, "vanilla");
                 auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());

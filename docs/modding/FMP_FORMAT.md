@@ -258,3 +258,37 @@ and preserves prior output. A scratch GUI automation check confirms the
 texture rows and saved winner control. Full mixed-source ordering remains open;
 an EgoCore `.resource` targeting an entry with a saved FMP texture choice
 currently refuses composition.
+
+The `graphics` FMP bank now maps to `data/graphics/graphics.big/MBANK_ALLMESHES`.
+Existing meshes retain their numeric id and type; new mesh names require an
+unused id. Forge preserves the package's mesh payload and Info subheader, composes
+disjoint entries, reports same-mesh conflicts, and masks FMP entries before a
+later whole-file graphics bank. The Mods conflict list and
+`mesh:<entry><TAB><mod name|vanilla>` saved picks select a contributing mesh or
+the install baseline. `vanilla` omits a mesh added only by mods. Graphics link
+metadata is decoded as named texture references; the target name must exist in
+the composed main texture bank and its numeric id must appear in the mesh Info
+header. An earlier EgoCore `.resource` targeting the
+same later FMP mesh is refused until mixed-source ordering is implemented.
+
+`tools/audit_named_fmp_graphics.py` inspected all 314 named packages with a
+`graphics` bank against this install without writing full graphics banks. It
+found 261 with compatible mesh name/id/type identities (136 replacement and
+786 added entries across the whole set); 53 have mesh collisions or malformed
+metadata. Of those 261, 186 also have available named textures with compatible
+texture identities. Seventeen name textures absent from both the package and
+install, and 61 carry texture id/type collisions (three are in both groups).
+All 3,180 graphics links
+decoded: 2,675 base, 360 specular and 145 bump texture references. The report
+is `build/named-fmp-graphics-audit.json`. These are metadata candidates, not
+186 completed builds or gameplay checks.
+
+`tools/test_fmp_graphics_layers.py` independently walked output BIG entries
+after direct apply (including Hollow Wip's mesh plus new texture), disjoint
+composition, both orders of the Half Mask/Lava JOB
+Mask conflict, an earlier-winner pick, a baseline pick, and removal of a new
+mesh via `vanilla`. It checked a missing texture refusal, occupied-id refusal,
+untouched output on refusal and unchanged source hashes. The scratch Mods GUI
+check in `tools/test_fmp_graphics_picks_ui.py` shows the named mesh conflict and
+persists its winner. New `OBJECT_*` definitions still need a compatible mesh
+and other referenced assets; in-game rendering remains unverified.

@@ -110,7 +110,7 @@ must show the source of the resulting value and explain why that source wins.
 
 - `gui/mods.cpp`: conflict rows, `modPick`/`setModPick`, and persisted choices in
   `forge_mods_picks.txt`; the default winner follows mod order. Several record,
-  placed-thing, quest, string and FMP main-texture families have picks. Lip-sync rows currently
+  placed-thing, quest, string, FMP main-texture and FMP mesh families have picks. Lip-sync rows currently
   instruct users to reorder packs instead.
 - The definition pipeline already supports schema-based field merging. Do not
   confuse automatic field merging with a complete per-field comparison/picking UI.

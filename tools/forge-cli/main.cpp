@@ -260,7 +260,7 @@ int usage() {
         "  forge mesh-info <graphics.big> <MESH_NAME|id|--last|--max-id> [--json]   (one MBANK_ALLMESHES entry decoded: counts, bounds, the Info blob)\n"
         "  forge assets missing-mesh <game-root> <def-schema.json> [--graphics <graphics.big>] [--json]\n"
         "  forge fmp list <file.fmp> [--json]\n"
-        "  forge fmp links <file.fmp> [--json]   (named game-link metadata)\n"
+        "  forge fmp links <file.fmp> [--graphics] [--json]   (named game or graphics link metadata)\n"
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
@@ -271,7 +271,7 @@ int usage() {
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
         "  forge mods deploy <game-root> [--picks f]   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
-        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, texture:<entry>, fse:<quest key>; winner = a mod name or vanilla\n"
+        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, texture:<entry>, mesh:<entry>, fse:<quest key>; winner = a mod name or vanilla\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -8172,6 +8172,80 @@ size_t patchFmpMainTextures(forge::big::File& textures,
     return changes->entries.size();
 }
 
+// Keep mesh ids stable: game.bin Graphic fields and the editor's mesh reader
+// reference MBANK_ALLMESHES by numeric id. Never let an FMP's new symbol
+// overwrite a different retail symbol at the same id.
+size_t patchFmpGraphics(forge::big::File& graphics,
+                        const forge::big::File& package) {
+    const auto* changes = package.findBank("graphics");
+    if (!changes || changes->entries.empty()) return 0;
+    auto* bank = graphics.findBank("MBANK_ALLMESHES");
+    if (!bank) throw std::runtime_error("FMP graphics: MBANK_ALLMESHES is absent");
+    std::set<std::string> seen;
+    for (const auto& source : changes->entries) {
+        if (source.name.empty() || !seen.insert(source.name).second || source.length == 0)
+            throw std::runtime_error("FMP graphics: invalid or duplicate entry " + source.name);
+        auto byName = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == source.name; });
+        auto byId = std::find_if(bank->entries.begin(), bank->entries.end(),
+            [&](const forge::big::Entry& e) { return e.id == source.id; });
+        if (byName != bank->entries.end()) {
+            if (byName->id != source.id || byName->type != source.type)
+                throw std::runtime_error("FMP graphics: identity mismatch for " + source.name);
+            byName->data = package.entryData(source);
+            byName->length = uint32_t(byName->data.size());
+            byName->subHeader = source.subHeader;
+        } else {
+            if (byId != bank->entries.end())
+                throw std::runtime_error("FMP graphics: id " + std::to_string(source.id) +
+                    " already belongs to " + byId->name + "; cannot add " + source.name);
+            forge::big::Entry added = source;
+            added.magic = bank->entries.empty() ? 42 : bank->entries.back().magic;
+            added.data = package.entryData(source);
+            added.length = uint32_t(added.data.size());
+            bank->entries.push_back(std::move(added));
+        }
+    }
+    return changes->entries.size();
+}
+
+void validateFmpGraphicLinks(const forge::big::File& package,
+                             const forge::big::File& textures) {
+    const auto* metadata = package.findBank("graphicsLinkMetaData");
+    if (!metadata || metadata->entries.empty()) return;
+    const auto* meshes = package.findBank("graphics");
+    const auto* bank = textures.findBank("GBANK_MAIN_PC");
+    if (!meshes || !bank) throw std::runtime_error("FMP graphics: mesh or texture bank is absent");
+    std::set<std::string> meshNames;
+    for (const auto& mesh : meshes->entries) meshNames.insert(mesh.name);
+    std::set<std::string> metadataNames;
+    for (const auto& entry : metadata->entries) {
+        if (!metadataNames.insert(entry.name).second || !meshNames.contains(entry.name))
+            throw std::runtime_error("FMP graphics: metadata has no unique mesh " + entry.name);
+        const auto mesh = std::find_if(meshes->entries.begin(), meshes->entries.end(),
+            [&](const forge::big::Entry& e) { return e.name == entry.name; });
+        for (const auto& link : forge::fmplinks::readMetadata(package.entryData(entry))) {
+            if (!link.path.ends_with(".BaseTexture") &&
+                !link.path.ends_with(".BumpMapTexture") &&
+                !link.path.ends_with(".SpecularMapTexture"))
+                throw std::runtime_error("FMP graphics: unsupported link path " + link.path);
+            const auto texture = std::find_if(bank->entries.begin(), bank->entries.end(),
+                [&](const forge::big::Entry& texture) { return texture.name == link.target; });
+            if (texture == bank->entries.end())
+                throw std::runtime_error("FMP graphics: " + entry.name + " needs missing texture " + link.target);
+            bool referenced = false;
+            for (size_t at = 0; at + 4 <= mesh->subHeader.size(); at += 4) {
+                uint32_t id = 0;
+                std::memcpy(&id, mesh->subHeader.data() + at, 4);
+                if (id == texture->id) { referenced = true; break; }
+            }
+            if (!referenced)
+                throw std::runtime_error("FMP graphics: " + entry.name + " names texture " +
+                    link.target + " but its id is absent from the mesh Info header");
+        }
+    }
+}
+
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
 // diff/merge pipeline consumes: each .fmp entry (name, definition, raw payload)
@@ -8182,7 +8256,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
              const std::string& outRoot, bool quiet = false,
              const std::string& schemaPath = {},
              forge::fmplinks::RecordLinks* symbolicLinks = nullptr,
-             bool deferMainTextures = false) {
+             bool deferMainTextures = false, bool deferGraphics = false) {
     namespace fs = std::filesystem;
     const auto pkg = openFmpPackage(fmpPath);
     for (const char* bankName : {"ScriptBINEntries", "FrontEndBINEntries"}) {
@@ -8192,8 +8266,13 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 " changes are not supported; package was not applied.");
     }
     const auto links = forge::fmplinks::readGameLinks(pkg);
+    if (const auto* metadata = pkg.findBank("graphicsLinkMetaData");
+        metadata && !metadata->entries.empty() &&
+        (!pkg.findBank("graphics") || pkg.findBank("graphics")->entries.empty()))
+        throw std::runtime_error("FMP graphics: link metadata has no graphics entries");
     const std::set<std::string> supportedBanks{"GameBINEntries", "GameBINLinkMetaData",
-        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD", "maintextures"};
+        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD", "maintextures",
+        "graphics", "graphicsLinkMetaData"};
     for (const auto& bank : pkg.banks()) {
         if (!bank.entries.empty() && !supportedBanks.contains(bank.name))
             throw std::runtime_error("FMP banks: " + bank.name +
@@ -8211,6 +8290,20 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         if (bank && !bank->entries.empty()) {
             textures.emplace(forge::big::File::open(fs::path(baseRoot) / textureRel));
             textureEntries = patchFmpMainTextures(*textures, pkg);
+        }
+    }
+    std::optional<forge::big::File> graphics;
+    size_t graphicsEntries = 0;
+    const fs::path graphicsRel = fs::path("data") / "graphics" / "graphics.big";
+    if (!deferGraphics) {
+        if (const auto* bank = pkg.findBank("graphics"); bank && !bank->entries.empty()) {
+            graphics.emplace(forge::big::File::open(fs::path(baseRoot) / graphicsRel));
+            graphicsEntries = patchFmpGraphics(*graphics, pkg);
+            if (textures) validateFmpGraphicLinks(pkg, *textures);
+            else {
+                const auto textureBank = forge::big::File::open(fs::path(baseRoot) / textureRel);
+                validateFmpGraphicLinks(pkg, textureBank);
+            }
         }
     }
 
@@ -8278,6 +8371,11 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         fs::create_directories(dst.parent_path());
         writeAllBytes(dst.string(), textures->serialize());
     }
+    if (graphics) {
+        const fs::path dst = fs::path(outRoot) / graphicsRel;
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), graphics->serialize());
+    }
     // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
     // applied to every language's text.big the base install has (the package names none)
     if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty()) {
@@ -8340,8 +8438,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         }
     }
 
-    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu; textures: %zu)\n",
-                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels, textureEntries);
+    if (!quiet) std::printf("applied %s onto %s -> %s (game.bin: %zu replaced, %zu added; WAD levels: %zu; textures: %zu; graphics: %zu)\n",
+                fmpPath.c_str(), baseRoot.c_str(), outRoot.c_str(), replaced, added, wadLevels, textureEntries, graphicsEntries);
     return 0;
 }
 
@@ -8485,8 +8583,9 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
 //   fse:<quest key>                    an FSE/quests.lua entry
 //   file:<data/... path, lower-case>   a whole-file layer
 //   texture:<GBANK_MAIN_PC entry name> one maintextures FMP entry
+//   mesh:<MBANK_ALLMESHES entry name> one graphics FMP entry
 // the winner is a mod label of the order, or "vanilla" to keep the retail version.
-struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse, texture; };
+struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse, texture, mesh; };
 ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
     ModsPicks p;
     for (const auto& [k, v] : all) {
@@ -8498,6 +8597,7 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
         else if (ns == "text") p.text[key] = v;
         else if (ns == "fse") p.fse[key] = v;
         else if (ns == "texture") p.texture[key] = v;
+        else if (ns == "mesh") p.mesh[key] = v;
         else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
         else if (ns == "defs") p.defs[key] = v;
         else p.defs[k] = v;
@@ -8814,7 +8914,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string root = tmpRoot(i);
             forge::fmplinks::RecordLinks links;
             fmpApply(baseRoot, s, root, jsonOutput, fieldSchema, &links,
-                     /*deferMainTextures*/ true);
+                     /*deferMainTextures*/ true, /*deferGraphics*/ true);
             contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
             rootLinks.push_back(std::move(links));
@@ -9220,7 +9320,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     struct WorldCarrier { std::string label; fs::path wld, bwd; };
     std::vector<WorldCarrier> worldCarriers;   // mods shipping FinalAlbion.wld / .bwd, in load order (merged per record below)
     std::map<std::string, size_t> dialogueWholeFileAt; // final raw archive layer for each language
-    std::optional<size_t> texturesWholeFileAt;
+    std::optional<size_t> texturesWholeFileAt, graphicsWholeFileAt;
     {
         struct Carrier { std::string label; fs::path src; std::string rel; size_t sourceIndex; };
         std::map<std::string, std::vector<Carrier>> carriers;   // lower rel path -> sources, in load order
@@ -9301,6 +9401,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             fs::create_directories(outPath.parent_path());
             fs::copy_file(win->src, outPath, fs::copy_options::overwrite_existing);
             if (lower == "data/graphics/pc/textures.big") texturesWholeFileAt = win->sourceIndex;
+            if (lower == "data/graphics/graphics.big") graphicsWholeFileAt = win->sourceIndex;
             if(lower.rfind("data/lang/",0)==0 && lower.ends_with("/dialogue.big"))
                 dialogueWholeFileAt[lower]=win->sourceIndex;
         }
@@ -9443,6 +9544,140 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             {"conflicts", conflicts}, {"masked", masked}};
         else if (!touched.empty() || !masked.empty())
             std::printf("FMP maintextures: %zu entry layer(s), %zu contested, %zu package(s) masked by a later whole-file bank\n",
+                touched.size(), conflicts.size(), masked.size());
+    }
+    // Compose individual FMP meshes over the chosen whole graphics bank.
+    // The metadata names textures, so validate it against the final texture
+    // bank after all texture layers and picks have been applied.
+    {
+        struct Version { std::string mod; size_t sourceIndex; uint32_t id, type;
+                         std::vector<uint8_t> payload, header; };
+        std::map<std::string, std::vector<Version>> touched;
+        json masked = json::array();
+        std::optional<forge::big::File> graphics, textures;
+        const fs::path rel = fs::path("data") / "graphics" / "graphics.big";
+        const fs::path textureRel = fs::path("data") / "graphics" / "pc" / "textures.big";
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (lowered(fs::path(sources[si]).extension().string()) != ".fmp") continue;
+            const auto pkg = openFmpPackage(sources[si]);
+            const auto* bank = pkg.findBank("graphics");
+            if (!bank || bank->entries.empty()) {
+                if (const auto* links = pkg.findBank("graphicsLinkMetaData"); links && !links->entries.empty())
+                    throw std::runtime_error("FMP graphics: link metadata has no graphics entries in " + srcLabel(si));
+                continue;
+            }
+            if (graphicsWholeFileAt && si < *graphicsWholeFileAt) {
+                masked.push_back({{"mod", srcLabel(si)}, {"by", srcLabel(*graphicsWholeFileAt)},
+                                  {"entries", bank->entries.size()}});
+                continue;
+            }
+            if (!graphics) {
+                const fs::path built = fs::path(outDir) / rel;
+                graphics.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / rel));
+            }
+            if (!textures) {
+                const fs::path built = fs::path(outDir) / textureRel;
+                textures.emplace(forge::big::File::open(fs::exists(built) ? built : fs::path(baseRoot) / textureRel));
+            }
+            patchFmpGraphics(*graphics, pkg);
+            validateFmpGraphicLinks(pkg, *textures);
+            for (const auto& entry : bank->entries)
+                touched[entry.name].push_back({srcLabel(si), si, entry.id, entry.type,
+                                               pkg.entryData(entry), entry.subHeader});
+        }
+        // EgoCore .resource files are applied after this pass. Reject a
+        // same-entry earlier resource whose intended later FMP win would be lost.
+        for (size_t si = 0; si < sources.size(); ++si) {
+            if (std::find(egoFolders.begin(), egoFolders.end(), sources[si]) == egoFolders.end()) continue;
+            fs::path data = fs::path(sources[si]) / "Data";
+            if (!fs::is_directory(data)) data = fs::path(sources[si]) / "data";
+            if (!fs::is_directory(data)) continue;
+            for (const auto& de : fs::recursive_directory_iterator(data)) {
+                if (!de.is_regular_file() || lowered(de.path().extension().string()) != ".resource") continue;
+                const std::string path = lowered(de.path().generic_string());
+                if (path.find("/graphics.big/") == std::string::npos) continue;
+                const std::string resourceName = lowered(de.path().stem().string());
+                for (const auto& [entry, versions] : touched) {
+                    if (lowered(entry) != resourceName) continue;
+                    for (const auto& version : versions)
+                        if (si < version.sourceIndex)
+                            throw std::runtime_error("FMP graphics: " + srcLabel(si) +
+                                " has an earlier EgoCore .resource for " + entry +
+                                " than " + version.mod + "; this mixed asset order is not supported yet");
+                    if (picks.mesh.contains(entry))
+                        throw std::runtime_error("FMP graphics: a saved choice for " + entry +
+                            " cannot override the EgoCore .resource in " + srcLabel(si) + " yet");
+                }
+            }
+        }
+        json conflicts = json::array(), entries = json::array();
+        std::optional<forge::big::File> baselineGraphics;
+        for (const auto& [name, versions] : touched) {
+            json mods = json::array();
+            bool differs = false, overridden = false, unavailable = false, keepBase = false;
+            const Version* winner = &versions.back();
+            for (const auto& version : versions) {
+                mods.push_back(version.mod);
+                if (version.id != versions.front().id || version.type != versions.front().type ||
+                    version.payload != versions.front().payload || version.header != versions.front().header)
+                    differs = true;
+            }
+            if (const auto choice = picks.mesh.find(name); choice != picks.mesh.end()) {
+                if (choice->second == "vanilla") keepBase = overridden = true;
+                else {
+                    const auto found = std::find_if(versions.begin(), versions.end(),
+                        [&](const Version& v) { return v.mod == choice->second; });
+                    if (found != versions.end()) { winner = &*found; overridden = true; }
+                    else unavailable = true;
+                }
+            }
+            if (overridden) {
+                auto* bank = graphics->findBank("MBANK_ALLMESHES");
+                auto target = std::find_if(bank->entries.begin(), bank->entries.end(),
+                    [&](const forge::big::Entry& e) { return e.name == name; });
+                if (target == bank->entries.end())
+                    throw std::runtime_error("FMP graphics: selected mesh is absent: " + name);
+                if (keepBase) {
+                    if (!baselineGraphics)
+                        baselineGraphics.emplace(forge::big::File::open(fs::path(baseRoot) / rel));
+                    const auto* baseBank = baselineGraphics->findBank("MBANK_ALLMESHES");
+                    const auto original = std::find_if(baseBank->entries.begin(), baseBank->entries.end(),
+                        [&](const forge::big::Entry& e) { return e.name == name; });
+                    if (original == baseBank->entries.end()) bank->entries.erase(target);
+                    else {
+                        target->id = original->id;
+                        target->type = original->type;
+                        target->subHeader = original->subHeader;
+                        target->data = baselineGraphics->entryData(*original);
+                        target->length = uint32_t(target->data.size());
+                    }
+                } else {
+                    target->id = winner->id;
+                    target->type = winner->type;
+                    target->subHeader = winner->header;
+                    target->data = winner->payload;
+                    target->length = uint32_t(target->data.size());
+                }
+            }
+            json row{{"entry", name}, {"id", versions.back().id}, {"mods", mods},
+                     {"winner", keepBase ? "vanilla" : winner->mod},
+                     {"overridden", overridden}, {"choice_unavailable", unavailable}};
+            entries.push_back(row);
+            if (versions.size() > 1 && differs) conflicts.push_back(row);
+        }
+        if (graphics) {
+            const auto* bank = graphics->findBank("MBANK_ALLMESHES");
+            std::set<uint32_t> ids;
+            for (const auto& entry : bank->entries)
+                if (!ids.insert(entry.id).second)
+                    throw std::runtime_error("FMP graphics: selected entries share mesh id " + std::to_string(entry.id));
+            const fs::path dst = fs::path(outDir) / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), graphics->serialize());
+        }
+        if (jsonOutput) rep["graphics"] = {{"entries", entries}, {"conflicts", conflicts}, {"masked", masked}};
+        else if (!touched.empty() || !masked.empty())
+            std::printf("FMP graphics: %zu entry layer(s), %zu contested, %zu package(s) masked by a later whole-file bank\n",
                 touched.size(), conflicts.size(), masked.size());
     }
     for (const auto& folder : egoFolders) {
@@ -9816,6 +10051,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         rep["summary"] = {{"sources", sources.size()}, {"defs_conflicts", defsConflicts}, {"tng_conflicts", tngThingConflicts}, {"qst_conflicts", qstConflicts},
                           {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
                           {"maintextures_conflicts", rep.contains("maintextures") ? rep["maintextures"]["conflicts"].size() : 0},
+                          {"graphics_conflicts", rep.contains("graphics") ? rep["graphics"]["conflicts"].size() : 0},
                           {"lip_sync_contested", lipSyncConflicts},
                           {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
         if (reportOut) *reportOut = rep;
@@ -9824,8 +10060,17 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     return 0;
 }
 
-int fmpLinks(const std::string& path, bool jsonOutput) {
-    const auto links = forge::fmplinks::readGameLinks(openFmpPackage(path));
+int fmpLinks(const std::string& path, bool jsonOutput, bool graphics = false) {
+    const auto package = openFmpPackage(path);
+    forge::fmplinks::RecordLinks links;
+    if (graphics) {
+        if (const auto* bank = package.findBank("graphicsLinkMetaData"))
+            for (const auto& entry : bank->entries) {
+                if (entry.name.empty() || links.contains(entry.name))
+                    throw std::runtime_error("FMP graphics links: unnamed or duplicate metadata entry");
+                links.emplace(entry.name, forge::fmplinks::readMetadata(package.entryData(entry)));
+            }
+    } else links = forge::fmplinks::readGameLinks(package);
     json records = json::array();
     for (const auto& [record, pairs] : links) {
         json items = json::array();
@@ -9838,7 +10083,8 @@ int fmpLinks(const std::string& path, bool jsonOutput) {
                 std::printf("  %s -> %s\n", link.path.c_str(), link.target.c_str());
         }
     }
-    if (jsonOutput) std::puts(json{{"file", path}, {"records", records}}.dump(2).c_str());
+    if (jsonOutput) std::puts(json{{"file", path}, {"bank", graphics ? "graphicsLinkMetaData" : "GameBINLinkMetaData"},
+                                    {"records", records}}.dump(2).c_str());
     return 0;
 }
 
@@ -11137,8 +11383,9 @@ int main(int argc, char** argv) {
             return fmpList(args[2], asJson);
         }
         if (args.size() >= 3 && args[0] == "fmp" && args[1] == "links") {
-            const bool asJson = !args.empty() && args.back() == "--json";
-            return fmpLinks(args[2], asJson);
+            const bool asJson = std::find(args.begin() + 3, args.end(), "--json") != args.end();
+            const bool graphics = std::find(args.begin() + 3, args.end(), "--graphics") != args.end();
+            return fmpLinks(args[2], asJson, graphics);
         }
         if (args.size() >= 5 && args[0] == "fmp" && args[1] == "apply") {
             return fmpApply(args[2], args[3], args[4]);
