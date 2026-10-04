@@ -8576,3 +8576,23 @@ The exact final binary's named eligible scan at
 small-bank FMPs, up from 391; 153 link, 11 schema and eight record-identity
 refusals remain. The 244 large-bank packages remain deferred. Original archive
 and install hashes were unchanged; no gameplay or Retroid test was performed.
+
+## 2026-10-04 legacy text, effect-map and switch-mesh links
+
+Three further ChocolateBox reference layouts are now recognized with exact
+field guards: `CShopDef.InitialHawkingPhrase` is a four-byte text ID;
+`CExperienceDef.PickupParticleEffectsPerExperiencePoints` is a counted
+`{experience threshold, effect ID}` map; and `GLOBAL.SwitchGraphic` is a
+17-byte engine graphic whose second word is a mesh ID. The FMP link unit test
+checks the addressed word and rejects an out-of-range effect-map item.
+
+The original Add Staffs to Bowerstone and Snowspire, C Experience Def Fix,
+and Aging Slowdown packages now reach explicit missing-target diagnostics for
+`TEXT_AI_SHOP_KEEPER_HAWKING_OUTSIDE_ARMOURY`, `EXP_ORB_PICKUP`, and
+`MESH_MARKER_SWITCH` respectively. Those dependencies are absent from the
+selected installed baseline and their FMPs, so these packages still refuse.
+The final-binary named scan at `build/named-fmp-coverage-7os_3y2h/result.json`
+remains 405/577 small-bank packages accepted, 153 link refusals, and 244
+large-bank deferrals. The scan verified unchanged archive and install hashes.
+This change improves reference handling and diagnostics; it does not establish
+that these three packages are self-contained or playable.

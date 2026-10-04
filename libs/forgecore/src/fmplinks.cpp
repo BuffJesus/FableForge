@@ -345,6 +345,35 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     field.name == "SummonedBrain" && field.type == "?" &&
                     link.path == "3463808271.Brain To Use")
                     return {offset, i + 1, Destination::NameOffset};
+                // ChocolateBox's CShopDef CD94E446 control is a TextID. The
+                // schema leaves this scalar unresolved, but the control's
+                // value occupies exactly one four-byte word.
+                if (entry.definition == "CShopDef" &&
+                    field.name == "InitialHawkingPhrase" && field.type == "?" &&
+                    link.path == "3449087046.HAWKING")
+                    return {offset, i + 1, Destination::TextEntry};
+            }
+            // CGlobalDef.SwitchGraphic is a 17-byte CEngineGraphic. Its
+            // second word names the graphics.big model; the legacy metadata
+            // calls this control's sole linked member "unknown".
+            if (entry.definition == "GLOBAL" &&
+                field.name == "SwitchGraphic" && field.type == "CEngineGraphic" &&
+                field.value.size() == 17 && link.path == "1020994168.unknown")
+                return {offset + 4, i + 1, Destination::MeshEntry};
+            // ChocolateBox's CExperienceDef 1D81A73B control stores a
+            // count followed by {experience threshold, EffectID} pairs.
+            if (entry.definition == "CExperienceDef" &&
+                field.name == "PickupParticleEffectsPerExperiencePoints" &&
+                field.type == "Map_JJ" && parts.size() == 4 &&
+                parts[1] == "unknown" && parts[3] == "unknown") {
+                if (field.value.size() < 4) fail("invalid experience effect map");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 8 ||
+                    field.value.size() != 4 + count * 8)
+                    fail("unsupported experience effect map layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("experience effect map index out of range");
+                return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
             }
             if (entry.definition == "CREATURE" &&
                 link.path == "706745797.Weapon3ID" &&

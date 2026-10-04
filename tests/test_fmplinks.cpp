@@ -154,6 +154,46 @@ int main() {
     rejects([&] { forge::fmplinks::relink(object, targets, objectSchema, references); },
             "mesh link without an identity map refuses");
 
+    const auto legacySchema = forge::defschema::Schema::loadText(R"({
+        "CShopDef":{"prefix_len":3,"fields":[{"name":"InitialHawkingPhrase","type":"?"}]},
+        "CExperienceDef":{"prefix_len":3,"fields":[{"name":"PickupParticleEffectsPerExperiencePoints","type":"Map_JJ"}]},
+        "CGlobalDef":{"prefix_len":3,"fields":[{"name":"SwitchGraphic","type":"CEngineGraphic"}]}
+    })");
+    auto legacyEntry = [](const std::string& definition, const std::string& fieldName,
+                          const std::string& fieldType, const Bytes& value) {
+        forge::defdecode::Decoded record;
+        record.prefix = {1, 0, 0}; record.prefixLen = 3; record.allTagsOk = true;
+        forge::defdecode::DecodedField field;
+        field.name = fieldName; field.type = fieldType;
+        field.tag = forge::defdecode::fieldTag(fieldName); field.tagOk = true;
+        field.value = value; record.fields = {field};
+        return forge::bin::Entry{definition, "PROBE", 0, forge::defdecode::encode(record)};
+    };
+    Bytes shopValue; word(shopValue, 77);
+    const auto shop = legacyEntry("CShopDef", "InitialHawkingPhrase", "?", shopValue);
+    const auto hawking = forge::fmplinks::locate(shop, legacySchema,
+                                               {"3449087046.HAWKING", "TEXT_PROBE"});
+    check(hawking.offset == 7 && hawking.destination == forge::fmplinks::Destination::TextEntry,
+          "shop hawking control addresses its four-byte text id");
+    Bytes effectMap; word(effectMap, 2); word(effectMap, 10); word(effectMap, 77);
+    word(effectMap, 20); word(effectMap, 78);
+    const auto experience = legacyEntry("CExperienceDef",
+        "PickupParticleEffectsPerExperiencePoints", "Map_JJ", effectMap);
+    const auto effect = forge::fmplinks::locate(experience, legacySchema,
+                                               {"495036219.unknown.1.unknown", "EFFECT_PROBE"});
+    check(effect.offset == 23 && effect.destination == forge::fmplinks::Destination::EffectEntry,
+          "experience effect map addresses the value after its threshold");
+    rejects([&] { forge::fmplinks::locate(experience, legacySchema,
+                  {"495036219.unknown.2.unknown", "EFFECT_PROBE"}); },
+            "experience effect map refuses an out-of-range index");
+    Bytes switchValue; word(switchValue, 5); word(switchValue, 77);
+    switchValue.insert(switchValue.end(), 9, 0);
+    const auto global = legacyEntry("GLOBAL", "SwitchGraphic", "CEngineGraphic", switchValue);
+    const auto switchMesh = forge::fmplinks::locate(global, legacySchema,
+                                                  {"1020994168.unknown", "MESH_PROBE"});
+    check(switchMesh.offset == 11 && switchMesh.destination == forge::fmplinks::Destination::MeshEntry,
+          "global switch graphic addresses only its model id");
+
     const auto villageSchema = forge::defschema::Schema::loadText(
         R"({"CVillagePeopleDef":{"prefix_len":3,"fields":[{"name":"MaleTeacher","type":"int32"},{"name":"MaleTeacher","type":"int32"}]}})");
     forge::defdecode::Decoded villageDecoded;
