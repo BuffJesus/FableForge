@@ -564,3 +564,14 @@ The final-binary scan `build/named-fmp-coverage-d8j4ye_7/result.json` accepts
 431/577 small-bank packages, six more than before with no regressions.
 127 link refusals and 244 deferred large-bank packages remain; runtime behavior
 is unverified.
+
+2026-10-04 potion/shot follow-up: CBonusItemDef.ParticleEffect and the two
+named SHOT holding/trail controls now use the EffectID domain. Their four-byte
+int32 representation previously selected game.bin identities. The original
+No Need for XP, Black Magic and 333-record Fable Reloaded packages pass
+independent effect-word checks and direct/composed bank parity (21 effect
+links), with selected missing-effect refusal before output replacement.
+Evidence: `build/fmp-particle-links-3q24flxm/result.json`.
+Full small-bank scan `build/named-fmp-coverage-cdm_68h9/result.json` accepts
+436/577, five more than before, without regressions. The 244 large-bank
+packages remain deferred at this checkpoint; runtime behavior is unverified.

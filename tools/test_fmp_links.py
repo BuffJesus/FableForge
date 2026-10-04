@@ -23,7 +23,7 @@ def crc0(name):
     return crc
 
 
-def package_records(path):
+def package_records(path, *, by_id=False):
     """Read BIG entry tables independently, retaining each raw payload and offset."""
     data = path.read_bytes(); pos = u32(data, 8); count = u32(data, pos); pos += 4
     banks = {}
@@ -33,13 +33,13 @@ def package_records(path):
         _, entries, start, _, _ = struct.unpack_from('<5I', data, pos); pos += 20
         cursor = start+4+u32(data, start)*8; records = {}
         for _ in range(entries):
-            _, _, _, length, offset, _, size = struct.unpack_from('<7I', data, cursor); cursor += 28
+            _, record_id, _, length, offset, _, size = struct.unpack_from('<7I', data, cursor); cursor += 28
             record = data[cursor:cursor+size].decode('ascii'); cursor += size+4
             sources = u32(data, cursor); cursor += 4
             for _ in range(sources):
                 size = u32(data, cursor); cursor += 4+size
             size = u32(data, cursor); cursor += 4+size
-            records[record] = (data[offset:offset+length], offset)
+            records[record_id if by_id else record] = (data[offset:offset+length], offset)
         banks[name] = records
     return banks
 

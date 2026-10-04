@@ -363,6 +363,16 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     link.path == "714092448.unknown" &&
                     field.name == "OpenParticleEffect" && field.type == "int32")
                     return {offset, i + 1, Destination::EffectEntry};
+                if (entry.definition == "CBonusItemDef" &&
+                    field.name == "ParticleEffect" && field.type == "int32" &&
+                    link.path == "1451703396.Effect Used")
+                    return {offset, i + 1, Destination::EffectEntry};
+                if (entry.definition == "SHOT" && field.type == "int32" &&
+                    ((field.name == "PrimaryEffect" &&
+                      link.path == "4071417874.Shot Projectile Holding Effect ID") ||
+                     (field.name == "AttachedContinuousEffect" &&
+                      link.path == "3914204730.Shot Projectile Trail Effect ID")))
+                    return {offset, i + 1, Destination::EffectEntry};
                 if (entry.definition == "CObjectAugmentationsDef") {
                     if (field.name == "EmptySlotName" && field.type == "uint32" &&
                         link.path == "3513435638.TEXT_AUG_SLOT")

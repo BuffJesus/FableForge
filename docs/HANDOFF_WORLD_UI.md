@@ -8661,3 +8661,27 @@ Any Long Bow, Obsidian Edge Augmentation Fix and Truly Evil S.O.A. Remaining:
 packages. Archive and baseline hashes are unchanged; gameplay is unverified.
 Fable Reloaded now passes augmentation metadata and reaches a separate
 CBonusItemDef particle-effect destination issue.
+
+## 2026-10-04 potion and shot effect destinations
+
+CBonusItemDef.ParticleEffect and SHOT.PrimaryEffect/AttachedContinuousEffect
+now resolve documented EffectIDs from effects.big. Their scalar int32 schema
+types previously fell through to game.bin identity lookup. Guards bind the
+definition, field name, type and exact legacy path.
+
+`tools/test_fmp_particle_links.py` passes 21 effect references across original
+No Need for XP, Black Magic and Fable Reloaded packages, independently checking
+named effects against output words and direct/composed bank parity. The Fable
+Reloaded source has 333 records and resolves 22,679 links. Its one-mod composer
+reports 310 actual changed records, no conflicts or new missing meshes. A
+selected potion change with a missing symbolic effect refuses both import
+routes without replacing prior output. Evidence:
+`build/fmp-particle-links-3q24flxm/result.json`. The test helper can now retain
+anonymous GameBINEntries by numeric ID instead of overwriting duplicate blank
+names. The link unit tests and weapon/load-order regression pass.
+
+Full small-bank scan `build/named-fmp-coverage-cdm_68h9/result.json` accepts
+436/577, up five with no regressions: Black Magic and its two balance variants,
+Fable Reloaded, and No Need for XP. Remaining: 122 link refusals, 11 unavailable
+schemas, eight record-identity refusals and 244 deferred large-bank packages.
+Input archive/baseline hashes are unchanged. Runtime behavior is unverified.
