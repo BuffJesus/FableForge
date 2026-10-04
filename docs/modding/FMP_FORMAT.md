@@ -585,3 +585,17 @@ non-reference bytes, direct/composed bank parity and safe missing-model refusal.
 Evidence: `build/fmp-global-links-khbe451s/result.json`, using the separate
 candidate CLI while the previous binary's full 821-package bank-write sweep
 continues. These fixtures establish offline import/composition, not gameplay.
+
+2026-10-04 graphics guard: named mesh textures must occur in the counted Info
+texture list, not an arbitrary matching physics/bounds word. The list follows
+LOD sizes, a safe-radius word and LODCount-1 switch-distance values; its count
+is at `48 + 8*LODCount`. One- and three-LOD fixtures pass with descriptor bytes
+preserved. Oversized counts and IDs present only outside the list refuse both
+import routes safely. Archon/Behemoth checks isolate their original asset banks;
+they are not complete-package compatibility claims. Exact evidence and the
+retained interrupted sweeps are in HANDOFF_WORLD_UI.
+
+CInventoryItemDef's 17-byte Graphic uses a texture ID at +4 for its exact
+Inventory HUD Icon path. ItemDescription and ItemDetails use named TextIDs for
+TEXT_TITLE/TEXT_DESCRIPTION. Missing custom text remains a hard failure; the
+link unit test verifies the three addressed words and unchanged graphic bytes.

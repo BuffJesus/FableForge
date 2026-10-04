@@ -367,6 +367,10 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     field.name == "ParticleEffect" && field.type == "int32" &&
                     link.path == "1451703396.Effect Used")
                     return {offset, i + 1, Destination::EffectEntry};
+                if (entry.definition == "CInventoryItemDef" && field.type == "uint32" &&
+                    ((field.name == "ItemDescription" && link.path == "4197094506.TEXT_TITLE") ||
+                     (field.name == "ItemDetails" && link.path == "1637763631.TEXT_DESCRIPTION")))
+                    return {offset, i + 1, Destination::TextEntry};
                 if (entry.definition == "SHOT" && field.type == "int32" &&
                     ((field.name == "PrimaryEffect" &&
                       link.path == "4071417874.Shot Projectile Holding Effect ID") ||
@@ -437,6 +441,10 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 ((field.name == "SwitchGraphic" && link.path == "1020994168.unknown") ||
                  (field.name == "TrackGraphic" && link.path == "1267143265.unknown")))
                 return {offset + 4, i + 1, Destination::MeshEntry};
+            if (entry.definition == "CInventoryItemDef" &&
+                field.name == "Graphic" && field.type == "CEngineGraphic" &&
+                field.value.size() == 17 && link.path == "3361958702.Inventory HUD Icon")
+                return {offset + 4, i + 1, Destination::TextureEntry};
             // ChocolateBox's CExperienceDef 1D81A73B control stores a
             // count followed by {experience threshold, EffectID} pairs.
             if (entry.definition == "CExperienceDef" &&

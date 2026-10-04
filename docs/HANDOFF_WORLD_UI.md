@@ -8750,7 +8750,8 @@ as accepted. Archive, baseline and importer hashes stay unchanged.
 ## 2026-10-04 mesh Info texture-list validation
 
 FMP graphics metadata now checks named texture IDs only in the descriptor's
-counted texture list after its bounds, LOD sizes and safe-radius word. A matching
+counted texture list after its bounds, LOD sizes, safe-radius word and
+LODCount-1 switch-distance floats. A matching
 physics ID or float bit pattern elsewhere no longer counts as a texture
 reference. LOD count is bounded to the existing mesh-reader limit of eight;
 texture counts must fit the available descriptor bytes. Opaque trailing bytes
@@ -8765,3 +8766,32 @@ in both direct apply and final composition (six refusal checks). Evidence:
 `build/fmp-graphics-texture-list-35x60183/result.json`; input hashes unchanged.
 An owned verification checkout on C: is being prepared for broader bank checks
 because the D: drive has shown sustained I/O queueing during these writes.
+
+### Multi-LOD correction and inventory destinations
+
+The first descriptor guard covered only the one-LOD fixture. The initial C:
+candidate sweep exposed valid multi-LOD headers; it was explicitly stopped and
+its partial `build/named-fmp-coverage-veqpt9cw/result.json` remains incomplete.
+Do not use it as a complete compatibility result. TextureIDsCount is at
+`48 + 8*LODCount`, after the safe radius and LODCount-1 LODErrors. The layout is
+documented in FableTLC `docs/formats/MESH.md` section 2 and independently matches
+Archon Blade's 92-byte and Behemoth Polearm's 80-byte three-LOD descriptors.
+Missing named textures are reported before a descriptor-layout error.
+
+The corrected test passes on the original Hollow Wip package plus explicitly
+asset-only fixtures retaining the exact Archon/Behemoth graphics, texture and
+graphics-metadata banks. Their unrelated definition layers are excluded because
+the complete Archon package references missing custom text. These asset tests
+do not certify the complete mods. Evidence in the owned C: checkout:
+`build/fmp-graphics-texture-list-sgnt3xjr/result.json`; six malformed-case
+refusals still preserve prior output. The original graphics layer/order/picks
+regression passed after the descriptor correction.
+
+CInventoryItemDef.Graphic's Inventory HUD Icon member now uses TextureEntry;
+ItemDescription.TEXT_TITLE and ItemDetails.TEXT_DESCRIPTION use TextEntry.
+Exact class/schema/path bindings follow ChocolateBox controls C8636B2E,
+FA2A946A and 619E4A2F. The link unit check independently verifies their three
+words and preservation of the graphic kind/tail; missing texture or text maps
+refuse. The complete Archon package now reaches its genuinely absent
+TEXT_NAME_ARCHON_BLADE prerequisite rather than an unsupported icon field.
+No placeholder text or unrelated game ID is substituted.

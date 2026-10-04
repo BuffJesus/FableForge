@@ -17,6 +17,26 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def asset_only(data):
+    """Retain exact asset banks; omit unrelated, unresolved game-data layers.
+
+    The originals need missing custom text names. This fixture verifies their
+    mesh descriptors without claiming that the complete mods are installable.
+    """
+    directory = struct.unpack_from('<I', data, 8)[0]
+    count = struct.unpack_from('<I', data, directory)[0]
+    cursor = directory + 4; rows = []
+    for _ in range(count):
+        start = cursor; end = data.index(0, cursor)
+        name = data[cursor:end].decode('ascii'); cursor = end + 21
+        if name in ('graphics', 'graphicsLinkMetaData', 'maintextures'):
+            rows.append(data[start:cursor])
+    result = bytearray(data)
+    struct.pack_into('<I', result, 8, len(result))
+    result += struct.pack('<I', len(rows)) + b''.join(rows)
+    return bytes(result)
+
+
 def main():
     repo = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -34,6 +54,10 @@ def main():
         catalogue = {r['file']: r for r in json.loads(archive.read('catalogue.json'))}
         payload = archive.read(member)
         assert hashlib.sha256(payload).hexdigest() == catalogue[member]['sha256']
+        multiple_lods = {name: archive.read('mods/' + name)
+                         for name in ('Archon Blade.fmp', 'Behemoth polearm.fmp')}
+        for name, data in multiple_lods.items():
+            assert hashlib.sha256(data).hexdigest() == catalogue['mods/' + name]['sha256']
     original = work/'original.fmp'; original.write_bytes(payload)
     mesh = entries(original, 'graphics', {'MESH_HERO_HOLLOW_MASK'}, include_payload=False)['MESH_HERO_HOLLOW_MASK']
     header = mesh['header']; assert len(header) == 64
@@ -71,11 +95,27 @@ def main():
             assert reason in failed.stderr, failed.stderr
             assert sorted(p.name for p in prior.iterdir()) == ['sentinel']
             assert (prior/'sentinel').read_bytes() == b'kept'
+    for index, (name, data) in enumerate(multiple_lods.items()):
+        package = work/('asset-only-' + name); package.write_bytes(asset_only(data))
+        original_meshes = entries(package, 'graphics', include_payload=False)
+        output = work/f'multiple-lods-{index}'
+        run(args.tool, 'fmp', 'apply', args.install, package, output)
+        built = entries(output/'data/graphics/graphics.big', 'MBANK_ALLMESHES',
+                        set(original_meshes), include_payload=False)
+        for symbol, original_mesh in original_meshes.items():
+            info = original_mesh['header']
+            count = struct.unpack_from('<I', info, 44)[0]; assert count == 3
+            # Sizes[count], safe radius, switch distances[count-1], texture count.
+            texture_count_at = 48 + 4 * count + 4 + 4 * (count - 1)
+            texture_count = struct.unpack_from('<I', info, texture_count_at)[0]
+            assert texture_count > 0 and len(info) == texture_count_at + 4 + 4 * texture_count
+            assert built[symbol]['header'] == info
     assert before == {str(path): digest(path) for path in inputs}
     (work/'result.json').write_text(json.dumps({'member': member, 'valid_header_preserved': True,
-        'refused': [name for name, _, _ in cases], 'input_hashes_unchanged': True,
+        'refused': [name for name, _, _ in cases], 'multiple_lods': list(multiple_lods),
+        'input_hashes_unchanged': True,
         'gameplay_tested': False}, indent=2), encoding='utf-8')
-    print('PASS: real mesh texture list and six bounded/safe refusal checks')
+    print('PASS: original one/three-LOD mesh descriptors and six bounded/safe refusal checks')
 
 
 if __name__ == '__main__':

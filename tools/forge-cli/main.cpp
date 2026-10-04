@@ -8264,7 +8264,8 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             throw std::runtime_error("FMP graphics: metadata has no unique mesh " + entry.name);
         const auto mesh = std::find_if(meshes->entries.begin(), meshes->entries.end(),
             [&](const forge::big::Entry& e) { return e.name == entry.name; });
-        // The Info descriptor stores bounds, LOD sizes and then a counted
+        // The Info descriptor stores bounds, LOD sizes, a safe radius,
+        // LODCount-1 switch-distance floats and then a counted
         // texture-ID list. A matching physics ID or float bit pattern elsewhere
         // in this header is not evidence that the mesh references the texture.
         const auto& info = mesh->subHeader;
@@ -8275,14 +8276,6 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             std::memcpy(&value, info.data() + at, 4);
             return value;
         };
-        const uint32_t lodCount = word(44);
-        if (!lodCount || lodCount > 8)
-            throw std::runtime_error("FMP graphics: invalid mesh Info LOD count for " + entry.name);
-        const size_t textureCountAt = 52 + size_t(lodCount) * 4;
-        const uint32_t textureCount = word(textureCountAt);
-        const size_t textureStart = textureCountAt + 4;
-        if (textureCount > (info.size() - textureStart) / 4)
-            throw std::runtime_error("FMP graphics: truncated mesh Info texture list for " + entry.name);
         for (const auto& link : forge::fmplinks::readMetadata(package.entryData(entry))) {
             if (!link.path.ends_with(".BaseTexture") &&
                 !link.path.ends_with(".BumpMapTexture") &&
@@ -8292,6 +8285,14 @@ void validateFmpGraphicLinks(const forge::big::File& package,
                 [&](const forge::big::Entry& texture) { return texture.name == link.target; });
             if (texture == bank->entries.end())
                 throw std::runtime_error("FMP graphics: " + entry.name + " needs missing texture " + link.target);
+            const uint32_t lodCount = word(44);
+            if (!lodCount || lodCount > 8)
+                throw std::runtime_error("FMP graphics: invalid mesh Info LOD count for " + entry.name);
+            const size_t textureCountAt = 48 + size_t(lodCount) * 8;
+            const uint32_t textureCount = word(textureCountAt);
+            const size_t textureStart = textureCountAt + 4;
+            if (textureCount > (info.size() - textureStart) / 4)
+                throw std::runtime_error("FMP graphics: truncated mesh Info texture list for " + entry.name);
             bool referenced = false;
             for (size_t index = 0; index < textureCount; ++index) {
                 const uint32_t id = word(textureStart + index * 4);

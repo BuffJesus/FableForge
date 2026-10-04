@@ -493,6 +493,48 @@ int main() {
                                          false, nullptr, nullptr, nullptr, &textIds); },
             "missing text target refuses");
 
+    const auto inventorySchema = forge::defschema::Schema::loadText(
+        R"({"CInventoryItemDef":{"prefix_len":3,"fields":[{"name":"Graphic","type":"CEngineGraphic"},{"name":"ItemDescription","type":"uint32"},{"name":"ItemDetails","type":"uint32"}]}})");
+    forge::defdecode::Decoded inventoryDecoded;
+    inventoryDecoded.prefix = {1, 0, 0}; inventoryDecoded.prefixLen = 3;
+    inventoryDecoded.allTagsOk = true;
+    auto inventoryField = [](const char* name, const char* type, std::vector<uint8_t> value) {
+        forge::defdecode::DecodedField field;
+        field.name = name; field.type = type; field.value = std::move(value);
+        field.tag = forge::defdecode::fieldTag(name); field.tagOk = true;
+        return field;
+    };
+    std::vector<uint8_t> inventoryGraphic;
+    word(inventoryGraphic, 1); word(inventoryGraphic, 7);
+    word(inventoryGraphic, 0x3f800000); word(inventoryGraphic, 0x3f000000);
+    inventoryGraphic.push_back(0x7f);
+    std::vector<uint8_t> inventoryTitle, inventoryDetails;
+    word(inventoryTitle, 8); word(inventoryDetails, 9);
+    inventoryDecoded.fields = {inventoryField("Graphic", "CEngineGraphic", inventoryGraphic),
+                               inventoryField("ItemDescription", "uint32", inventoryTitle),
+                               inventoryField("ItemDetails", "uint32", inventoryDetails)};
+    forge::bin::Entry inventory{"CInventoryItemDef", "INVENTORY_PROBE", 0,
+                                forge::defdecode::encode(inventoryDecoded)};
+    const auto originalInventory = inventory.data;
+    const std::map<std::string, uint32_t> inventoryTextures{{"INVENTORY_ICON", 5665}};
+    const std::map<std::string, uint32_t> inventoryTexts{{"ITEM_TITLE", 15100}, {"ITEM_DETAILS", 15101}};
+    references = {{"3361958702.Inventory HUD Icon", "INVENTORY_ICON"},
+                  {"4197094506.TEXT_TITLE", "ITEM_TITLE"},
+                  {"1637763631.TEXT_DESCRIPTION", "ITEM_DETAILS"}};
+    const auto linkedInventory = forge::fmplinks::relink(inventory, targets, inventorySchema,
+        references, false, nullptr, &inventoryTextures, nullptr, &inventoryTexts);
+    auto expectedInventory = originalInventory;
+    for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{{11, 5665}, {28, 15100}, {36, 15101}})
+        std::memcpy(expectedInventory.data() + at, &value, 4);
+    check(linkedInventory == expectedInventory && inventory.data == originalInventory,
+          "inventory icon and title/details use asset IDs without changing graphic kind/tail");
+    rejects([&] { forge::fmplinks::relink(inventory, targets, inventorySchema,
+        references, false, nullptr, nullptr, nullptr, &inventoryTexts); },
+        "inventory texture cannot fall back to a game record");
+    rejects([&] { forge::fmplinks::relink(inventory, targets, inventorySchema,
+        references, false, nullptr, &inventoryTextures); },
+        "inventory title/details require matching text identities");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

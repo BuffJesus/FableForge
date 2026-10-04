@@ -1,10 +1,14 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
-2026-10-04 named GLOBAL candidate: Aging Slowdown, Fire Teleport and Lightning
+2026-10-04 named GLOBAL continuation: Aging Slowdown, Fire Teleport and Lightning
 Teleport pass 42 independently checked model/texture/effect words, byte
-preservation, direct/composed parity and safe missing-model refusal. The full
-821-package texture/graphics write sweep remains in progress with its previous
-fixed importer. See HANDOFF_WORLD_UI for exact candidate and corpus boundaries.
+preservation, direct/composed parity and safe missing-model refusal; the complete
+small-bank scan reaches 439/577 without regressions. Counted mesh texture lists
+now account for multi-LOD switch distances, with one/three-LOD asset fixtures and
+safe malformed-list refusal. Inventory icon/title/detail references use their
+texture/text domains. Interrupted large-bank candidates are retained; the fixed
+full sweep is being prepared in an owned C: verification checkout after observed
+D: I/O contention. See HANDOFF_WORLD_UI for exact evidence and scope boundaries.
 
 2026-10-04 release checkpoint: the Forge-managed Aeon/controller route is
 published as prerelease `v0.18.1-rc.1` at tagged source `f5c763a` with green
