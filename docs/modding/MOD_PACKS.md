@@ -25,6 +25,11 @@ also refuses changed/new unnamed components and changed sibling banks, so it can
 report success after omitting those edits. These checks do not add script/frontend
 composition or general cross-bank relocation support.
 
+An FMP record must have a name. New records also need a definition type; an
+existing named record can still be replaced by a legacy untyped entry. An explicit
+type that differs from the existing baseline type refuses. These identity failures
+abort the whole package before writes, including earlier valid contributions.
+
 Individual choices are available for contested unique named scalar fields in
 clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
 CDefString with their expected byte widths. They override the record choice;

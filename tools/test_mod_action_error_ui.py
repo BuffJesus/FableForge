@@ -28,11 +28,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Unsupported metadata fixture for --mode fmp')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
-    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling')
+    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record')
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-action-error-', dir=repo/'build')).resolve()
@@ -89,6 +89,7 @@ def main():
             assert added.returncode == 0, (added.stdout+added.stderr).decode('utf-8', errors='replace')
             bad = case/('ChangedSiblingBanks' if args.mode == 'sibling' else
                         'UnnamedComponents' if args.mode == 'unnamed' else
+                        'UntypedRecords.fmp' if args.mode == 'record' else
                         'UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
             if args.mode == 'sibling':
                 (bad/'data/CompiledDefs').mkdir(parents=True)
@@ -101,6 +102,12 @@ def main():
                 index = next(i for i, entry in enumerate(entries) if not entry['name'])
                 entries[index] = dict(entries[index], data=entries[index]['data']+b'unsupported-unnamed-edit')
                 rewrite_bank(root, bad, entries)
+            elif args.mode == 'record':
+                from test_fmp_record_refusal import write_fmp
+                from test_fmp_links import read_bank
+                entry = next(entry for entry in read_bank(root) if entry['name'])
+                write_fmp(bad, [(entry['name'], entry['definition'], entry['data']),
+                                ('NEW_UNTYPED_RECORD', '-', b'unsupported-untyped-record')])
             elif args.mode == 'fmp': shutil.copyfile(args.fmp, bad)
             else: bad.write_bytes(b'not a BSDIFF patch'+b'x'*64)
             bad_before = snapshot(bad) if bad.is_dir() else digest(bad)
@@ -114,11 +121,13 @@ def main():
                 f'mod_add {bad.as_posix()} BrokenPatch', 'frames 3']
             lines += button('btn_mods_deploy')+['assert_log mods deploy: FAILED',
                 'assert_log changed sibling definition banks' if args.mode == 'sibling' else
+                'assert_log has no definition type' if args.mode == 'record' else
                 'assert_log changed or new unnamed definition entries' if args.mode == 'unnamed' else
                 'assert_log unsupported target list' if args.mode == 'fmp' else 'assert_log bad magic']
-            if args.mode in ('unnamed', 'sibling'):
+            if args.mode in ('unnamed', 'sibling', 'record'):
                 lines += button('btn_mods_conflicts')+['assert_log mods conflicts: FAILED',
                     'assert_log changed sibling definition banks' if args.mode == 'sibling' else
+                    'assert_log has no definition type' if args.mode == 'record' else
                     'assert_log changed or new unnamed definition entries']
         else:
             lines += button('btn_mods_conflicts')

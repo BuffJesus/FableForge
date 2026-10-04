@@ -98,6 +98,8 @@ def main():
     run('defs', [package / 'forge-tools.exe', 'defs', 'list', args.root.resolve(), 'game.bin', 'OBJECT_HERO'])
     run('mod_bank_refusal', [sys.executable, repo/'tools/test_mod_bank_refusal.py',
         '--tool', package/'forge-tools.exe', '--cwd', cwd])
+    run('fmp_record_refusal', [sys.executable, repo/'tools/test_fmp_record_refusal.py',
+        '--tool', package/'forge-tools.exe', '--cwd', cwd])
     run('retail', [sys.executable, repo / 'tools/retail_smoke.py', '--exe', package / 'forge.exe',
         '--count', '8', '--install', args.root.resolve(), '--out', work / 'exports'])
     run('gui', [sys.executable, repo / 'tools/ui_smoke.py', '--exe', package / 'FableForge.exe',
@@ -106,7 +108,7 @@ def main():
         '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
-    for mode in ('redeploy', 'report', 'missing', 'unnamed', 'sibling'):
+    for mode in ('redeploy', 'report', 'missing', 'unnamed', 'sibling', 'record'):
         run('mod_action_' + mode, [sys.executable, repo / 'tools/test_mod_action_error_ui.py',
             '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--mode', mode])
     skipped = []

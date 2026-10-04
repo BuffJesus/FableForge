@@ -8103,7 +8103,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     // preserving existing offsets and appending any new record names, so the
     // copied script/frontend bins still resolve against it.
     auto game = openDefs(baseRoot, "game.bin");
-    size_t replaced = 0, added = 0, skippedUntyped = 0;
+    size_t replaced = 0, added = 0;
     std::set<std::string> importedNames;
     // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
     // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
@@ -8114,10 +8114,16 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         const auto* bank = pkg.findBank(bankName);
         if (bank == nullptr) continue;
         for (const auto& e : bank->entries) {
+            if (e.name.empty())
+                throw std::runtime_error("FMP records: " + std::string(bankName) +
+                    " contains an unnamed record; package was not applied.");
             auto data = pkg.entryData(e);
             const forge::bin::Entry* existing =
                 e.name.empty() ? nullptr : game.find(e.name);
             if (existing != nullptr) {
+                if (!e.definition.empty() && e.definition != "-" && e.definition != existing->definition)
+                    throw std::runtime_error("FMP records: " + e.name +
+                        " has a different definition type from the baseline; package was not applied.");
                 game.setEntryData((size_t)(existing - game.entries().data()),
                                   std::move(data));
                 ++replaced;
@@ -8127,8 +8133,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 ++added;
                 importedNames.insert(e.name);
             } else {
-                std::fprintf(stderr, "  warning: %s: new record %s has no def type in this package; not added\n", bankName, e.name.c_str());
-                ++skippedUntyped;
+                throw std::runtime_error("FMP records: new record " + e.name +
+                    " has no definition type; package was not applied.");
             }
         }
     }

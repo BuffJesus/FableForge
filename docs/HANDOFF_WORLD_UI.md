@@ -80,6 +80,43 @@ and explicit steps pass; rebuild its hash after final text changes. Application
 archive 9bc1f1d remains unchanged and accepted across 42 original/resumed checks.
 This guide prose does not turn synthetic offline checks into manual/gameplay proof.
 
+## 2026-10-03 isolated FMP record identity refusal
+
+Owning checkout D:/Code/FableForge-fmp-entry-review, based on frozen 1b638eb.
+Read-only scratch untyped-fmp-audit-1ujee_8l in bank-review proves the previous
+CLI returns success, emits output and only warns while skipping a new untyped
+Objects record. The follow-up refuses new untyped/unnamed records and explicit
+replacement type mismatches before output. Legacy empty/dash-type replacements
+of existing named records and typed new additions remain accepted.
+
+Native fmp-record-refusal-y5l_w6x_ passes 16 independent standalone/composed cases:
+each invalid contribution follows a valid addition, and source/prior-output
+snapshots remain unchanged on refusal. Supported replacement/addition payloads
+are independently parsed. Initial fixture 6k82h8uu failed its Python writer check
+because duplicate record names collapsed in the reader map; corrected fixture
+uses distinct names. No product failure is hidden. Existing 29 bank cases pass
+in mod-bank-refusal-nznda178; fmp-links-7du0b6sn passes retail/intact Aeon/composed
+14-link checks, all existing-record preservation, field choices and relocation.
+All Release targets build, 38/38 CTest cases and documentation commands pass.
+Both-size record GUI recovery passes in mod-action-error-tg4qb2tl, including
+refused redeploy/conflict check, reopen/rescan, preserved inventories and same-
+process retry; the compact screenshot is visually inspected.
+Source/package suites now include these cases (46 extracted runtime workflows).
+No package, promotion or gameplay claim for this follow-up.
+
+Latest user steering explicitly requires Forge to perform Aeon installation;
+manual copying is a workaround and does not meet the intended workflow. Keep the
+installed-overhaul preservation contract, but implement a complete-data installation
+route in Forge before controller composition. Do not present the manual-copy guide
+as the final resolution. New guide and whole-bank installation acceptance remain
+required; no live install, author tools or game execution are authorized here.
+
+Read-only locked-file-compare-audit-o6u8490y exposes a separate existing bug:
+same-size source and baseline differ, but an exclusive source read lock makes
+filesIdentical return true without reading. CLI merge returns success and omits
+the source asset. Both input snapshots remain unchanged. This follow-up does not
+fix that helper; keep the evidence for a separate file-read preservation change.
+
 ## 2026-10-03 isolated unsupported-bank preservation guard
 
 Owning checkout D:/Code/FableForge-bank-review, branch

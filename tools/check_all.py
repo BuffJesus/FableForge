@@ -45,6 +45,8 @@ def main():
     ok &= run("CTest (core, rows, geometry, LZO)", ["ctest", "--test-dir", "build", "--output-on-failure"], capture_output=True)
     ok &= run("unchanged bank carries, unsupported sibling/FMP bank refusal and export preservation",
               [sys.executable, "tools/test_mod_bank_refusal.py"], capture_output=True)
+    ok &= run("FMP record identity refusal and supported legacy replacements",
+              [sys.executable, "tools/test_fmp_record_refusal.py"], capture_output=True)
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
@@ -90,7 +92,7 @@ def main():
                 ok &= run("Texture image refusal, persistent error, retry and exact Restore " + str(options),
                           [sys.executable, "tools/test_texture_replace_failure_ui.py", "--install", install_root,
                            *options], capture_output=True)
-            for mode in ("redeploy", "report", "missing", "unnamed", "sibling"):
+            for mode in ("redeploy", "report", "missing", "unnamed", "sibling", "record"):
                 ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
                           [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
                            "--mode", mode], capture_output=True)
