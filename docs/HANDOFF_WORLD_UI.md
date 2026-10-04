@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 individual-field selection audit
+
+Review switches clean to feat/forge-field-choice-review-20261003 and advances to
+primary 0cca70f after choice feedback acceptance. Offline synthetic composer
+audit field-choice-scope-audit-zh6iebk1 independently proves no record pick can
+express A first-field / C second-and-third / B independent fourth-field. Sources,
+baseline and choices remain byte-exact. 7y0xh56b first used an incorrect expected
+B third-field value; corrected to 30, with no product change. Full reports and
+current typed/tag/part identities are retained; unsupported field-key probe is
+ignored, not supported syntax. CONTENT_OVERRIDES records the scoped next contract
+and why numeric part indices alone cannot identify persisted fields across
+layouts. No product implementation yet, active process, gameplay or corpus writes.
+
 ## 2026-10-03 choice feedback primary integration
 
 Primary feat/editor-ui-shell fast-forwarded 6258a31 to b428ec1 and all Release

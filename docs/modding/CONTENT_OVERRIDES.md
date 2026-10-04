@@ -1,5 +1,33 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-03 individual-field scope audit
+
+At integrated 0cca70f, owning review field-choice-scope-audit-zh6iebk1 creates
+three synthetic CRegionScriptDef versions and independently reads merged banks.
+Desired values (10,21,31,5) take RandomVillagerMax from PackA, RandomGuardMax
+and RandomBanditMax from PackC and the sole RegionDangerLevel edit from PackB.
+No current record pick expresses that result: order/C give (11,21,31,5), A
+(10,20,31,5), B (11,21,30,5), baseline (1,2,3,5). The first audit 7y0xh56b
+misclassified the third field as independent; correcting its expected B value
+requires no product change. Original baseline/source/pick bytes stay preserved.
+A deliberately unsupported field namespace probe is ignored as an unused
+definition-record key; it is not proposed or supported syntax.
+
+The existing report already retains part_index (prefix 0, fields index+1),
+field/type/values and actual sourceVersions for symbolic FMP relocation. GUI
+collectConflicts drops part_index. Numeric indices identify duplicate unnamed
+parts for one decode but cannot alone guard persisted selections after a layout
+change. A new persisted identity must qualify bank, record and definition layout;
+field selection must update sourceVersions so selected FMP links follow the
+chosen bytes. Reuse fresh-read/PendingBanks choice persistence and failure UI.
+
+Bounded next implementation: explicit choices among currently contested clean
+decoded parts, field choices overriding a record choice, clearing one field
+returning to its record/order default, and independent edits surviving. Prefix,
+unnamed fields, variable arrays, missing sources and schema changes require
+explicit identity/availability behavior before exposing them as durable picks.
+No individual-field product support or new package/gate result is claimed here.
+
 Recorded 2026-10-02 at the user's request for future FableForge/mod-manager work.
 Status: **broader design backlog; comparison increments are recorded below,
 not a claim of complete override UI or format support**.
