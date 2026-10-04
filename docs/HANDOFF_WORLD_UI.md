@@ -8721,3 +8721,22 @@ and updated core library. The in-flight full-corpus importer remains unchanged
 at SHA256 `9f887c2a31b23a4e5fe6f533cf220d0871a34f4e4d46bd2dee44ac349b62a625`.
 Full-corpus counts and normal CLI rebuild await that run's completion; no
 runtime compatibility claim.
+
+The GLOBAL candidate's complete small-bank scan at
+`build/named-fmp-coverage-5_n45c9r/result.json` accepts 439/577, adds exactly
+the three GLOBAL fixtures, and regresses none of the previous 436 accepted
+packages. Remaining: 119 link refusals, 11 unavailable schemas, eight identity
+refusals and 244 large-bank packages deferred in this scoped scan.
+
+The earlier full bank-write sweep `build/named-fmp-coverage-y_urs7oy` actually
+terminated on a 90-second apply timeout for eligible package 643, Red EXP.
+Its last emitted checkpoint was 459 accepted out of 600 processed; the loaded
+older script did not retain individual rows or a final report. This is partial
+evidence only. Do not count it as a completed 821-package gate or restart it
+merely because stdout was quiet. The failure's original current.fmp/output
+remain for inspection. A separate one-package retry uses 180 seconds.
+
+The audit now accepts explicit `--start-index` and `--timeout`, records selected
+and full eligible scope independently, and retains timeouts as inconclusive
+`not_applied_timeout` rows before continuing. A completed selected scope is not
+an assertion that the omitted prefix was tested or that timeouts were accepted.

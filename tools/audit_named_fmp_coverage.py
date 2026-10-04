@@ -55,11 +55,17 @@ def main():
     parser.add_argument('--install', required=True, type=Path)
     parser.add_argument('--tool', type=Path, default=repo/'build/forge-tools.exe')
     parser.add_argument('--limit', type=int, default=0, help='First N eligible packages; 0 = all')
+    parser.add_argument('--start-index', type=int, default=1,
+                        help='One-based first eligible package to audit; records the selected scope')
+    parser.add_argument('--timeout', type=float, default=90,
+                        help='Seconds allowed per import; timeouts remain inconclusive rows')
     parser.add_argument('--apply-textures', action='store_true',
                         help='Also write the large textures.big scratch result for each texture package')
     parser.add_argument('--apply-graphics', action='store_true',
                         help='Also write the large graphics.big scratch result for each graphics package')
     args = parser.parse_args()
+    if args.start_index < 1 or args.timeout <= 0 or args.limit < 0:
+        parser.error('start-index and timeout must be positive; limit cannot be negative')
     work = Path(tempfile.mkdtemp(prefix='named-fmp-coverage-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
     archive_hash = digest(args.archive)
@@ -70,6 +76,8 @@ def main():
     with zipfile.ZipFile(args.archive) as archive:
         catalogue = json.loads(archive.read('catalogue.json'))
         eligible = [r for r in catalogue if r['banks'] and set(r['banks']) <= SUPPORTED_BANKS]
+        eligible_archive_total = len(eligible)
+        eligible = eligible[args.start_index - 1:]
         if args.limit:
             eligible = eligible[:args.limit]
         def checkpoint(complete=False):
@@ -80,6 +88,8 @@ def main():
                 'baseline': str(args.install.resolve()), 'tool': str(args.tool.resolve()),
                 'tool_sha256': tool_hash, 'baseline_sha256': baseline_hashes,
                 'eligible_total': len(eligible), 'all_catalogue_total': len(catalogue),
+                'eligible_archive_total': eligible_archive_total, 'start_index': args.start_index,
+                'timeout_seconds': args.timeout,
                 'processed_total': len(results), 'complete': complete,
                 'apply_textures': args.apply_textures, 'apply_graphics': args.apply_graphics,
                 'status_counts': dict(collections.Counter(r['category'] for r in results)),
@@ -109,14 +119,20 @@ def main():
             source = work/'current.fmp'
             source.write_bytes(payload)
             output = work/'current-output'
-            result = subprocess.run(
-                [str(args.tool.resolve()), 'fmp', 'apply', str(args.install.resolve()),
-                 str(source), str(output)], capture_output=True, timeout=90, cwd=repo)
-            stderr = result.stderr.decode('utf-8', errors='replace').strip()
-            row = {'file': record['file'], 'sha256': record['sha256'],
-                   'banks': record['banks'], 'status': 'importable_offline' if result.returncode == 0 else 'refused',
-                   'category': 'accepted' if result.returncode == 0 else category(stderr),
-                   'reason': stderr[-1500:] if result.returncode else ''}
+            command = [str(args.tool.resolve()), 'fmp', 'apply', str(args.install.resolve()),
+                       str(source), str(output)]
+            try:
+                result = subprocess.run(command, capture_output=True, timeout=args.timeout, cwd=repo)
+                stderr = result.stderr.decode('utf-8', errors='replace').strip()
+                row = {'file': record['file'], 'sha256': record['sha256'],
+                       'banks': record['banks'], 'status': 'importable_offline' if result.returncode == 0 else 'refused',
+                       'category': 'accepted' if result.returncode == 0 else category(stderr),
+                       'reason': stderr[-1500:] if result.returncode else ''}
+            except subprocess.TimeoutExpired:
+                row = {'file': record['file'], 'sha256': record['sha256'],
+                       'banks': record['banks'], 'status': 'not_applied_timeout',
+                       'category': 'apply timeout',
+                       'reason': f'Import exceeded {args.timeout:g} seconds; compatibility is unverified.'}
             results.append(row)
             checkpoint()
             checked_remove(output, work)
