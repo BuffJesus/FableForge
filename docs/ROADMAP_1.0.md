@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-04 complete-Data installer integration: the isolated primary-based
+merge preserves all product/test bytes from the 46-workflow-tested review branch
+and passes an all-target Release build, 38 core cases and the focused
+installer/refusal gates. The local development ZIP and illustrated guide are
+validated but unpublished. Direct `mods merge` late-read output atomicity and
+live PC/Retroid gameplay remain open. See HANDOFF_WORLD_UI.
+
 2026-10-03 primary scalar/Aeon checkpoint: review 9bc1f1d is integrated through
 801e733; all Release targets build, 38 core tests and rebuilt-primary named-link /
 existing-record preservation checks pass. Its frozen archive passes all 42 extracted workflows

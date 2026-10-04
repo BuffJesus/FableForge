@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 primary integration checkpoint
+
+The accepted complete-Data review was reconciled with primary's separately
+integrated scalar/Aeon history in isolated branch
+`integration/complete-data-20261004` at `4ec9325`. Only the historical handoff
+and roadmap content differs from the 46-workflow-tested review branch; every
+product, guide, and test file is byte-identical. The merged worktree builds all
+Release targets and passes 38/38 CTest, 14 complete-install, 29 bank refusal,
+16 FMP record, locked-file retry, and documentation-command checks. The review
+branch's local extracted application ZIP passed 46/46 workflows with zero skips;
+no duplicate package suite was needed for byte-identical executable source.
+No release, live game, Discord or author install changed.
+
 ## 2026-10-03 bedtime: resume Forge-managed installation work
 
 User explicitly stopped work for shutdown and requested a tomorrow handoff.
