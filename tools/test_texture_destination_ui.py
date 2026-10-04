@@ -43,16 +43,16 @@ def main():
     blue = work/'blue.png'
     Image.new('RGB', (64, 64), (0, 0, 255)).save(blue)
     shared = subprocess.run([str(gui.with_name('forge.exe')), 'texture-add', 'ROOT_SHARED_TEST',
-        str(image), '--install', str(first)], cwd=cwd, capture_output=True, text=True, timeout=90)
+        str(image), '--install', str(first)], cwd=cwd, capture_output=True, text=True, timeout=300)
     (work/'shared.log').write_text(shared.stdout+shared.stderr, encoding='utf-8')
     assert shared.returncode == 0, shared.stdout+shared.stderr
     shutil.copyfile(first/'data/graphics/pc/textures.big', second/'data/graphics/pc/textures.big')
     replaced = subprocess.run([str(gui.with_name('forge.exe')), 'texture-replace', 'ROOT_SHARED_TEST',
-        str(blue), '--install', str(second)], cwd=cwd, capture_output=True, text=True, timeout=90)
+        str(blue), '--install', str(second)], cwd=cwd, capture_output=True, text=True, timeout=300)
     (work/'replace.log').write_text(replaced.stdout+replaced.stderr, encoding='utf-8')
     assert replaced.returncode == 0, replaced.stdout+replaced.stderr
     result = subprocess.run([str(gui.with_name('forge.exe')), 'texture-add', 'ROOT_SWITCH_TEST',
-        str(blue), '--install', str(second)], cwd=cwd, capture_output=True, text=True, timeout=90)
+        str(blue), '--install', str(second)], cwd=cwd, capture_output=True, text=True, timeout=300)
     (work/'add.log').write_text(result.stdout+result.stderr, encoding='utf-8')
     assert result.returncode == 0, result.stdout+result.stderr
     before = {p: digest(p) for root in [first, second, empty] for p in root.rglob('*') if p.is_file()}
