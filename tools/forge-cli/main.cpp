@@ -4820,7 +4820,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>* rootLabels = nullptr,         // mod labels parallel to modRoots, else the folder names
               const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr,
               const std::map<std::string, uint32_t>* meshIds = nullptr,
-              const std::map<std::string, uint32_t>* textureIds = nullptr) {
+              const std::map<std::string, uint32_t>* textureIds = nullptr,
+              const std::vector<bool>* numericFmpRoots = nullptr) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4835,16 +4836,19 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
 
     auto merged = openDefs(baseRoot, bin);
 
-    // Snapshot base payloads by name BEFORE mutating, for change detection.
+    // Snapshot base payloads BEFORE mutating. Blank-name records have stable
+    // numeric identity only for FMPs that named the matching baseline index.
     std::map<std::string, std::vector<uint8_t>> baseData;
     std::map<std::string, std::string> baseDef;  // name -> definition type
     std::map<std::string, size_t> nameToIndex;
     for (size_t i = 0; i < merged.entries().size(); ++i) {
         const auto& e = merged.entries()[i];
-        if (e.name.empty()) continue;
-        baseData[e.name] = e.data;
-        baseDef[e.name] = e.definition;
-        nameToIndex[e.name] = i;
+        const auto key = e.name.empty() ? forge::fmplinks::anonymousKey(i) : e.name;
+        if (!e.name.empty() && e.name.starts_with("@unnamed:"))
+            throw std::runtime_error("game.bin name collides with internal numeric identity: " + e.name);
+        baseData[key] = e.data;
+        baseDef[key] = e.definition;
+        nameToIndex[key] = i;
     }
 
     // Gather every mod version that changes/adds each record, in load order.
@@ -4859,21 +4863,30 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         const auto& modRoot = modRoots[mi];
         const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
-        requireUnchangedUnnamedEntries(merged, mod, bin, modName);
-        for (const auto& me : mod.entries()) {
-            if (me.name.empty()) continue;
-            auto bit = baseData.find(me.name);
+        const bool numeric = numericFmpRoots && mi < numericFmpRoots->size() && numericFmpRoots->at(mi);
+        if (!numeric) requireUnchangedUnnamedEntries(merged, mod, bin, modName);
+        for (size_t entryIndex = 0; entryIndex < mod.entries().size(); ++entryIndex) {
+            const auto& me = mod.entries()[entryIndex];
+            if (me.name.empty() && !numeric) continue;
+            if (me.name.empty() && (entryIndex >= merged.entries().size() ||
+                !merged.entries()[entryIndex].name.empty() ||
+                me.definition != merged.entries()[entryIndex].definition ||
+                me.indexInDefinition != merged.entries()[entryIndex].indexInDefinition))
+                throw std::runtime_error("FMP numeric identity changed at game.bin index " +
+                                         std::to_string(entryIndex));
+            const auto key = me.name.empty() ? forge::fmplinks::anonymousKey(entryIndex) : me.name;
+            auto bit = baseData.find(key);
             const bool isAdd = bit == baseData.end();
             const bool isChange = !isAdd && me.data != bit->second;
             if (!isAdd && !isChange) continue;  // identical to vanilla
-            if (changes.find(me.name) == changes.end()) order.push_back(me.name);
+            if (changes.find(key) == changes.end()) order.push_back(key);
             std::vector<forge::fmplinks::Link> links;
             if (rootLinks) {
                 if (rootLinks->size() != modRoots.size()) throw std::runtime_error("FMP links: source count mismatch");
-                const auto found = rootLinks->at(mi).find(me.name);
+                const auto found = rootLinks->at(mi).find(key);
                 if (found != rootLinks->at(mi).end()) links = found->second;
             }
-            changes[me.name].push_back({modName, me.definition, me.data, std::move(links)});
+            changes[key].push_back({modName, me.definition, me.data, std::move(links)});
         }
     }
 
@@ -5052,11 +5065,14 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     }
 
     for (const auto& [name, links] : selectedLinks) {
-        const auto* entry = merged.find(name);
-        if (!entry) throw std::runtime_error("FMP links: selected owner is absent: " + name);
-        auto data = forge::fmplinks::relink(*entry, merged, *schema, links,
+        const auto found = nameToIndex.find(name);
+        if (found == nameToIndex.end()) throw std::runtime_error("FMP links: selected owner is absent: " + name);
+        const auto* entry = &merged.entries().at(found->second);
+        auto owner = *entry;
+        if (owner.name.empty()) owner.name = name;
+        auto data = forge::fmplinks::relink(owner, merged, *schema, links,
                                            false, meshIds, textureIds);
-        merged.setEntryData(size_t(entry - merged.entries().data()), std::move(data));
+        merged.setEntryData(found->second, std::move(data));
     }
 
     // Write a game-root layout (<outDir>/data/CompiledDefs/) so the result is a
@@ -5069,6 +5085,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         json conflictRows = json::array();
         for (const auto& c : conflicts) {
             conflictRows.push_back({{"record", c.record}, {"mods", c.mods},
+                                    {"definition", baseDef.contains(c.record) ? baseDef.at(c.record) : changes.at(c.record).front().definition},
+                                    {"index", nameToIndex.contains(c.record) ? json(nameToIndex.at(c.record)) : json(nullptr)},
                                     {"winner", c.winner},
                                     {"field_merged", c.fieldMerged},
                                     {"field_conflicts", c.fieldDetails},
@@ -7815,6 +7833,7 @@ int fmpList(const std::string& path, bool jsonOutput) {
             json ents = json::array();
             for (const auto& e : b.entries)
                 ents.push_back({{"name", e.name}, {"definition", e.definition},
+                                {"id", e.id}, {"type", e.type},
                                 {"length", e.length}});
             banks.push_back({{"bank", b.name}, {"count", b.entries.size()},
                              {"entries", ents}});
@@ -8333,7 +8352,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     // copied script/frontend bins still resolve against it.
     auto game = openDefs(baseRoot, "game.bin");
     size_t replaced = 0, added = 0;
-    std::set<std::string> importedNames;
+    std::map<std::string, size_t> importedIndexes;
     // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
     // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
     // package (contentType 459: banks Settings / Objects / ObjectLinks / Text, entries
@@ -8343,24 +8362,33 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         const auto* bank = pkg.findBank(bankName);
         if (bank == nullptr) continue;
         for (const auto& e : bank->entries) {
-            if (e.name.empty())
-                throw std::runtime_error("FMP records: " + std::string(bankName) +
-                    " contains an unnamed record; package was not applied.");
+            if (e.name.empty()) {
+                const auto index = size_t(e.id);
+                const auto key = forge::fmplinks::anonymousKey(index);
+                if (std::string_view(bankName) != "GameBINEntries" ||
+                    index >= game.entries().size() || !game.entries()[index].name.empty() ||
+                    e.definition.empty() || e.definition != game.entries()[index].definition ||
+                    importedIndexes.contains(key))
+                    throw std::runtime_error("FMP records: unnamed entry " + std::to_string(index) +
+                        " has no matching blank-name baseline identity; package was not applied.");
+                game.setEntryData(index, pkg.entryData(e));
+                importedIndexes[key] = index;
+                ++replaced;
+                continue;
+            }
             auto data = pkg.entryData(e);
-            const forge::bin::Entry* existing =
-                e.name.empty() ? nullptr : game.find(e.name);
+            const forge::bin::Entry* existing = game.find(e.name);
             if (existing != nullptr) {
                 if (!e.definition.empty() && e.definition != "-" && e.definition != existing->definition)
                     throw std::runtime_error("FMP records: " + e.name +
                         " has a different definition type from the baseline; package was not applied.");
-                game.setEntryData((size_t)(existing - game.entries().data()),
-                                  std::move(data));
+                const auto index = size_t(existing - game.entries().data());
+                game.setEntryData(index, std::move(data));
                 ++replaced;
-                importedNames.insert(e.name);
+                importedIndexes[e.name] = index;
             } else if (!e.definition.empty() && e.definition != "-") {
-                game.addEntry(e.definition, e.name, std::move(data));
+                importedIndexes[e.name] = game.addEntry(e.definition, e.name, std::move(data));
                 ++added;
-                importedNames.insert(e.name);
             } else {
                 throw std::runtime_error("FMP records: new record " + e.name +
                     " has no definition type; package was not applied.");
@@ -8373,13 +8401,13 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
-        if (!importedNames.contains(name))
+        const auto imported = importedIndexes.find(name);
+        if (imported == importedIndexes.end())
             throw std::runtime_error("FMP links: metadata owner was not imported: " + name);
         if (!linkSchema) linkSchema = forge::defschema::Schema::load(
             schemaPath.empty() ? defaultDefSchemaPath() : schemaPath);
-        const auto* entry = game.find(name);
-        if (!entry) throw std::runtime_error("FMP links: metadata owner is absent: " + name);
-        const auto index = size_t(entry - game.entries().data());
+        const auto index = imported->second;
+        const auto* entry = &game.entries().at(index);
         if (!meshIds && std::any_of(recordLinks.begin(), recordLinks.end(),
                 [](const auto& link) { return link.path.ends_with(".Model ID") ||
                                              link.path.ends_with(".Model Eye ID"); })) {
@@ -8395,7 +8423,9 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 for (const auto& texture : packageTextures->entries)
                     (*textureIds)[texture.name] = texture.id;
         }
-        auto data = forge::fmplinks::relink(*entry, game, *linkSchema, recordLinks,
+        auto owner = *entry;
+        if (owner.name.empty()) owner.name = name;
+        auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
                                           symbolicLinks != nullptr,
                                           meshIds ? &*meshIds : nullptr,
                                           textureIds ? &*textureIds : nullptr);
@@ -8940,6 +8970,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     std::vector<std::string> roots;
     std::vector<std::string> rootLabels;   // parallel to roots
     std::vector<forge::fmplinks::RecordLinks> rootLinks;
+    std::vector<bool> numericFmpRoots;      // only FMP entries carry verified baseline numeric ids
     std::vector<std::string> contentRoots = sources; // .fmp WAD banks become staged trees
     std::vector<std::string> egoFolders;
     std::vector<size_t> forgePacks;   // FableForge packs (forge_pack.json): their recipes run after the layers below
@@ -8958,14 +8989,17 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             contentRoots[i] = root;
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
             rootLinks.push_back(std::move(links));
+            numericFmpRoots.push_back(true);
         } else if (ext == ".patch" || ext == ".PATCH") {
             const std::string root = tmpRoot(i);
             patchToRoot(baseRoot, s, root, jsonOutput);
             roots.push_back(root); rootLabels.push_back(srcLabel(i));
             rootLinks.emplace_back();
+            numericFmpRoots.push_back(false);
         } else if (fs::exists(fs::path(s) / "data" / "CompiledDefs" / "game.bin")) {
             roots.push_back(s); rootLabels.push_back(srcLabel(i));  // already a game-root
             rootLinks.emplace_back();
+            numericFmpRoots.push_back(false);
         } else if (fs::is_directory(s) && fs::exists(fs::path(s) / (fs::path(s).filename().string() + ".dll"))) {
             // an EgoCore mod folder: the DLL goes into Mods/ below; its .def text becomes a defs layer now
             egoFolders.push_back(s);
@@ -8976,6 +9010,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             if (forge::egocore::normaliseDefs(s, baseRoot, root, ep, erep)) {
                 roots.push_back(root); rootLabels.push_back(srcLabel(i));
                 rootLinks.emplace_back();
+                numericFmpRoots.push_back(false);
                 if (jsonOutput) rep["egocore_defs"].push_back({{"mod", erep.modName}, {"def_files", erep.defFiles}, {"records_changed", erep.recordsChanged}, {"fields", erep.fieldsApplied}, {"new", erep.recordsNew}, {"skipped", erep.recordsSkipped}});
                 if (!jsonOutput) std::printf("egocore %s: %zu .def file(s), %zu block(s) replaced, %zu added -> %zu record(s) changed (%zu field(s)), %zu new, %zu skipped\n",
                             erep.modName.c_str(), erep.defFiles, erep.blocksReplaced, erep.blocksAdded, erep.recordsChanged, erep.fieldsApplied, erep.recordsNew, erep.recordsSkipped);
@@ -9005,7 +9040,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // refusal for overhauls, then validate banks this composer cannot apply.
     const auto baselineDefs = openDefs(baseRoot, "game.bin");
     for (size_t i = 0; i < roots.size(); ++i)
-        requireUnchangedUnnamedEntries(baselineDefs, openDefs(roots[i], "game.bin"), "game.bin", rootLabels[i]);
+        if (!numericFmpRoots.at(i))
+            requireUnchangedUnnamedEntries(baselineDefs, openDefs(roots[i], "game.bin"), "game.bin", rootLabels[i]);
     for (size_t i = 0; i < roots.size(); ++i)
         requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
     for (size_t i = 0; i < contentRoots.size(); ++i)
@@ -9055,7 +9091,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
                              schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
                              plannedMeshIds ? &*plannedMeshIds : nullptr,
-                             plannedTextureIds ? &*plannedTextureIds : nullptr);
+                             plannedTextureIds ? &*plannedTextureIds : nullptr, &numericFmpRoots);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 

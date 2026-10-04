@@ -14,6 +14,8 @@ namespace forge::fmplinks {
 struct Link { std::string path, target; };
 struct LinkGroup { std::string path; std::vector<std::string> targets; };
 using RecordLinks = std::map<std::string, std::vector<Link>>;
+// Stable internal key for a blank-name record identified by its baseline index.
+std::string anonymousKey(size_t index);
 
 // Read inert NRBF data, never instantiate serialized framework objects.
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes);

@@ -18,6 +18,7 @@ from pathlib import Path
 SUPPORTED_BANKS = {
     'GameBINEntries', 'GameBINLinkMetaData', 'Objects', 'Settings',
     'ObjectLinks', 'Text', 'FinalAlbionWAD', 'maintextures',
+    'graphics', 'graphicsLinkMetaData',
 }
 
 
@@ -56,6 +57,8 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help='First N eligible packages; 0 = all')
     parser.add_argument('--apply-textures', action='store_true',
                         help='Also write the large textures.big scratch result for each texture package')
+    parser.add_argument('--apply-graphics', action='store_true',
+                        help='Also write the large graphics.big scratch result for each graphics package')
     args = parser.parse_args()
     work = Path(tempfile.mkdtemp(prefix='named-fmp-coverage-', dir=repo/'build')).resolve()
     print('Evidence retained at', work, flush=True)
@@ -71,12 +74,18 @@ def main():
         for index, record in enumerate(eligible):
             payload = archive.read(record['file'])
             assert hashlib.sha256(payload).hexdigest() == record['sha256'], record['file']
+            deferred = []
             if 'maintextures' in record['banks'] and not args.apply_textures:
+                deferred.append('texture')
+            if 'graphics' in record['banks'] and not args.apply_graphics:
+                deferred.append('graphics')
+            if deferred:
                 results.append({'file': record['file'], 'sha256': record['sha256'],
                                 'banks': record['banks'], 'status': 'not_applied_large_bank',
-                                'category': 'large texture bank',
-                                'reason': 'Use --apply-textures for a full scratch apply; '
-                                          'audit_named_fmp_textures.py checks entry metadata without writing the bank.'})
+                                'category': 'large ' + ' and '.join(deferred) + ' bank',
+                                'reason': 'Use the matching --apply-textures/--apply-graphics flags '
+                                          'for a full scratch apply; the named asset audits inspect '
+                                          'entry metadata without writing the large banks.'})
                 continue
             source = work/'current.fmp'
             source.write_bytes(payload)

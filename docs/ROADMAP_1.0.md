@@ -57,6 +57,15 @@ identity/relocation remains unsupported. Historical Aeon/UFP/other-overhaul
 container counts did not establish complete preservation. Package acceptance
 and promotion are pending; exact boundaries are in HANDOFF_WORLD_UI.
 
+2026-10-04 named FMP exception: a blank-name `GameBINEntries` record can now
+compose by numeric index when its ID, blank name, and definition type match the
+selected baseline. Its fields participate in load order, conflict choices,
+and saved picks. Loose overhaul directories remain guarded. The full named
+archive scratch scan accepts 222 of 577 attempted small-bank FMPs, up from
+197 before this exception; 244 large texture/graphics packages remain deferred
+from apply testing. Original Bandit Beard and two conflicting lamp FMPs pass
+byte, precedence, and GUI deploy/restore checks. See `docs/modding/FMP_FORMAT.md`.
+
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover
 on same-process retry. Both-size primary locked/unreadable checks pass, including

@@ -233,17 +233,30 @@ std::vector<LinkGroup> readMetadataGroups(std::span<const uint8_t> bytes) {
     try { return Reader(bytes).groups(); }
     catch (const nlohmann::json::exception& e) { fail(std::string("invalid metadata shape: ") + e.what()); }
 }
+std::string anonymousKey(size_t index) { return "@unnamed:" + std::to_string(index); }
 RecordLinks readGameLinks(const big::File& package) {
     RecordLinks result;
     for (const auto* bankName : {"GameBINLinkMetaData", "ObjectLinks"}) {
         const auto* bank = package.findBank(bankName); if (!bank) continue;
         for (const auto& entry : bank->entries) {
-            if (entry.name.empty() || result.contains(entry.name)) fail("unnamed or duplicate metadata entry");
-            try { result.emplace(entry.name, readMetadata(package.entryData(entry))); }
+            std::string owner = entry.name;
+            if (owner.empty()) {
+                // ChocolateBox gives anonymous metadata a one-based position
+                // in GameBINEntries. The referenced record's numeric id is a
+                // baseline game.bin index, not a name or metadata id.
+                const auto* records = package.findBank("GameBINEntries");
+                if (std::string_view(bankName) != "GameBINLinkMetaData" || !records ||
+                    entry.id == 0 || entry.id > records->entries.size())
+                    fail("unnamed metadata entry has no ordered GameBIN owner");
+                const auto& source = records->entries[entry.id - 1];
+                owner = source.name.empty() ? anonymousKey(source.id) : source.name;
+            }
+            if (result.contains(owner)) fail("duplicate metadata owner " + owner);
+            try { result.emplace(owner, readMetadata(package.entryData(entry))); }
             catch (const std::runtime_error& e) {
                 std::string reason = e.what();
                 if (reason.starts_with("FMP links: ")) reason.erase(0, 11);
-                fail(entry.name + ": " + reason);
+                fail(owner + ": " + reason);
             }
         }
     }

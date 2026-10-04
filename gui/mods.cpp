@@ -512,7 +512,12 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
     auto mods = [](const json& arr) { std::vector<std::string> v; for (const auto& m : arr) v.push_back(m.get<std::string>()); return v; };
     if (rep.contains("defs"))
         for (const auto& c : rep["defs"].value("conflicts", json::array())) {
-            rows.push_back({"record", c.value("record", ""), c.value("record", ""), mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
+            const std::string key = c.value("record", "");
+            std::string label = key;
+            if (key.starts_with("@unnamed:") && c.contains("index") && c["index"].is_number_unsigned())
+                label = "Unnamed " + c.value("definition", std::string("definition")) +
+                        " (game.bin #" + std::to_string(c["index"].get<size_t>()) + ")";
+            rows.push_back({"record", key, label, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false), true, c.value("field_merged", false)});
             if (rows.back().fieldMerged)
                 for (const auto& field : c.value("field_conflicts",json::array())) {
                     rows.back().fields.push_back({field.value("field",""),mods(field["mods"]),field.value("winner","")});

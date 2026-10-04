@@ -105,7 +105,7 @@ def main():
     (source/'data/CompiledDefs/script.bin').write_bytes(original)
     # FMP with game changes and unsupported banks refuses the entire package.
     payload=zlib.decompress((source/'data/CompiledDefs/game.bin').read_bytes()[49:])[2:]
-    for bank in ('ScriptBINEntries','FrontEndBINEntries','graphics','FinalAlbionSTB','UnknownBank'):
+    for bank in ('ScriptBINEntries','FrontEndBINEntries','FinalAlbionSTB','UnknownBank'):
         package=work/(bank+'.fmp');fmp(package,[('GameBINEntries',[payload]),(bank,[payload])])
         run('standalone-'+bank,['fmp','apply',base,package,out],'FMP banks:')
         run('composed-'+bank,['mods','merge',base,out,'--with',package],'FMP banks:')

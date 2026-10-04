@@ -206,6 +206,27 @@ report is `build/named-fmp-coverage-km2oevq6/result.json` in this checkout.
 The earlier pre-texture importer scan is
 `build/named-fmp-coverage-b8woptao/result.json` (117/577 accepted).
 
+2026-10-04 numeric FMP record update: `GameBINEntries` with blank names now use
+their package record ID only when that index exists in the selected baseline,
+is also blank-named, and has the same definition type. Ordered link metadata
+for those records is attached to the verified numeric owner. `mods merge`
+tracks them under internal `@unnamed:<index>` keys, so load order, field
+conflicts, and saved picks work without changing their names in `game.bin`.
+Ordinary loose/overhaul directories still refuse changed or moved unnamed
+records, and FMP export still refuses them. The current full eligible scan is
+`build/named-fmp-coverage-by4g8egf/result.json`: 821 packages have only
+currently recognized banks; 222 of the 577 small-bank candidates apply
+offline, 336 refuse on link constraints, 11 need a definition schema, and
+eight fail record identity checks. The other 244 packages have large texture
+and/or graphics banks and were deferred from this apply scan. This raises
+small-bank acceptance from 197 immediately before numeric support to 222;
+the 112 packages with plausible anonymous identity in the metadata audit were
+only candidates, not 112 successful imports. `tools/test_fmp_anonymous_layers.py`
+checks archived Bandit Beard and both lamp packages, including both orders,
+field conflicts, and a saved winner. `tools/test_fmp_anonymous_picks_ui.py`
+checks the real conflict and deployment in the Mods UI. Neither is a gameplay
+test.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16
