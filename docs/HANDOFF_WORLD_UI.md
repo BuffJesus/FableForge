@@ -1,5 +1,41 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 full scalar-choice package acceptance and unnamed-definition gap
+
+Frozen 7e1722b archive passes ALL 40 extracted runtime workflows, zero skips:
+package-smoke-bkjp7298/result.json, package_field_choices_7e1722b_20261003.log,
+exit 0. 103 file identities, 116 links/four guide images pass. Manifest records
+clean packaging checkout 7e1722b69aa8b1ec7243cfc518207cd79f220532. Application
+dist/development/20261003-7e1722b/FableForge-0.18.0-dev-win64.zip SHA256
+f8923cbb1cabd4705ebc8d5c528cd4ed27e46d4fe64b0bde2588b583e509b154.
+Guide ZIP is alongside it. All local/unpublished; promotion remains pending.
+
+Extracted CLI full Aeon/controller fixture aeon_controller_8lpj6vem also passes
+its existing assertions: 70->141 bindings, DLL enabled/unchanged, 14 named links,
+843 effective level payloads, 547 WAD replacements/47 additions, zero missing
+DirectGraphic references. This is NOT complete definition-overhaul preservation.
+New independent unnamed-aeon-defs-audit-f6s5e96z exposes missing coverage:
+retail 14764 entries/5873 unnamed, Aeon 16366/6625, composed 15618/5873.
+766 same-index unnamed payload changes (95 CWeaponDef) remain exactly retail;
+none equals Aeon. Three name/type differences are the install's extra named
+OBJECT_FORGE_PROBE_CUBE/CUBE3/CUBE4 versus Aeon's unnamed additions at 14761..3.
+The install is not a certified pristine baseline. Observed index alignment is
+not portable identity. Current mergeDefs explicitly skips unnamed source entries.
+
+Read-only weapon-transfer-evidence-fd7m8_ee pins the existing debug executable
+a9d6d0977d9d7fc8242da4292ae7ed92e926ca80364a95c003d9b9f689e41845.
+CWeaponDef Transfer 01ba53c5: Damage push/call 01ba54ca/01ba54d2 -> 0183ba85,
+same float helper as TargetingFOV; AnimationSpeedVal/MeleeTargetingArc call
+017c4e21. Existing decomp_schema_gap2.c identifies these as Transfer<float>.
+weapon-scalar-audit-b_bjrfqi independently checks 190 weapons/760 four-byte
+finite float ranges; 189 weapon records are unnamed. Candidate types stay in
+scratch; neither schema nor FableTLC evidence is edited.
+
+Next priority is refusing incomplete unnamed-definition composition and testing
+Controller Support against a complete already-installed Aeon baseline. Current
+archive/checks do not establish that importing Aeon as a mod layer preserves its
+whole overhaul. No active test/build remains; primary stays clean 0cca70f.
+
 ## 2026-10-03 isolated persisted scalar field choices
 
 Review extends the per-part foundation into clean unique named scalar keys and

@@ -1,5 +1,24 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-03 unnamed-overhaul preservation audit
+
+The scalar-choice archive passes all 40 extracted checks, while a new independent
+audit of the real Aeon fixture exposes a broader pre-existing omission: mergeDefs
+skips unnamed entries. Aeon carries 766 changed unnamed payloads at matching
+baseline slots (including 95 weapons); the existing composed bank keeps every
+one at baseline and has 5873 unnamed entries versus Aeon's 6625. Existing
+bindings/levels/named-link/DirectGraphic assertions do not cover this loss.
+The extra named Forge probe records in the baseline also differ from Aeon's
+initial unnamed additions, so index equality alone is not a portable key.
+
+Native evidence and all 190 retail weapons confirm Damage and three other
+unknown-schema fields are floats, but 189 CWeaponDef records are unnamed. Merely
+filling their types would not make them selectable in the named-record composer.
+Complete identity/ownership and relocation remain necessary for full overhaul
+layers. First prevent silently accepted incomplete builds and validate Controller
+Support against an intact Aeon baseline. Detailed hashes/evidence are retained in
+HANDOFF_WORLD_UI; no gameplay compatibility or whole-overhaul claim.
+
 ## 2026-10-03 isolated scalar field-choice increment
 
 Owning review adds choices for contested unique named fixed-size scalar fields
