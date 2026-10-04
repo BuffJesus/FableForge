@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated per-part composer foundation
+
+Review defdecode::mergeFields accepts optional decode-local part choices, taking
+precedence over a record choice only for genuinely contested parts and eligible
+changing sources/baseline aliases. Missing or unchanged sources fall back to the
+record choice; unique/identical edits still auto-merge. Chosen sourceVersions
+follow each selected byte range, and an out-of-range index throws. This internal
+API includes prefix/unnamed parts; it does not establish their persistent identity
+or expose new saved syntax/GUI support. Existing callers pass the empty default.
+
+All Release targets rebuild and 38/38 CTest checks pass. Expanded part-choice tests
+cover mixed bytes/source ownership, baseline, unavailable source, unchanged source,
+clearing one part, independent/identical edits and incompatible layout/index.
+The later test-only additions pass the focused defdecode target. Existing retail,
+Aeon and merged 14-link audit plus choices/refusal/external relocation pass in
+fmp-links-80w6zk0b. First compile missed the new algorithm include; corrected
+before acceptance. No new package/full source gate or primary promotion yet.
+
 ## 2026-10-03 individual-field selection audit
 
 Review switches clean to feat/forge-field-choice-review-20261003 and advances to

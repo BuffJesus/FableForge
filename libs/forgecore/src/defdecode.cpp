@@ -1,5 +1,6 @@
 #include "forge/defdecode.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
@@ -162,8 +163,11 @@ Decoded decode(const bin::Entry& entry, const defschema::Schema& schema) {
 FieldMerge mergeFields(
     const Decoded& base,
     const std::vector<std::pair<std::string, Decoded>>& versions,
-    const std::string& pick) {
+    const std::string& pick,
+    const std::map<size_t, std::string>& partPicks) {
     FieldMerge r;
+    for (const auto& [index, winner] : partPicks)
+        if (index > base.fields.size()) throw std::invalid_argument("field choice part is outside the decoded record");
     if (!base.clean()) return r;
     for (const auto& [name, d] : versions) {
         if (!d.clean() || d.fields.size() != base.fields.size()) return r;
@@ -172,8 +176,9 @@ FieldMerge mergeFields(
         }
     }
 
-    const bool keepBase = pick == "vanilla" || pick == "base" ||
-                          pick == "none" || pick == "-";
+    auto isBaseline = [](const std::string& winner) {
+        return winner == "vanilla" || winner == "base" || winner == "none" || winner == "-";
+    };
 
     Decoded merged = base;  // tags + shape from base; values overwritten below
     r.sourceVersions.resize(base.fields.size() + 1);
@@ -212,15 +217,21 @@ FieldMerge mergeFields(
         c.part = partName;
         c.partIndex = partIndex;
         c.mods = changers;
+        std::string effectivePick = pick;
+        if (const auto selectedPick = partPicks.find(partIndex); selectedPick != partPicks.end()) {
+            const auto& candidate = selectedPick->second;
+            if (isBaseline(candidate) || std::find(changers.begin(), changers.end(), candidate) != changers.end())
+                effectivePick = candidate;
+        }
         std::optional<size_t> selected = changerIndices.back();
-        if (!pick.empty()) {
-            if (keepBase) { dst = baseVal; c.winner = "vanilla"; selected.reset(); }
+        if (!effectivePick.empty()) {
+            if (isBaseline(effectivePick)) { dst = baseVal; c.winner = "vanilla"; selected.reset(); }
             else {
                 dst = *changerVals.back();
                 c.winner = changers.back();
                 for (size_t m = 0; m < versions.size(); ++m) {
-                    if (versions[m].first == pick && modVals[m] != baseVal) {
-                        dst = modVals[m]; c.winner = pick; selected = m; break;
+                    if (versions[m].first == effectivePick && modVals[m] != baseVal) {
+                        dst = modVals[m]; c.winner = effectivePick; selected = m; break;
                     }
                 }
             }

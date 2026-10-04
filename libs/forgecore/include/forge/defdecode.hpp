@@ -25,6 +25,7 @@
 // interpretation is provided for the known scalar/string types.
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -107,9 +108,15 @@ struct FieldMerge {
 // load order unless `pick` names a mod ("vanilla"/"base" keeps the base value).
 // Returns ok=false if base or any version is not clean() or the field layouts
 // do not align (different def types) -- the caller must then merge whole-record.
+// Optional partPicks use this decode's indices (0 prefix, fields index+1).
+// They override `pick` only for a true conflict and an eligible changing source
+// or baseline alias. An unavailable source falls back to the record choice.
+// Independent/identical edits keep auto-merging. Indices beyond this decode
+// throw; callers must establish persistent identity separately from these indices.
 FieldMerge mergeFields(const Decoded& base,
                        const std::vector<std::pair<std::string, Decoded>>& versions,
-                       const std::string& pick = {});
+                       const std::string& pick = {},
+                       const std::map<size_t, std::string>& partPicks = {});
 
 // Human-readable rendering of a field value using its type
 // (e.g. "391" for int32, "\"GATEWAY_IDLE_01\"" for CCharString,

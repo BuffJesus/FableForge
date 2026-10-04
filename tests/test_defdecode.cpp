@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <exception>
+#include <stdexcept>
 
 int main() {
     int failures = 0;
@@ -76,5 +77,40 @@ int main() {
     const auto agreement = forge::defdecode::mergeFields(base, {{"first",first},{"last",first}});
     check(agreement.sourceVersions == std::vector<std::optional<size_t>>({0,0,0}),
           "agreeing changed parts retain their first equivalent source");
+    const auto mixed = forge::defdecode::mergeFields(base, {{"first",first},{"last",last}},
+                                                    "last", {{0,"first"},{1,"vanilla"},{2,"first"}});
+    check(mixed.ok && mixed.payload == std::vector<uint8_t>({2,1,0,0,0,1,2,0,0,0,4}),
+          "part choices independently override record choice, including prefix and unnamed parts");
+    check(mixed.sourceVersions == std::vector<std::optional<size_t>>({0,std::nullopt,0}),
+          "part-selected symbols follow chosen bytes, baseline retains no mod source");
+    const auto absent = forge::defdecode::mergeFields(base, {{"first",first},{"last",last}},
+                                                     "first", {{1,"missing"}});
+    check(absent.payload == forge::defdecode::mergeFields(base, {{"first",first},{"last",last}}, "first").payload,
+          "unavailable part source falls back to record choice");
+    const auto unchanged = forge::defdecode::mergeFields(base,
+        {{"first",first},{"last",last},{"unchanged",base}}, "first", {{1,"unchanged"}});
+    check(unchanged.payload == absent.payload && unchanged.sourceVersions[1] == 0,
+          "selected mod without an edit of a contested part falls back to record choice");
+    const auto cleared = forge::defdecode::mergeFields(base, {{"first",first},{"last",last}},
+                                                      "last", {{0,"first"},{1,"vanilla"}});
+    check(cleared.payload == std::vector<uint8_t>({2,1,0,0,0,1,2,0,0,0,5}) &&
+          cleared.sourceVersions == std::vector<std::optional<size_t>>({0,std::nullopt,1}),
+          "clearing one part choice returns only that part to the record default");
+    auto mismatched = last; mismatched.fields[0].tag = 99;
+    check(!forge::defdecode::mergeFields(base, {{"first",first},{"last",mismatched}},
+                                       "first", {{1,"last"}}).ok,
+          "part choices cannot bypass the existing incompatible-layout refusal");
+    const auto unique = forge::defdecode::mergeFields(base, {{"first",first},{"last",independent}},
+                                                     "last", {{1,"vanilla"}});
+    check(unique.sourceVersions[1] == 0 && unique.payload == chosen.payload,
+          "part baseline choice leaves unique edits auto-merged");
+    const auto same = forge::defdecode::mergeFields(base, {{"first",first},{"last",first}},
+                                                   "last", {{1,"vanilla"}});
+    check(same.payload == agreement.payload && same.sourceVersions == agreement.sourceVersions,
+          "part baseline choice leaves identical edits auto-merged");
+    bool refused = false;
+    try { (void)forge::defdecode::mergeFields(base, {{"first",first}}, {}, {{3,"first"}}); }
+    catch (const std::invalid_argument&) { refused = true; }
+    check(refused, "invalid part index refuses rather than selecting another field");
     return failures ? 1 : 0;
 }
