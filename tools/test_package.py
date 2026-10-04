@@ -79,7 +79,7 @@ def main():
     guide = package / 'AEON_CONTROLLER.html'
     assert guide.is_file()
     pictures = re.findall(r'<img[^>]+src="([^"]+)"', guide.read_text(encoding='utf-8'))
-    assert len(pictures) == 4
+    assert len(pictures) == 7
     for picture in pictures:
         target = (package / picture).resolve()
         assert target.is_relative_to(package) and target.is_file(), picture

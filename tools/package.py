@@ -77,7 +77,8 @@ def package_guide(root, output=None):
     guide_zip = output / "FableForge-Aeon-Controller-Guide.zip"
     with zipfile.ZipFile(guide_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(guide_dir / "index.html", "AEON_CONTROLLER.html")
-        for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+        for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png",
+                     "05-aeon-selected.png", "06-fmp-selected.png", "07-runtime-selected.png"):
             archive.write(guide_dir / shot, shot)
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
@@ -152,7 +153,8 @@ def main():
     shutil.copy(os.path.join("docs", "CLI.md"), stage)
     shutil.copytree(os.path.join("docs", "walkthrough"), os.path.join(stage, "walkthrough"))
     guide = (root / "docs/walkthrough/aeon-controller/index.html").read_text(encoding="utf-8")
-    for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png"):
+    for shot in ("01-order.png", "02-add.png", "03-check.png", "04-deploy.png",
+                 "05-aeon-selected.png", "06-fmp-selected.png", "07-runtime-selected.png"):
         guide = guide.replace('"' + shot + '"', '"walkthrough/aeon-controller/' + shot + '"')
     (Path(stage) / "AEON_CONTROLLER.html").write_text(guide, encoding="utf-8")
     shutil.copytree("presets", os.path.join(stage, "presets"))
