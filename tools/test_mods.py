@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The mod load order, offline, on a scratch root: forge-tools mods add / list / move /
-disable / build over three corpus packs of three shapes (a bsdiff .patch that needs the pristine
+disable / build over three corpus packs of three shapes (refusal of a bsdiff .patch that edits unnamed
 game.bin, a supported Fable Explorer v459 .fmp, refusal of a ChocolateBox v510
 .fmp with unsupported nested/asset links, and its separate loose-TNG test tree). Skips when
 the corpus (work/nexus_mods/_peek) or the install is missing. Nothing touches the install.
@@ -137,21 +137,26 @@ def main() -> int:
             files_at(scratch) != before_refusal or files_at(out) != out_before):
         print("unsupported F2 link metadata was not safely refused:", refused.stderr[-600:]); ok = False
     run("mods", "disable", scratch, "F2 Melee (defs)")
+    unnamed_before = files_at(scratch)
+    refused = run("mods", "build", scratch, out, expect=1)
+    if ("changed or new unnamed definition entries" not in refused.stderr or
+            files_at(scratch) != unnamed_before or files_at(out) != out_before):
+        print("UFP unnamed changes were not safely refused:", refused.stderr[-600:]); ok = False
+    bak = os.path.join(defs, "game.bin.retail-bak")
+    resaved = os.path.exists(bak) and open(bak, "rb").read() != open(os.path.join(defs, "game.bin"), "rb").read()
+    if resaved and "applied to game.bin.retail-bak instead" not in refused.stdout:
+        print("expected pristine fallback before the unnamed refusal:", refused.stdout[-400:]); ok = False
+    if not resaved and "retail-bak instead" in refused.stdout:
+        print("pristine game.bin should take the patch directly"); ok = False
+    run("mods", "disable", scratch, "Unofficial Fable Patch")
     remove_owned(out)
     r = run("mods", "build", scratch, out)
     import re as _re
     m = _re.search(r"(\d+) changes applied \((\d+) new records\)", r.stdout)
-    # UFP and Special Melee replace existing definitions; the unsupported F2
-    # definition package is disabled, while its independent level tree is active.
+    # Special Melee replaces named definitions. UFP's unnamed edits and F2's
+    # unsupported metadata are disabled; the independent level tree is active.
     if not m or int(m.group(2)) != 0 or int(m.group(1)) < 9:
         print("build output unexpected:", r.stdout[-800:]); ok = False
-    bak = os.path.join(defs, "game.bin.retail-bak")
-    resaved = os.path.exists(bak) and open(bak, "rb").read() != open(os.path.join(defs, "game.bin"), "rb").read()
-    if resaved and "applied to game.bin.retail-bak instead" not in r.stdout:
-        # the install's game.bin is a re-save; the patch must have gone to the pristine copy
-        print("expected the pristine fallback for the bsdiff patch:", r.stdout[-400:]); ok = False
-    if not resaved and "retail-bak instead" in r.stdout:
-        print("pristine game.bin should take the patch directly"); ok = False
     if not os.path.exists(os.path.join(out, "data", "CompiledDefs", "game.bin")):
         print("no merged game.bin"); ok = False
     tngs = [f for f in os.listdir(os.path.join(out, "data", "Levels", "FinalAlbion")) if f.endswith(".tng")] if os.path.isdir(os.path.join(out, "data", "Levels", "FinalAlbion")) else []

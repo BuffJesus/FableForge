@@ -4715,7 +4715,8 @@ int modsAnalyze(const std::string& baseRoot,
 // A picks file (record<TAB>winner, one per line; winner = a mod's folder name or
 // "vanilla") OVERRIDES load order PER CONFLICT — this is what the GUI's per-row
 // winner picker produces, letting users resolve each conflict however they want.
-// Proven on Aeon x Lost Content: ~98% of changes merge, ~2% are true conflicts.
+// Unnamed components cannot be matched safely across independently edited banks;
+// refuse changed/new unnamed rows rather than silently omitting their edits.
 // Writes <outDir>/names.bin + <outDir>/<bin>. mods are in load order.
 // Only unique named fixed-size scalars get persisted field choices initially.
 // Layout identity excludes values/relocated IDs and includes the whole ordered
@@ -4785,6 +4786,27 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         const auto& modRoot = modRoots[mi];
         const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
+        size_t unsupportedUnnamed = 0;
+        size_t firstUnsupportedUnnamed = 0;
+        for (size_t i = 0; i < mod.entries().size(); ++i) {
+            const auto& entry = mod.entries()[i];
+            if (!entry.name.empty()) continue;
+            const bool unchanged = i < merged.entries().size() &&
+                merged.entries()[i].name.empty() &&
+                merged.entries()[i].definition == entry.definition &&
+                merged.entries()[i].data == entry.data;
+            if (!unchanged) {
+                if (!unsupportedUnnamed) firstUnsupportedUnnamed = i;
+                ++unsupportedUnnamed;
+            }
+        }
+        if (unsupportedUnnamed) {
+            throw std::runtime_error("Cannot compose " + bin + " from '" + modName + "': " +
+                std::to_string(unsupportedUnnamed) + " changed or new unnamed definition entries " +
+                "(first index " + std::to_string(firstUnsupportedUnnamed) + "). " +
+                "Unnamed components have no safe cross-bank identity. Install this overhaul first " +
+                "and use its intact files as the baseline, then add supported named mods.");
+        }
         for (const auto& me : mod.entries()) {
             if (me.name.empty()) continue;
             auto bit = baseData.find(me.name);

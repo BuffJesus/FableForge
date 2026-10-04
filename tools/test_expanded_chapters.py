@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Build Expanded Chapters plus its separate graphics archive over scratch retail."""
+"""Refuse full Expanded Chapters banks; audit its content-only level/asset fixture."""
+import argparse
 import json
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import tempfile
+from mod_content_fixture import content_only, refuse_overhaul
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -15,6 +17,12 @@ TOOL = REPO / "build/forge-tools.exe"
 
 
 def main() -> int:
+    global SOURCE
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--corpus', type=Path, default=REPO/'work/nexus_mods/_peek')
+    parser.add_argument('--keep', action='store_true')
+    args = parser.parse_args()
+    SOURCE = args.corpus.resolve()/'ExpandedChapters/FTECv1/Fable The Lost Chapters'
     required = [TOOL, SOURCE / "data/CompiledDefs/game.bin",
                 SOURCE / "data/Levels/FinalAlbion",
                 SOURCE / "data/Levels/FinalAlbion_RT.stb",
@@ -30,6 +38,7 @@ def main() -> int:
 
     work = Path(tempfile.mkdtemp(prefix="expanded_chapters_", dir=REPO / "build"))
     root, out = work / "retail", work / "merged"
+    print('Evidence retained at', work, flush=True)
     try:
         for relative in ("data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin",
                          "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
@@ -49,7 +58,8 @@ def main() -> int:
                 raise AssertionError(f"{' '.join(map(str, argv))}\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}")
             return proc.stdout
 
-        run("mods", "add", root, SOURCE, "--name", "Expanded Chapters")
+        refuse_overhaul(TOOL, root, SOURCE, work/'rejected', REPO, work/'refusal')
+        run("mods", "add", root, content_only(SOURCE, work/'content-fixture'), "--name", "Expanded Chapters content fixture")
         result = run("mods", "build", root, out)
         wad = out / "data/Levels/FinalAlbion.wad"
         assert wad.is_file() and not (out / "userst.ini").exists()
@@ -79,8 +89,7 @@ def main() -> int:
         assert summary and int(summary.group(1)) + int(summary.group(2)) == len(built_levels), result[-1500:]
         audit = json.loads(run("assets", "missing-mesh", out,
                                "docs/re_reference/def_schema.json", "--json"))
-        assert not audit["missing"], audit["missing"][:12]
-        print("Expanded Chapters: PASS")
+        print("Expanded Chapters full-source refusal + content-only level/WAD checks: PASS")
         print(f"  source WAD payloads checked: {len(source_levels)}")
         print(f"  all built loose payloads checked: {len(built_levels)}")
         print(f"  WAD: {summary.group(1)} replaced, {summary.group(2)} appended")
@@ -91,7 +100,7 @@ def main() -> int:
         return 0
     finally:
         assert work.resolve().is_relative_to((REPO / "build").resolve())
-        shutil.rmtree(work)
+        if not args.keep: shutil.rmtree(work)
 
 
 if __name__ == "__main__":

@@ -88,7 +88,7 @@ def main():
                 ok &= run("Texture image refusal, persistent error, retry and exact Restore " + str(options),
                           [sys.executable, "tools/test_texture_replace_failure_ui.py", "--install", install_root,
                            *options], capture_output=True)
-            for mode in ("redeploy", "report", "missing"):
+            for mode in ("redeploy", "report", "missing", "unnamed"):
                 ok &= run(f"Mods {mode} persistent errors, preserved files and same-process retry",
                           [sys.executable, "tools/test_mod_action_error_ui.py", "--install", install_root,
                            "--mode", mode], capture_output=True)
@@ -219,7 +219,7 @@ def main():
     ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)
     ok &= run("textures tab (scratch textures.big)", [sys.executable, "tools/test_textures.py"], capture_output=True)
     ok &= run("mod load order (scratch root; skips without the corpus)", [sys.executable, "tools/test_mods.py"], capture_output=True)
-    ok &= run("Aeon Edition + Controller Support (scratch retail WAD; skips without the corpus)",
+    ok &= run("Aeon baseline preservation + Controller Support (scratch loose levels; skips without the corpus)",
               [sys.executable, "tools/test_aeon_controller.py"], capture_output=True)
     ok &= run("Freeroam FMP walkability (76 LEVs through scratch WAD; skips without corpus)",
               [sys.executable, "tools/test_freeroam.py"], capture_output=True)
@@ -268,14 +268,14 @@ def main():
                   [sys.executable, "tools/test_setup_asset_restore.py", "--install", install_root], capture_output=True)
     ok &= run("Install switch (scratch roots, unsaved edit and invalid path)",
               [sys.executable, "tools/test_install_switch_ui.py"], capture_output=True)
-    ok &= run("GB pack under the UFP (Project Seasons; skips without the pack)", [sys.executable, "tools/test_gbpack.py"], capture_output=True)
-    ok &= run("overlapping GB packs under the UFP (Seasons + AlbionSecrets; skips without both)",
+    ok &= run("Project Seasons refusal + content-only WAD fixture (skips without the pack)", [sys.executable, "tools/test_gbpack.py"], capture_output=True)
+    ok &= run("Seasons/AlbionSecrets refusals + overlapping content-only WAD fixtures (skips without both)",
               [sys.executable, "tools/test_gbpack.py", "--pack", "both"], capture_output=True)
     ok &= run("Dragon Cliff Restored (root WAD levels and asset references; skips without the archive)",
               [sys.executable, "tools/test_dragoncliff.py"], capture_output=True)
-    ok &= run("Lost Content (full WAD payloads and asset references; skips without the archive)",
+    ok &= run("Lost Content refusal + content-only WAD payloads (skips without the archive)",
               [sys.executable, "tools/test_lost_content.py"], capture_output=True)
-    ok &= run("Expanded Chapters (content + graphics archives; skips without both)",
+    ok &= run("Expanded Chapters refusal + content-only WAD payloads (skips without both archives)",
               [sys.executable, "tools/test_expanded_chapters.py"], capture_output=True)
     ok &= run("custom mesh import (.obj + .glb cube into scratch banks)", [sys.executable, "tools/test_meshimport.py"], capture_output=True)
     ok &= run("custom theme import (base/cliff textures, failure rollback)", [sys.executable, "tools/test_custom_theme.py"], capture_output=True)

@@ -2,6 +2,14 @@
 
 # Mod packs, load order, and conflict resolution
 
+Compiled-definition composition refuses sources carrying changed or new unnamed
+entries. Such components have no safe cross-bank identity; silently ignoring them
+would produce an incomplete overhaul. Install an overhaul first and select its
+intact installation as the baseline, then add supported named mods. Unchanged
+unnamed copies of that baseline remain allowed. Sparse named-only sources are
+allowed; absent unnamed rows are not treated as deletions. This guard does not
+validate arbitrary raw-ID references in named-only source banks.
+
 Individual choices are available for contested unique named scalar fields in
 clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
 CDefString with their expected byte widths. They override the record choice;
@@ -351,7 +359,8 @@ from the build; the editor's badges / filter / *Back to retail*). GB packs (Proj
 whole files identical to the install are skipped, and changed levels are repacked into the real WAD
 (423 entries, 75 changed TNGs with provenance in the current baseline-aware test),
 the new `ProjectAutumn/` folder and the whole STB / banks ride as
-whole-file layers; UFP's bsdiff underneath composes without a conflict. FSE packs: `FSE/quests.lua`
+whole-file layers. The historical UFP composition omitted unnamed edits and
+is now refused; those older counts are not complete-patch preservation proof. FSE packs: `FSE/quests.lua`
 is a key-level union (own bytes per entry, `fse:<key>` picks, id clashes reported); an FSE-only folder is a
 tree source. EgoCore partial TNG mods (`[Settings]` + `Replace=true` / `DeleteUIDs:`, TngMerger.h) merge by
 UID into the level, deletions applied, even as the only editor.
@@ -360,44 +369,28 @@ Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) +
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,
 640 fields auto-merged, 35 same-field conflicts decided by load order, 177 whole-record (add-add of
 identical new records), 8.5 s. `mods deploy` / `mods undeploy` round-trip a scratch root byte-identical.
-GB-pack case: Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/` tree: game.bin,
+Historical GB-pack case (now refused for unnamed edits): Unofficial Fable Patch (bsdiff) under Aeon Edition (a whole `Data/` tree: game.bin,
 text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records both touch (Aeon wins
 by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
 the whole-file game.bin instead of failing on it.
 
-Aeon Edition + Controller Support (updated 2026-10-03): the author-provided install
-sequence is Aeon first, Controller Support `.fmp` through a legacy package
-editor, then only `FableControllerSupport.dll` in
-`Mods/FableControllerSupport/`, enabled through EgoCore. EgoCore's optional WAD
-decompile step should be skipped for this combination. Forge's equivalent
-scratch order is the Aeon tree, `ControllerSupport.fmp`, then a DLL-only EgoCore
-folder. The importer now reads the FMP's named game-definition links and carries
-them through field choices to the final composed entry identities. The old raw
-import resolved 12 of 14 controller references incorrectly, including the PC
-combat camera; binding counts alone missed this. `tools/test_fmp_links.py` checks
-all 14 references independently on retail, Aeon and the composed output, with
-zero mismatches, payload preservation and conflict-choice/refusal cases.
-`python tools/test_aeon_controller.py` also checks all 14 in its full build over retail:
-1,392 definition changes (854 added), two records merged per field, zero field
-or whole-record conflicts; the controller scheme is Aeon's 70 bindings before
-the package and 141 after it. The DLL is byte-identical in output and registered
-in `Mods.ini`. With retail `FinalAlbion.wad` in the scratch input, Forge repacks
-547 changed level files and appends 47 new level files; the output WAD lists
-`BarrowFields.tng`. The two extra replacements are Aeon's root-level
-`Data/Levels/creature_hub.lev` and `.tng`: both are also present in retail's WAD,
-so Forge must repack them at that path. The test extracts the rebuilt WAD and
-compares all 843 Aeon level payloads against the effective build (594 loose
-overrides and the unchanged WAD entries). This proves
-the composed files and order, not runtime behavior on
-Retroid/Android or under EgoCore. The test never deploys to the real install.
-The test includes Aeon's `graphics.big`, `textures.big`, `FinalAlbion_RT.stb`
-and `Bones` files from the original 5.03 archive. A read-only
-`forge-tools assets missing-mesh <built-root> <schema.json>` audit finds zero
-missing `Graphic` model IDs against Aeon's output graphics bank. Auditing those
-same definitions against the retail graphics bank alone reports 243 absent IDs,
-which shows why checking an incomplete Aeon extraction gives a false alarm.
-This audit checks direct `Graphic` references in `game.bin`; it does not prove
-that map scenery, scripted visibility, meshes or textures render correctly.
+Aeon Edition + Controller Support (corrected 2026-10-03): install Aeon first
+and use its intact game files as the baseline. Add only ControllerSupport.fmp and
+the DLL-only FableControllerSupport folder. The earlier retail-plus-Aeon source
+recipe lost 766 changed unnamed components and omitted unnamed additions; named
+link, binding, level and DirectGraphic checks did not establish complete overhaul
+preservation. That route now refuses. The same guard rejects Unofficial Fable
+Patch's 25 unnamed edits over the current baseline. Earlier composition counts
+in this document are historical container checks, not preservation evidence.
+
+The current test synthesizes a complete Aeon 5.03 extracted-level baseline, then
+adds the two controller layers. Every existing definition outside the five FMP
+imports is compared by index, type, name and payload: 16362 records survive,
+including all 6625 unnamed entries. Bindings change from 70 to 141 and all 14 named
+controller references resolve. Baseline level/asset inventory stays unchanged;
+the WAD remains parked. GUI deployment matches CLI output, copies the unchanged
+DLL and enables it in Mods.ini. The corrected illustrated guide uses that two-layer
+order. No gameplay, Android or complete manual-install certification is claimed.
 
 FMP support remains bounded. Supported scalar, flat reference-vector and CDef
 listing paths resolve by name; malformed, unsupported or selected missing links
@@ -455,7 +448,7 @@ Aeon's other edits to those LEVs, so do not stack it as a whole-file override.
 
 AlbionSecrets Modpack 492 is a close derivative of Project Seasons 122: their
 ZIP manifests share 915 file paths; CRCs differ for 22 shared files, and the
-Modpack adds one lighting file. Both pass `python tools/test_gbpack.py` on a
+Modpack adds one lighting file. Historical container checks passed `python tools/test_gbpack.py` on a
 scratch retail root under the Unofficial Fable Patch, as does their combined
 load order (`--pack seasons`, `--pack modpack`, `--pack both`). The current
 composer compares TNGs against the retail WAD baseline and omits unchanged
@@ -468,7 +461,7 @@ both visual overhauls' intended appearances survive their overlapping whole
 banks and maps.
 
 Expanded Chapters v1 needs both its content RAR and its separate graphics RAR.
-`python tools/test_expanded_chapters.py` builds the combined tree on scratch
+Historical `python tools/test_expanded_chapters.py` built the combined tree on scratch
 retail. All 798 source LEV/TNG payloads resolve to the expected WAD bytes,
 and all 583 built loose level payloads match WAD extraction. Forge replaces
 579 entries and appends four (`ArenaNew_Leadout_01` and
@@ -476,7 +469,7 @@ and all 583 built loose level payloads match WAD extraction. Forge replaces
 changes include 761 new records; zero direct Graphic mesh IDs are missing
 against its own graphics bank. In-game quests and visuals remain unverified.
 
-Fable: The Lost Content 0.7.5 has a current full-tree scratch build. Its
+Fable: The Lost Content 0.7.5 had a historical full-tree scratch build. Its 19 changed/new unnamed entries now cause refusal; the old counts below do not prove complete preservation. Its
 `python tools/test_lost_content.py` check finds 1,002 source LEV/TNG files;
 all match the effective rebuilt WAD bytes. Forge replaces 498 entries and
 appends 206, leaves the pack's parked `_FinalAlbion.wad` and `userst.ini` out

@@ -1,5 +1,14 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 isolated preservation correction: changed/new unnamed definition
+sources now refuse instead of silently losing component edits. Controller FMP
+composition over intact Aeon preserves 16362 existing records (6625 unnamed),
+14 named links and baseline levels/assets. Both-size GUI refusal/retry and the
+corrected two-layer guide deployment pass; all 38 core cases pass. Full overhaul
+identity/relocation remains unsupported. Historical Aeon/UFP/other-overhaul
+container counts did not establish complete preservation. Package acceptance
+and promotion are pending; exact boundaries are in HANDOFF_WORLD_UI.
+
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover
 on same-process retry. Both-size primary locked/unreadable checks pass, including

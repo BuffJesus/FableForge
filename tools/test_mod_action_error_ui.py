@@ -28,11 +28,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Unsupported metadata fixture for --mode fmp')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
-    deployment_case = args.mode in ('redeploy', 'fmp')
+    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed')
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-action-error-', dir=repo/'build')).resolve()
@@ -87,9 +87,17 @@ def main():
             added = subprocess.run([str(gui.with_name('forge-tools.exe')), 'mods', 'add', str(root),
                 str(pack), '--name', 'SmallFilePack'], cwd=cwd, capture_output=True, timeout=45)
             assert added.returncode == 0, (added.stdout+added.stderr).decode('utf-8', errors='replace')
-            bad = case/('UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
-            if args.mode == 'fmp': shutil.copyfile(args.fmp, bad)
+            bad = case/('UnnamedComponents' if args.mode == 'unnamed' else
+                        'UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
+            if args.mode == 'unnamed':
+                from test_fmp_links import read_bank, rewrite_bank
+                entries = read_bank(root)
+                index = next(i for i, entry in enumerate(entries) if not entry['name'])
+                entries[index] = dict(entries[index], data=entries[index]['data']+b'unsupported-unnamed-edit')
+                rewrite_bank(root, bad, entries)
+            elif args.mode == 'fmp': shutil.copyfile(args.fmp, bad)
             else: bad.write_bytes(b'not a BSDIFF patch'+b'x'*64)
+            bad_before = snapshot(bad) if bad.is_dir() else digest(bad)
             pack_before = snapshot(pack)
         before = snapshot(root)
         failed = case/'failed.png'
@@ -99,7 +107,11 @@ def main():
             lines += button('btn_mods_deploy')+['assert_log mods deploy: done',
                 f'mod_add {bad.as_posix()} BrokenPatch', 'frames 3']
             lines += button('btn_mods_deploy')+['assert_log mods deploy: FAILED',
+                'assert_log changed or new unnamed definition entries' if args.mode == 'unnamed' else
                 'assert_log unsupported target list' if args.mode == 'fmp' else 'assert_log bad magic']
+            if args.mode == 'unnamed':
+                lines += button('btn_mods_conflicts')+['assert_log mods conflicts: FAILED',
+                    'assert_log changed or new unnamed definition entries']
         else:
             lines += button('btn_mods_conflicts')
             if args.mode == 'report': lines += ['assert_log mods conflicts: FAILED']
@@ -147,7 +159,9 @@ def main():
                     process.terminate(); process.wait(timeout=10)
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
         assert snapshot(root) == before and snapshot(other) == other_before
-        if deployment_case: assert snapshot(pack) == pack_before
+        if deployment_case:
+            assert snapshot(pack) == pack_before
+            assert (snapshot(bad) if bad.is_dir() else digest(bad)) == bad_before
         assert rc == 0 and 'RESULT PASS' in log, log[-4500:]
         bounds = re.search(r'widget_rect mods_action_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)', log)
         assert bounds

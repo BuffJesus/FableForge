@@ -1,9 +1,15 @@
 # Mod packs and load order
 
 The **Mods** tab keeps one ordered list of every mod you want, builds them
-together onto the retail files and can undo the whole deploy. Mods are merged
-record by record, so two mods that change different parts of the same game file
-both keep their changes.
+together onto the selected installation and can undo the whole deploy. Supported
+named definition records and level objects merge individually.
+
+Whole overhauls can contain unnamed definition components that Forge cannot yet
+match safely between edited banks. Changed or newly added unnamed source entries
+stop the build instead of silently losing edits. Install and verify the overhaul
+first, then choose its intact game folder as the baseline for supported named
+mods. Do not add that overhaul again as a source. An unchanged unnamed baseline
+copy is allowed; a sparse named-only source does not delete absent components.
 
 ![Two mods in the load order](img/mods_load_order.png)
 

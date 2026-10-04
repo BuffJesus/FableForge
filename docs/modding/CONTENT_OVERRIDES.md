@@ -16,7 +16,13 @@ unknown-schema fields are floats, but 189 CWeaponDef records are unnamed. Merely
 filling their types would not make them selectable in the named-record composer.
 Complete identity/ownership and relocation remain necessary for full overhaul
 layers. First prevent silently accepted incomplete builds and validate Controller
-Support against an intact Aeon baseline. Detailed hashes/evidence are retained in
+Support against an intact Aeon baseline. The owning follow-up now refuses changed
+or new unnamed source entries before emitting banks. Controller composition over
+intact Aeon preserves 16362 existing records, including all 6625 unnamed entries;
+the 14 named links resolve and bindings become 141. Both-size GUI refusal/retry
+and the corrected two-layer guide's scratch deployment pass. Full overhaul
+identity/relocation remains unsupported, as do arbitrary raw-ID references in
+named-only source banks. Detailed hashes/evidence are retained in
 HANDOFF_WORLD_UI; no gameplay compatibility or whole-overhaul claim.
 
 ## 2026-10-03 isolated scalar field-choice increment

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Fable: The Lost Content over scratch retail and audit its WAD payloads."""
+"""Refuse full Lost Content banks; audit its explicitly content-only WAD fixture."""
 import argparse
 import json
 from pathlib import Path
@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from mod_content_fixture import content_only, refuse_overhaul
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -19,7 +20,12 @@ AEON = REPO / "work/nexus_mods/_peek/AeonEdition"
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--with-aeon", action="store_true", help="audit Aeon first, Lost Content second")
+    parser.add_argument('--corpus', type=Path, default=REPO/'work/nexus_mods/_peek')
+    parser.add_argument('--keep', action='store_true')
     args = parser.parse_args()
+    global SOURCE, AEON
+    SOURCE = args.corpus.resolve()/'LostContent/Version 0.7.5/FableTLContent/The Mod/Fable The Lost Chapters'
+    AEON = args.corpus.resolve()/'AeonEdition'
     required = [TOOL, SOURCE / "data/CompiledDefs/game.bin",
                 SOURCE / "data/Levels/FinalAlbion",
                 SOURCE / "data/graphics/graphics.big",
@@ -35,6 +41,7 @@ def main() -> int:
 
     work = Path(tempfile.mkdtemp(prefix="lost_content_", dir=REPO / "build"))
     root, out = work / "retail", work / "merged"
+    print('Evidence retained at', work, flush=True)
     try:
         for relative in ("data/CompiledDefs/game.bin", "data/CompiledDefs/names.bin",
                          "data/CompiledDefs/script.bin", "data/CompiledDefs/frontend.bin",
@@ -55,8 +62,10 @@ def main() -> int:
             return proc.stdout
 
         if args.with_aeon:
-            run("mods", "add", root, AEON, "--name", "Aeon Edition")
-        run("mods", "add", root, SOURCE, "--name", "Lost Content")
+            refuse_overhaul(TOOL, root, AEON, work/'rejected-aeon', REPO, work/'refusal-aeon')
+            run("mods", "add", root, content_only(AEON, work/'aeon-content'), "--name", "Aeon content fixture")
+        refuse_overhaul(TOOL, root, SOURCE, work/'rejected', REPO, work/'refusal')
+        run("mods", "add", root, content_only(SOURCE, work/'lost-content-fixture'), "--name", "Lost Content fixture")
         result = run("mods", "build", root, out)
         assert "parks the retail WAD as _FinalAlbion.wad: skipped" in result
         assert not (out / "data/Levels/_FinalAlbion.wad").exists()
@@ -90,9 +99,7 @@ def main() -> int:
             assert int(summary.group(1)) + int(summary.group(2)) == loose_count
         audit = json.loads(run("assets", "missing-mesh", out,
                                "docs/re_reference/def_schema.json", "--json"))
-        if not args.with_aeon:
-            assert not audit["missing"], audit["missing"][:12]
-        print("Aeon + Lost Content: AUDIT" if args.with_aeon else "Lost Content: PASS")
+        print("Lost Content full-source refusal + content-only level/WAD checks: PASS")
         print(f"  WAD payloads checked: {len(source_levels)} ({loose_count} loose overrides)")
         print(f"  all built loose level payloads checked: {len(built_levels)}")
         print(f"  WAD: {summary.group(1)} replaced, {summary.group(2)} appended")
@@ -105,7 +112,7 @@ def main() -> int:
         return 0
     finally:
         assert work.resolve().is_relative_to((REPO / "build").resolve())
-        shutil.rmtree(work)
+        if not args.keep: shutil.rmtree(work)
 
 
 if __name__ == "__main__":

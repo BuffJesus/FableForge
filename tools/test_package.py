@@ -104,7 +104,7 @@ def main():
         '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
-    for mode in ('redeploy', 'report', 'missing'):
+    for mode in ('redeploy', 'report', 'missing', 'unnamed'):
         run('mod_action_' + mode, [sys.executable, repo / 'tools/test_mod_action_error_ui.py',
             '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--mode', mode])
     skipped = []
@@ -115,6 +115,9 @@ def main():
         run('fmp_named_links', [sys.executable, repo/'tools/test_fmp_links.py', '--tool',
             package/'forge-tools.exe', '--cwd', cwd, '--install', args.root.resolve(),
             '--fmp', controller_fmp, '--aeon', aeon])
+        run('aeon_controller_preservation', [sys.executable, repo/'tools/test_aeon_controller.py',
+            '--tool', package/'forge-tools.exe', '--cwd', cwd, '--install', args.root.resolve(),
+            '--corpus', corpus, '--keep'])
     else: skipped.append('fmp_named_links: controller/Aeon corpus unavailable')
     f2_fmp = corpus/'F2MeleeWeapons/F2MeleeWeaponPack.fmp'
     if f2_fmp.is_file():

@@ -1,5 +1,56 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated unnamed-component refusal and intact Aeon preservation
+
+Owning review branch feat/forge-unnamed-defs-review-20261003 now refuses changed,
+new or moved unnamed entries before composing definition banks. Matching same-index
+unnamed type/payload copies remain allowed; sparse named sources do not delete
+absent components. Raw index equality is only evidence of unchanged carry, not a
+portable identity/import rule. Arbitrary raw-ID links in named-only source banks
+remain outside this guard. Complete overhaul composition remains unsupported.
+
+Release all-target build and all 38 CTest cases pass. fmp-links-spl7x4ik passes
+isolated changed/added/moved unnamed refusal, direct merge/build prior-output
+preservation, every existing Aeon entry outside Controller's imports, 14 named
+links on retail/Aeon/composed banks, record/scalar choices, selected missing-target
+refusal and provider relocation. Complete input hashes remain unchanged.
+
+Native aeon_controller_t8fo_9v8 uses a synthetic extracted-level Aeon baseline:
+all complete source banks copied verbatim, retail levels extracted and Aeon Data
+overlaid, WAD parked. 16362 existing definitions retain index/type/name/payload,
+including all 6625 unnamed entries. 949 baseline files remain unchanged; bindings
+70->141, 14 named links, unchanged/enabled DLL. This is no certification of manual
+installation or gameplay. The obsolete retail-plus-Aeon source route refuses.
+The corrected guide requires installed Aeon first and only two controller source
+layers. Actual GUI conflict check/deploy matches CLI game.bin/DLL/Mods.ini and
+preserves baseline levels/assets; all four screenshots are refreshed. Guide
+capture's missing json import was corrected after successful GUI assertions;
+rerun passes the complete independent preservation check.
+
+GUI mod-action-error-8_udxefi passes normal 1440x900 and compact 800x600/1.5:
+refused redeploy restores the prior baseline, conflict refusal retains wrapped
+feedback through reopen/rescan, removing the unsupported source enables retry and
+undeploy. All owned and original source inventories stay intact; compact image
+visually inspected. Existing redeploy failure contract still reverts before build.
+
+Updated corpus mods-corpus-mir9fi9_ passes all 50 recorded CLI operations and the
+GUI workflow. The old binaxb1u fixture expected UFP success and failed: the new
+guard exposes 25 previously omitted unnamed UFP edits. Updated test asserts safe
+UFP/F2 refusal, then disables those sources for supported FMP/text/levels/DLL/
+resources/FSE and rollback cases. Input/output evidence retained; no game launch.
+
+Independent read-only bank scan also finds 33 changed/new unnamed entries in
+Project Seasons, 203 in AlbionSecrets, 19 in Lost Content and 10 in Expanded
+Chapters over the current modified retail baseline. Their old container counts
+must not be presented as complete mod preservation. Tests now check full-source
+refusal plus explicitly content-only level/asset fixtures; those checks remain
+in progress. Native/game files are never modified. Full source gate is NOT rerun.
+
+Extracted-package suite now registers 42 workflows (previous 40 plus unnamed GUI
+refusal and complete Aeon preservation); no archive of this follow-up is yet
+accepted or promoted. The preceding 7e archive's 40 passes remain narrow historical
+evidence and do not validate unnamed overhaul composition.
+
 ## 2026-10-03 full scalar-choice package acceptance and unnamed-definition gap
 
 Frozen 7e1722b archive passes ALL 40 extracted runtime workflows, zero skips:

@@ -194,8 +194,61 @@ def main():
     merged=work/'merged'
     result=subprocess.run([str(tool),'mods','merge',str(base),str(merged),'--with',str(aeon),'--with',str(args.fmp),'--fields',str(schema)],capture_output=True,timeout=120)
     (work/'merged.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode != 0, 'partial unnamed overhaul composition must refuse'
+    assert b'changed or new unnamed definition entries' in result.stderr, result.stderr
+    assert not (merged/'data/CompiledDefs/game.bin').exists()
+    reports['unnamed_overhaul_refusal'] = True
+    # Use the intact overhaul bank as the baseline, never a named-only merge.
+    result=subprocess.run([str(tool),'mods','merge',str(aeon),str(merged),
+                           '--with',str(args.fmp),'--fields',str(schema)],capture_output=True,timeout=120)
+    (work/'aeon-baseline-merged.log').write_bytes(result.stdout+result.stderr)
     assert result.returncode==0,(result.stdout+result.stderr).decode('utf-8',errors='replace')
     reports['merged']=audit(merged)
+    imported = package_records(args.fmp)['GameBINEntries']
+    intact = read_bank(aeon); composed = read_bank(merged)
+    for index, entry in enumerate(intact):
+        if entry['name'] not in imported:
+            assert composed[index] == entry, ('Aeon baseline preservation', index, entry['name'])
+    reports['merged']['preserved_unnamed_records'] = sum(not e['name'] for e in intact)
+
+    # Direct merge and transactional build must preserve prior output on refusal.
+    before_merged = {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()}
+    for mode in ('merge', 'build'):
+        refusal_base = work/('refusal-base-'+mode)
+        shutil.copytree(base, refusal_base)
+        options = ['--with', str(aeon)]
+        if mode == 'build':
+            added = subprocess.run([str(tool),'mods','add',str(refusal_base),str(aeon)],capture_output=True,timeout=60)
+            assert added.returncode == 0, added.stderr
+            options = []
+        failed = subprocess.run([str(tool),'mods',mode,str(refusal_base),str(merged),*options],capture_output=True,timeout=120)
+        (work/('unnamed-refusal-'+mode+'.log')).write_bytes(failed.stdout+failed.stderr)
+        assert failed.returncode != 0 and b'changed or new unnamed definition entries' in failed.stderr, failed.stderr
+        assert {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()} == before_merged
+
+    # Isolate changed, appended and moved unnamed components. None has a safe
+    # identity merely because a numeric row exists in another edited bank.
+    vanilla_entries = read_bank(base)
+    unnamed_index = next(i for i, entry in enumerate(vanilla_entries) if not entry['name'])
+    for label in ('changed', 'added', 'moved'):
+        variant = list(vanilla_entries)
+        if label == 'changed':
+            variant[unnamed_index] = dict(variant[unnamed_index], data=variant[unnamed_index]['data']+b'guard-test')
+        elif label == 'added':
+            variant.append(dict(variant[unnamed_index]))
+        else:
+            other = next(i for i, entry in enumerate(variant) if not entry['name'] and
+                         entry['definition'] == variant[unnamed_index]['definition'] and
+                         entry['data'] != variant[unnamed_index]['data'])
+            variant[unnamed_index], variant[other] = variant[other], variant[unnamed_index]
+        source = work/('unnamed-'+label)
+        rewrite_bank(base, source, variant)
+        failed = subprocess.run([str(tool),'defs','merge',str(base),str(merged),'game.bin',str(source)],
+                                capture_output=True,timeout=120)
+        (work/('unnamed-'+label+'.log')).write_bytes(failed.stdout+failed.stderr)
+        assert failed.returncode != 0 and b'changed or new unnamed definition entries' in failed.stderr, failed.stderr
+        assert {p.relative_to(merged): digest(p) for p in merged.rglob('*') if p.is_file()} == before_merged
+    reports['isolated_unnamed_refusals'] = ['changed', 'added', 'moved']
 
     # A competing camera field plus an independent edit: picks must apply only
     # to the conflicting field, and the FMP symbols must follow that choice.
