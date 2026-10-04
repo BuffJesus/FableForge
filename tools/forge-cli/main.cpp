@@ -264,14 +264,14 @@ int usage() {
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
-        "  forge mods merge <base-root> <out-dir> --with <src>... [--install-data] [--fields schema.json] [--stage] [--json]\n"
+        "  forge mods merge <base-root> <out-dir> --with <src>... [--install-data] [--fields schema.json] [--picks file] [--stage] [--json]\n"
         "  forge mods list <game-root> [--json]                       the load order in <game-root>/forge_mods.json\n"
         "  forge mods add <game-root> <source> [--name N] [--at i] [--note text] [--install-data]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
         "  forge mods deploy <game-root> [--picks f]   |   forge mods undeploy <game-root>   (deploy = revert the previous stage, rebuild from the order, stage; uninstall a mod = remove + deploy)\n"
-        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, fse:<quest key>; winner = a mod name or vanilla\n"
+        "      picks: <game-root>/forge_mods_picks.txt by default, `key<TAB>winner` per line; keys <Record>, tng:<level>|<thing>, qst:<file>|<quest>, text:<lang>|<name>, file:<path>, texture:<entry>, fse:<quest key>; winner = a mod name or vanilla\n"
         "  forge patch info <file.patch>\n"
         "  forge patch apply <old-file> <file.patch> <out-file>\n"
         "  forge mods analyze <base-root> <mod-root>... [--json]\n"
@@ -8484,8 +8484,9 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
 //   text:<language>|<string name>      a text.big string
 //   fse:<quest key>                    an FSE/quests.lua entry
 //   file:<data/... path, lower-case>   a whole-file layer
+//   texture:<GBANK_MAIN_PC entry name> one maintextures FMP entry
 // the winner is a mod label of the order, or "vanilla" to keep the retail version.
-struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse; };
+struct ModsPicks { std::map<std::string, std::string> defs, tng, qst, text, file, fse, texture; };
 ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
     ModsPicks p;
     for (const auto& [k, v] : all) {
@@ -8496,6 +8497,7 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
         else if (ns == "qst") p.qst[key] = v;
         else if (ns == "text") p.text[key] = v;
         else if (ns == "fse") p.fse[key] = v;
+        else if (ns == "texture") p.texture[key] = v;
         else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
         else if (ns == "defs") p.defs[key] = v;
         else p.defs[k] = v;
@@ -9364,28 +9366,78 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                             throw std::runtime_error("FMP maintextures: " + srcLabel(si) +
                                 " has an earlier EgoCore .resource for " + entry +
                                 " than " + version.mod + "; this mixed asset order is not supported yet");
+                    if (picks.texture.contains(entry))
+                        throw std::runtime_error("FMP maintextures: a saved choice for " + entry +
+                            " cannot override the EgoCore .resource in " + srcLabel(si) + " yet");
                 }
             }
         }
-        if (textures) {
-            const fs::path dst = fs::path(outDir) / rel;
-            fs::create_directories(dst.parent_path());
-            writeAllBytes(dst.string(), textures->serialize());
-        }
         json conflicts = json::array(), entries = json::array();
+        std::optional<forge::big::File> baselineTextures;
         for (const auto& [name, versions] : touched) {
             json mods = json::array();
-            bool differs = false;
+            bool differs = false, overridden = false, unavailable = false, keepBase = false;
+            const Version* winner = &versions.back();
             for (const auto& version : versions) {
                 mods.push_back(version.mod);
                 if (version.id != versions.front().id || version.type != versions.front().type ||
                     version.payload != versions.front().payload || version.header != versions.front().header)
                     differs = true;
             }
-            json row{{"entry", name}, {"id", versions.back().id},
-                     {"mods", mods}, {"winner", versions.back().mod}};
+            if (const auto choice = picks.texture.find(name); choice != picks.texture.end()) {
+                if (choice->second == "vanilla") {
+                    keepBase = overridden = true;
+                } else {
+                    const auto found = std::find_if(versions.begin(), versions.end(),
+                        [&](const Version& v) { return v.mod == choice->second; });
+                    if (found != versions.end()) { winner = &*found; overridden = true; }
+                    else unavailable = true; // preserve a stale choice; the order still decides
+                }
+            }
+            if (overridden) {
+                auto* bank = textures->findBank("GBANK_MAIN_PC");
+                auto target = std::find_if(bank->entries.begin(), bank->entries.end(),
+                    [&](const forge::big::Entry& e) { return e.name == name; });
+                if (target == bank->entries.end())
+                    throw std::runtime_error("FMP maintextures: selected entry is absent: " + name);
+                if (keepBase) {
+                    if (!baselineTextures)
+                        baselineTextures.emplace(forge::big::File::open(fs::path(baseRoot) / rel));
+                    const auto* baseBank = baselineTextures->findBank("GBANK_MAIN_PC");
+                    const auto original = std::find_if(baseBank->entries.begin(), baseBank->entries.end(),
+                        [&](const forge::big::Entry& e) { return e.name == name; });
+                    if (original == baseBank->entries.end()) bank->entries.erase(target);
+                    else {
+                        target->id = original->id;
+                        target->type = original->type;
+                        target->subHeader = original->subHeader;
+                        target->data = baselineTextures->entryData(*original);
+                        target->length = uint32_t(target->data.size());
+                    }
+                } else {
+                    target->id = winner->id;
+                    target->type = winner->type;
+                    target->subHeader = winner->header;
+                    target->data = winner->payload;
+                    target->length = uint32_t(target->data.size());
+                }
+            }
+            json row{{"entry", name}, {"id", versions.back().id}, {"mods", mods},
+                     {"winner", keepBase ? "vanilla" : winner->mod},
+                     {"overridden", overridden}, {"choice_unavailable", unavailable}};
             entries.push_back(row);
             if (versions.size() > 1 && differs) conflicts.push_back(row);
+        }
+        if (textures) {
+            const auto* bank = textures->findBank("GBANK_MAIN_PC");
+            std::set<uint32_t> ids;
+            for (const auto& entry : bank->entries)
+                if (!ids.insert(entry.id).second)
+                    throw std::runtime_error("FMP maintextures: selected entries share texture id " +
+                        std::to_string(entry.id));
+            const fs::path dst = fs::path(outDir) / rel;
+            fs::create_directories(dst.parent_path());
+            writeAllBytes(dst.string(), textures->serialize());
         }
         if (jsonOutput) rep["maintextures"] = {{"entries", entries},
             {"conflicts", conflicts}, {"masked", masked}};
@@ -13098,7 +13150,7 @@ int main(int argc, char** argv) {
         if (args.size() >= 5 && args[0] == "mods" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";
             bool doStage = false, installData = false;
-            std::string fieldSchema;
+            std::string fieldSchema, picksPath;
             std::vector<std::string> sources;
             bool seenWith = false;
             for (size_t i = 4; i < args.size(); ++i) {
@@ -13109,14 +13161,18 @@ int main(int argc, char** argv) {
                     fieldSchema = args[++i];
                     continue;
                 }
+                if (args[i] == "--picks" && i + 1 < args.size()) {
+                    picksPath = args[++i];
+                    continue;
+                }
                 if (args[i] == "--with") { seenWith = true; continue; }
                 sources.push_back(args[i]);
             }
             (void)seenWith;
             if (!doStage)
                 return modsMergePrepared(args[2], args[3], sources, fieldSchema,
-                                         asJson, {}, "", installData);
-            return modsMerge(args[2], args[3], sources, fieldSchema, true, asJson, {}, "", nullptr, installData);
+                                         asJson, {}, picksPath, installData);
+            return modsMerge(args[2], args[3], sources, fieldSchema, true, asJson, {}, picksPath, nullptr, installData);
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

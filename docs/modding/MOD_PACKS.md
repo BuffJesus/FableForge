@@ -326,7 +326,7 @@ field-level pipeline:
   archive (`forge::big`); `fmp apply` turns it into a drop-in game-root.
 - bsdiff `.patch` (**done**): `forge-tools patch apply` (`forge::bunzip`+`forge::bspatch`)
   produces a modified game.bin from a `game.bin.patch`.
-- `forge-tools mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--stage]`
+- `forge-tools mods merge <base> <out> --with <dir/.fmp/.patch>... [--fields] [--picks file] [--stage]`
   (**done**): normalizes each source to a game-root, then in ONE pass runs the
   field-level game.bin merge **and** the loose level-TNG thing-merge (per level:
   1 editor → copy; ≥2 → thing-merge by UID). Proven: HalsSword.fmp + Unofficial

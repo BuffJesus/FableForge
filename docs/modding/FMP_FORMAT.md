@@ -233,13 +233,19 @@ FMP; other entries retain their original payloads. In a mod stack, FMP entries
 compose in load order over the selected whole-file texture bank. Disjoint edits
 survive together; different edits to one entry are reported as texture conflicts
 with the later winner. An FMP before a later whole-file bank is reported as
-masked. The Mods conflict list shows texture conflicts, with order as the
-current way to choose their winner.
+masked. The Mods conflict list lets users pick either contributing mod or the
+install baseline for each contested texture. The saved choice uses
+`texture:<entry name><TAB><mod name|vanilla>` in `forge_mods_picks.txt`; it
+survives reordering. Without a choice, the later mod wins. `vanilla` restores
+an existing entry from the selected install baseline or omits an entry added
+only by mods. A saved choice for a mod that no longer contributes is reported
+as unavailable and load order applies.
 
 `tools/test_fmp_texture_layers.py` checked direct replacement from Young Hero
 Retexture, four new entries from Blue Ass Beta Textures, disjoint Apprentice
 plus Young Hero changes, both orders of a two-entry Apprentice conflict,
-whole-file masking, an id-mismatch refusal, and unchanged source bytes. The
+whole-file masking, earlier-winner and baseline picks across reorder, an
+id-mismatch refusal, and unchanged source bytes. The
 output BIG entries were read independently. `tools/audit_named_fmp_textures.py`
 checks metadata for all 169 texture-capable packages without writing 169 copies
 of a 533 MB bank: 165 have compatible identities (838 replacements, 34
@@ -248,5 +254,7 @@ refuse. These 165 are metadata-compatible candidates, not 165 completed builds
 or gameplay tests. When an earlier EgoCore `.resource` and a later FMP target
 the same texture, the current composer refuses that mixed order instead of
 silently giving the EgoCore layer the last write; the scratch test covers this
-and preserves prior output. Full mixed-source ordering and per-entry manual
-picks remain open.
+and preserves prior output. A scratch GUI automation check confirms the
+texture rows and saved winner control. Full mixed-source ordering remains open;
+an EgoCore `.resource` targeting an entry with a saved FMP texture choice
+currently refuses composition.

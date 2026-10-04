@@ -568,7 +568,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
         for (const auto& c : rep["maintextures"].value("conflicts", json::array()))
             rows.push_back({"texture", "texture:" + c.value("entry", ""),
                             c.value("entry", ""), mods(c["mods"]),
-                            c.value("winner", ""), false, false});
+                            c.value("winner", ""), c.value("overridden", false), true});
     if (rep.contains("lip_sync"))
         for (const auto& c : rep["lip_sync"].value("contested", json::array())) {
             const std::string language=c.value("language",""),bank=c.value("bank","");
@@ -993,7 +993,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
                 auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
                 for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
-                if (ImGui::Selectable(c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)", current == "vanilla")) modPick(c.key, "vanilla");
+                const char* baselineLabel = c.kind == "texture" ? "install baseline" :
+                    c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)";
+                if (ImGui::Selectable(baselineLabel, current == "vanilla")) modPick(c.key, "vanilla");
                 auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());
                 ImGui::EndCombo();
             }

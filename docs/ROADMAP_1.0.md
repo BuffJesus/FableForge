@@ -1040,7 +1040,10 @@ metadata audit finds 165/169 identity-compatible packages (838 replacement and
 both orders, whole-file ordering and refusal scratch tests pass. Runtime and
 combined EgoCore resource ordering remain unverified/open; the overlapping
 earlier-EgoCore/later-FMP case now refuses before stage rather than reversing
-the requested winner.
+the requested winner. Per-entry FMP texture winners can now be saved in the Mods
+conflict list (or supplied to `mods merge --picks`); an existing install-baseline
+entry or absence of a newly added entry can be selected with `vanilla`. Picks
+survive reordering, with an unavailable contributor reported and load order used.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

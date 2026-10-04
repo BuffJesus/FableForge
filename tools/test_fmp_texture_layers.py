@@ -110,8 +110,9 @@ def main():
         packages = {name: entries(work/name, 'maintextures') for name in PACKAGES}
         untouched = 'YOUNGHERO_SKIN_FACE'
         retail_apprentice = 'TEXTURE_HERO_APPRENTICE_SHIRT_NEUTRAL'
+        retail_boots = 'TEXTURE_HERO_APPRENTICE_BOOTS_NEUTRAL'
         retail = entries(args.install/TEXTURES, 'GBANK_MAIN_PC',
-                         {untouched, retail_apprentice})
+                         {untouched, retail_apprentice, retail_boots})
         assert untouched in retail
 
         direct = work/'direct'
@@ -157,6 +158,22 @@ def main():
         assert added_count == base_count + len(packages[PACKAGES[3]])
         checked_remove(added, work)
 
+        new_name = 'TEXTURE_HERO_ASSASSIN_BOOTS_BLUE'
+        new_pick = work/'new-texture-pick.txt'
+        new_pick.write_text('texture:' + new_name + '\tvanilla\n', encoding='utf-8')
+        no_new = work/'no-new'
+        report = run(args.tool, 'mods', 'merge', args.install, no_new, '--with',
+                     work/PACKAGES[3], '--picks', new_pick, '--json')
+        assert next(e for e in report['maintextures']['entries']
+                    if e['entry'] == new_name)['winner'] == 'vanilla'
+        assert new_name not in entries(no_new/TEXTURES, 'GBANK_MAIN_PC', {new_name})
+        expected_new = {n: e for n, e in packages[PACKAGES[3]].items() if n != new_name}
+        check_output(no_new, {**expected_new, untouched: retail[untouched]}, untouched)
+        no_new_count = next(b['count'] for b in run(args.tool, 'big', 'list',
+            no_new/TEXTURES, '--json')['banks'] if b['bank'] == 'GBANK_MAIN_PC')
+        assert no_new_count == base_count + len(expected_new)
+        checked_remove(no_new, work)
+
         for order in ((PACKAGES[1], PACKAGES[2]), (PACKAGES[2], PACKAGES[1])):
             output = work/'overlap'
             report = run(args.tool, 'mods', 'merge', args.install, output, '--with',
@@ -167,6 +184,53 @@ def main():
             check_output(output, {**packages[order[0]], **packages[order[1]],
                                   untouched: retail[untouched]}, untouched)
             checked_remove(output, work)
+
+        picks = work/'texture-picks.txt'
+        picks.write_text('texture:' + retail_apprentice + '\t' + Path(PACKAGES[1]).stem + '\n',
+                         encoding='utf-8')
+        selected = work/'selected'
+        report = run(args.tool, 'mods', 'merge', args.install, selected, '--with',
+                     work/PACKAGES[1], work/PACKAGES[2], '--picks', picks, '--json')
+        shirt = next(c for c in report['maintextures']['conflicts'] if c['entry'] == retail_apprentice)
+        assert shirt['winner'] == Path(PACKAGES[1]).stem and shirt['overridden']
+        check_output(selected, {**packages[PACKAGES[1]], **packages[PACKAGES[2]],
+                                retail_apprentice: packages[PACKAGES[1]][retail_apprentice],
+                                untouched: retail[untouched]}, untouched)
+        checked_remove(selected, work)
+
+        reordered = work/'reordered'
+        report = run(args.tool, 'mods', 'merge', args.install, reordered, '--with',
+                     work/PACKAGES[2], work/PACKAGES[1], '--picks', picks, '--json')
+        shirt = next(c for c in report['maintextures']['conflicts'] if c['entry'] == retail_apprentice)
+        assert shirt['winner'] == Path(PACKAGES[1]).stem and shirt['overridden']
+        check_output(reordered, {**packages[PACKAGES[2]], **packages[PACKAGES[1]],
+                                 untouched: retail[untouched]}, untouched)
+        checked_remove(reordered, work)
+
+        picks.write_text('texture:' + retail_apprentice + '\tvanilla\n' +
+                         'texture:' + retail_boots + '\tvanilla\n', encoding='utf-8')
+        baseline = work/'baseline'
+        report = run(args.tool, 'mods', 'merge', args.install, baseline, '--with',
+                     work/PACKAGES[1], work/PACKAGES[2], '--picks', picks, '--json')
+        assert next(c for c in report['maintextures']['conflicts']
+                    if c['entry'] == retail_apprentice)['winner'] == 'vanilla'
+        assert next(c for c in report['maintextures']['entries']
+                    if c['entry'] == retail_boots)['winner'] == 'vanilla'
+        check_output(baseline, {**packages[PACKAGES[1]], **packages[PACKAGES[2]],
+                                retail_apprentice: retail[retail_apprentice],
+                                retail_boots: retail[retail_boots],
+                                untouched: retail[untouched]}, untouched)
+        checked_remove(baseline, work)
+
+        picks.write_text('texture:' + retail_apprentice + '\tMissingMod\n', encoding='utf-8')
+        stale = work/'stale'
+        report = run(args.tool, 'mods', 'merge', args.install, stale, '--with',
+                     work/PACKAGES[1], work/PACKAGES[2], '--picks', picks, '--json')
+        shirt = next(c for c in report['maintextures']['conflicts'] if c['entry'] == retail_apprentice)
+        assert shirt['winner'] == Path(PACKAGES[2]).stem and shirt['choice_unavailable']
+        check_output(stale, {**packages[PACKAGES[1]], **packages[PACKAGES[2]],
+                             untouched: retail[untouched]}, untouched)
+        checked_remove(stale, work)
 
         # A package whose named texture claims another numeric id must refuse
         # before changing a requested output directory.
@@ -194,7 +258,7 @@ def main():
         assert source_hashes == {'archive': digest(args.archive),
                                  'textures': digest(args.install/TEXTURES),
                                  'game.bin': digest(args.install/'data/CompiledDefs/game.bin')}
-        print('FMP texture replacement/addition, disjoint merge, whole-file order, conflict orders and ID/mixed-resource refusals pass')
+        print('FMP texture replacement/addition, disjoint merge, whole-file order, conflict picks, baseline/stale choices and refusals pass')
 
 
 if __name__ == '__main__':
