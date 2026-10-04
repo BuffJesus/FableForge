@@ -1042,6 +1042,7 @@ private:
     std::future<ModsToolResult> modsFuture_;
     std::string modsVerb_;
     std::string modsActionError_;
+    std::string modsChoiceError_;
     // the conflict report of the last Check conflicts (forge-tools mods conflicts --json) and the
     // picks the user made on it (forge_mods_picks.txt next to forge_mods.json; deploy reads it)
 public:

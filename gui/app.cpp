@@ -1894,6 +1894,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("pack_destination=" + fs::path(packDest_).generic_string());
     v.push_back("mods_picks=" + std::to_string(modPicks_.size()));
     v.push_back("mod_action_failed=" + std::to_string(!modsActionError_.empty()));
+    v.push_back("mod_choice_failed=" + std::to_string(!modsChoiceError_.empty()));
     size_t unavailableChoices = 0;
     if (modReportLoaded_)
         for (const auto& conflict : modConflicts_) unavailableChoices += modChoiceUnavailable(conflict);

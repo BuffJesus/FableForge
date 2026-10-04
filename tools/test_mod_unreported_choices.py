@@ -11,6 +11,7 @@ import re
 import struct
 import subprocess
 import tempfile
+import time
 from test_mod_field_details import write_bank
 
 
@@ -26,6 +27,8 @@ def main():
     print('Evidence retained at', work, flush=True)
     root = work/'install'
     write_bank(root, (1, 2, 3, 4))
+    other = work/'other-install'
+    write_bank(other, (1, 2, 3, 4))
     def cli(label, *arguments):
         result = subprocess.run([str(gui.with_name('forge-tools.exe')), *map(str, arguments)],
             cwd=cwd, capture_output=True, text=True, timeout=60)
@@ -49,7 +52,7 @@ def main():
                 b'file:data/misc/shared.txt\tPackA\n'
                 b'file:data/misc/uncontested.txt\tvanilla\n')
     picks.write_bytes(original)
-    hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for source in (root, *sources)
+    hashes = {p: hashlib.sha256(p.read_bytes()).hexdigest() for source in (root, other, *sources)
               for p in source.rglob('*') if p.is_file() and p != picks}
     report = json.loads(cli('report', 'mods', 'conflicts', root, '--json'))
     assert len(report['files']['contested']) == 1
@@ -62,17 +65,27 @@ def main():
         else: assert independent.read_bytes() == b'Independent PackA'
         assert not (output/'data/Misc/missing-target-with-a-long-readable-name.txt').exists()
     check_build('before', True)
-    def run(case, size, lines):
+    def run(case, size, lines, unlock=None):
         case.mkdir()
         script = case/'review.txt'
         script.write_text('\n'.join(lines+['quit'])+'\n', encoding='utf-8')
-        result = subprocess.run([str(gui), '--install', str(args.install), '--size', size,
-            '--auto', str(script)], cwd=cwd, capture_output=True, text=True, timeout=180,
-            env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
-                     APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata')))
-        (case/'output.log').write_text(result.stdout+result.stderr, encoding='utf-8')
+        with (case/'output.log').open('w',encoding='utf-8') as output:
+            process = subprocess.Popen([str(gui), '--install', str(args.install), '--size', size,
+                '--auto', str(script)], cwd=cwd, stdout=output, stderr=subprocess.STDOUT,
+                env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
+                         APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata')))
+            try:
+                if unlock:
+                    deadline=time.monotonic()+150
+                    while not (case/'locked.png').exists() and process.poll() is None and time.monotonic()<deadline:
+                        time.sleep(.01)
+                    assert (case/'locked.png').exists(),'locked choice checkpoint missing'
+                    unlock()
+                rc=process.wait(timeout=180)
+            finally:
+                if process.poll() is None: process.terminate();process.wait(timeout=10)
         log = Path(str(script)+'.log').read_text(encoding='utf-8')
-        assert result.returncode == 0 and 'RESULT PASS' in log, log[-5000:]
+        assert rc == 0 and 'RESULT PASS' in log, log[-5000:]
         return log
     def start(scale):
         return ['wait_maps', 'wait_ready', f'set saveroot {root.as_posix()}',
@@ -109,16 +122,44 @@ def main():
     kernel.CreateFileW.restype = wintypes.HANDLE
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel.CloseHandle.restype = wintypes.BOOL
-    handle = kernel.CreateFileW(str(picks), 0x80000000, 1, None, 3, 0x80, None)
-    assert handle != wintypes.HANDLE(-1).value
-    try:
-        lines = start(1.5)+reveal('mod_clear_unreported_0')+[
-            'click mod_clear_unreported_0', 'frames 3', 'assert_state mods_picks 3',
-            'assert_state mods_unreported_choices 2', 'assert_log cannot save conflict choices']
-        run(work/'locked', '800x600', lines)
-        assert picks.read_bytes() == original
-    finally:
-        kernel.CloseHandle(handle)
+    for size,scale in [('1440x900',1),('800x600',1.5)]:
+        picks.write_bytes(original)
+        case=work/('locked-'+size)
+        handle = kernel.CreateFileW(str(picks), 0x80000000, 1, None, 3, 0x80, None)
+        assert handle != wintypes.HANDLE(-1).value
+        def unlock():
+            nonlocal handle
+            assert picks.read_bytes()==original,'failed choice changed persisted winners'
+            assert not list(root.glob('.forge-mod-picks-*'))
+            kernel.CloseHandle(handle);handle=None
+        try:
+            lines=start(scale)+reveal('mod_winner_0')+['click mod_winner_0','frames 3',
+                'click mod_vanilla_0','frames 3','assert_state mods_first_winner PackA',
+                'assert_state mod_choice_failed 1','clear_toasts','mods_tab 0','frames 3',
+                'mods_tab 1','mods_conflicts','wait_mods','frames 3',
+                'assert_state mod_choice_failed 1']
+            lines += [f'set saveroot {other.as_posix()}','frames 3','assert_state mod_choice_failed 0',
+                f'set saveroot {root.as_posix()}','mods_conflicts','wait_mods','frames 3',
+                'assert_state mods_first_winner PackA','assert_state mod_choice_failed 0']
+            lines+=reveal('mod_clear_unreported_0')+['click mod_clear_unreported_0','frames 3',
+                'assert_state mods_picks 3','assert_state mods_unreported_choices 2',
+                'assert_log cannot save conflict choices','clear_toasts']
+            lines+=reveal('mods_choice_error')+['assert_widget mods_choice_error',
+                'dump_widget mods_choice_error','mouse_move viewport',
+                f'screenshot {(case/"locked.png").as_posix()}','frames 300']
+            lines+=reveal('mod_clear_unreported_0')+['click mod_clear_unreported_0','frames 3',
+                'assert_state mod_choice_failed 0','assert_state mods_picks 2',
+                'assert_state mods_unreported_choices 1','assert_state mods_first_winner PackA']
+            log=run(case,size,lines,unlock)
+            rect=re.search(r'widget_rect mods_choice_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
+            clip=re.search(r'widget_clip_rect mods_choice_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
+            assert rect and clip
+            left,top,right,bottom=map(float,rect.groups());cl,ct,cr,cb=map(float,clip.groups())
+            assert cl<=left<right<=cr and ct<=top<bottom<=cb,(rect.groups(),clip.groups())
+            print(size,'persistent choice refusal, unchanged winner and same-process retry: PASS',flush=True)
+        finally:
+            if handle is not None:kernel.CloseHandle(handle)
+    picks.write_bytes(original)
     assert not list(root.glob('.forge-mod-picks-*'))
     lines = start(1.5)+['assert_state mods_unreported_choices 2']
     lines += reveal('mod_clear_unreported_0')+['click mod_clear_unreported_0', 'frames 3',
@@ -159,7 +200,7 @@ def main():
     # Only the explicitly changed mod-order file may differ from its initial state.
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p, digest in hashes.items()
                if p != root/'forge_mods.json')
-    retained = {p for source in (root, *sources) for p in source.rglob('*') if p.is_file()
+    retained = {p for source in (root, other, *sources) for p in source.rglob('*') if p.is_file()
                 and p not in (picks, root/'forge_mods.json')}
     assert retained == set(hashes)-{root/'forge_mods.json'}
     print('Individual clearing, expected next-build change, empty-order report and search beyond 400: PASS', flush=True)

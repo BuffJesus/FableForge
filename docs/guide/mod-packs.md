@@ -23,6 +23,10 @@ The tick box beside each row turns a mod off without removing it.
 
 ## Order them
 
+If choosing a winner or clearing a saved choice fails, Mods keeps the error
+visible beside the choices. The previous selection stays saved. Resolve the
+reported file/access problem, then retry the choice.
+
 The **top loads first and the last mod wins**. Drag a name, or use the arrows,
 to reorder. Game records, a level's objects, text strings and world maps/regions
 are merged; whole files such as texture banks come from the last mod that ships

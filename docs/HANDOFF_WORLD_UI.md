@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated conflict-choice failure feedback
+
+Review feat/forge-choice-save-feedback-20261003 starts at primary 6258a31.
+Failed choice reads/writes and busy actions retain feedback beside comparisons,
+including after tab reopening and conflict refresh. A successful choice clears
+it; changing destination resets the previous folder's error. Choice persistence
+still uses the existing fresh-read/PendingBanks transaction and label contract.
+Activity retains the full file error; the compact message names the choices file.
+
+The expanded locked fixture first fails on unchanged GUI utpvj0hc (missing
+persistent state/widget), while failed writes preserve the file/winner. The first
+implementation 6hhfhve6 passes normal but exposes a 402-pixel error group in a
+314-pixel compact clip. Shortening durable text fixes this; 85srdqc2 passes both
+sizes, real winner/clear controls, reopen/refresh, destination reset, failure
+preservation, cleaned stages and same-process retry. Compact screenshot inspected.
+Existing unreported/empty-order/401-row checks pass, as do both-size field details
+and independent merged bytes in fo831lau. Release GUI builds; docs checker passes.
+Raw-file regression/extracted package and promotion remain pending. No full gate
+rerun or game/live-install/corpus writes.
+
 ## 2026-10-03 raw-file comparison primary integration
 
 Primary feat/editor-ui-shell fast-forwarded 27755ec to 55e20dc. All Release

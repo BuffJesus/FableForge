@@ -86,6 +86,7 @@ void App::setSaveRoot(const std::string& root) {
 
 void App::resetModDestination() {
     modsActionError_.clear();
+    modsChoiceError_.clear();
     texReplaceError_.clear();
     texAddError_.clear();
     meshImportError_.clear(); customThemeError_.clear();
@@ -305,7 +306,10 @@ std::map<std::string, std::string> readModPicks(const fs::path& root) {
 
 void App::loadModPicks() {
     try { modPicks_ = readModPicks(saveRoot()); }
-    catch (const std::exception& e) { pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2); }
+    catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
+        pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
+    }
 }
 
 bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
@@ -324,27 +328,33 @@ bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
         if (!pending.install(false, error)) throw std::runtime_error(error);
         return true;
     } catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot save forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot save conflict choices: ") + e.what(), 2);
         return false;
     }
 }
 
 bool App::setModPick(const std::string& key, const std::string& winner) {
-    if (fileWriteBlocked("mod conflict choice")) return false;
+    if (const char* job = activeFileJob()) {
+        modsChoiceError_ = std::string("Cannot change conflict choices: wait for ") + job + " to finish, then retry.";
+        fileWriteBlocked("mod conflict choice");
+        return false;
+    }
     std::map<std::string, std::string> picks;
     try { picks = readModPicks(saveRoot()); }
     catch (const std::exception& e) {
+        modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
         return false;
     }
     if (winner == "-") picks.erase(key); else picks[key] = winner;
     if (!saveModPicks(picks)) return false;
     modPicks_ = std::move(picks);
+    modsChoiceError_.clear();
     return true;
 }
 
 bool App::modPick(const std::string& key, const std::string& winner) {
-    if (fileWriteBlocked("mod conflict choice")) return false;
     const ModConflict* row = nullptr;
     for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
@@ -809,6 +819,19 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     theme::endCard();
     ImGui::Dummy(ImVec2(0, S(8)));
 
+    if (!modsChoiceError_.empty()) {
+        ImGui::SetCursorPosX(pad);
+        theme::beginCard("##modchoiceerror", inner);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        ImGui::BeginGroup();
+        ImGui::TextColored(theme::vec(theme::Error), "%s", modsChoiceError_.c_str());
+        ImGui::TextWrapped("The attempted choice was not saved. Resolve the error, then retry the choice.");
+        ImGui::EndGroup();
+        ImGui::PopTextWrapPos();
+        auto_.registerWidget("mods_choice_error");
+        theme::endCard();
+        ImGui::Dummy(ImVec2(0, S(8)));
+    }
     if (modReportLoaded_) {
         const auto unreportedChoices = modUnreportedChoices();
         ImGui::SetCursorPosX(pad);

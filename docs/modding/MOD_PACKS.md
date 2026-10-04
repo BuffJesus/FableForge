@@ -2,6 +2,12 @@
 
 # Mod packs, load order, and conflict resolution
 
+If a conflict choice cannot be read or saved, Mods keeps a wrapped error beside
+the comparison area after toasts fade or the tab is reopened. A failed save
+retains the previous winner. Resolve the reported file/access problem and retry
+the choice; a successful choice clears the error. Changing the save destination
+clears feedback for the previous folder.
+
 Future investigation: [fine-grained content overrides](CONTENT_OVERRIDES.md)
 describes choosing contributions within FMPs and large overhauls, item/field
 comparison, persistent compatibility choices, and dependency validation.
