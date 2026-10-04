@@ -326,7 +326,16 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             // retail OBJECT/CREATURE records. Only the named Model ID link
             // may alter it; the kind and tail remain byte-for-byte intact.
             if (parts.size() == 2 && parts[1] == "Model ID" &&
-                field.type == "CEngineGraphic" && field.value.size() >= 8)
+                ((field.type == "CEngineGraphic" && field.value.size() >= 8) ||
+                 (field.name == "Graphic" && field.value.size() == 17)))
+                return {offset + 4, i + 1, Destination::MeshEntry};
+            if (entry.definition == "CREATURE" && parts.size() == 2 &&
+                parts[1] == "Model ID" && field.name == "Graphic" &&
+                field.value.size() == 62 &&
+                read32(field.value, 17) == defdecode::fieldTag("EyeGraphic") &&
+                read32(field.value, 38) == defdecode::fieldTag("DefaultOwner") &&
+                read32(field.value, 46) == defdecode::fieldTag("ControlledMovementType") &&
+                read32(field.value, 54) == defdecode::fieldTag("CombatTypeDef"))
                 return {offset + 4, i + 1, Destination::MeshEntry};
             // CThingComponentSet: count, 9-byte {CTC name offset, param, flag}
             // records, then an opaque retail tail. The creature schema calls
@@ -375,6 +384,42 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             fail("unsupported CREATURE weapon/brain field layout in " + entry.name);
         }
+        const bool torsoTexture = link.path == "3896642804.TorsoMainTextureID";
+        const bool model = link.path == "3361958702.Model ID";
+        const bool eye = link.path == "2104816530.Model Eye ID";
+        const bool attack = link.path == "587433138.AttackStyleID";
+        const bool combat1 = link.path == "368349979.CombatType1ID";
+        const bool combat2 = link.path == "600034842.CombatType2ID";
+        if (torsoTexture || model || eye || attack || combat1 || combat2) {
+            size_t nestedOffset = decoded.prefixLen;
+            for (size_t i = 0; i < decoded.fields.size(); ++i) {
+                const auto& field = decoded.fields[i]; nestedOffset += 4;
+                if (torsoTexture && field.name == "Damage" && field.value.size() == 20 &&
+                    read32(field.value, 4) == defdecode::fieldTag("DamageEffectDef") &&
+                    read32(field.value, 12) == defdecode::fieldTag("StunnedParticle"))
+                    return {nestedOffset + 16, i + 1, Destination::TextureEntry};
+                if ((model || eye || attack) && field.name == "Graphic" &&
+                    field.value.size() == 62 &&
+                    read32(field.value, 17) == defdecode::fieldTag("EyeGraphic") &&
+                    read32(field.value, 38) == defdecode::fieldTag("DefaultOwner") &&
+                    read32(field.value, 46) == defdecode::fieldTag("ControlledMovementType") &&
+                    read32(field.value, 54) == defdecode::fieldTag("CombatTypeDef"))
+                    return {nestedOffset + (model ? 4u : eye ? 25u : 58u), i + 1,
+                            attack ? Destination::GameEntry : Destination::MeshEntry};
+                if ((combat1 || combat2) &&
+                    field.name == "ResetCombatTypeOnUnsheatheDefaultWeapons" &&
+                    field.value.size() == 25 &&
+                    read32(field.value, 1) == defdecode::fieldTag("HeroCombatDef") &&
+                    // The XML display name differs from the serialized tag;
+                    // 23C3CE1A is the native control ID for this slot.
+                    read32(field.value, 9) == 0x1acec323u &&
+                    read32(field.value, 17) == defdecode::fieldTag("CombatDiameter"))
+                    return {nestedOffset + (combat1 ? 5u : 13u), i + 1, Destination::GameEntry};
+                nestedOffset += field.value.size();
+            }
+            fail("unsupported CREATURE graphic/combat field layout in " + entry.name +
+                 " for " + link.path);
+        }
     }
     fail("unknown field in " + entry.name + ": " + link.path);
 }
@@ -382,7 +427,8 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
 std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                            const defschema::Schema& schema, std::span<const Link> links,
                            bool deferMissing,
-                           const std::map<std::string, uint32_t>* meshIds) {
+                           const std::map<std::string, uint32_t>* meshIds,
+                           const std::map<std::string, uint32_t>* textureIds) {
     auto data = entry.data; std::set<size_t> offsets;
     for (const auto& link : links) {
         const auto location = locate(entry, schema, link);
@@ -395,6 +441,11 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
             if (meshIds) {
                 const auto found = meshIds->find(link.target);
                 if (found != meshIds->end()) target = found->second;
+            }
+        } else if (location.destination == Destination::TextureEntry) {
+            if (textureIds) {
+                const auto found = textureIds->find(link.target);
+                if (found != textureIds->end()) target = found->second;
             }
         } else {
             const auto name = targets.originalNameOffset(link.target);

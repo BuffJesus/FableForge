@@ -323,8 +323,18 @@ One verified exception to the multi-target refusal is the two repeated
 Children.fmp` records both names under one `VillagePeopleID` path; the linker
 keeps their order and addresses the two distinct four-byte fields. It also
 handles that package's nested `CREATURE` primary/secondary weapon and brain
-links after validating the complete local tag sequence. The unit test checks
-that only those words change. `tools/test_fmp_village_pair.py` checks the real
-metadata and proves the merger now advances to `TorsoMainTextureID`, where it
-still refuses without writing output. The package is not yet installable;
-nested creature texture, eye mesh and combat references remain to be resolved.
+links after validating the complete local tag sequence. The same guarded
+layout now resolves the torso texture, body/eye meshes and combat IDs through
+their composed banks. A 17-byte `Graphic` field in the village record also
+resolves its named marker mesh. The unit test checks that only those words
+change and rejects a missing texture map or malformed nested tag.
+
+`tools/test_fmp_knothole_children.py` merged the original named package against
+the installed TLC baseline in scratch space: four definitions applied, three
+added, no conflicts and no newly missing mesh assets. It independently read
+the resulting game definitions and checked both ordered village targets, the
+male/female child entries, all 18 named creature references and the village
+marker against the output game/asset identities. The source archive and install
+banks were unchanged. This is an offline compose check; the village and new
+creatures have not been checked in Forge's viewport or in the game. Other
+creature layouts and texture/mesh winner picks need separate coverage.

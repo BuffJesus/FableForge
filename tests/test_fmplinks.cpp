@@ -209,6 +209,59 @@ int main() {
     rejects([&] { forge::fmplinks::relink(malformedCreature, targets, creatureSchema, references); },
             "unexpected nested creature tag refuses");
 
+    const auto assetCreatureSchema = forge::defschema::Schema::loadText(
+        R"({"CREATURE":{"prefix_len":3,"fields":[{"name":"Damage","type":"?"},{"name":"Graphic","type":"?"},{"name":"ResetCombatTypeOnUnsheatheDefaultWeapons","type":"?"}]}})");
+    forge::defdecode::Decoded assetDecoded;
+    assetDecoded.prefix = {1, 0, 0}; assetDecoded.prefixLen = 3; assetDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField damage, creatureGraphic, combat;
+    damage.name = "Damage"; damage.type = "?";
+    damage.tag = forge::defdecode::fieldTag(damage.name); damage.tagOk = true;
+    word(damage.value, 0); word(damage.value, forge::defdecode::fieldTag("DamageEffectDef"));
+    word(damage.value, 0); word(damage.value, forge::defdecode::fieldTag("StunnedParticle"));
+    word(damage.value, 0);
+    creatureGraphic.name = "Graphic"; creatureGraphic.type = "?";
+    creatureGraphic.tag = forge::defdecode::fieldTag(creatureGraphic.name); creatureGraphic.tagOk = true;
+    word(creatureGraphic.value, 4); word(creatureGraphic.value, 0);
+    creatureGraphic.value.insert(creatureGraphic.value.end(), 9, 0);
+    word(creatureGraphic.value, forge::defdecode::fieldTag("EyeGraphic"));
+    word(creatureGraphic.value, 5); word(creatureGraphic.value, 0);
+    word(creatureGraphic.value, 0); word(creatureGraphic.value, 0);
+    creatureGraphic.value.push_back(0);
+    word(creatureGraphic.value, forge::defdecode::fieldTag("DefaultOwner")); word(creatureGraphic.value, 0);
+    word(creatureGraphic.value, forge::defdecode::fieldTag("ControlledMovementType")); word(creatureGraphic.value, 0);
+    word(creatureGraphic.value, forge::defdecode::fieldTag("CombatTypeDef")); word(creatureGraphic.value, 0);
+    combat.name = "ResetCombatTypeOnUnsheatheDefaultWeapons"; combat.type = "?";
+    combat.tag = forge::defdecode::fieldTag(combat.name); combat.tagOk = true;
+    combat.value.push_back(0);
+    word(combat.value, forge::defdecode::fieldTag("HeroCombatDef")); word(combat.value, 0);
+    word(combat.value, 0x1acec323u); word(combat.value, 0);
+    word(combat.value, forge::defdecode::fieldTag("CombatDiameter")); word(combat.value, 0);
+    assetDecoded.fields = {damage, creatureGraphic, combat};
+    forge::bin::Entry assetCreature{"CREATURE", "CREATURE_ASSET_PROBE", 0,
+                                    forge::defdecode::encode(assetDecoded)};
+    const auto originalAsset = assetCreature.data;
+    const std::map<std::string, uint32_t> creatureMeshes{{"MESH_BODY", 8136}, {"MESH_EYE", 8137}};
+    const std::map<std::string, uint32_t> creatureTextures{{"TEXTURE_TORSO", 200}};
+    references = {{"3896642804.TorsoMainTextureID", "TEXTURE_TORSO"},
+                  {"3361958702.Model ID", "MESH_BODY"},
+                  {"2104816530.Model Eye ID", "MESH_EYE"},
+                  {"587433138.AttackStyleID", "B"},
+                  {"368349979.CombatType1ID", "B"},
+                  {"600034842.CombatType2ID", "A"}};
+    const auto linkedAsset = forge::fmplinks::relink(assetCreature, targets, assetCreatureSchema,
+                                                    references, false, &creatureMeshes, &creatureTextures);
+    auto expectedAsset = originalAsset;
+    auto put = [&](size_t at, uint32_t value) {
+        for (int byte = 0; byte < 4; ++byte) expectedAsset[at + byte] = uint8_t(value >> (byte * 8));
+    };
+    put(23, 200); put(35, 8136); put(56, 8137);
+    put(89, 1); put(102, 1); put(110, 0);
+    check(linkedAsset == expectedAsset && assetCreature.data == originalAsset,
+          "nested creature texture, body/eye mesh and combat words relink without other edits");
+    rejects([&] { forge::fmplinks::relink(assetCreature, targets, assetCreatureSchema,
+                                         references, false, &creatureMeshes); },
+            "missing named creature texture refuses");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

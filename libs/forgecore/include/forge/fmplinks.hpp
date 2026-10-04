@@ -22,7 +22,7 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes);
 std::vector<LinkGroup> readMetadataGroups(std::span<const uint8_t> bytes);
 RecordLinks readGameLinks(const big::File& package);
 
-enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry };
+enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry, TextureEntry };
 struct Location { size_t offset, part; Destination destination; };
 Location locate(const bin::Entry& entry, const defschema::Schema& schema,
                 const Link& link);
@@ -32,5 +32,6 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema,
 std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                            const defschema::Schema& schema,
                            std::span<const Link> links, bool deferMissing = false,
-                           const std::map<std::string, uint32_t>* meshIds = nullptr);
+                           const std::map<std::string, uint32_t>* meshIds = nullptr,
+                           const std::map<std::string, uint32_t>* textureIds = nullptr);
 } // namespace forge::fmplinks

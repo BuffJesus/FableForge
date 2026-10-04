@@ -4819,7 +4819,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::map<std::string, std::string>* picksMap = nullptr,  // picks already parsed (the mods family), else picksPath
               const std::vector<std::string>* rootLabels = nullptr,         // mod labels parallel to modRoots, else the folder names
               const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr,
-              const std::map<std::string, uint32_t>* meshIds = nullptr) {
+              const std::map<std::string, uint32_t>* meshIds = nullptr,
+              const std::map<std::string, uint32_t>* textureIds = nullptr) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4905,7 +4906,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         for (auto& [name, versions] : changes) for (auto& version : versions) {
             if (version.links.empty()) continue;
             forge::bin::Entry entry{version.definition, name, 0, version.data};
-            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links, true, meshIds);
+            version.data = forge::fmplinks::relink(entry, identities, *schema, version.links,
+                                                  true, meshIds, textureIds);
         }
     }
     forge::fmplinks::RecordLinks selectedLinks;
@@ -5052,7 +5054,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     for (const auto& [name, links] : selectedLinks) {
         const auto* entry = merged.find(name);
         if (!entry) throw std::runtime_error("FMP links: selected owner is absent: " + name);
-        auto data = forge::fmplinks::relink(*entry, merged, *schema, links, false, meshIds);
+        auto data = forge::fmplinks::relink(*entry, merged, *schema, links,
+                                           false, meshIds, textureIds);
         merged.setEntryData(size_t(entry - merged.entries().data()), std::move(data));
     }
 
@@ -8248,13 +8251,20 @@ void validateFmpGraphicLinks(const forge::big::File& package,
     }
 }
 
-std::map<std::string, uint32_t> meshIdentityMap(const std::filesystem::path& file) {
+std::map<std::string, uint32_t> assetIdentityMap(const std::filesystem::path& file,
+                                                  const std::string& bankName) {
     std::map<std::string, uint32_t> result;
     if (!std::filesystem::exists(file)) return result;
-    const auto graphics = forge::big::File::open(file);
-    if (const auto* bank = graphics.findBank("MBANK_ALLMESHES"))
+    const auto asset = forge::big::File::open(file);
+    if (const auto* bank = asset.findBank(bankName))
         for (const auto& entry : bank->entries) result[entry.name] = entry.id;
     return result;
+}
+std::map<std::string, uint32_t> meshIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "MBANK_ALLMESHES");
+}
+std::map<std::string, uint32_t> textureIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "GBANK_MAIN_PC");
 }
 
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
@@ -8359,6 +8369,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     }
     std::optional<forge::defschema::Schema> linkSchema;
     std::optional<std::map<std::string, uint32_t>> meshIds;
+    std::optional<std::map<std::string, uint32_t>> textureIds;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
@@ -8370,15 +8381,24 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         if (!entry) throw std::runtime_error("FMP links: metadata owner is absent: " + name);
         const auto index = size_t(entry - game.entries().data());
         if (!meshIds && std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path.ends_with(".Model ID"); })) {
+                [](const auto& link) { return link.path.ends_with(".Model ID") ||
+                                             link.path.ends_with(".Model Eye ID"); })) {
             meshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
             if (const auto* packageMeshes = pkg.findBank("graphics"))
                 for (const auto& mesh : packageMeshes->entries)
                     (*meshIds)[mesh.name] = mesh.id;
         }
+        if (!textureIds && std::any_of(recordLinks.begin(), recordLinks.end(),
+                [](const auto& link) { return link.path.ends_with(".TorsoMainTextureID"); })) {
+            textureIds.emplace(textureIdentityMap(fs::path(baseRoot) / textureRel));
+            if (const auto* packageTextures = pkg.findBank("maintextures"))
+                for (const auto& texture : packageTextures->entries)
+                    (*textureIds)[texture.name] = texture.id;
+        }
         auto data = forge::fmplinks::relink(*entry, game, *linkSchema, recordLinks,
                                           symbolicLinks != nullptr,
-                                          meshIds ? &*meshIds : nullptr);
+                                          meshIds ? &*meshIds : nullptr,
+                                          textureIds ? &*textureIds : nullptr);
         game.setEntryData(index, std::move(data));
         linked += recordLinks.size();
     }
@@ -8993,35 +9013,49 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
+    std::optional<std::map<std::string, uint32_t>> plannedTextureIds;
     const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
-                if (link.path.ends_with(".Model ID")) return true;
+                if (link.path.ends_with(".Model ID") || link.path.ends_with(".Model Eye ID")) return true;
         return false;
     });
-    if (hasNamedMeshLinks) {
-        const fs::path graphicsRel = fs::path("data") / "graphics" / "graphics.big";
-        plannedMeshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
+    const bool hasNamedTextureLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
+        for (const auto& [name, links] : records)
+            for (const auto& link : links)
+                if (link.path.ends_with(".TorsoMainTextureID")) return true;
+        return false;
+    });
+    auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {
+        auto ids = assetIdentityMap(fs::path(baseRoot) / "data" / tail, targetBank);
         for (const auto& source : sources) {
             if (lowered(fs::path(source).extension().string()) == ".fmp") {
                 const auto pkg = openFmpPackage(source);
-                if (const auto* bank = pkg.findBank("graphics"))
+                if (const auto* bank = pkg.findBank(packageBank))
                     for (const auto& entry : bank->entries)
-                        (*plannedMeshIds)[entry.name] = entry.id;
+                        ids[entry.name] = entry.id;
                 continue;
             }
             for (const auto& dataName : {"data", "Data"}) {
-                const fs::path bank = fs::path(source) / dataName / "graphics" / "graphics.big";
+                const fs::path bank = fs::path(source) / dataName / tail;
                 if (fs::exists(bank)) {
-                    *plannedMeshIds = meshIdentityMap(bank);
+                    ids = assetIdentityMap(bank, targetBank);
                     break;
                 }
             }
         }
-    }
+        return ids;
+    };
+    if (hasNamedMeshLinks)
+        plannedMeshIds.emplace(planAssetIds(fs::path("graphics") / "graphics.big",
+                                            "MBANK_ALLMESHES", "graphics"));
+    if (hasNamedTextureLinks)
+        plannedTextureIds.emplace(planAssetIds(fs::path("graphics") / "pc" / "textures.big",
+                                               "GBANK_MAIN_PC", "maintextures"));
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
                              schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
-                             plannedMeshIds ? &*plannedMeshIds : nullptr);
+                             plannedMeshIds ? &*plannedMeshIds : nullptr,
+                             plannedTextureIds ? &*plannedTextureIds : nullptr);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 
