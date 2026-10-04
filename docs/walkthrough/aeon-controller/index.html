@@ -2,7 +2,7 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aeon Edition + Controller Support &mdash; FableForge</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#11121a;color:#e9e8ef;font:17px/1.65 system-ui,sans-serif}main{max-width:960px;margin:auto;padding:48px 24px 80px}h1{font-size:42px;line-height:1.15}h2{font-size:24px;margin:0 0 12px}p{margin:12px 0}a{color:#bcb0ff}small,figcaption{color:#b1adbf}section{margin:28px 0;padding:26px;background:#1b1d29;border:1px solid #343044;border-radius:16px}code{font-size:.9em;overflow-wrap:anywhere;background:#292637;padding:2px 5px;border-radius:4px}figure{margin:22px 0 0}img{width:100%;height:auto;border:1px solid #403951;border-radius:8px}figcaption{font-size:14px;margin-top:8px}.eyebrow{color:#bdacf3;font-weight:650}.note{border-left:3px solid #bda6ff;padding-left:16px}.step{color:#bda6ff;margin-right:10px}.sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.source{padding:20px;background:#13141d;border:1px solid #3e354f;border-radius:12px}.path{display:block;overflow-wrap:anywhere}@media(max-width:720px){.sources{grid-template-columns:1fr}h1{font-size:34px}main{padding:28px 16px}section{padding:20px}}@media print{body{background:white;color:#222}section{background:white}img{max-height:350px;object-fit:contain}}
+*{box-sizing:border-box}body{margin:0;background:#11121a;color:#e9e8ef;font:17px/1.65 system-ui,sans-serif}main{max-width:960px;margin:auto;padding:48px 24px 80px}h1{font-size:42px;line-height:1.15}h2{font-size:24px;margin:0 0 12px}p{margin:12px 0}a{color:#bcb0ff}small,figcaption{color:#b1adbf}section{margin:28px 0;padding:26px;background:#1b1d29;border:1px solid #343044;border-radius:16px}code{font-size:.9em;overflow-wrap:anywhere;background:#292637;padding:2px 5px;border-radius:4px}pre{overflow:auto;background:#13141d;border:1px solid #3e354f;border-radius:8px;padding:14px;font:14px/1.5 ui-monospace,monospace}figure{margin:22px 0 0}img{width:100%;height:auto;border:1px solid #403951;border-radius:8px}figcaption{font-size:14px;margin-top:8px}.eyebrow{color:#bdacf3;font-weight:650}.note{border-left:3px solid #bda6ff;padding-left:16px}.step{color:#bda6ff;margin-right:10px}.sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.source{padding:20px;background:#13141d;border:1px solid #3e354f;border-radius:12px}.path{display:block;overflow-wrap:anywhere}@media(max-width:720px){.sources{grid-template-columns:1fr}h1{font-size:34px}main{padding:28px 16px}section{padding:20px}}@media print{body{background:white;color:#222}section{background:white}img{max-height:350px;object-fit:contain}}
 </style>
 <main>
 <p class="eyebrow">FABLEFORGE &middot; A GUIDE FOR PERODIS</p>
@@ -16,10 +16,21 @@
 <section><h2><span class="step">2</span>Extract and identify three sources</h2>
 <p>Download <a href="https://www.nexusmods.com/fablethelostchapters/mods/454">Aeon Edition</a> and <a href="https://www.nexusmods.com/fablethelostchapters/mods/596?tab=files">Controller Support's legacy FMP and runtime downloads</a>. Extract them outside the game folder. The offline checks used Aeon 5.03 and Controller Support version 1.</p>
 <div class="sources" aria-label="Three mod sources for Forge">
-<article class="source"><h3>Aeon Edition</h3><code class="path">AeonEdition/Data/</code><p>Keep the complete extraction, including compiled definitions, graphics, textures, levels and Bones. Choose the extracted <code>AeonEdition</code> folder containing Data. Selecting Data itself also works: Forge recognizes its parent.</p></article>
+<article class="source"><h3>Aeon Edition</h3><code class="path">AeonEdition/Data/</code><p>The Aeon 5.03 ZIP puts <code>Bones</code>, <code>CompiledDefs</code>, <code>graphics</code>, <code>lang</code> and <code>Levels</code> at the top level; it does not include a <code>Data</code> folder. Put those five folders inside a new <code>Data</code> folder under <code>AeonEdition</code>. Choose <code>AeonEdition</code> in Forge.</p></article>
 <article class="source"><h3>Controller game data</h3><code class="path">ControllerSupport.fmp</code><p>Choose this file from the legacy FMP download. Forge resolves its supported named references against the installed overhaul.</p></article>
 <article class="source"><h3>Controller runtime</h3><code class="path">Mods/FableControllerSupport/</code><p>Choose the extracted runtime folder containing <code>FableControllerSupport.dll</code>. Keep the original download intact, including its Data folder if supplied.</p></article>
 </div>
+<p><strong>Arrange Aeon before opening Forge:</strong> in the extracted <code>AeonEdition</code> folder, create a folder named <code>Data</code>. Move the five Aeon game-data folders into it. The result must include <code>AeonEdition/Data/CompiledDefs/game.bin</code>, <code>AeonEdition/Data/graphics/graphics.big</code> and <code>AeonEdition/Data/Levels</code>. Leave <code>Guide</code>, <code>readme.txt</code> and the changelog outside <code>Data</code>; a deleted Guide is fine. Do not use Steam's <code>Data</code> folder for this preparation.</p>
+<pre aria-label="Aeon folder arrangement">AeonEdition/
+  Data/
+    Bones/
+    CompiledDefs/
+      game.bin
+    graphics/
+    lang/
+    Levels/
+  Guide/  (optional)
+  readme.txt</pre>
 <p>These are paths you select in Forge. After extraction, continue to steps 3 and 4 to add them. Forge handles copying them into the selected game installation.</p>
 <p>When the controller FMP is present, Forge installs the controller runtime DLL without its alternate Data overrides. That prevents the runtime package from overwriting the relinked FMP result. The original downloaded folder stays unchanged.</p></section>
 <section><h2><span class="step">3</span>Select the game folder in Forge</h2>
@@ -28,7 +39,7 @@
 <section><h2><span class="step">4</span>Add all three sources</h2>
 <p>Under <strong>Add a mod</strong>, click <strong>Browse&hellip;</strong>. The menu has separate choices for a file and a folder:</p>
 <figure><a href="02-add.png"><img src="02-add.png" alt="Forge Browse menu with Choose mod file and Choose mod folder"></a><figcaption>The Browse menu in Forge. The following three screenshots show the selected path in Add a mod before pressing Add to the order. The P:, Q: and R: drives are short temporary paths on our Windows PC; use your own extracted folders and file.</figcaption></figure>
-<ol><li><strong>Aeon Edition:</strong> choose <strong>Choose mod folder&hellip;</strong>, open the extracted Aeon Edition folder, and select that folder. It must contain <code>Data</code>. Do not select your Steam game folder. When its path appears, click <strong>Add to the order</strong> and wait for Forge to finish reading it. Aeon is large, so this can take several minutes.
+<ol><li><strong>Aeon Edition:</strong> choose <strong>Choose mod folder&hellip;</strong>, open the prepared Aeon Edition folder, and select that folder. It must directly contain the new <code>Data</code> folder with <code>CompiledDefs</code>, <code>graphics</code>, <code>Levels</code>, <code>lang</code> and <code>Bones</code> inside. Do not select your Steam game folder. When its path appears, click <strong>Add to the order</strong> and wait for Forge to finish reading it. Aeon is large, so this can take several minutes.
 <figure><a href="05-aeon-selected.png"><img src="05-aeon-selected.png" alt="Aeon Edition folder selected in Forge Add a mod"></a><figcaption>Aeon's extracted parent folder is selected. Its <code>Data</code> folder is inside it.</figcaption></figure></li>
 <li><strong>Controller game data:</strong> click <strong>Browse&hellip; &rarr; Choose mod file&hellip;</strong>, select <code>ControllerSupport.fmp</code>, then click <strong>Add to the order</strong>.
 <figure><a href="06-fmp-selected.png"><img src="06-fmp-selected.png" alt="ControllerSupport.fmp selected in Forge Add a mod"></a><figcaption>Select the FMP file itself.</figcaption></figure></li>

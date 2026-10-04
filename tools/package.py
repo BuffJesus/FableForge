@@ -83,7 +83,8 @@ def package_guide(root, output=None):
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
             "Use the updated application build specified in the guide; the older rc.3 rejects this route.\n"
-            "Add the extracted Aeon folder (or its Data folder), controller FMP and original controller runtime folder in Forge, in that order.\n"
+            "Aeon 5.03 has no Data folder in the ZIP: put its Bones, CompiledDefs, graphics, lang and Levels folders in a new AeonEdition/Data folder.\n"
+            "Then add AeonEdition, controller FMP and the original controller runtime folder in Forge, in that order.\n"
             "Download FableForge separately from:\n"
             f"{download}\n\n"
             "This ZIP contains only the illustrated guide, not the application or mods.\n")
