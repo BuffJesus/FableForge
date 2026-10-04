@@ -63,6 +63,7 @@
 #include "forge/rangecodec.hpp"
 #include "forge/stage.hpp"
 #include "forge/modorder.hpp"
+#include "miniz/miniz.h"
 #include "forge/egocore.hpp"
 #include "forge/stb.hpp"
 #include "forge/stbbake.hpp"
@@ -7745,10 +7746,59 @@ int patchApply(const std::string& oldPath, const std::string& patchPath,
     return 0;
 }
 
+// Some historic FMPs put a u32 12345 and one zlib stream around the BIG file.
+// Inflate only that exact framing, with a hard cap and no trailing bytes. The
+// original stays untouched; openFully retains normalized bytes after scratch
+// cleanup so lazy entry reads never refer to the removed temporary file.
+forge::big::File openFmpPackage(const std::string& path) {
+    std::ifstream header(path, std::ios::binary);
+    if (!header) throw std::runtime_error("fmp: cannot open " + path);
+    uint8_t prefix[4]{};
+    header.read(reinterpret_cast<char*>(prefix), 4);
+    if (header.gcount() != 4 ||
+        !(prefix[0] == 0x39 && prefix[1] == 0x30 && prefix[2] == 0 && prefix[3] == 0))
+        return forge::big::File::open(path);
+
+    const auto packed = readAllBytes(path);
+    if (packed.size() <= 4 || packed.size() - 4 > std::numeric_limits<unsigned>::max())
+        throw std::runtime_error("fmp: invalid compressed wrapper length");
+    constexpr size_t maxBytes = 256u * 1024u * 1024u;
+    mz_stream stream{};
+    if (mz_inflateInit(&stream) != MZ_OK)
+        throw std::runtime_error("fmp: cannot initialize compressed wrapper reader");
+    stream.next_in = packed.data() + 4;
+    stream.avail_in = static_cast<unsigned>(packed.size() - 4);
+    std::vector<uint8_t> plain;
+    std::vector<uint8_t> chunk(32768);
+    int rc = MZ_OK;
+    do {
+        stream.next_out = chunk.data();
+        stream.avail_out = static_cast<unsigned>(chunk.size());
+        rc = mz_inflate(&stream, MZ_NO_FLUSH);
+        const size_t produced = chunk.size() - stream.avail_out;
+        if (produced > maxBytes - plain.size()) {
+            mz_inflateEnd(&stream);
+            throw std::runtime_error("fmp: compressed wrapper exceeds 256 MiB");
+        }
+        plain.insert(plain.end(), chunk.begin(), chunk.begin() + produced);
+    } while (rc == MZ_OK);
+    const bool complete = rc == MZ_STREAM_END && stream.avail_in == 0;
+    mz_inflateEnd(&stream);
+    if (!complete) throw std::runtime_error("fmp: incomplete or trailing compressed wrapper");
+    if (plain.size() < 4 || plain[0] != 'B' ||
+        !((plain[1] == 'I' && plain[2] == 'G' && plain[3] == 'B') ||
+          (plain[1] == 0 && plain[2] == 0 && plain[3] == 0)))
+        throw std::runtime_error("fmp: compressed wrapper does not contain BIG data");
+    const albion::detail::TemporaryDirectory scratch("fmp-wrapper-");
+    const auto normalized = scratch.path() / "package.fmp";
+    writeAllBytes(normalized.string(), plain);
+    return forge::big::File::openFully(normalized);
+}
+
 // List an .fmp (or any BIG) archive: banks and their changed entries. An .fmp is
 // a record-delta package, so this is a mod's footprint by container.
 int fmpList(const std::string& path, bool jsonOutput) {
-    const auto file = forge::big::File::open(path);
+    const auto file = openFmpPackage(path);
     size_t totalEntries = 0;
     for (const auto& b : file.banks()) totalEntries += b.entries.size();
 
@@ -7794,7 +7844,7 @@ int fmpList(const std::string& path, bool jsonOutput) {
 int fmpExtract(const std::string& fmpPath, const std::string& outDir,
                const std::string& bankFilter) {
     namespace fs = std::filesystem;
-    const auto pkg = forge::big::File::open(fmpPath);
+    const auto pkg = openFmpPackage(fmpPath);
     const std::string needle = lowered(bankFilter);
     size_t written = 0;
 
@@ -8094,7 +8144,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
              const std::string& schemaPath = {},
              forge::fmplinks::RecordLinks* symbolicLinks = nullptr) {
     namespace fs = std::filesystem;
-    const auto pkg = forge::big::File::open(fmpPath);
+    const auto pkg = openFmpPackage(fmpPath);
     for (const char* bankName : {"ScriptBINEntries", "FrontEndBINEntries"}) {
         const auto* bank = pkg.findBank(bankName);
         if (bank && !bank->entries.empty())
@@ -9577,6 +9627,25 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     return 0;
 }
 
+// A direct build may encounter an unreadable source after its definitions were
+// already written. Keep the caller's output untouched until composition succeeds.
+int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
+                      const std::vector<std::string>& sources,
+                      const std::string& fieldSchema, bool jsonOutput,
+                      const std::vector<std::string>& labels,
+                      const std::string& picksPath, bool allowCompleteData) {
+    const albion::detail::TemporaryDirectory workspace("mods-output-");
+    json report;
+    const int rc = modsMerge(baseRoot, workspace.path().string(), sources,
+                             fieldSchema, false, jsonOutput, labels, picksPath,
+                             nullptr, allowCompleteData,
+                             jsonOutput ? &report : nullptr);
+    if (rc != 0) return rc;
+    copyInstallTree(workspace.path(), outDir, true);
+    if (jsonOutput) std::puts(report.dump(2).c_str());
+    return 0;
+}
+
 // Read a Fable "FableSave!" save and print its decoded HEADER section (world/
 // region/save meta + gameplay flags). Read-only. Hero stats (gold/morality) are
 // in the entity graph and not decoded yet — see forge/save.hpp.
@@ -9625,7 +9694,7 @@ int saveRead(const std::string& path, bool jsonOutput) {
 
 // Hidden: read a BIG/.fmp and re-serialize it (validates forge::big::serialize).
 int fmpRewrite(const std::string& inPath, const std::string& outPath) {
-    const auto f = forge::big::File::open(inPath);
+    const auto f = openFmpPackage(inPath);
     writeAllBytes(outPath, f.serialize());
     std::printf("rewrote %s -> %s\n", inPath.c_str(), outPath.c_str());
     return 0;
@@ -12849,7 +12918,10 @@ int main(int argc, char** argv) {
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
+                    if (!doStage)
+                        return modsMergePrepared(root, args[3], sources, fieldSchema, asJson,
+                                                 mo::buildLabels(order), picksPath, mo::installsCompleteData(order));
+                    return modsMerge(root, args[3], sources, fieldSchema, true, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
                 }
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
@@ -12874,7 +12946,10 @@ int main(int argc, char** argv) {
                 sources.push_back(args[i]);
             }
             (void)seenWith;
-            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson, {}, "", nullptr, installData);
+            if (!doStage)
+                return modsMergePrepared(args[2], args[3], sources, fieldSchema,
+                                         asJson, {}, "", installData);
+            return modsMerge(args[2], args[3], sources, fieldSchema, true, asJson, {}, "", nullptr, installData);
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

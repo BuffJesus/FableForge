@@ -2,6 +2,18 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-04 historic wrapper support: 73 packages in the user's 2019 forum
+attachment corpus start with little-endian `12345` followed by one zlib stream
+containing a BIG FMP. The CLI's FMP list/extract/apply/rewrite paths now accept
+these originals directly. Inflation is capped at 256 MiB and requires a complete
+stream, no trailing bytes and a BIG magic. The source package is never changed;
+rewrite/export still emit ordinary BIG FMP bytes. All 73 original listings match
+their independently normalized copies; one payload rewrite matches, synthetic
+wrapped/unwrapped apply and merge outputs match, malformed wrappers refuse, and
+the existing 16 FMP record/refusal cases pass. This is
+container access, not proof that the packages' linked definitions, asset banks
+or gameplay are supported.
+
 2026-10-03 linking correction: the importer previously skipped link metadata.
 Controller Support's raw camera IDs did not match even normalized retail output;
 12 of its 14 named references were wrong. Record names and binding counts alone

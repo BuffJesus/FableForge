@@ -50,7 +50,7 @@ def main():
     assert locked.returncode != 0, locked.stdout.decode(errors='replace')
     assert b'cannot read' in locked.stderr, locked.stderr
     assert digest(changed) == source_hash and digest(prior) == prior_hash
-    assert not (out/'data/Misc/shared.asset').exists()
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob('*')) == ['prior.txt']
 
     unlocked = subprocess.run(command, cwd=repo, capture_output=True, timeout=120)
     (work/'unlocked.log').write_bytes(unlocked.stdout + unlocked.stderr)

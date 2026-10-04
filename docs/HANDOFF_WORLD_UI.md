@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 direct mod-build late-read preservation
+
+Direct `forge-tools mods merge` and registered `mods build` without `--stage` now
+compose in an owned temporary directory and copy the result to the requested
+output only after a successful composition. A late unreadable source therefore
+does not leave a prepared `game.bin` or other new files beside an existing
+output sentinel. The Windows locked-source regression checks the entire output
+inventory before retry, and the unlocked retry succeeds. All 29 bank refusal/
+carry cases and the 50-command Nexus load-order check plus Mods UI script pass.
+The Release CLI target builds. A failure during the final file copy can still
+leave a partial requested output; this is late-read preservation, not a
+transactional publish or a change to staged deployment. Source mods and the
+game install were not written.
+
+Historic compressed FMP wrapper reading is now implemented separately. The
+user's 2019 mirror has 73 distinct `12345 + zlib` packages; all 73 originals
+produce the same CLI listing as their independently normalized BIG copies.
+One original/normalized payload rewrite pair is byte-equal; synthetic wrapped
+and plain package apply/merge outputs match. Truncated,
+trailing-data, non-BIG and >256 MiB wrappers refuse while preserving prior
+output. The 16 FMP record/refusal cases pass after this change. Only the CLI
+FMP surfaces (list/extract/apply/rewrite) use this wrapper reader; it does not
+make unsupported linked, asset-bank or unnamed-record edits installable. The
+original corpus and game install were read only. See the FableTLC 2026-10-02
+FMP corpus journal and `docs/modding/CONTENT_OVERRIDES.md`.
+
 ## 2026-10-04 Aeon/controller prerelease published
 
 `v0.18.1-rc.1` tags `f5c763a` and is published as a GitHub prerelease:
