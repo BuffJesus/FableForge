@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 bedtime: resume Forge-managed installation work
+
+User explicitly stopped work for shutdown and requested a tomorrow handoff.
+Active implementation is checkpointed at `a0fbb3a` on
+`feat/forge-complete-data-install-20261003` in
+`D:/Code/FableForge-overhaul-review`. Read that checkout's
+`docs/HANDOFF_WORLD_UI.md` first: it records exact evidence, remaining checks and
+the resume commands. Primary implementation has not received this WIP.
+
+The user requires the original managed route: select extracted Aeon, controller
+FMP and original controller runtime; Forge performs installation and removal.
+The manual-copy/two-source guide in this primary checkout is superseded as the
+intended workflow and must not be offered as the resolution.
+
+New installer builds and passes 14 native fixture checks, both-size actual Add/
+check/deploy/redeploy/undeploy fixtures, the established 50-command corpus and
+29 bank-preservation/refusal checks. Real three-source CLI verifies 16362 retained
+Aeon records, all 6625 unnamed entries, 14 links, 942 other files and 843 authored
+WAD level payloads. Broader existing-archive audit covers 73 unique FMPs: 37
+preservation-checked builds and 36 explicit refusals on each definition baseline.
+Refusals are not compatibility successes; gameplay remains untested.
+
+Real three-source GUI/illustrated-guide capture is still pending after a fixture
+mistake used an old screenshot as a deployment checkpoint. Driver corrected;
+old two-source illustrations must not ship with the rewritten guide. Core/package
+acceptance, other large-pack installation checks, known unreadable-file comparison
+bug and eventual integration remain. All owned test/build processes were absent
+at shutdown; the retained real GUI scratch baseline has no stage manifest.
+No live game, corpus, Discord or release changes were made.
+
 ## 2026-10-03 primary scalar choices and Aeon preservation integration
 
 Accepted review commits d2c438a, 1cfd14a, 7e1722b, ef87f9f and 9bc1f1d are
