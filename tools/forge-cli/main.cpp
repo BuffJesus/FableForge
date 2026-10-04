@@ -8264,6 +8264,25 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             throw std::runtime_error("FMP graphics: metadata has no unique mesh " + entry.name);
         const auto mesh = std::find_if(meshes->entries.begin(), meshes->entries.end(),
             [&](const forge::big::Entry& e) { return e.name == entry.name; });
+        // The Info descriptor stores bounds, LOD sizes and then a counted
+        // texture-ID list. A matching physics ID or float bit pattern elsewhere
+        // in this header is not evidence that the mesh references the texture.
+        const auto& info = mesh->subHeader;
+        auto word = [&](size_t at) {
+            if (at > info.size() || info.size() - at < 4)
+                throw std::runtime_error("FMP graphics: truncated mesh Info for " + entry.name);
+            uint32_t value = 0;
+            std::memcpy(&value, info.data() + at, 4);
+            return value;
+        };
+        const uint32_t lodCount = word(44);
+        if (!lodCount || lodCount > 8)
+            throw std::runtime_error("FMP graphics: invalid mesh Info LOD count for " + entry.name);
+        const size_t textureCountAt = 52 + size_t(lodCount) * 4;
+        const uint32_t textureCount = word(textureCountAt);
+        const size_t textureStart = textureCountAt + 4;
+        if (textureCount > (info.size() - textureStart) / 4)
+            throw std::runtime_error("FMP graphics: truncated mesh Info texture list for " + entry.name);
         for (const auto& link : forge::fmplinks::readMetadata(package.entryData(entry))) {
             if (!link.path.ends_with(".BaseTexture") &&
                 !link.path.ends_with(".BumpMapTexture") &&
@@ -8274,9 +8293,8 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             if (texture == bank->entries.end())
                 throw std::runtime_error("FMP graphics: " + entry.name + " needs missing texture " + link.target);
             bool referenced = false;
-            for (size_t at = 0; at + 4 <= mesh->subHeader.size(); at += 4) {
-                uint32_t id = 0;
-                std::memcpy(&id, mesh->subHeader.data() + at, 4);
+            for (size_t index = 0; index < textureCount; ++index) {
+                const uint32_t id = word(textureStart + index * 4);
                 if (id == texture->id) { referenced = true; break; }
             }
             if (!referenced)

@@ -8740,3 +8740,28 @@ The audit now accepts explicit `--start-index` and `--timeout`, records selected
 and full eligible scope independently, and retains timeouts as inconclusive
 `not_applied_timeout` rows before continuing. A completed selected scope is not
 an assertion that the omitted prefix was tested or that timeouts were accepted.
+
+Red EXP's 180-second retry also times out, with complete one-package scope and
+an explicit inconclusive row at `build/named-fmp-coverage-0c4po547/result.json`.
+Two forced 1 ms timeouts in `build/named-fmp-coverage-6igp474z/result.json`
+verify that the audit continues, records both results and never counts a timeout
+as accepted. Archive, baseline and importer hashes stay unchanged.
+
+## 2026-10-04 mesh Info texture-list validation
+
+FMP graphics metadata now checks named texture IDs only in the descriptor's
+counted texture list after its bounds, LOD sizes and safe-radius word. A matching
+physics ID or float bit pattern elsewhere no longer counts as a texture
+reference. LOD count is bounded to the existing mesh-reader limit of eight;
+texture counts must fit the available descriptor bytes. Opaque trailing bytes
+remain untouched. This is list-membership validation, not per-material symbolic
+relocation or verification that each metadata path names the correct material.
+
+`tools/test_fmp_graphics_texture_list.py` passes on original Hollow Wip:
+its valid descriptor is preserved. Moving the sole HOLLOW_TEX1 ID into the
+physics slot while removing it from the texture list refuses. Oversized LOD
+and texture counts also refuse. All three malformed cases preserve prior output
+in both direct apply and final composition (six refusal checks). Evidence:
+`build/fmp-graphics-texture-list-35x60183/result.json`; input hashes unchanged.
+An owned verification checkout on C: is being prepared for broader bank checks
+because the D: drive has shown sustained I/O queueing during these writes.
