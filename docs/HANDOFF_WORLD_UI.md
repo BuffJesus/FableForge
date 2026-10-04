@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 extracted conflict-choice feedback acceptance
+
+Product 34b29bf passes THREE focused extracted workflows (unreported choices,
+field details, raw-file snapshots), not a repeated full 39-workflow package gate.
+build/choice-feedback-package-focus-39id32ga/result.json records all return codes
+0, 103 file identities, 116 local documentation links/four guide images and
+literal percent-token/ampersand extraction from unrelated cwd. CLI executables
+match the preceding full-39 7b1c043 archive except strip's PE timestamp/checksum;
+compiler/schema are byte-identical. Raw-file source regression 84puxyap also
+passes both sizes. Application ZIP SHA256:
+71e83582ac3a0cba87590198612899004615b68181ef3fbad52e8ea194c1beb2,
+dist/development/20261003-34b29bf/FableForge-0.18.0-dev-win64.zip; guide alongside.
+
+Expanded registered choice fixture qnvz6gnf passes against that same extracted
+product: sharing-locked saves and exclusive unreadable input after report load,
+normal/compact bounds, preserved file/winner, destination reset and same-process
+retry; all earlier empty-order/search/compose/inventory checks pass. Its first
+unreadable attempt 78qy6elh exercised correct refusal/retry but used mod_pick
+rather than mod_pick_refused, making the fixture fail; no product change needed.
+Compact read-error screenshot inspected. Additional fixture changes are test-only.
+All original/other-install/source bytes stay intact. No active review test/build
+remains. Promotion/rebuild is next; last full source gate still b1eb3b9.
+
 ## 2026-10-03 isolated conflict-choice failure feedback
 
 Review feat/forge-choice-save-feedback-20261003 starts at primary 6258a31.

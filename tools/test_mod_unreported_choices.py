@@ -65,7 +65,7 @@ def main():
         else: assert independent.read_bytes() == b'Independent PackA'
         assert not (output/'data/Misc/missing-target-with-a-long-readable-name.txt').exists()
     check_build('before', True)
-    def run(case, size, lines, unlock=None):
+    def run(case, size, lines, unlock=None, checkpoints=()):
         case.mkdir()
         script = case/'review.txt'
         script.write_text('\n'.join(lines+['quit'])+'\n', encoding='utf-8')
@@ -75,12 +75,14 @@ def main():
                 env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
                          APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata')))
             try:
-                if unlock:
+                callbacks=list(checkpoints)
+                if unlock:callbacks.append(('locked.png',unlock))
+                for filename,callback in callbacks:
                     deadline=time.monotonic()+150
-                    while not (case/'locked.png').exists() and process.poll() is None and time.monotonic()<deadline:
+                    while not (case/filename).exists() and process.poll() is None and time.monotonic()<deadline:
                         time.sleep(.01)
-                    assert (case/'locked.png').exists(),'locked choice checkpoint missing'
-                    unlock()
+                    assert (case/filename).exists(),f'choice checkpoint missing: {filename}'
+                    callback()
                 rc=process.wait(timeout=180)
             finally:
                 if process.poll() is None: process.terminate();process.wait(timeout=10)
@@ -161,6 +163,39 @@ def main():
             if handle is not None:kernel.CloseHandle(handle)
     picks.write_bytes(original)
     assert not list(root.glob('.forge-mod-picks-*'))
+    for size,scale in [('1440x900',1),('800x600',1.5)]:
+        case=work/('unreadable-'+size);handle=None
+        def lock_read():
+            nonlocal handle
+            handle=kernel.CreateFileW(str(picks),0x80000000,0,None,3,0x80,None)
+            assert handle != wintypes.HANDLE(-1).value
+        def unlock_read():
+            nonlocal handle
+            kernel.CloseHandle(handle);handle=None
+            assert picks.read_bytes()==original
+        try:
+            lines=start(scale)+[f'screenshot {(case/"read-ready.png").as_posix()}','frames 300',
+                'mod_pick_refused * vanilla','frames 3','assert_state mod_choice_failed 1',
+                'assert_state mods_picks 3','assert_state mods_first_winner PackA',
+                'assert_log cannot read conflict choices','clear_toasts']
+            lines+=reveal('mods_choice_error')+['dump_widget mods_choice_error',
+                f'screenshot {(case/"read-failed.png").as_posix()}','frames 300',
+                'mod_pick * vanilla','frames 3','assert_state mod_choice_failed 0',
+                'assert_state mods_picks 3','assert_state mods_first_winner vanilla']
+            log=run(case,size,lines,checkpoints=[('read-ready.png',lock_read),('read-failed.png',unlock_read)])
+            expected=dict(line.split('\t',1) for line in original.decode().splitlines())
+            expected['file:data/misc/shared.txt']='vanilla'
+            actual=dict(line.split('\t',1) for line in picks.read_text().splitlines() if line and not line.startswith('#'))
+            assert actual==expected
+            rect=re.search(r'widget_rect mods_choice_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
+            clip=re.search(r'widget_clip_rect mods_choice_error ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
+            assert rect and clip
+            left,top,right,bottom=map(float,rect.groups());cl,ct,cr,cb=map(float,clip.groups())
+            assert cl<=left<right<=cr and ct<=top<bottom<=cb
+            print(size,'unreadable choices, unchanged file/winner and same-process retry: PASS',flush=True)
+        finally:
+            if handle is not None:kernel.CloseHandle(handle)
+        picks.write_bytes(original)
     lines = start(1.5)+['assert_state mods_unreported_choices 2']
     lines += reveal('mod_clear_unreported_0')+['click mod_clear_unreported_0', 'frames 3',
         'assert_state mods_unreported_choices 1', 'assert_state mods_picks 2']
