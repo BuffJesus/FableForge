@@ -20,6 +20,7 @@ PACKAGES = {
     'super': 'mods/Lamp-Super Bright.fmp',
     'invalid': 'mods/Fireball to dreadwing magic.fmp',
     'silver': 'mods/0 Silver Keys Needed.fmp',
+    'always': 'mods/Alwaysthere001.fmp',
 }
 LIGHT = 12869
 
@@ -119,6 +120,21 @@ def main():
         failure = run(args.tool, 'fmp', 'apply', no_effects, silver, absent, ok=False)
         assert 'missing target CHEST_OPEN_01' in failure.stderr and not absent.exists()
 
+        # A native CREATURE control nests DeadBodyDecayEffect after a float.
+        # ChocolateBox calls its link path "unknown"; the guarded nested tag
+        # must resolve through the same effects.big identity table.
+        always = packages['always']
+        always_direct, always_merged = work/'always-direct', work/'always-merged'
+        run(args.tool, 'fmp', 'apply', args.install, always, always_direct)
+        run(args.tool, 'mods', 'merge', args.install, always_merged,
+            '--with', always, json_output=True)
+        for bank_name in ('game.bin', 'names.bin'):
+            assert digest(always_direct/'data/CompiledDefs'/bank_name) == digest(
+                always_merged/'data/CompiledDefs'/bank_name)
+        decay = read_bank(always_merged)[1591]['data']
+        decay_marker = decay.find(bytes.fromhex('2cf7f120'))
+        assert decay_marker >= 0 and struct.unpack_from('<I', decay, decay_marker + 4)[0] == 909
+
         schema = repo/'docs/re_reference/def_schema.json'
         ab = work/'ab'
         report = run(args.tool, 'mods', 'merge', args.install, ab,
@@ -150,7 +166,7 @@ def main():
         assert not invalid.exists()
     assert hashes == {str(path): digest(path) for path in sources}
     print('Anonymous FMPs: direct/merged bytes agree, real lamp load order and '
-          'saved pick win, Silver Keys effect links resolve, missing effect '
+          'saved pick win, chest/creature effect links resolve, missing effect '
           'and invalid baseline ID refuse')
 
 

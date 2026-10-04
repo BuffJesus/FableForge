@@ -8428,9 +8428,11 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 for (const auto& texture : packageTextures->entries)
                     (*textureIds)[texture.name] = texture.id;
         }
-        if (!effectIds && entry->definition == "CChestDef" &&
+        if (!effectIds &&
+            (entry->definition == "CChestDef" || entry->definition == "CREATURE") &&
             std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path == "714092448.unknown"; }))
+                [](const auto& link) { return link.path == "714092448.unknown" ||
+                                             link.path == "754446624.unknown"; }))
             effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
                 "data" / "Misc" / "pc" / "effects.big"));
         auto owner = *entry;
@@ -9077,7 +9079,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     const bool hasNamedEffectLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
-                if (link.path == "714092448.unknown") return true;
+                if (link.path == "714092448.unknown" ||
+                    link.path == "754446624.unknown") return true;
         return false;
     });
     auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {

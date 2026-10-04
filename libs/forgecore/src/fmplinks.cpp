@@ -383,6 +383,20 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
     // controls under its first unresolved field. Validate the complete local
     // tag sequence before addressing a native ChocolateBox weapon/brain link.
     if (entry.definition == "CREATURE" && parts.size() == 2) {
+        if (link.path == "754446624.unknown") {
+            size_t nestedOffset = decoded.prefixLen;
+            for (size_t i = 0; i < decoded.fields.size(); ++i) {
+                const auto& field = decoded.fields[i]; nestedOffset += 4;
+                // Native control 2CF7F120 is DeadBodyDecayEffect -> EffectID.
+                // The current schema groups it with the preceding float.
+                if (field.name == "RecoverEvadeHitsPercent" &&
+                    field.value.size() == 12 &&
+                    read32(field.value, 4) == defdecode::fieldTag("DeadBodyDecayEffect"))
+                    return {nestedOffset + 8, i + 1, Destination::EffectEntry};
+                nestedOffset += field.value.size();
+            }
+            fail("unsupported CREATURE decay effect layout in " + entry.name);
+        }
         const bool primary = link.path == "3898150842.Weapon1ID";
         const bool secondary = link.path == "2486342274.Weapon2ID";
         const bool brain = link.path == "1867951032.BrainID";

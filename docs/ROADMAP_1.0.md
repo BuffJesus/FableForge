@@ -69,6 +69,12 @@ The verified chest particle-effect link now resolves through `effects.big` in
 both direct FMP apply and final composition. Two original Silver Keys packages
 raise the small-bank accepted count to 224 of 577 attempted; missing effect
 targets still refuse before writing.
+The guarded nested `CREATURE.DeadBodyDecayEffect` link resolves through
+`effects.big` as well. Original archived `Alwaysthere001.fmp` passes direct
+apply and composition with matching definition banks; the full eligible
+small-bank scan rises to 320/577, an additional 96 accepted packages. The
+remaining 238 link refusals and 244 deferred large-bank packages are ongoing
+corpus work, not gameplay compatibility claims.
 
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover

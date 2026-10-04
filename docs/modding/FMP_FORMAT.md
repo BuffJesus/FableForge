@@ -239,6 +239,19 @@ The real Silver Keys direct apply and final composer produce byte-identical
 `tools/test_fmp_anonymous_layers.py` checks these cases. Other effect link
 shapes remain subject to their own layout and target verification.
 
+2026-10-04 creature decay-effect follow-up: ChocolateBox control `2CF7F120`
+appears as `754446624.unknown` in FMP links. In `CREATURE`, its four-byte
+`EffectID` follows a four-byte float and the nested control tag inside the
+schema's `RecoverEvadeHitsPercent` field. The linker checks that exact 12-byte
+layout before writing the ID from `effects.big`. The archived
+`Alwaysthere001.fmp` links `DEATH_CRUMBLE_HUMAN` to retail ID 909; direct
+apply and final composition produce byte-identical definition banks. The full
+small-bank scan at `build/named-fmp-coverage-xnelc49n/result.json` accepts
+320 of 577 attempted packages, 96 more than before this field was supported.
+The remaining 238 link refusals have other causes; 244 packages with large
+texture or graphics banks were deferred. This remains an offline import test,
+not proof that the mods work during gameplay.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16
