@@ -1058,9 +1058,12 @@ the writer still refuses fields whose multi-target byte layout is unknown.
 `CEngineGraphic.Model ID` now resolves to a named mesh in the planned graphics
 bank. A scratch merge of the real Huge Mushroom FMP independently verified seven
 new objects against seven exact output meshes with no introduced missing assets.
-This is an offline definition/asset check; placement, viewport rendering and
-gameplay remain unverified. See `tools/test_fmp_named_mesh_refs.py` and the
-format notes for the audit counts and remaining limits.
+The Huge Mushroom editor probe then deployed the archived FMP through the Mods
+panel, found its textured mesh in Models, placed its object in a scratch map,
+and showed the selected geometry in the viewport. Undeploy removed the model
+and restored original banks byte for byte. Gameplay and the other archived
+packages remain unverified. See `tools/test_fmp_named_mesh_refs.py`,
+`tools/test_fmp_named_object_ui.py` and the format notes for audit limits.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

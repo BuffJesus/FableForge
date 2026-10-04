@@ -308,5 +308,12 @@ four-byte model id inside the field. `tools/test_fmp_named_mesh_refs.py` merged
 the archived `Huge Mushroom.fmp` into a scratch install and independently
 checked all seven `OBJECT_*` fields against the seven exact mesh entries in the
 output BIG. No new missing assets were reported, and the source archive and
-install files were unchanged. This establishes offline object-to-mesh linkage;
-the objects have not been placed in a map or checked in the viewport or game.
+install files were unchanged. `tools/test_fmp_named_object_ui.py` then deployed
+the same package into a separate scratch install through the Mods panel. Forge's
+Models browser listed the new mesh with `OBJECT_HUGE_SHROOM_01_BIT_01` as its
+user and displayed its textured preview. The editor placed that object in a
+scratch map and showed its selected geometry in the viewport. Undeploy removed
+the new model from the browser and restored the original banks byte for byte.
+Screenshots are retained under `build/fmp-named-object-ui-2ysxv1z6/` in this
+checkout. This verifies Forge's editor path for this package; the game and
+other archived packages have not been checked.
