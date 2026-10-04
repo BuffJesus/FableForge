@@ -72,6 +72,12 @@ def main():
     tool_hash = digest(args.tool)
     baseline = args.install/'data/CompiledDefs'
     baseline_hashes = {name: digest(baseline/name) for name in ('game.bin', 'names.bin')}
+    asset_paths = []
+    if args.apply_textures:
+        asset_paths.append('data/graphics/pc/textures.big')
+    if args.apply_graphics:
+        asset_paths.append('data/graphics/graphics.big')
+    asset_hashes = {name: digest(args.install/name) for name in asset_paths}
     results = []
     with zipfile.ZipFile(args.archive) as archive:
         catalogue = json.loads(archive.read('catalogue.json'))
@@ -87,6 +93,7 @@ def main():
                 'archive': str(args.archive.resolve()), 'archive_sha256': archive_hash,
                 'baseline': str(args.install.resolve()), 'tool': str(args.tool.resolve()),
                 'tool_sha256': tool_hash, 'baseline_sha256': baseline_hashes,
+                'baseline_asset_sha256': asset_hashes,
                 'eligible_total': len(eligible), 'all_catalogue_total': len(catalogue),
                 'eligible_archive_total': eligible_archive_total, 'start_index': args.start_index,
                 'timeout_seconds': args.timeout,
@@ -143,6 +150,7 @@ def main():
     assert digest(args.archive) == archive_hash
     assert digest(args.tool) == tool_hash, 'Importer binary changed during the corpus audit'
     assert {name: digest(baseline/name) for name in baseline_hashes} == baseline_hashes
+    assert {name: digest(args.install/name) for name in asset_hashes} == asset_hashes
     checkpoint(complete=True)
     print('Result:', work/'result.json', flush=True)
 
