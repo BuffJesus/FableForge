@@ -65,6 +65,10 @@ archive scratch scan accepts 222 of 577 attempted small-bank FMPs, up from
 197 before this exception; 244 large texture/graphics packages remain deferred
 from apply testing. Original Bandit Beard and two conflicting lamp FMPs pass
 byte, precedence, and GUI deploy/restore checks. See `docs/modding/FMP_FORMAT.md`.
+The verified chest particle-effect link now resolves through `effects.big` in
+both direct FMP apply and final composition. Two original Silver Keys packages
+raise the small-bank accepted count to 224 of 577 attempted; missing effect
+targets still refuse before writing.
 
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover

@@ -4821,6 +4821,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::vector<forge::fmplinks::RecordLinks>* rootLinks = nullptr,
               const std::map<std::string, uint32_t>* meshIds = nullptr,
               const std::map<std::string, uint32_t>* textureIds = nullptr,
+              const std::map<std::string, uint32_t>* effectIds = nullptr,
               const std::vector<bool>* numericFmpRoots = nullptr) {
     namespace fs = std::filesystem;
 
@@ -4920,7 +4921,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             if (version.links.empty()) continue;
             forge::bin::Entry entry{version.definition, name, 0, version.data};
             version.data = forge::fmplinks::relink(entry, identities, *schema, version.links,
-                                                  true, meshIds, textureIds);
+                                                  true, meshIds, textureIds, effectIds);
         }
     }
     forge::fmplinks::RecordLinks selectedLinks;
@@ -5071,7 +5072,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, merged, *schema, links,
-                                           false, meshIds, textureIds);
+                                           false, meshIds, textureIds, effectIds);
         merged.setEntryData(found->second, std::move(data));
     }
 
@@ -8285,6 +8286,9 @@ std::map<std::string, uint32_t> meshIdentityMap(const std::filesystem::path& fil
 std::map<std::string, uint32_t> textureIdentityMap(const std::filesystem::path& file) {
     return assetIdentityMap(file, "GBANK_MAIN_PC");
 }
+std::map<std::string, uint32_t> effectIdentityMap(const std::filesystem::path& file) {
+    return assetIdentityMap(file, "PARTICLE_MAIN_PC");
+}
 
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
 // drop-in root. This normalizes an .fmp mod into the same root-based shape the
@@ -8398,6 +8402,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     std::optional<forge::defschema::Schema> linkSchema;
     std::optional<std::map<std::string, uint32_t>> meshIds;
     std::optional<std::map<std::string, uint32_t>> textureIds;
+    std::optional<std::map<std::string, uint32_t>> effectIds;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
@@ -8423,12 +8428,18 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 for (const auto& texture : packageTextures->entries)
                     (*textureIds)[texture.name] = texture.id;
         }
+        if (!effectIds && entry->definition == "CChestDef" &&
+            std::any_of(recordLinks.begin(), recordLinks.end(),
+                [](const auto& link) { return link.path == "714092448.unknown"; }))
+            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
+                "data" / "Misc" / "pc" / "effects.big"));
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
                                           symbolicLinks != nullptr,
                                           meshIds ? &*meshIds : nullptr,
-                                          textureIds ? &*textureIds : nullptr);
+                                          textureIds ? &*textureIds : nullptr,
+                                          effectIds ? &*effectIds : nullptr);
         game.setEntryData(index, std::move(data));
         linked += recordLinks.size();
     }
@@ -9050,6 +9061,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
     std::optional<std::map<std::string, uint32_t>> plannedTextureIds;
+    std::optional<std::map<std::string, uint32_t>> plannedEffectIds;
     const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
@@ -9060,6 +9072,12 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (const auto& [name, links] : records)
             for (const auto& link : links)
                 if (link.path.ends_with(".TorsoMainTextureID")) return true;
+        return false;
+    });
+    const bool hasNamedEffectLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
+        for (const auto& [name, links] : records)
+            for (const auto& link : links)
+                if (link.path == "714092448.unknown") return true;
         return false;
     });
     auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {
@@ -9088,10 +9106,14 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (hasNamedTextureLinks)
         plannedTextureIds.emplace(planAssetIds(fs::path("graphics") / "pc" / "textures.big",
                                                "GBANK_MAIN_PC", "maintextures"));
+    if (hasNamedEffectLinks)
+        plannedEffectIds.emplace(planAssetIds(fs::path("Misc") / "pc" / "effects.big",
+                                              "PARTICLE_MAIN_PC", "effects"));
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
                              schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
                              plannedMeshIds ? &*plannedMeshIds : nullptr,
-                             plannedTextureIds ? &*plannedTextureIds : nullptr, &numericFmpRoots);
+                             plannedTextureIds ? &*plannedTextureIds : nullptr,
+                             plannedEffectIds ? &*plannedEffectIds : nullptr, &numericFmpRoots);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 

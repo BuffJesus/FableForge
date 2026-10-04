@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import shutil
+import struct
 import subprocess
 import tempfile
 import zipfile
@@ -17,6 +19,7 @@ PACKAGES = {
     'bright': 'mods/Brighterlamp.fmp',
     'super': 'mods/Lamp-Super Bright.fmp',
     'invalid': 'mods/Fireball to dreadwing magic.fmp',
+    'silver': 'mods/0 Silver Keys Needed.fmp',
 }
 LIGHT = 12869
 
@@ -49,7 +52,8 @@ def main():
     parser.add_argument('--tool', type=Path, default=repo/'build/forge-tools.exe')
     args = parser.parse_args()
     sources = (args.archive, args.install/'data/CompiledDefs/game.bin',
-               args.install/'data/CompiledDefs/names.bin')
+               args.install/'data/CompiledDefs/names.bin',
+               args.install/'data/Misc/pc/effects.big')
     hashes = {str(path): digest(path) for path in sources}
     build = (repo/'build').resolve()
     with tempfile.TemporaryDirectory(prefix='fmp-anonymous-layers-', dir=build) as temp:
@@ -77,6 +81,43 @@ def main():
         assert digest(direct/'data/CompiledDefs/game.bin') == digest(
             merged/'data/CompiledDefs/game.bin')
         assert read_bank(merged)[11696]['data'] == beard['']['payload']
+
+        # The original Silver Keys package links five blank-name chest records
+        # to CHEST_OPEN_01 in effects.big. Retail gives that effect ID 391.
+        silver = packages['silver']
+        listing = run(args.tool, 'fmp', 'list', silver, json_output=True)
+        chest_ids = [entry['id'] for bank in listing['banks']
+                     if bank['bank'] == 'GameBINEntries' for entry in bank['entries']]
+        assert chest_ids == [12266, 12268, 12270, 12272, 12276]
+        effects = run(args.tool, 'big', 'list', args.install/'data/Misc/pc/effects.big',
+                      json_output=True)
+        particle = next(bank for bank in effects['banks'] if bank['bank'] == 'PARTICLE_MAIN_PC')
+        assert next(entry['id'] for entry in particle['entries']
+                    if entry['name'] == 'CHEST_OPEN_01') == 391
+        silver_direct, silver_merged = work/'silver-direct', work/'silver-merged'
+        run(args.tool, 'fmp', 'apply', args.install, silver, silver_direct)
+        report = run(args.tool, 'mods', 'merge', args.install, silver_merged,
+                     '--with', silver, json_output=True)
+        assert report['defs']['summary']['applied'] == 4
+        assert digest(silver_direct/'data/CompiledDefs/game.bin') == digest(
+            silver_merged/'data/CompiledDefs/game.bin')
+        assert digest(silver_direct/'data/CompiledDefs/names.bin') == digest(
+            silver_merged/'data/CompiledDefs/names.bin')
+        silver_records = read_bank(silver_merged)
+        for chest_id in chest_ids:
+            payload = silver_records[chest_id]['data']
+            marker = payload.find(bytes.fromhex('2a902fa0'))
+            assert marker >= 0 and struct.unpack_from('<I', payload, marker + 4)[0] == 391
+
+        # A selected effect link must refuse when its target bank is absent.
+        no_effects = work/'no-effects'
+        no_effects_defs = no_effects/'data/CompiledDefs'
+        no_effects_defs.mkdir(parents=True)
+        for name in ('game.bin', 'names.bin'):
+            shutil.copyfile(args.install/'data/CompiledDefs'/name, no_effects_defs/name)
+        absent = work/'no-effects-output'
+        failure = run(args.tool, 'fmp', 'apply', no_effects, silver, absent, ok=False)
+        assert 'missing target CHEST_OPEN_01' in failure.stderr and not absent.exists()
 
         schema = repo/'docs/re_reference/def_schema.json'
         ab = work/'ab'
@@ -109,7 +150,8 @@ def main():
         assert not invalid.exists()
     assert hashes == {str(path): digest(path) for path in sources}
     print('Anonymous FMPs: direct/merged bytes agree, real lamp load order and '
-          'saved pick win, invalid baseline ID refuses')
+          'saved pick win, Silver Keys effect links resolve, missing effect '
+          'and invalid baseline ID refuse')
 
 
 if __name__ == '__main__':

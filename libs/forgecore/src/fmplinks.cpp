@@ -314,6 +314,13 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             if (parts.size() == 2 && !parts[1].empty() && field.value.size() == 4) {
                 if (field.type == "CDefString") return {offset, i + 1, Destination::NameOffset};
+                // ChocolateBox calls this path "unknown", but its CChestDef
+                // control 2A902FA0 is OpenParticleEffect -> EffectID. The
+                // retail value agrees with the named effects.big entry ID.
+                if (entry.definition == "CChestDef" &&
+                    link.path == "714092448.unknown" &&
+                    field.name == "OpenParticleEffect" && field.type == "int32")
+                    return {offset, i + 1, Destination::EffectEntry};
                 if (field.type == "int32" || field.type == "uint32" || field.type == "CDefIndex" || field.type == "J")
                     return {offset, i + 1, Destination::GameEntry};
                 // CREATURE's schema leaves GroupDef unresolved; the donor and
@@ -441,7 +448,8 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
                            const defschema::Schema& schema, std::span<const Link> links,
                            bool deferMissing,
                            const std::map<std::string, uint32_t>* meshIds,
-                           const std::map<std::string, uint32_t>* textureIds) {
+                           const std::map<std::string, uint32_t>* textureIds,
+                           const std::map<std::string, uint32_t>* effectIds) {
     auto data = entry.data; std::set<size_t> offsets;
     for (const auto& link : links) {
         const auto location = locate(entry, schema, link);
@@ -459,6 +467,11 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
             if (textureIds) {
                 const auto found = textureIds->find(link.target);
                 if (found != textureIds->end()) target = found->second;
+            }
+        } else if (location.destination == Destination::EffectEntry) {
+            if (effectIds) {
+                const auto found = effectIds->find(link.target);
+                if (found != effectIds->end()) target = found->second;
             }
         } else {
             const auto name = targets.originalNameOffset(link.target);

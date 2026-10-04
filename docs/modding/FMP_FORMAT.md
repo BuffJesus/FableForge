@@ -227,6 +227,18 @@ field conflicts, and a saved winner. `tools/test_fmp_anonymous_picks_ui.py`
 checks the real conflict and deployment in the Mods UI. Neither is a gameplay
 test.
 
+2026-10-04 effect-reference follow-up: the `CChestDef.OpenParticleEffect`
+metadata path `714092448.unknown` resolves against `PARTICLE_MAIN_PC` in the
+selected `data/Misc/pc/effects.big`. Retail `CHEST_OPEN_01` is ID 391, matching
+the stock chest field. Both the original `0 Silver Keys Needed.fmp` and
+`No Silver Key Need (Variant 1).fmp` now apply in the full eligible scan:
+224 accepted, 334 link refusals, 11 schema refusals, eight record refusals,
+and 244 deferred large-bank packages (`build/named-fmp-coverage-i22yc968/result.json`).
+The real Silver Keys direct apply and final composer produce byte-identical
+`game.bin` and `names.bin`; missing `effects.big` refuses before writing.
+`tools/test_fmp_anonymous_layers.py` checks these cases. Other effect link
+shapes remain subject to their own layout and target verification.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16
