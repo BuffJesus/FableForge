@@ -207,6 +207,15 @@ uint32_t read32(std::span<const uint8_t> bytes, size_t offset) {
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
     std::vector<Link> result;
     for (const auto& group : readMetadataGroups(bytes)) {
+        // CVillagePeopleDef contains two consecutive MaleTeacher controls with
+        // the same field tag. ChocolateBox records their two links as one
+        // VillagePeopleID group, in field order. Keep the occurrence in the
+        // internal path so field selection remains exact after composition.
+        if (group.path == "4272390883.VillagePeopleID" && group.targets.size() == 2) {
+            for (size_t i = 0; i < 2; ++i)
+                result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
+            continue;
+        }
         if (group.targets.size() != 1) {
             std::string detail;
             for (const auto& target : group.targets) {
@@ -268,10 +277,28 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
     const auto id = number(parts[0]);
     const uint32_t tag = (id >> 24) | ((id >> 8) & 0xff00u) |
                          ((id << 8) & 0xff0000u) | (id << 24);
+    const bool villagePair = entry.definition == "CVillagePeopleDef" &&
+        parts.size() == 3 && parts[0] == "4272390883" &&
+        parts[1] == "VillagePeopleID";
+    size_t villageOccurrence = 0;
+    size_t villageIndex = 0;
+    if (villagePair) {
+        villageIndex = number(parts[2]);
+        if (villageIndex >= 2 || std::count_if(decoded.fields.begin(), decoded.fields.end(),
+            [&](const auto& field) { return field.tag == tag && field.name == "MaleTeacher" &&
+                                            field.type == "int32" && field.value.size() == 4; }) != 2)
+            fail("invalid VillagePeopleID repeated-field layout");
+    }
     size_t offset = decoded.prefixLen;
     for (size_t i = 0; i < decoded.fields.size(); ++i) {
         const auto& field = decoded.fields[i]; offset += 4;
         if (field.tag == tag) {
+            if (villagePair) {
+                if (villageOccurrence++ == villageIndex)
+                    return {offset, i + 1, Destination::GameEntry};
+                offset += field.value.size();
+                continue;
+            }
             if (parts.size() == 2 && !parts[1].empty() && field.value.size() == 4) {
                 if (field.type == "CDefString") return {offset, i + 1, Destination::NameOffset};
                 if (field.type == "int32" || field.type == "uint32" || field.type == "CDefIndex" || field.type == "J")
@@ -322,6 +349,32 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             fail("unsupported reference field " + entry.name + ": " + field.name);
         }
         offset += field.value.size();
+    }
+    // The CREATURE schema currently groups several consecutive four-byte
+    // controls under its first unresolved field. Validate the complete local
+    // tag sequence before addressing a native ChocolateBox weapon/brain link.
+    if (entry.definition == "CREATURE" && parts.size() == 2) {
+        const bool primary = link.path == "3898150842.Weapon1ID";
+        const bool secondary = link.path == "2486342274.Weapon2ID";
+        const bool brain = link.path == "1867951032.BrainID";
+        if (primary || secondary || brain) {
+            size_t nestedOffset = decoded.prefixLen;
+            for (size_t i = 0; i < decoded.fields.size(); ++i) {
+                const auto& field = decoded.fields[i]; nestedOffset += 4;
+                if ((primary || secondary) && field.name == "InitialWeaponDef" &&
+                    field.value.size() == 20 &&
+                    read32(field.value, 4) == defdecode::fieldTag("PrimaryMeleeWeaponDef") &&
+                    read32(field.value, 12) == defdecode::fieldTag("SecondaryMeleeWeaponDef"))
+                    return {nestedOffset + (primary ? 8u : 16u), i + 1, Destination::GameEntry};
+                if (brain && field.name == "RangedWeaponDef" && field.value.size() == 28 &&
+                    read32(field.value, 4) == defdecode::fieldTag("InitialSheathedWeapon") &&
+                    read32(field.value, 12) == defdecode::fieldTag("PBrain") &&
+                    read32(field.value, 20) == defdecode::fieldTag("CreatureInteractionType"))
+                    return {nestedOffset + 16, i + 1, Destination::GameEntry};
+                nestedOffset += field.value.size();
+            }
+            fail("unsupported CREATURE weapon/brain field layout in " + entry.name);
+        }
     }
     fail("unknown field in " + entry.name + ": " + link.path);
 }

@@ -28,12 +28,12 @@ Bytes metadata() {
     b.push_back(16); word(b, 6); word(b, 4); string(b, 7, "TARGET"); b.insert(b.end(), {13, 3, 11});
     return b;
 }
-Bytes metadataTwo() {
+Bytes metadataTwo(const std::string& path = "123._") {
     Bytes b{0}; word(b, 1); word(b, UINT32_MAX); word(b, 1); word(b, 0);
     b.push_back(4); word(b, 1); text(b, "System.Collections.Specialized.NameValueCollection");
     word(b, 3); text(b, "Count"); text(b, "Keys"); text(b, "Values");
     b.insert(b.end(), {0, 6, 5, 8}); word(b, 1); ref(b, 2); ref(b, 3);
-    b.push_back(17); word(b, 2); word(b, 1); string(b, 4, "123._");
+    b.push_back(17); word(b, 2); word(b, 1); string(b, 4, path);
     b.push_back(16); word(b, 3); word(b, 1); ref(b, 5);
     b.push_back(4); word(b, 5); text(b, "System.Collections.ArrayList"); word(b, 3);
     text(b, "_items"); text(b, "_size"); text(b, "_version"); b.insert(b.end(), {5, 0, 0, 8, 8});
@@ -58,6 +58,11 @@ int main() {
           "two-target metadata is available for inspection");
     rejects([&] { forge::fmplinks::readMetadata(metadataTwo()); },
             "writer keeps unsupported two-target references guarded");
+    const auto villageLinks = forge::fmplinks::readMetadata(metadataTwo("4272390883.VillagePeopleID"));
+    check(villageLinks.size() == 2 &&
+          villageLinks[0].path == "4272390883.VillagePeopleID.0" && villageLinks[0].target == "FIRST" &&
+          villageLinks[1].path == "4272390883.VillagePeopleID.1" && villageLinks[1].target == "SECOND",
+          "repeated village controls preserve both ordered targets");
     for (size_t size = 0; size < valid.size(); ++size)
         rejects([&] { forge::fmplinks::readMetadata(std::span(valid).first(size)); }, "every truncated prefix refuses");
     auto bad = valid; bad.push_back(0);
@@ -145,6 +150,64 @@ int main() {
           "CEngineGraphic Model ID changes only its four-byte mesh reference");
     rejects([&] { forge::fmplinks::relink(object, targets, objectSchema, references); },
             "mesh link without an identity map refuses");
+
+    const auto villageSchema = forge::defschema::Schema::loadText(
+        R"({"CVillagePeopleDef":{"prefix_len":3,"fields":[{"name":"MaleTeacher","type":"int32"},{"name":"MaleTeacher","type":"int32"}]}})");
+    forge::defdecode::Decoded villageDecoded;
+    villageDecoded.prefix = {1, 0, 0}; villageDecoded.prefixLen = 3; villageDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField teacher;
+    teacher.name = "MaleTeacher"; teacher.type = "int32";
+    teacher.tag = forge::defdecode::fieldTag(teacher.name); teacher.tagOk = true;
+    word(teacher.value, 77);
+    villageDecoded.fields = {teacher, teacher};
+    forge::bin::Entry village{"CVillagePeopleDef", "VILLAGE_PROBE", 0,
+                              forge::defdecode::encode(villageDecoded)};
+    const auto originalVillage = village.data;
+    references = {{"4272390883.VillagePeopleID.0", "B"},
+                  {"4272390883.VillagePeopleID.1", "A"}};
+    auto linkedVillage = forge::fmplinks::relink(village, targets, villageSchema, references);
+    auto expectedVillage = originalVillage;
+    expectedVillage[7] = 1; expectedVillage[8] = expectedVillage[9] = expectedVillage[10] = 0;
+    expectedVillage[15] = expectedVillage[16] = expectedVillage[17] = expectedVillage[18] = 0;
+    check(linkedVillage == expectedVillage && village.data == originalVillage,
+          "both repeated MaleTeacher references change only their own words");
+    references = {{"4272390883.VillagePeopleID.2", "A"}};
+    rejects([&] { forge::fmplinks::relink(village, targets, villageSchema, references); },
+            "out-of-range repeated village reference refuses");
+
+    const auto creatureSchema = forge::defschema::Schema::loadText(
+        R"({"CREATURE":{"prefix_len":3,"fields":[{"name":"InitialWeaponDef","type":"?"},{"name":"RangedWeaponDef","type":"?"}]}})");
+    forge::defdecode::Decoded creatureDecoded;
+    creatureDecoded.prefix = {1, 0, 0}; creatureDecoded.prefixLen = 3; creatureDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField weapons, ranged;
+    weapons.name = "InitialWeaponDef"; weapons.type = "?";
+    weapons.tag = forge::defdecode::fieldTag(weapons.name); weapons.tagOk = true;
+    word(weapons.value, UINT32_MAX);
+    word(weapons.value, forge::defdecode::fieldTag("PrimaryMeleeWeaponDef")); word(weapons.value, 77);
+    word(weapons.value, forge::defdecode::fieldTag("SecondaryMeleeWeaponDef")); word(weapons.value, 78);
+    ranged.name = "RangedWeaponDef"; ranged.type = "?";
+    ranged.tag = forge::defdecode::fieldTag(ranged.name); ranged.tagOk = true;
+    word(ranged.value, UINT32_MAX);
+    word(ranged.value, forge::defdecode::fieldTag("InitialSheathedWeapon")); word(ranged.value, 0);
+    word(ranged.value, forge::defdecode::fieldTag("PBrain")); word(ranged.value, 79);
+    word(ranged.value, forge::defdecode::fieldTag("CreatureInteractionType")); word(ranged.value, 0);
+    creatureDecoded.fields = {weapons, ranged};
+    forge::bin::Entry creature{"CREATURE", "CREATURE_PROBE", 0,
+                               forge::defdecode::encode(creatureDecoded)};
+    const auto originalCreature = creature.data;
+    references = {{"3898150842.Weapon1ID", "B"}, {"2486342274.Weapon2ID", "A"},
+                  {"1867951032.BrainID", "B"}};
+    const auto linkedCreature = forge::fmplinks::relink(creature, targets, creatureSchema, references);
+    auto expectedCreature = originalCreature;
+    expectedCreature[15] = 1; expectedCreature[16] = expectedCreature[17] = expectedCreature[18] = 0;
+    expectedCreature[23] = expectedCreature[24] = expectedCreature[25] = expectedCreature[26] = 0;
+    expectedCreature[47] = 1; expectedCreature[48] = expectedCreature[49] = expectedCreature[50] = 0;
+    check(linkedCreature == expectedCreature && creature.data == originalCreature,
+          "nested creature weapon and brain links change only their validated words");
+    auto malformedCreature = creature;
+    malformedCreature.data[11] ^= 1;
+    rejects([&] { forge::fmplinks::relink(malformedCreature, targets, creatureSchema, references); },
+            "unexpected nested creature tag refuses");
 
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);

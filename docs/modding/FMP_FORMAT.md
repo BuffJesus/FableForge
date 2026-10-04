@@ -297,7 +297,7 @@ Named game link inspection now preserves complete target lists through
 `forge-tools fmp links <package> --groups --json`. The read-only corpus audit
 `tools/audit_named_fmp_links.py` decoded metadata from all 897 packages carrying
 game or object links. It counted 345,785 single-target groups and 17,007 groups
-with two to six targets across 219 packages. The writer still refuses these
+with two to six targets across 219 packages. The writer refuses unrecognized
 multi-target fields until each field's byte layout is established; for example,
 an augmentation effect list and a flourish effect list have distinct layouts.
 The audit is `build/named-fmp-link-audit.json`.
@@ -317,3 +317,14 @@ the new model from the browser and restored the original banks byte for byte.
 Screenshots are retained under `build/fmp-named-object-ui-2ysxv1z6/` in this
 checkout. This verifies Forge's editor path for this package; the game and
 other archived packages have not been checked.
+
+One verified exception to the multi-target refusal is the two repeated
+`MaleTeacher` controls in `CVillagePeopleDef`. The archived `Knothole Glade
+Children.fmp` records both names under one `VillagePeopleID` path; the linker
+keeps their order and addresses the two distinct four-byte fields. It also
+handles that package's nested `CREATURE` primary/secondary weapon and brain
+links after validating the complete local tag sequence. The unit test checks
+that only those words change. `tools/test_fmp_village_pair.py` checks the real
+metadata and proves the merger now advances to `TorsoMainTextureID`, where it
+still refuses without writing output. The package is not yet installable;
+nested creature texture, eye mesh and combat references remain to be resolved.

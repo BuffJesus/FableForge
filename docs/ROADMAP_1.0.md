@@ -1064,6 +1064,10 @@ and showed the selected geometry in the viewport. Undeploy removed the model
 and restored original banks byte for byte. Gameplay and the other archived
 packages remain unverified. See `tools/test_fmp_named_mesh_refs.py`,
 `tools/test_fmp_named_object_ui.py` and the format notes for audit limits.
+The Knothole Glade Children FMP now preserves its two ordered `MaleTeacher`
+targets and passes verified nested creature weapon and brain links. Its merge
+still refuses at the unresolved torso texture link and leaves output untouched.
+This is a step toward full creature support, not a deployable package.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff
