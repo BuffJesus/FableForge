@@ -6,8 +6,9 @@ Accepted review commits d2c438a, 1cfd14a, 7e1722b, ef87f9f and 9bc1f1d are
 integrated locally through primary 801e733. All Release targets build; 38/38
 primary CTest cases pass. Rebuilt-primary fmp-links-6z24y160 passes all 14 named
 references on retail/intact Aeon/composed roots, all existing-record preservation,
-field choice precedence and external provider relocation. Primary GUI checks
-remain pending while the other checkout owns the package GUI run.
+field choice precedence and external provider relocation. Both-size rebuilt-primary
+field choices (mod-field-choices-3tq9jpvb) and persistent unnamed refusal/retry
+(mod-action-error-nq_fsrdt) pass; primary_choices_801e733_20261003.json records both.
 Scalar choices remain restricted to unique named fixed-size fields with guarded
 layout identities. Changed/new unnamed component sources refuse; intact Aeon
 must be the baseline before adding Controller Support and its DLL-only layer.
@@ -30,6 +31,24 @@ run is still in progress and these changes are not yet integrated here.
 Lost Content's full-source refusal passes, while its content-only diagnostic
 remains incomplete after a direct composition timeout. Full source gate not rerun.
 All archives and commits are local and unpublished; game files remain untouched.
+
+## 2026-10-03 Perodis screenshot follow-up: explicit folder/copy instructions
+
+Supplied screenshots show the old three-source guide and rc.3 rejecting
+AeonEdition/Data. The corrected two-source guide now explicitly distinguishes
+the downloaded Aeon tree from a working game copy, copying Data's contents into
+game/data (not nesting Data/Data), selecting the game with Install..., and adding
+the FMP file and DLL-only folder with the actual Browse menu choices. It names
+rc.3 as predating the linker/refusal corrections. Author-required FreeRoam level
+preparation is described before copying Aeon files; no executable was run.
+Sources checked read-only: published rc.3 release, Aeon's Nexus 454 requirements
+and its linked Steam FreeRoam tutorial. No messages or release changes were sent.
+
+Guide-only ZIP under dist/development/20261003-guide-folder-clarity contains four
+existing verified screenshots and the revised HTML. CRC, four image references
+and explicit steps pass; rebuild its hash after final text changes. Application
+archive 9bc1f1d remains unchanged and accepted across 42 original/resumed checks.
+This guide prose does not turn synthetic offline checks into manual/gameplay proof.
 
 ## 2026-10-03 isolated unnamed-component refusal and intact Aeon preservation
 
