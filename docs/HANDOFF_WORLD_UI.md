@@ -8589,10 +8589,46 @@ checks the addressed word and rejects an out-of-range effect-map item.
 The original Add Staffs to Bowerstone and Snowspire, C Experience Def Fix,
 and Aging Slowdown packages now reach explicit missing-target diagnostics for
 `TEXT_AI_SHOP_KEEPER_HAWKING_OUTSIDE_ARMOURY`, `EXP_ORB_PICKUP`, and
-`MESH_MARKER_SWITCH` respectively. Those dependencies are absent from the
-selected installed baseline and their FMPs, so these packages still refuse.
+`MESH_MARKER_SWITCH` respectively. The next pass established that these
+diagnostics came from missing asset lookup maps, rather than absent baseline
+assets. See the destination-driven lookup correction below.
 The final-binary named scan at `build/named-fmp-coverage-7os_3y2h/result.json`
 remains 405/577 small-bank packages accepted, 153 link refusals, and 244
 large-bank deferrals. The scan verified unchanged archive and install hashes.
 This change improves reference handling and diagnostics; it does not establish
 that these three packages are self-contained or playable.
+
+## 2026-10-04 weapon multi-target links and asset lookup correction
+
+Legacy weapon metadata combines pairs of flourish effect IDs, flourish
+texture IDs and indexed trail texture IDs under a single path. The importer
+now preserves their ordered slots. `FlourishParticles`' two counted name
+lists resolve to saved names.bin offsets. Full list lengths and indexes are
+checked, and only linked four-byte words change. The CWeaponDef schema now
+includes the independently documented Shot/Ammo controls between its helper
+string and targeting fields, plus exact scalar types for SheatheObject,
+MissileLoadCarrySlot and NextWeaponForBoss.
+
+Both direct import and final composition now choose asset lookup banks using
+the link's resolved destination. Their earlier path-name allowlists omitted
+newly supported controls and falsely reported existing assets as missing.
+This also makes the prior experience effect-map support effective.
+
+`tools/test_fmp_weapon_links.py` passes on original Avenger Flourish and
+Dripping Blood: all 20 Avenger link words match independently read game,
+name, texture and effect identities; direct and composed banks are identical;
+both load orders retain the winning particle field's symbolic targets; a
+malformed trail count refuses both routes without replacing prior output.
+Evidence: `build/fmp-weapon-links-rlotdvac/result.json`. Existing 25-link
+appearance and 17-link brain regressions pass at
+`build/fmp-appearance-links-4alj6squ` and `build/fmp-brain-links-yvfp_bn6`.
+The FMP link unit tests pass, including both name lists and index bounds.
+The broader mod-manager workflow passes at `build/mods-corpus-s1aim6ml`.
+
+Full eligible scan `build/named-fmp-coverage-plbkpz3z/result.json` accepts
+425/577 small-bank FMPs, up 20 from 405 with no previously accepted package
+regressing. New cases include Avenger Flourish, Dripping Blood, C Weapon Def
+Restore, the Even Damage variants, Hero to Hobbe total conversion, Soul
+Seeker V2 and EXP Mod. Remaining: 133 link refusals, 11 unavailable schemas,
+eight record identity refusals and 244 deferred large-bank packages. The
+archive and installed input hashes are unchanged. Gameplay is unverified.

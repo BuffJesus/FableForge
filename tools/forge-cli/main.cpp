@@ -8455,57 +8455,28 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             schemaPath.empty() ? defaultDefSchemaPath() : schemaPath);
         const auto index = imported->second;
         const auto* entry = &game.entries().at(index);
-        if (!meshIds && std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path.ends_with(".Model ID") ||
-                                             link.path.ends_with(".Model Eye ID") ||
-                                             link.path.ends_with(".Clothing Model ID"); })) {
+        auto owner = *entry;
+        if (owner.name.empty()) owner.name = name;
+        std::set<forge::fmplinks::Destination> destinations;
+        for (const auto& link : recordLinks)
+            destinations.insert(forge::fmplinks::locate(owner, *linkSchema, link).destination);
+        if (!meshIds && destinations.contains(forge::fmplinks::Destination::MeshEntry)) {
             meshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
             if (const auto* packageMeshes = pkg.findBank("graphics"))
                 for (const auto& mesh : packageMeshes->entries)
                     (*meshIds)[mesh.name] = mesh.id;
         }
-        if (!textureIds && std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path.ends_with(".TorsoMainTextureID") ||
-                                             link.path.starts_with("3734701334.Texture Morph List.") ||
-                                             link.path.ends_with(".Hero Ability Hud Icon ID"); })) {
+        if (!textureIds && destinations.contains(forge::fmplinks::Destination::TextureEntry)) {
             textureIds.emplace(textureIdentityMap(fs::path(baseRoot) / textureRel));
             if (const auto* packageTextures = pkg.findBank("maintextures"))
                 for (const auto& texture : packageTextures->entries)
                     (*textureIds)[texture.name] = texture.id;
         }
-        if (!effectIds &&
-            (entry->definition == "CChestDef" || entry->definition == "CREATURE") &&
-            std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path == "714092448.unknown" ||
-                                             link.path == "754446624.unknown"; }))
+        if (!effectIds && destinations.contains(forge::fmplinks::Destination::EffectEntry))
             effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
                 "data" / "Misc" / "pc" / "effects.big"));
-        if (!effectIds && entry->definition == "CHeroMorphDef" &&
-            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
-                return (link.path.starts_with("1904900413.Effect Attachments 1.") ||
-                        link.path.starts_with("439861392.Effect Attachments 2.")) &&
-                       (link.path.ends_with(".Effect Maximum") ||
-                        link.path.ends_with(".Effect Minimum"));
-            }))
-            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
-                "data" / "Misc" / "pc" / "effects.big"));
-        if (!effectIds && entry->definition == "CSpecialEffectsDef" &&
-            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
-                return link.path.starts_with("44838243.CSpecialEffectsDefList.") &&
-                       link.path.ends_with(".CSpecialEffectsDefLink");
-            }))
-            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
-                "data" / "Misc" / "pc" / "effects.big"));
-        if ((entry->definition == "HERO_ABILITY" || entry->definition == "HERO_STATS") && !textIds &&
-            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
-                return link.path.ends_with(".GUIDescription1ID") ||
-                       link.path.ends_with(".GUIDescription2ID") ||
-                       link.path.starts_with("2555713587.HAtextArray.") ||
-                       link.path.ends_with(".HeroAbilityMasteredTextGUI_ID") ||
-                       link.path.starts_with("54218450.Spells/Attribute Levels.");
-            })) textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
-        auto owner = *entry;
-        if (owner.name.empty()) owner.name = name;
+        if (!textIds && destinations.contains(forge::fmplinks::Destination::TextEntry))
+            textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
         auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
                                           symbolicLinks != nullptr,
                                           meshIds ? &*meshIds : nullptr,
@@ -9236,35 +9207,28 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     std::optional<std::map<std::string, uint32_t>> plannedTextureIds;
     std::optional<std::map<std::string, uint32_t>> plannedEffectIds;
     std::optional<std::map<std::string, uint32_t>> plannedTextIds;
-    const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
-        for (const auto& [name, links] : records)
-            for (const auto& link : links)
-                if (link.path.ends_with(".Model ID") ||
-                    link.path.ends_with(".Model Eye ID") ||
-                    link.path.ends_with(".Clothing Model ID")) return true;
-        return false;
-    });
-    const bool hasNamedTextureLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
-        for (const auto& [name, links] : records)
-            for (const auto& link : links)
-                if (link.path.ends_with(".TorsoMainTextureID") ||
-                    link.path.starts_with("3734701334.Texture Morph List.") ||
-                    link.path.ends_with(".Hero Ability Hud Icon ID")) return true;
-        return false;
-    });
-    const bool hasNamedEffectLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
-        for (const auto& [name, links] : records)
-            for (const auto& link : links)
-                if (link.path == "714092448.unknown" ||
-                    link.path == "754446624.unknown" ||
-                    ((link.path.starts_with("1904900413.Effect Attachments 1.") ||
-                      link.path.starts_with("439861392.Effect Attachments 2.")) &&
-                     (link.path.ends_with(".Effect Maximum") ||
-                      link.path.ends_with(".Effect Minimum"))) ||
-                    (link.path.starts_with("44838243.CSpecialEffectsDefList.") &&
-                     link.path.ends_with(".CSpecialEffectsDefLink"))) return true;
-        return false;
-    });
+    std::set<forge::fmplinks::Destination> linkDestinations;
+    if (std::any_of(rootLinks.begin(), rootLinks.end(),
+                    [](const auto& records) { return !records.empty(); })) {
+        const auto schema = forge::defschema::Schema::load(schemaPath);
+        for (size_t ri = 0; ri < rootLinks.size(); ++ri) {
+            if (rootLinks[ri].empty()) continue;
+            const auto definitions = openDefs(roots[ri], "game.bin");
+            for (size_t ei = 0; ei < definitions.entries().size(); ++ei) {
+                const auto& entry = definitions.entries()[ei];
+                const auto key = entry.name.empty() ? forge::fmplinks::anonymousKey(ei) : entry.name;
+                const auto found = rootLinks[ri].find(key);
+                if (found == rootLinks[ri].end()) continue;
+                auto owner = entry;
+                if (owner.name.empty()) owner.name = key;
+                for (const auto& link : found->second)
+                    linkDestinations.insert(forge::fmplinks::locate(owner, schema, link).destination);
+            }
+        }
+    }
+    const bool hasNamedMeshLinks = linkDestinations.contains(forge::fmplinks::Destination::MeshEntry);
+    const bool hasNamedTextureLinks = linkDestinations.contains(forge::fmplinks::Destination::TextureEntry);
+    const bool hasNamedEffectLinks = linkDestinations.contains(forge::fmplinks::Destination::EffectEntry);
     auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {
         auto ids = assetIdentityMap(fs::path(baseRoot) / "data" / tail, targetBank);
         for (const auto& source : sources) {
@@ -9294,16 +9258,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (hasNamedEffectLinks)
         plannedEffectIds.emplace(planAssetIds(fs::path("Misc") / "pc" / "effects.big",
                                               "PARTICLE_MAIN_PC", "effects"));
-    const bool hasNamedTextLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
-        for (const auto& [name, links] : records)
-            for (const auto& link : links)
-                if (link.path.ends_with(".GUIDescription1ID") ||
-                    link.path.ends_with(".GUIDescription2ID") ||
-                    link.path.starts_with("2555713587.HAtextArray.") ||
-                    link.path.ends_with(".HeroAbilityMasteredTextGUI_ID") ||
-                    link.path.starts_with("54218450.Spells/Attribute Levels.")) return true;
-        return false;
-    });
+    const bool hasNamedTextLinks = linkDestinations.contains(forge::fmplinks::Destination::TextEntry);
     if (hasNamedTextLinks)
         plannedTextIds.emplace(textIdentityMap(fs::exists(textPlanRoot / "data" / "lang" / "English" / "text.big")
                                                   ? textPlanRoot : fs::path(baseRoot)));

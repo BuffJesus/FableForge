@@ -527,3 +527,23 @@ FMPs accepted, up from 391; 153 refuse on links, 11 on schema availability and
 eight on record identity. Another 244 packages with large texture/graphics
 banks remain deferred from apply testing. These are offline import checks, not
 gameplay or runtime compatibility evidence.
+
+2026-10-04 weapon follow-up: two-target Flourish Effect and Flourish Sprite
+groups now address the ordered effect/texture scalar slots in CWeaponDef.
+WeaponTrails contains a count and 12-byte augmentation-key/two-texture rows;
+the indexed metadata pair addresses only its texture words. FlourishParticles
+has five scalar words and two counted name-offset lists, whose complete layout
+is checked before relinking. The schema also separates Shot/Ammo controls from
+the preceding helper string. ChocolateBox's local CWeaponDef controls are the
+format evidence; no unknown trailing bytes are rewritten.
+
+The direct importer and final composer now load reference identity maps from
+resolved destination types instead of path-name lists. The old lists caused
+false missing-target diagnostics for newly supported controls, including the
+experience effect map. `tools/test_fmp_weapon_links.py` verifies the original
+Avenger Flourish package's complete 20-word symbolic rewrite, direct/composed
+bank parity, both load orders with Dripping Blood and malformed-list refusal.
+Evidence: `build/fmp-weapon-links-rlotdvac/result.json`.
+Full scan `build/named-fmp-coverage-plbkpz3z/result.json` accepts 425/577,
+20 more than before and no accepted-package regressions. 133 link refusals and
+244 deferred large-bank packages remain. This is offline composition evidence.

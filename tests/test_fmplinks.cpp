@@ -63,6 +63,13 @@ int main() {
           villageLinks[0].path == "4272390883.VillagePeopleID.0" && villageLinks[0].target == "FIRST" &&
           villageLinks[1].path == "4272390883.VillagePeopleID.1" && villageLinks[1].target == "SECOND",
           "repeated village controls preserve both ordered targets");
+    for (const auto& path : {"2996266366.Flourish Effect", "473863218.Flourish Sprite",
+                              "1732080037.unknown.0.CWeapon Sprite_Weapon_Trail1"}) {
+        const auto pair = forge::fmplinks::readMetadata(metadataTwo(path));
+        check(pair.size() == 2 && pair[0].path == std::string(path) + ".0" &&
+              pair[0].target == "FIRST" && pair[1].path == std::string(path) + ".1" &&
+              pair[1].target == "SECOND", "weapon multi-target group preserves slot order");
+    }
     for (size_t size = 0; size < valid.size(); ++size)
         rejects([&] { forge::fmplinks::readMetadata(std::span(valid).first(size)); }, "every truncated prefix refuses");
     auto bad = valid; bad.push_back(0);
@@ -193,6 +200,84 @@ int main() {
                                                   {"1020994168.unknown", "MESH_PROBE"});
     check(switchMesh.offset == 11 && switchMesh.destination == forge::fmplinks::Destination::MeshEntry,
           "global switch graphic addresses only its model id");
+
+    const auto weaponSchema = forge::defschema::Schema::loadText(R"({"CWeaponDef":{
+        "prefix_len":3,"fields":[
+            {"name":"FlourishParticles","type":"?"},
+            {"name":"FlourishSpecialWeaponTrail","type":"?"},
+            {"name":"WeaponTrails","type":"?"},
+            {"name":"Explosion","type":"?"}]}})");
+    forge::defdecode::Decoded weaponDecoded;
+    weaponDecoded.prefix = {1, 0, 0}; weaponDecoded.prefixLen = 3;
+    weaponDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField flourish, sprite, trails, explosion;
+    auto setField = [](forge::defdecode::DecodedField& field,
+                       const std::string& name) {
+        field.name = name; field.type = "?";
+        field.tag = forge::defdecode::fieldTag(name); field.tagOk = true;
+    };
+    setField(flourish, "FlourishParticles");
+    for (uint32_t value : {0, 77, 78, 0, 0, 1, 31, 1, 32}) word(flourish.value, value);
+    setField(sprite, "FlourishSpecialWeaponTrail");
+    word(sprite.value, 11); word(sprite.value, 12);
+    setField(trails, "WeaponTrails");
+    for (uint32_t value : {2, 0, 10, 12, 1, 13, 14}) word(trails.value, value);
+    setField(explosion, "Explosion"); word(explosion.value, 79);
+    weaponDecoded.fields = {flourish, sprite, trails, explosion};
+    forge::bin::Entry weapon{"CWeaponDef", "WEAPON_PROBE", 0,
+                             forge::defdecode::encode(weaponDecoded)};
+    auto locateWeapon = [&](const std::string& path) {
+        return forge::fmplinks::locate(weapon, weaponSchema, {path, "TARGET"});
+    };
+    const auto flourish0 = locateWeapon("2996266366.Flourish Effect.0");
+    const auto flourish1 = locateWeapon("2996266366.Flourish Effect.1");
+    check(flourish0.offset + 4 == flourish1.offset &&
+          flourish0.destination == forge::fmplinks::Destination::EffectEntry &&
+          flourish1.destination == forge::fmplinks::Destination::EffectEntry,
+          "flourish effects address consecutive effect words");
+    const auto firstSlot = locateWeapon(
+        "2996266366.Weapon Augmentation Slots List 1.0.Weapon Augmentation Slot Name 1");
+    const auto secondSlot = locateWeapon(
+        "2996266366.Weapon Augmentation Slots List 2.0.Weapon Augmentation Slot Name 2");
+    check(firstSlot.offset == 31 && secondSlot.offset == 39 &&
+          firstSlot.destination == forge::fmplinks::Destination::NameOffset &&
+          secondSlot.destination == forge::fmplinks::Destination::NameOffset,
+          "both flourish name lists address their own saved name-offset words");
+    const auto sprite0 = locateWeapon("473863218.Flourish Sprite.0");
+    const auto sprite1 = locateWeapon("473863218.Flourish Sprite.1");
+    check(sprite0.offset + 4 == sprite1.offset &&
+          sprite0.destination == forge::fmplinks::Destination::TextureEntry &&
+          sprite1.destination == forge::fmplinks::Destination::TextureEntry,
+          "flourish sprites address consecutive texture words");
+    const auto trail0 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.0");
+    const auto trail1 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.1");
+    check(trail0.offset + 4 == trail1.offset &&
+          trail0.destination == forge::fmplinks::Destination::TextureEntry &&
+          trail1.destination == forge::fmplinks::Destination::TextureEntry,
+          "indexed weapon trail addresses both texture words in the selected row");
+    const auto explosionLink = locateWeapon("301428501.unknown");
+    check(explosionLink.destination == forge::fmplinks::Destination::GameEntry,
+          "weapon explosion names a game definition");
+    rejects([&] { locateWeapon("2996266366.Flourish Effect.2"); },
+            "third flourish effect slot refuses");
+    rejects([&] { locateWeapon(
+                  "2996266366.Weapon Augmentation Slots List 1.1.Weapon Augmentation Slot Name 1"); },
+            "flourish name-list index outside count refuses");
+    rejects([&] { locateWeapon("1732080037.unknown.2.CWeapon Sprite_Weapon_Trail1.0"); },
+            "weapon trail index outside count refuses");
+    auto malformedWeapon = weapon;
+    const auto trailTag = forge::defdecode::fieldTag("WeaponTrails");
+    for (size_t at = 0; at + 4 <= malformedWeapon.data.size(); ++at) {
+        uint32_t found = 0;
+        std::memcpy(&found, malformedWeapon.data.data() + at, 4);
+        if (found == trailTag) {
+            malformedWeapon.data[at + 4] = 3;
+            break;
+        }
+    }
+    rejects([&] { forge::fmplinks::locate(malformedWeapon, weaponSchema,
+                  {"1732080037.unknown.0.CWeapon Sprite_Weapon_Trail1.0", "TARGET"}); },
+            "weapon trail count inconsistent with payload refuses");
 
     const auto villageSchema = forge::defschema::Schema::loadText(
         R"({"CVillagePeopleDef":{"prefix_len":3,"fields":[{"name":"MaleTeacher","type":"int32"},{"name":"MaleTeacher","type":"int32"}]}})");

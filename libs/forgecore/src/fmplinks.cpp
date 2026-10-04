@@ -216,6 +216,26 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
         }
+        // CWeaponDef.FlourishParticles contains two consecutive EffectIDs.
+        // ChocolateBox groups both links under its single Flourish Effect
+        // control, so retain their order as addressed scalar slots.
+        if (group.path == "2996266366.Flourish Effect" && group.targets.size() == 2) {
+            for (size_t i = 0; i < 2; ++i)
+                result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
+            continue;
+        }
+        if (group.path == "473863218.Flourish Sprite" && group.targets.size() == 2) {
+            for (size_t i = 0; i < 2; ++i)
+                result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
+            continue;
+        }
+        if (group.path.starts_with("1732080037.unknown.") &&
+            group.path.ends_with(".CWeapon Sprite_Weapon_Trail1") &&
+            group.targets.size() == 2) {
+            for (size_t i = 0; i < 2; ++i)
+                result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
+            continue;
+        }
         if (group.targets.size() != 1) {
             std::string detail;
             for (const auto& target : group.targets) {
@@ -352,6 +372,10 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     field.name == "InitialHawkingPhrase" && field.type == "?" &&
                     link.path == "3449087046.HAWKING")
                     return {offset, i + 1, Destination::TextEntry};
+                if (entry.definition == "CWeaponDef" &&
+                    field.name == "Explosion" && field.type == "?" &&
+                    link.path == "301428501.unknown")
+                    return {offset, i + 1, Destination::GameEntry};
             }
             // CGlobalDef.SwitchGraphic is a 17-byte CEngineGraphic. Its
             // second word names the graphics.big model; the legacy metadata
@@ -374,6 +398,58 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 const size_t index = number(parts[2]);
                 if (index >= count) fail("experience effect map index out of range");
                 return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
+            }
+            if (entry.definition == "CWeaponDef" &&
+                field.name == "FlourishParticles" && field.type == "?" &&
+                ((parts.size() == 3 && parts[1] == "Flourish Effect") ||
+                 (parts.size() == 4 &&
+                  ((parts[1] == "Weapon Augmentation Slots List 1" &&
+                    parts[3] == "Weapon Augmentation Slot Name 1") ||
+                   (parts[1] == "Weapon Augmentation Slots List 2" &&
+                    parts[3] == "Weapon Augmentation Slot Name 2"))))) {
+                if (field.value.size() < 28) fail("invalid flourish particle field");
+                const size_t firstCount = read32(field.value, 20);
+                if (firstCount > 4096 || firstCount > (field.value.size() - 28) / 4)
+                    fail("unsupported flourish particle list layout");
+                const size_t secondCountAt = 24 + firstCount * 4;
+                const size_t secondCount = read32(field.value, secondCountAt);
+                if (secondCount > 4096 ||
+                    secondCount > (field.value.size() - secondCountAt - 4) / 4 ||
+                    field.value.size() != secondCountAt + 4 + secondCount * 4)
+                    fail("unsupported flourish particle list layout");
+                const size_t index = number(parts[2]);
+                if (parts.size() == 3) {
+                    if (index >= 2) fail("flourish effect index out of range");
+                    return {offset + 4 + index * 4, i + 1, Destination::EffectEntry};
+                }
+                const bool first = parts[1] == "Weapon Augmentation Slots List 1";
+                if (index >= (first ? firstCount : secondCount))
+                    fail("flourish augmentation slot index out of range");
+                return {offset + (first ? 24 + index * 4 :
+                        secondCountAt + 4 + index * 4),
+                        i + 1, Destination::NameOffset};
+            }
+            if (entry.definition == "CWeaponDef" &&
+                field.name == "FlourishSpecialWeaponTrail" && field.type == "?" &&
+                field.value.size() == 8 && parts.size() == 3 &&
+                parts[1] == "Flourish Sprite") {
+                const size_t index = number(parts[2]);
+                if (index >= 2) fail("flourish sprite index out of range");
+                return {offset + index * 4, i + 1, Destination::TextureEntry};
+            }
+            if (entry.definition == "CWeaponDef" &&
+                field.name == "WeaponTrails" && field.type == "?" &&
+                parts.size() == 5 && parts[1] == "unknown" &&
+                parts[3] == "CWeapon Sprite_Weapon_Trail1") {
+                if (field.value.size() < 4) fail("invalid weapon trail list");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 12 ||
+                    field.value.size() != 4 + count * 12)
+                    fail("unsupported weapon trail list layout");
+                const size_t index = number(parts[2]), slot = number(parts[4]);
+                if (index >= count || slot >= 2) fail("weapon trail link index out of range");
+                return {offset + 4 + index * 12 + 4 + slot * 4,
+                        i + 1, Destination::TextureEntry};
             }
             if (entry.definition == "CREATURE" &&
                 link.path == "706745797.Weapon3ID" &&
