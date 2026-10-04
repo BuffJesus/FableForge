@@ -382,6 +382,56 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("component reference index out of range");
                 return {offset + 4 + index * 9, i + 1, Destination::NameOffset};
             }
+            // CHeroMorphDef.TextureMorphs: count, 24-byte records, one opaque
+            // trailing control. ChocolateBox's Base/Applied Texture names
+            // address the fourth and fifth u32 of a record respectively.
+            if (entry.definition == "CHeroMorphDef" &&
+                field.name == "TextureMorphs" && field.type == "CTextureMorphs" &&
+                parts.size() == 4 && parts[1] == "Texture Morph List" &&
+                (parts[3] == "Base Texture" || parts[3] == "Applied Texture")) {
+                if (field.value.size() < 8) fail("invalid texture morph reference path");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 8) / 24 ||
+                    field.value.size() != 8 + count * 24)
+                    fail("unsupported texture morph record layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("texture morph reference index out of range");
+                return {offset + 4 + index * 24 + (parts[3] == "Base Texture" ? 12u : 16u),
+                        i + 1, Destination::TextureEntry};
+            }
+            if (entry.definition == "CHeroMorphDef" &&
+                field.name == "SkeletalMorphs" && field.type == "CSkeletalMorphs" &&
+                parts.size() == 4 && parts[1] == "Bone Config List" &&
+                parts[3] == "Bone Config") {
+                if (field.value.size() < 4) fail("invalid bone config reference path");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 11 ||
+                    field.value.size() != 4 + count * 11)
+                    fail("unsupported bone config record layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("bone config reference index out of range");
+                return {offset + 4 + index * 11 + 4, i + 1, Destination::NameOffset};
+            }
+            const bool particle = field.name == "ParticleMorphs" &&
+                parts.size() == 4 && parts[1] == "Effect Attachments 1";
+            const bool idleParticle = field.name == "IdleParticleMorphs" &&
+                parts.size() == 4 && parts[1] == "Effect Attachments 2";
+            if (entry.definition == "CHeroMorphDef" && field.type == "CParticleMorphs" &&
+                (particle || idleParticle) &&
+                (parts[3] == "Model Helper to Attach to" ||
+                 parts[3] == "Effect Maximum" || parts[3] == "Effect Minimum")) {
+                if (field.value.size() < 8) fail("invalid particle morph reference path");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 8) / 40 ||
+                    field.value.size() != 8 + count * 40)
+                    fail("unsupported particle morph record layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("particle morph reference index out of range");
+                const bool helper = parts[3] == "Model Helper to Attach to";
+                const size_t member = helper ? 16u : parts[3] == "Effect Maximum" ? 24u : 28u;
+                return {offset + 4 + index * 40 + member, i + 1,
+                        helper ? Destination::NameOffset : Destination::EffectEntry};
+            }
             fail("unsupported reference field " + entry.name + ": " + field.name);
         }
         offset += field.value.size();

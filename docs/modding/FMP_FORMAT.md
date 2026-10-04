@@ -265,6 +265,20 @@ field was supported. It still refuses 220 on other link constraints, 11 on
 schema availability and eight on record identity, while 244 large-bank
 packages were deferred. This remains an offline import check.
 
+2026-10-04 hero morph follow-up: `CHeroMorphDef` link metadata now resolves
+`TextureMorphs` base/applied texture IDs through `maintextures`, skeletal
+bone config names through `names.bin`, and particle/idle particle helper names
+and effect IDs through `names.bin` and `effects.big`. Each array has an exact
+size and index check before rewriting. `tools/test_fmp_hero_morph_links.py`
+checks the original archived `Clean Hero.fmp` (144 links) against both direct
+apply and final composition, including retail texture IDs 1250 and 1025;
+the output `game.bin` and `names.bin` bytes match. The full eligible scan at
+`build/named-fmp-coverage-u89uksmq/result.json` accepts 354 of 577 attempted
+small-bank packages, including 16 hero morph packages that previously failed.
+It still refuses 204 on other link constraints, 11 on schema availability and
+eight on record identity; 244 large-bank packages were deferred. This is
+offline import evidence, not an in-game compatibility claim.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16

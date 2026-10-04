@@ -8422,7 +8422,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                     (*meshIds)[mesh.name] = mesh.id;
         }
         if (!textureIds && std::any_of(recordLinks.begin(), recordLinks.end(),
-                [](const auto& link) { return link.path.ends_with(".TorsoMainTextureID"); })) {
+                [](const auto& link) { return link.path.ends_with(".TorsoMainTextureID") ||
+                                             link.path.starts_with("3734701334.Texture Morph List."); })) {
             textureIds.emplace(textureIdentityMap(fs::path(baseRoot) / textureRel));
             if (const auto* packageTextures = pkg.findBank("maintextures"))
                 for (const auto& texture : packageTextures->entries)
@@ -8433,6 +8434,15 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             std::any_of(recordLinks.begin(), recordLinks.end(),
                 [](const auto& link) { return link.path == "714092448.unknown" ||
                                              link.path == "754446624.unknown"; }))
+            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
+                "data" / "Misc" / "pc" / "effects.big"));
+        if (!effectIds && entry->definition == "CHeroMorphDef" &&
+            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
+                return (link.path.starts_with("1904900413.Effect Attachments 1.") ||
+                        link.path.starts_with("439861392.Effect Attachments 2.")) &&
+                       (link.path.ends_with(".Effect Maximum") ||
+                        link.path.ends_with(".Effect Minimum"));
+            }))
             effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
                 "data" / "Misc" / "pc" / "effects.big"));
         auto owner = *entry;
@@ -9073,14 +9083,19 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     const bool hasNamedTextureLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
-                if (link.path.ends_with(".TorsoMainTextureID")) return true;
+                if (link.path.ends_with(".TorsoMainTextureID") ||
+                    link.path.starts_with("3734701334.Texture Morph List.")) return true;
         return false;
     });
     const bool hasNamedEffectLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
                 if (link.path == "714092448.unknown" ||
-                    link.path == "754446624.unknown") return true;
+                    link.path == "754446624.unknown" ||
+                    ((link.path.starts_with("1904900413.Effect Attachments 1.") ||
+                      link.path.starts_with("439861392.Effect Attachments 2.")) &&
+                     (link.path.ends_with(".Effect Maximum") ||
+                      link.path.ends_with(".Effect Minimum")))) return true;
         return false;
     });
     auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {
