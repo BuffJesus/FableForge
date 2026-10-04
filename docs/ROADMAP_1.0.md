@@ -10,6 +10,16 @@ and unnamed-source refusal are included. Separate sibling/FMP-bank guard package
 validation remains in progress. No gameplay or complete-overhaul relocation claim;
 see HANDOFF_WORLD_UI for evidence and the unchanged full-source-gate boundary.
 
+2026-10-03 isolated unsupported-bank follow-up: changed script/frontend sources,
+unsupported nonempty FMP banks and incomplete unnamed/sibling FMP exports refuse
+before writes. Unchanged sibling copies remain supported. All 38 core checks,
+29 native preservation cases and both-size persistent GUI refusal/retry pass.
+This checkout is not yet packaged or promoted. The frozen 9bc1f1d package's initial
+run passed 36 workflows then timed out seeding the texture-destination fixture;
+six remaining checks are being resumed while retaining that failure. Lost Content's
+content-only diagnostic remains incomplete after a composition timeout. Exact
+scope and evidence are recorded in HANDOFF_WORLD_UI.
+
 2026-10-03 isolated preservation correction: changed/new unnamed definition
 sources now refuse instead of silently losing component edits. Controller FMP
 composition over intact Aeon preserves 16362 existing records (6625 unnamed),

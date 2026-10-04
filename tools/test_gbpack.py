@@ -83,11 +83,11 @@ def main() -> int:
     fixtures = []
     for index, (pack_name, pack_path) in enumerate(packs):
         refuse_overhaul(tool, scratch, pack_path, work/f'rejected-{index}', ROOT, work/f'refusal-{index}')
-        fixture = content_only(pack_path, work/f'content-{index}')
+        fixture = content_only(pack_path, work/'content'/pack_name)
         fixtures.append(fixture)
-        run("mods", "add", scratch, str(fixture), "--name", pack_name)
     t0 = time.time()
-    r = run("mods", "build", scratch, out)
+    options = [argument for fixture in fixtures for argument in ('--with', str(fixture))]
+    r = run("mods", "merge", scratch, out, *options)
     dt = time.time() - t0
     o = r.stdout
     for pack_name, _ in packs:

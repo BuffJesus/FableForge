@@ -80,6 +80,49 @@ and explicit steps pass; rebuild its hash after final text changes. Application
 archive 9bc1f1d remains unchanged and accepted across 42 original/resumed checks.
 This guide prose does not turn synthetic offline checks into manual/gameplay proof.
 
+## 2026-10-03 isolated unsupported-bank preservation guard
+
+Owning checkout D:/Code/FableForge-bank-review, branch
+feat/forge-bank-refusal-review-20261003, based on frozen 9bc1f1d. A read-only
+scratch audit sibling-defs-audit-zuzy8cyn in choice-review established that
+composition returned success while omitting changed script/frontend banks.
+The follow-up preflights those banks, including partial source trees, and refuses
+actual changes before output. Exact unchanged copies and compression-only semantic
+copies with stable existing name offsets remain allowed. The unnamed guard now
+also checks indexInDefinition. FMP export shares both guards. FMP apply rejects
+nonempty unsupported banks before writes; empty exporter placeholders remain
+allowed. Existing nested-link diagnostics retain their specific refusal.
+
+All Release targets build and 38/38 CTest cases pass in
+build/ctest_bank_guard_20261003.log. Native mod-bank-refusal-9qqf6t94/result.json
+passes 29 independent cases covering exact/compression-only carry, name-pool
+stability, direct/registered/conflict/deploy/export refusal, mixed FMP atomicity,
+unnamed ordinal changes and Unicode/literal-token paths. GUI
+mod-action-error-x5kvxzfb passes normal and compact persistent sibling refusal,
+reopen/rescan, unchanged source/baseline files, retry and undeploy. Expanded
+fmp-links-o4ahq5mk passes Controller's 14 references on retail/intact Aeon/composed
+roots, all existing-record preservation, field choices and provider relocation.
+No complete-overhaul relocation or gameplay claim. Not yet frozen or promoted.
+
+Frozen choice-review archive 9bc1f1d SHA256
+04f0f82c38baf90b73f19fcc9d2e06cefba0f284b69bc6ea95c8ef10c457a87d verifies
+103 identities and 116 documentation links. package-smoke-gyyl1yzw initially
+passes 36 workflows, then texture_destination's CLI seed exceeds 90 seconds.
+The failure and its fixture remain retained. Six remaining workflows are being
+resumed against the same extracted files from the same unrelated directory;
+texture_destination now passes. No first-run all-pass claim or package promotion.
+
+Native diagnostic boundaries: expanded_chapters_dv_jqo5u passes full-source
+refusal and explicitly content-only checks (798 source/583 built payloads).
+gb-content-1b0dsezs/resume-result.json passes direct content-only composition
+(1592 source comparisons/433 built WAD payloads); original registry-hash timeout
+is retained. lost_content_9pzkcb4j passes full-source refusal but its resumed
+direct composition exceeds 1800 seconds, so content preservation remains unverified.
+Do not repeat that large fixture unchanged. These are never complete or playable
+overhaul installation claims. Diagnostic scripts now use direct composition after
+the full-source refusal to avoid unrelated registry hashing of multi-GB fixtures.
+The full source gate is not rerun. Primary remains clean 0cca70f.
+
 ## 2026-10-03 isolated unnamed-component refusal and intact Aeon preservation
 
 Owning review branch feat/forge-unnamed-defs-review-20261003 now refuses changed,

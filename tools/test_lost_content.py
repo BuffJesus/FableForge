@@ -61,12 +61,14 @@ def main() -> int:
                 raise AssertionError(f"{' '.join(map(str, argv))}\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}")
             return proc.stdout
 
+        layers = []
         if args.with_aeon:
             refuse_overhaul(TOOL, root, AEON, work/'rejected-aeon', REPO, work/'refusal-aeon')
-            run("mods", "add", root, content_only(AEON, work/'aeon-content'), "--name", "Aeon content fixture")
+            layers.append(content_only(AEON, work/'aeon-content'))
         refuse_overhaul(TOOL, root, SOURCE, work/'rejected', REPO, work/'refusal')
-        run("mods", "add", root, content_only(SOURCE, work/'lost-content-fixture'), "--name", "Lost Content fixture")
-        result = run("mods", "build", root, out)
+        layers.append(content_only(SOURCE, work/'lost-content-fixture'))
+        options = [argument for layer in layers for argument in ('--with', layer)]
+        result = run("mods", "merge", root, out, *options)
         assert "parks the retail WAD as _FinalAlbion.wad: skipped" in result
         assert not (out / "data/Levels/_FinalAlbion.wad").exists()
         assert not (out / "userst.ini").exists()

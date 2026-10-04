@@ -28,11 +28,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Unsupported metadata fixture for --mode fmp')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
-    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed')
+    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling')
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-action-error-', dir=repo/'build')).resolve()
@@ -87,9 +87,15 @@ def main():
             added = subprocess.run([str(gui.with_name('forge-tools.exe')), 'mods', 'add', str(root),
                 str(pack), '--name', 'SmallFilePack'], cwd=cwd, capture_output=True, timeout=45)
             assert added.returncode == 0, (added.stdout+added.stderr).decode('utf-8', errors='replace')
-            bad = case/('UnnamedComponents' if args.mode == 'unnamed' else
+            bad = case/('ChangedSiblingBanks' if args.mode == 'sibling' else
+                        'UnnamedComponents' if args.mode == 'unnamed' else
                         'UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
-            if args.mode == 'unnamed':
+            if args.mode == 'sibling':
+                (bad/'data/CompiledDefs').mkdir(parents=True)
+                for source in sources:
+                    shutil.copyfile(source, bad/source.relative_to(args.install))
+                shutil.copyfile(root/'data/CompiledDefs/game.bin', bad/'data/CompiledDefs/script.bin')
+            elif args.mode == 'unnamed':
                 from test_fmp_links import read_bank, rewrite_bank
                 entries = read_bank(root)
                 index = next(i for i, entry in enumerate(entries) if not entry['name'])
@@ -107,10 +113,12 @@ def main():
             lines += button('btn_mods_deploy')+['assert_log mods deploy: done',
                 f'mod_add {bad.as_posix()} BrokenPatch', 'frames 3']
             lines += button('btn_mods_deploy')+['assert_log mods deploy: FAILED',
+                'assert_log changed sibling definition banks' if args.mode == 'sibling' else
                 'assert_log changed or new unnamed definition entries' if args.mode == 'unnamed' else
                 'assert_log unsupported target list' if args.mode == 'fmp' else 'assert_log bad magic']
-            if args.mode == 'unnamed':
+            if args.mode in ('unnamed', 'sibling'):
                 lines += button('btn_mods_conflicts')+['assert_log mods conflicts: FAILED',
+                    'assert_log changed sibling definition banks' if args.mode == 'sibling' else
                     'assert_log changed or new unnamed definition entries']
         else:
             lines += button('btn_mods_conflicts')

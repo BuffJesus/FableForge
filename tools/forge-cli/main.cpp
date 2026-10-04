@@ -4740,6 +4740,74 @@ std::string defsFieldPickKey(const std::string& bin, const std::string& record,
     return "field:" + json::array({bin, record, definition, layout, part, field}).dump(-1, ' ', true);
 }
 
+void requireUnchangedUnnamedEntries(const forge::bin::File& base, const forge::bin::File& mod,
+                                   const std::string& bin, const std::string& label) {
+    size_t count = 0, first = 0;
+    for (size_t i = 0; i < mod.entries().size(); ++i) {
+        const auto& entry = mod.entries()[i];
+        if (!entry.name.empty()) continue;
+        const bool unchanged = i < base.entries().size() && base.entries()[i].name.empty() &&
+            base.entries()[i].definition == entry.definition &&
+            base.entries()[i].indexInDefinition == entry.indexInDefinition &&
+            base.entries()[i].data == entry.data;
+        if (!unchanged) { if (!count) first = i; ++count; }
+    }
+    if (count) throw std::runtime_error("Cannot compose " + bin + " from '" + label + "': " +
+        std::to_string(count) + " changed or new unnamed definition entries (first index " +
+        std::to_string(first) + "). Unnamed components have no safe cross-bank identity. " +
+        "Install this overhaul first and use its intact files as the baseline, then add supported named mods.");
+}
+
+// Mods composition currently writes game.bin only. Sibling banks can be carried
+// unchanged, including compression-only re-saves with stable existing name offsets.
+// Reject actual edits before any output rather than skipping the entire defs tree.
+void requireUnchangedSiblingBanks(const std::string& baseRoot, const std::string& sourceRoot,
+                                 const std::string& label) {
+    namespace fs = std::filesystem;
+    const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
+    const fs::path sourceDefs = fs::path(sourceRoot) / "data" / "CompiledDefs";
+    auto readNative = [](const fs::path& path) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) throw std::runtime_error("cannot read definition bank: " + path.string());
+        return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    for (const char* bank : {"script.bin", "frontend.bin"}) {
+        if (!fs::exists(sourceDefs / bank)) continue;
+        bool unchanged = false;
+        if (fs::exists(baseDefs / bank)) {
+            const auto baseNames = readNative(baseDefs / "names.bin");
+            bool namesStable = !fs::exists(sourceDefs / "names.bin");
+            if (!namesStable) {
+                const auto sourceNames = readNative(sourceDefs / "names.bin");
+                auto count = [](const auto& bytes) {
+                    uint32_t result = 0;
+                    for (size_t i = 0; i < 4; ++i) result |= uint32_t(bytes[8 + i]) << (8 * i);
+                    return result;
+                };
+                namesStable = baseNames.size() >= 20 && sourceNames.size() >= baseNames.size() &&
+                    count(sourceNames) >= count(baseNames) &&
+                    std::equal(baseNames.begin() + 4, baseNames.begin() + 8, sourceNames.begin() + 4) &&
+                    std::equal(baseNames.begin() + 20, baseNames.end(), sourceNames.begin() + 20);
+            }
+            if (namesStable) {
+                unchanged = readNative(baseDefs / bank) == readNative(sourceDefs / bank);
+                if (!unchanged && fs::exists(sourceDefs / "names.bin")) {
+                    const auto base = openDefs(baseRoot, bank), source = openDefs(sourceRoot, bank);
+                    unchanged = base.entries().size() == source.entries().size() &&
+                        std::equal(base.entries().begin(), base.entries().end(), source.entries().begin(),
+                            [](const auto& a, const auto& b) {
+                                return a.name == b.name && a.definition == b.definition &&
+                                    a.indexInDefinition == b.indexInDefinition && a.data == b.data;
+                            });
+                }
+            }
+        }
+        if (!unchanged) throw std::runtime_error("Cannot compose " + std::string(bank) + " from '" + label +
+            "': changed sibling definition banks are not supported. Use the intact installation " +
+            "as the baseline; this source was not applied.");
+    }
+}
+
 int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::string& bin, const std::vector<std::string>& modRoots,
               const std::string& picksPath, const std::string& fieldSchemaPath,
@@ -4786,27 +4854,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         const auto& modRoot = modRoots[mi];
         const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
-        size_t unsupportedUnnamed = 0;
-        size_t firstUnsupportedUnnamed = 0;
-        for (size_t i = 0; i < mod.entries().size(); ++i) {
-            const auto& entry = mod.entries()[i];
-            if (!entry.name.empty()) continue;
-            const bool unchanged = i < merged.entries().size() &&
-                merged.entries()[i].name.empty() &&
-                merged.entries()[i].definition == entry.definition &&
-                merged.entries()[i].data == entry.data;
-            if (!unchanged) {
-                if (!unsupportedUnnamed) firstUnsupportedUnnamed = i;
-                ++unsupportedUnnamed;
-            }
-        }
-        if (unsupportedUnnamed) {
-            throw std::runtime_error("Cannot compose " + bin + " from '" + modName + "': " +
-                std::to_string(unsupportedUnnamed) + " changed or new unnamed definition entries " +
-                "(first index " + std::to_string(firstUnsupportedUnnamed) + "). " +
-                "Unnamed components have no safe cross-bank identity. Install this overhaul first " +
-                "and use its intact files as the baseline, then add supported named mods.");
-        }
+        requireUnchangedUnnamedEntries(merged, mod, bin, modName);
         for (const auto& me : mod.entries()) {
             if (me.name.empty()) continue;
             auto bit = baseData.find(me.name);
@@ -8033,7 +8081,20 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
              forge::fmplinks::RecordLinks* symbolicLinks = nullptr) {
     namespace fs = std::filesystem;
     const auto pkg = forge::big::File::open(fmpPath);
+    for (const char* bankName : {"ScriptBINEntries", "FrontEndBINEntries"}) {
+        const auto* bank = pkg.findBank(bankName);
+        if (bank && !bank->entries.empty())
+            throw std::runtime_error("FMP banks: " + std::string(bankName) +
+                " changes are not supported; package was not applied.");
+    }
     const auto links = forge::fmplinks::readGameLinks(pkg);
+    const std::set<std::string> supportedBanks{"GameBINEntries", "GameBINLinkMetaData",
+        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD"};
+    for (const auto& bank : pkg.banks()) {
+        if (!bank.entries.empty() && !supportedBanks.contains(bank.name))
+            throw std::runtime_error("FMP banks: " + bank.name +
+                " changes are not supported; package was not applied.");
+    }
 
     const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
     const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
@@ -8125,16 +8186,6 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             fs::copy_file(baseDefs / sib, defsOut / sib,
                           fs::copy_options::overwrite_existing);
     }
-    // Warn if the .fmp changes script/frontend defs — not applied yet (shared
-    // names.bin needs a multi-bin pass).
-    for (const char* b : {"ScriptBINEntries", "FrontEndBINEntries"}) {
-        const auto* bank = pkg.findBank(b);
-        if (bank != nullptr && !bank->entries.empty())
-            std::fprintf(stderr,
-                         "  warning: %s has %zu entries, NOT applied (multi-bin "
-                         "shared-names apply is a follow-up)\n",
-                         b, bank->entries.size());
-    }
 
     // ChocolateBox packages can carry level payloads in the WAD bank. Stage
     // them as loose levels so the normal composer can merge TNGs and repack
@@ -8177,6 +8228,8 @@ int fmpExport(const std::string& baseRoot, const std::string& moddedRoot,
               const std::string& outFmp) {
     const auto base = openDefs(baseRoot, "game.bin");
     const auto mod = openDefs(moddedRoot, "game.bin");
+    requireUnchangedUnnamedEntries(base, mod, "game.bin", "FMP export");
+    requireUnchangedSiblingBanks(baseRoot, moddedRoot, "FMP export");
 
     std::map<std::string, const forge::bin::Entry*> baseByName;
     for (const auto& e : base.entries())
@@ -8463,6 +8516,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (!jsonOutput) std::printf("normalized %zu source(s) -> %zu game-root(s); field-level merge:\n",
                 sources.size(), roots.size());
     json defsRep;
+    // Check every normalized game bank first, retaining the actionable unnamed
+    // refusal for overhauls, then validate banks this composer cannot apply.
+    const auto baselineDefs = openDefs(baseRoot, "game.bin");
+    for (size_t i = 0; i < roots.size(); ++i)
+        requireUnchangedUnnamedEntries(baselineDefs, openDefs(roots[i], "game.bin"), "game.bin", rootLabels[i]);
+    for (size_t i = 0; i < roots.size(); ++i)
+        requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
+    for (size_t i = 0; i < contentRoots.size(); ++i)
+        if (fs::is_directory(contentRoots[i])) requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",

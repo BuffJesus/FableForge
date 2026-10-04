@@ -59,8 +59,8 @@ def main() -> int:
             return proc.stdout
 
         refuse_overhaul(TOOL, root, SOURCE, work/'rejected', REPO, work/'refusal')
-        run("mods", "add", root, content_only(SOURCE, work/'content-fixture'), "--name", "Expanded Chapters content fixture")
-        result = run("mods", "build", root, out)
+        layer = content_only(SOURCE, work/'content-fixture')
+        result = run("mods", "merge", root, out, '--with', layer)
         wad = out / "data/Levels/FinalAlbion.wad"
         assert wad.is_file() and not (out / "userst.ini").exists()
         assert (out / "data/graphics/graphics.big").is_file()

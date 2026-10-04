@@ -1,5 +1,18 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-03 unsupported-bank preservation follow-up
+
+A read-only scratch audit found successful composition omitted changed script
+and frontend banks. The owning follow-up refuses those edits, including partial
+source trees and changed existing name pools. Exact unchanged banks and semantic
+compression-only copies with stable name offsets remain accepted. Nonempty FMP
+banks outside the supported set refuse before package writes; FMP export refuses
+unnamed edits and changed sibling banks. Native tests cover 29 independent cases,
+prior-output/source preservation, Unicode paths and literal percent/ampersand
+paths. Both-size GUI refusal, reopen/rescan and same-process retry pass.
+Complete overhaul identity/relocation remains unsupported. Package validation
+and promotion of this follow-up are pending; see HANDOFF_WORLD_UI.
+
 ## 2026-10-03 unnamed-overhaul preservation audit
 
 The scalar-choice archive passes all 40 extracted checks, while a new independent

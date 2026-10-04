@@ -10,6 +10,21 @@ unnamed copies of that baseline remain allowed. Sparse named-only sources are
 allowed; absent unnamed rows are not treated as deletions. This guard does not
 validate arbitrary raw-ID references in named-only source banks.
 
+Composition currently applies `game.bin` definitions. A source carrying changed
+`script.bin` or `frontend.bin` refuses before output instead of silently dropping
+those banks. Unchanged copies remain allowed, including compression-only re-saves
+whose entries and existing name offsets are unchanged. A partial source containing
+only a changed sibling bank also refuses. Use an intact installation as baseline
+when those banks are part of an overhaul.
+
+FMP application refuses nonempty unsupported banks before writing package content.
+Supported banks are GameBINEntries, supported GameBINLinkMetaData, Objects,
+Settings, ObjectLinks, Text and FinalAlbionWAD; their existing format and link
+restrictions still apply. Empty exporter bank placeholders are allowed. FMP export
+also refuses changed/new unnamed components and changed sibling banks, so it cannot
+report success after omitting those edits. These checks do not add script/frontend
+composition or general cross-bank relocation support.
+
 Individual choices are available for contested unique named scalar fields in
 clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
 CDefString with their expected byte widths. They override the record choice;
