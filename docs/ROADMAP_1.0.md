@@ -10,6 +10,18 @@ and unnamed-source refusal are included. Separate sibling/FMP-bank guard package
 validation remains in progress. No gameplay or complete-overhaul relocation claim;
 see HANDOFF_WORLD_UI for evidence and the unchanged full-source-gate boundary.
 
+2026-10-04 Forge-managed complete Aeon/controller route in the owning review
+branch: real three-source normal GUI Add/Check/Deploy/redeploy/Undeploy and compact
+check/deploy/restore pass; original five bank/WAD files restored, staged banks,
+DLL and Mods.ini match the independent CLI build. The illustrated guide has
+four new captures from the passing run. All Release targets, 38 core tests,
+14 install, 29 bank and 16 FMP cases pass. An extracted local development ZIP
+passes all 46 workflows with zero skips, 103 identities and 117 links. The
+old rc.3 package is unchanged; game/Retroid behavior is untested. Direct
+`mods merge` late-read failure can leave prepared files in its requested output;
+managed Deploy prepares in scratch. Exact evidence, hashes and continuation are
+in HANDOFF_WORLD_UI.
+
 2026-10-03 isolated unsupported-bank follow-up: changed script/frontend sources,
 unsupported nonempty FMP banks and incomplete unnamed/sibling FMP exports refuse
 before writes. Unchanged sibling copies remain supported. All 38 core checks,

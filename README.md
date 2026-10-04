@@ -276,9 +276,14 @@ game-root folders, bsdiff `.patch` files, `.qst` edits, EgoCore `Mods/<Name>/` f
 (DLL + text `.def` + `.resource` bank overrides + partial TNGs) and whole-file packs like
 Project Seasons. Mods merge record by record (a `game.bin` field, a thing by UID, a
 `.qst` statement, a `text.big` key, an `FSE/quests.lua` entry) and later mods win.
+For a complete extracted overhaul such as Aeon Edition, add the folder containing
+`Data` first (selecting `Data` itself also works). Forge installs that complete
+tree before composing later mods. The [Aeon + Controller guide](docs/walkthrough/aeon-controller/index.html)
+shows the three-source setup and its file-level validation.
 *Check conflicts* lists every contested record in one report where you pick the winner.
-*Build and deploy* rebuilds the whole order onto the retail files; *Undeploy* puts them
-back. Things a mod placed are badged in the editor with the mod's name. Shell:
+*Build and deploy* rebuilds the whole order onto the selected installation;
+*Undeploy* restores its previous files. Things a mod placed are badged in the
+editor with the mod's name. Shell:
 `forge-tools mods list/add/remove/move/enable/disable/build/deploy/undeploy/conflicts`.
 These commands reject unknown or incomplete options before editing the order or
 reverting a stage. Reorder indices must be complete signed decimal integers.

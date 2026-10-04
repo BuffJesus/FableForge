@@ -394,23 +394,32 @@ text.big, 421 loose LEV/TNG, WLD/BWD): 1,391 record changes (853 new), 5 records
 by order), 791 strings, 392 levels, 436 whole-file layers, 3.6 s -- the bsdiff still lands underneath
 the whole-file game.bin instead of failing on it.
 
-Aeon Edition + Controller Support (corrected 2026-10-03): install Aeon first
-and use its intact game files as the baseline. Add only ControllerSupport.fmp and
-the DLL-only FableControllerSupport folder. The earlier retail-plus-Aeon source
-recipe lost 766 changed unnamed components and omitted unnamed additions; named
-link, binding, level and DirectGraphic checks did not establish complete overhaul
-preservation. That route now refuses. The same guard rejects Unofficial Fable
-Patch's 25 unnamed edits over the current baseline. Earlier composition counts
-in this document are historical container checks, not preservation evidence.
+Aeon Edition + Controller Support (corrected 2026-10-03): in the updated Forge,
+select the extracted Aeon folder (or its `Data` folder) as the **first** mod,
+then `ControllerSupport.fmp`, then the original `FableControllerSupport` runtime
+folder. Forge installs Aeon's complete Data tree and composes the controller
+layers over it. When the controller FMP is present, Forge takes the DLL from the
+runtime folder and excludes that download's alternate Data overrides. The source
+folders stay outside the game installation and remain unchanged. The older rc.3
+build rejected this complete-Data selection; its guide and screenshots are
+superseded by `docs/walkthrough/aeon-controller/index.html`.
 
-The current test synthesizes a complete Aeon 5.03 extracted-level baseline, then
-adds the two controller layers. Every existing definition outside the five FMP
-imports is compared by index, type, name and payload: 16362 records survive,
-including all 6625 unnamed entries. Bindings change from 70 to 141 and all 14 named
-controller references resolve. Baseline level/asset inventory stays unchanged;
-the WAD remains parked. GUI deployment matches CLI output, copies the unchanged
-DLL and enables it in Mods.ini. The corrected illustrated guide uses that two-layer
-order. No gameplay, Android or complete manual-install certification is claimed.
+The earlier retail-plus-Aeon *composition* recipe lost 766 changed unnamed
+components and omitted unnamed additions; named-link, binding, level and
+DirectGraphic checks did not establish complete overhaul preservation. That
+route now refuses. The same guard rejects Unofficial Fable Patch's 25 unnamed
+edits over the current baseline. Earlier composition counts in this document
+are historical container checks, not preservation evidence.
+
+The three-source CLI fixture starts from a copied retail baseline, installs
+complete Aeon 5.03, and then adds the FMP and runtime. Every Aeon definition
+outside the five FMP imports is compared by index, type, name and payload:
+16362 records survive, including all 6625 unnamed entries. All 14 named
+controller references resolve; 942 other source files and 843 authored WAD level
+payloads match the prepared output. The runtime DLL is unchanged and enabled in
+`Mods.ini`, while its alternate Data is excluded. Packed and extracted-layout
+fixtures also check deploy and exact undeploy. These are file-level checks; no
+gameplay or Android compatibility is claimed.
 
 FMP support remains bounded. Supported scalar, flat reference-vector and CDef
 listing paths resolve by name; malformed, unsupported or selected missing links

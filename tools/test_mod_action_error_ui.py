@@ -46,7 +46,7 @@ def main():
         source = work/'invalid-report.cpp'
         source.write_text('#include <cstdio>\n#include <cstdlib>\nint main() { const char* schema = std::getenv("FORGE_TEST_REPORT_SCHEMA"); std::puts(schema && *schema ? "{}" : "not a JSON report"); return 0; }\n', encoding='utf-8')
         cache = (repo/'build/CMakeCache.txt').read_text(encoding='utf-8')
-        compiler = re.search(r'^CMAKE_CXX_COMPILER:FILEPATH=(.+)$', cache, re.M).group(1)
+        compiler = re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$', cache, re.M).group(1)
         helper = work/'invalid-report.exe'
         subprocess.run([compiler, '-static', str(source), '-o', str(helper)],
             cwd=cwd, check=True, capture_output=True, timeout=60)

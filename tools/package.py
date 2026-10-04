@@ -81,8 +81,8 @@ def package_guide(root, output=None):
             archive.write(guide_dir / shot, shot)
         archive.writestr("README.txt",
             "Extract this ZIP, then open AEON_CONTROLLER.html in your browser.\n\n"
-            "Use the application build specified in the guide; named FMP linking and unnamed-component refusal are required.\n"
-            "Install and verify Aeon Edition first, then add only the controller FMP and DLL in Forge.\n"
+            "Use the updated application build specified in the guide; the older rc.3 rejects this route.\n"
+            "Add the extracted Aeon folder (or its Data folder), controller FMP and original controller runtime folder in Forge, in that order.\n"
             "Download FableForge separately from:\n"
             f"{download}\n\n"
             "This ZIP contains only the illustrated guide, not the application or mods.\n")
@@ -125,6 +125,7 @@ def main():
     for doc in ["FIRST_LEVEL.md", "ENGINE_RULES.md", "EDITOR.md", "AUTOMATION.md", "CLI.md"]:
         readme = readme.replace("docs/" + doc, doc)
     readme = readme.replace("docs/guide/", "guide/")
+    readme = readme.replace("docs/walkthrough/aeon-controller/index.html", "AEON_CONTROLLER.html")
     readme = readme.replace("vendor/EgoCore-LICENSE.txt", "EgoCore-LICENSE.txt")
     readme = readme.replace("vendor/VENDORED.md", "THIRD_PARTY.md")
     readme += "\nIllustrated Aeon Edition + Controller Support setup: open [AEON_CONTROLLER.html](AEON_CONTROLLER.html) in your browser.\n"

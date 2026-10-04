@@ -223,6 +223,8 @@ def main():
     ok &= run("overworld moves (scratch install + World tab)", [sys.executable, "tools/test_overworld.py"], capture_output=True)
     ok &= run("textures tab (scratch textures.big)", [sys.executable, "tools/test_textures.py"], capture_output=True)
     ok &= run("mod load order (scratch root; skips without the corpus)", [sys.executable, "tools/test_mods.py"], capture_output=True)
+    ok &= run("locked same-size mod file refuses comparison and retries after unlock",
+              [sys.executable, "tools/test_unreadable_file_compare.py"], capture_output=True)
     ok &= run("Aeon baseline preservation + Controller Support (scratch loose levels; skips without the corpus)",
               [sys.executable, "tools/test_aeon_controller.py"], capture_output=True)
     ok &= run("Freeroam FMP walkability (76 LEVs through scratch WAD; skips without corpus)",

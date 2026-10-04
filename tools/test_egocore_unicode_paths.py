@@ -56,7 +56,7 @@ int wmain(int argc, wchar_t** argv) {
 }
 ''', encoding='utf-8')
     cache = (repo/'build/CMakeCache.txt').read_text(encoding='utf-8')
-    compiler = re.search(r'^CMAKE_CXX_COMPILER:FILEPATH=(.+)$', cache, re.M).group(1)
+    compiler = re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$', cache, re.M).group(1)
     helper = work/'fail-compiler.exe'
     subprocess.run([compiler, '-std=c++20', '-static', '-municode', str(source), '-o', str(helper)],
         cwd=work, check=True, capture_output=True, timeout=60)

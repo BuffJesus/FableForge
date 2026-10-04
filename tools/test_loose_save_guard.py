@@ -39,7 +39,7 @@ def main():
         wad.rename(renamed)
     source = work / 'hold.cpp'
     source.write_text('#include <windows.h>\n#include <cstdio>\nint main() { puts("ready"); fflush(stdout); Sleep(180000); }\n')
-    compiler = re.search(r'^CMAKE_CXX_COMPILER:FILEPATH=(.+)$', (repo / 'build/CMakeCache.txt').read_text(), re.MULTILINE).group(1)
+    compiler = re.search(r'^CMAKE_CXX_COMPILER:(?:FILEPATH|STRING)=(.+)$', (repo / 'build/CMakeCache.txt').read_text(), re.MULTILINE).group(1)
     helper = root / 'Fable.exe'
     subprocess.run([compiler, str(source), '-o', str(helper)], check=True, capture_output=True, timeout=60)
     def snapshot():

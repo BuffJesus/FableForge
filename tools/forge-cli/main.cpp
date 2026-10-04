@@ -7682,9 +7682,22 @@ int questMaster(const std::string& qstPath,
 // two files byte-identical? Streamed (the GB packs ship 900 MB STBs), size first.
 bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path& b) {
     std::error_code ec;
-    if (!std::filesystem::exists(a, ec) || !std::filesystem::exists(b, ec)) return false;
-    if (std::filesystem::file_size(a, ec) != std::filesystem::file_size(b, ec)) return false;
+    if (!std::filesystem::exists(a, ec)) {
+        if (ec) throw std::runtime_error("cannot inspect " + a.string() + ": " + ec.message());
+        return false;
+    }
+    if (!std::filesystem::exists(b, ec)) {
+        if (ec) throw std::runtime_error("cannot inspect " + b.string() + ": " + ec.message());
+        return false;
+    }
+    const auto aSize = std::filesystem::file_size(a, ec);
+    if (ec) throw std::runtime_error("cannot inspect " + a.string() + ": " + ec.message());
+    const auto bSize = std::filesystem::file_size(b, ec);
+    if (ec) throw std::runtime_error("cannot inspect " + b.string() + ": " + ec.message());
+    if (aSize != bSize) return false;
     std::ifstream fa(a, std::ios::binary), fb(b, std::ios::binary);
+    if (!fa) throw std::runtime_error("cannot read " + a.string());
+    if (!fb) throw std::runtime_error("cannot read " + b.string());
     std::vector<char> ba(1 << 20), bb(1 << 20);
     while (fa && fb) {
         fa.read(ba.data(), std::streamsize(ba.size()));
@@ -7692,6 +7705,7 @@ bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path&
         if (fa.gcount() != fb.gcount() || !std::equal(ba.begin(), ba.begin() + fa.gcount(), bb.begin())) return false;
         if (fa.gcount() == 0) break;
     }
+    if (fa.bad() || fb.bad()) throw std::runtime_error("cannot finish reading " + a.string() + " or " + b.string());
     return true;
 }
 

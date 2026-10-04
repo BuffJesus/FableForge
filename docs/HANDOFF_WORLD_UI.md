@@ -80,6 +80,61 @@ and explicit steps pass; rebuild its hash after final text changes. Application
 archive 9bc1f1d remains unchanged and accepted across 42 original/resumed checks.
 This guide prose does not turn synthetic offline checks into manual/gameplay proof.
 
+## 2026-10-04 complete Data installer acceptance in the owning review branch
+
+Continued the saved `a0fbb3a` checkpoint in
+`D:/Code/FableForge-overhaul-review` for the user's original three-source plan.
+The real extracted Aeon `Data` selection passed GUI Add, followed by the
+Controller FMP and unmodified controller runtime folder. The normal-size
+automation trace `build/complete-aeon-controller-9app3r3_/gui-1440x1000-1791120504186020000/guide.txt.log`
+ends `RESULT PASS`: Check conflicts, Deploy, Check while deployed, redeploy and
+Undeploy. Aeon's 2.68 GB source hash took about 25 minutes on this scratch drive;
+the first capture wrapper's 30-minute deadline was stopped after GUI deployment
+began, leaving its owned GUI automation running through the successful result.
+No product error was masked. Its deployed `game.bin`, `names.bin`, DLL and
+`Mods.ini` matched the independently built CLI output byte for byte; runtime
+alternate `Data` was excluded. All five original copied baseline banks/WAD
+matched their before hashes after Undeploy; the stage manifest was absent.
+
+The compact 800x600/1.5 run reused that exact saved GUI order, then passed
+Check, Deploy, Check while deployed, redeploy and Undeploy; its runner recorded
+`gui-result-compact.json` and compared all baseline file paths plus compiled
+banks, WAD and `graphics.big` digests before/after. It did not repeat the real
+Aeon Add. All four guide screenshots now come from the passing normal run;
+the compact installation summary was visually checked for clipping. The guide,
+README, package guide README and modding reference now describe Forge's complete
+three-source route. The old rc.3 guide and manual-copy/two-source instructions
+are superseded.
+
+Focused checks after the change: 14 complete-install cases, 29 bank refusal/carry
+cases, 16 FMP record cases, 38/38 CTest cases, documentation commands and the
+new locked same-size file regression pass. `filesIdentical` now refuses unreadable
+files instead of silently calling them unchanged; the regression checks a real
+Windows sharing lock, unchanged source/prior sentinel, and retry after unlock.
+Direct `mods merge` can leave prepared definition files in its *requested output*
+after a late read refusal; the managed Deploy path prepares in scratch. That
+direct-merge atomicity remains follow-up work. No source corpus or live game
+install was written.
+
+Local development ZIPs in `dist/development/20261004-complete-data/` are
+unpublished. Application SHA256
+`704af5465df45a1d3947c2fb27dfd7b8b8a6601693b73c36d8ad3c54c013a646`;
+guide SHA256
+`479ffbbfce02e868249b232f8b0a228d13002949d345d7dad2ac7656b3b04d2a`.
+The extracted application passes all **46** package workflows, **zero skips**,
+103 file identities and 117 documentation links in
+`build/package-smoke-d89nful0/result.json`. Its first run stopped at a test
+fixture which only accepted `CMAKE_CXX_COMPILER:FILEPATH`; this checkout records
+`:STRING`. Six compiler-reading fixtures now accept both, focused report retry
+passes, and the complete second package run passes. Game launch, controller
+behavior on PC/Retroid, Android/Winlator and arbitrary unnamed cross-overhaul
+composition remain unverified. No release or Discord message was sent.
+
+Next: review the direct-merge partial-output defect, reconcile the accepted
+review branch into primary, and prepare any publication or Perodis response for
+the user's final approval. Keep rc.3's failure and the new archive's offline
+scope explicit; do not tell Perodis to copy Aeon into the game by hand.
+
 ## Active: Forge-managed complete Data installation, user plan restored
 
 User explicitly rejects manual copying and requires the original manager workflow:
