@@ -376,6 +376,22 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("reward object index out of range");
                 return {offset + 4 + index * 8, i + 1, Destination::GameEntry};
             }
+            // CAppearanceModifierGraphics is a counted array of 24-byte
+            // entries. The third u32 is the worn mesh's graphics.big ID;
+            // the selectors, scale, and appearance range stay untouched.
+            if (entry.definition == "CAppearanceModifierDef" &&
+                field.name == "Graphics" && field.type == "CAppearanceModifierGraphics" &&
+                parts.size() == 4 && parts[1] == "Appearance Clothing Model List" &&
+                parts[3] == "Clothing Model ID") {
+                if (field.value.size() < 4) fail("invalid appearance graphics list");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 24 ||
+                    field.value.size() != 4 + count * 24)
+                    fail("unsupported appearance graphics layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("appearance graphics index out of range");
+                return {offset + 4 + index * 24 + 8, i + 1, Destination::MeshEntry};
+            }
             // The archived hero sound map's "Default Fire Effect" is the
             // name offset in the second word of a criteria pair. The first
             // word is a criterion hash; accept only the verified no-single

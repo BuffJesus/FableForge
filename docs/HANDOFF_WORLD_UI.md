@@ -8524,3 +8524,26 @@ Edge Rock Troll Spawn progresses to a missing target error for
 `names.bin` hashes are unchanged. No gameplay test was performed. Direct
 non-staging `mods merge` already prepares in scratch; its final copy may still
 partially fail on destination I/O errors.
+
+## 2026-10-04 appearance graphics FMP continuation
+
+Added guarded `CAppearanceModifierDef.Graphics` links for the legacy
+`Appearance Clothing Model List.{i}.Clothing Model ID` path. The preserved
+field layout is a count plus 24-byte records, with the graphics BIG mesh ID in
+the third word of each record. The independent evidence is in
+`D:/Documents/FableTLC/docs/engine/HERO_APPEARANCE.md`. Direct FMP import and
+the final composer both plan mesh IDs for this path.
+
+`tools/test_fmp_appearance_mesh_links.py` passes with 25 named links from the
+original Berserk Horns and Will Baldness FMPs: each output Graphics field has
+exactly the named ID words changed, and direct/merged definition banks match.
+It also checks malformed-list refusal and missing-mesh refusal with prior
+output intact. The separate `fableforge_fmplinks_tests` CTest passes. Evidence:
+`build/fmp-appearance-links-k1vky57m/result.json`.
+
+Full named small-bank coverage at
+`build/named-fmp-coverage-r5hiyz_2/result.json` rises from 381/577 to
+391/577 accepted; 167 link refusals and 244 large-bank deferrals remain.
+Ten previously refused appearance packages pass. Four progress to separate
+missing-mesh or unsupported-link refusals. The archive and installed input
+hashes are unchanged. No rendering or gameplay was tested.

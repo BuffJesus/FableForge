@@ -484,3 +484,20 @@ the prior 375; 177 link refusals remain and 244 large-bank packages remain
 deferred. Obsidian Edge Rock Troll Spawn passes this field but still lacks its
 `OBJECT_OBSIDIAN_EDGE` target in the selected baseline. These are offline
 composition checks, not runtime or gameplay validation.
+
+2026-10-04 appearance-mesh follow-up: the `CAppearanceModifierGraphics` field
+has a count and 24-byte records; the third word of each record is a
+`graphics.big` mesh ID. The local engine evidence is
+`D:/Documents/FableTLC/docs/engine/HERO_APPEARANCE.md`. Forge now resolves the
+legacy `Appearance Clothing Model List.{i}.Clothing Model ID` link at that
+word in both direct FMP apply and final composition, validating the array
+length and index. `tools/test_fmp_appearance_mesh_links.py` checks 25 links
+from the original Berserk Horns and Will Baldness packages against named mesh
+entries; the complete Graphics field differs only at linked ID words. Direct
+and composed definition banks match. A malformed count and missing named mesh
+both refuse without changing prior output. The full eligible scan at
+`build/named-fmp-coverage-r5hiyz_2/result.json` accepts 391/577 attempted
+small-bank FMPs, ten more than before; 167 link refusals and 244 deferred
+large-bank packages remain. Four appearance packages still refuse on missing
+mesh names or another unsupported reference. This does not verify game
+rendering or gameplay.

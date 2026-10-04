@@ -8457,7 +8457,8 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         const auto* entry = &game.entries().at(index);
         if (!meshIds && std::any_of(recordLinks.begin(), recordLinks.end(),
                 [](const auto& link) { return link.path.ends_with(".Model ID") ||
-                                             link.path.ends_with(".Model Eye ID"); })) {
+                                             link.path.ends_with(".Model Eye ID") ||
+                                             link.path.ends_with(".Clothing Model ID"); })) {
             meshIds.emplace(meshIdentityMap(fs::path(baseRoot) / graphicsRel));
             if (const auto* packageMeshes = pkg.findBank("graphics"))
                 for (const auto& mesh : packageMeshes->entries)
@@ -9238,7 +9239,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     const bool hasNamedMeshLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {
         for (const auto& [name, links] : records)
             for (const auto& link : links)
-                if (link.path.ends_with(".Model ID") || link.path.ends_with(".Model Eye ID")) return true;
+                if (link.path.ends_with(".Model ID") ||
+                    link.path.ends_with(".Model Eye ID") ||
+                    link.path.ends_with(".Clothing Model ID")) return true;
         return false;
     });
     const bool hasNamedTextureLinks = std::any_of(rootLinks.begin(), rootLinks.end(), [](const auto& records) {

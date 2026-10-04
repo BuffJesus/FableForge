@@ -46,8 +46,8 @@ DLL and Mods.ini match the independent CLI build. The illustrated guide has
 four new captures from the passing run. All Release targets, 38 core tests,
 14 install, 29 bank and 16 FMP cases pass. An extracted local development ZIP
 passes all 46 workflows with zero skips, 103 identities and 117 links. The
-old rc.3 package is unchanged; game/Retroid behavior is untested. Direct
-At that checkpoint, `mods merge` late-read failure could leave prepared files in its requested output;
+old rc.3 package is unchanged; game/Retroid behavior is untested. At that
+checkpoint, `mods merge` late-read failure could leave prepared files in its requested output;
 managed Deploy prepares in scratch. Exact evidence, hashes and continuation are
 in HANDOFF_WORLD_UI.
 
@@ -97,9 +97,9 @@ The bounded `HERO_ABILITY` and `HERO_STATS` text-reference paths now resolve
 existing `text.big` names, with hero HUD icons resolved through `textures.big`.
 The archived `EXP And Hero Mod.fmp` applies directly and through the one-mod
 composer with byte-identical definition banks and 217 resolved named links.
-The current full small-bank scan accepts 381/577, six more than the prior
-375/577 scan after bounded `OBJECT_FAMILY` reward-list links; 177 link
-refusals remain. New FMP Text IDs now resolve after
+The current full small-bank scan accepts 391/577, ten more than the prior
+381/577 scan after bounded `CAppearanceModifierDef.Graphics` mesh links;
+167 link refusals remain. New FMP Text IDs now resolve after
 text-only sources, load order and picks are composed; cross-language ID
 validation and a 13-case synthetic archived-hero regression pass offline.
 Runtime behavior still requires separate validation. The proposed successor
