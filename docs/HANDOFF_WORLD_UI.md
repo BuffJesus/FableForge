@@ -8632,3 +8632,32 @@ Restore, the Even Damage variants, Hero to Hobbe total conversion, Soul
 Seeker V2 and EXP Mod. Remaining: 133 link refusals, 11 unavailable schemas,
 eight record identity refusals and 244 deferred large-bank packages. The
 archive and installed input hashes are unchanged. Gameplay is unverified.
+
+## 2026-10-04 sparse augmentation effect groups
+
+CObjectAugmentationsDef.AugmentationParticles has counted rows containing an
+augmentation key, scale, four effect words and two counted dummy-name lists.
+Legacy export omits unresolved effect slots. Forge retains each group's target
+count and order, requires that the row's populated effect-word count agrees,
+and addresses those exact words. The first pair, last pair and full four-slot
+layouts are verified from original package bytes. Ambiguous rows refuse.
+Both dummy lists resolve saved name offsets. EmptySlotName is a text ID, and
+the six projectile trail/hit controls resolve effect IDs instead of game.bin
+indexes, matching the local ChocolateBox control definitions.
+
+`tools/test_fmp_augmentation_links.py` passes on the original Obsidian Edge
+Augmentation Fix: all 67 linked words match independently read identities and
+every other record byte remains intact. Direct and one-mod composed definition
+banks match. Removing a populated source effect or adding an oversized name
+list refuses both routes while preserving prior output. Evidence:
+`build/fmp-augmentation-links-j7a_hnf1/result.json`. The 20-link weapon/load-order
+regression passes at `build/fmp-weapon-links-jyjoajth`; FMP link CTest passes.
+
+Full eligible scan `build/named-fmp-coverage-d8j4ye_7/result.json` accepts
+431/577, up six from 425 with no accepted-package regressions. New cases are
+both Object Augmentation Edit merge tests, Legendary Broadsword 02, No Quivers
+Any Long Bow, Obsidian Edge Augmentation Fix and Truly Evil S.O.A. Remaining:
+127 link refusals, 11 schema, eight record identity and 244 deferred large-bank
+packages. Archive and baseline hashes are unchanged; gameplay is unverified.
+Fable Reloaded now passes augmentation metadata and reaches a separate
+CBonusItemDef particle-effect destination issue.

@@ -547,3 +547,20 @@ Evidence: `build/fmp-weapon-links-rlotdvac/result.json`.
 Full scan `build/named-fmp-coverage-plbkpz3z/result.json` accepts 425/577,
 20 more than before and no accepted-package regressions. 133 link refusals and
 244 deferred large-bank packages remain. This is offline composition evidence.
+
+2026-10-04 augmentation follow-up: each AugmentationParticles row stores a
+key, scale, four effect words and two counted name-offset lists. Metadata target
+lists can omit null effect words; the importer requires the target count to
+match populated words and retains their order. It supports first-pair,
+last-pair and full four-slot rows, rejecting an ambiguous count. It validates
+the complete map and both nested lists before selecting a word. EmptySlotName
+and projectile-effect scalars also use their documented text/effect banks.
+
+`tools/test_fmp_augmentation_links.py` independently checks all 67 symbolic
+words of the original Obsidian Edge Augmentation Fix, unchanged surrounding
+bytes, direct/composed bank parity, ambiguous slots and oversized-list refusal.
+Evidence: `build/fmp-augmentation-links-j7a_hnf1/result.json`.
+The final-binary scan `build/named-fmp-coverage-d8j4ye_7/result.json` accepts
+431/577 small-bank packages, six more than before with no regressions.
+127 link refusals and 244 deferred large-bank packages remain; runtime behavior
+is unverified.

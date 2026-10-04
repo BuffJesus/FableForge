@@ -236,6 +236,17 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
         }
+        // Augmentation particle rows have four EffectID slots. Legacy export
+        // omits unresolved null slots, retaining the populated slots' order.
+        // Carry the group size so locate can reject an ambiguous source row.
+        if (group.path.starts_with("2080096978.Augmentations Effects Per Rank.") &&
+            group.path.ends_with(".unknown") &&
+            !group.targets.empty() && group.targets.size() <= 4) {
+            for (size_t i = 0; i < group.targets.size(); ++i)
+                result.push_back({group.path + "." + std::to_string(i) + "." +
+                    std::to_string(group.targets.size()), group.targets[i]});
+            continue;
+        }
         if (group.targets.size() != 1) {
             std::string detail;
             for (const auto& target : group.targets) {
@@ -352,6 +363,19 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     link.path == "714092448.unknown" &&
                     field.name == "OpenParticleEffect" && field.type == "int32")
                     return {offset, i + 1, Destination::EffectEntry};
+                if (entry.definition == "CObjectAugmentationsDef") {
+                    if (field.name == "EmptySlotName" && field.type == "uint32" &&
+                        link.path == "3513435638.TEXT_AUG_SLOT")
+                        return {offset, i + 1, Destination::TextEntry};
+                    if (field.type == "int32" && parts[1] == "unknown" &&
+                        (field.name == "FireProjectileTrailEffect" ||
+                         field.name == "LightningProjectileTrailEffect" ||
+                         field.name == "FireAndLightningProjectileTrailEffect" ||
+                         field.name == "FireProjectileOnHitEffect" ||
+                         field.name == "LightningProjectileOnHitEffect" ||
+                         field.name == "FireAndLightningProjectileOnHitEffect"))
+                        return {offset, i + 1, Destination::EffectEntry};
+                }
                 if (field.type == "int32" || field.type == "uint32" || field.type == "CDefIndex" || field.type == "J")
                     return {offset, i + 1, Destination::GameEntry};
                 // CREATURE's schema leaves GroupDef unresolved; the donor and
@@ -450,6 +474,57 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count || slot >= 2) fail("weapon trail link index out of range");
                 return {offset + 4 + index * 12 + 4 + slot * 4,
                         i + 1, Destination::TextureEntry};
+            }
+            if (entry.definition == "CObjectAugmentationsDef" &&
+                field.name == "AugmentationParticles" &&
+                field.type == "Map_VCObjectAugmentationParticleSet__W4EObjectAugmentationType__" &&
+                parts.size() == 6 && parts[1] == "Augmentations Effects Per Rank" &&
+                (parts[3] == "unknown" ||
+                 ((parts[3] == "Model Dummy to Attach Effect 1" ||
+                   parts[3] == "Model Dummy to Attach Effect 2") && parts[5] == "Dummy Node"))) {
+                if (field.value.size() < 4) fail("invalid augmentation particle map");
+                const size_t count = read32(field.value, 0), wanted = number(parts[2]);
+                if (count > 4096 || wanted >= count)
+                    fail("augmentation particle row index out of range");
+                size_t cursor = 4;
+                std::optional<size_t> targetOffset;
+                const bool effects = parts[3] == "unknown";
+                for (size_t row = 0; row < count; ++row) {
+                    if (cursor > field.value.size() || field.value.size() - cursor < 32)
+                        fail("unsupported augmentation particle row layout");
+                    const size_t rowStart = cursor;
+                    cursor += 24;
+                    for (size_t list = 0; list < 2; ++list) {
+                        const size_t names = read32(field.value, cursor);
+                        cursor += 4;
+                        if (names > 4096 || names > (field.value.size() - cursor) / 4)
+                            fail("unsupported augmentation particle name list");
+                        if (!effects && row == wanted &&
+                            list == (parts[3] == "Model Dummy to Attach Effect 1" ? 0u : 1u)) {
+                            const size_t index = number(parts[4]);
+                            if (index >= names) fail("augmentation dummy node index out of range");
+                            targetOffset = offset + cursor + index * 4;
+                        }
+                        cursor += names * 4;
+                        if (list == 0 && field.value.size() - cursor < 4)
+                            fail("truncated augmentation particle second list");
+                    }
+                    if (effects && row == wanted) {
+                        std::vector<size_t> populated;
+                        for (size_t slot = 0; slot < 4; ++slot)
+                            if (read32(field.value, rowStart + 8 + slot * 4) != 0)
+                                populated.push_back(rowStart + 8 + slot * 4);
+                        const size_t ordinal = number(parts[4]), expected = number(parts[5]);
+                        if (expected == 0 || expected > 4 || populated.size() != expected ||
+                            ordinal >= expected)
+                            fail("ambiguous augmentation effect slots");
+                        targetOffset = offset + populated[ordinal];
+                    }
+                }
+                if (cursor != field.value.size() || !targetOffset)
+                    fail("augmentation particle map has trailing bytes or missing target");
+                return {*targetOffset, i + 1,
+                        effects ? Destination::EffectEntry : Destination::NameOffset};
             }
             if (entry.definition == "CREATURE" &&
                 link.path == "706745797.Weapon3ID" &&
