@@ -328,6 +328,13 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (field.name == "GroupDef" && field.type == "?")
                     return {offset, i + 1, Destination::GameEntry};
             }
+            if (entry.definition == "CREATURE" &&
+                link.path == "706745797.Weapon3ID" &&
+                field.name == "RangedWeaponDef" && field.value.size() == 28 &&
+                read32(field.value, 4) == defdecode::fieldTag("InitialSheathedWeapon") &&
+                read32(field.value, 12) == defdecode::fieldTag("PBrain") &&
+                read32(field.value, 20) == defdecode::fieldTag("CreatureInteractionType"))
+                return {offset, i + 1, Destination::GameEntry};
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
             if (parts.size() >= 4 && !parts.back().empty() && !parts[1].empty() &&

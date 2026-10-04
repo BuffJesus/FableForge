@@ -252,6 +252,19 @@ The remaining 238 link refusals have other causes; 244 packages with large
 texture or graphics banks were deferred. This remains an offline import test,
 not proof that the mods work during gameplay.
 
+2026-10-04 ranged-weapon follow-up: `CREATURE` metadata path
+`706745797.Weapon3ID` is the first four-byte value of the existing guarded
+28-byte `RangedWeaponDef` field. It links to a `game.bin` `OBJECT` record.
+The original `No body Rots.fmp` replaces 510 records and carries 47,328
+symbolic links; direct apply and final composition produce byte-identical
+`game.bin` and `names.bin`, and its bandit archer's crossbow points to retail
+record 5595. `tools/test_fmp_creature_weapon_links.py` checks that result.
+The full eligible scan at `build/named-fmp-coverage-8zjp2lak/result.json`
+accepts 338 of 577 attempted small-bank packages, 18 more than before this
+field was supported. It still refuses 220 on other link constraints, 11 on
+schema availability and eight on record identity, while 244 large-bank
+packages were deferred. This remains an offline import check.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16

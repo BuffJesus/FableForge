@@ -75,6 +75,11 @@ apply and composition with matching definition banks; the full eligible
 small-bank scan rises to 320/577, an additional 96 accepted packages. The
 remaining 238 link refusals and 244 deferred large-bank packages are ongoing
 corpus work, not gameplay compatibility claims.
+The guarded `CREATURE.Weapon3ID` link now resolves through the existing
+`RangedWeaponDef` layout. The archived 510-record `No body Rots.fmp` passes
+direct/composed byte comparison and crossbow target validation. The eligible
+small-bank scan rises to 338/577; 220 remaining link refusals need distinct
+format work.
 
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover
