@@ -356,11 +356,19 @@ bool App::setModPick(const std::string& key, const std::string& winner) {
 
 bool App::modPick(const std::string& key, const std::string& winner) {
     const ModConflict* row = nullptr;
-    for (const auto& c : modConflicts_) if (key == "*" || c.key == key) { row = &c; break; }
+    const ModFieldConflict* selectedField = nullptr;
+    for (const auto& c : modConflicts_) {
+        if (key == "*" || c.key == key) { row = &c; break; }
+        for (const auto& field : c.fields)
+            if (!field.choiceKey.empty() && field.choiceKey == key) { row = &c; selectedField = &field; break; }
+        if (row) break;
+    }
     if (!row) { pushLog("mods: no conflict " + key, 2); return false; }
     if (!row->pickable) { pushLog("mods: reorder packs to choose this lip sync winner", 1); return false; }
-    if (!setModPick(row->key, winner)) return false;
-    pushLog("mods: " + row->label + " -> " + (winner == "-" ? "load order" : winner) + " (forge_mods_picks.txt; deploy applies it)", 0);
+    if (!setModPick(selectedField ? selectedField->choiceKey : row->key, winner)) return false;
+    pushLog("mods: " + row->label + (selectedField ? " / " + selectedField->field : "") + " -> " +
+        (winner == "-" ? selectedField ? "record / load order" : "load order" : winner) +
+        " (forge_mods_picks.txt; deploy applies it)", 0);
     return true;
 }
 
@@ -394,7 +402,33 @@ bool App::modChoiceUnavailable(const ModConflict& conflict) const {
     return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
 }
 
+bool App::modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const {
+    const auto saved=modPicks_.find(field.choiceKey);
+    return !field.choiceKey.empty() && saved!=modPicks_.end() &&
+        !isModBaselineChoice(conflict,saved->second) &&
+        std::find(field.mods.begin(),field.mods.end(),saved->second)==field.mods.end();
+}
+
+std::string App::modSavedChoiceLabel(const std::string& key) {
+    if (key.rfind("field:",0)==0) {
+        try {
+            const auto identity=nlohmann::json::parse(key.substr(6));
+            if (identity.is_array() && identity.size()==6 && identity[0].is_string() &&
+                identity[1].is_string() && identity[5].is_string())
+                return identity[0].get<std::string>()+" / "+identity[1].get<std::string>()+
+                    " / "+identity[5].get<std::string>()+" (saved field)";
+        } catch (const std::exception&) {}
+    }
+    return key;
+}
+
 std::string App::modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const {
+    if (!field.choiceKey.empty()) {
+        if (const auto selected=modPicks_.find(field.choiceKey); selected!=modPicks_.end()) {
+            if (isModBaselineChoice(conflict,selected->second)) return "vanilla";
+            if (std::find(field.mods.begin(),field.mods.end(),selected->second)!=field.mods.end()) return selected->second;
+        }
+    }
     const auto pick=modPicks_.find(conflict.key);
     if (pick!=modPicks_.end()) {
         const auto& winner=pick->second;
@@ -414,7 +448,10 @@ std::string App::modFieldValue(const ModConflict& conflict, const ModFieldConfli
 }
 
 bool App::modConflictMatches(const ModConflict& conflict) const {
-    if (modChoicesOnly_ && !modPicks_.contains(conflict.key)) return false;
+    if (modChoicesOnly_ && !modPicks_.contains(conflict.key) &&
+        std::none_of(conflict.fields.begin(),conflict.fields.end(),[&](const auto& field) {
+            return !field.choiceKey.empty() && modPicks_.contains(field.choiceKey);
+        })) return false;
     const std::string_view needle(modConflictSearch_);
     if (needle.empty()) return true;
     auto contains = [&](std::string_view text) {
@@ -424,7 +461,10 @@ bool App::modConflictMatches(const ModConflict& conflict) const {
     if (contains(conflict.key) || contains(conflict.label) || contains(conflict.kind)) return true;
     if (const auto pick = modPicks_.find(conflict.key); pick != modPicks_.end() && contains(pick->second)) return true;
     for (const auto& mod : conflict.mods) if (contains(mod)) return true;
-    for (const auto& field : conflict.fields) if (contains(field.field)) return true;
+    for (const auto& field : conflict.fields) {
+        if (contains(field.field)) return true;
+        if (const auto pick=modPicks_.find(field.choiceKey); pick!=modPicks_.end() && contains(pick->second)) return true;
+    }
     return false;
 }
 
@@ -432,7 +472,10 @@ std::vector<std::pair<std::string, std::string>> App::modUnreportedChoices() con
     std::vector<std::pair<std::string, std::string>> choices;
     if (!modReportLoaded_) return choices;
     std::set<std::string> reported;
-    for (const auto& conflict : modConflicts_) reported.insert(conflict.key);
+    for (const auto& conflict : modConflicts_) {
+        reported.insert(conflict.key);
+        for (const auto& field : conflict.fields) if (!field.choiceKey.empty()) reported.insert(field.choiceKey);
+    }
     for (const auto& choice : modPicks_)
         if (!reported.contains(choice.first)) choices.push_back(choice);
     return choices;
@@ -472,6 +515,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                     auto& detail = rows.back().fields.back();
                     detail.hasValues = field.contains("base_value");
                     detail.type = field.value("type", "");
+                    detail.choiceKey = field.value("choice_key", "");
                     detail.baseline = field.value("base_value", "");
                     for (const auto& value : field.value("values", json::array()))
                         detail.values.emplace_back(value.value("mod", ""), value.value("value", ""));
@@ -938,24 +982,51 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             }
             if (c.fieldMerged) {
                 ImGui::PushFont(fontSmall_);
-                theme::hint("This choice resolves conflicting fields. Other edits still merge.");
+                theme::hint("This choice resolves conflicting fields. Individual field choices take precedence. Other edits still merge.");
                 ImGui::PopFont();
                 if (!c.fields.empty()) {
-                    const bool open=ImGui::TreeNodeEx("##fields",ImGuiTreeNodeFlags_SpanAvailWidth,
+                    const float wrapRight=ImGui::GetCursorPosX()+cardInner;
+                    const bool open=ImGui::TreeNodeEx("##fields",0,
                         "Conflicting fields (%zu)",c.fields.size());
                     auto_.registerWidget(("mod_fields_"+std::to_string(i)).c_str());
                     if (open) {
                         ImGui::PushFont(fontSmall_);
+                        ImGui::PushTextWrapPos(wrapRight);
                         for (size_t fieldIndex=0;fieldIndex<c.fields.size();++fieldIndex) {
                             const auto& field=c.fields[fieldIndex];
                             ImGui::BeginGroup();
                             ImGui::TextWrapped("%s",field.field.c_str());
+                            if (!field.choiceKey.empty()) {
+                                ImGui::PushID(int(fieldIndex));
+                                const bool picked=modPicks_.contains(field.choiceKey);
+                                const auto current=modFieldWinner(c,field);
+                                const auto shown=(picked ? "* " : "")+current;
+                                ImGui::SetNextItemWidth(std::max(S(40),wrapRight-ImGui::GetCursorPosX()));
+                                if (ImGui::BeginCombo("##fieldwinner",shown.c_str())) {
+                                    if (ImGui::Selectable("record / load order",!picked)) modPick(field.choiceKey,"-");
+                                    auto_.registerWidget(("mod_field_reset_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    for (size_t source=0;source<field.mods.size();++source) {
+                                        const auto& mod=field.mods[source];
+                                        if (ImGui::Selectable(mod.c_str(),picked && current==mod)) modPick(field.choiceKey,mod);
+                                        auto_.registerWidget(("mod_field_pick_"+std::to_string(i)+"_"+std::to_string(fieldIndex)+"_"+std::to_string(source)).c_str());
+                                    }
+                                    if (ImGui::Selectable("current baseline",picked && current=="vanilla")) modPick(field.choiceKey,"vanilla");
+                                    auto_.registerWidget(("mod_field_baseline_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    ImGui::EndCombo();
+                                }
+                                auto_.registerWidget(("mod_field_winner_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                ImGui::PopID();
+                                if (modFieldChoiceUnavailable(c,field)) {
+                                    ImGui::TextColored(theme::vec(theme::Warn),"Saved field choice has no changed value here; record choice applies.");
+                                    auto_.registerWidget(("mod_field_unavailable_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                }
+                            }
                             const std::string winner=modFieldWinner(c,field);
                             ImGui::TextWrapped("Winner: %s",winner.c_str());
                             if (field.hasValues) {
                                 ImGui::TextWrapped("Value: %s",modFieldValue(c,field).c_str());
                                 auto_.registerWidget(("mod_field_value_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
-                                theme::hint(("Type: "+field.type).c_str());
+                                ImGui::TextColored(theme::vec(theme::Faint),"Type: %s",field.type.c_str());
                                 ImGui::TextWrapped("Baseline: %s",field.baseline.c_str());
                                 auto_.registerWidget(("mod_field_base_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
                                 for (size_t sourceIndex=0;sourceIndex<field.values.size();++sourceIndex) {
@@ -967,15 +1038,16 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                             }
                             std::string contributors;
                             for (const auto& mod : field.mods) contributors+=(contributors.empty()?"":", ")+mod;
-                            theme::hint(("Changed by: "+contributors).c_str());
+                            ImGui::TextColored(theme::vec(theme::Faint),"Changed by: %s",contributors.c_str());
                             const auto pick=modPicks_.find(c.key);
                             if (pick!=modPicks_.end() && winner!="vanilla" && winner!=pick->second)
-                                theme::hint("The selected mod has no changed value for this field; load order applies.");
+                                if (field.choiceKey.empty() || !modPicks_.contains(field.choiceKey))
+                                    ImGui::TextColored(theme::vec(theme::Faint),"The selected mod has no changed value for this field; load order applies.");
                             ImGui::EndGroup();
                             auto_.registerWidget(("mod_field_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
                             ImGui::Spacing();
                         }
-                        ImGui::PopFont();
+                        ImGui::PopTextWrapPos();ImGui::PopFont();
                         ImGui::TreePop();
                     }
                 }
@@ -1024,12 +1096,13 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             for (size_t i = 0; i < unreportedChoices.size(); ++i) {
                 const auto& [key, winner] = unreportedChoices[i];
                 ModConflict choice;
-                choice.kind = "saved choice"; choice.key = key; choice.label = key;
+                choice.kind = "saved choice"; choice.key = key; choice.label = modSavedChoiceLabel(key);
                 if (!modConflictMatches(choice)) continue;
                 ++matching;
                 if (shown++ >= 400) continue;
                 ImGui::PushID(key.c_str());
-                ImGui::TextWrapped("%s", key.c_str());
+                ImGui::TextWrapped("%s", choice.label.c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",key.c_str());
                 ImGui::TextWrapped("Saved choice: %s", winner.c_str());
                 auto_.registerWidget(("mod_unreported_choice_"+std::to_string(i)).c_str());
                 if (theme::ghostButton("Clear choice", ImVec2(cardInner, S(28)))) {

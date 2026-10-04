@@ -191,6 +191,12 @@ void save(const fs::path& gameRoot, const Order& order) {
     }
 }
 
+std::string sha256OfBytes(std::string_view bytes) {
+    Sha256 s;
+    s.update(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+    return s.hex();
+}
+
 std::string sha256Of(const fs::path& p) {
     Sha256 s;
     std::error_code ec;

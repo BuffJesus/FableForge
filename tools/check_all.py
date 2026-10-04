@@ -67,6 +67,8 @@ def main():
                   [sys.executable, "tools/test_mod_winner_refresh.py", "--root", install_root], capture_output=True)
         ok &= run("mod field details, actual contributors, choice scope and independent merged values",
                   [sys.executable, "tools/test_mod_field_details.py", "--install", install_root], capture_output=True)
+        ok &= run("individual scalar field choices, precedence/reset, exact merged bytes and layout identity",
+                  [sys.executable, "tools/test_mod_field_choices.py", "--install", install_root], capture_output=True)
         ok &= run("mod raw-file snapshots, same-size source refresh, clip visibility and composed picks",
                   [sys.executable, "tools/test_mod_file_content.py", "--install", install_root], capture_output=True)
         ok &= run("long mod field values, each baseline/contributor/result and exact merged payload",

@@ -1,4 +1,5 @@
 #include "forge/defdecode.hpp"
+#include "forge/modorder.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdio>
 #include <exception>
@@ -9,6 +10,12 @@ int main() {
     auto check = [&](bool okay, const char* label) {
         if (!okay) { ++failures; std::fprintf(stderr, "def value: %s\n", label); }
     };
+    check(forge::modorder::sha256OfBytes("") ==
+          "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "empty layout bytes use standard SHA256");
+    check(forge::modorder::sha256OfBytes("abc") ==
+          "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "layout identity SHA256 matches known vector");
     for (const auto* type : {"CCharString"}) {
         forge::defdecode::DecodedField field;
         field.type = type;

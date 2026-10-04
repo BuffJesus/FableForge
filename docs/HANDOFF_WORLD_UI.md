@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 isolated persisted scalar field choices
+
+Review extends the per-part foundation into clean unique named scalar keys and
+Mods selectors, field-over-record/baseline/reset semantics, saved-only search,
+unavailable choice fallback and readable unreported field review. Existing
+PendingBanks persistence and sourceVersions relocation stay authoritative.
+Layout SHA256 guards bank/record/definition/prefix/name/type/tag/part identity;
+it excludes values and does not freeze selected source content. Prefix, unnamed
+and variable/composite fields keep existing record-level GUI choices.
+
+mod-field-choices-9ka0gtnk first passes both-size controls/badges/filter, exact mixed
+bytes and independent digest/type-layout guard. Expanded 4wqp86jv also passes
+unavailable source/search, another-bank key review/individual clearing, sharing-
+locked field save preservation and same-process retry. Compact selected, missing
+and locked screenshots inspected. field-choice-regressions-n_05gdpf passes all
+five scalar/field/long/unreported/unavailable workflows; 38/38 core checks pass.
+fmp-links-w74ywv2d passes old retail/Aeon/merged 14-target contracts and new scalar
+precedence, FMP-symbol source selection, missing-target refusal and external
+provider relocation. Docs commands pass. Source/package gates register the new
+workflow (40 package runtime checks). Final comment/doc changes and extracted
+package acceptance/promotion remain pending. Primary stays clean 0cca70f.
+
 ## 2026-10-03 isolated per-part composer foundation
 
 Review defdecode::mergeFields accepts optional decode-local part choices, taking

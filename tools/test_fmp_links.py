@@ -236,6 +236,35 @@ def main():
         choices[label] = {'selected_reference': value(field), 'independent_field_retained': True}
     reports['choices'] = choices
 
+    # An explicit scalar-field choice overrides the rival record choice, and
+    # must carry only that FMP part's named-link metadata into the final bank.
+    field_base=work/'choice-base-last'
+    result=subprocess.run([str(tool),'mods','build',str(field_base),str(work/'field-report'),
+                           '--fields',str(schema),'--json'],capture_output=True,timeout=120)
+    (work/'field-report.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode==0,result.stderr
+    rows=json.loads(result.stdout)['defs']['conflicts']
+    row=next(row for row in rows if row['record']==owner)
+    key=next(part['choice_key'] for part in row['field_conflicts'] if part['field']==field)
+    assert key.startswith('field:'),key
+    field_choices={}
+    for label,winner in [('controller',args.fmp.stem),('vanilla','vanilla')]:
+        picks=work/('field-'+label+'.txt')
+        picks.write_text(owner+'\t'+rival.name+'\n'+key+'\t'+winner+'\n',encoding='utf-8')
+        saved=picks.read_bytes();output=work/('field-'+label)
+        result=subprocess.run([str(tool),'mods','build',str(field_base),str(output),
+                               '--fields',str(schema),'--picks',str(picks)],capture_output=True,timeout=120)
+        (work/('field-'+label+'.log')).write_bytes(result.stdout+result.stderr)
+        assert result.returncode==0,result.stderr
+        actual_entries=read_bank(output);actual_ids={e['name']:i for i,e in enumerate(actual_entries) if e['name']}
+        payload=actual_entries[actual_ids[owner]]['data']
+        actual=u32(payload,payload.index(struct.pack('<I',crc0(field)))+4)
+        expected=base_reference if label=='vanilla' else actual_ids['CAMERA_MANAGER_PC_MAIN_COMBAT']
+        assert actual==expected and picks.read_bytes()==saved
+        assert u32(payload,payload.index(struct.pack('<I',crc0('CameraManagerMain')))+4)==ids['CAMERA_PC_FAR']
+        field_choices[label]={'selected_reference':actual,'record_choice_overridden':True,'independent_field_retained':True}
+    reports['field_choices']=field_choices
+
     # Corrupt an owned metadata copy and ensure failed application keeps prior
     # output bytes intact, rather than emitting a successfully imported bank.
     bad_fmp = work/'malformed.fmp'; bad_data = bytearray(args.fmp.read_bytes())
@@ -285,6 +314,14 @@ def main():
     assert all(p.read_bytes() == data for p,data in preserved_out.items())
     reports['composed_missing'] = {'unused_version_allowed': True, 'selected_version_refused': True,
                                    'prior_output_preserved': True}
+    field_missing_picks=work/'field-selected-missing.txt'
+    field_missing_picks.write_text(owner+'\t'+rival.name+'\n'+key+'\t'+missing_fmp.stem+'\n',encoding='utf-8')
+    result=subprocess.run([str(tool),'mods','build',str(unused_base),str(unused_out),
+                           '--fields',str(schema),'--picks',str(field_missing_picks)],capture_output=True,timeout=120)
+    (work/'field-selected-missing.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode!=0 and b'missing target' in result.stderr,result.stderr
+    assert all(p.read_bytes()==data for p,data in preserved_out.items())
+    reports['field_selected_missing']={'refused':True,'prior_output_preserved':True}
     # Another source may provide a named target absent during FMP normalization.
     # Both packages add an entry, so its final ID also differs from the provider's.
     provider = work/'Provider'
@@ -311,6 +348,14 @@ def main():
     assert final_entries[actual]['data'] == supplied_entry['data']
     reports['external_target'] = {'source_id': len(entries), 'final_id': actual,
                                    'resolved_name': supplied_name, 'provider_payload_preserved': True}
+    field_provider_out=work/'field-provider-output'
+    result=subprocess.run([str(tool),'mods','build',str(provider_base),str(field_provider_out),
+                           '--fields',str(schema),'--picks',str(field_missing_picks)],capture_output=True,timeout=120)
+    (work/'field-provided-target.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode==0,result.stderr
+    field_entries=read_bank(field_provider_out)
+    assert [(e['name'],e['definition'],e['data']) for e in field_entries]==[(e['name'],e['definition'],e['data']) for e in final_entries]
+    reports['field_external_target']={'final_id':actual,'all_record_payloads_equal_record_pick':True}
     assert {p:digest(p) for p in sources}==before
     (work/'result.json').write_text(json.dumps(reports,indent=2),encoding='utf-8')
     for label in ('retail', 'aeon', 'merged'):
@@ -318,6 +363,7 @@ def main():
     assert all(not reports[label]['errors'] for label in ('retail', 'aeon', 'merged')),'FMP named references do not resolve to their intended targets; see result.json'
     print('Four conflict choices, payload preservation and malformed-output refusal: PASS', flush=True)
     print('External target relocation and selected/unused missing-target checks: PASS', flush=True)
+    print('Scalar field precedence, FMP symbols, missing-target refusal and external relocation: PASS',flush=True)
 
 
 if __name__=='__main__': main()

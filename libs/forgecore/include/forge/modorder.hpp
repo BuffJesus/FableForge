@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace forge::modorder {
@@ -39,6 +40,8 @@ void save(const std::filesystem::path& gameRoot, const Order& order);
 
 // Hex sha256 of a file, or of a folder (every regular file's relative path + bytes, sorted).
 std::string sha256Of(const std::filesystem::path& p);
+// Hex SHA256 of exact bytes, using the same implementation as file identities.
+std::string sha256OfBytes(std::string_view bytes);
 
 // Edits. `add` appends (or inserts at `at` when >= 0); a source already listed (same sha256)
 // is refused. `remove` and `move` address an entry by name or 0-based index; both throw

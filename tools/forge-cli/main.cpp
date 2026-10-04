@@ -4717,6 +4717,28 @@ int modsAnalyze(const std::string& baseRoot,
 // winner picker produces, letting users resolve each conflict however they want.
 // Proven on Aeon x Lost Content: ~98% of changes merge, ~2% are true conflicts.
 // Writes <outDir>/names.bin + <outDir>/<bin>. mods are in load order.
+// Only unique named fixed-size scalars get persisted field choices initially.
+// Layout identity excludes values/relocated IDs and includes the whole ordered
+// name/type/tag shape plus prefix length. A schema/layout change cannot reuse a key.
+std::string defsLayoutIdentity(const forge::defdecode::Decoded& decoded) {
+    json fields = json::array();
+    for (const auto& field : decoded.fields) fields.push_back({field.name, field.type, field.tag});
+    return forge::modorder::sha256OfBytes(json({decoded.prefix.size(), fields}).dump());
+}
+
+size_t defsPickScalarSize(const forge::defdecode::DecodedField& field) {
+    if (field.type == "bool" || field.type == "uint8") return 1;
+    if (field.type == "int32" || field.type == "uint32" || field.type == "float" ||
+        field.type == "CDefIndex" || field.type == "CDefString") return 4;
+    return 0;
+}
+
+std::string defsFieldPickKey(const std::string& bin, const std::string& record,
+                            const std::string& definition, const std::string& layout,
+                            size_t part, const std::string& field) {
+    return "field:" + json::array({bin, record, definition, layout, part, field}).dump(-1, ' ', true);
+}
+
 int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::string& bin, const std::vector<std::string>& modRoots,
               const std::string& picksPath, const std::string& fieldSchemaPath,
@@ -4866,7 +4888,26 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                 std::vector<std::pair<std::string, forge::defdecode::Decoded>> dvs;
                 for (const auto& v : vers)
                     dvs.emplace_back(v.mod, forge::defdecode::decode(v.data, *def));
-                const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick);
+                std::map<size_t, std::string> fieldKeys, partPicks;
+                if (baseDec.clean()) {
+                    const auto layout = defsLayoutIdentity(baseDec);
+                    for (size_t fi = 0; fi < baseDec.fields.size(); ++fi) {
+                        const auto& field = baseDec.fields[fi];
+                        const auto bytes = defsPickScalarSize(field);
+                        if (field.name.empty() || !field.tagOk || !bytes || field.value.size() != bytes ||
+                            std::count_if(baseDec.fields.begin(), baseDec.fields.end(),
+                                [&](const auto& other) { return other.name == field.name; }) != 1) continue;
+                        bool eligible = true;
+                        for (const auto& [label, decoded] : dvs)
+                            if (!decoded.clean() || decoded.fields.size() != baseDec.fields.size() ||
+                                decoded.fields[fi].value.size() != bytes) eligible = false;
+                        if (!eligible) continue;
+                        const auto key = defsFieldPickKey(bin, name, baseDef[name], layout, fi+1, field.name);
+                        fieldKeys[fi+1] = key;
+                        if (const auto selected = picks.find(key); selected != picks.end()) partPicks[fi+1] = selected->second;
+                    }
+                }
+                const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick, partPicks);
                 if (fm.ok) {
                     merged.setEntryData(idx->second, fm.payload);
                     for (size_t vi = 0; vi < vers.size(); ++vi) {
@@ -4900,6 +4941,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                             }
                             c.fieldDetails.push_back({{"field", field.part}, {"mods", field.mods},
                                 {"winner", field.winner}, {"part_index", field.partIndex},
+                                {"choice_key", fieldKeys.contains(field.partIndex) ? fieldKeys.at(field.partIndex) : ""},
                                 {"type", baseline.type}, {"base_value", forge::defdecode::formatValue(baseline)},
                                 {"values", values}});
                         }
@@ -8235,6 +8277,7 @@ void patchToRoot(const std::string& baseRoot, const std::string& patchPath,
 // Picks file for the whole order (forge_mods_picks.txt next to forge_mods.json, or --picks):
 // one `key<TAB>winner` per line, the key namespaced by merge stage --
 //   <Record> or defs:<Record>          a game.bin record (as `defs merge --picks`)
+//   field:<JSON identity array>        one supported contested scalar definition field
 //   tng:<level path>|<thing key>       a thing of a level (`FinalAlbion/Arena.tng|uid:...`)
 //   qst:<qst path>|<quest name>        a quest flag
 //   text:<language>|<string name>      a text.big string

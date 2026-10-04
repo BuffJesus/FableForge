@@ -1897,14 +1897,17 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("mod_choice_failed=" + std::to_string(!modsChoiceError_.empty()));
     size_t unavailableChoices = 0;
     if (modReportLoaded_)
-        for (const auto& conflict : modConflicts_) unavailableChoices += modChoiceUnavailable(conflict);
+        for (const auto& conflict : modConflicts_) {
+            unavailableChoices += modChoiceUnavailable(conflict);
+            for (const auto& field : conflict.fields) unavailableChoices += modFieldChoiceUnavailable(conflict,field);
+        }
     v.push_back("mods_unavailable_choices="+std::to_string(unavailableChoices));
     const auto unreportedChoices = modUnreportedChoices();
     v.push_back("mods_unreported_choices="+std::to_string(unreportedChoices.size()));
     size_t matchingUnreportedChoices = 0;
     for (const auto& [key, winner] : unreportedChoices) {
         ModConflict choice;
-        choice.kind = "saved choice"; choice.key = key; choice.label = key;
+        choice.kind = "saved choice"; choice.key = key; choice.label = modSavedChoiceLabel(key);
         matchingUnreportedChoices += modConflictMatches(choice);
     }
     v.push_back("mods_unreported_matching="+std::to_string(matchingUnreportedChoices));

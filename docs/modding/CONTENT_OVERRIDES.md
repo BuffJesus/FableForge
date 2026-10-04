@@ -1,5 +1,26 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-03 isolated scalar field-choice increment
+
+Owning review adds choices for contested unique named fixed-size scalar fields
+in clean definitions, with field-over-record precedence, baseline and individual
+reset. JSON reports carry bank/record/type/layout-qualified choice keys; GUI
+retains them, follows selected values/badges and includes field picks in saved-only
+search. Missing contributors retain their picks with record-choice fallback.
+Unreported fields display readable bank/record/field labels and clear individually.
+Layout SHA256 includes prefix length and ordered field name/type/tag metadata,
+excluding values and relocated IDs. This does not detect source-content updates.
+
+Both-size actual controls, exact mixed bank values (10,21,31,5), type-layout
+changes, unavailable selections/search, another-bank review/clearing and sharing-
+locked field save/retry pass in mod-field-choices-4wqp86jv. All sources, baseline,
+order and unaffected choices remain byte-exact. Expanded FMP audit w74ywv2d proves
+field-selected metadata follows the final named target, selected missing targets
+refuse before writes, and external target relocation works. Five related GUI
+workflows and 38 core checks pass. Extracted-package validation and promotion
+remain pending; arrays/prefix/unnamed selection, profiles, component policies and
+source-content stale-choice validation stay separate.
+
 ## 2026-10-03 individual-field scope audit
 
 At integrated 0cca70f, owning review field-choice-scope-audit-zh6iebk1 creates

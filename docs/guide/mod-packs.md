@@ -51,6 +51,18 @@ a field unchanged, the last mod that changed that field wins instead, with an
 explanation beside the field. **Vanilla for conflicting fields** restores those
 contested fields and keeps independent edits from the other mods.
 
+Supported named scalar fields also have their own winner dropdown. A field
+choice takes precedence over the record choice. **Current baseline** restores
+that contested field; **record / load order** clears only its field choice.
+Other independent edits still merge. The selected values and wins/loses counts
+update immediately; Build and deploy applies the saved choices.
+
+If a saved field source has no changed value in the current comparison, Forge
+keeps the choice for review and uses the record choice. Choices whose targets
+or field layouts are absent from the latest report appear under **Other saved
+choices**, where you can clear them individually. Values describe the last
+check; run Check conflicts again after updating your mods.
+
 ## Deploy and undeploy
 
 **Build and deploy** first undoes the save folder's previous deployment, then

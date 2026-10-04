@@ -2,6 +2,23 @@
 
 # Mod packs, load order, and conflict resolution
 
+Individual choices are available for contested unique named scalar fields in
+clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
+CDefString with their expected byte widths. They override the record choice;
+clearing one restores its record/order default. Unavailable or unchanged chosen
+sources retain the saved choice while the record choice applies. Unique and
+identical edits still auto-merge. Arrays, prefixes and unnamed fields retain
+record-level selection in the GUI.
+
+The existing tab-separated choices file stores field keys as `field:` followed
+by a compact JSON array `[bank, record, definition, layoutSHA256, partIndex,
+fieldName]`; use the report's `choice_key` instead of constructing one. The layout
+digest hashes `[prefixByteCount, [[fieldName, fieldType, fieldTag], ...]]` in
+serialization order. Values and relocated IDs are excluded. A changed bank,
+record/type/layout cannot bind that key to a different field. Unreported keys
+stay saved and reviewable; this is layout identity, not choose-time source-content
+fingerprinting. `defs merge --picks` and order builds use the same canonical keys.
+
 If a conflict choice cannot be read or saved, Mods keeps a wrapped error beside
 the comparison area after toasts fade or the tab is reopened. A failed save
 retains the previous winner. Resolve the reported file/access problem and retry

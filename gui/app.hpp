@@ -1048,7 +1048,7 @@ private:
 public:
     struct ModFieldConflict { std::string field; std::vector<std::string> mods; std::string winner;
         std::string type, baseline; std::vector<std::pair<std::string, std::string>> values;
-        bool hasValues = false; };
+        bool hasValues = false; std::string choiceKey; };
     struct ModFileContent { std::string mod; bool present = false; uint64_t bytes = 0;
                             std::string sha256; };
     struct ModConflict { std::string kind, key, label; std::vector<std::string> mods;
@@ -1058,6 +1058,8 @@ public:
                          std::vector<ModFileContent> fileVersions; };
     std::string modConflictWinner(const ModConflict& conflict) const;
     bool modChoiceUnavailable(const ModConflict& conflict) const;
+    bool modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const;
+    static std::string modSavedChoiceLabel(const std::string& key);
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
     std::string modFieldValue(const ModConflict& conflict, const ModFieldConflict& field) const;
     bool modConflictMatches(const ModConflict& conflict) const;
