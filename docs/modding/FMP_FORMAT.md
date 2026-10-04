@@ -315,9 +315,24 @@ resolves 217 named links in direct apply; its direct and one-mod merged
 `game.bin` and `names.bin` files match byte-for-byte. The full eligible scan
 at `build/named-fmp-coverage-ry3g5gyz/result.json` accepts 375/577 attempted
 small-bank packages, 15 more than before, with 183 link refusals remaining.
-The 244 large-bank packages remain deferred. Newly added text targets need
-cross-language ID planning and are not supported by this linker path yet;
-these results do not establish gameplay compatibility.
+The 244 large-bank packages remain deferred. These results do not establish
+gameplay compatibility.
+
+2026-10-04 new-text follow-up: a linked FMP `Text` entry can now add a new
+symbol. Direct apply plans its ID from the English baseline, validates the
+selected link targets in every available language, and serializes every
+language before writing output banks. The composer prepares its text union in
+scratch before linking definitions, so final TextIDs account for earlier
+text-only folders, later FMPs and saved text picks. Selected links must resolve
+to the same ID in each available language. The synthetic archived-hero
+fixture in `tools/test_fmp_new_text_links.py` verifies direct ID 28914,
+load-order-shifted ID 28915, exact four-byte hero-field relocation, text-only
+source contribution, vanilla-pick refusal, malformed payload refusal before
+output, two-language agreement and locale mismatch refusal. The updated full
+small-bank scan at `build/named-fmp-coverage-b_evlyty/result.json` retains
+375/577 accepted, 183 named-link refusals and 244 deferred large-bank packages.
+These are offline bank checks; game behavior and authoring of a successor
+package remain open.
 
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy

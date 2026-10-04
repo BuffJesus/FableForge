@@ -4823,7 +4823,9 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::map<std::string, uint32_t>* textureIds = nullptr,
               const std::map<std::string, uint32_t>* effectIds = nullptr,
               const std::map<std::string, uint32_t>* textIds = nullptr,
-              const std::vector<bool>* numericFmpRoots = nullptr) {
+              const std::vector<bool>* numericFmpRoots = nullptr,
+              const std::vector<std::pair<std::string, std::map<std::string, uint32_t>>>*
+                  languageTextIds = nullptr) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -5074,6 +5076,18 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, merged, *schema, links,
                                             false, meshIds, textureIds, effectIds, textIds);
+        if (languageTextIds)
+            for (const auto& link : links)
+                if (forge::fmplinks::locate(owner, *schema, link).destination ==
+                    forge::fmplinks::Destination::TextEntry) {
+                    const auto canonical = textIds->at(link.target);
+                    for (const auto& [language, ids] : *languageTextIds) {
+                        const auto foundText = ids.find(link.target);
+                        if (foundText == ids.end() || foundText->second != canonical)
+                            throw std::runtime_error("FMP text links: " + language +
+                                " has no matching TextID for " + link.target);
+                    }
+                }
         merged.setEntryData(found->second, std::move(data));
     }
 
@@ -8290,16 +8304,30 @@ std::map<std::string, uint32_t> textureIdentityMap(const std::filesystem::path& 
 std::map<std::string, uint32_t> effectIdentityMap(const std::filesystem::path& file) {
     return assetIdentityMap(file, "PARTICLE_MAIN_PC");
 }
-std::map<std::string, uint32_t> textIdentityMap(const std::filesystem::path& gameRoot) {
-    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
-    if (!std::filesystem::exists(path))
-        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+std::map<std::string, uint32_t> textIdentityMap(const forge::big::File& file) {
     std::map<std::string, uint32_t> result;
-    const auto file = forge::big::File::open(path);
     for (const auto& bank : file.banks())
         for (const auto& entry : bank.entries)
             if (!entry.name.empty()) result[entry.name] = entry.id;
     return result;
+}
+std::map<std::string, uint32_t> textIdentityMap(const std::filesystem::path& gameRoot) {
+    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
+    if (!std::filesystem::exists(path))
+        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+    return textIdentityMap(forge::big::File::open(path));
+}
+std::map<std::string, uint32_t> plannedFmpTextIds(const std::filesystem::path& gameRoot,
+                                                    const forge::big::File& package) {
+    const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
+    if (!std::filesystem::exists(path))
+        throw std::runtime_error("FMP text links: baseline English/text.big is missing");
+    auto text = forge::big::File::open(path);
+    if (const auto* bank = package.findBank("Text"))
+        for (const auto& entry : bank->entries)
+            forge::textbig::upsertString(text, entry.name,
+                                         forge::textbig::decode(package.entryData(entry), 0));
+    return textIdentityMap(text);
 }
 
 // Apply an .fmp's BIN-record banks onto a base game-root, producing a full
@@ -8416,6 +8444,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     std::optional<std::map<std::string, uint32_t>> textureIds;
     std::optional<std::map<std::string, uint32_t>> effectIds;
     std::optional<std::map<std::string, uint32_t>> textIds;
+    std::set<std::string> referencedTextNames;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
         if (recordLinks.empty()) continue;
@@ -8473,7 +8502,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                        link.path.starts_with("2555713587.HAtextArray.") ||
                        link.path.ends_with(".HeroAbilityMasteredTextGUI_ID") ||
                        link.path.starts_with("54218450.Spells/Attribute Levels.");
-            })) textIds.emplace(textIdentityMap(baseRoot));
+            })) textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
@@ -8482,9 +8511,58 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                                           textureIds ? &*textureIds : nullptr,
                                           effectIds ? &*effectIds : nullptr,
                                           textIds ? &*textIds : nullptr);
+        for (const auto& link : recordLinks)
+            if (forge::fmplinks::locate(owner, *linkSchema, link).destination ==
+                forge::fmplinks::Destination::TextEntry)
+                referencedTextNames.insert(link.target);
         game.setEntryData(index, std::move(data));
         linked += recordLinks.size();
     }
+    // Validate and serialize every language before writing any output bank.
+    // Definition TextIDs are shared across languages; a locale with a missing
+    // or colliding ID must refuse instead of leaving a partial install.
+    std::vector<std::pair<fs::path, std::vector<uint8_t>>> preparedText;
+    size_t textLangs = 0, textStrings = 0, badText = 0;
+    const auto* packageText = pkg.findBank("Text");
+    const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+    if (fs::is_directory(langRoot) &&
+        ((packageText && !packageText->entries.empty()) || !referencedTextNames.empty()))
+        for (const auto& lang : fs::directory_iterator(langRoot)) {
+            const fs::path src = lang.path() / "text.big";
+            if (!fs::exists(src)) continue;
+            auto file = forge::big::File::open(src);
+            size_t applied = 0;
+            if (packageText)
+                for (const auto& e : packageText->entries) {
+                    try {
+                        auto value = forge::textbig::decode(pkg.entryData(e), 0);
+                        forge::textbig::upsertString(file, e.name, std::move(value),
+                            textIds ? std::optional<uint32_t>(textIds->at(e.name)) : std::nullopt);
+                        ++applied;
+                    } catch (const std::exception& ex) {
+                        if (textIds) throw;
+                        if (textLangs == 0) {
+                            ++badText;
+                            std::fprintf(stderr, "  warning: Text %s: %s\n", e.name.c_str(), ex.what());
+                        }
+                    }
+                }
+            if (textIds) {
+                const auto localeIds = textIdentityMap(file);
+                for (const auto& name : referencedTextNames) {
+                    const auto canonical = textIds->find(name);
+                    if (canonical == textIds->end()) continue; // another source may supply it
+                    const auto found = localeIds.find(name);
+                    if (found == localeIds.end() || found->second != canonical->second)
+                        throw std::runtime_error("FMP text links: " + lang.path().filename().string() +
+                            " has no matching TextID for " + name);
+                }
+            }
+            if (packageText && !packageText->entries.empty())
+                preparedText.emplace_back(lang.path().filename(), file.serialize());
+            ++textLangs;
+            textStrings = applied;
+        }
     if (!quiet && linked) std::printf("  resolved %zu named definition link(s)\n", linked);
     if (symbolicLinks) *symbolicLinks = links;
     fs::create_directories(defsOut);
@@ -8499,33 +8577,15 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         fs::create_directories(dst.parent_path());
         writeAllBytes(dst.string(), graphics->serialize());
     }
-    // the Fable Explorer package's Text bank: type-0 text.big payloads keyed by string name,
-    // applied to every language's text.big the base install has (the package names none)
-    if (const auto* text = pkg.findBank("Text"); text != nullptr && !text->entries.empty()) {
-        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
-        size_t langs = 0, strings = 0, bad = 0;
-        if (fs::is_directory(langRoot))
-            for (const auto& lang : fs::directory_iterator(langRoot)) {
-                const fs::path src = lang.path() / "text.big";
-                if (!fs::exists(src)) continue;
-                auto file = forge::big::File::open(src);
-                size_t applied = 0;
-                for (const auto& e : text->entries) {
-                    try {
-                        auto value = forge::textbig::decode(pkg.entryData(e), 0);
-                        forge::textbig::upsertString(file, e.name, std::move(value));
-                        ++applied;
-                    } catch (const std::exception& ex) {
-                        if (langs == 0) { ++bad; std::fprintf(stderr, "  warning: Text %s: %s\n", e.name.c_str(), ex.what()); }
-                    }
-                }
-                const fs::path dst = fs::path(outRoot) / "data" / "lang" / lang.path().filename() / "text.big";
-                fs::create_directories(dst.parent_path());
-                writeAllBytes(dst.string(), file.serialize());
-                ++langs; strings = applied;
-            }
-        if (!quiet) std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n", strings, langs, bad ? " (some payloads did not decode)" : "");
+    // The Fable Explorer package's type-0 Text bank was prepared above.
+    for (const auto& [language, bytes] : preparedText) {
+        const fs::path dst = fs::path(outRoot) / "data" / "lang" / language / "text.big";
+        fs::create_directories(dst.parent_path());
+        writeAllBytes(dst.string(), bytes);
     }
+    if (packageText && !packageText->entries.empty() && !quiet)
+        std::printf("  text.big: %zu string(s) applied to %zu language folder(s)%s\n",
+                    textStrings, textLangs, badText ? " (some payloads did not decode)" : "");
 
     // Copy the untouched sibling bins so the out-root is a complete install.
     for (const char* sib : {"script.bin", "frontend.bin"}) {
@@ -9099,6 +9159,76 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
     for (size_t i = 0; i < contentRoots.size(); ++i)
         if (fs::is_directory(contentRoots[i])) requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
+    // Prepare the text union in scratch before linking game.bin. Final text IDs
+    // must reflect load order and picks, including names added by earlier mods.
+    const fs::path textPlanRoot = tmp / "text-plan";
+    size_t textLangsMerged = 0, textKeysApplied = 0, textKeysContested = 0;
+    // --- text.big key union: every root whose data/lang/<L>/text.big differs from the base
+    // contributes its changed or new strings (by name); a name several roots change takes
+    // the load-order winner.
+    {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        json textRows = json::array();
+        if (fs::is_directory(langRoot))
+            for (const auto& lang : fs::directory_iterator(langRoot)) {
+                const fs::path basePath = lang.path() / "text.big";
+                if (!fs::exists(basePath)) continue;
+                const std::string langName = lang.path().filename().string();
+                std::vector<std::pair<std::string, std::string>> changers;   // (label, path)
+                for (size_t ri = 0; ri < contentRoots.size(); ++ri) {
+                    const fs::path p = fs::path(contentRoots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
+                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back({srcLabel(ri), p.string()});
+                }
+                if (changers.empty()) continue;
+                auto base = forge::big::File::open(basePath);
+                std::map<std::string, std::vector<uint8_t>> baseByName;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
+                struct Version { std::string mod; std::vector<uint8_t> data; };
+                std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
+                std::vector<std::string> order;
+                for (const auto& [label, c] : changers) {
+                    auto f = forge::big::File::open(c);
+                    for (const auto& b : f.banks())
+                        for (const auto& e : b.entries) {
+                            if (e.name.empty()) continue;
+                            auto data = f.entryData(e);
+                            const auto it = baseByName.find(e.name);
+                            if (it != baseByName.end() && it->second == data) continue;
+                            if (!versions.count(e.name)) order.push_back(e.name);
+                            versions[e.name].push_back({label, std::move(data)});
+                        }
+                }
+                for (const auto& name : order) {
+                    const auto& vs = versions[name];
+                    const Version* win = &vs.back();
+                    bool overridden = false, keepBase = false;
+                    if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
+                        overridden = true;
+                        if (pk->second == "vanilla") keepBase = true;
+                        else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+                    }
+                    bool agree = true;
+                    for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
+                    if (vs.size() > 1 && !agree) {
+                        ++textKeysContested;
+                        json mods = json::array();
+                        for (const auto& v : vs) mods.push_back(v.mod);
+                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
+                    }
+                    if (keepBase) continue;
+                    try {
+                        forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
+                        ++textKeysApplied;
+                    } catch (const std::exception&) {}
+                }
+                const fs::path dst = textPlanRoot / "data" / "lang" / lang.path().filename() / "text.big";
+                fs::create_directories(dst.parent_path());
+                writeAllBytes(dst.string(), base.serialize());
+                ++textLangsMerged;
+            }
+        if (jsonOutput) rep["text"] = {{"languages", textLangsMerged}, {"applied", textKeysApplied}, {"contested", textRows}};
+    }
+
     // field-level merge whenever the def schema is at hand: two mods editing different fields of one record agree
     const std::string schemaPath = fieldSchema.empty() ? defaultDefSchemaPath() : fieldSchema;
     std::optional<std::map<std::string, uint32_t>> plannedMeshIds;
@@ -9171,13 +9301,29 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     link.path.starts_with("54218450.Spells/Attribute Levels.")) return true;
         return false;
     });
-    if (hasNamedTextLinks) plannedTextIds.emplace(textIdentityMap(baseRoot));
+    if (hasNamedTextLinks)
+        plannedTextIds.emplace(textIdentityMap(fs::exists(textPlanRoot / "data" / "lang" / "English" / "text.big")
+                                                  ? textPlanRoot : fs::path(baseRoot)));
+    std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> languageTextIds;
+    if (hasNamedTextLinks) {
+        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
+        for (const auto& lang : fs::directory_iterator(langRoot)) {
+            const fs::path staged = textPlanRoot / "data" / "lang" /
+                                    lang.path().filename() / "text.big";
+            const fs::path baseline = lang.path() / "text.big";
+            const fs::path& selected = fs::exists(staged) ? staged : baseline;
+            if (fs::exists(selected))
+                languageTextIds.emplace_back(lang.path().filename().string(),
+                    textIdentityMap(forge::big::File::open(selected)));
+        }
+    }
     const int rc = mergeDefs(baseRoot, outDir, "game.bin", roots, /*picks*/ "",
                              schemaPath, jsonOutput, jsonOutput ? &defsRep : nullptr, &picks.defs, &rootLabels, &rootLinks,
                              plannedMeshIds ? &*plannedMeshIds : nullptr,
                              plannedTextureIds ? &*plannedTextureIds : nullptr,
                              plannedEffectIds ? &*plannedEffectIds : nullptr,
-                             plannedTextIds ? &*plannedTextIds : nullptr, &numericFmpRoots);
+                             plannedTextIds ? &*plannedTextIds : nullptr, &numericFmpRoots,
+                             hasNamedTextLinks ? &languageTextIds : nullptr);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 
@@ -9372,74 +9518,20 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     "%zu single-editor copies), %zu quest conflicts\n",
                     qstChangers.size(), qstMerged, qstCopied, qstConflicts);
 
-    // --- text.big key union: every root whose data/lang/<L>/text.big differs from the base
-    // contributes its changed or new strings (by name); a name several roots change takes
-    // the load-order winner.
-    {
-        const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
-        size_t langsMerged = 0, keysApplied = 0, keysContested = 0;
-        json textRows = json::array();
-        if (fs::is_directory(langRoot))
-            for (const auto& lang : fs::directory_iterator(langRoot)) {
-                const fs::path basePath = lang.path() / "text.big";
-                if (!fs::exists(basePath)) continue;
-                const std::string langName = lang.path().filename().string();
-                std::vector<std::pair<std::string, std::string>> changers;   // (label, path)
-                for (size_t ri = 0; ri < roots.size(); ++ri) {
-                    const fs::path p = fs::path(roots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
-                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back({rootLabels[ri], p.string()});
-                }
-                if (changers.empty()) continue;
-                auto base = forge::big::File::open(basePath);
-                std::map<std::string, std::vector<uint8_t>> baseByName;
-                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
-                struct Version { std::string mod; std::vector<uint8_t> data; };
-                std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
-                std::vector<std::string> order;
-                for (const auto& [label, c] : changers) {
-                    auto f = forge::big::File::open(c);
-                    for (const auto& b : f.banks())
-                        for (const auto& e : b.entries) {
-                            if (e.name.empty()) continue;
-                            auto data = f.entryData(e);
-                            const auto it = baseByName.find(e.name);
-                            if (it != baseByName.end() && it->second == data) continue;
-                            if (!versions.count(e.name)) order.push_back(e.name);
-                            versions[e.name].push_back({label, std::move(data)});
-                        }
-                }
-                for (const auto& name : order) {
-                    const auto& vs = versions[name];
-                    const Version* win = &vs.back();
-                    bool overridden = false, keepBase = false;
-                    if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
-                        overridden = true;
-                        if (pk->second == "vanilla") keepBase = true;
-                        else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
-                    }
-                    bool agree = true;
-                    for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
-                    if (vs.size() > 1 && !agree) {
-                        ++keysContested;
-                        json mods = json::array();
-                        for (const auto& v : vs) mods.push_back(v.mod);
-                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
-                    }
-                    if (keepBase) continue;
-                    try {
-                        forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
-                        ++keysApplied;
-                    } catch (const std::exception&) {}
-                }
-                const fs::path dst = fs::path(outDir) / "data" / "lang" / lang.path().filename() / "text.big";
-                fs::create_directories(dst.parent_path());
-                writeAllBytes(dst.string(), base.serialize());
-                ++langsMerged;
-            }
-        if (jsonOutput) rep["text"] = {{"languages", langsMerged}, {"applied", keysApplied}, {"contested", textRows}};
-        if (langsMerged)
-            if (!jsonOutput) std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, %zu contested (load order decided)\n", langsMerged, keysApplied, keysContested);
-    }
+    const fs::path plannedLanguages = textPlanRoot / "data" / "lang";
+    if (fs::is_directory(plannedLanguages))
+        for (const auto& lang : fs::directory_iterator(plannedLanguages)) {
+            const fs::path src = lang.path() / "text.big";
+            if (!fs::exists(src)) continue;
+            const fs::path dst = fs::path(outDir) / "data" / "lang" /
+                                 lang.path().filename() / "text.big";
+            fs::create_directories(dst.parent_path());
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing);
+        }
+    if (textLangsMerged && !jsonOutput)
+        std::printf("text.big merge: %zu language folder(s), %zu string(s) applied, "
+                    "%zu contested (load order decided)\n",
+                    textLangsMerged, textKeysApplied, textKeysContested);
 
     // --- FSE quest registry union: every dir source whose FSE/quests.lua differs from the base
     // contributes its entries (by key, its own bytes); a key several mods define takes the load-

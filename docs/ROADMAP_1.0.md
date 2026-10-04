@@ -98,8 +98,12 @@ existing `text.big` names, with hero HUD icons resolved through `textures.big`.
 The archived `EXP And Hero Mod.fmp` applies directly and through the one-mod
 composer with byte-identical definition banks and 217 resolved named links.
 The current full small-bank scan accepts 375/577, 15 more than the prior
-360/577 scan; 183 link refusals remain. New text IDs and runtime behavior
-still require separate validation.
+360/577 scan; 183 link refusals remain. New FMP Text IDs now resolve after
+text-only sources, load order and picks are composed; cross-language ID
+validation and a 13-case synthetic archived-hero regression pass offline.
+Runtime behavior still requires separate validation. The proposed successor
+package shape, including complete-data baseline profiles and EgoCore DLL
+components, is in `docs/modding/PACKAGE_V2_PROPOSAL.md`.
 
 2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
 choice reads/writes retain compact-safe feedback, preserve winners and recover
