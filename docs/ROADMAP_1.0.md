@@ -1,5 +1,15 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary scalar/Aeon checkpoint: review 9bc1f1d is integrated through
+801e733; all Release targets build, 38 core tests and rebuilt-primary named-link /
+existing-record preservation checks pass. Its frozen archive passes all 42 extracted workflows
+across the original and resumed runs, zero skips; the initial texture CLI timeout
+is retained. Intact Aeon baseline plus Controller FMP/DLL preserves all existing
+non-imported records, including 6625 unnamed components. The corrected guide
+and unnamed-source refusal are included. Separate sibling/FMP-bank guard package
+validation remains in progress. No gameplay or complete-overhaul relocation claim;
+see HANDOFF_WORLD_UI for evidence and the unchanged full-source-gate boundary.
+
 2026-10-03 isolated preservation correction: changed/new unnamed definition
 sources now refuse instead of silently losing component edits. Controller FMP
 composition over intact Aeon preserves 16362 existing records (6625 unnamed),

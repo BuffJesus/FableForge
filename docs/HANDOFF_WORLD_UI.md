@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 primary scalar choices and Aeon preservation integration
+
+Accepted review commits d2c438a, 1cfd14a, 7e1722b, ef87f9f and 9bc1f1d are
+integrated locally through primary 801e733. All Release targets build; 38/38
+primary CTest cases pass. Rebuilt-primary fmp-links-6z24y160 passes all 14 named
+references on retail/intact Aeon/composed roots, all existing-record preservation,
+field choice precedence and external provider relocation. Primary GUI checks
+remain pending while the other checkout owns the package GUI run.
+Scalar choices remain restricted to unique named fixed-size fields with guarded
+layout identities. Changed/new unnamed component sources refuse; intact Aeon
+must be the baseline before adding Controller Support and its DLL-only layer.
+The corrected guide and independent all-record preservation checks are included.
+
+Frozen 9bc1f1d archive SHA256
+04f0f82c38baf90b73f19fcc9d2e06cefba0f284b69bc6ea95c8ef10c457a87d passes
+ALL 42 extracted workflows across its original and resumed runs, zero skips.
+Choice-review build/package-smoke-gyyl1yzw/resumed-result.json records each check's
+origin. Initial run passed 36 then texture_destination's CLI seed timed out at
+90 seconds; the original failure remains retained. Six remaining checks passed
+on the same extracted package, with 103 identities reverified before and after.
+116 documentation links and four guide images pass. This is offline scratch
+acceptance, not gameplay/Android or complete-overhaul relocation validation.
+
+Separate review 1b638eb additionally refuses changed script/frontend banks,
+unsupported nonempty FMP banks and incomplete unnamed/sibling FMP exports.
+Its 38 core/29 native/both-size GUI checks pass, but its 44-workflow package
+run is still in progress and these changes are not yet integrated here.
+Lost Content's full-source refusal passes, while its content-only diagnostic
+remains incomplete after a direct composition timeout. Full source gate not rerun.
+All archives and commits are local and unpublished; game files remain untouched.
+
 ## 2026-10-03 isolated unnamed-component refusal and intact Aeon preservation
 
 Owning review branch feat/forge-unnamed-defs-review-20261003 now refuses changed,
