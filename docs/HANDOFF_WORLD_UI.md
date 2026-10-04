@@ -1,5 +1,18 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 choice feedback primary integration
+
+Primary feat/editor-ui-shell fast-forwarded 6258a31 to b428ec1 and all Release
+targets build. Rebuilt-primary mod-unreported-choices-sjba4pew passes actual
+normal/compact locked choice/clear controls, persistent clip-checked errors,
+reopen/refresh/destination reset, exclusive unreadable input, same-process retry,
+empty-order/search/build and exact source/other-install inventories. The accepted
+34b29bf application/guide archives are copied unchanged/hash-verified into primary
+dist/development/20261003-34b29bf. THREE focused extracted workflows pass; preceding
+7b1c043 retains the full 39-workflow result. Source gate boundary stays b1eb3b9
+136 PASS / 1 identified/fixed dialogue FAIL. No active primary test/build remains,
+no publication, game launch or live/corpus writes.
+
 ## 2026-10-03 extracted conflict-choice feedback acceptance
 
 Product 34b29bf passes THREE focused extracted workflows (unreported choices,

@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Failed
+choice reads/writes retain compact-safe feedback, preserve winners and recover
+on same-process retry. Both-size primary locked/unreadable checks pass, including
+destination reset. The 34b29bf archive passes THREE focused choice/field/file
+workflows; the preceding 7b1c043 archive passes all 39. See HANDOFF_WORLD_UI for
+the hashes, preservation evidence and unchanged full source-gate boundary.
+
 2026-10-03 primary file comparison checkpoint: 55e20dc is integrated and all
 Release targets build. Rebuilt-primary normal/compact file snapshots and the
 retail/Aeon/merged named-link audit pass. The 7b1c043 package passes ALL 39

@@ -1,5 +1,12 @@
 # Feature depth audit — started 2026-09-30
 
+2026-10-03 choice feedback checkpoint: b428ec1 is integrated and rebuilt. Choice
+read/write failures remain visible beside comparisons through reopen/refresh;
+normal/compact locks and unreadable input preserve file/winner, reset on a new
+destination and recover on same-process retry. Primary expanded choice fixture
+passes. The 34b29bf package passes THREE focused extracted workflows, not a new
+full 39-workflow gate. See HANDOFF_WORLD_UI for exact acceptance boundaries.
+
 2026-10-03 primary file comparison checkpoint: 55e20dc is integrated and rebuilt.
 Normal/compact file snapshot visibility, same-size refresh, preserved choices
 and exact output pass; all 14 Controller references resolve in retail/Aeon/merged
