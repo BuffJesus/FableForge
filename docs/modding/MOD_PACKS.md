@@ -28,16 +28,25 @@ when those banks are part of an overhaul.
 
 FMP application refuses nonempty unsupported banks before writing package content.
 Supported banks are GameBINEntries, supported GameBINLinkMetaData, Objects,
-Settings, ObjectLinks, Text and FinalAlbionWAD; their existing format and link
-restrictions still apply. Empty exporter bank placeholders are allowed. FMP export
+Settings, ObjectLinks, Text, FinalAlbionWAD, maintextures, graphics and supported
+graphicsLinkMetaData; their existing format and link restrictions still apply.
+Texture and mesh replacements retain their baseline name, ID and type. New
+entries with IDs already owned by another symbol refuse; arbitrary asset-ID
+relocation remains open. Empty exporter bank placeholders are allowed. FMP export
 also refuses changed/new unnamed components and changed sibling banks, so it cannot
 report success after omitting those edits. These checks do not add script/frontend
 composition or general cross-bank relocation support.
 
-An FMP record must have a name. New records also need a definition type; an
-existing named record can still be replaced by a legacy untyped entry. An explicit
-type that differs from the existing baseline type refuses. These identity failures
-abort the whole package before writes, including earlier valid contributions.
+A named FMP record can replace an existing symbol; new named records also need
+a definition type. An existing named record can still be replaced by a legacy
+untyped entry. A blank-name FMP record can replace only the exact numeric baseline
+index whose blank name and definition type match; it cannot create an anonymous
+identity or relocate one across overhauls. Its supported fields participate in
+load order and conflict selection. An explicit type that differs from the
+existing baseline type refuses. These identity failures abort the whole package
+before writes, including earlier valid contributions. This exception applies to
+FMP records with verified numeric identities; the loose-tree unnamed guard above
+remains in use.
 
 Individual choices are available for contested unique named scalar fields in
 clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
@@ -91,10 +100,12 @@ does not affect block boundaries. Valid replacements and templates retain their
 existing merge behavior.
 
 EgoCore file copies, resource/header reads and output writes report I/O failures.
-An unreadable existing source bank also fails the build. A failed explicit build
-may retain files emitted before the error; deploy does not stage that incomplete
-result. Missing target banks and unsupported resource locations still report
-skipped overrides.
+An unreadable existing source bank also fails the build. Direct `mods merge` and
+registered `mods build` prepare composition in an owned temporary directory before
+publishing to the requested output. Composition/read failures preserve existing
+output; a failure during the final copy can still leave partial published files.
+Deploy does not stage an incomplete composition. Missing target banks and
+unsupported resource locations still report skipped overrides.
 
 ## Recipe asset storage and failed edits
 
