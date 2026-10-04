@@ -281,5 +281,7 @@ build/file-content-regressions-thcoz76f. One local 128 MiB source-file compariso
 in build/file-content-perf-jthne9fm took 0.297 s before and 0.740 s with snapshots;
 this warmed-cache sample is not a large-corpus performance guarantee.
 The source/package gates register the new workflow (39 package runtime checks).
-This prototype remains isolated until extracted-package validation/promotion;
-no new whole-gate result or gameplay compatibility claim.
+The 7b1c043 package passes all 39 extracted runtime workflows without skips;
+55e20dc is promoted and rebuilt in primary with focused file/named-link checks.
+Exact evidence is in HANDOFF_WORLD_UI. No new whole-source-gate result or
+gameplay compatibility claim.

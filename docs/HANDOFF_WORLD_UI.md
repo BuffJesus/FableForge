@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 raw-file comparison primary integration
+
+Primary feat/editor-ui-shell fast-forwarded 27755ec to 55e20dc. All Release
+targets build. Rebuilt-primary mod-file-content-_vvfbyzt passes normal/compact
+snapshots, actual clip bounds, same-size source refresh, choice preservation and
+composed bytes. fmp-links-mtofmtvt passes all 14 named targets in retail, Aeon
+and merged banks, choices, byte preservation, refusal and external relocation.
+The first attempts used the quoted Steam path rather than this machine's
+C:/programs/Steam install: fmp-links-k7s2fe0o stopped on missing game.bin and
+mod-file-content-js_0v8ex timed out awaiting maps. Both are invocation errors,
+corrected with the actual install path; their evidence remains retained.
+
+The 7b1c043 application and guide ZIPs are copied unchanged/hash-verified into
+primary dist/development/20261003-7b1c043. ALL 39 extracted runtime workflows,
+103 shipped identities and documentation checks pass as recorded below. The
+last full SOURCE gate remains b1eb3b9 136 PASS / 1 reproduced/fixed dialogue FAIL.
+No game launch, live-install/corpus writes or publication. No active build/test
+remains at this integration checkpoint.
+
 ## 2026-10-03 complete extracted file-comparison package acceptance
 
 Frozen review product 7b1c043 passes ALL 39 extracted runtime workflows with

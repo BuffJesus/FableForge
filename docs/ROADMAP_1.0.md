@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-03 primary file comparison checkpoint: 55e20dc is integrated and all
+Release targets build. Rebuilt-primary normal/compact file snapshots and the
+retail/Aeon/merged named-link audit pass. The 7b1c043 package passes ALL 39
+extracted runtime workflows without skips and verifies 103 shipped identities.
+The last full source gate remains b1eb3b9 136 PASS / 1 identified/fixed dialogue
+FAIL. Raw-file snapshots do not detect stale choices automatically. Exact
+evidence and local archive identity are in HANDOFF_WORLD_UI.
+
 2026-10-03 primary linker/Add/dialogue checkpoint: reviewed changes are integrated
 at 0a7887e and all Release targets build. The frozen b1eb3b9 source gate finishes
 136 PASS / 1 dialogue playback FAIL with no skipped integration checks. The

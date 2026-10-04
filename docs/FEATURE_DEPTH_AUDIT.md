@@ -1,5 +1,13 @@
 # Feature depth audit — started 2026-09-30
 
+2026-10-03 primary file comparison checkpoint: 55e20dc is integrated and rebuilt.
+Normal/compact file snapshot visibility, same-size refresh, preserved choices
+and exact output pass; all 14 Controller references resolve in retail/Aeon/merged
+banks. The 7b1c043 development package passes ALL 39 extracted runtime workflows,
+zero skips, and 103 shipped identities. This includes the persistent texture
+Add/Replace recovery and dialogue endpoint fix. Full source coverage remains
+frozen b1eb3b9 136 PASS / 1 identified/fixed dialogue FAIL. See HANDOFF_WORLD_UI.
+
 2026-10-03 primary texture checkpoint: 39bdf32 is promoted and rebuilt. Its
 stripped development ZIP passes four focused texture workflows sequentially,
 including new locked/invalid replacement recovery and existing Unicode inputs /
