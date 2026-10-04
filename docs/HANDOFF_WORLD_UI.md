@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-03 complete extracted file-comparison package acceptance
+
+Frozen review product 7b1c043 passes ALL 39 extracted runtime workflows with
+zero skipped checks. build/package-smoke-d_hjua63/result.json records every
+return code 0 / passed true / skipped []; full log
+build/package_file_content_7b1c043_20261003.log exits 0. The package runs under a
+literal percent-token/ampersand path from an unrelated working directory with
+the actual primary Controller/Aeon/F2 corpus supplied explicitly. This includes
+the new clip-checked file snapshots, all field/search/saved-choice flows, named
+FMP references and unsupported-FMP recovery, Unicode image/compiler paths,
+all Setup/asset restoration cases and locked/invalid Add/Replace/export retry.
+103 shipped identities and 116 local documentation links/four guide images pass.
+
+dist/development/20261003-7b1c043/FableForge-0.18.0-dev-win64.zip SHA256:
+c5b9e1e756dd8c2e501239be9d0696bad053a670830f7cdac5320516870c61ff.
+Guide-only ZIP is alongside it. All local/unpublished, no live game launch or
+original install/corpus modification. No active review test/build remains.
+Promotion/rebuild is next; primary is still 27755ec at this review checkpoint.
+The last full SOURCE gate remains frozen b1eb3b9 136 PASS / 1 separately
+reproduced/fixed dialogue FAIL, not a new all-pass source-gate claim.
+
 ## 2026-10-03 isolated whole-file comparison validated
 
 Review source-choice branch adds raw file_content snapshots to contested JSON
