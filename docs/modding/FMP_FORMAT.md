@@ -168,3 +168,29 @@ decodes against the 100% def schema with zero leftover bytes after
 Note: a stale pre-SOLVED prototype (`forge::fmp` — custom footer parser assuming
 u32-length-prefixed section names, 12-byte hash/offset/size entries, zlib record
 streams) was discarded 2026-07-20; `forge::big` is the single `.fmp` reader.
+
+## Named historic corpus check (2026-10-04)
+
+`tools/audit_named_fmp_stack.py` reads original packages from the named 1,142-FMP
+archive into scratch space, checks their catalogue SHA-256 values, and composes
+against this machine's installed TLC data without changing the archive or install.
+The 14-case run at `build/named-fmp-stack-syhvax35/result.json` establishes:
+
+- `100Multiarrow.fmp`, `Oak Vale bed.fmp`, `Berserk Scale 1.5.fmp`, and
+  `Small Berserk.fmp` compose offline. Oak Vale bed repacks one WAD entry and
+  produces `OakValeWest_v2.tng` plus provenance for five UIDs. After staging and
+  opening that map, those things use the same viewport and Objects list as retail
+  things; the provenance file supplies their mod badges.
+- The two Berserk packages conflict on `SPECIAL_ABILITIES_BERSERK_DEF_INSTANCE` /
+  `BerserkScale`. Both orders compose; the reported field winner follows the last
+  package, and the output `game.bin` hashes differ. This is a real named-package
+  check of field-level load order, not a synthetic conflict.
+- The other selected packages refuse cleanly: Ghost Sword variants need a verified
+  `Components` reference layout; Young Hero Retexture needs `maintextures` support;
+  Working Stick needs `FrontEndBINEntries`; the staff package has an unresolved
+  multi-target link; 0 Silver Keys has ambiguous link metadata. Refused packages
+  leave the requested output untouched.
+
+This is an offline compatibility sample, not an in-game validation or a claim
+that every package in the archive is supported. New `OBJECT_*` definitions still
+need their graphics bank entries before the editor can show their thumbnails.
