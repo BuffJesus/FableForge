@@ -1073,6 +1073,7 @@ private:
     std::map<std::string, std::string> modPicks_;
     bool modReportLoaded_ = false;
     std::string modReportSummary_;
+    std::string modInstallSummary_;
     struct ModMissingMesh { std::string definition, type; uint32_t meshId = 0; };
     std::vector<ModMissingMesh> modNewMissingMeshes_;
     size_t modMissingMeshTotal_ = 0, modMissingMeshBaseline_ = 0;

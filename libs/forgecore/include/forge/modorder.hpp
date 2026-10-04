@@ -19,6 +19,9 @@ enum class Kind { Fmp, Patch, Tree, EgoCore, Qst, Forge, Unknown };   // Forge: 
 const char* kindName(Kind k);
 // By the source's shape: *.fmp, *.patch, *.qst, a folder with Data/ (tree) or <Name>.dll (EgoCore).
 Kind classify(const std::filesystem::path& source);
+// A selected Data directory denotes the mod root containing that directory.
+std::filesystem::path normalizeSource(const std::filesystem::path& source);
+bool hasCompleteData(const std::filesystem::path& source);
 
 struct Entry {
     std::string name;
@@ -27,6 +30,7 @@ struct Entry {
     std::string sha256;      // of the source file, or of the folder's file list + contents
     bool enabled = true;
     std::string note;        // free text (version, origin URL ...)
+    bool installData = false; // install the complete first Data layer before composing following mods
 };
 
 struct Order {
@@ -46,7 +50,7 @@ std::string sha256OfBytes(std::string_view bytes);
 // Edits. `add` appends (or inserts at `at` when >= 0); a source already listed (same sha256)
 // is refused. `remove` and `move` address an entry by name or 0-based index; both throw
 // std::runtime_error with a reason when the entry is not there.
-Entry& add(Order& order, const std::filesystem::path& gameRoot, const std::filesystem::path& source, const std::string& name = "", int at = -1);
+Entry& add(Order& order, const std::filesystem::path& gameRoot, const std::filesystem::path& source, const std::string& name = "", int at = -1, bool installData = false);
 void remove(Order& order, const std::string& nameOrIndex);
 void move(Order& order, const std::string& nameOrIndex, int to);
 void setEnabled(Order& order, const std::string& nameOrIndex, bool enabled);
@@ -56,5 +60,7 @@ int indexOf(const Order& order, const std::string& nameOrIndex);   // -1 when ab
 std::vector<std::string> buildSources(const Order& order, const std::filesystem::path& gameRoot);
 // the names of the enabled mods, parallel to buildSources (the labels every merge report row carries)
 std::vector<std::string> buildLabels(const Order& order);
+// At most one complete Data installation, first among enabled sources.
+bool installsCompleteData(const Order& order);
 
 } // namespace forge::modorder

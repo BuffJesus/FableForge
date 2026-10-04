@@ -111,6 +111,21 @@ const char* kindName(Kind k) {
     }
 }
 
+fs::path normalizeSource(const fs::path& source) {
+    if (lower(source.filename().string()) == "data" && fs::is_directory(source) &&
+        (fs::is_directory(source / "CompiledDefs") || fs::is_directory(source / "Levels") ||
+         fs::is_directory(source / "graphics"))) return source.parent_path();
+    return source;
+}
+
+bool hasCompleteData(const fs::path& input) {
+    const auto source = normalizeSource(input);
+    if (!fs::is_directory(source) || fs::exists(source / "forge_pack.json")) return false;
+    for (const char* bank : {"names.bin", "game.bin", "script.bin", "frontend.bin"})
+        if (!fs::is_regular_file(source / "data" / "CompiledDefs" / bank)) return false;
+    return true;
+}
+
 Kind classify(const fs::path& source) {
     std::error_code ec;
     if (fs::is_regular_file(source, ec)) {
@@ -149,6 +164,7 @@ Order load(const fs::path& gameRoot) {
         Entry e;
         e.name = m.value("name", ""); e.source = m.value("source", ""); e.sha256 = m.value("sha256", "");
         e.enabled = m.value("enabled", true); e.note = m.value("note", "");
+        e.installData = m.value("install_data", false);
         const std::string k = m.value("kind", "unknown");
         e.kind = k == "fmp" ? Kind::Fmp : k == "patch" ? Kind::Patch : k == "tree" ? Kind::Tree : k == "egocore" ? Kind::EgoCore : k == "qst" ? Kind::Qst : k == "forge" ? Kind::Forge : Kind::Unknown;
         order.mods.push_back(std::move(e));
@@ -158,8 +174,10 @@ Order load(const fs::path& gameRoot) {
 
 void save(const fs::path& gameRoot, const Order& order) {
     json mods = json::array();
-    for (const auto& e : order.mods)
+    for (const auto& e : order.mods) {
         mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
+        if (e.installData) mods.back()["install_data"] = true;
+    }
     // Serialization can reject invalid text; finish it before touching the old order.
     const std::string bytes = json{{"version", order.version}, {"mods", mods}}.dump(2) + "\n";
     const fs::path target = fs::absolute(orderPath(gameRoot)).lexically_normal();
@@ -224,15 +242,19 @@ int indexOf(const Order& order, const std::string& nameOrIndex) {
     return -1;
 }
 
-Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const std::string& name, int at) {
+Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const std::string& name, int at, bool installData) {
     std::error_code ec;
     // as typed (relative to the current directory) first, then relative to the game root
     fs::path abs = fs::absolute(source, ec);
     if (!fs::exists(abs, ec)) abs = resolveSource(gameRoot, source.string());
     if (!fs::exists(abs, ec)) throw std::runtime_error("no such source: " + source.string());
     abs = fs::weakly_canonical(abs, ec);
+    abs = normalizeSource(abs);
     Entry e;
     e.kind = classify(abs);
+    if (installData && (e.kind != Kind::Tree || !hasCompleteData(abs)))
+        throw std::runtime_error("complete Data installation requires a mod folder with names.bin, game.bin, script.bin and frontend.bin");
+    e.installData = installData;
     if (e.kind == Kind::Unknown) throw std::runtime_error("not a mod source (need .fmp / .patch / .qst / a folder with Data/ or FSE/ / an EgoCore Mods/<Name>/ folder): " + abs.string());
     e.sha256 = sha256Of(abs);
     for (const auto& m : order.mods)
@@ -276,11 +298,26 @@ std::vector<std::string> buildLabels(const Order& order) {
     return out;
 }
 
+bool installsCompleteData(const Order& order) {
+    size_t enabled = 0;
+    bool result = false;
+    for (const auto& entry : order.mods) {
+        if (!entry.enabled) continue;
+        if (entry.installData) {
+            if (enabled != 0) throw std::runtime_error("Complete Data installation must be the first enabled mod; move it to the top of the order.");
+            result = true;
+        }
+        ++enabled;
+    }
+    return result;
+}
+
 std::vector<std::string> buildSources(const Order& order, const fs::path& gameRoot) {
+    installsCompleteData(order);
     std::vector<std::string> out;
     for (const auto& e : order.mods) {
         if (!e.enabled) continue;
-        fs::path p = resolveSource(gameRoot, e.source);
+        fs::path p = normalizeSource(resolveSource(gameRoot, e.source));
         const auto kind = classify(p);
         if (kind == Kind::Unknown)
             throw std::runtime_error("enabled mod source is missing or unsupported: " + e.name + " (" + p.string() + ")");

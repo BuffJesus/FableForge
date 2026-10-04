@@ -80,6 +80,89 @@ and explicit steps pass; rebuild its hash after final text changes. Application
 archive 9bc1f1d remains unchanged and accepted across 42 original/resumed checks.
 This guide prose does not turn synthetic offline checks into manual/gameplay proof.
 
+## Active: Forge-managed complete Data installation, user plan restored
+
+User explicitly rejects manual copying and requires the original manager workflow:
+add extracted Aeon, Controller FMP and runtime, then Forge performs the complete
+installation/deployment/removal. Existing author Discord reports and corpus remain
+acceptance inputs. The manual-copy guide is a workaround, not the requested result.
+Owning checkout D:/Code/FableForge-overhaul-review, branch
+feat/forge-complete-data-install-20261003, based on 560abb0. No primary/corpus/live
+install writes or publication in this lane.
+
+Work in progress: selected Data paths normalize to their parent mod roots. A first
+folder source carrying all four complete compiled banks is prepared intact, then
+following sources compose against that installation. Existing WAD writers preserve
+packed layout and include authored loose root/FinalAlbion payloads; extracted layouts
+must stay extracted. Sources are never modified, and requested output is untouched
+until preparation and following composition finish. Existing stage/revert handles
+installation backups. This does not implement arbitrary unnamed cross-bank merging.
+Validated in this owning checkout: forge-tools and FableForge build; independent
+complete-data-install-p0qopp8d passes 14 checks, including all four exact supplied
+banks/assets, selected Data normalization, packed WAD replacement/addition, loose
+layout, check while deployed, redeploy, exact undeploy, missing banks/order and
+missing controller FMP refusals. Source and prior-output snapshots remain unchanged.
+Complete-data-ui-ccga2fwv passes actual Add/check/deploy/redeploy/undeploy at
+1440x900 and 800x600; compact installation-plan screenshot inspected. First UI
+fixture jflfdf29 passed automation but omitted dump_widget needed by its Python
+layout assertion; fixed test, not product. Do not treat limited corpus counts as
+complete acceptance.
+
+Real runtime corpus has FableControllerSupport.dll plus Data. The author says Data
+must not overwrite the Aeon/FMP result. Next compatibility check should use that
+original download shape, not require users to manually construct a DLL-only folder.
+FMP metadata identifies five imported controller records and 14 supported links;
+the existing linker handles their named targets. Android/gameplay remain untested.
+
+Real three-source CLI check complete-aeon-controller-9app3r3_ passes: Forge starts
+from copied baseline banks/WAD, consumes the original complete Aeon source, legacy
+FMP and original full runtime folder (including Data). All 16362 unaffected Aeon
+records, all 6625 unnamed entries, 14 named references, 942 other source files,
+843 authored WAD level payloads and exact runtime DLL pass. Full original source
+inventories and owned baseline remain unchanged. Runtime preparation automatically
+uses DLL only when the controller FMP's five known records are present; reports
+the excluded Data source. Baseline preparation reads validated stage originals
+without reverting during a dry-run check. No gameplay/Android claim.
+
+Established test_mods.py corpus passes 50 commands plus GUI in mods-corpus-69nvmsbc.
+Native bank refusal/carry checks pass 29 cases in mod-bank-refusal-6nby4da8. Broader
+audit_fmp_corpus.py reads all available small source archives into owned scratch,
+deduplicates 130 copies into 73 unique FMPs and checks each over retail and complete
+Aeon definition fixtures. fmp-corpus-audit-3r7tupqi/result.json records 37 accepted
+preservation-checked and 36 refused per baseline. Refusals preserve prior outputs;
+source archives, FMPs and baseline inventories stay unchanged. Refusals are NOT
+compatible mods; accepted preservation checks do NOT prove arbitrary raw-ID
+linking or gameplay. Preserve this detailed matrix for the existing linking plan.
+
+2026-10-03 bedtime checkpoint: user explicitly requests stop and docs for tomorrow.
+All owned test/build processes checked absent; no stage manifest on the owned real
+GUI baseline. New installation implementation remains isolated, unpromoted and
+unpublished. No live game, source corpus, Discord or release changes.
+
+Resume here, not by restarting old corpus or manual-install work:
+1. Real three-source GUI guide capture is INCOMPLETE. First capture attempted to
+   use existing docs/04-deploy.png as a checkpoint, so Python compared original
+   baseline game.bin before GUI deployment and terminated its own process. There
+   is no evidence of a product failure or successful real GUI deployment. Fixed
+   capture_complete_aeon_guide.py uses unique owned case directories, new checkpoint
+   files and only copies illustrations to docs after the complete run passes.
+   Run against build/complete-aeon-controller-9app3r3_, corpus
+   D:/Code/FableForge/work/nexus_mods/_peek and the read-only C:/Programs/Steam/
+   steamapps/common/Fable The Lost Chapters install. That owned baseline now also
+   has copied retail graphics for preview. Both normal/compact GUI source order,
+   original Data selection, check/deploy/redeploy/undeploy and CLI-bank comparison
+   remain required. Existing four guide PNGs are OLD two-layer captures.
+2. Guide HTML now describes the original Forge-managed three-source route and
+   version requirement; do not ship it with the old screenshots. MOD_PACKS/roadmap,
+   README links/CLI docs and packaging acceptance need reconciliation.
+3. Run the affected core checks and remaining FMP record checks; inspect full
+   installation behavior in the other existing large-pack fixtures. First complete
+   tree installation does not implement merging arbitrary unnamed overhauls.
+4. Known locked filesIdentical read failure remains unfixed (see below). Do not
+   silently classify unreadable source files as identical; scoped follow-up needed.
+5. No new package or integration until acceptance is complete. Main remains on
+   its earlier integrated changes; the corrected installer is in this worktree.
+
 ## 2026-10-03 isolated FMP record identity refusal
 
 Owning checkout D:/Code/FableForge-fmp-entry-review, based on frozen 1b638eb.

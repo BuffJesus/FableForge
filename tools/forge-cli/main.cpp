@@ -262,9 +262,9 @@ int usage() {
         "  forge fmp apply <base-root> <file.fmp> <out-root>\n"
         "  forge fmp extract <file.fmp> <out-dir> [bank-filter]\n"
         "  forge fmp export <base-root> <modded-root> <out.fmp>\n"
-        "  forge mods merge <base-root> <out-dir> --with <src>... [--fields schema.json] [--stage] [--json]\n"
+        "  forge mods merge <base-root> <out-dir> --with <src>... [--install-data] [--fields schema.json] [--stage] [--json]\n"
         "  forge mods list <game-root> [--json]                       the load order in <game-root>/forge_mods.json\n"
-        "  forge mods add <game-root> <source> [--name N] [--at i] [--note text]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
+        "  forge mods add <game-root> <source> [--name N] [--at i] [--note text] [--install-data]   (.fmp / .patch / .qst / a Data/ tree / an EgoCore Mods/<Name>/ folder)\n"
         "  forge mods remove <game-root> <name|index>   |   mods move <game-root> <name|index> <to>   |   mods enable|disable <game-root> <name|index>\n"
         "  forge mods build <game-root> <out-dir> [--fields schema.json] [--picks f] [--stage] [--json]   (= mods merge over the enabled order)\n"
         "  forge mods conflicts <game-root> [--picks f] [--json]      a dry-run build: ONE report over every stage (records, things, quests, strings, files), nothing written\n"
@@ -8429,13 +8429,229 @@ void preflightModRecipes(const std::vector<std::string>& sources) {
     }
 }
 
+bool completeDataSource(const std::filesystem::path& source) {
+    return forge::modorder::classify(source) == forge::modorder::Kind::Tree &&
+        forge::modorder::hasCompleteData(source);
+}
+
+void copyInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
+                     bool overwrite) {
+    namespace fs = std::filesystem;
+    if (!fs::is_directory(source)) return;
+    for (const auto& item : fs::recursive_directory_iterator(source)) {
+        if (item.is_symlink()) throw std::runtime_error("mod installation does not follow symlinks: " + item.path().string());
+        if (!item.is_regular_file()) continue;
+        const auto relative = item.path().lexically_relative(source);
+        for (const auto& part : relative)
+            if (part == ".." || part.string().ends_with(".forgebak"))
+                throw std::runtime_error("mod installation contains a recovery or unsafe path: " + relative.string());
+        const auto destination = target / relative;
+        if (!overwrite && fs::exists(destination)) continue;
+        fs::create_directories(destination.parent_path());
+        fs::copy_file(item.path(), destination, fs::copy_options::overwrite_existing);
+    }
+}
+
+void copyInstallBaseline(const std::filesystem::path& base, const std::filesystem::path& effective) {
+    namespace fs = std::filesystem;
+    std::map<std::string, forge::stage::RecoveryEntry> recovery;
+    if (fs::exists(forge::stage::manifestPath(base)))
+        for (const auto& entry : forge::stage::inspectRecovery(base))
+            recovery.emplace(lowered(fs::path(entry.relative).generic_string()), entry);
+    auto copy = [&](const fs::path& path) {
+        const auto relative = path.lexically_relative(base);
+        if (lowered(path.filename().string()).ends_with(".forgebak")) return;
+        auto source = path;
+        if (const auto found = recovery.find(lowered(relative.generic_string())); found != recovery.end()) {
+            if (!found->second.hadOriginal) return;
+            source = found->second.backup;
+        }
+        const auto destination = effective / relative;
+        if (fs::exists(destination)) return;
+        fs::create_directories(destination.parent_path());
+        fs::copy_file(source, destination);
+    };
+    for (const char* folder : {"data", "FSE", "Mods"}) {
+        if (!fs::is_directory(base / folder)) continue;
+        for (const auto& item : fs::recursive_directory_iterator(base / folder)) {
+            if (item.is_symlink()) throw std::runtime_error("mod installation does not follow symlinks: " + item.path().string());
+            if (item.is_regular_file()) copy(item.path());
+        }
+    }
+    if (fs::is_regular_file(base / "Mods.ini")) copy(base / "Mods.ini");
+}
+
+// Install a complete definition snapshot intact, then use it as the baseline for
+// following layers. No cross-bank identity or raw-ID relocation is guessed here.
+int modsMerge(const std::string&, const std::string&, const std::vector<std::string>&,
+              const std::string&, bool, bool, const std::vector<std::string>&,
+              const std::string&, const std::map<std::string, std::string>*, bool, json*);
+
+int installCompleteData(const std::string& baseRoot, const std::string& outDir,
+                        const std::vector<std::string>& sources, const std::string& fieldSchema,
+                        bool doStage, bool jsonOutput, const std::vector<std::string>& labels,
+                        const std::string& picksPath, const std::map<std::string, std::string>* loadedPicks,
+                        json* reportOut) {
+    namespace fs = std::filesystem;
+    const fs::path source = fs::weakly_canonical(sources.front());
+    const fs::path base = fs::weakly_canonical(baseRoot), output = fs::weakly_canonical(outDir);
+    auto within = [](const fs::path& child, const fs::path& parent) {
+        return std::mismatch(parent.begin(), parent.end(), child.begin(), child.end()).first == parent.end();
+    };
+    if (source == base) throw std::runtime_error("Select the extracted mod folder, not the game installation, in Add a mod.");
+    if (within(output, base) || within(base, output) || within(output, source) || within(source, output))
+        throw std::runtime_error("Complete mod output must be outside the game installation and source folder.");
+    // Parse every supplied bank before any output or installation writes.
+    size_t records = 0, unnamed = 0;
+    for (const char* bank : {"game.bin", "script.bin", "frontend.bin"}) {
+        const auto file = openDefs(source.string(), bank);
+        if (std::string_view(bank) == "game.bin") {
+            records = file.entries().size();
+            for (const auto& entry : file.entries()) unnamed += entry.name.empty();
+        }
+    }
+    if (doStage && fs::is_directory(base / "data"))
+        for (const auto& item : fs::recursive_directory_iterator(base / "data"))
+            if (item.is_regular_file() && item.path().extension() == ".tmp" &&
+                fs::exists(item.path().parent_path() / item.path().stem()))
+                throw std::runtime_error("EgoCore has deployed mods on this install; restore them in EgoCore before deploying from Forge.");
+    const albion::detail::TemporaryDirectory workspace("mods-complete-data-");
+    const auto effective = workspace.path() / "effective", prepared = workspace.path() / "prepared";
+    copyInstallTree(source / "data", effective / "data", true);
+    for (const char* folder : {"FSE", "Mods"}) {
+        copyInstallTree(source / folder, effective / folder, true);
+    }
+    copyInstallBaseline(base, effective);
+    copyInstallTree(source / "data", prepared / "data", true);
+    copyInstallTree(source / "FSE", prepared / "FSE", true);
+    copyInstallTree(source / "Mods", prepared / "Mods", true);
+    // Keep packed installs packed. Every authored root/FinalAlbion LEV and TNG
+    // overrides its WAD payload; new maps become native entries. Loose installs
+    // never gain a WAD. This uses the same existing WAD writers as the composer.
+    const auto wad = effective / "data/Levels/FinalAlbion.wad";
+    size_t repacked = 0, appended = 0;
+    if (fs::is_regular_file(wad)) {
+        const auto archive = forge::wad::Archive::open(wad);
+        auto wadKey = [](std::string value) {
+            std::replace(value.begin(), value.end(), '/', '\\');
+            return lowered(value);
+        };
+        std::map<std::string, std::string> known;
+        for (const auto& entry : archive.entries()) known.emplace(wadKey(entry.name), entry.name);
+        std::map<std::string, std::vector<uint8_t>> replacements;
+        std::vector<forge::wad::NativeEntry> additions;
+        const auto levels = effective / "data/Levels";
+        for (const auto& [folder, prefix] : std::vector<std::pair<fs::path, std::string>>{
+                 {levels, "Data\\Levels\\"}, {levels / "FinalAlbion", "Data\\Levels\\FinalAlbion\\"}}) {
+            if (!fs::is_directory(folder)) continue;
+            for (const auto& item : fs::directory_iterator(folder)) {
+                const auto extension = lowered(item.path().extension().string());
+                if (!item.is_regular_file() || (extension != ".lev" && extension != ".tng")) continue;
+                const auto name = prefix + item.path().filename().string();
+                auto payload = readAllBytes(item.path().string());
+                if (const auto existing = known.find(wadKey(name)); existing != known.end())
+                    replacements.emplace(existing->second, std::move(payload));
+                else additions.push_back({name, std::move(payload)});
+            }
+        }
+        auto temporary = wad; temporary += ".complete.tmp";
+        if (!replacements.empty()) {
+            repacked = forge::wad::repack(wad, replacements, temporary); fs::rename(temporary, wad);
+        }
+        if (!additions.empty()) {
+            appended = forge::wad::appendNativeEntries(wad, additions, temporary); fs::rename(temporary, wad);
+        }
+        if (repacked || appended) {
+            fs::create_directories(prepared / "data/Levels");
+            fs::copy_file(wad, prepared / "data/Levels/FinalAlbion.wad", fs::copy_options::overwrite_existing);
+        }
+    }
+    std::vector<std::string> following(sources.begin() + 1, sources.end());
+    // Controller Support ships alternate text definitions alongside its runtime.
+    // Its legacy FMP supplies the game-data layer for this route; installing both
+    // would let EgoCore overwrite the relinked controller records at launch.
+    bool controllerPackage = false;
+    const std::set<std::string> controllerRecords{
+        "CAMERA_MANAGER_SET_TEMPLATE", "FABLE_XBOX_CONTROL_SCHEME_BASE",
+        "PLAYER_GUI_PC", "PLAYER_GUI_DEFAULT", "CAMERA_MANAGER_PC_MAIN_COMBAT"};
+    for (const auto& path : following) {
+        if (lowered(fs::path(path).extension().string()) != ".fmp") continue;
+        const auto package = forge::big::File::open(path);
+        const auto* bank = package.findBank("GameBINEntries");
+        if (!bank) continue;
+        std::set<std::string> names;
+        for (const auto& entry : bank->entries) names.insert(entry.name);
+        if (std::includes(names.begin(), names.end(), controllerRecords.begin(), controllerRecords.end()))
+            controllerPackage = true;
+    }
+    json runtimePlans = json::array();
+    for (size_t i = 0; i < following.size(); ++i) {
+        const fs::path original = following[i];
+        const auto dll = original / "FableControllerSupport.dll";
+        if (!fs::is_directory(original) || !fs::is_regular_file(dll)) continue;
+        if (!controllerPackage)
+            throw std::runtime_error("Controller Support over a complete overhaul also needs its legacy ControllerSupport.fmp. Add the FMP before deploying the runtime.");
+        const auto runtime = workspace.path() / ("runtime-" + std::to_string(i)) / "FableControllerSupport";
+        fs::create_directories(runtime);
+        fs::copy_file(dll, runtime / dll.filename());
+        following[i] = runtime.string();
+        runtimePlans.push_back({{"source", original.string()}, {"dll", dll.filename().string()},
+                                {"data_excluded", fs::is_directory(original / "Data")},
+                                {"reason", "The controller FMP supplies game data; EgoCore loads only the runtime DLL."}});
+    }
+    std::vector<std::string> followingLabels;
+    if (!labels.empty()) followingLabels.assign(labels.begin() + 1, labels.end());
+    const auto changes = workspace.path() / "following";
+    json report;
+    const int rc = modsMerge(effective.string(), changes.string(), following, fieldSchema, false,
+                             true, followingLabels, picksPath, loadedPicks, false, &report);
+    if (rc) return rc;
+    copyInstallTree(changes, prepared, true);
+    // Empty following orders preserve the supplied complete BINs byte for byte.
+    if (following.empty())
+        for (const char* bank : {"names.bin", "game.bin", "script.bin", "frontend.bin"})
+            fs::copy_file(source / "data/CompiledDefs" / bank, prepared / "data/CompiledDefs" / bank,
+                          fs::copy_options::overwrite_existing);
+    const std::string label = labels.empty() ? source.filename().string() : labels.front();
+    report["sources"] = json::array();
+    for (size_t i = 0; i < sources.size(); ++i) {
+        const fs::path path = sources[i];
+        const std::string sourceLabel = i < labels.size() ? labels[i] :
+            (fs::is_directory(path) ? path.filename().string() : path.stem().string());
+        report["sources"].push_back({{"label", sourceLabel}, {"source", sources[i]}});
+    }
+    report["complete_data"] = {{"label", label}, {"definition_records", records}, {"unnamed_records", unnamed},
+                                {"wad_repacked", repacked}, {"wad_appended", appended}};
+    report["summary"]["sources"] = sources.size();
+    if (!runtimePlans.empty()) report["runtime_plan"] = runtimePlans;
+    // All validation/composition completes before the requested output is touched.
+    copyInstallTree(prepared, output, true);
+    if (doStage) {
+        const auto staged = forge::stage::apply(base, output);
+        report["stage"] = {{"staged", staged.staged.size()}, {"backed_up", staged.backedUp.size()}};
+    }
+    if (reportOut) *reportOut = report;
+    else if (jsonOutput) std::puts(report.dump(2).c_str());
+    else std::printf("Installed complete Data files from '%s': %zu definition records (%zu unnamed); %zu following mod(s).\n",
+                     label.c_str(), records, unnamed, following.size());
+    return 0;
+}
+
 int modsMerge(const std::string& baseRoot, const std::string& outDir,
-              const std::vector<std::string>& sources,
+              const std::vector<std::string>& sourcePaths,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath,
-              const std::map<std::string, std::string>* loadedPicks = nullptr) {
+              const std::map<std::string, std::string>* loadedPicks = nullptr,
+              bool allowCompleteData = false, json* reportOut = nullptr) {
     namespace fs = std::filesystem;
+    std::vector<std::string> sources;
+    for (const auto& source : sourcePaths) sources.push_back(forge::modorder::normalizeSource(source).string());
     preflightModRecipes(sources);
+    if (allowCompleteData && (sources.empty() || !completeDataSource(sources.front())))
+        throw std::runtime_error("The complete Data source is missing its compiled banks; restore the extracted mod files before building.");
+    if (allowCompleteData)
+        return installCompleteData(baseRoot, outDir, sources, fieldSchema, doStage, jsonOutput,
+                                   labels, picksPath, loadedPicks, reportOut);
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -9341,7 +9557,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                           {"text_contested", rep.contains("text") ? rep["text"]["contested"].size() : 0}, {"files_contested", rep.contains("files") ? rep["files"]["contested"].size() : 0},
                           {"lip_sync_contested", lipSyncConflicts},
                           {"fse_contested", rep.contains("fse") ? rep["fse"]["contested"].size() : 0}, {"fse_id_clashes", rep.contains("fse") ? rep["fse"]["id_clashes"].size() : 0}};
-        std::puts(rep.dump(2).c_str());
+        if (reportOut) *reportOut = rep;
+        else std::puts(rep.dump(2).c_str());
     }
     return 0;
 }
@@ -12476,7 +12693,7 @@ int main(int argc, char** argv) {
             namespace mo = forge::modorder;
             const std::string root = args[2];
             const std::string& verb = args[1];
-            bool asJson = false, doStage = false;
+            bool asJson = false, doStage = false, installData = false;
             std::string name, note, fieldSchema;
             std::optional<std::string> picksOverride;
             int at = -1, destination = 0;
@@ -12504,6 +12721,7 @@ int main(int argc, char** argv) {
                 const auto& option = args[i];
                 if (option == "--json" && (verb == "list" || verb == "build" || verb == "conflicts" || verb == "deploy")) asJson = true;
                 else if (option == "--stage" && verb == "build") doStage = true;
+                else if (option == "--install-data" && verb == "add") installData = true;
                 else if ((verb == "add" && (option == "--name" || option == "--note" || option == "--at")) ||
                          (verb == "build" && option == "--fields") ||
                          ((verb == "build" || verb == "conflicts" || verb == "deploy") && option == "--picks")) {
@@ -12527,7 +12745,7 @@ int main(int argc, char** argv) {
                     const auto order = mo::load(root);
                     if (asJson) {
                         json mods = json::array();
-                        for (const auto& e : order.mods) mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", mo::kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}});
+                        for (const auto& e : order.mods) mods.push_back({{"name", e.name}, {"source", e.source}, {"kind", mo::kindName(e.kind)}, {"sha256", e.sha256}, {"enabled", e.enabled}, {"note", e.note}, {"install_data", e.installData}});
                         std::puts(json{{"file", mo::orderPath(root).generic_string()}, {"mods", mods}}.dump(2).c_str());
                         return 0;
                     }
@@ -12541,7 +12759,7 @@ int main(int argc, char** argv) {
                 if (args[1] == "add") {
                     if (args.size() < 4) { std::fprintf(stderr, "mods add <game-root> <source> [--name N] [--at i] [--note text]\n"); return 2; }
                     auto order = mo::load(root);
-                    auto& e = mo::add(order, root, args[3], name, at);
+                    auto& e = mo::add(order, root, args[3], name, at, installData);
                     e.note = note;
                     mo::save(root, order);
                     std::printf("added \"%s\" (%s, sha256 %.12s) at %d of %zu\n", e.name.c_str(), mo::kindName(e.kind), e.sha256.c_str(), mo::indexOf(order, e.name), order.mods.size());
@@ -12595,7 +12813,7 @@ int main(int argc, char** argv) {
                     const albion::detail::TemporaryDirectory workspace("mods-deploy-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath, &loadedPicks);
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, /*stage*/ true, asJson, mo::buildLabels(order), picksPath, &loadedPicks, mo::installsCompleteData(order));
                     return rc;
                 }
                 if (args[1] == "conflicts") {   // a dry-run build into a scratch folder: the report without the files
@@ -12607,7 +12825,7 @@ int main(int argc, char** argv) {
                     const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath);
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
                     return rc;
                 }
                 if (args[1] == "build") {
@@ -12617,7 +12835,7 @@ int main(int argc, char** argv) {
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson, mo::buildLabels(order), picksPath);
+                    return modsMerge(root, args[3], sources, fieldSchema, doStage, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
                 }
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
@@ -12626,13 +12844,14 @@ int main(int argc, char** argv) {
         }
         if (args.size() >= 5 && args[0] == "mods" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";
-            bool doStage = false;
+            bool doStage = false, installData = false;
             std::string fieldSchema;
             std::vector<std::string> sources;
             bool seenWith = false;
             for (size_t i = 4; i < args.size(); ++i) {
                 if (args[i] == "--json") continue;
                 if (args[i] == "--stage") { doStage = true; continue; }
+                if (args[i] == "--install-data") { installData = true; continue; }
                 if (args[i] == "--fields" && i + 1 < args.size()) {
                     fieldSchema = args[++i];
                     continue;
@@ -12641,7 +12860,7 @@ int main(int argc, char** argv) {
                 sources.push_back(args[i]);
             }
             (void)seenWith;
-            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson, {}, "");
+            return modsMerge(args[2], args[3], sources, fieldSchema, doStage, asJson, {}, "", nullptr, installData);
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

@@ -103,6 +103,7 @@ void App::resetModDestination() {
 
 void App::refreshModOrder() {
     modReportLoaded_ = false;   // a report describes one order; Check conflicts again after a change
+    modInstallSummary_.clear();
     modNewMissingMeshes_.clear(); modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
     modAssetStatus_.clear(); modAssetError_.clear();
     try { modOrder_ = mo::load(saveRoot()); modOrderError_.clear(); }
@@ -156,9 +157,12 @@ bool App::modAdd(const std::string& source, const std::string& name) {
     if (fileWriteBlocked("add mod")) return false;
     try {
         auto order = mo::load(saveRoot());
-        auto& e = mo::add(order, saveRoot(), source, name);
+        const auto normalized = mo::normalizeSource(fs::weakly_canonical(source));
+        const bool complete = mo::classify(normalized) == mo::Kind::Tree && mo::hasCompleteData(normalized);
+        auto& e = mo::add(order, saveRoot(), normalized, name, -1, complete);
         mo::save(saveRoot(), order);
         pushLog("mods: added \"" + e.name + "\" (" + mo::kindName(e.kind) + ")", 0);
+        if (complete) pushLog("mods: complete Data files will be installed first; keep this mod at the top of the enabled order", 0);
         refreshModOrder();
         return true;
     } catch (const std::exception& e) { pushLog(std::string("mods: ") + e.what(), 2); return false; }
@@ -599,6 +603,12 @@ void App::pollModsTool() {
                 throw std::runtime_error("conflict report is missing its summary");
             modConflicts_.clear();
             collectConflicts(rep, modConflicts_);
+            modInstallSummary_.clear();
+            if (const auto complete = rep.find("complete_data"); complete != rep.end())
+                modInstallSummary_ = "Forge installs " + complete->value("label", "the overhaul") +
+                    " first, then applies the following mods.";
+            if (rep.contains("runtime_plan") && !rep["runtime_plan"].empty())
+                modInstallSummary_ += " Controller runtime: DLL only; the FMP supplies its game data.";
             modNewMissingMeshes_.clear();
             modMissingMeshTotal_ = modMissingMeshBaseline_ = modAssetUnparsed_ = 0;
             modAssetStatus_.clear(); modAssetError_.clear();
@@ -829,6 +839,10 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         ImGui::PushFont(fontSmall_);
         ImGui::PushStyleColor(ImGuiCol_Text, theme::vec(theme::Muted));
         ImGui::TextWrapped("%s%s%s", mo::kindName(e.kind), e.note.empty() ? "" : "  ", e.note.c_str());
+        if (e.installData) {
+            ImGui::TextWrapped("Installs complete Data files first; later mods apply over this overhaul.");
+            auto_.registerWidget(("mod_complete_data_" + std::to_string(i)).c_str());
+        }
         ImGui::PopStyleColor();
         if (const auto it = wl.find(e.name); it != wl.end()) {
             if (!it->second.won.empty()) {
@@ -884,6 +898,10 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
+        if (!modInstallSummary_.empty()) {
+            ImGui::TextWrapped("%s", modInstallSummary_.c_str());
+            auto_.registerWidget("mod_install_summary");
+        }
         if (modAssetStatus_ == "checked") {
             if (modNewMissingMeshes_.empty())
                 ImGui::TextColored(theme::vec(theme::Faint), "Models: no new missing mesh references (%zu in build, %zu in base)", modMissingMeshTotal_, modMissingMeshBaseline_);
