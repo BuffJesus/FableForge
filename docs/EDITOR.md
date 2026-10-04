@@ -716,7 +716,9 @@ is placed as the retail `AICreature` thing (`Document::placeCreature`: a
 `CTCPhysicsNavigator` frame, `CTCTargeted`/`CTCTalk`/`CTCEditor`, `VillageMember 0`
 for villager defs, the AI flags, and the world-space `InitialPos` the engine
 reads -- the map origin comes from FinalAlbion.wld at open), into the NULL
-section like everything else. **In-game verified**: a
+section like everything else. The editor viewport shows its skinned LOD0 mesh
+in bind pose, including creatures added by deployed mods; it does not play the
+game's creature animations. **In-game verified**: a
 `CREATURE_OAKVALE_VILLAGER_MALE_UNEMPLOYED` placed in Greatwood_1 (loose + WAD,
 fresh game) stands at the placed spot facing the camera (`--things AtlasNPC`
 finds it within 0.1). Saves cache a region's entities, so a new game (or a

@@ -232,6 +232,7 @@ void App::startThingsReload() {
         to.gameRoot = root;
         to.graphicsBig = graphics;
         to.textures = true;
+        to.creatures = true; // Keep placed and edited creatures visible on reload.
         to.up = te::UpAxis::Y;
         to.tngText = text;
         try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }

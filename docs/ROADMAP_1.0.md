@@ -1068,9 +1068,12 @@ The Knothole Glade Children FMP now preserves its two ordered `MaleTeacher`
 targets and resolves its nested creature weapon, brain, torso texture, body/eye
 mesh and combat links. It composes offline with four applied definitions and
 three additions; independent output checks match 18 creature references plus
-the village pair, child entries and marker mesh. Forge viewport and gameplay
-checks for this package remain open; other creature layouts and asset winner
-picks need separate coverage.
+the village pair, child entries and marker mesh. The scratch GUI deploy probe
+places both new children and sees their selected skinned LOD0 meshes in the
+viewport; undeploy restores the baseline banks. This exposed and fixed the
+editor's previous `creatures=false` preview setting. Retail creature placement
+and the editor workflow still pass. Gameplay, animation, other creature layouts
+and asset winner picks need separate coverage.
 
 What already exists (verified): the legacy CLI family in `forge-tools` -- `forge mods merge
 <base> <out> --with <src>... [--fields] [--stage]` (sources = game-root dirs, `.fmp`, bsdiff

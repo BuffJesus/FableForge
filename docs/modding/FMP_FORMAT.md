@@ -335,6 +335,10 @@ added, no conflicts and no newly missing mesh assets. It independently read
 the resulting game definitions and checked both ordered village targets, the
 male/female child entries, all 18 named creature references and the village
 marker against the output game/asset identities. The source archive and install
-banks were unchanged. This is an offline compose check; the village and new
-creatures have not been checked in Forge's viewport or in the game. Other
-creature layouts and texture/mesh winner picks need separate coverage.
+banks were unchanged. The scratch GUI test `tools/test_fmp_knothole_ui.py`
+deploys the package,
+places both new children and confirms each has one selected viewport mesh with
+its named texture list. Undeploy restores the original banks byte for byte.
+The editor shows skinned LOD0 in bind pose; animation and gameplay are still
+unverified. Other creature layouts and texture/mesh winner picks need separate
+coverage.

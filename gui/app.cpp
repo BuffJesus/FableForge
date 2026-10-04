@@ -1102,6 +1102,7 @@ void App::startFoliageLoad(bool foliageOnly) {
             to.gameRoot = root;
             to.graphicsBig = graphics;
             to.textures = true;
+            to.creatures = true; // Editor map previews show skinned creatures in bind pose.
             to.up = te::UpAxis::Y;
             to.tngText = tngText;
             try { r.things = thingsexport::load(entry.name, to, *ctx, &r.thingStats); } catch (const std::exception& e) { r.things.warnings.push_back(e.what()); }
