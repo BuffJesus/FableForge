@@ -8445,6 +8445,13 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
             }))
             effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
                 "data" / "Misc" / "pc" / "effects.big"));
+        if (!effectIds && entry->definition == "CSpecialEffectsDef" &&
+            std::any_of(recordLinks.begin(), recordLinks.end(), [](const auto& link) {
+                return link.path.starts_with("44838243.CSpecialEffectsDefList.") &&
+                       link.path.ends_with(".CSpecialEffectsDefLink");
+            }))
+            effectIds.emplace(effectIdentityMap(fs::path(baseRoot) /
+                "data" / "Misc" / "pc" / "effects.big"));
         auto owner = *entry;
         if (owner.name.empty()) owner.name = name;
         auto data = forge::fmplinks::relink(owner, game, *linkSchema, recordLinks,
@@ -9095,7 +9102,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     ((link.path.starts_with("1904900413.Effect Attachments 1.") ||
                       link.path.starts_with("439861392.Effect Attachments 2.")) &&
                      (link.path.ends_with(".Effect Maximum") ||
-                      link.path.ends_with(".Effect Minimum")))) return true;
+                      link.path.ends_with(".Effect Minimum"))) ||
+                    (link.path.starts_with("44838243.CSpecialEffectsDefList.") &&
+                     link.path.ends_with(".CSpecialEffectsDefLink"))) return true;
         return false;
     });
     auto planAssetIds = [&](const fs::path& tail, const char* targetBank, const char* packageBank) {

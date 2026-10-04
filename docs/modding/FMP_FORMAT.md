@@ -279,6 +279,19 @@ It still refuses 204 on other link constraints, 11 on schema availability and
 eight on record identity; 244 large-bank packages were deferred. This is
 offline import evidence, not an in-game compatibility claim.
 
+2026-10-04 special-effects follow-up: `CSpecialEffectsDef.SpecialEffects`
+contains a count followed by eight-byte action/effect pairs. ChocolateBox's
+`CSpecialEffectsDefList.{i}.CSpecialEffectsDefLink` points to the second word
+of each pair in `effects.big`. Forge validates the complete array and index
+before patching. `tools/test_fmp_special_effect_links.py` checks the archived
+`Fireberserk.fmp` against direct apply and composition, and independently
+checks its first two targets against retail effect IDs 149 and 217. The full
+eligible scan at `build/named-fmp-coverage-9_08ga8h/result.json` accepts 355
+of 577 attempted small-bank packages, one more than before; 203 still refuse
+on other link constraints, 11 on schema availability and eight on record
+identity. The 244 large-bank packages remain deferred. Several packages with
+this field now pass it but still need separate link types such as SoundMap.
+
 One verified expansion is `Vector_VCDefString__`: its four-byte values are
 offsets into `names.bin`, including the sound arrays in Divine and Unholy
 Powers. `tools/test_fmp_string_vector_links.py` independently checked 16

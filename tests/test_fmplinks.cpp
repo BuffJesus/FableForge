@@ -262,6 +262,40 @@ int main() {
                                          references, false, &creatureMeshes); },
             "missing named creature texture refuses");
 
+    const auto effectsSchema = forge::defschema::Schema::loadText(
+        R"({"CSpecialEffectsDef":{"prefix_len":3,"fields":[{"name":"SpecialEffects","type":"CSpecialEffectsStringMap"}]}})");
+    forge::defdecode::Decoded effectsDecoded;
+    effectsDecoded.prefix = {1, 0, 0}; effectsDecoded.prefixLen = 3; effectsDecoded.allTagsOk = true;
+    forge::defdecode::DecodedField effectsField;
+    effectsField.name = "SpecialEffects"; effectsField.type = "CSpecialEffectsStringMap";
+    effectsField.tag = forge::defdecode::fieldTag(effectsField.name); effectsField.tagOk = true;
+    word(effectsField.value, 2);
+    word(effectsField.value, 0x11111111u); word(effectsField.value, 7);
+    word(effectsField.value, 0x22222222u); word(effectsField.value, 8);
+    effectsDecoded.fields = {effectsField};
+    forge::bin::Entry specialEffects{"CSpecialEffectsDef", "SPECIAL_EFFECTS_PROBE", 0,
+                                     forge::defdecode::encode(effectsDecoded)};
+    const auto originalEffects = specialEffects.data;
+    const std::map<std::string, uint32_t> effectIds{{"EFFECT_B", 909}};
+    references = {{"44838243.CSpecialEffectsDefList.1.CSpecialEffectsDefLink", "EFFECT_B"}};
+    auto linkedEffects = forge::fmplinks::relink(specialEffects, targets, effectsSchema,
+                                                 references, false, nullptr, nullptr, &effectIds);
+    auto expectedEffects = originalEffects;
+    expectedEffects[23] = 0x8d; expectedEffects[24] = 0x03;
+    expectedEffects[25] = expectedEffects[26] = 0;
+    check(linkedEffects == expectedEffects && specialEffects.data == originalEffects,
+          "special effects link rewrites only the second effect ID");
+    references = {{"44838243.CSpecialEffectsDefList.2.CSpecialEffectsDefLink", "EFFECT_B"}};
+    rejects([&] { forge::fmplinks::relink(specialEffects, targets, effectsSchema,
+                                         references, false, nullptr, nullptr, &effectIds); },
+            "special effects index outside the array refuses");
+    auto malformedEffects = specialEffects;
+    malformedEffects.data.pop_back();
+    references = {{"44838243.CSpecialEffectsDefList.1.CSpecialEffectsDefLink", "EFFECT_B"}};
+    rejects([&] { forge::fmplinks::relink(malformedEffects, targets, effectsSchema,
+                                         references, false, nullptr, nullptr, &effectIds); },
+            "truncated special effects record refuses");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

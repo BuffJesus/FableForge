@@ -335,6 +335,20 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 read32(field.value, 12) == defdecode::fieldTag("PBrain") &&
                 read32(field.value, 20) == defdecode::fieldTag("CreatureInteractionType"))
                 return {offset, i + 1, Destination::GameEntry};
+            if (entry.definition == "CSpecialEffectsDef" &&
+                field.name == "SpecialEffects" &&
+                field.type == "CSpecialEffectsStringMap" &&
+                parts.size() == 4 && parts[1] == "CSpecialEffectsDefList" &&
+                parts[3] == "CSpecialEffectsDefLink") {
+                if (field.value.size() < 4) fail("invalid special effects reference path");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 8 ||
+                    field.value.size() != 4 + count * 8)
+                    fail("unsupported special effects record layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("special effects reference index out of range");
+                return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
+            }
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
             if (parts.size() >= 4 && !parts.back().empty() && !parts[1].empty() &&
