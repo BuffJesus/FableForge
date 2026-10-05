@@ -1,5 +1,41 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 level-thing choice contributors
+
+Active TNG thing choices now require an actual changed/new version of that
+thing from the selected contributor. Builds refuse unavailable labels before
+publication; conflict checks report the unavailable choice without an override,
+and the GUI requires review/clear. This includes agreeing edits, partial TNGs,
+single-editor whole files, Replace=true and absent-baseline new levels. Whole
+file routes edit only actively picked things, retaining the editor's other
+removals. Vanilla restores the original thing or removes its new counterpart;
+DeleteUIDs on partial merges remains effective. Unreported/no-change choices
+remain inactive. Standalone conservative merge still requires its baseline.
+
+The pre-fix QST/TNG probe is
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-level-choice-probe-u8vm53n9/:
+both unavailable picks silently succeed. QST is not fixed by this increment.
+The final ordinary native/UI TNG gate passes 38 checks in
+mod-tng-choice-contributors-fhaqc21d/; complete-Data passes 36 native checks in
+mod-tng-choice-contributors-5mzty21v/. They cover exact UID/Health results,
+unrelated edits, original/absent things, independent full-file removals,
+partial explicit UID deletion, inactive keys, previous output and input hashes,
+both-size real dropdown clearing and unclipped warnings. The compact screenshot
+was visually inspected in the earlier w6l054n2 UI run. Standalone merge and
+missing-baseline-before-write checks also pass. No game behavior claim.
+
+Initial hdow1lgd/c5bcyslr expose a new-level vanilla restoration bug: the copied
+empty file has a null provenance entry, which cannot erase a thing. The guard
+was corrected; intermediate w6l054n2/4cg7jkpw pass before the final additional
+agreeing-contributor/standalone checks. CLI/GUI Release builds pass. The existing
+mixed 50-command corpus plus Mods UI passes in build/mods-corpus-v_0h0mok/.
+Core implementation remains unchanged. No live installation writes.
+
+The future package harness now has 59 workflows, including both native TNG
+variants; older frozen ZIP evidence remains at its original scope. QST remains
+the next confirmed contributor gap, including its single-editor copy shortcut
+and core merge's single-contributor choice bypass.
+
 ## 2026-10-05 ordinary staged baseline copy projection
 
 Ordinary folder/FMP builds on an existing stage now reconstruct the recorded

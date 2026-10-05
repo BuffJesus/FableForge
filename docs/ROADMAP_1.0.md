@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 TNG contributors: active saved thing winners now require actual
+contributions, including partial/replacement/single-editor/new-level routes.
+Vanilla restores original/absent things while unrelated deletions stay intact.
+Ordinary 38-check native/UI and complete-Data 36-check gates, standalone checks
+and the mixed 50-command corpus/Mods UI pass. QST remains next; see HANDOFF_WORLD_UI.
+
 2026-10-05 staged baseline copying: ordinary folder/FMP snapshots now retain
 composer dependencies and authored paths, reducing the local copy from roughly
 7.7 GB to 1.57 GB. Original restoration/absence, unrelated-file retention rules,

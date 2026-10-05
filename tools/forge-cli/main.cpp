@@ -1094,7 +1094,7 @@ int tngConflicts(const std::string& basePath,
 // (later mod wins) with a reported conflict count. Additions from all mods are
 // kept. Removals are NOT applied (conservative — keeps content). The level analog
 // of `defs merge`; turns whole-file-conflicting TNGs into a merged level.
-struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false; };
+struct TngConflictRow { std::string thing; std::vector<std::string> mods; std::string winner; bool overridden = false, choiceUnavailable = false; };
 struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0; std::vector<TngConflictRow> rows; std::map<std::string, std::string> origin; };   // origin: thing key -> the mod whose version landed
 
 // Thing-level merge: base TNG + mod TNGs (load order) -> outPath. A thing is keyed
@@ -1104,12 +1104,14 @@ struct TngMergeResult { size_t things = 0, applied = 0, added = 0, conflicts = 0
 TngMergeResult mergeTngLabeled(const std::string& basePath,
                                const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path) in load order
                                const std::string& outPath,
-                               const std::map<std::string, std::string>& picks) {
+                               const std::map<std::string, std::string>& picks,
+                               bool reviewChoices = false, bool wholeFile = false) {
     namespace fs = std::filesystem;
-    auto out = forge::tng::File::parse(basePath);
+    const auto base = wholeFile && !fs::exists(basePath) ? forge::tng::File::parseText("") : forge::tng::File::parse(basePath);
+    auto out = wholeFile ? forge::tng::File::parse(mods.back().second) : base;
 
     std::map<std::string, std::string> baseSig;  // key -> signature
-    for (const auto& t : out.things()) baseSig[thingKey(t)] = thingSignature(t);
+    for (const auto& t : base.things()) baseSig[thingKey(t)] = thingSignature(t);
 
     struct Version { std::string mod; forge::tng::Thing thing; bool isAdd; };
     std::map<std::string, std::vector<Version>> versions;   // key -> every mod's version, in load order
@@ -1128,32 +1130,61 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
 
     TngMergeResult r;
     for (const auto& key : order) {
+        if (wholeFile && !picks.contains(key)) continue; // preserve this editor's full-file removals
         const auto& vs = versions[key];
         const Version* win = &vs.back();
-        bool overridden = false, keepBase = false;
+        bool overridden = false, keepBase = false, unavailable = false;
         if (auto pk = picks.find(key); pk != picks.end()) {
             overridden = true;
             if (pk->second == "vanilla") keepBase = true;
-            else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+            else {
+                const auto selected = std::find_if(vs.begin(), vs.end(),
+                    [&](const auto& v) { return v.mod == pk->second; });
+                if (selected == vs.end()) {
+                    if (!reviewChoices)
+                        throw std::runtime_error("mods TNG choice: " + key +
+                            " selects unavailable contributor " + pk->second +
+                            "; review or clear this saved choice");
+                    unavailable = true;
+                    overridden = false;
+                } else win = &*selected;
+            }
         }
         bool agree = true;   // the same edit from several mods is not a conflict
         for (const auto& v : vs) if (thingSignature(v.thing) != thingSignature(vs.front().thing)) { agree = false; break; }
-        if (vs.size() > 1 && !agree) {   // >1 mod wants a different version of this thing
+        if ((vs.size() > 1 && !agree) || picks.contains(key)) {
             TngConflictRow row;
-            row.thing = key; row.winner = keepBase ? "vanilla" : win->mod; row.overridden = overridden;
+            row.thing = key;
+            row.winner = keepBase ? "vanilla" : wholeFile && unavailable ? mods.back().first : win->mod;
+            row.overridden = overridden;
+            row.choiceUnavailable = unavailable;
             for (const auto& v : vs) row.mods.push_back(v.mod);
             r.rows.push_back(row);
             ++r.conflicts;
         }
-        if (keepBase) continue;
-        r.origin[key] = agree ? vs.front().mod : win->mod;   // the same edit from several mods: the first that made it
-        if (win->isAdd) {
+        if (keepBase) {
+            if (wholeFile) {
+                const forge::tng::Thing* original = nullptr;
+                for (const auto& thing : base.things())
+                    if (thingKey(thing) == key) { original = &thing; break; }
+                size_t index = 0;
+                while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
+                if (original) {
+                    if (index < out.things().size()) out.replaceThing(index, *original);
+                    else out.addThing(*original);
+                } else if (index < out.things().size()) out.removeThing(index);
+            }
+            continue;
+        }
+        if (wholeFile && unavailable) continue; // review keeps the effective whole-file result
+        r.origin[key] = agree && !overridden ? vs.front().mod : win->mod;
+        size_t index = 0;
+        while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
+        if (index == out.things().size()) {
             out.addThing(win->thing);
             ++r.added;
         } else {
-            // Locate the (possibly moved) thing in out by key and replace.
-            for (size_t i = 0; i < out.things().size(); ++i)
-                if (thingKey(out.things()[i]) == key) { out.replaceThing(i, win->thing); break; }
+            out.replaceThing(index, win->thing);
         }
         ++r.applied;
     }
@@ -9602,6 +9633,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const fs::path baseTng = baselineLevelPath(key);
         json row{{"level", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
+        std::map<std::string, std::string> levelPicks;
+        for (const auto& [k, v] : picks.tng)
+            if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|')
+                levelPicks[k.substr(key.size() + 1)] = v;
         // EgoCore-style partial TNG mods (a [Settings] header, or far fewer things than the level)
         // merge even when they are the only editor: copying one would replace the level with its
         // handful of things. Replace=true asks for exactly that copy.
@@ -9641,12 +9676,24 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     if (it == baseSig.end() || it->second != thingSignature(t)) lvl[k] = changers.back().first;
                 }
             } catch (const std::exception&) {}
+            if (!levelPicks.empty()) {
+                const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(),
+                                               levelPicks, reviewChoices, true);
+                json crows = json::array();
+                for (const auto& c : tr.rows) {
+                    crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner},
+                                     {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable}});
+                    if (c.winner == "vanilla") {
+                        if (provenance.contains(key) && provenance[key].is_object()) provenance[key].erase(c.thing);
+                    }
+                    else if (!c.choiceUnavailable) provenance[key][c.thing] = c.winner;
+                }
+                row["conflicts"] = crows;
+                tngThingConflicts += tr.conflicts;
+            }
         } else {
             // this level's picks: `tng:<level>|<thing>` -> `<thing>`
-            std::map<std::string, std::string> levelPicks;
-            for (const auto& [k, v] : picks.tng)
-                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') levelPicks[k.substr(key.size() + 1)] = v;
-            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks);
+            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks, reviewChoices);
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
             for (const auto& [k, m] : tr.origin) provenance[key][k] = m;
@@ -9654,7 +9701,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             row["mode"] = "thing-merged";
             row["things"] = tr.things; row["applied"] = tr.applied; row["added"] = tr.added;
             json crows = json::array();
-            for (const auto& c : tr.rows) crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner}, {"overridden", c.overridden}});
+            for (const auto& c : tr.rows) crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner},
+                                                        {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable}});
             row["conflicts"] = crows;
         }
         tngRows.push_back(row);

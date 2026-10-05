@@ -1038,7 +1038,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (modChoiceUnavailable(c) || modFileChoiceStale(c)) {
                 ImGui::PushFont(fontSmall_);
                 const bool strictChoice = c.kind == "record" || c.kind == "file" || c.kind == "texture" ||
-                                          c.kind == "mesh" || c.kind == "fse" || c.kind == "string";
+                                          c.kind == "mesh" || c.kind == "fse" || c.kind == "string" || c.kind == "thing";
                 const auto message = modFileChoiceStale(c) ?
                     "File contents changed since this choice was reviewed; choose again or clear it before building." :
                     "Saved choice " + modPicks_.at(c.key) +
