@@ -99,11 +99,11 @@ def main():
         reports.append({'route': 'folder plus empty FMP', 'footprint': report['baseline_originals']})
         recipe = work/'Recipe'
         put(recipe, 'forge_pack.json', b'{"name":"Recipe","version":1}')
-        report = run('recipe', 'mods', 'merge', root, work/'recipe', '--with', a, b,
+        report = run('recipe', 'mods', 'merge', root, work/'recipe-output', '--with', a, b,
                      recipe, '--picks', picks, '--json')
         assert report['baseline_originals']['mode'] == 'complete'
         assert report['baseline_originals']['bytes_copied'] >= 4*1024*1024
-        assert (work/'recipe/data/Sound/touched.bin').read_bytes() == original
+        assert (work/'recipe-output/data/Sound/touched.bin').read_bytes() == original
         assert snapshot(root) == installed
         reports.append({'route': 'recipe full snapshot fallback', 'footprint': report['baseline_originals']})
     finally:

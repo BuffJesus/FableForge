@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 reusable output ownership and fresh-only staging
+
+Successful public mods build/merge writes root forge_mods_build.json format 1,
+listing generated relative paths with byte counts and SHA256. Rebuilding removes
+only obsolete recorded files whose identities still match. Missing old files
+drop from ownership; edited obsolete files refuse without writes. Unlisted and
+pre-receipt legacy files remain unclaimed. Active emitted files retain the prior
+replacement policy. Root source receipts are ignored; nested data files bearing
+the same name remain ordinary authored content. Receipt claims are local output
+bookkeeping, not signed source provenance.
+
+The receipt, obsolete removals and new files share publication rollback. Invalid
+paths/digests/formats, Windows aliases/device names and redirected owned paths
+refuse. Output must be separate from the install and active source paths. Public
+--stage composes privately, publishes output, and stages the fresh composition,
+excluding unrelated reusable-output files and the root receipt. Existing stage,
+EgoCore recovery markers and the target's running game refuse before publication.
+A later installation failure retains the existing stage recovery behavior;
+output publication and installation are separate transactions.
+
+Evidence root: C:/Users/Cornelio/FableForge-asset-checks-20261005.
+test_mod_build_ownership passes 58 ordinary checks in mod-build-ownership-5ubsxmp9
+and 58 complete-layout checks in mod-build-ownership-lp_axib1: independent SHA
+inventory, disabled-source cleanup, UTF-8 paths, locked-output rollback/retry,
+edited obsolete preservation, unsafe receipt refusal, real junction protection,
+fresh-only staging, existing-stage/EgoCore guards, overlap refusal and exact undo.
+Earlier x815a4x8/6jziksds failures retain an overly broad test expectation: a
+disabled source omitted from bare merge is not an active source; corrected tests
+check the enabled Keep source. Original stale-stage proof is retained in
+mod-staged-output-probe-wdsll7f2. Publication six-case regression passes at
+build/mod-output-publish-q9wtdsfc; file contributor 24 checks pass in
+mod-file-choice-contributors-bwuhabsf. Staged-baseline projection passes in
+mod-staged-baseline-yd9y2cqv after separating Recipe source and recipe-output
+(the previous Windows case alias is correctly refused; wvw47iwf retained).
+Mixed 50-command corpus plus Mods UI passes at build/mods-corpus-h62pky20.
+All Release targets are current; canonical core is unchanged from its 40-test
+gate. Package harness adds both ownership layouts (85 total).
+Frozen b7ec186 ZIP and its 81-workflow acceptance do not include this change.
+
 ## 2026-10-05 frozen local package covers 81 workflows across retained runs
 
 Application ZIP:

@@ -1,6 +1,7 @@
 // forge — command-line front end for the FableForge modding core.
 #include <algorithm>
 #include <cctype>
+#include <cwctype>
 #include <charconv>
 #include <cstdint>
 #include <cmath>
@@ -9048,31 +9049,114 @@ void requireUnredirectedOutputPath(const std::filesystem::path& root,
     }
 }
 
+void requireSafeModOutputPath(const std::filesystem::path& target,
+                             const std::filesystem::path& relative) {
+    const auto outputRoot = std::filesystem::weakly_canonical(target);
+    if (relative.empty() || relative.has_root_path() || relative != relative.lexically_normal())
+        throw std::runtime_error("unsafe mod output path: " + relative.string());
+    for (const auto& part : relative) {
+        const auto name = lowered(part.string());
+        if (name.empty() || name.find('\0') != std::string::npos || part == "." || part == ".." ||
+            name.ends_with(".forgebak") || name.starts_with(".forge-mod-output-"))
+            throw std::runtime_error("unsafe mod output path: " + relative.string());
+#ifdef _WIN32
+        const auto stem = name.substr(0, name.find('.'));
+        const bool device = stem == "con" || stem == "prn" || stem == "aux" || stem == "nul" ||
+            (stem.size() == 4 && (stem.starts_with("com") || stem.starts_with("lpt")) && stem[3] >= '1' && stem[3] <= '9');
+        if (name.find_first_of("<>:\"|?*") != std::string::npos || name.back() == '.' || name.back() == ' ' ||
+            device || std::any_of(name.begin(), name.end(), [](unsigned char c) { return c < 32; }))
+            throw std::runtime_error("unsafe mod output path: " + relative.string());
+#endif
+    }
+    const auto resolved = std::filesystem::weakly_canonical(target / relative);
+    if (resolved == outputRoot ||
+        std::mismatch(outputRoot.begin(), outputRoot.end(), resolved.begin(), resolved.end()).first != outputRoot.end())
+        throw std::runtime_error("mod output path escapes output folder: " + relative.string());
+    requireUnredirectedOutputPath(target, relative);
+}
+
+std::string modOutputKey(const std::filesystem::path& relative) {
+#ifdef _WIN32
+    return lowered(relative.generic_string());
+#else
+    return relative.generic_string();
+#endif
+}
+
+struct ModBuildFile { std::filesystem::path relative; forge::modchoices::FileContent content; };
+using ModBuildFiles = std::map<std::string, ModBuildFile>;
+
+ModBuildFiles readModBuildFiles(const std::filesystem::path& target) {
+    const auto receiptPath = target / "forge_mods_build.json";
+    requireUnredirectedOutputPath(target, "forge_mods_build.json");
+    if (!std::filesystem::exists(receiptPath)) return {};
+    try {
+        if (!std::filesystem::is_regular_file(receiptPath)) throw std::runtime_error("receipt is not a file");
+        std::ifstream input(receiptPath);
+        if (!input) throw std::runtime_error("cannot read receipt");
+        const auto receipt = json::parse(input);
+        if (!receipt.is_object() || !receipt.at("format").is_number_integer() || receipt.at("format") != 1 ||
+            !receipt.at("files").is_object()) throw std::runtime_error("unsupported receipt format");
+        ModBuildFiles result;
+        for (const auto& [name, value] : receipt.at("files").items()) {
+            const std::filesystem::path relative(name);
+            requireSafeModOutputPath(target, relative);
+            if (relative.generic_string() != name || lowered(name) == "forge_mods_build.json")
+                throw std::runtime_error("invalid owned path: " + name);
+            if (!value.is_object() || !value.at("bytes").is_number_unsigned() || !value.at("sha256").is_string())
+                throw std::runtime_error("invalid file identity: " + name);
+            const auto hash = lowered(value.at("sha256").get<std::string>());
+            if (hash.size() != 64 || !std::all_of(hash.begin(), hash.end(), [](unsigned char c) {
+                    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }))
+                throw std::runtime_error("invalid file digest: " + name);
+            if (!result.emplace(modOutputKey(relative), ModBuildFile{relative,
+                    {true, value.at("bytes").get<uint64_t>(), hash}}).second)
+                throw std::runtime_error("duplicate owned path: " + name);
+        }
+        return result;
+    } catch (const std::exception& error) {
+        throw std::runtime_error("mods build receipt: " + std::string(error.what()));
+    }
+}
+
 void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
                         const std::vector<std::filesystem::path>& removals = {}) {
-    // Prepare on the output filesystem, then use the existing bank transaction
-    // to restore previous files if any later destination cannot be renamed.
-    albion::detail::PendingBanks pending(target, ".forge-mod-output-");
-    const auto outputRoot = std::filesystem::weakly_canonical(target);
-    for (const auto& relative : removals) {
-        if (relative.empty() || relative.has_root_path())
-            throw std::runtime_error("unsafe mod output removal: " + relative.string());
-        for (const auto& part : relative)
-            if (part == ".." || part.string().ends_with(".forgebak"))
-                throw std::runtime_error("unsafe mod output removal: " + relative.string());
-        const auto resolved = std::filesystem::weakly_canonical(target / relative);
-        if (resolved == outputRoot ||
-            std::mismatch(outputRoot.begin(), outputRoot.end(), resolved.begin(), resolved.end()).first != outputRoot.end())
-            throw std::runtime_error("mod output removal escapes output folder: " + relative.string());
-        requireUnredirectedOutputPath(target, relative);
-        // Later recipes may create this path after the raw-file choice. Keep
-        // their final contribution rather than erasing an emitted file.
-        if (!std::filesystem::exists(source / relative)) pending.remove(relative);
-    }
+    const auto previous = readModBuildFiles(target);
+    ModBuildFiles current;
     visitInstallFiles(source, [&](const auto& path, const auto& relative) {
-        requireUnredirectedOutputPath(target, relative);
+        if (lowered(relative.generic_string()) == "forge_mods_build.json") return;
+        requireSafeModOutputPath(target, relative);
+        if (!current.emplace(modOutputKey(relative), ModBuildFile{relative, forge::modchoices::fileContent(path)}).second)
+            throw std::runtime_error("duplicate mod output path: " + relative.string());
+    });
+    std::map<std::string, std::filesystem::path> erased;
+    for (const auto& relative : removals) {
+        requireSafeModOutputPath(target, relative);
+        // Later recipes may emit this path after a raw-file choice.
+        if (!current.contains(modOutputKey(relative))) erased.emplace(modOutputKey(relative), relative);
+    }
+    for (const auto& [key, file] : previous) {
+        if (current.contains(key)) continue;
+        const auto destination = target / file.relative;
+        if (!std::filesystem::exists(destination)) continue;
+        if (!std::filesystem::is_regular_file(destination) || forge::modchoices::fileContent(destination) != file.content)
+            throw std::runtime_error("mods build receipt: previously generated file changed: " + file.relative.generic_string() +
+                "; preserve or move those edits before rebuilding this output");
+        erased.emplace(key, file.relative);
+    }
+    // The receipt and obsolete owned files participate in the same rollback
+    // transaction as new output. Unlisted files remain outside this ownership.
+    albion::detail::PendingBanks pending(target, ".forge-mod-output-");
+    for (const auto& [key, relative] : erased) pending.remove(relative);
+    visitInstallFiles(source, [&](const auto& path, const auto& relative) {
+        if (lowered(relative.generic_string()) == "forge_mods_build.json") return;
         std::filesystem::copy_file(path, pending.prepare(relative));
     });
+    json receipt{{"format", 1}, {"files", json::object()}};
+    for (const auto& [key, file] : current)
+        receipt["files"][file.relative.generic_string()] = {{"bytes", file.content.bytes}, {"sha256", file.content.sha256}};
+    const auto serialized = receipt.dump(2) + "\n";
+    writeAllBytes(pending.prepare("forge_mods_build.json").string(), std::vector<uint8_t>(serialized.begin(), serialized.end()));
     std::string error;
     if (!pending.install(false, error))
         throw std::runtime_error("cannot publish mod build: " + error);
@@ -10060,6 +10144,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (!de.is_regular_file()) continue;
                 const std::string rel = fs::relative(de.path(), s).generic_string();
                 std::string lower = rel; std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                if (lower == "forge_mods_build.json") continue; // output ownership is generated here, never imported
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
                 if (lext == ".tng" || lext == ".qst") continue;                      // merged above
@@ -10928,11 +11013,52 @@ int fmpDecode(const std::string& path, const std::string& which, bool jsonOutput
 
 // A direct build may encounter an unreadable source after its definitions were
 // already written. Keep the caller's output untouched until composition succeeds.
+void requireModBuildOutput(const std::string& baseRoot, const std::string& outDir,
+                           const std::vector<std::string>& sources) {
+    auto key = [](const std::filesystem::path& path) {
+        auto result = std::filesystem::weakly_canonical(path);
+#ifdef _WIN32
+        auto text = result.native();
+        std::transform(text.begin(), text.end(), text.begin(), [](wchar_t c) { return wchar_t(std::towlower(c)); });
+        result = text;
+#endif
+        return result;
+    };
+    auto overlaps = [](const auto& a, const auto& b) {
+        auto within = [](const auto& child, const auto& parent) {
+            return std::mismatch(parent.begin(), parent.end(), child.begin(), child.end()).first == parent.end();
+        };
+        return within(a, b) || within(b, a);
+    };
+    const auto output = key(outDir);
+    if (overlaps(output, key(baseRoot)))
+        throw std::runtime_error("Mod output must be outside the game installation and source folders.");
+    for (const auto& source : sources)
+        if (overlaps(output, key(forge::modorder::normalizeSource(source))))
+            throw std::runtime_error("Mod output must be outside the game installation and source folders.");
+}
+
+void requireCleanModStage(const std::string& baseRoot) {
+    namespace fs = std::filesystem;
+    if (albion::backups::gameRunningIn(baseRoot))
+        throw std::runtime_error("Fable.exe is running from this installation; quit the game before staging");
+    if (fs::exists(forge::stage::manifestPath(baseRoot)))
+        throw std::runtime_error("A mod is already staged; undeploy it before staging this build");
+    const auto data = fs::path(baseRoot) / "data";
+    if (fs::is_directory(data))
+        for (const auto& item : fs::recursive_directory_iterator(data))
+            if (item.is_regular_file() && lowered(item.path().extension().string()) == ".tmp" &&
+                fs::exists(item.path().parent_path() / item.path().stem()))
+                throw std::runtime_error("EgoCore has deployed mods on this install; restore vanilla in EgoCore before staging");
+}
+
 int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
                       const std::vector<std::string>& sources,
                       const std::string& fieldSchema, bool jsonOutput,
                       const std::vector<std::string>& labels,
-                      const std::string& picksPath, bool allowCompleteData) {
+                      const std::string& picksPath, bool allowCompleteData, bool doStage = false) {
+    requireModBuildOutput(baseRoot, outDir, sources);
+    if (doStage) requireCleanModStage(baseRoot);
     const albion::detail::TemporaryDirectory workspace("mods-output-");
     json report;
     std::vector<std::filesystem::path> removals;
@@ -10942,6 +11068,15 @@ int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
                              jsonOutput ? &report : nullptr, &removals);
     if (rc != 0) return rc;
     publishInstallTree(workspace.path(), outDir, removals);
+    if (doStage) {
+        requireCleanModStage(baseRoot);
+        // Stage exactly this composition, excluding receipt and unlisted files
+        // retained in the reusable output folder.
+        const auto staged = forge::stage::apply(baseRoot, workspace.path());
+        if (jsonOutput) report["stage"] = {{"staged", staged.staged.size()}, {"backed_up", staged.backedUp.size()}};
+        else std::printf("staged %zu file(s) onto %s (%zu backed up)\n",
+                         staged.staged.size(), baseRoot.c_str(), staged.backedUp.size());
+    }
     if (jsonOutput) std::puts(report.dump(2).c_str());
     return 0;
 }
@@ -14228,10 +14363,8 @@ int main(int argc, char** argv) {
                     const auto sources = mo::buildSources(order, root);
                     if (sources.empty()) { std::fprintf(stderr, "mods build: the order has no enabled mods (mods add first)\n"); return 1; }
                     if (!asJson) std::printf("building %zu enabled mod(s) in order onto %s\n", sources.size(), root.c_str());
-                    if (!doStage)
-                        return modsMergePrepared(root, args[3], sources, fieldSchema, asJson,
-                                                 mo::buildLabels(order), picksPath, mo::installsCompleteData(order));
-                    return modsMerge(root, args[3], sources, fieldSchema, true, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
+                    return modsMergePrepared(root, args[3], sources, fieldSchema, asJson,
+                                             mo::buildLabels(order), picksPath, mo::installsCompleteData(order), doStage);
                 }
             } catch (const std::exception& e) {
                 std::fprintf(stderr, "mods %s: %s\n", args[1].c_str(), e.what());
@@ -14260,10 +14393,8 @@ int main(int argc, char** argv) {
                 sources.push_back(args[i]);
             }
             (void)seenWith;
-            if (!doStage)
-                return modsMergePrepared(args[2], args[3], sources, fieldSchema,
-                                         asJson, {}, picksPath, installData);
-            return modsMerge(args[2], args[3], sources, fieldSchema, true, asJson, {}, picksPath, nullptr, installData);
+            return modsMergePrepared(args[2], args[3], sources, fieldSchema,
+                                     asJson, {}, picksPath, installData, doStage);
         }
         if (args.size() >= 6 && args[0] == "defs" && args[1] == "merge") {
             const bool asJson = !args.empty() && args.back() == "--json";

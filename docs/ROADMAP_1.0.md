@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 reusable mod outputs now record generated file identities and remove
+unchanged obsolete files transactionally. Edited obsolete files refuse cleanup;
+unlisted files remain. Public --stage uses fresh composition, excludes output
+bookkeeping and unrelated files, and refuses existing deployments before writes.
+Both 58-check layouts pass; package harness now includes 85 workflows. Frozen
+b7ec186 ZIP excludes this increment. See HANDOFF_WORLD_UI for evidence and scope.
+
 2026-10-05 frozen b7ec186 local ZIP covers all 81 workflows across 44 retained
 initial passes and 37 resumed passes after one GUI timeout. Zero uncovered/skips;
 108 packaged identities and 120 doc links verified. Later DeleteUIDs and build

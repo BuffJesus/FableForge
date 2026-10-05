@@ -17,8 +17,23 @@ no current contributors stay inactive. Selecting vanilla emits the existing
 baseline file bytes so a reused direct output restores that file. A baseline
 that lacks the file now removes that selected addition from a reused direct
 output. Removals and replacements share one rollback transaction. Redirected
-child files/directories in the output refuse publication. Automatic obsolete-
-file cleanup and choose-time content fingerprints are pending.
+child files/directories in the output refuse publication. Choose-time content
+fingerprints are pending.
+
+Successful builds write `forge_mods_build.json` in the output root, recording
+generated file sizes and SHA256 identities. Reusing that output removes obsolete
+recorded files only while their bytes still match; edited obsolete files refuse
+the build so you can preserve or move your edits. Unlisted files, including files
+left by builds predating the receipt, remain. New files and replacements keep
+the existing overwrite behavior. Publication rolls back removals, replacements
+and the receipt together on failure. Use an output folder separate from the game
+installation and active sources.
+
+`mods build --stage` and `mods merge --stage` stage the newly composed files,
+excluding the root receipt and unrelated files in a reused output folder.
+Undeploy an existing stage first. A running target game or existing EgoCore
+deployment refuses before output publication. Output publication and installation
+are separate operations; an installation failure uses the usual stage recovery.
 
 Compiled-definition composition refuses sources carrying changed or new unnamed
 entries. Such components have no safe cross-bank identity; silently ignoring them

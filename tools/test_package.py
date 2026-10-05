@@ -127,6 +127,9 @@ def main():
                 [sys.executable, repo/f'tools/test_mod_{family}_choice_contributors.py',
                  '--tool', package/'forge-tools.exe', '--work-root', work, *options])
     for suffix, options in [('', []), ('_complete', ['--complete-data'])]:
+        run('mod_build_ownership' + suffix,
+            [sys.executable, repo/'tools/test_mod_build_ownership.py',
+             '--tool', package/'forge-tools.exe', '--work-root', work, *options])
         run('mod_text_payload_refusal' + suffix,
             [sys.executable, repo/'tools/test_mod_text_payload_refusal.py',
              '--tool', package/'forge-tools.exe', '--work-root', work, *options])
