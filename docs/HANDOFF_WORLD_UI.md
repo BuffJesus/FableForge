@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 FSE quest choice contributors
+
+Active FSE/quests.lua entry choices now refuse a winner that did not contribute
+a changed version of that entry, before publishing the composed result.
+Read-only conflict checks still report current contributors and flag the
+unavailable choice; the GUI asks for review/clear before building. `vanilla`
+restores the baseline entry or its absence. Other labels, including `base` and
+`none`, require actual contributions. Existing entries with no current changes
+and unreported keys retain inactive choices.
+
+The synthetic pre-fix probe is
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-fse-choice-3zynorq8/result.json.
+The final gate passes 26 checks including both-size real dropdown clearing,
+exact rebuilt registry values and full warning clipping in
+mod-fse-choice-contributors-u1urn2np/. Its synthetic complete-Data variant passes
+24 native checks in mod-fse-choice-contributors-wiz7nqrp/. Source/baseline
+inventories and previous output are hash-checked; a single remaining contributor,
+unchanged saved winner, all-inactive entry and absent baseline entry are covered.
+Earlier gqu2rgio/vhazp6z8 native and vbt0bgrf UI reports remain retained. The
+compact warning was visually inspected. These synthetic registries do not
+certify executable quest-script behavior or quest-ID compatibility.
+
+CLI/GUI Release targets build. The mixed corpus gate runs all 50 commands plus
+the normal Mods UI and passes in build/mods-corpus-c78hjyw1/result.json.
+Initial zd5uu5js completes all 50 commands but fails an outdated F2 diagnostic
+assertion: the importer now reaches the specific unsupported
+CInventoryItemDef_F2_IRON_AXE Graphic reference instead of an earlier target-list
+refusal. The corrected assertion retains full input/output preservation checks.
+Core implementation is unchanged from the preceding 39-test gate. No live
+game files changed. Both earlier development ZIPs remain frozen and exclude
+this FSE increment. Language/string choices are the next separately reproduced
+saved-winner gap.
+
 ## 2026-10-05 local development package checkpoints
 
 Two development archives were created under separate `dist/development/`

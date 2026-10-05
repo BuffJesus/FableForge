@@ -119,7 +119,8 @@ def main() -> int:
     run("mods", "enable", scratch, "1")
     out = os.path.join(work, "ui_mods_out")
     remove_owned(out)
-    # F2's metadata repeats a path for distinct nested/asset members. The old
+    # F2's current first refusal is an unlocated inventory Graphic reference.
+    # Earlier readers stopped at its repeated nested/asset target paths. The old
     # importer silently ignored all symbols; its 95-added-record count proved
     # container composition only, not a valid installation. Refuse this scope
     # without touching the source root or an existing output, then continue the
@@ -133,7 +134,7 @@ def main() -> int:
     marker = Path(out)/'prior-result.txt'; marker.write_bytes(b'preserve prior build')
     out_before = files_at(out)
     refused = run("mods", "build", scratch, out, expect=1)
-    if ("FMP links:" not in refused.stderr or "unsupported target list" not in refused.stderr or
+    if ("FMP links: unsupported reference field CInventoryItemDef_F2_IRON_AXE: Graphic" not in refused.stderr or
             files_at(scratch) != before_refusal or files_at(out) != out_before):
         print("unsupported F2 link metadata was not safely refused:", refused.stderr[-600:]); ok = False
     run("mods", "disable", scratch, "F2 Melee (defs)")

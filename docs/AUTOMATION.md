@@ -178,6 +178,12 @@ choices, single/no-contributor cases, baseline aliases and exact output/input
 preservation in mod merge/build and both standalone definitions merge modes.
 Its optional `--complete-data` fixture uses synthetic definition banks.
 
+`tools/test_mod_fse_choice_contributors.py` checks quest-entry contributors,
+baseline presence/absence, inactive choices and preserved input/output bytes.
+`--complete-data` adds synthetic complete definition banks. Optional
+`--gui <exe> --install <root>` also checks both-size warning clipping, actual
+winner-menu clearing and independently read rebuilt quest-registry values.
+
 `tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
 winner matches independently built output for an absent saved contributor.
 It checks preservation, choice-name search, real dropdown clearing, an ordinary

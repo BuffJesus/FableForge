@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 FSE contributors: unavailable active quest-entry winners now refuse
+publication while conflict checks remain reviewable. Ordinary 26-check native/UI
+and complete-Data 24-check gates pass, including inactive/absent entries and
+both-size real dropdown clearing. The mixed 50-command corpus/Mods UI gate also
+passes. This increment is not in the earlier frozen ZIPs; see HANDOFF_WORLD_UI.
+
 2026-10-05 local package checkpoints: frozen d1ad2a4 passes its original 48
 extracted workflows across retained runs, zero skips. The later 1930ebb archive
 passes ten affected workflows including scalar/record refusals; its other 42
