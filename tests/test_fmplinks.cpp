@@ -256,6 +256,27 @@ int main() {
                 "shop phrase requires a text identity map");
     }
     Bytes effectMap; word(effectMap, 2); word(effectMap, 10); word(effectMap, 77);
+    const auto suitSchema = forge::defschema::Schema::loadText(
+        R"({"CHeroSuitDef":{"prefix_len":3,"fields":[{"name":"SuitParts","type":"Map_JW4EClothingSuitPart__"}]}})");
+    Bytes suitParts; word(suitParts, 2);
+    word(suitParts, 1); word(suitParts, 77); word(suitParts, 5); word(suitParts, 78);
+    const auto suit = legacyEntry("CHeroSuitDef", "SuitParts", "Map_JW4EClothingSuitPart__", suitParts);
+    const std::vector<forge::fmplinks::Link> suitLinks{
+        {"1104892239.unknown.0.Suit ID", "A"}, {"1104892239.unknown.1.Suit ID", "B"}};
+    const auto linkedSuit = forge::fmplinks::relink(suit, targets, suitSchema, suitLinks);
+    auto expectedSuit = suit.data;
+    const uint32_t firstSuitObject = 0, secondSuitObject = 1;
+    std::memcpy(expectedSuit.data() + 15, &firstSuitObject, 4);
+    std::memcpy(expectedSuit.data() + 23, &secondSuitObject, 4);
+    check(linkedSuit == expectedSuit && suit.data == legacyEntry("CHeroSuitDef", "SuitParts",
+          "Map_JW4EClothingSuitPart__", suitParts).data,
+          "suit object links preserve clothing-part enum keys and every other byte");
+    rejects([&] { forge::fmplinks::locate(suit, suitSchema,
+        {"1104892239.unknown.2.Suit ID", "A"}); }, "suit part map refuses an out-of-range index");
+    auto badSuitParts = suitParts; badSuitParts[0] = 3;
+    const auto badSuit = legacyEntry("CHeroSuitDef", "SuitParts", "Map_JW4EClothingSuitPart__", badSuitParts);
+    rejects([&] { forge::fmplinks::locate(badSuit, suitSchema, suitLinks[0]); },
+            "suit part map refuses a count extending beyond the payload");
     const auto stockSchema = forge::defschema::Schema::loadText(
         R"({"CShopDef":{"prefix_len":3,"fields":[{"name":"DefaultStock","type":"?"}]}})");
     const auto keeperSchema = forge::defschema::Schema::loadText(

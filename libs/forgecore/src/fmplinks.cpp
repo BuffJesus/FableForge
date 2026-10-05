@@ -627,9 +627,22 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("special effects reference index out of range");
                 return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
             }
-            // OBJECT_FAMILY reward entries are a counted list of eight-byte
-            // {game.bin object index, float weight} pairs. The link names the
-            // first word; preserve the weight and every other entry byte.
+            // Suit maps contain {clothing-part enum, game.bin object index}
+            // pairs. Relink only the value, preserving the enum key.
+            if (entry.definition == "CHeroSuitDef" && field.name == "SuitParts" &&
+                field.type == "Map_JW4EClothingSuitPart__" && parts.size() == 4 &&
+                parts[0] == "1104892239" && parts[1] == "unknown" && parts[3] == "Suit ID") {
+                if (field.value.size() < 4) fail("invalid suit part map");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 8 ||
+                    field.value.size() != 4 + count * 8)
+                    fail("unsupported suit part map layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("suit part reference index out of range");
+                return {offset + 8 + index * 8, i + 1, Destination::GameEntry};
+            }
+            // OBJECT_FAMILY reward entries contain {object index, float weight}.
+            // Preserve the weight and every other entry byte.
             if (entry.definition == "OBJECT_FAMILY" &&
                 field.name == "Objects" && field.type == "Vector_VCObjectFamilyEntry__" &&
                 parts.size() == 4 && parts[1] == "Reward Object List" &&

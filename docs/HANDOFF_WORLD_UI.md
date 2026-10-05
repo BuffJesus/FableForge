@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 suit map references
+
+CHeroSuitDef SuitParts now resolves the object-ID values of the counted
+eight-byte clothing-part map. The enum keys and all other bytes stay unchanged;
+exact count/length and ordinal bounds are required. ChocolateBox control
+41DB514F and the native Map_JW4EClothingSuitPart__ schema establish this layout.
+
+`tools/test_fmp_suit_links.py` passes against four untouched original packages:
+Will Robes with Wizard Hats, Daedric Cuirass beta 1, Platemail with Demonic
+Helms, and Thunder Suit. Independent payload comparisons and direct/composed
+bank parity pass; six malformed count/index/missing-target cases preserve
+existing output. Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261004/
+fmp-suit-links-qhkxcunf/result.json. Native fmplinks tests also pass.
+Blue Ass Beta still refuses its inventory-type text reference and is not counted
+as supported. The live 1102-package sweep is frozen at bcfa118 and excludes this
+fix and the later material-slot guard. No gameplay or release claim is made.
+
 ## 2026-10-04 graphics material-slot validation
 
 Named texture links now validate the exact ordinal LOD/MAT slot after counted
