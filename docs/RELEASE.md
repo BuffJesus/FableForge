@@ -29,6 +29,16 @@ checks extracted links and runs retail/GUI plus field-comparison, long-value,
 search, unavailable-choice and unreported-choice workflows from an unrelated
 working directory. The asset-restore fixture also exercises packaged mesh import
 and Setup restoration of real copied banks.
+The package gate also checks ordinary and complete-Data whole-file review
+refusals. It writes `progress.json` after each completed workflow, including the
+archive SHA256 and any nonzero exit status. After correcting a failed fixture, use
+`--start-at <workflow-name>` to exercise the remaining workflows from the same
+archive. Earlier workflows appear as `not_run`, never as passes; retain the
+earlier logs and report combined coverage only for the identical archive hash.
+`--only <name> ...` selects focused workflows for a later artifact; it also
+reports all omitted checks as `not_run`. Scalar and record contributor checks
+cover ordinary and synthetic complete-Data composition. Unknown/unavailable
+requested workflow names fail the gate.
 Extracted-package checks also cover locked/partial writes, ambiguous recovery
 records, active/orphaned stages, confirmation cancellation and absent bank,
 loose-level and stock-WAD recovery. Recovery fixtures accept `--gui` and `--cwd`

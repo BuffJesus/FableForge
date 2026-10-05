@@ -37,6 +37,9 @@ def main():
     parser.add_argument('--root', type=Path, default=Path(os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters')))
     parser.add_argument('--corpus', type=Path, default=repo/'work/nexus_mods/_peek')
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument('--start-at', help='Run this named workflow and subsequent workflows; earlier checks are reported as not run')
+    selection.add_argument('--only', nargs='+', help='Run only these named workflows; all others are reported as not run')
     args = parser.parse_args()
     archive = args.archive.resolve()
     work = Path(tempfile.mkdtemp(prefix='package-smoke-', dir=repo / 'build')).resolve()
@@ -87,17 +90,42 @@ def main():
     cwd = work / 'unrelated working directory'
     cwd.mkdir()
     env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', FORGE_PACKAGE_TOKEN='expanded')
-    checks = []
+    checks, not_run = [], []
+    pending_start = args.start_at
+    pending_only = set(args.only or [])
+    with archive.open('rb') as stream:
+        archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     def run(label, command):
+        nonlocal pending_start
+        if args.only is not None:
+            if label not in pending_only:
+                not_run.append(label)
+                return
+            pending_only.remove(label)
+        if pending_start and label != pending_start:
+            not_run.append(label)
+            return
+        pending_start = None
         result = subprocess.run(list(map(str, command)), cwd=cwd, env=env,
             capture_output=True, text=True, timeout=600)
         (work / (label + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
         checks.append({'check': label, 'returncode': result.returncode})
+        (work / 'progress.json').write_text(json.dumps({'archive': str(archive),
+            'sha256': archive_hash, 'checks': checks, 'not_run': not_run}, indent=2), encoding='utf-8')
         assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
         print(label + ': PASS', flush=True)
     run('defs', [package / 'forge-tools.exe', 'defs', 'list', args.root.resolve(), 'game.bin', 'OBJECT_HERO'])
     run('mod_bank_refusal', [sys.executable, repo/'tools/test_mod_bank_refusal.py',
         '--tool', package/'forge-tools.exe', '--cwd', cwd])
+    for label, options in [('mod_file_choice_reviews', []),
+                           ('mod_file_choice_reviews_complete', ['--complete-data'])]:
+        run(label, [sys.executable, repo/'tools/test_mod_file_choice_reviews.py',
+            '--tool', package/'forge-tools.exe', '--work-root', work, *options])
+    for family in ('field', 'record'):
+        for suffix, options in [('', []), ('_complete', ['--complete-data'])]:
+            run(f'mod_{family}_choice_contributors{suffix}',
+                [sys.executable, repo/f'tools/test_mod_{family}_choice_contributors.py',
+                 '--tool', package/'forge-tools.exe', '--work-root', work, *options])
     run('fmp_record_refusal', [sys.executable, repo/'tools/test_fmp_record_refusal.py',
         '--tool', package/'forge-tools.exe', '--cwd', cwd])
     run('retail', [sys.executable, repo / 'tools/retail_smoke.py', '--exe', package / 'forge.exe',
@@ -171,11 +199,12 @@ def main():
             '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), *options])
     run('texture_export_failure', [sys.executable, repo / 'tools/test_texture_export_failure_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--install', args.root.resolve()])
-    with archive.open('rb') as stream:
-        archive_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+    assert pending_start is None, f'workflow not found or unavailable: {pending_start}'
+    assert not pending_only, f'workflows not found or unavailable: {sorted(pending_only)}'
     (work / 'result.json').write_text(json.dumps({'archive': str(archive), 'sha256': archive_hash,
-        'package': str(package), 'checks': checks, 'skipped': skipped, 'passed': True}, indent=2), encoding='utf-8')
-    print('Extracted package, retail exports, GUI pixels and literal-path mod workflow: PASS')
+        'package': str(package), 'checks': checks, 'not_run': not_run,
+        'skipped': skipped, 'passed': True}, indent=2), encoding='utf-8')
+    print('Extracted package workflows: PASS', len(checks), 'run,', len(not_run), 'not run,', len(skipped), 'skipped')
 
 
 if __name__ == '__main__':

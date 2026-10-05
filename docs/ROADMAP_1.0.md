@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 local package checkpoints: frozen d1ad2a4 passes its original 48
+extracted workflows across retained runs, zero skips. The later 1930ebb archive
+passes ten affected workflows including scalar/record refusals; its other 42
+workflows are not claimed. Both verify 108 identities and 120 documentation
+links. Two retained D: scratch timeouts have same-binary passing command retries
+and a passing C: gate; their cause remains unconfirmed. See HANDOFF_WORLD_UI.
+
 2026-10-05 record contributor choices: absent/unchanged saved record winners now
 refuse publication, including one remaining contributor; inactive records remain
 supported. Both 48-case ordinary/complete-Data gates, both-size record-choice UI

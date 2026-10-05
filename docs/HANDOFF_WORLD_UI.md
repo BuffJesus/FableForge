@@ -1,5 +1,57 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 local development package checkpoints
+
+Two development archives were created under separate `dist/development/`
+directories; neither replaces published assets or tags. Both verify 108 file
+identities and 120 linked documentation targets when extracted below a literal
+`%FORGE_PACKAGE_TOKEN% & files` path and run from an unrelated working directory.
+
+`20261005-d1ad2a4/FableForge-0.18.1-dev.d1ad2a4.20261005-win64.zip`
+has SHA256 e56be5872c5f6a8936abb8a04dcfc26b4d8b5d58aea04d2f3e890a78bc334f41.
+Its original 48-workflow scope passes across retained runs: 17 initial passes
+in build/package-smoke-yuta8e05/, the corrected both-size FMP refusal fixture
+in build/mod-action-error-g3gl29w1/, and the remaining 30 passes with zero skips
+in build/package-smoke-s0olwmvc/result.json. The Aeon/controller check preserves
+16362 records (6625 unnamed), validates 14 links and 70 -> 141 control bindings;
+this remains offline composition, not game execution. This archive excludes
+the subsequent case-insensitive metadata, scalar and record-choice fixes.
+
+Initial build/package-smoke-9fixp_c8/ caught an outdated unnamed-record
+diagnostic expectation; its corrected 16-case standalone gate passes in
+build/fmp-record-refusal-gqqglw40/. The yuta8e05 run caught the outdated
+`unsupported target list` expectation after FMP text-link support: the minimal
+GUI baseline actually lacks English/text.big. The corrected fixture verifies
+that exact refusal, persistent error, byte preservation and same-process retry.
+
+`20261005-1930ebb/FableForge-0.18.1-dev.1930ebb.20261005-win64.zip`
+has SHA256 e8bf426180348961e65b9a02582b01c50ce2e841479ce9e9eb61dcf8f6371819.
+It includes the three subsequent fixes and passes ten affected extracted
+workflows: both 28-case file-review gates and ordinary 33-case scalar gate in
+build/package-smoke-v85gp6qq/, complete-Data scalar gate in
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-field-choice-contributors-ek7x80kc/,
+then both 48-case record gates, named FMP references, field details, field choices
+and file-content UI in build/package-smoke-5ai5v0bq/result.json. That final report
+explicitly records six run / 46 not run / zero skipped; combined scope is ten
+affected workflows, not a full 52-workflow acceptance or the earlier ZIP's full
+scope. The new binaries were built from 1930ebb; PACKAGE_INFO packaging checkout
+marks tracked changes for the test/documentation updates and does not itself
+attest binary source provenance.
+
+Two D: scratch complete-Data scalar attempts timed out after 120 seconds at
+different baseline aliases: v85gp6qq and nuvqy1sr. The exact first command's
+retry passes in 7.8 seconds; the second passes in 0.06–0.13 seconds through both
+captured pipes and file output from the unrelated directory. Retry evidence is
+retained inside each failed fixture. The unchanged extracted binary passes the
+full 33-case gate on C: with the same timeout. Cause of the intermittent D:
+timeouts is unconfirmed; retain them instead of silently raising limits.
+
+The package harness now retains per-workflow archive-hashed progress, supports
+`--start-at` and `--only`, and lists omitted workflows as `not_run`. Its full
+scope adds ordinary/complete-Data file, scalar and record-choice checks to the
+previous 46 workflows. No live install files changed, package published or game
+launched for these checks. Later FSE contributor work is separate from both ZIPs.
+
 ## 2026-10-05 definition record choice contributors
 
 Saved whole-record choices now require the named mod to contribute a changed

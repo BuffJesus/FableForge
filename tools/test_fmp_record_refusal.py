@@ -35,7 +35,7 @@ def main():
     checks=[]
     cases=[('new-untyped','NEW_RECORD','-', 'has no definition type'),
            ('new-empty-type','NEW_RECORD','', 'has no definition type'),
-           ('unnamed','',TYPE,'contains an unnamed record'),
+           ('unnamed','',TYPE,'has no matching blank-name baseline identity'),
            ('wrong-type',RECORD,'DifferentDefinition','different definition type')]
     for label,name,definition,reason in cases:
         package=work/(label+'.fmp')

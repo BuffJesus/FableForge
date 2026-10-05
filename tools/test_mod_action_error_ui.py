@@ -29,7 +29,7 @@ def main():
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
     parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record'], default='redeploy')
-    parser.add_argument('--fmp', type=Path, help='Unsupported metadata fixture for --mode fmp')
+    parser.add_argument('--fmp', type=Path, help='Text-link fixture for a scratch baseline without text.big')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
     deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record')
@@ -123,7 +123,7 @@ def main():
                 'assert_log changed sibling definition banks' if args.mode == 'sibling' else
                 'assert_log has no definition type' if args.mode == 'record' else
                 'assert_log changed or new unnamed definition entries' if args.mode == 'unnamed' else
-                'assert_log unsupported target list' if args.mode == 'fmp' else 'assert_log bad magic']
+                'assert_log FMP text links: baseline English/text.big is missing' if args.mode == 'fmp' else 'assert_log bad magic']
             if args.mode in ('unnamed', 'sibling', 'record'):
                 lines += button('btn_mods_conflicts')+['assert_log mods conflicts: FAILED',
                     'assert_log changed sibling definition banks' if args.mode == 'sibling' else
