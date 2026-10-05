@@ -78,6 +78,17 @@ breath particles use effect IDs. Four-byte storage does not identify the bank.
 Native operations must declare the target domain, with legacy path spelling
 retained as import provenance rather than becoming the new format's identity.
 
+The completed 1102-package corpus has 110 independently verified first-reported
+asset-ID collisions: 89 texture and 21 graphics clashes. Of these, 107 collide
+with vanilla and three with an earlier entry in the same package (Blackplate,
+Skyrim Headgear Fable and Skyrimweapons Fable). A numeric old-to-new map cannot
+distinguish two same-ID source symbols. Native references must identify the
+target symbol and bank; package-local identity must not be its inherited ID.
+Legacy conversion must refuse ambiguous references. Eventual relocation must
+update game references, descriptor lists, material words and relevant physics
+references while preserving opaque mesh bytes; allocating a free ID alone is
+insufficient. Current importers still refuse these collisions.
+
 Provider-index matches are review hints. The original Apple Store requires an
 OBJECT_APPLE_CARE record supplied by Apple Packagev2; staff shop edits have several
 possible providers. An author-declared dependency should name a package/version

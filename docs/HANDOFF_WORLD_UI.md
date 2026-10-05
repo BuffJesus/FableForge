@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 collision and texture-provider audit
+
+`tools/audit_named_fmp_asset_collisions.py` independently checks the source and
+baseline BIG entry tables against the completed frozen report. It verifies all
+110 reported collisions: 89 maintexture and 21 graphics, with 107 baseline
+clashes and three within-package duplicate numeric IDs (Blackplate, Skyrim
+Headgear Fable and Skyrimweapons Fable). It checks archive/catalogue/report hashes
+and baseline asset identities; no IDs are allocated and no files installed.
+Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261004/
+named-fmp-asset-collisions-x1eb9716/result.json. The initial 0qm1k8c8 harness
+incorrectly assumed every collision was against vanilla; retain that failed
+attempt as evidence of the distinction. Only the first refusal per package is
+examined; additional problems may appear after resolution.
+
+The provider index now reports missing mesh textures separately, with candidates
+restricted to maintextures. build/named-fmp-providers-0p_86gkn/result.json has
+seven candidate matches among twelve missing textures, alongside the unchanged
+40/78 general missing-target matches. Independent source-table checks are in
+texture-candidate-verification.json. Symbol matches are unverified dependencies.
+The v2 proposal now records why package-local symbolic/bank identities are
+required even before final numeric ID allocation.
+
 ## 2026-10-04 read-only mesh texture-word locations
 
 Decoded materials now expose optional offsets for the four established diffuse,

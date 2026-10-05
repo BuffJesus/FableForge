@@ -113,7 +113,16 @@ def main():
             if index % 100 == 0:
                 print(index, '/', len(catalogue), flush=True)
     missing = []
+    missing_textures = []
     for row in coverage['rows']:
+        texture = re.fullmatch(r'error: FMP graphics: (.+?) needs missing texture (.+)', row['reason'])
+        if texture:
+            mesh, target = texture.groups()
+            candidates = [p for p in providers.get(target, [])
+                          if p['file'] != row['file'] and p['bank'] == 'maintextures']
+            missing_textures.append({'consumer': row['file'], 'mesh': mesh, 'target': target,
+                'required_bank': 'maintextures', 'candidates': candidates,
+                'compatibility_verified': False})
         match = re.search(r': missing target (.+?) for (.+)$', row['reason'])
         if not match:
             continue
@@ -125,11 +134,14 @@ def main():
     report = {'archive_sha256': before[str(args.archive)], 'coverage_sha256': before[str(args.coverage)],
               'indexed_packages': len(packages), 'packages': packages, 'refused_packages': refused,
               'providers': dict(sorted(providers.items())), 'missing_targets': missing,
+              'missing_texture_targets': missing_textures,
+              'texture_candidate_matches': sum(bool(r['candidates']) for r in missing_textures),
               'candidate_matches': sum(bool(r['candidates']) for r in missing),
               'dependencies_declared': False, 'gameplay_tested': False}
     (work/'result.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print('Named provider index:', len(packages), 'packages;', report['candidate_matches'],
           '/', len(missing), 'missing-target rows have candidates; no compatibility claim')
+    print('Mesh texture candidates:', report['texture_candidate_matches'], '/', len(missing_textures))
 
 
 if __name__ == '__main__':
