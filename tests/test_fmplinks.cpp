@@ -730,6 +730,37 @@ int main() {
         references, false, nullptr, &inventoryTextures); },
         "inventory title/details require matching text identities");
 
+    const auto augmentSchema = forge::defschema::Schema::loadText(
+        R"({"CAugmentationDef":{"prefix_len":3,"fields":[{"name":"Name","type":"?"},{"name":"Type","type":"?"},{"name":"InventoryGraphic","type":"?"}]}})");
+    forge::defdecode::Decoded augmentDecoded;
+    augmentDecoded.prefix = {1, 0, 1}; augmentDecoded.prefixLen = 3;
+    augmentDecoded.allTagsOk = true;
+    std::vector<uint8_t> augmentName, augmentType, augmentGraphic;
+    word(augmentName, 77); word(augmentType, 0x200); word(augmentGraphic, 88);
+    augmentDecoded.fields = {inventoryField("Name", "?", augmentName),
+                            inventoryField("Type", "?", augmentType),
+                            inventoryField("InventoryGraphic", "?", augmentGraphic)};
+    forge::bin::Entry augment{"CAugmentationDef", "AUGMENT_PROBE", 0,
+                             forge::defdecode::encode(augmentDecoded)};
+    references = {{"604919263.GUIDescription1ID", "ITEM_TITLE"},
+                  {"3069668529.HUD Icon Texture", "INVENTORY_ICON"}};
+    const auto linkedAugment = forge::fmplinks::relink(augment, targets, augmentSchema,
+        references, false, nullptr, &inventoryTextures, nullptr, &inventoryTexts);
+    auto expectedAugment = augment.data;
+    const uint32_t augmentText = 15100, augmentTexture = 5665;
+    std::memcpy(expectedAugment.data() + 7, &augmentText, 4);
+    std::memcpy(expectedAugment.data() + 23, &augmentTexture, 4);
+    check(linkedAugment == expectedAugment, "augmentation text/icon rewrite exact scalars and preserve type");
+    rejects([&] { forge::fmplinks::relink(augment, targets, augmentSchema,
+        references, false, nullptr, nullptr, nullptr, &inventoryTexts); },
+        "augmentation icon requires texture identities");
+    rejects([&] { forge::fmplinks::relink(augment, targets, augmentSchema,
+        references, false, nullptr, &inventoryTextures); },
+        "augmentation name requires text identities");
+    rejects([&] { forge::fmplinks::locate(augment, augmentSchema,
+        {"604919263.Unverified Name", "ITEM_TITLE"}); },
+        "augmentation control requires exact legacy path");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

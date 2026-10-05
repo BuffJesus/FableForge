@@ -615,3 +615,12 @@ CInventoryItemDef's 17-byte Graphic uses a texture ID at +4 for its exact
 Inventory HUD Icon path. ItemDescription and ItemDetails use named TextIDs for
 TEXT_TITLE/TEXT_DESCRIPTION. Missing custom text remains a hard failure; the
 link unit test verifies the three addressed words and unchanged graphic bytes.
+
+2026-10-05 CAugmentationDef's four-byte Name and InventoryGraphic fields now
+bind the exact legacy GUIDescription1ID/HUD Icon Texture controls to text and
+main-texture IDs. Original Augments.fmp passes four independent symbolic-word
+checks and exact preservation of all other definition bytes, direct/composed
+game/names/text bank parity on a clean copied baseline and six safe refusals.
+Evidence: fmp-augment-label-links-8qn0ydao under the owning C: scratch parent;
+details and prior baseline-comparison diagnostic are in HANDOFF_WORLD_UI.
+Unknown control paths remain unsupported; gameplay remains unverified.

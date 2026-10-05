@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 augmentation label and icon scalar links
+
+Original Augments.fmp still refused at the current importer on CAugmentationDef
+Name; retained probe fmp-augment-name-probe-gwyz75qo confirms the exact reason.
+ChocolateBox controls 240E55DF/B6F76CB1 explicitly bind Name to TextID and
+InventoryGraphic to MainTextureID. The native CAugmentationDef header agrees
+that both members are scalar words. Exact legacy paths 604919263.GUIDescription1ID
+and 3069668529.HUD Icon Texture now select those domains only for this definition,
+the unresolved four-byte schema fields and those field names. Other paths refuse.
+
+tools/test_fmp_augment_label_links.py passes on the original package at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/fmp-augment-label-links-8qn0ydao:
+four actual text/icon IDs, exact surrounding 75-byte definition records,
+direct/composed game/names/text bank parity and six safe refusals for missing
+text, missing texture and unverified paths. Source hashes remain unchanged.
+The first 8erz1n3y attempt had equal definition banks but unequal text banks:
+the input game folder has a stage manifest, so direct apply reads current bytes
+and composition projects saved originals. The corrected fixture copies actual
+source files into a clean private baseline for both routes; no live writes.
+Core tests pass all 40 (122.66s); existing 67 augmentation-effect links and
+refusals pass at build/fmp-augmentation-links-0y19wt7d/result.json. All Release
+targets are current. This is original-package offline evidence, not gameplay,
+arbitrary-stack compatibility or a fresh full historic-corpus acceptance.
+The frozen 9bc59e8 ZIP and its running 88-workflow gate exclude this later fix.
+
 ## 2026-10-05 Windows Unicode loose-file identity and native merge I/O
 
 Clean 9bc59e8 local ZIP:

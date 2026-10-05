@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 original Augments.fmp now binds verified augmentation name/icon
+scalars to text/texture IDs. Four links, exact surrounding bytes, direct/composed
+bank parity and six safe refusals pass; existing 67 augmentation-effect links
+and all 40 core tests pass. Frozen 9bc59e8 excludes this increment. See handoff.
+
 2026-10-05 Windows Unicode loose-file identities now preserve contributor order,
 reviewed choices and output ownership. Native TNG/QST I/O retains Unicode names;
 57 ordinary/GUI and 55 complete-data checks pass, including exact stage restore.

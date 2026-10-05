@@ -349,6 +349,14 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             if (parts.size() == 2 && !parts[1].empty() && field.value.size() == 4) {
                 if (field.type == "CDefString") return {offset, i + 1, Destination::NameOffset};
+                // ChocolateBox CAugmentationDef controls 240E55DF/B6F76CB1
+                // bind these scalar words to TextID/MainTextureID respectively.
+                if (entry.definition == "CAugmentationDef" && field.type == "?") {
+                    if (field.name == "Name" && link.path == "604919263.GUIDescription1ID")
+                        return {offset, i + 1, Destination::TextEntry};
+                    if (field.name == "InventoryGraphic" && link.path == "3069668529.HUD Icon Texture")
+                        return {offset, i + 1, Destination::TextureEntry};
+                }
                 if (entry.definition == "HERO_ABILITY" && field.type == "?") {
                     if (field.name == "IconGraphicIndex" && parts[1] == "Hero Ability Hud Icon ID")
                         return {offset, i + 1, Destination::TextureEntry};
