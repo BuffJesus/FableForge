@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 ordinary staged baseline copy projection
+
+Ordinary folder/FMP builds on an existing stage now reconstruct the recorded
+originals for the composer dependencies and every folder-source file path.
+They retain compiled banks, named asset banks, language text, level archives,
+world/static-map files and loose LEV/TNG/QST inputs. Unrelated video, sound,
+FSE backup trees and archival copies beside those banks are omitted unless a
+source explicitly contributes that path. This is a real-copy scratch snapshot;
+the live installation is not redirected or changed. Full recovery validation
+still precedes copies. Recipes, patches, EgoCore and complete-Data composition
+retain their full snapshots. Dependency changes must update this projection.
+Successful JSON reports expose baseline_originals mode/file/byte counts.
+
+The final five-route gate is
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-staged-baseline-dyhlh0og/.
+It covers merge/build/review, an empty FMP alongside folders and a recipe
+fallback. Recorded original UTF-16 text and raw-file bytes are restored; newly
+staged files restore absence. An explicitly authored retail-bak path is retained.
+Seven unrelated 1 MiB files are omitted; full fallback copies them. Stage/source
+inventories stay exact, and undeploy restores the complete initial inventory.
+The initial broad projection passed vvibpjc4/tcjmcif7; expanded backup/locale
+decoys exposed excess copies in 4urzd4l6, before the exact dependency refinement.
+Intermediate k4xc03lx retained; ordinary 28-case file-review gates pass
+i52nud99/ua1j9mv0 and full-snapshot complete-Data passes 3amg6z_d.
+
+A real archived TextID donor against the read-only staged game install succeeds
+in staged-originals-probe-lidn_65a (5,643,141,488 copied bytes, 20.24 seconds) and
+the final staged-originals-probe-691sir2u (1,571,376,785 bytes, 39.99 seconds).
+The final two output data banks are byte-identical to the broader projection;
+comparison.json records this. Manifest/donor hashes are unchanged. Unfiltered
+installation reconstruction is roughly 7.7 GB. Timings varied and do not prove
+a speedup; copied bytes demonstrate the reduction. Earlier 120-second timeouts
+remain retained and do not establish copying as their sole cause. No gameplay
+claim or live writes. CLI Release builds; core implementation is unchanged.
+
+The package harness now includes ordinary/complete FSE and text contributor
+gates plus this projection gate, increasing future scope from 52 to 57 workflows.
+The frozen older ZIPs were not rebuilt or rerun under this expanded scope.
+
 ## 2026-10-05 language/string choice contributors
 
 Active language/string choices now refuse unavailable contributors before

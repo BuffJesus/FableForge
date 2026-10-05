@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 staged baseline copying: ordinary folder/FMP snapshots now retain
+composer dependencies and authored paths, reducing the local copy from roughly
+7.7 GB to 1.57 GB. Original restoration/absence, unrelated-file retention rules,
+recipe fallback and byte-identical real-donor output pass. Timings vary; no
+speedup claim. Broader source types keep full snapshots. See HANDOFF_WORLD_UI.
+
 2026-10-05 language/string contributors: unavailable active per-language winners
 now refuse publication; conflict checks and both-size dropdown recovery remain
 available. Ordinary 26-check and complete-Data 24-check gates plus the 13-case

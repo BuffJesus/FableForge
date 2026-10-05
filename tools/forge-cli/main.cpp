@@ -8979,8 +8979,41 @@ void publishInstallTree(const std::filesystem::path& source, const std::filesyst
         throw std::runtime_error("cannot publish mod build: " + error);
 }
 
-void copyInstallBaseline(const std::filesystem::path& base, const std::filesystem::path& effective) {
+// The ordinary folder/FMP composer reads these engine banks plus paths carried
+// by folder sources. Recipes, binary patches and EgoCore have broader discovery
+// rules and retain the complete snapshot until their dependencies are planned.
+std::optional<std::set<std::string>> ordinaryBaselinePaths(const std::vector<std::string>& sources) {
     namespace fs = std::filesystem;
+    std::set<std::string> paths{
+        "fse/quests.lua", "mods.ini",
+        "data/compileddefs/names.bin", "data/compileddefs/game.bin",
+        "data/compileddefs/script.bin", "data/compileddefs/frontend.bin",
+        "data/graphics/graphics.big", "data/graphics/pc/graphics.big",
+        "data/graphics/pc/textures.big", "data/misc/pc/effects.big",
+        "data/levels/finalalbion.wad", "data/levels/finalalbion.bwd",
+        "data/levels/finalalbion.wld", "data/levels/finalalbion_rt.stb"};
+    for (const auto& source : sources) {
+        if (!fs::is_directory(source)) {
+            if (lowered(fs::path(source).extension().string()) != ".fmp") return std::nullopt;
+            continue; // FMP WAD payloads are restricted to data/Levels.
+        }
+        if (albion::modpack::isPack(source) ||
+            fs::exists(fs::path(source) / (fs::path(source).filename().string() + ".dll")))
+            return std::nullopt;
+        for (const auto& item : fs::recursive_directory_iterator(source)) {
+            if (item.is_symlink()) return std::nullopt;
+            if (item.is_regular_file())
+                paths.insert(lowered(item.path().lexically_relative(source).generic_string()));
+        }
+    }
+    return paths;
+}
+
+json copyInstallBaseline(const std::filesystem::path& base, const std::filesystem::path& effective,
+                         const std::set<std::string>* ordinaryPaths = nullptr) {
+    namespace fs = std::filesystem;
+    size_t copied = 0;
+    uintmax_t bytes = 0;
     std::map<std::string, forge::stage::RecoveryEntry> recovery;
     if (fs::exists(forge::stage::manifestPath(base)))
         for (const auto& entry : forge::stage::inspectRecovery(base))
@@ -8988,6 +9021,15 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
     auto copy = [&](const fs::path& path) {
         const auto relative = path.lexically_relative(base);
         if (lowered(path.filename().string()).ends_with(".forgebak")) return;
+        const auto key = lowered(relative.generic_string());
+        if (ordinaryPaths && !ordinaryPaths->contains(key)) {
+            const auto extension = lowered(path.extension().string());
+            const bool looseLevel = key.starts_with("data/levels/") &&
+                (extension == ".tng" || extension == ".lev" || extension == ".qst");
+            const bool languageText = key.starts_with("data/lang/") &&
+                lowered(path.filename().string()) == "text.big";
+            if (!looseLevel && !languageText) return;
+        }
         auto source = path;
         if (const auto found = recovery.find(lowered(relative.generic_string())); found != recovery.end()) {
             if (!found->second.hadOriginal) return;
@@ -8997,6 +9039,8 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
         if (fs::exists(destination)) return;
         fs::create_directories(destination.parent_path());
         fs::copy_file(source, destination);
+        ++copied;
+        bytes += fs::file_size(source);
     };
     for (const char* folder : {"data", "FSE", "Mods"}) {
         if (!fs::is_directory(base / folder)) continue;
@@ -9006,6 +9050,8 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
         }
     }
     if (fs::is_regular_file(base / "Mods.ini")) copy(base / "Mods.ini");
+    return {{"mode", ordinaryPaths ? "ordinary_dependencies" : "complete"},
+            {"files_copied", copied}, {"bytes_copied", bytes}};
 }
 
 // Install a complete definition snapshot intact, then use it as the baseline for
@@ -9194,10 +9240,18 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         // restores before composing. Otherwise an installed winner disappears
         // from its own contributors and a valid review looks stale.
         const albion::detail::TemporaryDirectory originals("mods-originals-");
-        copyInstallBaseline(baseRoot, originals.path());
-        return modsMerge(originals.path().string(), outDir, sources, fieldSchema, false,
-                         jsonOutput, labels, picksPath, loadedPicks, false, reportOut,
-                         outputRemovals, reviewChoices);
+        const auto paths = ordinaryBaselinePaths(sources);
+        const auto snapshot = copyInstallBaseline(baseRoot, originals.path(), paths ? &*paths : nullptr);
+        json report;
+        const int rc = modsMerge(originals.path().string(), outDir, sources, fieldSchema, false,
+                                jsonOutput, labels, picksPath, loadedPicks, false,
+                                jsonOutput ? &report : nullptr, outputRemovals, reviewChoices);
+        if (rc == 0 && jsonOutput) {
+            report["baseline_originals"] = snapshot;
+            if (reportOut) *reportOut = report;
+            else std::puts(report.dump(2).c_str());
+        }
+        return rc;
     }
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
