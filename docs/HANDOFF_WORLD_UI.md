@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 expanded full corpus completed
+
+Latest targeted follow-up: INVENTORY_TYPE.InventoryName uint32 path
+3517586038.unknown resolves through the text bank. ChocolateBox D1AA1A76
+explicitly declares TextID; native CInventoryDef alias schema agrees.
+Original Blue Ass Beta now passes direct/composed bank parity and actual text-ID
+checks in C:/Users/Cornelio/FableForge-asset-checks-20261004/
+fmp-inventory-label-b1fbufoe/result.json. Neighboring scalar bytes and source
+hashes remain unchanged; native tests verify exact four-byte relinking and
+missing-text-map refusal. This later fix is outside the frozen full gate below.
+
+The frozen bcfa118 scan completed all 1102 eligible originals with texture and
+graphics application enabled: 800 accepted, 156 link refusals, 125 other FMP
+refusals, 12 unavailable schemas, 8 record refusals and one timeout. Evidence:
+C:/Users/Cornelio/FableForge-corpus-20261004/build/named-fmp-coverage-fxez8wky/
+result.json; tool SHA256 9afbbfed72c8fed546f8b922723f6061e0c1df821063ea2a9ef6803ed2ece4ce.
+Archive, tool and baseline game/names/text/effects/graphics/textures hash checks
+pass. The original report retains its 90-second timeout.
+
+The sole timeout, Eye Swap and new C Hero Morph Def (index 314), passed a
+separate 180-second-limit retry with the same frozen binary in
+build/named-fmp-coverage-lwycqhi1/result.json. This establishes 801 individually
+successful offline imports and 301 refusals, with no remaining inconclusive
+package in this scan scope. Original-cohort comparison finds 19 newly accepted
+rows (including the previous Apprentice Suit timeout); the only previously
+accepted row absent from full-scan successes is the now-successful Eye Swap
+retry. All overlapping package hashes match: no demonstrated acceptance
+regression in the old 821-package cohort. Neither gameplay nor arbitrary mod
+combinations have been certified. This gate excludes later material-slot and
+suit-map changes; those have their own targeted regressions.
+
+The 125 other-FMP refusals comprise 89 maintexture, 34 graphics and two text
+errors. These categories are not proof of corrupt packages: keep exact reasons
+and investigate ID collisions, layout limits and prerequisite references.
+
 ## 2026-10-04 suit map references
 
 CHeroSuitDef SuitParts now resolves the object-ID values of the counted

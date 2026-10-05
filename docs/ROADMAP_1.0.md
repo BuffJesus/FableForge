@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-04 expanded full scan completed at frozen bcfa118: 800/1102 originals
+imported, 301 refused and one timed out. The same-build timeout retry passed,
+giving 801 individually successful offline imports. No acceptance regression
+remains in the old 821-package cohort after that retry. Later material-slot
+validation and four original suit-map recoveries have separate targeted gates;
+the full scan does not cover them. See HANDOFF_WORLD_UI for hashes and evidence.
+
 2026-10-04 named-corpus follow-ups: exact expression, shop and region reference
 domains raise separately demonstrated offline imports to 653 in the original
 821-package scope. Original lowercase text banks add two checked packages and

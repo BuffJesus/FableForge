@@ -178,6 +178,24 @@ int main() {
         return forge::bin::Entry{definition, "PROBE", 0, forge::defdecode::encode(record)};
     };
     Bytes shopValue; word(shopValue, 77);
+    {
+        const auto labelSchema = forge::defschema::Schema::loadText(
+            R"({"INVENTORY_TYPE":{"prefix_len":3,"fields":[{"name":"InventoryName","type":"uint32"}]}})");
+        const auto labelRecord = legacyEntry("INVENTORY_TYPE", "InventoryName", "uint32", shopValue);
+        const std::vector<forge::fmplinks::Link> labelLinks{{"3517586038.unknown", "LABEL"}};
+        const std::map<std::string, uint32_t> labelText{{"LABEL", 14444}};
+        const auto labelLocation = forge::fmplinks::locate(labelRecord, labelSchema, labelLinks[0]);
+        check(labelLocation.offset == 7 && labelLocation.destination == forge::fmplinks::Destination::TextEntry,
+              "inventory name uses text identity");
+        auto expectedLabel = labelRecord.data;
+        const uint32_t labelId = 14444;
+        std::memcpy(expectedLabel.data() + 7, &labelId, 4);
+        check(forge::fmplinks::relink(labelRecord, targets, labelSchema, labelLinks,
+              false, nullptr, nullptr, nullptr, &labelText) == expectedLabel,
+              "inventory label changes only its text word");
+        rejects([&] { forge::fmplinks::relink(labelRecord, targets, labelSchema, labelLinks); },
+                "inventory label refuses missing text map");
+    }
     for (const auto& [fieldName, fieldType, path, destination] :
          std::vector<std::tuple<std::string, std::string, std::string, forge::fmplinks::Destination>>{
              {"RegionDescription", "uint32", "801675342.Region Description", forge::fmplinks::Destination::TextEntry},

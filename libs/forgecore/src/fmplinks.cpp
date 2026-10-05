@@ -382,6 +382,9 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (entry.definition == "REGION" && field.name == "RegionDescription" &&
                     field.type == "uint32" && link.path == "801675342.Region Description")
                     return {offset, i + 1, Destination::TextEntry};
+                if (entry.definition == "INVENTORY_TYPE" && field.name == "InventoryName" &&
+                    field.type == "uint32" && link.path == "3517586038.unknown")
+                    return {offset, i + 1, Destination::TextEntry};
                 if (entry.definition == "REGION" && field.name == "HeroBreathParticle" &&
                     field.type == "int32" && link.path == "435772141.Area Effects")
                     return {offset, i + 1, Destination::EffectEntry};
