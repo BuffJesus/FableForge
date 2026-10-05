@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 clean 60bafcf local ZIP passes seven selected extracted workflows,
+covering label refusal, reviewed file choices, ownership and DeleteUIDs. Explicit
+79 omissions, zero fixture skips; 108 identities and 122 links pass. This is
+scoped acceptance, independent of the 087467d archive's full 85-workflow run.
+See HANDOFF_WORLD_UI for archive hashes and evidence.
+
 2026-10-05 mod labels now distinguish sources from the reserved vanilla choice
 and survive the choice-file format. Invalid names refuse registration and enabled
 legacy entries refuse composition before deploy reverts its old stage. Both GUI

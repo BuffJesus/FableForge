@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 label-fix local ZIP: seven scoped extracted workflows
+
+Clean 60bafcf was packaged after all Release targets reported current:
+dist/development/20261005-60bafcf/FableForge-0.18.1-dev.60bafcf.20261005-win64.zip
+SHA256: 70ac2269a534cef6413aa759d72eeac6c92d88677d2cab5ff02d2d63ecaee393.
+Companion guide is in the same directory. No old archive was overwritten or
+published. build/package-smoke-qwztlplc/result.json passes seven deliberately
+selected workflows: labels (native/both GUI sizes), file-choice reviews in both
+layouts, output ownership in both layouts and DeleteUIDs in both layouts.
+It explicitly reports 79 workflows not run and zero fixture skips; this is not
+full 86-workflow acceptance. From an unrelated cwd and literal percent/token/
+ampersand extraction folder, 108 packaged identities and 122 doc links pass.
+The increased link count includes the later review-document clarification.
+The separate 087467d ZIP's already-running 85-workflow scope remains independent;
+acceptance cannot be carried between these differing archive hashes.
+
 ## 2026-10-05 labels cannot alias baseline or corrupt choice lines
 
 Pre-fix mod-reserved-label-9uuui36o accepts a source named vanilla, then choosing
