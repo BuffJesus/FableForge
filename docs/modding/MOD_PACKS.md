@@ -11,6 +11,13 @@ languages refuses the build.
 
 # Mod packs, load order, and conflict resolution
 
+Saved whole-file choices refuse if their named winner no longer contributes to
+that file; review or clear the choice before building. Choices for files with
+no current contributors stay inactive. Selecting vanilla emits the existing
+baseline file bytes so a reused direct output restores that file. A baseline
+that lacks the file still requires an explicit removal plan for reused outputs;
+automatic obsolete-file cleanup and choose-time content fingerprints are pending.
+
 Compiled-definition composition refuses sources carrying changed or new unnamed
 entries. Such components have no safe cross-bank identity; silently ignoring them
 would produce an incomplete overhaul. Install an overhaul first and select its

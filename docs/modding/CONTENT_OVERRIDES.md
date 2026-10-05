@@ -1,5 +1,26 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-04 whole-file saved contributor guard
+
+A saved file winner must be a current contributor to that file. If the chosen
+mod is missing, contributes a different file, has removed this file, or now
+matches baseline and is no longer a changed contributor, composition refuses
+with a review/clear message instead of falling back to the last source. A key
+with no current contributions remains inactive so disabling all its sources
+does not discard the saved choice. This is per-file contributor validation;
+choose-time source/baseline fingerprints and same-size content-update review
+remain unimplemented.
+
+An explicit vanilla choice for an existing baseline file now emits its baseline
+bytes, restoring that file when a direct build reuses an older output folder.
+The regression passes 14 direct-merge/registered-build cases, including eight
+refusals preserving all prior output files, valid source/baseline choices and
+inactive-choice retention. Evidence: C:/Users/Cornelio/
+FableForge-asset-checks-20261004/mod-file-choice-contributors-_6jw8qcz/result.json.
+The initial skkhsqx3 check exposed the old vanilla omission leaving an older
+modded output file; that evidence is retained. Explicit absent-baseline removals
+and general obsolete-output cleanup remain separate work.
+
 ## 2026-10-03 unsupported-bank preservation follow-up
 
 A read-only scratch audit found successful composition omitted changed script

@@ -9713,7 +9713,15 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             if (auto pk = picks.file.find(lower); pk != picks.file.end()) {
                 overridden = true;
                 if (pk->second == "vanilla") keepBase = true;
-                else for (const auto& c : who) if (c.label == pk->second) win = &c;
+                else {
+                    const auto selected = std::find_if(who.begin(), who.end(),
+                        [&](const Carrier& c) { return c.label == pk->second; });
+                    if (selected == who.end())
+                        throw std::runtime_error("mods file choice: " + lower +
+                            " selects unavailable contributor " + pk->second +
+                            "; review or clear this saved choice");
+                    win = &*selected;
+                }
             }
             bool agree = true;
             for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = filesIdentical(who[ci].src, who.front().src);
@@ -9740,7 +9748,17 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 }
                 fileRows.push_back(std::move(row));
             }
-            if (keepBase) continue;
+            if (keepBase) {
+                // An explicit baseline choice must restore known baseline bytes
+                // even when publishing over a previous build's modded file.
+                const fs::path baselinePath = fs::path(baseRoot) / win->rel;
+                if (fs::is_regular_file(baselinePath)) {
+                    const fs::path restored = fs::path(outDir) / win->rel;
+                    fs::create_directories(restored.parent_path());
+                    fs::copy_file(baselinePath, restored, fs::copy_options::overwrite_existing);
+                }
+                continue;
+            }
             // keep the source's own spelling for the output path
             fs::path outPath = fs::path(outDir) / win->rel;
             fs::create_directories(outPath.parent_path());

@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 saved file winner and baseline restore
+
+Whole-file choices now reject an unavailable per-file contributor instead of
+silently retaining the last-source fallback. The error names the file and saved
+winner and requests review/clear. Named choices remain inactive when their file
+has no current contributors. Explicit vanilla choices now copy existing
+baseline file bytes into composed output, including over prior direct outputs.
+An absent baseline still needs an explicit deletion plan for reused outputs;
+general stale-output cleanup is not implemented by this increment.
+
+`tools/test_mod_file_choice_contributors.py` passes 14 cases for direct merge
+and registered build in C:/Users/Cornelio/FableForge-asset-checks-20261004/
+mod-file-choice-contributors-_6jw8qcz/result.json. Removed winner, unrelated
+enabled source, deleted source file and source now matching baseline all refuse
+without altering prior file inventory/hashes. Valid source selection, explicit
+baseline restore and inactive-key retention pass. Baseline/source inputs remain
+unchanged. Initial skkhsqx3 evidence exposed and retains the previous vanilla
+restore failure. No GUI source was changed; CLI errors surface through Activity.
+Content fingerprint validation is still a separate planned feature.
+
 ## 2026-10-04 named texture-provider pairs
 
 `tools/audit_named_fmp_texture_pairs.py` tests five selected original pairs in
