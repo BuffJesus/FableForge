@@ -4,6 +4,7 @@
 // it is intentionally rendering-agnostic so GUI previews and thumbnails share it.
 
 #include <cstdint>
+#include <cstddef>
 #include <array>
 #include <filesystem>
 #include <optional>
@@ -33,6 +34,11 @@ struct Material {
     bool alphaEnabled = false;
     uint8_t unknown42 = 0;
     uint16_t unknown43 = 0;
+    // Read-only locations of diffuse/bump/reflection/alpha i32 words in the
+    // input payload. decodeLods returns offsets into its whole input, whereas
+    // decodeLod0 returns offsets into its single input block. Authored preview
+    // materials have no source locations. Padding/map flags are not included.
+    std::optional<std::array<size_t,4>> textureWordOffsets;
 };
 struct Helper {
     uint32_t nameCrc = 0;

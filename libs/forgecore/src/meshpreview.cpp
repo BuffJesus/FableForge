@@ -234,7 +234,9 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     }
     c.skip(48);
     for(int32_t i=0;i<materials;++i){
-        Material m; m.id=c.i32(); c.str(); c.i32(); m.diffuseTexture=c.i32();
+        Material m; m.id=c.i32(); c.str(); c.i32();
+        m.textureWordOffsets=std::array<size_t,4>{c.p,c.p+4,c.p+8,c.p+12};
+        m.diffuseTexture=c.i32();
         m.bumpTexture=c.i32(); m.reflectionTexture=c.i32(); m.alphaMapTexture=c.i32();
         m.textureFlags=c.u32(); m.glowStrength=c.u32(); m.unknown40=c.u8();
         m.alphaEnabled=c.u8()!=0; m.unknown42=c.u8();
@@ -345,6 +347,9 @@ std::vector<Geometry> decodeLods(const std::vector<uint8_t>& payload,
     size_t offset = 0;
     for (const auto size : sizes) {
         lods.push_back(decodeLod0({payload.begin() + offset, payload.begin() + offset + size}, meshType));
+        for(auto& material:lods.back().materials)
+            if(material.textureWordOffsets)
+                for(auto& wordOffset:*material.textureWordOffsets)wordOffset+=offset;
         descriptorSphereFallback(lods.back(),descriptor);
         offset += size;
     }

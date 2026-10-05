@@ -3344,6 +3344,35 @@ void testMeshCompose() {
         payload.insert(payload.begin()+lodSize,c.payload.begin(),c.payload.begin()+lodSize);
         const auto chain=forge::meshpreview::decodeLods(payload,info,1);
         CHECK(chain.size()==2 && chain[1].triangles.size()==6);
+        auto changedPayload=payload;
+        for(size_t lod=0;lod<chain.size();++lod) {
+            CHECK(chain[lod].materials[0].textureWordOffsets.has_value());
+            const auto& slots=*chain[lod].materials[0].textureWordOffsets;
+            const auto& firstSlots=*chain[0].materials[0].textureWordOffsets;
+            for(size_t slot=0;slot<4;++slot) {
+                CHECK(slots[slot]==firstSlots[slot]+lod*lodSize);
+                CHECK(slots[slot]+4<=lodSize*(lod+1));
+                int32_t actual=0;
+                std::memcpy(&actual,payload.data()+slots[slot],4);
+                const int32_t expected=slot==0?chain[lod].materials[0].diffuseTexture:
+                    slot==1?chain[lod].materials[0].bumpTexture:
+                    slot==2?chain[lod].materials[0].reflectionTexture:
+                            chain[lod].materials[0].alphaMapTexture;
+                CHECK(actual==expected);
+                const int32_t replacement=10000+int32_t(lod)*100+int32_t(slot);
+                std::memcpy(changedPayload.data()+slots[slot],&replacement,4);
+            }
+        }
+        const auto changed=forge::meshpreview::decodeLods(changedPayload,info,1);
+        CHECK(changed[0].materials[0].diffuseTexture==10000);
+        CHECK(changed[1].materials[0].alphaMapTexture==10103);
+        for(size_t at=0;at<payload.size();++at) {
+            bool referenceByte=false;
+            for(const auto& lod:chain)
+                for(size_t slot:*lod.materials[0].textureWordOffsets)
+                    referenceByte|=at>=slot&&at<slot+4;
+            CHECK(referenceByte||changedPayload[at]==payload[at]);
+        }
         for (int malformed=0;malformed<4;++malformed) {
             auto bad=info;
             if (malformed==0) bad.resize(46);

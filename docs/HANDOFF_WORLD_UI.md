@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 read-only mesh texture-word locations
+
+Decoded materials now expose optional offsets for the four established diffuse,
+bump, reflection and alpha texture words. decodeLod0 offsets address its input
+block; decodeLods adjusts them into the whole original payload. Authored preview
+materials have no offsets. The preceding padding/decal word, geometry, bones,
+map flags, compression blocks and trailing ghost are not rewritten.
+
+`fableforge_tests` passes, including compressed/uncompressed two-LOD location
+checks, independent raw-word comparison, redecoding intended changes and
+preservation of all other payload bytes. A read-only native probe against the
+render-mesh entries in nine original packages verifies 88 words in 22 materials,
+18 LODs and eight meshes: eight skinned LODs and four multi-LOD meshes. Animation
+and type-3 physics entries are excluded from this material check. Archive,
+normalized fixtures and compiled reader inputs remain unchanged. Owned evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261004/mesh-material-slots-0dyh5brp/
+selected-result.json, with probe source/binary retained in the scratch parent.
+The initial result.json records a probe-harness failure that incorrectly tried
+to decode an animation entry; the selected report is the corrected scoped gate.
+
+This is a read-only prerequisite, not asset-ID relocation. Collision refusals
+remain until allocation, descriptor/material/game reference remapping and
+load-order conflict preservation have their own gates.
+
 ## 2026-10-04 legacy weapon display-name aliases
 
 The additional exact path
