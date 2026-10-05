@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 verified opinion reaction vectors now relink animation names and
+dialogue text while preserving attitudes and all other bytes. Original Getting
+Away With Murder passes 306 links, bank parity and 14 safe refusals; all 40 core
+tests pass. Frozen 9bc59e8/46d5c91 exclude this increment. See handoff for scope.
+
 2026-10-05 original Augments.fmp now binds verified augmentation name/icon
 scalars to text/texture IDs. Four links, exact surrounding bytes, direct/composed
 bank parity and six safe refusals pass; existing 67 augmentation-effect links

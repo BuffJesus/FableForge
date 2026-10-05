@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 opinion reaction animation-name and dialogue links
+
+Original Getting Away With Murder Mod.fmp refused on OPINION_DEED_EFFECTS
+Reaction; fmp-followup-probes-5m56l5w7 retains that refusal. ChocolateBox control
+C8BA8338 and native COpinionDeedReactionDef schema agree on each vector row:
+tagged attitude count/list, tagged Animation CDefString, tagged DialogueTag
+TextID. Exact legacy 3367666488.unknown.<index>.Animation/Text paths now map to
+saved names.bin offsets and text-entry IDs. The full vector is checked before
+returning a slot, including later rows, count bounds, all tags and trailing data.
+No animation-bank ID or opinion attitude is substituted or rewritten.
+
+tools/test_fmp_opinion_reaction_links.py passes the original at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/fmp-opinion-reaction-links-b5h1jmf4:
+306 links across 13 records, exact surrounding bytes/attitude lists and
+direct/composed game/names bank parity on a clean copied baseline. Fourteen
+safe refusals cover outer/nested counts, later attitude/animation/dialogue tags
+and missing animation-name/dialogue targets through both routes, preserving
+prior outputs. All input hashes are retained and unchanged. Initial ezhqr7al
+diagnostic was an overly strict checker assertion for a valid empty vector;
+9dwaud7z passed the first ten malformed cases before adding target refusals.
+Native tests verify variable row sizes, exact offsets/domains, later-row refusal,
+out-of-range indices and missing text maps. All 40 core tests pass (40.23s);
+Release targets are current. No gameplay or full historic-corpus acceptance is
+claimed. Both frozen 9bc59e8 and 46d5c91 ZIPs exclude this later increment.
+
 ## 2026-10-05 package timeout evidence and configurable scratch parent
 
 The full frozen 9bc59e8 extraction at build/package-smoke-vpvfa94h records 56

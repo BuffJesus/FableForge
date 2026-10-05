@@ -761,6 +761,51 @@ int main() {
         {"604919263.Unverified Name", "ITEM_TITLE"}); },
         "augmentation control requires exact legacy path");
 
+    const auto reactionSchema = forge::defschema::Schema::loadText(
+        R"({"OPINION_DEED_EFFECTS":{"prefix_len":3,"fields":[{"name":"Reaction","type":"vector<COpinionDeedReactionDef>"}]}})");
+    std::vector<uint8_t> reactionValue;
+    word(reactionValue, 2);
+    for (const uint32_t attitudes : {2u, 0u}) {
+        word(reactionValue, forge::defdecode::fieldTag("Attitudes"));
+        word(reactionValue, attitudes);
+        for (uint32_t n = 0; n < attitudes; ++n) word(reactionValue, n + 3);
+        word(reactionValue, forge::defdecode::fieldTag("Animation")); word(reactionValue, 77);
+        word(reactionValue, forge::defdecode::fieldTag("DialogueTag")); word(reactionValue, 88);
+    }
+    forge::defdecode::Decoded reactionDecoded;
+    reactionDecoded.prefix = {1, 0, 0}; reactionDecoded.prefixLen = 3;
+    reactionDecoded.allTagsOk = true;
+    reactionDecoded.fields = {inventoryField("Reaction", "vector<COpinionDeedReactionDef>", reactionValue)};
+    forge::bin::Entry reaction{"OPINION_DEED_EFFECTS", "REACTION_PROBE", 0,
+                              forge::defdecode::encode(reactionDecoded)};
+    references = {{"3367666488.unknown.0.Animation", "B"},
+                  {"3367666488.unknown.1.Text", "ITEM_TITLE"}};
+    const auto reactionAnimation = forge::fmplinks::locate(reaction, reactionSchema, references[0]);
+    const auto reactionText = forge::fmplinks::locate(reaction, reactionSchema, references[1]);
+    check(reactionAnimation.offset == 31 && reactionText.offset == 63 &&
+          reactionAnimation.destination == forge::fmplinks::Destination::NameOffset &&
+          reactionText.destination == forge::fmplinks::Destination::TextEntry,
+          "opinion reaction references retain domains across variable attitude counts");
+    auto expectedReaction = reaction.data;
+    const uint32_t reactionName = *targets.savedNameOffset("B");
+    std::memcpy(expectedReaction.data() + 31, &reactionName, 4);
+    std::memcpy(expectedReaction.data() + 63, &augmentText, 4);
+    check(forge::fmplinks::relink(reaction, targets, reactionSchema, references,
+          false, nullptr, nullptr, nullptr, &inventoryTexts) == expectedReaction,
+          "opinion reaction relinks only selected animation/text words");
+    auto badReaction = reaction;
+    badReaction.data[15] = 0xff;
+    rejects([&] { forge::fmplinks::locate(badReaction, reactionSchema, references[0]); },
+        "oversized nested reaction attitude count refuses");
+    badReaction = reaction; badReaction.data[59] ^= 1;
+    rejects([&] { forge::fmplinks::locate(badReaction, reactionSchema, references[0]); },
+        "malformed later reaction tag refuses even for an earlier selection");
+    rejects([&] { forge::fmplinks::locate(reaction, reactionSchema,
+        {"3367666488.unknown.2.Text", "ITEM_TITLE"}); },
+        "opinion reaction index outside the vector refuses");
+    rejects([&] { forge::fmplinks::relink(reaction, targets, reactionSchema, references); },
+        "opinion reaction dialogue requires text identities");
+
     forge::bin::Entry prefix{"PREFIX", "COMPONENTS", 0, {1, 0, 1, 1, 0}};
     word(prefix.data, 42); word(prefix.data, UINT32_MAX); word(prefix.data, 77);
     const auto oldPrefix = prefix.data;

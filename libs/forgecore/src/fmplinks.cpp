@@ -772,6 +772,40 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             // CHeroMorphDef.TextureMorphs: count, 24-byte records, one opaque
             // trailing control. ChocolateBox's Base/Applied Texture names
             // address the fourth and fifth u32 of a record respectively.
+            // ChocolateBox C8BA8338 and native COpinionDeedReactionDef:
+            // tagged attitude vector, animation name offset, dialogue TextID.
+            if (entry.definition == "OPINION_DEED_EFFECTS" && field.name == "Reaction" &&
+                field.type == "vector<COpinionDeedReactionDef>" && parts.size() == 4 &&
+                parts[1] == "unknown" && (parts[3] == "Animation" || parts[3] == "Text")) {
+                if (field.value.size() < 4) fail("invalid opinion reaction reference layout");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 24)
+                    fail("invalid opinion reaction count");
+                const size_t wanted = number(parts[2]);
+                if (wanted >= count) fail("opinion reaction reference index out of range");
+                size_t cursor = 4;
+                std::optional<size_t> targetOffset;
+                for (size_t row = 0; row < count; ++row) {
+                    if (field.value.size() - cursor < 8 ||
+                        read32(field.value, cursor) != defdecode::fieldTag("Attitudes"))
+                        fail("unsupported opinion reaction attitude layout");
+                    const size_t attitudes = read32(field.value, cursor + 4);
+                    if (attitudes > 4096 || attitudes > (field.value.size() - cursor - 8) / 4)
+                        fail("invalid opinion reaction attitude count");
+                    cursor += 8 + attitudes * 4;
+                    if (field.value.size() - cursor < 16 ||
+                        read32(field.value, cursor) != defdecode::fieldTag("Animation") ||
+                        read32(field.value, cursor + 8) != defdecode::fieldTag("DialogueTag"))
+                        fail("unsupported opinion reaction animation/text layout");
+                    if (row == wanted)
+                        targetOffset = offset + cursor + (parts[3] == "Animation" ? 4 : 12);
+                    cursor += 16;
+                }
+                if (cursor != field.value.size() || !targetOffset)
+                    fail("opinion reaction layout has trailing bytes or missing target");
+                return {*targetOffset, i + 1,
+                        parts[3] == "Animation" ? Destination::NameOffset : Destination::TextEntry};
+            }
             if (entry.definition == "CHeroMorphDef" &&
                 field.name == "TextureMorphs" && field.type == "CTextureMorphs" &&
                 parts.size() == 4 && parts[1] == "Texture Morph List" &&

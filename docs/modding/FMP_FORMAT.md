@@ -624,3 +624,12 @@ game/names/text bank parity on a clean copied baseline and six safe refusals.
 Evidence: fmp-augment-label-links-8qn0ydao under the owning C: scratch parent;
 details and prior baseline-comparison diagnostic are in HANDOFF_WORLD_UI.
 Unknown control paths remain unsupported; gameplay remains unverified.
+
+2026-10-05 OPINION_DEED_EFFECTS Reaction now supports the verified legacy
+3367666488.unknown.<index>.Animation/Text paths. Animation uses a saved names.bin
+offset; Text uses a text-entry ID. Complete tagged rows and both vector counts
+are checked before relinking; opinion attitudes remain byte-exact. Original
+Getting Away With Murder passes 306 references across 13 records, direct/composed
+bank parity and 14 safe malformed/missing-target refusals at
+fmp-opinion-reaction-links-b5h1jmf4 under the C: scratch parent. This establishes
+offline import/composition only; it does not certify gameplay.
