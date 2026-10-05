@@ -8337,13 +8337,27 @@ std::map<std::string, uint32_t> textIdentityMap(const std::filesystem::path& gam
         throw std::runtime_error("FMP text links: baseline English/text.big is missing");
     return textIdentityMap(forge::big::File::open(path));
 }
+const forge::big::Bank* fmpTextBank(const forge::big::File& package) {
+    const forge::big::Bank* result = nullptr;
+    for (const auto& bank : package.banks()) {
+        if ((bank.name != "Text" && bank.name != "text") || bank.entries.empty()) continue;
+        if (result) throw std::runtime_error("FMP text: multiple nonempty text banks are ambiguous");
+        result = &bank;
+        std::set<std::string> names;
+        for (const auto& entry : bank.entries) {
+            if (entry.type != 0 || entry.name.empty() || !names.insert(entry.name).second)
+                throw std::runtime_error("FMP text: entries require unique names and type-0 string payloads");
+        }
+    }
+    return result;
+}
 std::map<std::string, uint32_t> plannedFmpTextIds(const std::filesystem::path& gameRoot,
                                                     const forge::big::File& package) {
     const auto path = gameRoot / "data" / "lang" / "English" / "text.big";
     if (!std::filesystem::exists(path))
         throw std::runtime_error("FMP text links: baseline English/text.big is missing");
     auto text = forge::big::File::open(path);
-    if (const auto* bank = package.findBank("Text"))
+    if (const auto* bank = fmpTextBank(package))
         for (const auto& entry : bank->entries)
             forge::textbig::upsertString(text, entry.name,
                                          forge::textbig::decode(package.entryData(entry), 0));
@@ -8375,7 +8389,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
         (!pkg.findBank("graphics") || pkg.findBank("graphics")->entries.empty()))
         throw std::runtime_error("FMP graphics: link metadata has no graphics entries");
     const std::set<std::string> supportedBanks{"GameBINEntries", "GameBINLinkMetaData",
-        "Objects", "Settings", "ObjectLinks", "Text", "FinalAlbionWAD", "maintextures",
+        "Objects", "Settings", "ObjectLinks", "Text", "text", "FinalAlbionWAD", "maintextures",
         "graphics", "graphicsLinkMetaData"};
     for (const auto& bank : pkg.banks()) {
         if (!bank.entries.empty() && !supportedBanks.contains(bank.name))
@@ -8385,6 +8399,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
 
     const fs::path baseDefs = fs::path(baseRoot) / "data" / "CompiledDefs";
     const fs::path defsOut = fs::path(outRoot) / "data" / "CompiledDefs";
+    const auto* packageText = fmpTextBank(pkg);
 
     std::optional<forge::big::File> textures;
     size_t textureEntries = 0;
@@ -8464,6 +8479,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     std::optional<std::map<std::string, uint32_t>> textureIds;
     std::optional<std::map<std::string, uint32_t>> effectIds;
     std::optional<std::map<std::string, uint32_t>> textIds;
+    if (packageText) textIds.emplace(plannedFmpTextIds(baseRoot, pkg));
     std::set<std::string> referencedTextNames;
     size_t linked = 0;
     for (const auto& [name, recordLinks] : links) {
@@ -8515,7 +8531,6 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     // or colliding ID must refuse instead of leaving a partial install.
     std::vector<std::pair<fs::path, std::vector<uint8_t>>> preparedText;
     size_t textLangs = 0, textStrings = 0, badText = 0;
-    const auto* packageText = pkg.findBank("Text");
     const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
     if (fs::is_directory(langRoot) &&
         ((packageText && !packageText->entries.empty()) || !referencedTextNames.empty()))

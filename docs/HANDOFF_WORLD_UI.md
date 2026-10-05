@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 original lowercase text banks
+
+Forge recognizes the original lowercase `text` bank alongside `Text`, using the
+same type-0 text writer and planned canonical IDs. Nonempty duplicate alias banks,
+duplicate/empty names and non-string types refuse. Pure text packages now plan
+their English IDs before publication, so invalid payloads refuse and added IDs
+are shared consistently across installed languages.
+
+`tools/test_fmp_legacy_text_bank.py` passes in `build/fmp-legacy-text-_618vowr`:
+original Briar Attempt adds two strings and For Lazy Person replaces one;
+uppercase/lowercase and direct/composed game/names/text output hashes match.
+All untouched strings and existing IDs/headers are preserved. Twelve ambiguous-
+bank, invalid-type and truncated-payload refusals preserve previous outputs.
+Direct unchanged script/frontend banks match baseline; composed output omits
+those unchanged files. Existing new-text relocation/load-order/pick/language
+checks pass (13 cases) in `build/fmp-new-text-links-u_gdus_5`; the 27 bank refusal/
+carry cases pass in `build/mod-bank-refusal-neapmfiv`. Inputs remain unchanged.
+
+The audit bank allowlist now covers 1102 original packages, up from 821; 283
+catalogue packages contain lowercase `text`, with other unsupported banks still
+excluded. The old 821-package full report remains historical. The two newly
+tested text-only originals add to the previous 653 successes, yielding 655
+separately demonstrated individual imports across the expanded scope. A new
+full gate is required to quantify the other newly eligible packages. Whole
+Apple/staff packages may still refuse asset-ID collisions or other references.
+The expanded audit also records unchanged baseline English text and effects
+hashes. Its one-millisecond timeout probe in `build/named-fmp-coverage-hlhcktwz`
+completes the selected one-package scope as inconclusive, with eligible archive
+total 1102; it does not count the timed-out package as accepted.
+
 ## 2026-10-04 named archive provider index
 
 `tools/audit_named_fmp_providers.py` reads bounded inert BIG tables, normalizes

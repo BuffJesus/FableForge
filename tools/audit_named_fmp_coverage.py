@@ -18,7 +18,7 @@ from pathlib import Path
 SUPPORTED_BANKS = {
     'GameBINEntries', 'GameBINLinkMetaData', 'Objects', 'Settings',
     'ObjectLinks', 'Text', 'FinalAlbionWAD', 'maintextures',
-    'graphics', 'graphicsLinkMetaData',
+    'graphics', 'graphicsLinkMetaData', 'text',
 }
 
 
@@ -77,6 +77,9 @@ def main():
         asset_paths.append('data/graphics/pc/textures.big')
     if args.apply_graphics:
         asset_paths.append('data/graphics/graphics.big')
+    for name in ('data/lang/English/text.big', 'data/Misc/pc/effects.big'):
+        if (args.install/name).exists():
+            asset_paths.append(name)
     asset_hashes = {name: digest(args.install/name) for name in asset_paths}
     results = []
     with zipfile.ZipFile(args.archive) as archive:

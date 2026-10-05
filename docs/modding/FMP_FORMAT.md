@@ -38,6 +38,15 @@ it lets FableForge ingest the entire community mod library as first-class deltas
 
 ## Container layout
 
+2026-10-04 importer update: original `text` and existing `Text` banks share the
+type-0 string importer. Names must be unique and nonempty, and multiple nonempty
+alias banks refuse. IDs are planned against English before any output is
+published and verified across installed languages. Original Briar Attempt and
+For Lazy Person pass alias/direct/composed parity, all untouched-string checks,
+and malformed-package output preservation; see `test_fmp_legacy_text_bank.py`.
+This makes 1102 named-corpus packages eligible for the expanded bank audit;
+eligibility does not imply successful import or gameplay compatibility.
+
 ```
 offset 0  u32 magic          = 0x42 (66)
 offset 4  u32 version        = 0x65 (101)   // format version

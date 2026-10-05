@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-04 named-corpus follow-ups: exact expression, shop and region reference
+domains raise separately demonstrated offline imports to 653 in the original
+821-package scope. Original lowercase text banks add two checked packages and
+expand bank eligibility to 1102; a fresh full sweep is pending. Twelve text-bank
+refusal cases and thirteen existing text relocation/order/pick/language checks
+pass. The provider index covers 1133 readable originals and offers candidate
+dependencies without treating symbol matches as verified compatibility.
+
 2026-10-04 named GLOBAL continuation: Aging Slowdown, Fire Teleport and Lightning
 Teleport pass 42 independently checked model/texture/effect words, byte
 preservation, direct/composed parity and safe missing-model refusal; the complete
