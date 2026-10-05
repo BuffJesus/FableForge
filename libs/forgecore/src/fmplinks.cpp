@@ -429,13 +429,19 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     field.name == "SummonedBrain" && field.type == "?" &&
                     link.path == "3463808271.Brain To Use")
                     return {offset, i + 1, Destination::NameOffset};
-                // ChocolateBox's CShopDef CD94E446 control is a TextID. The
-                // schema leaves this scalar unresolved, but the control's
-                // value occupies exactly one four-byte word.
+                // ChocolateBox's four shop dialogue controls are TextIDs.
+                // The schema leaves these scalars unresolved; each verified
+                // control occupies exactly one four-byte word.
                 if (entry.definition == "CShopDef" &&
-                    field.name == "InitialHawkingPhrase" && field.type == "?" &&
-                    link.path == "3449087046.HAWKING")
+                    field.type == "?" &&
+                    ((field.name == "InitialHawkingPhrase" && link.path == "3449087046.HAWKING") ||
+                     (field.name == "ReplyToRequestPhrase" && link.path == "2474119287.REPLYTOREQUEST") ||
+                     (field.name == "CustomerFollowPhrase" && link.path == "2490160490.FOLLOWME") ||
+                     (field.name == "ThankingPhrase" && link.path == "4019884189.THANKING")))
                     return {offset, i + 1, Destination::TextEntry};
+                if (entry.definition == "CShopDef" && field.type == "?" &&
+                    field.name == "PreferredShopkeeper" && link.path == "425186066.ShopKeeperCreatureID")
+                    return {offset, i + 1, Destination::GameEntry};
                 if (entry.definition == "CWeaponDef" &&
                     field.name == "Explosion" && field.type == "?" &&
                     link.path == "301428501.unknown")
@@ -578,6 +584,28 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 read32(field.value, 12) == defdecode::fieldTag("PBrain") &&
                 read32(field.value, 20) == defdecode::fieldTag("CreatureInteractionType"))
                 return {offset, i + 1, Destination::GameEntry};
+            // Legacy shop stock rows contain eight tagged four-byte values.
+            // Only the first value is an object identity; prices, counts and
+            // restock settings must remain byte-exact.
+            if (entry.definition == "CShopDef" && field.name == "DefaultStock" &&
+                field.type == "?" && parts.size() == 4 &&
+                parts[0] == "3996108785" && parts[1] == "CShopDefArrayList1" &&
+                parts[3] == "ItemForSell") {
+                if (field.value.size() < 4) fail("invalid shop stock list");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 64 ||
+                    field.value.size() != 4 + count * 64)
+                    fail("unsupported shop stock layout");
+                constexpr uint32_t tags[] = {0x0da8270b, 0x03a7ab09, 0x7afc0513,
+                    0x34fd91b8, 0x669cc35b, 0xdc6d0e85, 0x9e63ec0d, 0x44f5c7a0};
+                for (size_t row = 0; row < count; ++row)
+                    for (size_t member = 0; member < 8; ++member)
+                        if (read32(field.value, 4 + row * 64 + member * 8) != tags[member])
+                            fail("unsupported shop stock row tags");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("shop stock reference index out of range");
+                return {offset + 8 + index * 64, i + 1, Destination::GameEntry};
+            }
             if (entry.definition == "CSpecialEffectsDef" &&
                 field.name == "SpecialEffects" &&
                 field.type == "CSpecialEffectsStringMap" &&

@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 shop dialogue and stock references
+
+All four exact CShopDef dialogue controls now use text IDs. PreferredShopkeeper
+uses a game identity, and DefaultStock ItemForSell references use the first value
+in verified 64-byte tagged rows. Bounds, count and all eight row tags are checked;
+other stock fields remain opaque. StockCategoryDefaults is still unsupported.
+Evidence comes from ChocolateBox controls and the original Hero Titles payload.
+
+`tools/test_fmp_shop_links.py` passes in `build/fmp-shop-links-iz70hvao`: 35
+independently resolved words, entire shop payload byte comparison, direct/composed
+bank parity and four malformed-stock refusals preserving previous output.
+Exact-word/missing-map and stock bounds/tag unit checks pass. Sources and baseline
+remain unchanged. Hero Titles was refused by the frozen sweep; this follow-up
+brings individual offline import evidence to 640/821, not gameplay validation.
+
+Read-only original-package probes now report missing OBJECT_STAFF_YEW for Add
+Staffs to Bowerstone and Snowspire and missing OBJECT_APPLE_CARE for Apple Store
+Bowerstone. These remain refused dependencies, not accepted packages. Both
+Scripted Shopkeeper variants still refuse StockCategoryDefaults.
+
 ## 2026-10-04 weapon-expression reference domains
 
 `EXPRESSION.SpriteGraphic` now resolves the exact legacy HUD path

@@ -212,7 +212,60 @@ int main() {
                                                {"3449087046.HAWKING", "TEXT_PROBE"});
     check(hawking.offset == 7 && hawking.destination == forge::fmplinks::Destination::TextEntry,
           "shop hawking control addresses its four-byte text id");
+    for (const auto& [fieldName, path] : std::vector<std::pair<std::string, std::string>>{
+            {"ReplyToRequestPhrase", "2474119287.REPLYTOREQUEST"},
+            {"CustomerFollowPhrase", "2490160490.FOLLOWME"},
+            {"ThankingPhrase", "4019884189.THANKING"}}) {
+        const auto phraseSchema = forge::defschema::Schema::loadText(
+            "{\"CShopDef\":{\"prefix_len\":3,\"fields\":[{\"name\":\"" +
+            fieldName + "\",\"type\":\"?\"}]}}");
+        const auto phrase = legacyEntry("CShopDef", fieldName, "?", shopValue);
+        const std::map<std::string, uint32_t> phraseTexts{{"TEXT_PHRASE", 15001}};
+        const std::vector<forge::fmplinks::Link> phraseLinks{{path, "TEXT_PHRASE"}};
+        const auto linked = forge::fmplinks::relink(phrase, targets, phraseSchema,
+            phraseLinks, false, nullptr, nullptr, nullptr, &phraseTexts);
+        auto expected = phrase.data;
+        const uint32_t value = 15001;
+        std::memcpy(expected.data() + 7, &value, 4);
+        check(linked == expected, "shop phrase changes only the text identity word");
+        rejects([&] { forge::fmplinks::relink(phrase, targets, phraseSchema, phraseLinks); },
+                "shop phrase requires a text identity map");
+    }
     Bytes effectMap; word(effectMap, 2); word(effectMap, 10); word(effectMap, 77);
+    const auto stockSchema = forge::defschema::Schema::loadText(
+        R"({"CShopDef":{"prefix_len":3,"fields":[{"name":"DefaultStock","type":"?"}]}})");
+    const auto keeperSchema = forge::defschema::Schema::loadText(
+        R"({"CShopDef":{"prefix_len":3,"fields":[{"name":"PreferredShopkeeper","type":"?"}]}})");
+    const auto keeper = legacyEntry("CShopDef", "PreferredShopkeeper", "?", shopValue);
+    const auto keeperLocation = forge::fmplinks::locate(keeper, keeperSchema,
+        {"425186066.ShopKeeperCreatureID", "CREATURE_PROBE"});
+    check(keeperLocation.offset == 7 &&
+          keeperLocation.destination == forge::fmplinks::Destination::GameEntry,
+          "preferred shopkeeper addresses its game identity word");
+    Bytes stock; word(stock, 2);
+    for (uint32_t row = 0; row < 2; ++row)
+        for (uint32_t tag : {0x0da8270bu, 0x03a7ab09u, 0x7afc0513u, 0x34fd91b8u,
+                             0x669cc35bu, 0xdc6d0e85u, 0x9e63ec0du, 0x44f5c7a0u}) {
+            word(stock, tag); word(stock, 77 + row);
+        }
+    const auto stockEntry = legacyEntry("CShopDef", "DefaultStock", "?", stock);
+    const auto stockLink = forge::fmplinks::locate(stockEntry, stockSchema,
+        {"3996108785.CShopDefArrayList1.1.ItemForSell", "OBJECT_PROBE"});
+    check(stockLink.offset == 79 && stockLink.destination == forge::fmplinks::Destination::GameEntry,
+          "shop stock addresses only the object value in the selected tagged row");
+    rejects([&] { forge::fmplinks::locate(stockEntry, stockSchema,
+        {"3996108785.CShopDefArrayList1.2.ItemForSell", "OBJECT_PROBE"}); },
+        "shop stock refuses an out-of-range row");
+    auto badStock = stock; badStock[12] ^= 1;
+    const auto badStockEntry = legacyEntry("CShopDef", "DefaultStock", "?", badStock);
+    rejects([&] { forge::fmplinks::locate(badStockEntry, stockSchema,
+        {"3996108785.CShopDefArrayList1.0.ItemForSell", "OBJECT_PROBE"}); },
+        "shop stock refuses an unexpected member tag");
+    auto oversizedStock = stock; oversizedStock[0] = 3;
+    const auto oversizedStockEntry = legacyEntry("CShopDef", "DefaultStock", "?", oversizedStock);
+    rejects([&] { forge::fmplinks::locate(oversizedStockEntry, stockSchema,
+        {"3996108785.CShopDefArrayList1.0.ItemForSell", "OBJECT_PROBE"}); },
+        "shop stock refuses a count extending beyond its payload");
     word(effectMap, 20); word(effectMap, 78);
     const auto experience = legacyEntry("CExperienceDef",
         "PickupParticleEffectsPerExperiencePoints", "Map_JJ", effectMap);
