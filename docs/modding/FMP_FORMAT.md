@@ -2,6 +2,26 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 legacy creature appearance groups beginning `4000099073.Unknown`
+address an alternative across the native body-part lists. Mesh groups visit
+each body part's selected alternative, then its skeletal configuration name
+offset when present. Texture groups visit each available selected texture row
+in body-part order and address its two texture IDs. Lowercase `unknown` mesh
+members are allowed only for skeletal alternatives after mesh alternatives end.
+The bounded prefix walk validates the complete wound/appearance/expression
+layout before addressing any word. Internal reference paths retain occurrence
+and original metadata count; truncated/extra groups refuse rather than binding
+a subset. Mesh IDs, texture IDs and names offsets retain their distinct domains.
+
+An independent source audit matches 9,935 named reference words across 186
+records. Original Dark Apprentices variants 1/2 and Hero Pack pass 204 appearance
+references, all 282 creature links, exact surrounding bytes and effective-bank
+parity through both routes, plus 34 safe negative routes. No General Experiance
+still refuses at a duplicate metadata owner. A labelled one-record derivative
+of its NoGenEXP77 record proves 70 appearance references, including five
+skeletal names offsets, all 86 creature links and 14 safe negative routes;
+it is not evidence that the original package imports. No gameplay is tested.
+
 2026-10-05 named game records beginning `@unnamed:` refuse before output
 writes through direct apply and composition. That prefix identifies physical
 blank-name baseline slots; accepting a literal named record could overwrite

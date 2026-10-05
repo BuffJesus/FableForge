@@ -364,3 +364,49 @@ identical-record gate fmp-identical-records-s1qnzaxe/package-identity-audit.json
 20 links, four control-equivalent outputs and 22 safe negative routes. This
 scoped audit excludes the later reserved namespace guard and is not a full
 package acceptance claim.
+
+## 2026-10-05 original nonempty creature appearance recovery
+
+ChocolateBox 237DCBE3 and native CCreatureDef counted-pointer evidence describe
+body-part model alternatives, paired texture rows and skeletal names offsets.
+The older 4000099073 metadata transposes alternatives across body-part lists.
+Independent source offset/name audits in fmp-appearance-probe-tm70hutl match
+9,935 words across 186 records, with no missing named IDs or order mismatches.
+The original source bytes and bank IDs, not list labels alone, establish order.
+
+The existing bounded prefix parser now records model/texture/skeletal offsets.
+Metadata carries occurrence plus complete group count; native locate validates
+those counts against all applicable body parts and optional skeletal slots.
+The lowercase skeletal-only member refuses when a mesh alternative exists.
+All links belong to prefix part zero. Only selected four-byte words change;
+mesh/texture IDs and skeletal names.bin offsets resolve in distinct domains.
+Native tests cover mixed domain exact bytes, count/index disagreement and the
+skeletal-only case. Final all-target build and package follow-up are in progress.
+
+Original Dark Apprentices variants 1/2 and Hero Pack pass in
+fmp-creature-appearance-a_49pg00: 204 appearance words, all 282 creature links,
+exact whole records and effective six-bank parity through both routes; 34
+negative routes preserve prior output and every original input hash. Unchanged
+banks omitted from output are compared against the owned baseline copy.
+The earlier y2d4g8ci checker failed by requiring an unchanged text bank in output;
+v13ygrz5 then exposed the original No General Experiance duplicate-owner guard.
+These diagnostic attempts are retained.
+
+The full No General Experiance original remains refused. Its explicitly
+labelled one-record NoGenEXP77 derivative in fmp-creature-appearance-vw0a3y6t
+passes 70 appearance words (9 mesh, 56 texture, 5 names offsets), all 86 links,
+byte preservation, bank parity and 14 safe negative routes. The derivative
+retains the original record/metadata bytes; its package hash and original hash
+are separate in the report. ubq84ok1 first exposed skeletal-only lowercase
+members, now handled with explicit native boundaries. No full historic counts
+were recomputed and no gameplay or live-install writes occurred.
+
+The 40-case core run passed 39 and timed out in the unrelated audio test;
+a focused unchanged audio rerun passed in 0.18 seconds. Later prefix tests
+pass after the skeletal-only addition. Retain both results; do not claim a
+single uninterrupted forty-pass run yet.
+
+Final all-target Release build is complete. All 40 core tests pass together in
+44.95 seconds after the final parser change; the earlier audio timeout and
+focused recovery remain part of the diagnostic history. The existing original
+wound/expression gate is being checked against this build separately.

@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 original creature appearance links now retain model/texture/name
+domains and complete group-count bounds. Dark Apprentices variants 1/2 and
+Hero Pack pass 204 appearance references, all 282 creature links, exact bytes,
+effective-bank parity and 34 safe negative routes. A labelled NoGenEXP77
+derivative proves skeletal names offsets; its original remains refused by a
+duplicate-owner guard. All 40 core tests pass; see handoff.
+
 2026-10-05 FMP named records cannot occupy the reserved `@unnamed:` identity
 namespace. A reproduced anonymous/named lookup collision now refuses both
 routes before writes. Original duplicate-record parity and 24 safe negative

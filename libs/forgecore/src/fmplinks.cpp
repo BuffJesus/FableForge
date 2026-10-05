@@ -5,6 +5,7 @@
 #include <cstring>
 #include <set>
 #include <stdexcept>
+#include <utility>
 #include <nlohmann/json.hpp>
 
 namespace forge::fmplinks {
@@ -205,6 +206,9 @@ uint32_t read32(std::span<const uint8_t> bytes, size_t offset) {
 }
 struct CreaturePrefix {
     size_t wounds = 0, woundRows = 0, expressions = 0, expressionRows = 0;
+    struct Model { size_t mesh = 0; std::vector<size_t> textures; };
+    std::vector<std::vector<Model>> bodies;
+    std::vector<size_t> skeletons;
 };
 CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
     // Native CCreatureDef leading counted-pointer blocks, described by
@@ -236,16 +240,25 @@ CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
     for (size_t body = 0; body < bodies; ++body) {
         const size_t models = count(17); allModels += models;
         if (allModels > 4096) fail("invalid creature prefix model count");
+        result.bodies.emplace_back();
         for (size_t model = 0; model < models; ++model) {
+            CreaturePrefix::Model layout; layout.mesh = cursor;
             skip(8);
             const size_t textures = count(12); allTextures += textures;
             if (allTextures > 4096) fail("invalid creature prefix texture count");
             skip(4); // serialized array metadata, retained verbatim
-            skip(textures * 12); skip(1);
+            for (size_t texture = 0; texture < textures; ++texture) {
+                layout.textures.push_back(cursor); skip(12);
+            }
+            skip(1); result.bodies.back().push_back(std::move(layout));
         }
     }
     skip(3 + 24);
-    const size_t skeletal = count(13); skip(skeletal * 13); skip(1 + 12);
+    const size_t skeletal = count(13);
+    for (size_t index = 0; index < skeletal; ++index) {
+        result.skeletons.push_back(cursor + 8); skip(13);
+    }
+    skip(1 + 12);
     tag(defdecode::fieldTag("Expressions"));
     result.expressions = count(12); result.expressionRows = cursor;
     skip(result.expressions * 12);
@@ -273,6 +286,28 @@ bool identicalGameOwners(const big::File& package, const std::string& owner) {
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
     std::vector<Link> result;
     for (const auto& group : readMetadataGroups(bytes)) {
+        // Legacy appearance groups transpose alternatives across body parts.
+        // Carry both occurrence and original group size so locate() can reject
+        // truncated/extra lists against the complete native prefix layout.
+        if (group.path.starts_with("4000099073.Unknown.")) {
+            std::vector<std::string_view> parts;
+            std::string_view path = group.path;
+            for (;;) {
+                const auto dot = path.find('.'); parts.push_back(path.substr(0, dot));
+                if (dot == path.npos) break; path.remove_prefix(dot + 1);
+            }
+            const bool mesh = parts.size() == 4 && (parts[3] == "Unknown" || parts[3] == "unknown");
+            const bool texture = parts.size() == 6 && parts[3] == "Unknown" && parts[5] == "unknown";
+            if (mesh || texture) {
+                number(parts[2]); if (texture) number(parts[4]);
+                if (group.targets.empty() || group.targets.size() > 4096)
+                    fail("invalid creature appearance reference count");
+                for (size_t index = 0; index < group.targets.size(); ++index)
+                    result.push_back({group.path + ".References." + std::to_string(index) + "." +
+                        std::to_string(group.targets.size()), group.targets[index]});
+                continue;
+            }
+        }
         // CVillagePeopleDef contains two consecutive MaleTeacher controls with
         // the same field tag. ChocolateBox records their two links as one
         // VillagePeopleID group, in field order. Keep the occurrence in the
@@ -399,6 +434,35 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
         return {5 + size_t(index) * 12 + member, 0, destination};
     }
     if (parts.size() < 2) fail("unsupported link path " + link.path);
+    if (entry.definition == "CCreatureDef" && (parts.size() == 7 || parts.size() == 9) &&
+        parts[0] == "4000099073" && parts[1] == "Unknown" &&
+        (parts[3] == "Unknown" || (parts.size() == 7 && parts[3] == "unknown")) &&
+        parts[parts.size()-3] == "References" && (parts.size() == 7 || parts[5] == "unknown")) {
+        const auto prefix = creaturePrefix(decoded.prefix);
+        const size_t alternative = number(parts[2]);
+        const bool mesh = parts.size() == 7;
+        const size_t texture = mesh ? 0 : number(parts[4]);
+        std::vector<std::pair<size_t, Destination>> slots;
+        for (const auto& body : prefix.bodies) {
+            if (alternative >= body.size()) continue;
+            const auto& model = body[alternative];
+            if (mesh) slots.emplace_back(model.mesh, Destination::MeshEntry);
+            else if (texture < model.textures.size()) {
+                slots.emplace_back(model.textures[texture], Destination::TextureEntry);
+                slots.emplace_back(model.textures[texture] + 4, Destination::TextureEntry);
+            }
+        }
+        // The lowercase legacy member is used by skeletal alternatives after
+        // all mesh alternatives end. Do not reinterpret a mesh-bearing group.
+        if (parts[3] == "unknown" && !slots.empty())
+            fail("creature skeletal-only reference path addresses mesh alternatives");
+        if (mesh && alternative < prefix.skeletons.size())
+            slots.emplace_back(prefix.skeletons[alternative], Destination::NameOffset);
+        const size_t index = number(parts[parts.size()-2]), expected = number(parts.back());
+        if (expected != slots.size() || expected == 0 || expected > 4096 || index >= slots.size())
+            fail("creature appearance reference count or index disagrees with native layout");
+        return {slots[index].first, 0, slots[index].second};
+    }
     if (entry.definition == "CCreatureDef" && parts.size() == 4 &&
         ((parts[0] == "4294151720" && parts[1] == "Skin Effects Array") ||
          (parts[0] == "4042377857" && parts[1] == "unknown" && parts[3] == "Animations"))) {

@@ -220,12 +220,15 @@ int main() {
         const size_t skinAt = prefix.size();
         for (uint32_t value = 70; value < 79; ++value) word(prefix, value);
         word(prefix, 0x01ab6cee); word(prefix, forge::defdecode::fieldTag("RandomAppearanceMorph"));
-        word(prefix, 2); word(prefix, 1); word(prefix, 9); word(prefix, 10);
+        word(prefix, 2); word(prefix, 1); const size_t meshAt = prefix.size();
+        word(prefix, 9); word(prefix, 10);
         word(prefix, 2); word(prefix, 2);
+        const size_t textureAt = prefix.size();
         for (int n = 0; n < 6; ++n) word(prefix, 100+n);
         prefix.push_back(1); word(prefix, 0);
         prefix.insert(prefix.end(), 27, 0);
-        word(prefix, 1); prefix.insert(prefix.end(), 13, 0); prefix.insert(prefix.end(), 13, 0);
+        word(prefix, 1); const size_t skeletonAt = prefix.size() + 8;
+        prefix.insert(prefix.end(), 13, 0); prefix.insert(prefix.end(), 13, 0);
         word(prefix, forge::defdecode::fieldTag("Expressions")); word(prefix, 2);
         word(prefix, 1); word(prefix, 2); word(prefix, 123);
         word(prefix, 3); word(prefix, 4); const size_t animationAt = prefix.size(); word(prefix, 124);
@@ -247,6 +250,46 @@ int main() {
         check(forge::fmplinks::locate(prefixRecord, prefixSchema, prefixLinks[0]).part == 0 &&
               forge::fmplinks::locate(prefixRecord, prefixSchema, prefixLinks[1]).part == 0,
               "creature prefix symbols follow the selected prefix contribution");
+        const auto appearanceMetadata = forge::fmplinks::readMetadata(
+            metadataTwo("4000099073.Unknown.0.Unknown"));
+        check(appearanceMetadata.size() == 2 &&
+              appearanceMetadata[0].path == "4000099073.Unknown.0.Unknown.References.0.2" &&
+              appearanceMetadata[1].path == "4000099073.Unknown.0.Unknown.References.1.2",
+              "appearance metadata retains occurrence and complete group count");
+        const std::vector<forge::fmplinks::Link> appearanceLinks{
+            {"4000099073.Unknown.0.Unknown.References.0.2", "ANIMATION"},
+            {"4000099073.Unknown.0.Unknown.References.1.2", "B"},
+            {"4000099073.Unknown.0.Unknown.1.unknown.References.0.2", "SKIN"},
+            {"4000099073.Unknown.0.Unknown.1.unknown.References.1.2", "SKIN"}};
+        auto appearanceExpected = prefix;
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{
+                {meshAt, 2002}, {skeletonAt, *targets.savedNameOffset("B")},
+                {textureAt+12, 2001}, {textureAt+16, 2001}})
+            for (size_t n = 0; n < 4; ++n) appearanceExpected[at+n] = uint8_t(value >> (8*n));
+        check(forge::fmplinks::relink(prefixRecord, targets, prefixSchema, appearanceLinks,
+                  false, &animationMap, &skinMap) == appearanceExpected,
+              "appearance mesh, texture pair and skeletal name offsets change only selected words");
+        check(forge::fmplinks::locate(prefixRecord, prefixSchema, appearanceLinks[1]).destination ==
+                  forge::fmplinks::Destination::NameOffset &&
+              forge::fmplinks::locate(prefixRecord, prefixSchema, appearanceLinks[2]).part == 0,
+              "appearance prefix retains skeletal name domain and prefix provenance");
+        for (const auto& path : {"4000099073.Unknown.0.Unknown.References.0.1",
+                                "4000099073.Unknown.0.Unknown.References.2.2",
+                                "4000099073.Unknown.1.Unknown.References.0.1",
+                                "4000099073.Unknown.0.Unknown.2.unknown.References.0.2",
+                                "4000099073.Unknown.0.Unknown.0.unknown.References.0.1",
+                                "4000099073.Unknown.0.unknown.References.0.2"})
+            rejects([&] { forge::fmplinks::locate(prefixRecord, prefixSchema, {path, "SKIN"}); },
+                    "appearance alternatives, texture indices and complete group counts must agree");
+        auto skeletalOnly = prefixRecord;
+        skeletalOnly.data.erase(skeletalOnly.data.begin()+meshAt,
+                                skeletalOnly.data.begin()+textureAt+25);
+        std::fill_n(skeletalOnly.data.begin()+meshAt-4, 4, uint8_t(0));
+        const auto skeletalSlot = forge::fmplinks::locate(skeletalOnly, prefixSchema,
+            {"4000099073.Unknown.0.unknown.References.0.1", "B"});
+        check(skeletalSlot.offset == skeletonAt-41 && skeletalSlot.destination ==
+                  forge::fmplinks::Destination::NameOffset,
+              "skeletal-only legacy alternatives retain their names-table domain");
         for (const auto& path : {"4294151720.Skin Effects Array.1.Link to ID",
                                 "4294151720.Skin Effects Array.0.Link to ID6",
                                 "4042377857.unknown.2.Animations"})
