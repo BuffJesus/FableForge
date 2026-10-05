@@ -4820,7 +4820,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
-    const std::map<std::string, std::string> picks = picksMap ? *picksMap : loadPicks(picksPath);
+    std::map<std::string, std::string> picks = picksMap ? *picksMap : loadPicks(picksPath);
 
     // Optional field-level schema. When present, records that >1 mod changes are
     // composed PER FIELD (different fields auto-merge; only same-field/differing
@@ -4885,6 +4885,19 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         }
     }
 
+    std::set<std::string> unavailableRecordChoices;
+    for (const auto& [name, versions] : changes) {
+        const auto selected = picks.find(name);
+        if (selected == picks.end()) continue;
+        const auto& winner = selected->second;
+        if (winner.empty() || winner == "vanilla" || winner == "base" || winner == "none" || winner == "-" ||
+            std::any_of(versions.begin(), versions.end(), [&](const auto& v) { return v.mod == winner; })) continue;
+        if (!reviewChoices)
+            throw std::runtime_error("mods record choice: " + name +
+                " selects unavailable contributor " + winner + "; review or clear this saved choice");
+        unavailableRecordChoices.insert(name);
+        picks.erase(selected); // review the current fallback without allowing publication
+    }
     auto chooseWhole = [&](const std::vector<Version>& versions, const std::string& pick) -> const Version* {
         bool agree = true;
         for (const auto& v : versions)
@@ -5111,6 +5124,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                                     {"winner", c.winner},
                                     {"field_merged", c.fieldMerged},
                                     {"field_conflicts", c.fieldDetails},
+                                    {"choice_unavailable", unavailableRecordChoices.contains(c.record)},
                                     {"overridden", picks.count(c.record) > 0}});
         }
         json labels = json::array();

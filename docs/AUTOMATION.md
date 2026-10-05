@@ -173,6 +173,11 @@ choices, read-only review flags, exact selected/baseline values, inactive layout
 and preserved input/output inventories. `--complete-data` adds synthetic complete
 definition banks; these checks do not launch the game.
 
+`tools/test_mod_record_choice_contributors.py` checks unavailable active record
+choices, single/no-contributor cases, baseline aliases and exact output/input
+preservation in mod merge/build and both standalone definitions merge modes.
+Its optional `--complete-data` fixture uses synthetic definition banks.
+
 `tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
 winner matches independently built output for an absent saved contributor.
 It checks preservation, choice-name search, real dropdown clearing, an ordinary

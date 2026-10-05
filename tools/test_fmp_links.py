@@ -402,8 +402,20 @@ def main():
     reports['external_target'] = {'source_id': len(entries), 'final_id': actual,
                                    'resolved_name': supplied_name, 'provider_payload_preserved': True}
     field_provider_out=work/'field-provider-output'
+    field_provider_out.mkdir(); (field_provider_out/'sentinel').write_bytes(b'prior output')
     result=subprocess.run([str(tool),'mods','build',str(provider_base),str(field_provider_out),
                            '--fields',str(schema),'--picks',str(field_missing_picks)],capture_output=True,timeout=120)
+    (work/'field-stale-provider-choice.log').write_bytes(result.stdout+result.stderr)
+    assert result.returncode!=0 and b'selects unavailable contributor Rival' in result.stderr,result.stderr
+    assert list(field_provider_out.iterdir())==[field_provider_out/'sentinel']
+    assert (field_provider_out/'sentinel').read_bytes()==b'prior output'
+    reports['stale_provider_record_choice']={'refused':True,'prior_output_preserved':True}
+    # This order contains Provider, not the earlier Rival source. Choose its
+    # actual label while retaining the FMP override for the camera field.
+    field_provider_picks=work/'field-provider-picks.txt'
+    field_provider_picks.write_text(owner+'\t'+provider.name+'\n'+key+'\t'+missing_fmp.stem+'\n',encoding='utf-8')
+    result=subprocess.run([str(tool),'mods','build',str(provider_base),str(field_provider_out),
+                           '--fields',str(schema),'--picks',str(field_provider_picks)],capture_output=True,timeout=120)
     (work/'field-provided-target.log').write_bytes(result.stdout+result.stderr)
     assert result.returncode==0,result.stderr
     field_entries=read_bank(field_provider_out)

@@ -1029,6 +1029,10 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   currently contested field. An unavailable choice refuses builds; check conflicts
   to review it, then choose a current contributor or clear it. Choices for a
   different schema/layout remain saved and inactive.
+  A saved record choice also requires a changed version from that contributor.
+  If the winner was removed or now matches baseline, review or clear the choice
+  before building. Choices for records with no current contributions stay saved
+  and inactive.
   Search conflicts by name, kind, mod or field; **Saved choices only** shows
   explicit choices. Filtering precedes the 400-row display limit so later rows
   remain reachable. **Show all conflicts** clears both filters without changing

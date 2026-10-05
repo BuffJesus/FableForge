@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 record contributor choices: absent/unchanged saved record winners now
+refuse publication, including one remaining contributor; inactive records remain
+supported. Both 48-case ordinary/complete-Data gates, both-size record-choice UI
+checks and named FMP reference/relocation regressions pass. The earlier ZIP is
+frozen and excludes this fix; see HANDOFF_WORLD_UI.
+
 2026-10-05 scalar contributor choices: unavailable contributors for current
 contested scalar fields now refuse builds while conflict checks remain reviewable.
 Both 33-case ordinary/complete-Data gates and both-size field-choice UI checks

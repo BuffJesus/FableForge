@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 definition record choice contributors
+
+Saved whole-record choices now require the named mod to contribute a changed
+version of that record. Missing labels, unchanged baseline copies and a removed
+winner when only one contributor remains refuse before output writes and before
+named-FMP identity planning. Read-only mod conflicts retain the actual fallback
+and report `choice_unavailable`; GUI warnings request review/clear. Records with
+no current changes remain inactive. Existing valid choices, definition baseline
+aliases and partial per-field record-choice behavior remain supported.
+
+Both 48-case contributor gates pass (ordinary and synthetic complete Data):
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+mod-record-choice-contributors-ls1jqycj/ and mod-record-choice-contributors-o3ag4m0g/.
+They exercise mod merge/build plus standalone definitions with and without
+field composition, exact values and complete output/input preservation.
+The preceding 36-case reports go1k1a2p/bhnmdvff remain retained.
+CLI/GUI Release targets build; both-size field-detail/record-choice regressions
+pass in build/mod-field-details-cq3iq1zl/. The scalar contributor regression
+still passes 33 cases in mod-field-choice-contributors-x_kr0qc8/.
+
+The named FMP regression passes in build/fmp-links-4wwfq5nf/: 14 symbolic
+references each against retail, Aeon and the merged bank, record/scalar choices,
+missing-target refusal, external-target relocation and payload preservation.
+The initial bcwghtqv run caught its provider-order fixture selecting absent
+`Rival` instead of current `Provider`. The test now preserves a sentinel when
+that stale record choice refuses, then chooses Provider with the FMP field
+override and verifies every record equals the independent record-choice output.
+No live install or source package changes; the earlier development ZIP remains
+frozen and excludes this fix. This closes the whole-record follow-up noted below.
+
 ## 2026-10-05 contested scalar choice contributors
 
 Currently supported, contested scalar choices now refuse an unavailable
