@@ -1,5 +1,26 @@
 # World view and UI continuation - 2026-09-29
 
+### Creature prefix: empty wounds and one-expression originals
+
+The same binding independently passes Brown Balverine Hero Transformation,
+White Balverine Hero Transformation and Bye Bye Morphing at C: scratch
+fmp-creature-prefix-links-_uphzli8/result.json: six prefix links, all 56 links
+in their three creature records, exact other bytes, direct/composed game/names
+parity and 42 safe refusals. They exercise empty wound lists and one/four
+expression rows. --members selects explicit originals; fixture assertions retain
+the actually verified zero/25 wounds, three empty appearance model lists and
+one/four expressions. Initial 43bibs42 retains a checker assumption of four
+expressions; accepting the actual one-expression layout corrects the checker,
+not the binding. The earlier two-original 210-prefix/258-total proof remains.
+
+Nine targeted current direct imports also pass in
+fmp-creature-prefix-followups-_usqrwn7/result.json, with unchanged input hashes.
+Beyond the three independently audited originals above, these include Bruised
+and Bloodied (With Scars), Scar Bruise Tweak, Hobbe Mod, Minion Dreadwings Mod,
+No Age Will Scars and Youthfullbody (Variant 2). The latter six have direct-only
+evidence, not independent word audits, composed-stack proof or gameplay checks.
+No historic full-sweep totals are recomputed from these targeted results.
+
 ## 2026-10-05 creature wound/expression prefix recovery
 
 CCreatureDef's leading CWoundMorphs, CRandomAppearanceMorph and CExpressionSet
