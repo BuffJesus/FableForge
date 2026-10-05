@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -256,10 +257,11 @@ Entry& add(Order& order, const fs::path& gameRoot, const fs::path& source, const
         throw std::runtime_error("complete Data installation requires a mod folder with names.bin, game.bin, script.bin and frontend.bin");
     e.installData = installData;
     if (e.kind == Kind::Unknown) throw std::runtime_error("not a mod source (need .fmp / .patch / .qst / a folder with Data/ or FSE/ / an EgoCore Mods/<Name>/ folder): " + abs.string());
+    e.name = name.empty() ? (abs.filename().string().empty() ? abs.parent_path().filename().string() : abs.stem().string()) : name;
+    requireLabel(e.name);
     e.sha256 = sha256Of(abs);
     for (const auto& m : order.mods)
         if (m.sha256 == e.sha256) throw std::runtime_error("already in the order as \"" + m.name + "\" (same contents)");
-    e.name = name.empty() ? (abs.filename().string().empty() ? abs.parent_path().filename().string() : abs.stem().string()) : name;
     if (indexOf(order, e.name) >= 0) throw std::runtime_error("a mod named \"" + e.name + "\" is already in the order; pass --name");
     // stored root-relative when the pack lives inside the game root (a portable order), absolute otherwise
     const fs::path rootAbs = fs::weakly_canonical(gameRoot, ec);
@@ -294,8 +296,20 @@ void setEnabled(Order& order, const std::string& nameOrIndex, bool enabled) {
 
 std::vector<std::string> buildLabels(const Order& order) {
     std::vector<std::string> out;
-    for (const auto& e : order.mods) if (e.enabled) out.push_back(e.name);
+    for (const auto& e : order.mods) if (e.enabled) {
+        requireLabel(e.name);
+        out.push_back(e.name);
+    }
     return out;
+}
+
+void requireLabel(std::string_view label) {
+    if (label.empty() || std::isspace(static_cast<unsigned char>(label.front())) ||
+        std::isspace(static_cast<unsigned char>(label.back())) ||
+        std::any_of(label.begin(), label.end(), [](unsigned char c) { return c < 32 || c == 127; }))
+        throw std::runtime_error("Mod name must be nonempty, without surrounding whitespace or control characters; choose another name with --name.");
+    if (lower(std::string(label)) == "vanilla")
+        throw std::runtime_error("Mod name vanilla is reserved for baseline choices; choose another name with --name.");
 }
 
 bool installsCompleteData(const Order& order) {
@@ -313,6 +327,7 @@ bool installsCompleteData(const Order& order) {
 }
 
 std::vector<std::string> buildSources(const Order& order, const fs::path& gameRoot) {
+    (void)buildLabels(order); // reject ambiguous decisions before deploy restores an existing stage
     installsCompleteData(order);
     std::vector<std::string> out;
     for (const auto& e : order.mods) {

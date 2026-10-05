@@ -11,6 +11,14 @@ languages refuses the build.
 
 # Mod packs, load order, and conflict resolution
 
+Mod names distinguish source choices from the reserved `vanilla` baseline choice.
+Names equal to `vanilla` (ignoring case), names with surrounding whitespace and
+names containing control characters refuse registration. Give such a source a
+different name with `mods add --name`. Existing orders remain readable so an
+invalid entry can be disabled or removed; enabled invalid names refuse builds,
+conflict checks and deploy before an existing stage is reverted. A bare merge
+also validates names inferred from its source paths.
+
 Saved whole-file choices refuse if their named winner no longer contributes to
 that file; review or clear the choice before building. Choices for files with
 no current contributors stay inactive. Selecting vanilla emits the existing

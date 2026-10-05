@@ -60,6 +60,8 @@ int indexOf(const Order& order, const std::string& nameOrIndex);   // -1 when ab
 std::vector<std::string> buildSources(const Order& order, const std::filesystem::path& gameRoot);
 // the names of the enabled mods, parallel to buildSources (the labels every merge report row carries)
 std::vector<std::string> buildLabels(const Order& order);
+// Names must survive the choice text format and distinguish sources from vanilla.
+void requireLabel(std::string_view label);
 // At most one complete Data installation, first among enabled sources.
 bool installsCompleteData(const Order& order);
 

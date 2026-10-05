@@ -47,6 +47,8 @@ def main():
               [sys.executable, "tools/test_mod_bank_refusal.py"], capture_output=True)
     ok &= run("FMP record identity refusal and supported legacy replacements",
               [sys.executable, "tools/test_fmp_record_refusal.py"], capture_output=True)
+    ok &= run("mod label choice identity, staged refusal and legacy recovery",
+              [sys.executable, "tools/test_mod_label_refusal.py"], capture_output=True)
     if os.name == "nt":
         for options in ([], ["--complete-data"]):
             ok &= run("mod output ownership, rollback and fresh-only staging " + str(options),

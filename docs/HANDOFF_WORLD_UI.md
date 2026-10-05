@@ -1,5 +1,33 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 labels cannot alias baseline or corrupt choice lines
+
+Pre-fix mod-reserved-label-9uuui36o accepts a source named vanilla, then choosing
+that label emits BASE instead of its MOD! bytes. Shared modorder::requireLabel now
+rejects empty labels, reserved vanilla (ASCII case-insensitive), surrounding
+whitespace and control characters. Registration validates before hashing;
+enabled buildSources/buildLabels validate before deploy reverts any prior stage.
+Direct merge validates inferred names before composing. Order loading/listing and
+disabled-entry recovery remain supported; no automatic renaming or format change.
+
+Under C:/Users/Cornelio/FableForge-asset-checks-20261005, label-refusal native
+24 checks pass at mod-label-refusal-6tvmgcw8; 26 native/actual-GUI checks pass at
+mod-label-refusal-u68__1t_. Eight explicit invalid names, inferred vanilla,
+baseline/source distinction, four malformed legacy labels over build/conflicts/
+deploy with an existing stage, exact preservation, listing/disable/remove recovery,
+and retained Add form/retry at both sizes are covered. Compact rejection inspected.
+Earlier b41txsys/74iw6b52 GUI test failures retain an incorrect expected insertion
+position/name; input_text trims leading spaces and mouse position varies. The
+corrected check verifies successful retry and removes the row by index rather
+than assuming cursor position. Core 40/40 passes in 48.44 seconds; all Release
+targets built. Ownership 58 checks remain passing in mod-build-ownership-uhi356ni;
+reviewed-file choice 28 checks pass in mod-file-choice-reviews-pnuzs2ws.
+Mixed 50-command corpus and Mods UI pass at build/mods-corpus-owja55ov.
+Source check_all registers the native label check; package harness adds the
+native/both-size GUI workflow (86 total for future archives). Frozen 087467d ZIP
+excludes this increment; its already-running package acceptance retains its own
+85-workflow scope and pre-label harness.
+
 ## 2026-10-05 reusable output ownership and fresh-only staging
 
 Successful public mods build/merge writes root forge_mods_build.json format 1,

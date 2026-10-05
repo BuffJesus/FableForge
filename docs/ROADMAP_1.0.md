@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 mod labels now distinguish sources from the reserved vanilla choice
+and survive the choice-file format. Invalid names refuse registration and enabled
+legacy entries refuse composition before deploy reverts its old stage. Both GUI
+sizes and all 40 core tests pass; disabled legacy entries remain removable. The
+frozen 087467d package excludes this later increment. See HANDOFF_WORLD_UI.
+
 2026-10-05 reusable mod outputs now record generated file identities and remove
 unchanged obsolete files transactionally. Edited obsolete files refuse cleanup;
 unlisted files remain. Public --stage uses fresh composition, excludes output

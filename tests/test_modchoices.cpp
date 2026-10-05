@@ -16,6 +16,17 @@ template<class F> static void refuses(F action) {
 
 int main() {
     try {
+        for (const std::string name : {"", "vanilla", "VaNiLlA", " Pack", "Pack ", "Pack\tA", "Pack\nA", "Pack\rA", "Pack\x7f"})
+            refuses([&] { forge::modorder::requireLabel(name); });
+        for (const std::string name : {"Pack A", "Vanilla Plus", "123", "Pack=One"})
+            forge::modorder::requireLabel(name);
+        forge::modorder::Order invalidOrder;
+        forge::modorder::Entry invalidEntry;
+        invalidEntry.name = "vanilla";
+        invalidOrder.mods.push_back(invalidEntry);
+        refuses([&] { (void)forge::modorder::buildLabels(invalidOrder); });
+        invalidOrder.mods.front().enabled = false;
+        require(forge::modorder::buildLabels(invalidOrder).empty(), "disabled legacy label blocked recovery");
         const auto legacy = mc::parse("# comment\r\nfile:data/a = Pack A \r\nrecord\tvanilla\nignored\n");
         require(legacy.picks.at("file:data/a") == "Pack A" && legacy.picks.at("record") == "vanilla",
                 "legacy choice parsing changed");
