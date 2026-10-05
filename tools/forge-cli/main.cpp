@@ -9488,6 +9488,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 for (const auto& [label, c] : changers) {
                     auto f = forge::big::File::open(c);
                     auto remainingUnnamed = baseUnnamed;
+                    std::set<std::string> namedEntries;
                     for (const auto& b : f.banks())
                         for (const auto& e : b.entries) {
                             if (e.name.empty()) {
@@ -9510,6 +9511,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                                 originals.erase(original);
                                 continue;
                             }
+                            if (!namedEntries.insert(e.name).second)
+                                throw std::runtime_error("mods text entry: " + langName + "/" + e.name +
+                                    " from " + label + "; duplicate named entries cannot be composed");
                             auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
                             if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type &&

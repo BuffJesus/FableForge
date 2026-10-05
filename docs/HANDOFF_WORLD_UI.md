@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 duplicate named source text entries refuse composition
+
+Each changed source language bank now requires unique nonempty symbolic names
+across all its sub-banks. Duplicate occurrences refuse with source/language/name
+context before symbolic selection, including vanilla or a saved pick of the
+ambiguous source. Identical duplicate values remain ambiguous identities.
+Case-sensitive distinct names remain valid. A byte-identical whole bank has no
+symbolic changes and keeps the existing no-op behavior. The core writer and
+unnamed-entry rules are unchanged; no arbitrary numeric occurrence is chosen.
+
+tools/test_mod_text_duplicate_refusal.py passes 60 ordinary checks at
+mod-text-duplicate-refusal-ni_fgh5b/ and 60 synthetic complete-Data checks at
+mod-text-duplicate-refusal-kfz8psm_/, under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/. Cases cover different/identical
+payloads, unchanged duplicates with another edit, new names, reused IDs, names
+repeated across sub-banks, all three native routes, all saved-choice variants,
+prior-output/input preservation, recovery and unchanged-bank no-ops.
+Both GUI sizes pass persistent failure, same-process recovery and exact
+undeployment at build/mod-action-error-stxshpd9/; compact screenshot inspected.
+Existing text contributors pass 24 at mod-text-choice-contributors-7h0ipg0g/;
+unnamed refusals pass 45 at mod-text-unnamed-refusal-9pxtuied/. Real FMP TextID
+checks pass 13 at fmp-new-text-links-q2vibhar/ with no gameplay claim.
+All Release targets are current. Package harness defines 81 workflows; a fresh
+local archive/full acceptance is next. Frozen 2147246 ZIP remains unchanged.
+
 ## 2026-10-05 selected text payloads must round-trip through the codec
 
 Ordinary composition now compares encode(decode(selected payload)) with the raw

@@ -28,14 +28,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed', 'text-metadata', 'text-codec'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed', 'text-metadata', 'text-codec', 'text-duplicate'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Text-link fixture for a scratch baseline without text.big')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
     text_error = {'text': 'mods text entry: English/SHARED from BrokenPatch could not be applied',
                   'text-unnamed': 'unnamed entry changes cannot be composed',
                   'text-metadata': 'unsupported TOC metadata changes',
-                  'text-codec': 'selected payload cannot be preserved by the string codec'}.get(args.mode)
+                  'text-codec': 'selected payload cannot be preserved by the string codec',
+                  'text-duplicate': 'duplicate named entries cannot be composed'}.get(args.mode)
     deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record') or text_error is not None
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
@@ -114,6 +115,12 @@ def main():
                     record['payload'] += b'opaque selected tail'
                 bank(bad/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
                      {'' if args.mode == 'text-unnamed' else 'SHARED': record})
+                if args.mode == 'text-duplicate':
+                    from test_fmp_texture_layers import entries
+                    from test_mod_text_unnamed_refusal import duplicate_bank
+                    record = entries(root/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN', {'SHARED'}, True)['SHARED']
+                    duplicate_bank(bad/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
+                        [('SHARED', record), ('SHARED', dict(record, id=2))])
             elif args.mode == 'sibling':
                 (bad/'data/CompiledDefs').mkdir(parents=True)
                 for source in sources:

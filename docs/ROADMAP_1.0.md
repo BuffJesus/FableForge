@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 duplicate named source text entries now refuse ambiguous composition,
+including repeats across sub-banks. Both 60-check layouts, both GUI sizes and
+real TextID checks pass. Unchanged-bank and case-sensitive-name behavior remain;
+fresh local package acceptance is next. See HANDOFF_WORLD_UI.
+
 2026-10-05 selected text payloads now refuse if the codec cannot preserve their
 raw bytes. Both 48-check ordinary/complete-Data suites, both GUI sizes and real
 13-case TextID checks pass; untouched opaque baseline payloads are retained.
