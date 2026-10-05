@@ -202,6 +202,56 @@ uint32_t read32(std::span<const uint8_t> bytes, size_t offset) {
     if (offset > bytes.size() || bytes.size() - offset < 4) fail("reference outside payload");
     uint32_t n; std::memcpy(&n, bytes.data() + offset, 4); return n;
 }
+struct CreaturePrefix {
+    size_t wounds = 0, woundRows = 0, expressions = 0, expressionRows = 0;
+};
+CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
+    // Native CCreatureDef leading counted-pointer blocks, described by
+    // ChocolateBox FFF38E28/237DCBE3/F0F1CA81. Walk boundaries; never search
+    // opaque bytes for an apparent reference tag.
+    size_t cursor = 3;
+    auto skip = [&](size_t length) {
+        if (cursor > bytes.size() || length > bytes.size() - cursor)
+            fail("truncated creature prefix layout");
+        cursor += length;
+    };
+    auto word = [&]() { const auto value = read32(bytes, cursor); cursor += 4; return value; };
+    auto tag = [&](uint32_t expected) {
+        if (word() != expected) fail("unsupported creature prefix control layout");
+    };
+    auto count = [&](size_t minimum) {
+        const size_t value = word();
+        if (value > 4096 || cursor > bytes.size() || value > (bytes.size() - cursor) / minimum)
+            fail("invalid creature prefix count");
+        return value;
+    };
+    CreaturePrefix result;
+    tag(defdecode::fieldTag("WoundMorphs"));
+    result.wounds = count(44); result.woundRows = cursor; skip(result.wounds * 44);
+    tag(0x01ab6ceeu);
+    tag(defdecode::fieldTag("RandomAppearanceMorph"));
+    const size_t bodies = count(4);
+    size_t allModels = 0, allTextures = 0;
+    for (size_t body = 0; body < bodies; ++body) {
+        const size_t models = count(17); allModels += models;
+        if (allModels > 4096) fail("invalid creature prefix model count");
+        for (size_t model = 0; model < models; ++model) {
+            skip(8);
+            const size_t textures = count(12); allTextures += textures;
+            if (allTextures > 4096) fail("invalid creature prefix texture count");
+            skip(4); // serialized array metadata, retained verbatim
+            skip(textures * 12); skip(1);
+        }
+    }
+    skip(3 + 24);
+    const size_t skeletal = count(13); skip(skeletal * 13); skip(1 + 12);
+    tag(defdecode::fieldTag("Expressions"));
+    result.expressions = count(12); result.expressionRows = cursor;
+    skip(result.expressions * 12);
+    tag(0x01ab6d32u);
+    tag(defdecode::fieldTag("Stats"));
+    return result;
+}
 } // namespace
 
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
@@ -320,6 +370,26 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
         return {5 + size_t(index) * 12 + member, 0, destination};
     }
     if (parts.size() < 2) fail("unsupported link path " + link.path);
+    if (entry.definition == "CCreatureDef" && parts.size() == 4 &&
+        ((parts[0] == "4294151720" && parts[1] == "Skin Effects Array") ||
+         (parts[0] == "4042377857" && parts[1] == "unknown" && parts[3] == "Animations"))) {
+        const auto prefix = creaturePrefix(decoded.prefix);
+        const size_t index = number(parts[2]);
+        if (parts[0] == "4042377857") {
+            if (index >= prefix.expressions) fail("creature expression index out of range");
+            return {prefix.expressionRows + index * 12 + 8, 0, Destination::MeshEntry};
+        }
+        size_t slot;
+        if (parts[3] == "Link to ID") slot = 0;
+        else if (parts[3] == "Link to ID1") slot = 1;
+        else if (parts[3] == "Link to ID2") slot = 2;
+        else if (parts[3] == "Link to ID3") slot = 3;
+        else if (parts[3] == "Link to ID4") slot = 4;
+        else if (parts[3] == "Link to ID5") slot = 5;
+        else fail("unsupported creature wound texture member");
+        if (index >= prefix.wounds) fail("creature wound index out of range");
+        return {prefix.woundRows + index * 44 + 8 + slot * 4, 0, Destination::TextureEntry};
+    }
     // ChocolateBox's decimal Control.ID uses the reverse byte order of the
     // little-endian runtime field tag (confirmed by its Control.ReadIn/Write).
     const auto id = number(parts[0]);

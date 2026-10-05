@@ -180,6 +180,58 @@ int main() {
     };
     Bytes shopValue; word(shopValue, 77);
     {
+        const auto prefixSchema = forge::defschema::Schema::loadText(
+            R"({"CCreatureDef":{"fields":[{"name":"InitialActions","type":"Vector_J"}]}})");
+        Bytes prefix{1, 0, 1}; word(prefix, forge::defdecode::fieldTag("WoundMorphs")); word(prefix, 1);
+        word(prefix, 4); word(prefix, 5);
+        const size_t skinAt = prefix.size();
+        for (uint32_t value = 70; value < 79; ++value) word(prefix, value);
+        word(prefix, 0x01ab6cee); word(prefix, forge::defdecode::fieldTag("RandomAppearanceMorph"));
+        word(prefix, 2); word(prefix, 1); word(prefix, 9); word(prefix, 10);
+        word(prefix, 2); word(prefix, 2);
+        for (int n = 0; n < 6; ++n) word(prefix, 100+n);
+        prefix.push_back(1); word(prefix, 0);
+        prefix.insert(prefix.end(), 27, 0);
+        word(prefix, 1); prefix.insert(prefix.end(), 13, 0); prefix.insert(prefix.end(), 13, 0);
+        word(prefix, forge::defdecode::fieldTag("Expressions")); word(prefix, 2);
+        word(prefix, 1); word(prefix, 2); word(prefix, 123);
+        word(prefix, 3); word(prefix, 4); const size_t animationAt = prefix.size(); word(prefix, 124);
+        const size_t endMarkerAt = prefix.size();
+        word(prefix, 0x01ab6d32); word(prefix, forge::defdecode::fieldTag("Stats")); word(prefix, 0);
+        word(prefix, forge::defdecode::fieldTag("InitialActions")); word(prefix, 0);
+        const forge::bin::Entry prefixRecord{"CCreatureDef", "PREFIX_PROBE", 0, prefix};
+        const std::vector<forge::fmplinks::Link> prefixLinks{
+            {"4294151720.Skin Effects Array.0.Link to ID5", "SKIN"},
+            {"4042377857.unknown.1.Animations", "ANIMATION"}};
+        const std::map<std::string, uint32_t> skinMap{{"SKIN", 2001}}, animationMap{{"ANIMATION", 2002}};
+        auto expected = prefix;
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{
+                {skinAt+20, 2001}, {animationAt, 2002}})
+            for (size_t n = 0; n < 4; ++n) expected[at+n] = uint8_t(value >> (8*n));
+        check(forge::fmplinks::relink(prefixRecord, targets, prefixSchema, prefixLinks,
+                  false, &animationMap, &skinMap) == expected && prefixRecord.data == prefix,
+              "counted creature prefix changes only skin/animation words across nested appearance data");
+        check(forge::fmplinks::locate(prefixRecord, prefixSchema, prefixLinks[0]).part == 0 &&
+              forge::fmplinks::locate(prefixRecord, prefixSchema, prefixLinks[1]).part == 0,
+              "creature prefix symbols follow the selected prefix contribution");
+        for (const auto& path : {"4294151720.Skin Effects Array.1.Link to ID",
+                                "4294151720.Skin Effects Array.0.Link to ID6",
+                                "4042377857.unknown.2.Animations"})
+            rejects([&] { forge::fmplinks::locate(prefixRecord, prefixSchema, {path, "SKIN"}); },
+                    "creature prefix index and member bounds refuse");
+        for (size_t at : {size_t(7), size_t(59), size_t(67), endMarkerAt}) {
+            auto malformed = prefixRecord; malformed.data[at] ^= 0xff;
+            rejects([&] { forge::fmplinks::locate(malformed, prefixSchema, prefixLinks[0]); },
+                    "later creature prefix corruption refuses even an earlier selected skin word");
+        }
+        rejects([&] { forge::fmplinks::relink(prefixRecord, targets, prefixSchema,
+                          prefixLinks, false, &animationMap, nullptr); },
+                "missing creature skin identity map refuses");
+        rejects([&] { forge::fmplinks::relink(prefixRecord, targets, prefixSchema,
+                          prefixLinks, false, nullptr, &skinMap); },
+                "missing creature animation identity map refuses");
+    }
+    {
         const auto replacementSchema = forge::defschema::Schema::loadText(
             R"({"CTextureReplacementDef":{"prefix_len":3,"fields":[{"name":"Entries","type":"Vector_VCEntry_CTextureReplacementDef__"}]}})");
         Bytes pairs; word(pairs, 2); word(pairs, 77); word(pairs, 78); word(pairs, 79); word(pairs, 80);

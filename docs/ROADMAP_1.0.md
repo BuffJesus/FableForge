@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 counted creature prefixes now relink wound textures and facial
+animation graphics entries. Original No Scar Fade and Bruised and Bloodied
+(No Scars) pass 210 prefix links, all 258 creature-record links, exact other
+bytes, bank parity and forty safe refusals; core 40 passes. Weapon4ID stays
+refused. Frozen f20e263 excludes this increment; see handoff for layout scope.
+
 2026-10-05 verified texture replacement pairs now bind old/new texture IDs.
 Original Plate Helmet and Prophet 01 Upper Robe pass four links, exact other
 bytes, direct/composed bank parity and twenty safe refusals; all 40 core tests

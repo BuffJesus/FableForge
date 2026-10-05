@@ -2,6 +2,18 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 CCreatureDef leading wound/expression links use a bounded prefix
+walk from byte three through the counted wound, appearance and expression
+blocks to the Stats marker. Legacy Skin Effects Array Link to ID/ID1..ID5
+paths select six MainTextureID words per 44-byte wound row; Expressions
+Animations paths select the graphics entry word of each 12-byte row. These
+symbols belong to prefix part zero in field composition. No enums, timing,
+alpha or appearance bytes are rewritten. Original No Scar Fade and Bruised
+and Bloodied (No Scars) pass 210 prefix links, exact full creature-record bytes
+after all 258 links, direct/composed bank parity and forty safe refusals.
+Their appearance model/skeletal lists are empty; nonempty nested layouts have
+synthetic native coverage only. The separate Weapon4ID path remains refused.
+
 2026-10-05 CTextureReplacementDef.Entries accepts the exact legacy
 659892607.CTextureReplacementDef_List.<index>.Texture To Replace and
 Replacement Texture paths. ChocolateBox control 2755297F stores a bounded

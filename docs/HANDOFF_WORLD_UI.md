@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 creature wound/expression prefix recovery
+
+CCreatureDef's leading CWoundMorphs, CRandomAppearanceMorph and CExpressionSet
+blocks are grouped in the decoded prefix before InitialActions. Native donor
+header/count-pointer layout and ChocolateBox FFF38E28/237DCBE3/F0F1CA81 controls
+identify their counted serialization. The linker walks from offset three through
+wound rows, appearance nested counts, skeletal rows and expression rows, checking
+control markers through Stats. It never searches arbitrary prefix bytes for a
+tag. Counts/bounds and total model/texture counts are limited to 4096. Legacy
+4294151720.Skin Effects Array.<index>.Link to ID[1..5] binds six texture words per
+wound row; 4042377857.unknown.<index>.Animations binds a graphics-bank entry.
+The actual facial animation targets are type-nine MBANK_ALLMESHES entries.
+Both link kinds follow composition's selected prefix (part zero); body enums,
+durations, alpha, appearance data and expression enums remain byte-preserved.
+
+tools/test_fmp_creature_prefix_links.py passes original No Scar Fade (112 prefix
+links) and Bruised and Bloodied (No Scars) (98), all 258 links in their two
+CCreatureDef records, exact remaining creature bytes, direct/composed game/names
+bank parity and forty safe refusals. Evidence: C: scratch
+fmp-creature-prefix-links-uqynnpdh/result.json; all input hashes unchanged.
+Negatives cover wound/body/model/expression counts, later expression marker,
+indices, members and missing skin/animation targets through both routes, each
+preserving prior output. Initial gpod1r_a failed because its copied baseline
+omitted effects.big needed by No Scar Fade's separate CREATURE owner; adding
+that real bank fixes the fixture, without substituting a target or changing code.
+
+Native tests cover nonempty nested appearance texture/skeletal rows synthetically,
+exact offsets/domains, prefix provenance, later-block refusal for an earlier skin
+link and missing maps. The two original fixtures have empty appearance model/
+skeletal rows; no broader original nonempty-layout or gameplay claim is made.
+All Release targets build, all 40 core tests pass (27.81s), and the final added
+missing-map/model-count cases pass the targeted native link test. Frozen f20e263
+and earlier ZIPs exclude this increment. Weapon4ID remains unbound due to the
+conflicting unlinked-integer evidence recorded below.
+
 ## 2026-10-05 texture replacement old/new texture links
 
 Current importer probes at C: scratch fmp-texture-replacement-probe-l9vx_hr5
