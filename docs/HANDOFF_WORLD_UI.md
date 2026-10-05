@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 language/string choice contributors
+
+Active language/string choices now refuse unavailable contributors before
+publication, including a mod that changes another language but leaves this
+entry unchanged. Conflict checks remain reviewable and the GUI requires
+review/clear before building. Vanilla restores the original entry or absence;
+inactive choices remain supported. Exact UTF-16 payloads, metadata, IDs,
+unrelated language contents and source/output inventories are checked.
+
+The ordinary 26-check native/UI gate passes in
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-text-choice-contributors-4ferjxyj/;
+complete-Data passes 24 checks in mod-text-choice-contributors-rq59dgi7/.
+Both window sizes exercise actual dropdown clearing; the compact warning was
+visually inspected. Initial kf17ym0v/bocendr_ fixtures incorrectly used reserved
+TextID zero and were corrected to IDs starting at one without weakening payload
+assertions. Release CLI/GUI targets build; canonical core is unchanged.
+
+The 13-case symbolic/new-TextID regression passes in fmp-new-text-links-r6lufzvf/:
+direct ID 28914, shifted ID 28915, original hero ID 10677. Its small unmanaged
+baseline copies recorded originals, with SHA-verified compiled/text banks and
+a metadata-only texture bank containing the donor's required icon symbols.
+Preparation evidence is textid-original-baseline-i7cdeg6n/source.json; the donor
+archive/member hashes are in textid-donor-k4eiu0or/source.json. No gameplay claim.
+
+Two earlier live-root attempts (build/fmp-new-text-links-obxmzsgy/ and C: scratch
+fmp-new-text-links-ysohe4ta/) timed out at ordinary merge. The live installation
+has an existing stage manifest: original reconstruction copies roughly 8 GB,
+including unrelated backups and assets, for every ordinary merge. Direct FMP
+apply also uses installed bytes while staged ordinary merge uses originals;
+the successful fixture deliberately gives both routes the same baseline.
+Addressing this reconstruction cost is the next task. No live files changed;
+the two development ZIPs remain frozen and exclude this increment.
+
 ## 2026-10-05 FSE quest choice contributors
 
 Active FSE/quests.lua entry choices now refuse a winner that did not contribute

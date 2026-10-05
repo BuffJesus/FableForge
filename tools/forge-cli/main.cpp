@@ -9346,11 +9346,22 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 for (const auto& name : order) {
                     const auto& vs = versions[name];
                     const Version* win = &vs.back();
-                    bool overridden = false, keepBase = false;
+                    bool overridden = false, keepBase = false, unavailable = false;
                     if (auto pk = picks.text.find(langName + "|" + name); pk != picks.text.end()) {
                         overridden = true;
                         if (pk->second == "vanilla") keepBase = true;
-                        else for (const auto& v : vs) if (v.mod == pk->second) win = &v;
+                        else {
+                            const auto selected = std::find_if(vs.begin(), vs.end(),
+                                [&](const auto& v) { return v.mod == pk->second; });
+                            if (selected == vs.end()) {
+                                if (!reviewChoices)
+                                    throw std::runtime_error("mods text choice: " + langName + "/" + name +
+                                        " selects unavailable contributor " + pk->second +
+                                        "; review or clear this saved choice");
+                                unavailable = true;
+                                overridden = false;
+                            } else win = &*selected;
+                        }
                     }
                     bool agree = true;
                     for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
@@ -9358,7 +9369,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                         ++textKeysContested;
                         json mods = json::array();
                         for (const auto& v : vs) mods.push_back(v.mod);
-                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->mod}, {"overridden", overridden}});
+                        textRows.push_back({{"language", langName}, {"name", name}, {"mods", mods},
+                                            {"winner", keepBase ? "vanilla" : win->mod},
+                                            {"overridden", overridden}, {"choice_unavailable", unavailable}});
                     }
                     if (keepBase) continue;
                     try {

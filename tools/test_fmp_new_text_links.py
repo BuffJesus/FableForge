@@ -114,13 +114,15 @@ def main():
     parser.add_argument("--fmp", required=True, type=Path)
     parser.add_argument("--install", required=True, type=Path)
     parser.add_argument("--tool", type=Path, default=repo / "build/forge-tools.exe")
+    parser.add_argument("--work-root", type=Path, default=repo / "build")
     args = parser.parse_args()
     fmp, install, tool = args.fmp.resolve(), args.install.resolve(), args.tool.resolve()
     originals = {path: hashlib.sha256(path.read_bytes()).hexdigest()
                  for path in (fmp, install / "data/CompiledDefs/game.bin",
                               install / "data/CompiledDefs/names.bin",
                               install / "data/lang/English/text.big")}
-    work = Path(tempfile.mkdtemp(prefix="fmp-new-text-links-", dir=repo / "build"))
+    args.work_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="fmp-new-text-links-", dir=args.work_root)).resolve()
     print("Evidence retained at", work, flush=True)
     assert len(OLD) == len(NEW)
     source = fmp.read_bytes()

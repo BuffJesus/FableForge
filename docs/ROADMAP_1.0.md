@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 language/string contributors: unavailable active per-language winners
+now refuse publication; conflict checks and both-size dropdown recovery remain
+available. Ordinary 26-check and complete-Data 24-check gates plus the 13-case
+TextID regression on recorded originals pass. Existing-stage reconstruction
+copies roughly 8 GB per merge on the local install; reducing that cost is next.
+See HANDOFF_WORLD_UI for evidence and fixture boundaries. ZIPs remain frozen.
+
 2026-10-05 FSE contributors: unavailable active quest-entry winners now refuse
 publication while conflict checks remain reviewable. Ordinary 26-check native/UI
 and complete-Data 24-check gates pass, including inactive/absent entries and
