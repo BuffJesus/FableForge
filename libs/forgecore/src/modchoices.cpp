@@ -41,9 +41,13 @@ Choices parse(std::string_view text) {
         if (line.starts_with(prefix)) {
             try {
                 const auto value = json::parse(line.substr(prefix.size()));
-                const auto key = value.at("key").get<std::string>();
+                auto key = value.at("key").get<std::string>();
                 if (!key.starts_with("file:") || key.size() <= 5)
                     throw std::runtime_error("file review key is not a file choice");
+                // File choices use case-insensitive paths in the composer. A
+                // differently cased annotation must protect that same choice.
+                std::transform(key.begin() + 5, key.end(), key.begin() + 5,
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                 FileReview review;
                 review.winner = value.at("winner").get<std::string>();
                 if (review.winner.empty() || review.winner.find_first_of("\r\n\t") != std::string::npos)

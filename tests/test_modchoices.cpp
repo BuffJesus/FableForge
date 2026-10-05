@@ -32,6 +32,14 @@ int main() {
         require(decoded.picks == choices.picks && decoded.fileReviews == choices.fileReviews,
                 "review round trip changed identities");
         require(mc::serialize(decoded) == serialized, "review serialization is not deterministic");
+        auto mixedCase = serialized;
+        const auto annotationKey = mixedCase.find("\"key\":\"file:data/a\"");
+        require(annotationKey != std::string::npos, "missing serialized review key");
+        mixedCase.replace(annotationKey, std::string("\"key\":\"file:data/a\"").size(),
+                          "\"key\":\"file:Data/A\"");
+        require(mc::parse(mixedCase).fileReviews == decoded.fileReviews,
+                "mixed-case review did not protect the canonical file choice");
+        refuses([&] { mc::parse(serialized + mixedCase.substr(mixedCase.find("# forge-file-review-v1 "))); });
         auto reordered = review;
         reordered.versions.clear();
         reordered.versions.emplace("Pack B", review.versions.at("Pack B"));

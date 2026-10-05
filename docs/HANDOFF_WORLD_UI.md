@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 case-insensitive file review identities
+
+A scratch probe demonstrated that a manually mixed-case review path was
+accepted but missed the composer's lowercase lookup: changed source bytes
+could replace a prior output. Evidence is retained at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-review-case-sqwls2cm/result.json.
+The shared parser now folds the path portion of review keys exactly as file
+choices do. Differently cased duplicate review annotations refuse instead of
+silently selecting one. Legacy choice parsing remains unchanged.
+
+The affected CLI and parser tests build and pass. The expanded ordinary and
+complete-Data scratch gates each pass 28 cases, including mixed-case choices,
+same-size changed bytes, output preservation and reviewable stale reports:
+mod-file-choice-reviews-2rwzotko/ and mod-file-choice-reviews-m9ryvfh_/
+under the same C: evidence root. All Release targets build and all 39 core
+tests pass. The previously
+created d1ad2a4 development ZIP remains frozen and does not include this fix;
+its full extracted workflow check is still in progress.
+
 ## 2026-10-05 whole-file choice content reviews
 
 The GUI now records the baseline and complete set of raw file contributor

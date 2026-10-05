@@ -86,6 +86,18 @@ def main():
         save(stamp,'PackB'); before=snapshot(output)
         run(*command,good=False); assert snapshot(output)==before
         checks.append({'route':route,'case':'winner edited without review','refused':True})
+        mixed_case = dict(stamp, key='file:Data/Misc/Shared.bin')
+        save(mixed_case)
+        run(*command)
+        assert (output/relative).read_bytes()==b'AAAA'
+        (sources[0]/relative).write_bytes(b'aaaa'); before=snapshot(output)
+        failed=run(*command,good=False)
+        assert 'contents changed' in failed.stderr and snapshot(output)==before
+        report=json.loads(run('mods','conflicts',root,'--picks',picks,'--json').stdout)
+        row=next(r for r in report['files']['contested'] if r['path']=='data/misc/shared.bin')
+        assert row['choice_stale'] and row['choice_reviewed']
+        (sources[0]/relative).write_bytes(b'AAAA')
+        checks.append({'route':route,'case':'mixed-case review path','refused_preserved_reviewable':True})
         save(stamp)
         if route=='merge':
             reversed_command=['mods','merge',root,output,'--with',*([complete] if complete else []),sources[1],sources[0],sources[2],'--picks',picks]

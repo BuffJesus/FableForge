@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 file review key casing: review paths now use the same case-insensitive
+identity as CLI file choices; mixed-case annotations cannot bypass changed-byte
+refusal, and case-alias duplicates refuse. Both 28-case ordinary/complete-Data
+gates and all 39 core tests pass; all Release targets build. The earlier d1ad2a4 development ZIP
+is a separate frozen checkpoint; see HANDOFF_WORLD_UI.
+
 2026-10-05 whole-file review fingerprints: new GUI choices preserve the raw
 baseline/contributor snapshots from the last check. Changed contents refuse
 builds and remain reviewable; legacy choices, stable reordering and unrelated
