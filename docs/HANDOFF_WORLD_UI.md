@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 identical TNG copies retain real contributors
+
+Consecutive byte-identical TNG files still share one parsed version and the
+existing copy/partial/removal strategy, but retain every actual contributor
+label. Saved picks can select an earlier identical contributor; conflict rows
+and provenance name that selection. Default physical ownership and whole-file
+winner remain the later copy. Unchanged things still cannot be selected from
+an unrelated mod. Distinct package identities remain required.
+
+The pre-fix probe mod-tng-identical-probe-hic0yktf/ rejected a real PackA pick;
+the fixed probe mod-tng-identical-probe-6xsz6xol/ accepts it. Under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/, the new test passes 26
+ordinary/native/UI checks at mod-tng-identical-contributors-belh39mm/ and 24
+complete-Data checks at mod-tng-identical-contributors-ebioy91s/. Coverage includes
+copy, partial, replacement, deletion, consecutive/nonconsecutive duplicates,
+source-specific provenance, vanilla, unavailable contributors, prior-output and
+input preservation, both GUI sizes, staged review and exact undeployment.
+Existing TNG contributor checks pass 36 each at mod-tng-choice-contributors-
+6ajyf50n/ and dp44s3y9/; level case checks pass 122 at
+mod-level-case-identity-8bwm43am/. Mixed 50-command corpus and Mods UI pass at
+build/mods-corpus-ohzz_kg9/. Core behavior is unchanged from the preceding
+40-test gate. Package harness now defines 75 workflows; the frozen 2147246 ZIP
+retains its scoped 71-workflow acceptance and excludes these later fixes.
+No live writes or game launch. Text trailing-byte and duplicate-symbol probes
+remain the next concrete composition gaps.
+
 ## 2026-10-05 level filenames and saved choices share file identity
 
 TNG/QST candidates now coalesce case-only relative paths while retaining the

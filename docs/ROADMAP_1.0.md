@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 identical TNG copies retain all actual contributor names without
+changing copy/removal strategy. Earlier saved choices and provenance now agree;
+26 ordinary/native/UI, 24 complete-Data, existing contributor/casing and mixed
+50-command/Mods UI checks pass. Frozen ZIP unchanged; see HANDOFF_WORLD_UI.
+
 2026-10-05 level casing: TNG/QST filenames now coalesce across casing and uppercase
 extensions are composed. Saved path aliases share CLI/GUI identity while entry
 names keep their case. Ordinary/native/UI 126 and complete-Data 122 checks,

@@ -1105,7 +1105,8 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
                                const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path) in load order
                                const std::string& outPath,
                                const std::map<std::string, std::string>& picks,
-                               bool reviewChoices = false, bool wholeFile = false) {
+                               bool reviewChoices = false, bool wholeFile = false,
+                               const std::vector<std::vector<std::string>>* contributorGroups = nullptr) {
     namespace fs = std::filesystem;
     const auto base = wholeFile && !fs::exists(basePath) ? forge::tng::File::parseText("") : forge::tng::File::parse(basePath);
     auto out = wholeFile ? forge::tng::File::parse(mods.back().second) : base;
@@ -1113,10 +1114,13 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
     std::map<std::string, std::string> baseSig;  // key -> signature
     for (const auto& t : base.things()) baseSig[thingKey(t)] = thingSignature(t);
 
-    struct Version { std::string mod; forge::tng::Thing thing; bool isAdd; };
+    struct Version { std::string mod; forge::tng::Thing thing; bool isAdd;
+                     const std::vector<std::string>* contributors; };
     std::map<std::string, std::vector<Version>> versions;   // key -> every mod's version, in load order
     std::vector<std::string> order;                          // first-seen order for stable output
-    for (const auto& [label, path] : mods) {
+    for (size_t mi = 0; mi < mods.size(); ++mi) {
+        const auto& [label, path] = mods[mi];
+        const auto* contributors = contributorGroups ? &contributorGroups->at(mi) : nullptr;
         const auto mod = forge::tng::File::parse(path);
         for (const auto& mt : mod.things()) {
             const std::string key = thingKey(mt);
@@ -1124,7 +1128,7 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
             const bool isAdd = bit == baseSig.end();
             if (!isAdd && thingSignature(mt) == bit->second) continue;  // identical to base
             if (!versions.count(key)) order.push_back(key);
-            versions[key].push_back({label, mt, isAdd});
+            versions[key].push_back({label, mt, isAdd, contributors});
         }
     }
 
@@ -1133,13 +1137,17 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
         if (wholeFile && !picks.contains(key)) continue; // preserve this editor's full-file removals
         const auto& vs = versions[key];
         const Version* win = &vs.back();
+        std::string selectedContributor;
         bool overridden = false, keepBase = false, unavailable = false;
         if (auto pk = picks.find(key); pk != picks.end()) {
             overridden = true;
             if (pk->second == "vanilla") keepBase = true;
             else {
                 const auto selected = std::find_if(vs.begin(), vs.end(),
-                    [&](const auto& v) { return v.mod == pk->second; });
+                    [&](const auto& v) {
+                        return v.contributors ? std::find(v.contributors->begin(), v.contributors->end(),
+                            pk->second) != v.contributors->end() : v.mod == pk->second;
+                    });
                 if (selected == vs.end()) {
                     if (!reviewChoices)
                         throw std::runtime_error("mods TNG choice: " + key +
@@ -1147,7 +1155,7 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
                             "; review or clear this saved choice");
                     unavailable = true;
                     overridden = false;
-                } else win = &*selected;
+                } else { win = &*selected; selectedContributor = pk->second; }
             }
         }
         bool agree = true;   // the same edit from several mods is not a conflict
@@ -1155,10 +1163,14 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
         if ((vs.size() > 1 && !agree) || picks.contains(key)) {
             TngConflictRow row;
             row.thing = key;
-            row.winner = keepBase ? "vanilla" : wholeFile && unavailable ? mods.back().first : win->mod;
+            row.winner = keepBase ? "vanilla" : wholeFile && unavailable ? mods.back().first :
+                selectedContributor.empty() ? win->mod : selectedContributor;
             row.overridden = overridden;
             row.choiceUnavailable = unavailable;
-            for (const auto& v : vs) row.mods.push_back(v.mod);
+            for (const auto& v : vs) {
+                if (v.contributors) row.mods.insert(row.mods.end(), v.contributors->begin(), v.contributors->end());
+                else row.mods.push_back(v.mod);
+            }
             r.rows.push_back(row);
             ++r.conflicts;
         }
@@ -1177,7 +1189,8 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
             continue;
         }
         if (wholeFile && unavailable) continue; // review keeps the effective whole-file result
-        r.origin[key] = agree && !overridden ? vs.front().mod : win->mod;
+        r.origin[key] = agree && !overridden ? vs.front().mod :
+            selectedContributor.empty() ? win->mod : selectedContributor;
         size_t index = 0;
         while (index < out.things().size() && thingKey(out.things()[index]) != key) ++index;
         if (index == out.things().size()) {
@@ -9691,6 +9704,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     // Preserve the first spelling for reports/output while grouping every Windows alias.
     std::map<std::string, std::vector<std::pair<std::string, std::string>>, decltype(levelPathLess)>
         tngChangers(levelPathLess), qstChangers(levelPathLess);
+    std::map<std::string, std::vector<std::vector<std::string>>, decltype(levelPathLess)>
+        tngContributorGroups(levelPathLess);
     if (fs::exists(baseLevels)) {
         for (size_t si = 0; si < sources.size(); ++si) {
             const std::string& s = contentRoots[si];
@@ -9714,12 +9729,16 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (differs) {
                     auto& changers = (ext == ".tng" ? tngChangers : qstChangers)[key];
                     // A derivative pack may ship the same complete TNG as its
-                    // predecessor. Keep the later owner without parsing and
-                    // merging hundreds of identical copies.
+                    // predecessor. Keep the later physical owner without parsing
+                    // hundreds of copies, while retaining every real contributor.
                     if (ext == ".tng" && !changers.empty() &&
-                        filesIdentical(de.path(), changers.back().second))
+                        filesIdentical(de.path(), changers.back().second)) {
+                        tngContributorGroups[key].back().push_back(label);
                         changers.back() = {label, de.path().string()};
-                    else changers.push_back({label, de.path().string()});
+                    } else {
+                        changers.push_back({label, de.path().string()});
+                        if (ext == ".tng") tngContributorGroups[key].push_back({label});
+                    }
                 }
             }
         }
@@ -9732,7 +9751,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const fs::path outTng = fs::path(outDir) / "data" / "Levels" / key;
         const fs::path baseTng = baselineLevelPath(key);
         json row{{"level", key}, {"mods", json::array()}};
-        for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
+        const auto& contributorGroups = tngContributorGroups.at(key);
+        for (const auto& group : contributorGroups)
+            for (const auto& label : group) row["mods"].push_back(label);
         std::map<std::string, std::string> levelPicks;
         const auto choicePrefix = forge::modchoices::canonicalKey("tng:" + key + "|").substr(4);
         for (const auto& [k, v] : picks.tng)
@@ -9779,7 +9800,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             } catch (const std::exception&) {}
             if (!levelPicks.empty()) {
                 const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(),
-                                               levelPicks, reviewChoices, true);
+                                               levelPicks, reviewChoices, true, &contributorGroups);
                 json crows = json::array();
                 for (const auto& c : tr.rows) {
                     crows.push_back({{"thing", c.thing}, {"mods", c.mods}, {"winner", c.winner},
@@ -9794,7 +9815,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             }
         } else {
             // this level's picks: `tng:<level>|<thing>` -> `<thing>`
-            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks, reviewChoices);
+            const auto tr = mergeTngLabeled(baseTng.string(), changers, outTng.string(), levelPicks, reviewChoices,
+                                           false, &contributorGroups);
             tngThingConflicts += tr.conflicts;
             ++tngMerged;
             for (const auto& [k, m] : tr.origin) provenance[key][k] = m;
