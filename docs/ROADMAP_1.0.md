@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 frozen b7ec186 local ZIP covers all 81 workflows across 44 retained
+initial passes and 37 resumed passes after one GUI timeout. Zero uncovered/skips;
+108 packaged identities and 120 doc links verified. Later DeleteUIDs and build
+ownership changes are excluded; see HANDOFF_WORLD_UI for hashes and evidence.
+
 2026-10-05 DeleteUIDs now agrees with effective winners, counts and provenance.
 Blocked choices refuse builds and remain reviewable/clearable; default TNG bytes
 are unchanged. Both 26/24-check layouts, existing TNG/casing checks and mixed

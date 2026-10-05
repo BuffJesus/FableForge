@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 frozen local package covers 81 workflows across retained runs
+
+Application ZIP:
+dist/development/20261005-b7ec186/FableForge-0.18.1-dev.b7ec186.20261005-win64.zip
+SHA256: 400e3d005d9c1a0b2e4d1cffb33e9807b943f22c0cf752d3803c85f65fd88f98.
+All Release targets were current from clean b7ec18649b9b8e4a96fabaf1006573cc8b45971c;
+PACKAGE_INFO records tracked_changes=false and identifies the packaging checkout,
+with its existing executable-provenance scope disclaimer. The companion guide
+ZIP is in the same directory. No archive was overwritten or published remotely.
+
+The first extracted run at build/package-smoke-5wlgnxkr/progress.json passed 44
+workflows, then timed out on the unnamed-text GUI lifecycle after the expected
+failure screen and assertions. Its process termination also timed out before
+eventually exiting; no assertion failure or remaining owned process was found.
+That evidence is retained. Resuming from the affected workflow at
+build/package-smoke-q2ee6uqi/result.json passes all remaining 37, explicitly
+omitting the already completed 44, with zero fixture skips. The resumed unnamed
+check passes both windows. combined-acceptance.json in that directory verifies
+the same archive SHA, all 81 unique workflows covered, 44+37 accepted, zero
+uncovered, and retains the original failed attempt rather than counting it.
+Both extractions verify 108 packaged identities and 120 Markdown links, from
+an unrelated cwd and a literal percent/environment-token/ampersand folder.
+
+This ZIP adds the level-case, identical-TNG, text-codec and duplicate-symbol fixes
+to the earlier 71-workflow artifact. It includes real Aeon/controller preservation,
+Unicode/compiler/FMP routes, all selected contributor families, staged originals,
+Setup recovery, asset refresh and texture failure workflows. No gameplay claim.
+The later DeleteUIDs correction and current build-ownership work are excluded.
+The previous 2147246 ZIP and its scoped acceptance remain unchanged.
+
+An output-ownership probe now confirms that a successful build with another mod
+still enabled leaves a disabled mod's old TNG, loose file and provenance:
+mod-inactive-output-probe-obm6g2ql/ under the existing C: evidence root. An entirely
+disabled order already refuses a build; it is not a successful no-op cleanup.
+The current receipt candidate removes those three stale paths while preserving
+the unrelated sentinel and source hashes at mod-inactive-output-probe-hzkd64vb/.
+Receipt validation, changed-owned-file protection and transaction rollback still
+require their dedicated checks before promotion.
+
 ## 2026-10-05 DeleteUIDs agrees with choices, reports and provenance
 
 FableForge retains its existing delete-after-union policy for partial TNGs.
@@ -39,7 +78,7 @@ winner/window cases pass at mod-whole-file-winner-d8e5u_9_/. Mixed 50 commands a
 Mods UI pass at build/mods-corpus-dy47zi6h/. Release GUI/CLI rebuilt; core is
 unchanged from the previous 40-test gate. Package harness now defines 83
 workflows. Frozen b7ec186 archive excludes this increment; its 81-workflow
-acceptance is still completing a resumed suffix after one GUI timeout.
+acceptance is covered across the initial and resumed runs recorded above.
 No live writes or game launch. Previously owned build files left by an inactive
 order remain a separate publication-ownership gap; no unowned files are deleted.
 
