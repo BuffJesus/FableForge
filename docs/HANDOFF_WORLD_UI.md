@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 original anonymous creature prefix choices
+
+tools/test_fmp_creature_prefix_choices.py composes original Bruised and Bloodied
+No Scars/With Scars against the same private copied baseline. Both bare merge
+and registered build pass order, either source, vanilla and clearing an
+unavailable selection: ten successful outputs plus two safe refusals. Exact
+chosen prefix bytes include independently resolved skin/animation symbols;
+all fields after InitialActions remain baseline-identical. Anonymous record
+@unnamed:10532 uses its record choice; its prefix has no scalar choice key.
+Disabled/absent selected source NoScars refuses while preserving prior output
+and the saved choice; clearing recovers WithScars. Archive, tool, source-bank
+and original package hashes remain unchanged.
+
+Evidence: C: scratch fmp-creature-prefix-choices-qkr0314j/result.json. Earlier
+97xm5aa1 covered eight selections before adding source-file hashes; b18bgm3x
+also verifies those hashes and retains a separate unavailable-source probe.
+This is CLI composition and symbolic-prefix selection evidence, not GUI or
+gameplay coverage. The running frozen f20e263 package excludes this later
+creature binding; acceptance scopes remain separate.
+
 ## 2026-10-05 deterministic GUI smoke geometry and private settings
 
 Fresh f20e263 extraction package-smoke-a2yhgf4g passes 42 workflows, then fails
