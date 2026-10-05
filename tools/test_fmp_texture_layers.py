@@ -224,12 +224,22 @@ def main():
 
         picks.write_text('texture:' + retail_apprentice + '\tMissingMod\n', encoding='utf-8')
         stale = work/'stale'
-        report = run(args.tool, 'mods', 'merge', args.install, stale, '--with',
-                     work/PACKAGES[1], work/PACKAGES[2], '--picks', picks, '--json')
-        shirt = next(c for c in report['maintextures']['conflicts'] if c['entry'] == retail_apprentice)
-        assert shirt['winner'] == Path(PACKAGES[2]).stem and shirt['choice_unavailable']
+        stale.mkdir(); (stale/'sentinel').write_bytes(b'keep prior output')
+        for winner in ('MissingMod', Path(PACKAGES[0]).stem):
+            picks.write_text('texture:' + retail_apprentice + '\t' + winner + '\n')
+            failed = run(args.tool, 'mods', 'merge', args.install, stale, '--with',
+                         work/PACKAGES[0], work/PACKAGES[1], work/PACKAGES[2],
+                         '--picks', picks, '--json', ok=False)
+            assert b'mods texture choice:' in failed.stderr and b'review or clear' in failed.stderr
+            assert winner.encode() in failed.stderr
+            assert list(stale.iterdir()) == [stale/'sentinel']
+            assert (stale/'sentinel').read_bytes() == b'keep prior output'
+        picks.write_text('texture:UNREPORTED_ENTRY\tMissingMod\n')
+        run(args.tool, 'mods', 'merge', args.install, stale, '--with',
+            work/PACKAGES[1], work/PACKAGES[2], '--picks', picks, '--json')
         check_output(stale, {**packages[PACKAGES[1]], **packages[PACKAGES[2]],
                              untouched: retail[untouched]}, untouched)
+        assert (stale/'sentinel').read_bytes() == b'keep prior output'
         checked_remove(stale, work)
 
         # A package whose named texture claims another numeric id must refuse

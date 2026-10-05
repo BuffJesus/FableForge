@@ -123,6 +123,23 @@ def main():
         check(output, {target: retail[target]}, untouched, retail)
         remove(output, work)
 
+        output.mkdir(); (output/'sentinel').write_bytes(b'keep prior output')
+        for winner in ('MissingMod', Path(PACKAGES[0]).stem):
+            picks.write_text('mesh:' + target + '\t' + winner + '\n')
+            failed = run(args.tool, 'mods', 'merge', args.install, output, '--with',
+                         work/PACKAGES[0], work/PACKAGES[2], work/PACKAGES[3],
+                         '--picks', picks, '--json', ok=False)
+            assert b'mods mesh choice:' in failed.stderr and b'review or clear' in failed.stderr
+            assert winner.encode() in failed.stderr
+            assert list(output.iterdir()) == [output/'sentinel']
+            assert (output/'sentinel').read_bytes() == b'keep prior output'
+        picks.write_text('mesh:UNREPORTED_ENTRY\tMissingMod\n')
+        run(args.tool, 'mods', 'merge', args.install, output, '--with',
+            work/PACKAGES[2], work/PACKAGES[3], '--picks', picks, '--json')
+        check(output, packages[PACKAGES[3]], untouched, retail)
+        assert (output/'sentinel').read_bytes() == b'keep prior output'
+        remove(output, work)
+
         new_mesh = next(iter(packages[PACKAGES[1]]))
         picks.write_text('mesh:' + new_mesh + '\tvanilla\n')
         run(args.tool, 'mods', 'merge', args.install, output, '--with',

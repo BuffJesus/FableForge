@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 saved texture/mesh choices now refuse unavailable per-entry
+contributors instead of falling back to load order. Twenty focused direct/build
+checks, both original asset-layer suites, the 24-case whole-file gate and all
+38 core tests pass. Inactive choices and valid source/vanilla choices remain
+supported. No full-corpus, packaging or gameplay claim; see HANDOFF_WORLD_UI.
+
 2026-10-04 expanded full scan completed at frozen bcfa118: 800/1102 originals
 imported, 301 refused and one timed out. The same-build timeout retry passed,
 giving 801 individually successful offline imports. No acceptance regression

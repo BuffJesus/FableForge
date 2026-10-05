@@ -9907,7 +9907,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const auto found = std::find_if(versions.begin(), versions.end(),
                         [&](const Version& v) { return v.mod == choice->second; });
                     if (found != versions.end()) { winner = &*found; overridden = true; }
-                    else unavailable = true; // preserve a stale choice; the order still decides
+                    else throw std::runtime_error("mods texture choice: " + name +
+                        " selects unavailable contributor " + choice->second +
+                        "; review or clear the saved choice");
                 }
             }
             if (overridden) {
@@ -10043,7 +10045,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const auto found = std::find_if(versions.begin(), versions.end(),
                         [&](const Version& v) { return v.mod == choice->second; });
                     if (found != versions.end()) { winner = &*found; overridden = true; }
-                    else unavailable = true;
+                    else throw std::runtime_error("mods mesh choice: " + name +
+                        " selects unavailable contributor " + choice->second +
+                        "; review or clear the saved choice");
                 }
             }
             if (overridden) {

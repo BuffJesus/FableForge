@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 saved texture and mesh contributor refusal
+
+Texture and mesh entry choices now refuse when their saved winner is absent
+from that entry's current FMP contributors. They no longer silently apply the
+last source. The error identifies the entry and winner and asks for review or
+clearing. Choices for entries with no current contributions remain inactive;
+valid source choices and explicit vanilla restoration retain their behavior.
+The GUI's existing saved-choice controls remain available; no GUI source changed.
+Conflict checking uses the composer and can also report this refusal.
+
+All 38 core CTest checks pass, and `forge-tools` rebuilds successfully.
+`tools/test_mod_asset_choice_contributors.py` passes 20 direct-merge/registered-
+build checks for absent and unrelated winners, exact selected-source/vanilla
+entry bytes, inactive choices and prior-output preservation. Its fixtures use
+hash-checked original asset banks stripped of unrelated package content and
+compact scratch baseline banks; other baseline texture payloads are inert.
+Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261005/
+mod-asset-choice-contributors-3_cm_40j/result.json.
+
+The original five-package texture and seven-package graphics layer suites also
+pass against the rebuilt CLI and retained install; those checks include unchanged
+archive and baseline hashes. The existing whole-file contributor gate still
+passes 24 cases in mod-file-choice-contributors-bqpwmqlg/result.json under the
+same evidence parent. No game files were changed. Fingerprint-based stale-content
+review, full-corpus rescanning, packaging and gameplay remain separate work.
+
 ## 2026-10-04 direct-output absent-baseline restore completed
 
 Explicit vanilla choices for current raw-file contributions now queue removal
