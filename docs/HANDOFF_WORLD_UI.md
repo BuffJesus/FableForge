@@ -2,6 +2,14 @@
 
 ## 2026-10-05 Windows Unicode loose-file identity and native merge I/O
 
+Clean 9bc59e8 local ZIP:
+dist/development/20261005-9bc59e8/FableForge-0.18.1-dev.9bc59e8.20261005-win64.zip
+SHA256: 7f089da45c445b753dc8c24199e23f6a5a0568a824cf5df1cd0ebd3f653d3a58.
+build/package-smoke-_xmjajwb/result.json passes nine selected extracted workflows:
+both Unicode-file, level-case, ownership and reviewed-file layouts plus Unicode
+compiler paths. Explicit 79 not run, zero reported skips; 108 identities and
+122 links pass. This scoped run is not full acceptance of all 88 workflows.
+
 The retained probe mod-unicode-file-alias-u7r5ppa2 reproduced reversed raw-file
 load order for Älias.bin/älias.bin: separate ASCII-only carrier keys wrote the
 lowercase source last regardless of contributor order. Shared filePathKey now
@@ -30,12 +38,13 @@ disjoint TNG/QST union, unavailable contributors and exact stage restoration.
 Earlier current core tests pass all 40 (32.78s), level-case checks 122 at
 ppdkdt4s and ownership 58 at z6g85ab5. No core changes followed those checks.
 build/egocore-unicode-62j6esev passes compiler/module/environment/temp Unicode
-paths and failed-build preservation. Package gates add both layouts (88 total),
+paths and failed-build preservation. Package gates add both layouts (88 total);
+source gates add both Windows layouts.
 The mixed real corpus and Mods UI pass all 50 commands at
 build/mods-corpus-j41huhue/result.json. Real TextID import passes 13 direct,
 shifted and original-link checks at fmp-new-text-links-5585irmc. All Release
 targets are current; Python compilation and diff checks pass.
-source gates add both Windows layouts. All existing frozen ZIPs exclude this
+All earlier frozen ZIPs exclude this
 increment. Unicode engine-archive entry names and gameplay are not certified.
 
 ## 2026-10-05 distinct-label ZIP: scoped extraction with tightened coverage guard
