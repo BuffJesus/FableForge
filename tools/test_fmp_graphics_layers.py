@@ -50,8 +50,11 @@ def main():
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--tool', type=Path, default=repo/'build/forge-tools.exe')
+    parser.add_argument('--work-root', type=Path, default=repo/'build',
+                        help='Parent for an owned temporary test directory')
     args = parser.parse_args()
-    build = (repo/'build').resolve()
+    build = args.work_root.resolve()
+    build.mkdir(parents=True, exist_ok=True)
     source_hashes = {'archive': digest(args.archive),
                      'graphics': digest(args.install/GRAPHICS),
                      'textures': digest(args.install/'data/graphics/pc/textures.big'),

@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 
 from test_fmp_texture_layers import entries
+from test_fmp_links import package_records
 from test_fmp_weapon_links import run
 
 
@@ -95,6 +96,29 @@ def main():
             assert reason in failed.stderr, failed.stderr
             assert sorted(p.name for p in prior.iterdir()) == ['sentinel']
             assert (prior/'sentinel').read_bytes() == b'kept'
+    original_mesh, mesh_at = package_records(original)['graphics']['MESH_HERO_HOLLOW_MASK']
+    texture_word = struct.pack('<I', texture_id)
+    assert original_mesh.count(texture_word) == 1
+    wrong_slot = bytearray(payload)
+    struct.pack_into('<I', wrong_slot, mesh_at + original_mesh.index(texture_word), 0)
+    metadata, metadata_at = package_records(original)['graphicsLinkMetaData']['MESH_HERO_HOLLOW_MASK']
+    path = b'LOD0.MAT0.BaseTexture'; assert metadata.count(path) == 1
+    slot_cases = [('wrong-material-texture', wrong_slot, 'does not reference named texture')]
+    for label, replacement in [('lod-out-of-range', b'LOD9.MAT0.BaseTexture'),
+                               ('material-out-of-range', b'LOD0.MAT9.BaseTexture')]:
+        changed = bytearray(payload)
+        at = metadata_at + metadata.index(path)
+        changed[at:at+len(path)] = replacement
+        slot_cases.append((label, changed, 'material link index out of range'))
+    for label, changed, reason in slot_cases:
+        package = work/f'{label}.fmp'; package.write_bytes(changed)
+        prior = work/f'{label}-output'; prior.mkdir(); (prior/'sentinel').write_bytes(b'kept')
+        for command in (('fmp', 'apply', args.install, package, prior),
+                        ('mods', 'merge', args.install, prior, '--with', package)):
+            failed = run(args.tool, *command, good=False)
+            assert reason in failed.stderr, failed.stderr
+            assert sorted(p.name for p in prior.iterdir()) == ['sentinel']
+            assert (prior/'sentinel').read_bytes() == b'kept'
     for index, (name, data) in enumerate(multiple_lods.items()):
         package = work/('asset-only-' + name); package.write_bytes(asset_only(data))
         original_meshes = entries(package, 'graphics', include_payload=False)
@@ -112,10 +136,10 @@ def main():
             assert built[symbol]['header'] == info
     assert before == {str(path): digest(path) for path in inputs}
     (work/'result.json').write_text(json.dumps({'member': member, 'valid_header_preserved': True,
-        'refused': [name for name, _, _ in cases], 'multiple_lods': list(multiple_lods),
+        'refused': [name for name, _, _ in cases + slot_cases], 'multiple_lods': list(multiple_lods),
         'input_hashes_unchanged': True,
         'gameplay_tested': False}, indent=2), encoding='utf-8')
-    print('PASS: original one/three-LOD mesh descriptors and six bounded/safe refusal checks')
+    print('PASS: original one/three-LOD meshes and twelve descriptor/material refusal checks')
 
 
 if __name__ == '__main__':

@@ -8277,6 +8277,7 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             std::memcpy(&value, info.data() + at, 4);
             return value;
         };
+        std::optional<std::vector<forge::meshpreview::Geometry>> lods;
         for (const auto& link : forge::fmplinks::readMetadata(package.entryData(entry))) {
             if (!link.path.ends_with(".BaseTexture") &&
                 !link.path.ends_with(".BumpMapTexture") &&
@@ -8302,6 +8303,41 @@ void validateFmpGraphicLinks(const forge::big::File& package,
             if (!referenced)
                 throw std::runtime_error("FMP graphics: " + entry.name + " names texture " +
                     link.target + " but its id is absent from the mesh Info header");
+            // ChocolateBox GfxModel uses ordinal LOD/MAT indices and maps
+            // SpecularMapTexture to Material.ReflectionTextureID. Info membership
+            // alone does not prove that the named material slot uses this ID.
+            const std::string_view path = link.path;
+            const auto first = path.find('.'), second = path.find('.', first + 1);
+            if (first == path.npos || second == path.npos || !path.starts_with("LOD") ||
+                path.substr(first + 1, 3) != "MAT")
+                throw std::runtime_error("FMP graphics: unsupported material link path " + link.path);
+            auto index = [&](std::string_view token) {
+                size_t value = 0;
+                const auto parsed = std::from_chars(token.data(), token.data() + token.size(), value);
+                if (parsed.ec != std::errc{} || parsed.ptr != token.data() + token.size())
+                    throw std::runtime_error("FMP graphics: invalid material index in " + link.path);
+                return value;
+            };
+            const auto lod = index(path.substr(3, first - 3));
+            const auto material = index(path.substr(first + 4, second - first - 4));
+            if (!lods) {
+                try { lods = forge::meshpreview::decodeLods(package.entryData(*mesh), info, mesh->type); }
+                catch (const std::exception& error) {
+                    throw std::runtime_error("FMP graphics: cannot inspect materials for " + entry.name +
+                                             ": " + error.what());
+                }
+            }
+            if (lod >= lods->size() || material >= lods->at(lod).materials.size())
+                throw std::runtime_error("FMP graphics: material link index out of range for " + entry.name);
+            const auto& slot = lods->at(lod).materials.at(material);
+            const auto member = path.substr(second + 1);
+            if (member != "BaseTexture" && member != "BumpMapTexture" && member != "SpecularMapTexture")
+                throw std::runtime_error("FMP graphics: unsupported material member in " + link.path);
+            const uint32_t actual = member == "BaseTexture" ? uint32_t(slot.diffuseTexture) :
+                member == "BumpMapTexture" ? uint32_t(slot.bumpTexture) : uint32_t(slot.reflectionTexture);
+            if (actual != texture->id)
+                throw std::runtime_error("FMP graphics: " + entry.name + " material slot " + link.path +
+                    " does not reference named texture " + link.target);
         }
     }
 }

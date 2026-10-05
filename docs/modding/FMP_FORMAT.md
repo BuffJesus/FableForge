@@ -595,6 +595,13 @@ Evidence: `build/fmp-global-links-khbe451s/result.json`, using the separate
 candidate CLI while the previous binary's full 821-package bank-write sweep
 continues. These fixtures establish offline import/composition, not gameplay.
 
+2026-10-04 material-slot follow-up: named links also resolve exact ordinal
+`LOD<n>.MAT<n>` slots in each decoded LOD. BaseTexture, BumpMapTexture and
+SpecularMapTexture use diffuse, bump and reflection values respectively. A valid
+Info list with a wrong material value refuses, as do bad indices and unknown
+members. Twelve malformed descriptor/material cases and the seven original
+graphics-layer regression packages pass. ID collision relocation remains open.
+
 2026-10-04 graphics guard: named mesh textures must occur in the counted Info
 texture list, not an arbitrary matching physics/bounds word. The list follows
 LOD sizes, a safe-radius word and LODCount-1 switch-distance values; its count

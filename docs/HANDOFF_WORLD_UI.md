@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 graphics material-slot validation
+
+Named texture links now validate the exact ordinal LOD/MAT slot after counted
+Info-list membership. Existing `meshpreview::decodeLods` reads the actual material
+values; BaseTexture/BumpMapTexture/SpecularMapTexture match diffuse/bump/reflection,
+as ChocolateBox GfxModel.cs declares. Bad indices, unknown members and mismatched
+material values refuse. No texture or mesh ID relocation is implemented here.
+
+`tools/test_fmp_graphics_texture_list.py` passes in
+`build/fmp-graphics-texture-list-kkcy1a36/result.json`: original one/three-LOD
+asset fixtures and twelve descriptor/material refusals preserve requested output.
+The new wrong-slot fixture retains a valid Info texture list while corrupting
+the sole material value. Both direct and composed paths refuse it. The seven
+original graphics-layer regression packages also pass their replacement/addition,
+both-order/disjoint composition and failure cases. That test now accepts an owned
+scratch parent via `--work-root`; C: avoids observed D: disk contention.
+
+The 1102-package sweep remains frozen at earlier source bcfa118; its report must
+not be treated as a full gate for this later material-slot guard.
+
 ## 2026-10-04 original lowercase text banks
 
 Forge recognizes the original lowercase `text` bank alongside `Text`, using the
