@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 whole-file winner previews: clearing saved TNG/QST choices now shows
+the last whole-file owner, including its removals. Four family/window cases and
+existing 38 TNG / 40 QST checks pass; the frozen ZIP excludes this GUI fix.
+See HANDOFF_WORLD_UI for cached-report and publication evidence.
+
 2026-10-05 text composition: malformed selected strings, unsupported changed
 types and missing language baselines now refuse instead of silently dropping
 changes. Ordinary 36-check, complete-Data 37-check, both-size GUI recovery and

@@ -397,6 +397,9 @@ std::string App::modConflictWinner(const ModConflict& conflict) const {
         if (isModBaselineChoice(conflict, winner)) return "vanilla";
         if (std::find(conflict.mods.begin(), conflict.mods.end(), winner) != conflict.mods.end()) return winner;
     }
+    // Whole-file copies also carry removals absent from the entry contributors.
+    // Retain that default independently of the cached report's selected winner.
+    if (!conflict.wholeFileWinner.empty()) return conflict.wholeFileWinner;
     // The report's winner may include a choice that has since been cleared.
     // Contributors are reported in load order; field merges retain their label.
     if (!conflict.fieldMerged && !conflict.mods.empty()) return conflict.mods.back();
@@ -549,6 +552,10 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             for (const auto& c : l.value("conflicts", json::array())) {
                 const std::string level = l.value("level", ""), thing = c.value("thing", "");
                 rows.push_back({"thing", "tng:" + level + "|" + thing, level + "  " + thing, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+                const auto mode = l.value("mode", "");
+                if ((mode == "new-level" || mode == "replaced" || mode == "single-editor") &&
+                    !l.value("mods", json::array()).empty())
+                    rows.back().wholeFileWinner = l["mods"].back().get<std::string>();
             }
     if (rep.contains("qst"))
         for (const auto& f : rep["qst"].value("files", json::array()))
@@ -557,6 +564,8 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                 std::vector<std::string> m;
                 for (const auto& w : c.value("wanted", json::array())) m.push_back(w.value("mod", ""));
                 rows.push_back({"quest", "qst:" + file + "|" + quest, file + "  " + quest, m, c.value("winner", ""), c.value("overridden", false)});
+                if (f.value("mode", "") == "single-editor" && !f.value("mods", json::array()).empty())
+                    rows.back().wholeFileWinner = f["mods"].back().get<std::string>();
             }
     if (rep.contains("text"))
         for (const auto& c : rep["text"].value("contested", json::array())) {

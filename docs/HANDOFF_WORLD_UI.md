@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 whole-file winner previews retain removals
+
+The GUI now retains the last whole-file owner separately from entry contributors
+for new/replaced/single-editor TNG and copied QST reports. Clearing an override
+uses this owner even if the cached report still contains the former selected
+winner. Ordinary thing/statement merges retain their last-contributor behavior.
+No composer policy or contributor validation changed.
+
+The pre-fix fixture mod-whole-file-winner-v2a2xivu/ under the recorded C: evidence
+root failed three times within one GUI run: native report winner PackC removes
+the entry, while GUI winner PackB incorrectly implies its contribution wins.
+Initial 1vrg59au/ lacked the Levels directory and did not reach the GUI;
+the corrected fixture includes an unrelated baseline registry.
+tools/test_mod_whole_file_winner_ui.py now passes all four family/window cases
+at mod-whole-file-winner-uajxm_lg/. It checks invalid and valid cached-pick
+clearing through the actual dropdown, disappears after fresh unpicked review,
+strict build refusal preserving prior output, selected PackA restoration,
+vanilla absence, built whole-file removals, and unchanged source inventories.
+The compact QST cleared screenshot shows PackC. Existing ordinary TNG 38 checks
+pass at mod-tng-choice-contributors-uu7z32so/ and QST 40 checks at
+mod-qst-choice-contributors-_ykjnp93/, both including two-size GUI recovery.
+All paths share C:/Users/Cornelio/FableForge-asset-checks-20261005/.
+FableForge rebuilt; core/CLI behavior is unchanged from the recorded gates.
+Package harness defines 65 workflows, not yet a new archive acceptance claim.
+Frozen ZIPs remain unchanged. No live writes or gameplay checks.
+
 ## 2026-10-05 text composition refuses unapplied changes
 
 Ordinary text composition now refuses a missing language baseline, selected

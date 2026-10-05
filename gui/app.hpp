@@ -1056,7 +1056,8 @@ public:
                          std::string winner; bool overridden = false, pickable = true, fieldMerged = false;
                          std::vector<ModFieldConflict> fields;
                          bool hasFileContent = false; ModFileContent fileBaseline;
-                         std::vector<ModFileContent> fileVersions; };
+                         std::vector<ModFileContent> fileVersions;
+                         std::string wholeFileWinner; };
     std::string modConflictWinner(const ModConflict& conflict) const;
     bool modChoiceUnavailable(const ModConflict& conflict) const;
     bool modFileChoiceStale(const ModConflict& conflict) const;
