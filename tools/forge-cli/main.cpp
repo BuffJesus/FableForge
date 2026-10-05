@@ -9428,6 +9428,19 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     {
         const fs::path langRoot = fs::path(baseRoot) / "data" / "lang";
         json textRows = json::array();
+        // A folder bank without its baseline would otherwise be skipped here
+        // and excluded again from whole-file layers, yielding a successful no-op.
+        for (size_t ri = 0; ri < contentRoots.size(); ++ri) {
+            const auto languages = fs::path(contentRoots[ri]) / "data" / "lang";
+            if (!fs::is_directory(languages)) continue;
+            for (const auto& language : fs::directory_iterator(languages)) {
+                if (!language.is_directory() || !fs::is_regular_file(language.path() / "text.big")) continue;
+                if (!fs::is_regular_file(langRoot / language.path().filename() / "text.big"))
+                    throw std::runtime_error("mods text baseline: " + language.path().filename().string() +
+                        "/text.big is missing for " + srcLabel(ri) +
+                        "; restore the language baseline before composing this bank");
+            }
+        }
         if (fs::is_directory(langRoot))
             for (const auto& lang : fs::directory_iterator(langRoot)) {
                 const fs::path basePath = lang.path() / "text.big";
@@ -9441,8 +9454,12 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 if (changers.empty()) continue;
                 auto base = forge::big::File::open(basePath);
                 std::map<std::string, std::vector<uint8_t>> baseByName;
-                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) baseByName[e.name] = base.entryData(e);
-                struct Version { std::string mod; std::vector<uint8_t> data; };
+                std::map<std::string, uint32_t> baseTypes;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) {
+                    baseByName[e.name] = base.entryData(e);
+                    baseTypes[e.name] = e.type;
+                }
+                struct Version { std::string mod; std::vector<uint8_t> data; uint32_t type; };
                 std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
                 std::vector<std::string> order;
                 for (const auto& [label, c] : changers) {
@@ -9452,9 +9469,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                             if (e.name.empty()) continue;
                             auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
-                            if (it != baseByName.end() && it->second == data) continue;
+                            if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type) continue;
                             if (!versions.count(e.name)) order.push_back(e.name);
-                            versions[e.name].push_back({label, std::move(data)});
+                            versions[e.name].push_back({label, std::move(data), e.type});
                         }
                 }
                 for (const auto& name : order) {
@@ -9478,7 +9495,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                         }
                     }
                     bool agree = true;
-                    for (const auto& v : vs) if (v.data != vs.front().data) { agree = false; break; }
+                    for (const auto& v : vs) if (v.data != vs.front().data || v.type != vs.front().type) { agree = false; break; }
                     if (vs.size() > 1 && !agree) {
                         ++textKeysContested;
                         json mods = json::array();
@@ -9488,10 +9505,17 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                                             {"overridden", overridden}, {"choice_unavailable", unavailable}});
                     }
                     if (keepBase) continue;
+                    if (win->type != 0)
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " has unsupported type " + std::to_string(win->type) +
+                            "; only string entry changes can be composed");
                     try {
                         forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
                         ++textKeysApplied;
-                    } catch (const std::exception&) {}
+                    } catch (const std::exception& error) {
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " could not be applied: " + error.what());
+                    }
                 }
                 const fs::path dst = textPlanRoot / "data" / "lang" / lang.path().filename() / "text.big";
                 fs::create_directories(dst.parent_path());

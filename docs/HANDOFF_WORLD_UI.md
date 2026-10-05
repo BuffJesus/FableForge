@@ -1,5 +1,41 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 text composition refuses unapplied changes
+
+Ordinary text composition now refuses a missing language baseline, selected
+malformed string, unsupported changed entry type, or canonical upsert failure.
+Contributor comparison includes type as well as payload, so type-only changes
+cannot silently disappear. Unchanged groups remain intact; changed groups and
+narrators are explicitly unsupported rather than guessed numeric-ID conversions.
+Valid saved contributors and vanilla bypass malformed losing candidates.
+Conflict review also reports genuine payload/type errors through the existing
+persistent Mods action error. The frozen 928e38a ZIP excludes this increment.
+
+tools/test_mod_text_payload_refusal.py passes 36 ordinary checks at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-text-payload-refusal-yyot6c5_/
+and 37 complete-Data checks at mod-text-payload-refusal-evf5txth/ in the same root.
+Coverage includes merge/build/review, truncated string/metadata, invalid UTF-16,
+new malformed strings, group/narrator/unknown/type-only changes, missing language
+baseline, unusable baseline ID, valid/vanilla recovery, prior-output inventory
+and source hashes. Complete Data can supply an intact language baseline.
+Earlier fixture attempts 2wtmr1aw/b_1n6wzr failed because their assertion decoded
+an unchanged group as a string; the final assertion decodes only SHARED and
+checks group payload/ID independently. No production failure was hidden.
+
+Both-size GUI error/retry checks pass at build/mod-action-error-k658jo8c/;
+the compact screenshot shows the full wrapped language/name/source diagnostic.
+Failed redeployment restores the owned original install before composition,
+consistent with existing stage policy; it does not preserve the old deployed
+stage. Removing the bad mod permits same-process deploy and exact undeploy.
+The valid text contributor gate passes 24 checks at mod-text-choice-contributors-
+0u5fobgu/, and the real donor TextID regression passes all 13 checks at
+fmp-new-text-links-bc7q_bqh/ (direct 28914, shifted 28915, original Hero 10677).
+All three C: evidence paths share the root above. No live-install writes or game
+launch. Only forge-tools needed rebuilding; core is unchanged from the 40-test
+gate. The package harness now defines 64 workflows; no new extracted archive
+is claimed. Unnamed entry changes and noncanonical trailing payload bytes
+remain separate unresolved cases.
+
 ## 2026-10-05 consolidated local development checkpoint
 
 Frozen application ZIP:

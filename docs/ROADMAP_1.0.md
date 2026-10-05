@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 text composition: malformed selected strings, unsupported changed
+types and missing language baselines now refuse instead of silently dropping
+changes. Ordinary 36-check, complete-Data 37-check, both-size GUI recovery and
+13-case TextID gates pass. Valid choices and unchanged groups remain supported.
+The frozen ZIP excludes this fix; see HANDOFF_WORLD_UI for remaining boundaries.
+
 2026-10-05 consolidated development ZIP at 928e38a passes all 61 extracted
 workflows, zero omitted/skipped checks, plus 108 identities and 120 doc links.
 It includes the subsequent contributor/staged-copy fixes. Three independent
