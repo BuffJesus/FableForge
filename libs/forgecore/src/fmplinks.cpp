@@ -231,8 +231,10 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
         }
-        if (group.path.starts_with("1732080037.unknown.") &&
-            group.path.ends_with(".CWeapon Sprite_Weapon_Trail1") &&
+        if (((group.path.starts_with("1732080037.unknown.") &&
+              group.path.ends_with(".CWeapon Sprite_Weapon_Trail1")) ||
+             (group.path.starts_with("1732080037.WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link).") &&
+              group.path.ends_with("._"))) &&
             group.targets.size() == 2) {
             for (size_t i = 0; i < 2; ++i)
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
@@ -525,8 +527,10 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             if (entry.definition == "CWeaponDef" &&
                 field.name == "WeaponTrails" && field.type == "?" &&
-                parts.size() == 5 && parts[1] == "unknown" &&
-                parts[3] == "CWeapon Sprite_Weapon_Trail1") {
+                parts.size() == 5 &&
+                ((parts[1] == "unknown" && parts[3] == "CWeapon Sprite_Weapon_Trail1") ||
+                 (parts[1] == "WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link)" &&
+                  parts[3] == "_"))) {
                 if (field.value.size() < 4) fail("invalid weapon trail list");
                 const size_t count = read32(field.value, 0);
                 if (count > 4096 || count > (field.value.size() - 4) / 12 ||

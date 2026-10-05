@@ -2,6 +2,17 @@
 
 ## 2026-10-04 legacy weapon display-name aliases
 
+The additional exact path
+1732080037.WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link).<row>._
+now uses the established counted twelve-byte row layout: augmentation key plus
+two MainTextureID words. ChocolateBox control 673D71A5 establishes those slots.
+Native tests verify two-word-only changes, row/slot bounds and ordered metadata;
+fmplinks tests pass. An untouched original Ultima Weapon broken graphic probe
+now passes these metadata checks and refuses the actual mesh-ID collision:
+7939 already belongs to MESH_AXE_GREAT_LEGENDARY_01, not MESH_ULTIMA_WEAPON.
+This original remains refused and is not added to accepted totals. Texture/mesh
+ID relocation remains separate work requiring all actual material references.
+
 The original Ultima Weapon broken graphic metadata uses 2996266366._ and
 473863218._ for the established FlourishParticles effect pair and
 FlourishSpecialWeaponTrail texture pair. These exact aliases now retain both

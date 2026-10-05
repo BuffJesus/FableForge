@@ -65,7 +65,8 @@ int main() {
           villageLinks[1].path == "4272390883.VillagePeopleID.1" && villageLinks[1].target == "SECOND",
           "repeated village controls preserve both ordered targets");
     for (const auto& path : {"2996266366.Flourish Effect", "2996266366._", "473863218.Flourish Sprite", "473863218._",
-                              "1732080037.unknown.0.CWeapon Sprite_Weapon_Trail1"}) {
+                              "1732080037.unknown.0.CWeapon Sprite_Weapon_Trail1",
+                              "1732080037.WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link).0._"}) {
         const auto pair = forge::fmplinks::readMetadata(metadataTwo(path));
         check(pair.size() == 2 && pair[0].path == std::string(path) + ".0" &&
               pair[0].target == "FIRST" && pair[1].path == std::string(path) + ".1" &&
@@ -430,6 +431,21 @@ int main() {
     }
     const auto trail0 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.0");
     const auto trail1 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.1");
+    {
+        const std::string alias = "1732080037.WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link).1._";
+        const std::vector<forge::fmplinks::Link> aliasLinks{{alias + ".0", "A"}, {alias + ".1", "B"}};
+        const std::map<std::string, uint32_t> textures{{"A", 50001}, {"B", 50002}};
+        auto expected = weapon.data;
+        const uint32_t a = 50001, b = 50002;
+        std::memcpy(expected.data() + trail0.offset, &a, 4);
+        std::memcpy(expected.data() + trail1.offset, &b, 4);
+        check(forge::fmplinks::relink(weapon, targets, weaponSchema, aliasLinks,
+                  false, nullptr, &textures) == expected,
+              "legacy trail names preserve keys and all other bytes");
+        rejects([&] { locateWeapon(alias + ".2"); }, "legacy trail rejects third texture slot");
+        rejects([&] { locateWeapon("1732080037.WeaponTrails[AUGMENTATION] = CWeaponTrailGraphicSet(link,link).2._.0"); },
+                "legacy trail rejects out-of-range row");
+    }
     check(trail0.offset + 4 == trail1.offset &&
           trail0.destination == forge::fmplinks::Destination::TextureEntry &&
           trail1.destination == forge::fmplinks::Destination::TextureEntry,
