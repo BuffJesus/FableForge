@@ -1348,9 +1348,10 @@ int qstRoundtrip(const std::string& path) {
 forge::qst::MergeResult mergeQstLabeled(
     const std::string& basePath, const std::vector<std::pair<std::string, std::string>>& mods,   // (label, path)
     const std::string& outPath,
-    const std::map<std::string, std::string>& picks) {
+    const std::map<std::string, std::string>& picks,
+    bool reviewChoices = false, bool wholeFile = false) {
     namespace fs = std::filesystem;
-    const auto base = forge::qst::File::parse(basePath);
+    const auto base = wholeFile && !fs::exists(basePath) ? forge::qst::File::parseText("") : forge::qst::File::parse(basePath);
     std::vector<forge::qst::File> files;
     files.reserve(mods.size());
     std::vector<forge::qst::MergeInput> inputs;
@@ -1359,6 +1360,34 @@ forge::qst::MergeResult mergeQstLabeled(
         inputs.push_back({label, &files.back()});
     }
     auto result = forge::qst::merge(base, inputs, picks);
+    for (const auto& conflict : result.conflicts)
+        if (conflict.choiceUnavailable && !reviewChoices)
+            throw std::runtime_error("mods QST choice: " + fs::path(basePath).filename().string() +
+                "/" + conflict.name + " selects unavailable contributor " + picks.at(conflict.name) +
+                "; review or clear this saved choice");
+    if (wholeFile) {
+        // Apply explicit choices to the last complete registry, retaining its
+        // other removals and AddTestQuest statements instead of taking a union.
+        auto output = files.back();
+        result.applied = result.addedQuests = result.addedTests = 0;
+        for (auto& conflict : result.conflicts) {
+            if (!picks.contains(conflict.name)) continue;
+            if (conflict.choiceUnavailable) { conflict.winner = mods.back().first; continue; }
+            const auto* wanted = conflict.winner == "vanilla" ? base.findQuest(conflict.name) :
+                                                               result.merged.findQuest(conflict.name);
+            if (!wanted) {
+                result.applied += output.removeQuest(conflict.name);
+            } else {
+                if (!output.setQuestActive(conflict.name, wanted->active())) {
+                    output.appendStatement(wanted->raw);
+                    ++result.addedQuests;
+                }
+                ++result.applied;
+            }
+        }
+        result.merged = std::move(output);
+        std::erase_if(result.conflicts, [&](const auto& conflict) { return !picks.contains(conflict.name); });
+    }
 
     if (fs::path(outPath).has_parent_path())
         fs::create_directories(fs::path(outPath).parent_path());
@@ -9732,6 +9761,11 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         const fs::path baseQst = baseLevels / key;
         json row{{"file", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
+        std::map<std::string, std::string> filePicks;
+        for (const auto& [k, v] : picks.qst)
+            if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|')
+                filePicks[k.substr(key.size() + 1)] = v;
+        std::optional<forge::qst::MergeResult> choiceResult;
         if (changers.size() == 1 || !fs::exists(baseQst)) {
             // Single editor (or no base to 3-way against): take the last version.
             fs::create_directories(outQst.parent_path());
@@ -9739,20 +9773,23 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                           fs::copy_options::overwrite_existing);
             ++qstCopied;
             row["mode"] = "single-editor";
+            if (!filePicks.empty())
+                choiceResult = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks, reviewChoices, true);
         } else {
-            std::map<std::string, std::string> filePicks;   // `qst:<file>|<quest>` -> `<quest>`
-            for (const auto& [k, v] : picks.qst)
-                if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|') filePicks[k.substr(key.size() + 1)] = v;
-            const auto qr = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks);
-            qstConflicts += qr.conflicts.size();
+            choiceResult = mergeQstLabeled(baseQst.string(), changers, outQst.string(), filePicks, reviewChoices);
             ++qstMerged;
             row["mode"] = "statement-merged";
+        }
+        if (choiceResult) {
+            const auto& qr = *choiceResult;
+            qstConflicts += qr.conflicts.size();
             row["applied"] = qr.applied; row["added_quests"] = qr.addedQuests;
             json crows = json::array();
             for (const auto& c : qr.conflicts) {
                 json wanted = json::array();
                 for (const auto& [m, flag] : c.wanted) wanted.push_back({{"mod", m}, {"flag", flag}});
-                crows.push_back({{"quest", c.name}, {"wanted", wanted}, {"winner", c.winner}, {"overridden", c.overridden}});
+                crows.push_back({{"quest", c.name}, {"wanted", wanted}, {"winner", c.winner},
+                                 {"overridden", c.overridden}, {"choice_unavailable", c.choiceUnavailable}});
             }
             row["conflicts"] = crows;
         }

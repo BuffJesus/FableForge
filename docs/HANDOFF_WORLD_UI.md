@@ -1,5 +1,43 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 quest-registration choice contributors
+
+Active QST registration choices now require a contributor that changed the
+quest's flag or added its registration. Strict standalone/mod builds refuse
+unavailable labels; conflict checks remain reviewable and the GUI requires
+review/clear. Single-contributor picks are now honored by the canonical merge.
+The low-level core retains flagged load-order fallback for review, with no false
+override. Single-editor and new-registry routes apply explicit choices to the
+last whole file, preserving its other removals and AddTestQuest statements.
+Vanilla restores original flags/registrations or removes new registrations.
+Unreported/no-change picks remain inactive. Only flag tokens or selected
+registration calls are changed; gap/comment bytes remain intact.
+
+Canonical File::removeQuest removes all matching AddQuest calls while retaining
+every gap/comment, trailing text and same-name AddTestQuest. The new focused
+core gate verifies duplicate removal, no-op absence, index consistency after
+removal, subsequent flag edits/appends, byte-preserved formatting and single/
+multiple/inactive contributor choices. All Release targets build and all 40
+CTest tests pass in 30.93 seconds, including this new target.
+
+Final ordinary native/UI passes 40 checks in
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-qst-choice-contributors-wgfrgb97/;
+complete-Data passes 38 checks in mod-qst-choice-contributors-6sbhcpsv/.
+They cover agreeing/contested flags, a non-contributing mod that changes another
+quest, one contributor across multiple files, whole-file removals, new registry
+absence, previous-output/source inventories, strict standalone choices before
+writes, both-size real dropdown clearing and warning clipping. Staged merge/
+build/review use recorded originals and remain read-only; undeploy restores the
+exact initial scratch inventory. Initial vtsgwej9/fxazne18 gates passed before
+the added standalone/staged cases; the compact warning was visually inspected.
+The shared pre-fix evidence is mod-level-choice-probe-u8vm53n9/. No live writes
+or in-game quest behavior claim. The preceding mixed-corpus gate belongs to the
+TNG checkpoint; it is not a fresh QST-specific full-corpus claim.
+
+Future package scope is now 61 workflows, adding both QST variants. The older
+development ZIPs remain frozen. A consolidated local development checkpoint
+can now validate these subsequent contributor and staged-copy changes together.
+
 ## 2026-10-05 level-thing choice contributors
 
 Active TNG thing choices now require an actual changed/new version of that

@@ -52,6 +52,9 @@ public:
     // token changes, the statement's whitespace/tab alignment is preserved
     // (ArenaRevisited-style one-token edit). Returns false if absent.
     bool setQuestActive(std::string_view name, bool active);
+    // Remove all AddQuest calls with this name, retaining every gap/comment and
+    // AddTestQuest call. Returns the number of registrations removed.
+    size_t removeQuest(std::string_view name);
     // Append `AddQuest("<name>", TRUE|FALSE);` on its own line at EOF (the
     // proven custom-quest registration mechanism). Uses the file's dominant
     // line terminator.
@@ -84,6 +87,9 @@ private:
 // Removals are NOT applied (conservative). Same-name flag conflicts resolve by
 // load order (later mod wins) unless overridden per quest via `picks`
 // (quest name -> winning mod label, or "vanilla" to keep base).
+// Active unavailable labels keep the effective load-order version and flag
+// choiceUnavailable; publishing callers must reject that result. Inactive
+// keys remain ignored. Picks also apply with one changed contributor.
 
 struct MergeInput {
     std::string label; // mod name, matched against picks
@@ -95,6 +101,7 @@ struct MergeConflict {
     std::vector<std::pair<std::string, bool>> wanted;  // (mod, flag) in load order
     std::string winner;                                // mod label or "vanilla"
     bool overridden = false;                           // decided by a pick
+    bool choiceUnavailable = false;                    // selected label did not contribute
 };
 
 struct MergeResult {

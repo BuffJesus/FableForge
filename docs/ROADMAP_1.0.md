@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 QST contributors: unavailable active registration winners now refuse
+publication, including single-editor/new-registry routes; single-contributor
+picks are honored. Original flags/absence and unrelated whole-file removals
+remain intact. Ordinary 40-check native/UI, complete-Data 38-check, standalone/
+staged checks and all 40 core tests pass. See HANDOFF_WORLD_UI for boundaries.
+
 2026-10-05 TNG contributors: active saved thing winners now require actual
 contributions, including partial/replacement/single-editor/new-level routes.
 Vanilla restores original/absent things while unrelated deletions stay intact.

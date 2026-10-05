@@ -121,7 +121,7 @@ def main():
                            ('mod_file_choice_reviews_complete', ['--complete-data'])]:
         run(label, [sys.executable, repo/'tools/test_mod_file_choice_reviews.py',
             '--tool', package/'forge-tools.exe', '--work-root', work, *options])
-    for family in ('field', 'record', 'fse', 'text', 'tng'):
+    for family in ('field', 'record', 'fse', 'text', 'tng', 'qst'):
         for suffix, options in [('', []), ('_complete', ['--complete-data'])]:
             run(f'mod_{family}_choice_contributors{suffix}',
                 [sys.executable, repo/f'tools/test_mod_{family}_choice_contributors.py',
