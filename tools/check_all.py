@@ -49,6 +49,8 @@ def main():
               [sys.executable, "tools/test_fmp_record_refusal.py"], capture_output=True)
     ok &= run("mod label choice identity, staged refusal and legacy recovery",
               [sys.executable, "tools/test_mod_label_refusal.py"], capture_output=True)
+    ok &= run("finite float conflict text and exact selected bank bits",
+              [sys.executable, "tools/test_mod_float_values.py"], capture_output=True)
     if os.name == "nt":
         for options in ([], ["--complete-data"]):
             ok &= run("Windows Unicode file identity, choices and exact restoration " + str(options),

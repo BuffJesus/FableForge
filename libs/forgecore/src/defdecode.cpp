@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -298,8 +299,9 @@ std::string formatValue(const DecodedField& f) {
     if (f.type == "float" && v.size() == 4) {
         float x;
         std::memcpy(&x, v.data(), 4);
-        std::snprintf(buf, sizeof(buf), "%g", x);
-        return buf;
+        const auto formatted = std::to_chars(buf, buf + sizeof(buf), x);
+        if (formatted.ec == std::errc{}) return std::string(buf, formatted.ptr);
+        return hex();
     }
     if (f.type == "CCharString") {
         std::string s = "\"";

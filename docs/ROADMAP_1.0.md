@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 finite definition floats now use shortest round-trip display text,
+distinguishing adjacent values and signed zero. Exact merge/build choices and
+both GUI sizes pass; all 40 core tests pass. Package harness adds this regression
+(89 workflows). Frozen 9bc59e8 separately passes all its 88 workflows across
+three retained attempts; later FMP and float increments are excluded. See handoff.
+
 2026-10-05 verified opinion reaction vectors now relink animation names and
 dialogue text while preserving attitudes and all other bytes. Original Getting
 Away With Murder passes 306 links, bank parity and 14 safe refusals; all 40 core

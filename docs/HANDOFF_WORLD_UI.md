@@ -1,5 +1,43 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 finite float conflict display and exact choices
+
+Six-digit %g formatting rendered distinct 0x41a00000/0x41a00001 contributors
+identically as 20. Definition float display now uses std::to_chars shortest
+round-trip text: 20 and 20.000002. Native tests round-trip eight finite bit
+patterns, including signed zero, subnormal/minimum-normal and maximum finite
+values, and verify that display leaves payload bytes unchanged. All 40 core
+tests pass (28.23s); all Release targets are current.
+
+tools/test_mod_float_values.py passes 12 exact source/vanilla selections through
+bare merge and registered build, preserving the independent second float and
+all input bytes. C:/Users/Cornelio/FableForge-asset-checks-20261005/
+mod-float-values-1plc36f4 additionally passes both GUI sizes (14 checks total).
+The GUI displays adjacent values and each selected/baseline result correctly.
+Source gate adds native coverage; package harness adds one GUI/native workflow
+(89 total). Existing scalar picks remain label-only selections of current source
+contents; this change adds no choose-time fingerprints or NaN payload identity.
+All previously frozen ZIPs exclude the float formatting increment.
+
+## 2026-10-05 frozen Unicode ZIP completes 88-workflow acceptance
+
+Frozen 9bc59e8 ZIP SHA256
+7f089da45c445b753dc8c24199e23f6a5a0568a824cf5df1cd0ebd3f653d3a58
+now covers all 88 distinct workflows across three retained attempts: 56 initial
+passes in build/package-smoke-vpvfa94h, three resumed passes in C: scratch
+package-smoke-vjr53y5o, and 29 final passes in package-smoke-zcbb50_2.
+The final result explicitly records 59 not run in that attempt; the combined
+audit resolves every omitted workflow against earlier same-hash successful
+evidence. No uncovered workflows or reported fixture skips remain. All 108
+identities and 122 links pass. This was not one uninterrupted run.
+
+build/audit_package_acceptance_9bc59e8.py verifies uniqueness, logs, archive hash
+and packaged identity; combined-acceptance.json is alongside the final result
+under C:/Users/Cornelio/FableForge-asset-checks-20261005/package-smoke-zcbb50_2.
+Both earlier timeout failures remain retained. This archive includes Unicode
+composition but excludes later augmentation/opinion links and float formatting;
+the newer 42aa3f5 archive retains its separate scoped acceptance.
+
 ## 2026-10-05 latest local FMP ZIP: scoped extracted checks
 
 Clean 42aa3f5 ZIP:

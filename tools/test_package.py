@@ -179,6 +179,9 @@ def main():
     run('mod_staged_baseline_projection',
         [sys.executable, repo/'tools/test_mod_staged_baseline_projection.py',
          '--tool', package/'forge-tools.exe', '--work-root', work])
+    run('mod_float_values', [sys.executable, repo/'tools/test_mod_float_values.py',
+        '--tool', package/'forge-tools.exe', '--gui', package/'FableForge.exe',
+        '--install', args.root.resolve(), '--work-root', work])
     run('mod_whole_file_winner_ui',
         [sys.executable, repo/'tools/test_mod_whole_file_winner_ui.py',
          '--tool', package/'forge-tools.exe', '--gui', package/'FableForge.exe',

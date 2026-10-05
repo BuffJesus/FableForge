@@ -2,6 +2,8 @@
 #include "forge/modorder.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdio>
+#include <charconv>
+#include <cstring>
 #include <exception>
 #include <stdexcept>
 
@@ -52,6 +54,23 @@ int main() {
     check(forge::defdecode::formatValue(number) == "2147483647", "largest signed reference");
     number.value = {0x41, 0x42, 0x43};
     check(forge::defdecode::formatValue(number) == "414243", "malformed reference retains raw bytes");
+    std::string previousFloat;
+    for (uint32_t bits : {0x41a00000u, 0x41a00001u, 0x3eaaaaabu, 0xbf800000u,
+                          0x80000000u, 0x7f7fffffu, 0x00800000u, 0x00000001u}) {
+        forge::defdecode::DecodedField floating;
+        floating.type = "float"; floating.value.resize(4);
+        std::memcpy(floating.value.data(), &bits, 4);
+        const auto original = floating.value;
+        const auto formatted = forge::defdecode::formatValue(floating);
+        float parsed = 0;
+        const auto result = std::from_chars(formatted.data(), formatted.data() + formatted.size(), parsed);
+        uint32_t recovered = 0; std::memcpy(&recovered, &parsed, 4);
+        check(result.ec == std::errc{} && result.ptr == formatted.data() + formatted.size() && recovered == bits,
+              "finite float display round-trips exact bits, including signed zero and subnormal");
+        check(floating.value == original, "float presentation preserves source bytes");
+        if (bits == 0x41a00001u) check(formatted != previousFloat, "adjacent floats remain distinguishable");
+        previousFloat = formatted;
+    }
     forge::defdecode::Decoded base;
     base.allTagsOk = true;
     base.prefix = {1};
