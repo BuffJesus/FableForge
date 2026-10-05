@@ -1,5 +1,18 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 frozen 0b6be9c duplicate/creature ZIP has audited passes for all 89
+workflows across 42 initial and 47 resumed successes. Both failed GUI attempts
+are retained; the resumed script exercises the compact dropdown on its actual
+1024x768 child desktop. Zero uncovered/fixture skips, 108 identities/122 links.
+Newer 864e853 appearance ZIP passes four scoped workflows plus extracted-tool
+original/derivative byte audits; 85 not run. See handoff for immutable hashes.
+
+2026-10-05 original appearance choices retain metadata matching each prefix.
+Thirteen named new-record/existing-record selections and two unavailable-choice
+refusals pass for both original Dark Apprentices variants. Existing-record
+coverage uses an explicitly derived distinct baseline prefix; the unchanged
+source package is correctly unavailable against an identical baseline.
+
 2026-10-05 original creature appearance links now retain model/texture/name
 domains and complete group-count bounds. Dark Apprentices variants 1/2 and
 Hero Pack pass 204 appearance references, all 282 creature links, exact bytes,

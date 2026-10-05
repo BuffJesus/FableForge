@@ -410,3 +410,64 @@ Final all-target Release build is complete. All 40 core tests pass together in
 44.95 seconds after the final parser change; the earlier audio timeout and
 focused recovery remain part of the diagnostic history. The existing original
 wound/expression gate is being checked against this build separately.
+
+## 2026-10-05 completed frozen duplicate/creature acceptance
+
+Frozen 0b6be9c SHA-256
+95e4e15734a405d3b4a77ce7593a49c70adcbedcc7e457ee9c2861375ee005e7
+now has 89 distinct successful workflows across 42 initial successes in
+package-smoke-lwbtweya and 47 continued successes in package-smoke-wxqrejsb.
+build/audit_package_acceptance_0b6be9c.py passes and the tail retains
+combined-acceptance.json. There are zero uncovered workflows or reported
+fixture skips, with 108 package identities and 122 documentation links.
+This is not an uninterrupted run: the initial GUI failure and diagnostic-only
+package-smoke-4odpvi9m failure are both retained. The resumed GUI exercises
+real compact dropdown selections with unchanged pixel and GLB assertions.
+This immutable archive excludes the later reserved namespace guard and
+appearance recovery; no current-head/full-historic-corpus claim is implied.
+
+Frozen a0cb5ab SHA-256
+37dce53af5b061092d8324b3406ef162b04c5c3324732b050f10a825395217a2
+passes two scoped workflows (18 FMP record cases and compact GUI) in
+package-smoke-ct3gpf67; 87 not run, zero skips. It includes the reserved
+namespace guard but excludes appearance recovery.
+
+Frozen 864e853 SHA-256
+9d04692d4a8c6af68c533b3cbb09ba6fe083642ed3300ab3f6b6d6fe3f9bb6cb
+passes four scoped workflows in package-smoke-81ymnck2: both record contributor
+modes, FMP record refusal and GUI; 85 not run, zero skips, 108 identities/122
+links. Actual extracted-tool appearance checks ftndda7b and hyvg0fe5 pass
+204 original appearance words/282 total creature links/34 negative routes
+and the separately labelled 70-word skeletal derivative/86 links/14 negative
+routes. appearance-acceptance-audit.json verifies the actual tool path/hash
+against PACKAGE_INFO (d53982c6f0e01198c2c471b47a3078bcff2efe4dfaf8bc037352353e445ebde6).
+No General Experiance original remains refused. The old wound/expression gate
+ntcmmgbd passes 210 prefix/258 total links plus forty safe negative routes
+against this final parser build. All archives/guide ZIPs remain local.
+
+## 2026-10-05 original appearance prefix choices
+
+The retained regression gate test_fmp_creature_appearance_choices.py passes
+13 selections and two safe unavailable refusals in fmp-appearance-choices-sryy8r4z.
+The two original Dark Apprentices packages have different appearance prefix
+sizes/texture group counts. A named new record follows whole-record load order
+or either source choice (three merges). An existing named record follows
+prefix part zero with no scalar choice key, for order/either source/baseline
+through merge and recipe build (eight selections). Choosing a disabled/omitted
+source refuses before changing output or picks; clearing it recovers the
+remaining source (two selections). Selected prefixes have independently
+resolved mesh/texture IDs and every later record byte equals baseline.
+
+Existing-record coverage uses an explicitly labelled baseline derivative:
+only the first MeshGroup word differs from original variant 1. Its original
+record/metadata bytes otherwise remain, with source and derivative hashes
+separate. Native source packages and live bank hashes remain unchanged.
+Probes e4ogsupz (new record), gz7i64zj (source identical to baseline correctly
+unavailable) and 3uhyj28c (distinct derived baseline) are retained. The prior
+unavailable result was expected contributor semantics, not an import defect.
+
+The appearance choice gate also passes with the actual extracted 864e853 tool
+in fmp-appearance-choices-6crk3cc5. Its package-identity-audit.json matches the
+recorded executable hash to PACKAGE_INFO, verifies 13 selections/two safe
+refusals and confirms different source prefix sizes. This Python-only follow-up
+adds no C++ behavior beyond frozen 864e853.
