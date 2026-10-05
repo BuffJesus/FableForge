@@ -219,12 +219,14 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
         // CWeaponDef.FlourishParticles contains two consecutive EffectIDs.
         // ChocolateBox groups both links under its single Flourish Effect
         // control, so retain their order as addressed scalar slots.
-        if (group.path == "2996266366.Flourish Effect" && group.targets.size() == 2) {
+        if ((group.path == "2996266366.Flourish Effect" || group.path == "2996266366._") &&
+            group.targets.size() == 2) {
             for (size_t i = 0; i < 2; ++i)
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
         }
-        if (group.path == "473863218.Flourish Sprite" && group.targets.size() == 2) {
+        if ((group.path == "473863218.Flourish Sprite" || group.path == "473863218._") &&
+            group.targets.size() == 2) {
             for (size_t i = 0; i < 2; ++i)
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
@@ -485,7 +487,7 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             if (entry.definition == "CWeaponDef" &&
                 field.name == "FlourishParticles" && field.type == "?" &&
-                ((parts.size() == 3 && parts[1] == "Flourish Effect") ||
+                ((parts.size() == 3 && (parts[1] == "Flourish Effect" || parts[1] == "_")) ||
                  (parts.size() == 4 &&
                   ((parts[1] == "Weapon Augmentation Slots List 1" &&
                     parts[3] == "Weapon Augmentation Slot Name 1") ||
@@ -516,7 +518,7 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             if (entry.definition == "CWeaponDef" &&
                 field.name == "FlourishSpecialWeaponTrail" && field.type == "?" &&
                 field.value.size() == 8 && parts.size() == 3 &&
-                parts[1] == "Flourish Sprite") {
+                (parts[1] == "Flourish Sprite" || parts[1] == "_")) {
                 const size_t index = number(parts[2]);
                 if (index >= 2) fail("flourish sprite index out of range");
                 return {offset + index * 4, i + 1, Destination::TextureEntry};

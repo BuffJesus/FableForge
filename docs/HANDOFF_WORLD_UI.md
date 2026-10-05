@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 legacy weapon display-name aliases
+
+The original Ultima Weapon broken graphic metadata uses 2996266366._ and
+473863218._ for the established FlourishParticles effect pair and
+FlourishSpecialWeaponTrail texture pair. These exact aliases now retain both
+ordered targets and use the same bounded layouts as the descriptive names.
+Native tests verify identical slot offsets/domains, full-record preservation
+except the four intended asset words, and third-slot refusal. Native fmplinks
+tests pass. This does not make that original fully supported: its next refusal
+is the distinct legacy WeaponTrails display-name path. Keep it refused until
+that layout/name evidence and associated checks are complete.
+
+The provider index refreshed against the completed full gate is
+build/named-fmp-providers-tczgio5h/result.json: 1133 readable originals and
+candidate providers for 40/78 missing-target rows. Candidates remain undeclared,
+unverified dependencies; no automatic installation or compatibility promotion.
+
 ## 2026-10-04 expanded full corpus completed
 
 Latest targeted follow-up: INVENTORY_TYPE.InventoryName uint32 path

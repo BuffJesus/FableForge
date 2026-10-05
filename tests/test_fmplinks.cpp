@@ -64,7 +64,7 @@ int main() {
           villageLinks[0].path == "4272390883.VillagePeopleID.0" && villageLinks[0].target == "FIRST" &&
           villageLinks[1].path == "4272390883.VillagePeopleID.1" && villageLinks[1].target == "SECOND",
           "repeated village controls preserve both ordered targets");
-    for (const auto& path : {"2996266366.Flourish Effect", "473863218.Flourish Sprite",
+    for (const auto& path : {"2996266366.Flourish Effect", "2996266366._", "473863218.Flourish Sprite", "473863218._",
                               "1732080037.unknown.0.CWeapon Sprite_Weapon_Trail1"}) {
         const auto pair = forge::fmplinks::readMetadata(metadataTwo(path));
         check(pair.size() == 2 && pair[0].path == std::string(path) + ".0" &&
@@ -385,6 +385,10 @@ int main() {
     };
     const auto flourish0 = locateWeapon("2996266366.Flourish Effect.0");
     const auto flourish1 = locateWeapon("2996266366.Flourish Effect.1");
+    check(locateWeapon("2996266366._.0").offset == flourish0.offset &&
+          locateWeapon("2996266366._.1").offset == flourish1.offset &&
+          locateWeapon("2996266366._.0").destination == forge::fmplinks::Destination::EffectEntry,
+          "legacy underscore flourish name preserves exact effect slots");
     check(flourish0.offset + 4 == flourish1.offset &&
           flourish0.destination == forge::fmplinks::Destination::EffectEntry &&
           flourish1.destination == forge::fmplinks::Destination::EffectEntry,
@@ -399,10 +403,31 @@ int main() {
           "both flourish name lists address their own saved name-offset words");
     const auto sprite0 = locateWeapon("473863218.Flourish Sprite.0");
     const auto sprite1 = locateWeapon("473863218.Flourish Sprite.1");
+    check(locateWeapon("473863218._.0").offset == sprite0.offset &&
+          locateWeapon("473863218._.1").offset == sprite1.offset &&
+          locateWeapon("473863218._.0").destination == forge::fmplinks::Destination::TextureEntry,
+          "legacy underscore sprite name preserves both texture slots");
     check(sprite0.offset + 4 == sprite1.offset &&
           sprite0.destination == forge::fmplinks::Destination::TextureEntry &&
           sprite1.destination == forge::fmplinks::Destination::TextureEntry,
           "flourish sprites address consecutive texture words");
+    {
+        const std::vector<forge::fmplinks::Link> oldNames{
+            {"2996266366._.0", "FX_A"}, {"2996266366._.1", "FX_B"},
+            {"473863218._.0", "TEX_A"}, {"473863218._.1", "TEX_B"}};
+        const std::map<std::string, uint32_t> effectMap{{"FX_A", 30001}, {"FX_B", 30002}};
+        const std::map<std::string, uint32_t> textureMap{{"TEX_A", 40001}, {"TEX_B", 40002}};
+        auto expected = weapon.data;
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{
+                 {flourish0.offset, 30001}, {flourish1.offset, 30002},
+                 {sprite0.offset, 40001}, {sprite1.offset, 40002}})
+            std::memcpy(expected.data() + at, &value, 4);
+        check(forge::fmplinks::relink(weapon, targets, weaponSchema, oldNames,
+                  false, nullptr, &textureMap, &effectMap) == expected,
+              "underscore aliases change only four identified asset words");
+        rejects([&] { locateWeapon("2996266366._.2"); }, "underscore effect alias rejects third slot");
+        rejects([&] { locateWeapon("473863218._.2"); }, "underscore sprite alias rejects third slot");
+    }
     const auto trail0 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.0");
     const auto trail1 = locateWeapon("1732080037.unknown.1.CWeapon Sprite_Weapon_Trail1.1");
     check(trail0.offset + 4 == trail1.offset &&
