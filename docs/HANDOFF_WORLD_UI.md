@@ -1,5 +1,35 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 unnamed text entries refuse unsupported deltas
+
+The independent pre-fix probe mod-text-unnamed-probe-bgn04vkv/ accepted a changed
+unnamed string but retained its original payload. Ordinary language composition
+now accepts unnamed occurrences only when bank name/id, entry id/type, payload
+and non-offset metadata match the baseline. Matches are consumed per source so
+an extra duplicate cannot masquerade as unchanged. Missing source occurrences
+retain overlay semantics; this does not add unnamed numeric-ID composition.
+An unrelated named vanilla pick cannot bypass unsupported unnamed changes.
+Complete Data may supply a new baseline containing untouched unnamed entries.
+
+tools/test_mod_text_unnamed_refusal.py passes 45 ordinary checks at
+mod-text-unnamed-refusal-p_nbsmcd/ and 46 complete-Data checks at
+mod-text-unnamed-refusal-g5zfuolz/, both under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/. It independently writes and
+parses fixtures, including a repeated unnamed TOC occurrence. Payload/type/
+metadata/bank changes, new IDs/groups and duplicate additions refuse across
+merge/build/review, preserving prior output and inputs. Unchanged unnamed data,
+metadata and IDs survive alongside an applied named-string change.
+Both-size persistent GUI failure/retry checks pass at
+build/mod-action-error-oynz3r41/; compact screenshot fully wraps the bank/source
+diagnostic. Failure restores the owned original stage baseline under existing
+redeployment policy; successful retry/undeploy restores its exact inventory.
+The 13-case real donor TextID regression still passes at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/fmp-new-text-links-m3skvzuv/.
+Only forge-tools rebuilt; core is unchanged. Package harness defines 68 workflows
+but no new ZIP acceptance is claimed. Frozen archives/live install untouched.
+Named entry TOC-only changes and noncanonical trailing payload bytes remain
+separate unresolved cases; see native TEXT.md for speaker/NarratorList metadata.
+
 ## 2026-10-05 whole-file winner previews retain removals
 
 The GUI now retains the last whole-file owner separately from entry contributors

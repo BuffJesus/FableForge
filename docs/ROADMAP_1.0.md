@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 unnamed text changes: new/changed/duplicate unnamed records now refuse
+ordinary composition while unchanged payloads/metadata survive. Ordinary 45-check,
+complete-Data 46-check, both-size GUI recovery and 13-case TextID gates pass.
+Named TOC-only deltas remain separate; see HANDOFF_WORLD_UI. Frozen ZIP unchanged.
+
 2026-10-05 whole-file winner previews: clearing saved TNG/QST choices now shows
 the last whole-file owner, including its removals. Four family/window cases and
 existing 38 TNG / 40 QST checks pass; the frozen ZIP excludes this GUI fix.

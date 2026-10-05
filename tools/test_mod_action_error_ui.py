@@ -28,11 +28,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Text-link fixture for a scratch baseline without text.big')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
-    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record', 'text')
+    deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed')
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
     work = Path(tempfile.mkdtemp(prefix='mod-action-error-', dir=repo/'build')).resolve()
@@ -77,7 +77,7 @@ def main():
             selected_gui = app/'FableForge.exe'
         payload = Path('data/Misc/action.txt')
         if deployment_case:
-            if args.mode == 'text':
+            if args.mode in ('text', 'text-unnamed'):
                 from test_mod_text_choice_contributors import text_bank
                 text_bank(root, 'English', {'SHARED': 'original owned string'})
             (root/payload).parent.mkdir(parents=True)
@@ -92,13 +92,14 @@ def main():
             assert added.returncode == 0, (added.stdout+added.stderr).decode('utf-8', errors='replace')
             bad = case/('ChangedSiblingBanks' if args.mode == 'sibling' else
                         'UnnamedComponents' if args.mode == 'unnamed' else
-                        'MalformedText' if args.mode == 'text' else
+                        'MalformedText' if args.mode in ('text', 'text-unnamed') else
                         'UntypedRecords.fmp' if args.mode == 'record' else
                         'UnsupportedLinks.fmp' if args.mode == 'fmp' else 'game.bin.patch')
-            if args.mode == 'text':
+            if args.mode in ('text', 'text-unnamed'):
                 from test_mod_asset_choice_contributors import bank
                 bank(bad/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
-                     {'SHARED': {'id': 1, 'type': 0, 'header': b'', 'payload': b'\0'}})
+                     {'SHARED' if args.mode == 'text' else '':
+                      {'id': 1 if args.mode == 'text' else 2, 'type': 0, 'header': b'', 'payload': b'\0'}})
             elif args.mode == 'sibling':
                 (bad/'data/CompiledDefs').mkdir(parents=True)
                 for source in sources:
@@ -132,12 +133,14 @@ def main():
                 'assert_log has no definition type' if args.mode == 'record' else
                 'assert_log changed or new unnamed definition entries' if args.mode == 'unnamed' else
                 'assert_log mods text entry: English/SHARED from BrokenPatch could not be applied' if args.mode == 'text' else
+                'assert_log unnamed entry changes cannot be composed' if args.mode == 'text-unnamed' else
                 'assert_log FMP text links: baseline English/text.big is missing' if args.mode == 'fmp' else 'assert_log bad magic']
-            if args.mode in ('unnamed', 'sibling', 'record', 'text'):
+            if args.mode in ('unnamed', 'sibling', 'record', 'text', 'text-unnamed'):
                 lines += button('btn_mods_conflicts')+['assert_log mods conflicts: FAILED',
                     'assert_log changed sibling definition banks' if args.mode == 'sibling' else
                     'assert_log has no definition type' if args.mode == 'record' else
                     'assert_log mods text entry: English/SHARED from BrokenPatch could not be applied' if args.mode == 'text' else
+                    'assert_log unnamed entry changes cannot be composed' if args.mode == 'text-unnamed' else
                     'assert_log changed or new unnamed definition entries']
         else:
             lines += button('btn_mods_conflicts')

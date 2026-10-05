@@ -9455,6 +9455,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 auto base = forge::big::File::open(basePath);
                 std::map<std::string, std::vector<uint8_t>> baseByName;
                 std::map<std::string, uint32_t> baseTypes;
+                using UnnamedIdentity = std::tuple<std::string, uint32_t, uint32_t>;
+                std::map<UnnamedIdentity, std::vector<const forge::big::Entry*>> baseUnnamed;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) if (e.name.empty())
+                    baseUnnamed[{b.name, b.id, e.id}].push_back(&e);
                 for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) {
                     baseByName[e.name] = base.entryData(e);
                     baseTypes[e.name] = e.type;
@@ -9464,9 +9468,29 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 std::vector<std::string> order;
                 for (const auto& [label, c] : changers) {
                     auto f = forge::big::File::open(c);
+                    auto remainingUnnamed = baseUnnamed;
                     for (const auto& b : f.banks())
                         for (const auto& e : b.entries) {
-                            if (e.name.empty()) continue;
+                            if (e.name.empty()) {
+                                // Unnamed strings/groups have no safe symbolic merge key.
+                                // Accept only unchanged baseline occurrences, including metadata;
+                                // consume matches so a duplicate addition cannot masquerade as a no-op.
+                                auto& originals = remainingUnnamed[{b.name, b.id, e.id}];
+                                const auto data = f.entryData(e);
+                                const auto original = std::find_if(originals.begin(), originals.end(),
+                                    [&](const forge::big::Entry* candidate) {
+                                        return candidate->type == e.type && candidate->magic == e.magic &&
+                                            candidate->devFileType == e.devFileType && candidate->devCrc == e.devCrc &&
+                                            candidate->devSources == e.devSources && candidate->subHeader == e.subHeader &&
+                                            base.entryData(*candidate) == data;
+                                    });
+                                if (original == originals.end())
+                                    throw std::runtime_error("mods text entry: " + langName + "/unnamed ID " +
+                                        std::to_string(e.id) + " in " + b.name + " from " + label +
+                                        " differs from the language baseline; unnamed entry changes cannot be composed");
+                                originals.erase(original);
+                                continue;
+                            }
                             auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
                             if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type) continue;
