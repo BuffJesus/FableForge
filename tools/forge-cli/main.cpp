@@ -22,6 +22,13 @@
 #include <string_view>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "modpack.hpp"
 #include "pendingbanks.hpp"
 #include "temporarydirectory.hpp"
@@ -8908,11 +8915,52 @@ void copyInstallTree(const std::filesystem::path& source, const std::filesystem:
     });
 }
 
-void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target) {
+void requireUnredirectedOutputPath(const std::filesystem::path& root,
+                                 const std::filesystem::path& relative) {
+    auto current = std::filesystem::absolute(root).lexically_normal();
+    for (const auto& part : relative) {
+        current /= part;
+#ifdef _WIN32
+        const DWORD attributes = GetFileAttributesW(current.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES) {
+            if (attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+                throw std::runtime_error("mod output path uses a redirected file or directory: " + relative.string());
+        } else {
+            const DWORD error = GetLastError();
+            if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND)
+                throw std::runtime_error("cannot inspect mod output path: " + current.string() +
+                                         " (Windows error " + std::to_string(error) + ")");
+        }
+#else
+        if (std::filesystem::is_symlink(current))
+            throw std::runtime_error("mod output path uses a redirected file or directory: " + relative.string());
+#endif
+    }
+}
+
+void publishInstallTree(const std::filesystem::path& source, const std::filesystem::path& target,
+                        const std::vector<std::filesystem::path>& removals = {}) {
     // Prepare on the output filesystem, then use the existing bank transaction
     // to restore previous files if any later destination cannot be renamed.
     albion::detail::PendingBanks pending(target, ".forge-mod-output-");
+    const auto outputRoot = std::filesystem::weakly_canonical(target);
+    for (const auto& relative : removals) {
+        if (relative.empty() || relative.has_root_path())
+            throw std::runtime_error("unsafe mod output removal: " + relative.string());
+        for (const auto& part : relative)
+            if (part == ".." || part.string().ends_with(".forgebak"))
+                throw std::runtime_error("unsafe mod output removal: " + relative.string());
+        const auto resolved = std::filesystem::weakly_canonical(target / relative);
+        if (resolved == outputRoot ||
+            std::mismatch(outputRoot.begin(), outputRoot.end(), resolved.begin(), resolved.end()).first != outputRoot.end())
+            throw std::runtime_error("mod output removal escapes output folder: " + relative.string());
+        requireUnredirectedOutputPath(target, relative);
+        // Later recipes may create this path after the raw-file choice. Keep
+        // their final contribution rather than erasing an emitted file.
+        if (!std::filesystem::exists(source / relative)) pending.remove(relative);
+    }
     visitInstallFiles(source, [&](const auto& path, const auto& relative) {
+        requireUnredirectedOutputPath(target, relative);
         std::filesystem::copy_file(path, pending.prepare(relative));
     });
     std::string error;
@@ -8953,13 +9001,14 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
 // following layers. No cross-bank identity or raw-ID relocation is guessed here.
 int modsMerge(const std::string&, const std::string&, const std::vector<std::string>&,
               const std::string&, bool, bool, const std::vector<std::string>&,
-              const std::string&, const std::map<std::string, std::string>*, bool, json*);
+              const std::string&, const std::map<std::string, std::string>*, bool, json*,
+              std::vector<std::filesystem::path>*);
 
 int installCompleteData(const std::string& baseRoot, const std::string& outDir,
                         const std::vector<std::string>& sources, const std::string& fieldSchema,
                         bool doStage, bool jsonOutput, const std::vector<std::string>& labels,
                         const std::string& picksPath, const std::map<std::string, std::string>* loadedPicks,
-                        json* reportOut) {
+                        json* reportOut, std::vector<std::filesystem::path>* outputRemovals) {
     namespace fs = std::filesystem;
     const fs::path source = fs::weakly_canonical(sources.front());
     const fs::path base = fs::weakly_canonical(baseRoot), output = fs::weakly_canonical(outDir);
@@ -9072,7 +9121,7 @@ int installCompleteData(const std::string& baseRoot, const std::string& outDir,
     const auto changes = workspace.path() / "following";
     json report;
     const int rc = modsMerge(effective.string(), changes.string(), following, fieldSchema, false,
-                             true, followingLabels, picksPath, loadedPicks, false, &report);
+                             true, followingLabels, picksPath, loadedPicks, false, &report, outputRemovals);
     if (rc) return rc;
     copyInstallTree(changes, prepared, true);
     // Empty following orders preserve the supplied complete BINs byte for byte.
@@ -9110,7 +9159,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath,
               const std::map<std::string, std::string>* loadedPicks = nullptr,
-              bool allowCompleteData = false, json* reportOut = nullptr) {
+              bool allowCompleteData = false, json* reportOut = nullptr,
+              std::vector<std::filesystem::path>* outputRemovals = nullptr) {
     namespace fs = std::filesystem;
     std::vector<std::string> sources;
     for (const auto& source : sourcePaths) sources.push_back(forge::modorder::normalizeSource(source).string());
@@ -9119,7 +9169,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         throw std::runtime_error("The complete Data source is missing its compiled banks; restore the extracted mod files before building.");
     if (allowCompleteData)
         return installCompleteData(baseRoot, outDir, sources, fieldSchema, doStage, jsonOutput,
-                                   labels, picksPath, loadedPicks, reportOut);
+                                   labels, picksPath, loadedPicks, reportOut, outputRemovals);
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -9756,6 +9806,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const fs::path restored = fs::path(outDir) / win->rel;
                     fs::create_directories(restored.parent_path());
                     fs::copy_file(baselinePath, restored, fs::copy_options::overwrite_existing);
+                } else if (outputRemovals) {
+                    outputRemovals->push_back(win->rel);
                 }
                 continue;
             }
@@ -10517,12 +10569,13 @@ int modsMergePrepared(const std::string& baseRoot, const std::string& outDir,
                       const std::string& picksPath, bool allowCompleteData) {
     const albion::detail::TemporaryDirectory workspace("mods-output-");
     json report;
+    std::vector<std::filesystem::path> removals;
     const int rc = modsMerge(baseRoot, workspace.path().string(), sources,
                              fieldSchema, false, jsonOutput, labels, picksPath,
                              nullptr, allowCompleteData,
-                             jsonOutput ? &report : nullptr);
+                             jsonOutput ? &report : nullptr, &removals);
     if (rc != 0) return rc;
-    publishInstallTree(workspace.path(), outDir);
+    publishInstallTree(workspace.path(), outDir, removals);
     if (jsonOutput) std::puts(report.dump(2).c_str());
     return 0;
 }

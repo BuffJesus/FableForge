@@ -1,5 +1,23 @@
 # Fine-grained mod overrides: investigation proposal
 
+## 2026-10-04 explicit absent-baseline choices
+
+Direct merge/build now removes a selected raw-file addition when the explicit
+winner is vanilla and baseline lacks that file. The plan comes only from current
+file contributors and passes through the same PendingBanks transaction as all
+replacements. Later recipes that emit the path retain their final contribution.
+This does not clean unrelated/obsolete output or validate choose-time hashes.
+Complete-Data composition forwards the plan; stage/deploy removal semantics are
+separate from this direct-output change.
+
+The 24-case gate in mod-file-choice-contributors-xeeb2n46/result.json verifies
+selection, restore/removal, prior-output preservation, locked publication rollback,
+retry and inactive picks on direct merge and registered build. Actual Windows
+junctions verify refusal of removal and replacement through redirected child
+paths, preserving sibling files outside output. MinGW weakly_canonical alone did
+not resolve the junction in the failed 95pxedbf prototype; native reparse-point
+checks now supplement lexical containment. No live installation was modified.
+
 ## 2026-10-04 whole-file saved contributor guard
 
 A saved file winner must be a current contributor to that file. If the chosen

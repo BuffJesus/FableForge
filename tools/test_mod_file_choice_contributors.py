@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 from test_mod_field_details import write_bank
+from test_mod_output_publish import locked
 
 
 def snapshot(root):
@@ -30,6 +31,8 @@ def main():
     for source in sources:
         (source/relative).parent.mkdir(parents=True)
     (sources[0]/relative).write_bytes(b'first'); (sources[1]/relative).write_bytes(b'last')
+    added = Path('data/Misc/added.bin')
+    (sources[0]/added).write_bytes(b'first addition'); (sources[1]/added).write_bytes(b'last addition')
     (sources[2]/'data/Misc/other.bin').write_bytes(b'unrelated contributor')
 
     def run(*arguments, good=True):
@@ -72,6 +75,41 @@ def main():
         checks.append({'route': route, 'case': 'inactive choice', 'result': 'retained without rebinding'})
         picks.write_text('')
         run(*chosen); assert (output/relative).read_bytes() == b'last'
+        assert (output/added).read_bytes() == b'last addition'
+        picks.write_text('file:data/misc/added.bin\tvanilla\n')
+        run(*chosen); assert not (output/added).exists()
+        checks.append({'route': route, 'case': 'absent baseline', 'result': 'removed only selected addition'})
+        picks.write_text(''); run(*chosen)
+        picks.write_text('file:data/misc/added.bin\tvanilla\n')
+        before = snapshot(output)
+        with locked(output/'data/CompiledDefs/game.bin'):
+            result = run(*chosen, good=False)
+        assert 'cannot publish mod build' in result.stderr and snapshot(output) == before
+        checks.append({'route': route, 'case': 'locked publish after removal', 'result': 'rolled back deletion and replacements'})
+        run(*chosen); assert not (output/added).exists()
+        assert (output/'data/Misc/other.bin').read_bytes() == b'unrelated contributor'
+        checks.append({'route': route, 'case': 'unlocked retry', 'result': 'removed addition; unrelated files preserved'})
+        escape = work/(route+'-escape'); write_bank(escape, (99, 98, 97, 96))
+        outside = work/(route+'-outside'); outside.mkdir()
+        (outside/'added.bin').write_bytes(b'keep outside output')
+        link = escape/'data/Misc'
+        assert outside.resolve().is_relative_to(work.resolve()) and escape.resolve().is_relative_to(work.resolve())
+        quote = lambda p: "'"+str(p).replace("'", "''")+"'"
+        linked = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+            'New-Item -ItemType Junction -Path '+quote(link)+' -Target '+quote(outside)+
+            ' -ErrorAction Stop | Out-Null'], capture_output=True, text=True, timeout=30)
+        assert linked.returncode == 0, linked.stderr
+        escaped_command = list(chosen); escaped_command[3] = escape
+        before_escape, before_outside = snapshot(escape), snapshot(outside)
+        result = run(*escaped_command, good=False)
+        assert 'redirected file or directory' in result.stderr
+        assert snapshot(escape) == before_escape and snapshot(outside) == before_outside
+        checks.append({'route': route, 'case': 'junction escape', 'result': 'refused; output and outside files preserved'})
+        picks.write_text('')
+        result = run(*escaped_command, good=False)
+        assert 'redirected file or directory' in result.stderr
+        assert snapshot(escape) == before_escape and snapshot(outside) == before_outside
+        checks.append({'route': route, 'case': 'junction replacement escape', 'result': 'refused; output and outside files preserved'})
         assert (output/'sentinel').read_bytes() == b'prior output'
     assert before_inputs == {str(p): snapshot(p) for p in [root, *sources]}
     (work/'result.json').write_text(json.dumps({'checks': checks, 'inputs_unchanged': True}, indent=2))

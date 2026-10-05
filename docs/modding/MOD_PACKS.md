@@ -15,8 +15,10 @@ Saved whole-file choices refuse if their named winner no longer contributes to
 that file; review or clear the choice before building. Choices for files with
 no current contributors stay inactive. Selecting vanilla emits the existing
 baseline file bytes so a reused direct output restores that file. A baseline
-that lacks the file still requires an explicit removal plan for reused outputs;
-automatic obsolete-file cleanup and choose-time content fingerprints are pending.
+that lacks the file now removes that selected addition from a reused direct
+output. Removals and replacements share one rollback transaction. Redirected
+child files/directories in the output refuse publication. Automatic obsolete-
+file cleanup and choose-time content fingerprints are pending.
 
 Compiled-definition composition refuses sources carrying changed or new unnamed
 entries. Such components have no safe cross-bank identity; silently ignoring them
@@ -35,7 +37,7 @@ when those banks are part of an overhaul.
 
 FMP application refuses nonempty unsupported banks before writing package content.
 Supported banks are GameBINEntries, supported GameBINLinkMetaData, Objects,
-Settings, ObjectLinks, Text, FinalAlbionWAD, maintextures, graphics and supported
+Settings, ObjectLinks, Text/text, FinalAlbionWAD, maintextures, graphics and supported
 graphicsLinkMetaData; their existing format and link restrictions still apply.
 Texture and mesh replacements retain their baseline name, ID and type. New
 entries with IDs already owned by another symbol refuse; arbitrary asset-ID

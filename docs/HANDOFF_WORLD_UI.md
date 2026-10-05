@@ -1,5 +1,31 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 direct-output absent-baseline restore completed
+
+Explicit vanilla choices for current raw-file contributions now queue removal
+when baseline lacks the file. modsMergePrepared forwards the plan to atomic
+publication, including through complete-Data composition. Only selected known
+paths are removed; later recipe output at the same path is kept. Replacements
+and deletions use one PendingBanks transaction. Unrelated and unselected obsolete
+files remain unchanged; stage/deploy and general cleanup are separate scopes.
+
+Publication checks containment and rejects redirected child destinations before
+any final rename. On Windows, GetFileAttributesW reparse flags supplement path
+containment for both removals and copied files. The initial 95pxedbf junction
+fixture exposed MinGW weakly_canonical not resolving that redirection; all paths
+in that negative test were owned scratch folders, with no live install writes.
+
+Latest `tools/test_mod_file_choice_contributors.py` passes 24 cases in
+C:/Users/Cornelio/FableForge-asset-checks-20261004/
+mod-file-choice-contributors-xeeb2n46/result.json. Both direct merge and registered
+build verify unavailable winner refusals, valid source/baseline choices, inactive
+picks, added-file removal, rollback after deletion when a later game.bin rename
+is locked, unlocked retry, unrelated-file preservation and actual Windows
+junction refusal for deletion and replacement. Source/baseline inputs remain
+unchanged. The preceding kvxnmej8 20-case gate lacked junction coverage; retain
+it alongside the failed prototype and corrected gate. No fingerprint-based
+stale-content review or new runtime/gameplay certification is claimed.
+
 ## 2026-10-04 saved file winner and baseline restore
 
 Whole-file choices now reject an unavailable per-file contributor instead of
