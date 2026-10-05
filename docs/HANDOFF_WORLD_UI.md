@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 scripted shop category defaults
+
+StockCategoryDefaults control 789AE61A uses the same verified tagged 64-byte row
+layout as DefaultStock, with its first value referring to a game-bank inventory
+category. Exact field/control/path checks share the stock count and tag guards.
+Both original Scripted Shopkeeper variants now pass direct and composed imports.
+
+Expanded `tools/test_fmp_shop_links.py` evidence in
+`build/fmp-shop-links-1ukvlwo4/result.json` checks Hero Titles plus both variants:
+full shop payloads after independently resolving every reference, 26 category
+rows across the variants and twelve malformed count/tag refusals preserving
+prior outputs. Source archive and baseline hashes remain unchanged. This adds
+two original-package successes to the previous 640, giving 642/821 individual
+offline imports. Gameplay and mixed-order compatibility are separate checks.
+The earlier shop entry below records the pre-extension state.
+
 ## 2026-10-04 shop dialogue and stock references
 
 All four exact CShopDef dialogue controls now use text IDs. PreferredShopkeeper

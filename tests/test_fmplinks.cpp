@@ -249,6 +249,14 @@ int main() {
             word(stock, tag); word(stock, 77 + row);
         }
     const auto stockEntry = legacyEntry("CShopDef", "DefaultStock", "?", stock);
+    const auto categorySchema = forge::defschema::Schema::loadText(
+        R"({"CShopDef":{"prefix_len":3,"fields":[{"name":"StockCategoryDefaults","type":"?"}]}})");
+    const auto categoryEntry = legacyEntry("CShopDef", "StockCategoryDefaults", "?", stock);
+    const auto categoryLocation = forge::fmplinks::locate(categoryEntry, categorySchema,
+        {"2023417370.unknown.1.Unknown", "INVENTORY_CATEGORY_PROBE"});
+    check(categoryLocation.offset == 79 &&
+          categoryLocation.destination == forge::fmplinks::Destination::GameEntry,
+          "stock category default addresses its category identity word");
     const auto stockLink = forge::fmplinks::locate(stockEntry, stockSchema,
         {"3996108785.CShopDefArrayList1.1.ItemForSell", "OBJECT_PROBE"});
     check(stockLink.offset == 79 && stockLink.destination == forge::fmplinks::Destination::GameEntry,

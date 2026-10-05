@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently verify every relocated word in original Hero Titles shop data."""
+"""Verify original Hero Titles and scripted shop records, including stock guards."""
 import argparse
 import hashlib
 import json
@@ -88,11 +88,60 @@ def main():
             assert 'shop stock' in result.stderr or 'unclean' in result.stderr or 'no schema' in result.stderr
             assert prior == {str(p.relative_to(output)): digest(p) for p in output.rglob('*') if p.is_file()}
             refused += 1
+    scripted_checks = []
+    with zipfile.ZipFile(args.archive) as archive:
+        for variant in (1, 2):
+            scripted_member = f'mods/Scripted Shopkeeper (Variant {variant}).fmp'
+            scripted_payload = archive.read(scripted_member)
+            assert hashlib.sha256(scripted_payload).hexdigest() == catalogue[scripted_member]['sha256']
+            scripted_package = work/f'scripted-{variant}.fmp'; scripted_package.write_bytes(scripted_payload)
+            scripted_source, source_at = package_records(scripted_package)['GameBINEntries']['SCRIPTED_SHOP']
+            scripted_report = json.loads(run(args.tool, 'fmp', 'links', scripted_package, '--groups', '--json').stdout)
+            scripted_groups = next(r['groups'] for r in scripted_report['records'] if r['record'] == 'SCRIPTED_SHOP')
+            direct, merged = work/f'scripted-direct-{variant}', work/f'scripted-merged-{variant}'
+            run(args.tool, 'fmp', 'apply', args.install, scripted_package, direct)
+            run(args.tool, 'mods', 'merge', args.install, merged, '--with', scripted_package)
+            for bank in ('game.bin', 'names.bin'):
+                assert digest(direct/'data/CompiledDefs'/bank) == digest(merged/'data/CompiledDefs'/bank)
+            built = read_bank(direct)
+            ids = {e['name']: i for i, e in enumerate(built) if e['name']}
+            expected = bytearray(scripted_source)
+            category_count = 0
+            for group in scripted_groups:
+                assert len(group['targets']) == 1
+                parts = group['path'].split('.'); target = group['targets'][0]
+                at = field_start(scripted_source, int(parts[0]).to_bytes(4, 'big').hex())
+                if parts[1] in ('HAWKING', 'REPLYTOREQUEST', 'FOLLOWME', 'THANKING'):
+                    value = entries(text, 'TEXT_ENGLISH_MAIN', {target}, False)[target]['id']
+                elif parts[0] == '2023417370':
+                    assert parts[1] == 'unknown' and parts[3] == 'Unknown'
+                    at += 8 + int(parts[2])*64; value = ids[target]; category_count += 1
+                else:
+                    assert group['path'] == '425186066.ShopKeeperCreatureID'
+                    value = ids[target]
+                struct.pack_into('<I', expected, at, value)
+            assert category_count == 13
+            assert built[ids['SCRIPTED_SHOP']]['data'] == expected
+            category_at = field_start(scripted_source, '789ae61a')
+            for label, relative, value in [('count', category_at, 14), ('tag', category_at+12, 0)]:
+                malformed = bytearray(scripted_payload)
+                struct.pack_into('<I', malformed, source_at + relative, value)
+                bad = work/f'scripted-{variant}-bad-{label}.fmp'; bad.write_bytes(malformed)
+                for command, output in [('apply', direct), ('merge', merged)]:
+                    prior = {str(p.relative_to(output)): digest(p) for p in output.rglob('*') if p.is_file()}
+                    if command == 'apply':
+                        run(args.tool, 'fmp', 'apply', args.install, bad, output, good=False)
+                    else:
+                        run(args.tool, 'mods', 'merge', args.install, output, '--with', bad, good=False)
+                    assert prior == {str(p.relative_to(output)): digest(p) for p in output.rglob('*') if p.is_file()}
+                    refused += 1
+            scripted_checks.append({'file': scripted_member, 'references': len(scripted_groups),
+                                    'category_rows': category_count, 'record_byte_exact': True})
     assert before == {str(p): digest(p) for p in inputs}
     (work/'result.json').write_text(json.dumps({'file': member, 'references': len(groups),
         'stock_rows': stock_links, 'record_byte_exact': True, 'safe_refusals': refused, 'inputs_unchanged': True,
-        'gameplay_tested': False}, indent=2))
-    print('PASS: original Hero Titles; 35 reference words and complete shop payload')
+        'scripted_checks': scripted_checks, 'gameplay_tested': False}, indent=2))
+    print('PASS: 3 original shop mods; exact shop payloads and 12 safe stock refusals')
 
 
 if __name__ == '__main__':

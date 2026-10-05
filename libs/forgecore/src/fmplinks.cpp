@@ -587,10 +587,11 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             // Legacy shop stock rows contain eight tagged four-byte values.
             // Only the first value is an object identity; prices, counts and
             // restock settings must remain byte-exact.
-            if (entry.definition == "CShopDef" && field.name == "DefaultStock" &&
-                field.type == "?" && parts.size() == 4 &&
-                parts[0] == "3996108785" && parts[1] == "CShopDefArrayList1" &&
-                parts[3] == "ItemForSell") {
+            if (entry.definition == "CShopDef" && field.type == "?" && parts.size() == 4 &&
+                ((field.name == "DefaultStock" && parts[0] == "3996108785" &&
+                  parts[1] == "CShopDefArrayList1" && parts[3] == "ItemForSell") ||
+                 (field.name == "StockCategoryDefaults" && parts[0] == "2023417370" &&
+                  parts[1] == "unknown" && parts[3] == "Unknown"))) {
                 if (field.value.size() < 4) fail("invalid shop stock list");
                 const size_t count = read32(field.value, 0);
                 if (count > 4096 || count > (field.value.size() - 4) / 64 ||
