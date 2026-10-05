@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 distinct-label a87b34a ZIP passes seven selected extracted workflows
+under the child-skip guard: labels 43, fields, level casing and identical TNG
+copies. Explicit 79 not run, zero reported skips; 108 identities/122 links pass.
+Coverage guard distinguishes missing fixtures from normal recipe arbitration.
+Independent full 85-workflow 087467d acceptance remains; see HANDOFF_WORLD_UI.
+
 2026-10-05 frozen 087467d local ZIP passes all 85 extracted workflows in one run,
 zero omitted/reported skips; retained child logs contain no SKIP markers. All
 108 identities and 120 links pass. It includes DeleteUIDs and output ownership/

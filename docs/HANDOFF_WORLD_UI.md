@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 distinct-label ZIP: scoped extraction with tightened coverage guard
+
+dist/development/20261005-a87b34a/FableForge-0.18.1-dev.a87b34a.20261005-win64.zip
+SHA256: a4810f479172e4e9b9e5c85376340e8006f23747e19bcb718ff240f1becc980e.
+Clean a87b34a packaging follows current Release targets; companion guide is
+alongside it. It includes the distinct-label correction. Under the tightened
+child-skip guard, build/package-smoke-5z0_oxmk/result.json passes seven selected
+workflows: expanded label 43 (including both GUI sizes), both field-contributor
+layouts, both level-case layouts and both identical-TNG layouts. Explicitly 79
+not run, zero reported skips: not full 86-workflow acceptance. All 108 identities
+and 122 doc links pass from unrelated cwd and literal token/percent/ampersand
+extraction paths. Older archives and acceptance scopes remain separate.
+
+The coverage classifier additionally distinguishes normal composer arbitration
+("lip sync recipes skipped: a later whole-file dialogue.big wins") from fixture
+omissions. build/probe_package_child_skip.py verifies that legitimate message,
+explicit SKIP markers and the controlled zero-exit missing-input launcher failure
+at build/package-smoke-z_qsgaaa; all 85 actual accepted earlier logs still classify
+without omissions. This refinement changes the harness only, no executable bytes.
+
 ## 2026-10-05 package children cannot hide omitted fixtures behind exit zero
 
 The package launcher previously labeled every zero-exit child PASS, even if its

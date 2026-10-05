@@ -15,9 +15,10 @@ from urllib.parse import unquote
 
 def reported_fixture_skips(output):
     """Recognize explicit fixture omissions, including legacy human-readable reports."""
-    marker = re.compile(r'^\s*(?:\[skip\]|skip(?:ped)?\b)|\bskipped\s*[:(]|'
+    marker = re.compile(r'^\s*(?:\[skip\]|skip(?:ped)?\b)|'
                         r'\b(?:check|test|part)\s+(?:is\s+)?skipped\b|'
-                        r'\b(?:corpus|inputs?|install)\b.*\bskipped\b', re.IGNORECASE)
+                        r'\b(?:corpus|inputs?|install)\b.*\b(?:missing|unavailable|not extracted|not found)\b.*\bskipped\b|'
+                        r'\bskipped\b.*\b(?:missing|unavailable|not found|no (?:install|inputs?|corpus))\b', re.IGNORECASE)
     return [line for line in output.splitlines() if marker.search(line)]
 
 
