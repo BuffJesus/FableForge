@@ -28,13 +28,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
-    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed', 'text-metadata'], default='redeploy')
+    parser.add_argument('--mode', choices=['redeploy', 'report', 'missing', 'fmp', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed', 'text-metadata', 'text-codec'], default='redeploy')
     parser.add_argument('--fmp', type=Path, help='Text-link fixture for a scratch baseline without text.big')
     args = parser.parse_args()
     if args.mode == 'fmp' and not args.fmp: parser.error('--mode fmp requires --fmp')
     text_error = {'text': 'mods text entry: English/SHARED from BrokenPatch could not be applied',
                   'text-unnamed': 'unnamed entry changes cannot be composed',
-                  'text-metadata': 'unsupported TOC metadata changes'}.get(args.mode)
+                  'text-metadata': 'unsupported TOC metadata changes',
+                  'text-codec': 'selected payload cannot be preserved by the string codec'}.get(args.mode)
     deployment_case = args.mode in ('redeploy', 'fmp', 'unnamed', 'sibling', 'record') or text_error is not None
     fmp_hash = digest(args.fmp) if args.fmp else None
     gui = args.gui.resolve()
@@ -106,6 +107,11 @@ def main():
                     from test_fmp_texture_layers import entries
                     record = dict(entries(root/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
                                           {'SHARED'}, True)['SHARED'], header=b'changed TOC metadata')
+                elif args.mode == 'text-codec':
+                    from test_fmp_texture_layers import entries
+                    record = dict(entries(root/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
+                                          {'SHARED'}, True)['SHARED'])
+                    record['payload'] += b'opaque selected tail'
                 bank(bad/'data/lang/English/text.big', 'TEXT_ENGLISH_MAIN',
                      {'' if args.mode == 'text-unnamed' else 'SHARED': record})
             elif args.mode == 'sibling':

@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 selected text payloads now refuse if the codec cannot preserve their
+raw bytes. Both 48-check ordinary/complete-Data suites, both GUI sizes and real
+13-case TextID checks pass; untouched opaque baseline payloads are retained.
+Duplicate source symbols remain separate. Frozen ZIP unchanged; see HANDOFF_WORLD_UI.
+
 2026-10-05 identical TNG copies retain all actual contributor names without
 changing copy/removal strategy. Earlier saved choices and provenance now agree;
 26 ordinary/native/UI, 24 complete-Data, existing contributor/casing and mixed

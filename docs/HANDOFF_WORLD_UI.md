@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 selected text payloads must round-trip through the codec
+
+Ordinary composition now compares encode(decode(selected payload)) with the raw
+selected type-0 payload before upsert. Opaque trailing bytes, unterminated tags
+and counted metadata strings whose trailing NUL would be normalized now refuse
+with language/name/contributor context. A valid contributor or vanilla choice
+can bypass the losing unsupported payload. Unchanged original entries retain
+their raw payloads; this guard does not alter the core decoder or the existing
+upsert policy of filling an empty identifier from the symbol name.
+
+tools/test_mod_text_codec_refusal.py passes 48 ordinary checks at
+mod-text-codec-refusal-9q4_md_g/ and 48 complete-Data checks at
+mod-text-codec-refusal-_ck7ddak/, under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/. Each exercises merge/build/
+conflicts, new/existing symbols, prior-output/input preservation, alternate and
+vanilla picks, and unchanged opaque baseline payloads. Both GUI sizes pass
+persistent-error/same-process recovery and exact undeployment at
+build/mod-action-error-odgwcd63/; the compact failure screenshot is inspected.
+Existing payload refusals pass 36 at mod-text-payload-refusal-t479ragb/ and TOC
+refusals pass 33 at mod-text-metadata-refusal-ebgvvm_3/. Real FMP TextID checks
+pass 13 at fmp-new-text-links-2rn9o7c1/ (no gameplay claim).
+Mixed 50-command corpus and Mods UI pass at build/mods-corpus-sd98vfdm/.
+Package harness defines 78 workflows; frozen ZIP acceptance remains unchanged.
+Duplicate source symbols are still a separate confirmed gap: the new pre-fix
+test at mod-text-duplicate-refusal-5gpbeekx/ succeeds while arbitrarily choosing
+one SHARED occurrence and reporting the same contributor twice.
+
 ## 2026-10-05 identical TNG copies retain real contributors
 
 Consecutive byte-identical TNG files still share one parsed version and the

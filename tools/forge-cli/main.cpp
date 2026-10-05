@@ -9563,7 +9563,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
                             " has unsupported TOC metadata changes; the selected entry metadata cannot be preserved");
                     try {
-                        forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
+                        const auto value = forge::textbig::decode(win->data, 0);
+                        if (forge::textbig::encode(value) != win->data)
+                            throw std::runtime_error("selected payload cannot be preserved by the string codec");
+                        forge::textbig::upsertString(base, name, value);
                         ++textKeysApplied;
                     } catch (const std::exception& error) {
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
