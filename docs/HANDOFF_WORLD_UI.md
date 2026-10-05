@@ -1,5 +1,23 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 deterministic GUI smoke geometry and private settings
+
+Fresh f20e263 extraction package-smoke-a2yhgf4g passes 42 workflows, then fails
+GUI smoke: the captured 1028x748 window presents a compact Color dropdown while
+the fixture clicks wide-layout chip widgets. The original screenshot/log and
+nonzero progress row remain retained. ui_smoke now explicitly requests 1440x900
+and sets APPDATA/LOCALAPPDATA to owned fixture directories, avoiding inherited
+geometry, scale and user settings writes. The same immutable ZIP resumed at
+GUI in package-smoke-qcuiluip passes the smoke's actual clicks, terrain-mode
+pixel assertions and GLB validation, plus later workflows; the tail is still
+running. This is not yet full 89-workflow acceptance.
+
+The float fixture likewise gets separate settings/cache directories per GUI
+size. It passes all 14 checks at C: scratch mod-float-values-8iiqqc1j, and an
+external before/after SHA256 comparison confirms user settings.json unchanged.
+No executable or smoke assertions changed. The frozen archive stays identical;
+private fixture settings and explicit dimensions are launcher improvements.
+
 ### Creature prefix: empty wounds and one-expression originals
 
 The same binding independently passes Brown Balverine Hero Transformation,

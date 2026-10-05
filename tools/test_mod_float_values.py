@@ -94,7 +94,8 @@ def main():
                 script.write_text('\n'.join(lines)+'\n', encoding='utf-8')
                 result = subprocess.run([str(args.gui.resolve()), '--install', str(args.install.resolve()),
                     '--size', size, '--auto', str(script)], cwd=repo, capture_output=True,
-                    text=True, timeout=240, env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1'))
+                    text=True, timeout=240, env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1',
+                        APPDATA=str(folder/(size+'-appdata')), LOCALAPPDATA=str(folder/(size+'-localappdata'))))
                 (folder/(size+'.output.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
                 log = Path(str(script)+'.log').read_text(encoding='utf-8')
                 assert result.returncode == 0 and 'RESULT PASS' in log, log[-5000:]

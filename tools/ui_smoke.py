@@ -61,12 +61,15 @@ def main():
     output.mkdir()
     script = work / a.script.name
     script.write_text(a.script.read_text(encoding="utf-8").replace("build/ui", output.as_posix()), encoding="utf-8")
-    command = [str(a.exe.resolve()), "--auto", str(script)]
+    # The script clicks the wide-layout view chips. Saved window geometry and
+    # UI scale from another workflow must not select a compact toolbar instead.
+    command = [str(a.exe.resolve()), "--size", "1440x900", "--auto", str(script)]
     if a.install:
         command += ["--install", str(a.install.resolve())]
     t0 = time.time()
     r = subprocess.run(command, cwd=a.cwd.resolve(), capture_output=True, text=True, timeout=600,
-                       env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN="1"))
+                       env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN="1",
+                                APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata')))
     dt = time.time() - t0
     (work / "gui_output.log").write_text(r.stdout + r.stderr, encoding="utf-8")
     log_path = Path(str(script) + ".log")

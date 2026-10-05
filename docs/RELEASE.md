@@ -29,6 +29,9 @@ checks extracted links and runs retail/GUI plus field-comparison, long-value,
 search, unavailable-choice and unreported-choice workflows from an unrelated
 working directory. The asset-restore fixture also exercises packaged mesh import
 and Setup restoration of real copied banks.
+The GUI smoke uses an explicit 1440x900 window and private settings/cache folders
+so saved geometry or UI scale cannot substitute a compact toolbar for its chip
+clicks. Float conflict coverage likewise isolates settings at both tested sizes.
 The package gate also checks ordinary and complete-Data whole-file review
 refusals. It writes `progress.json` after each completed workflow, including the
 archive SHA256 and any nonzero exit status. After correcting a failed fixture, use
