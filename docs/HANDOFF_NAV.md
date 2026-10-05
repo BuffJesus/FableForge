@@ -325,3 +325,17 @@ all six comparison logs above reproduce, and docs-command checks pass. The full
 suite already passed on the preceding shared-scene scale fix (`a537d7f`); this
 follow-up changes only the experimental generator/diagnostic, its tests and
 metadata documentation. Latest binaries are in this lane's `build` directory.
+
+## 2026-10-05 reserved FMP record identity guard
+
+A crafted Assasain package kept anonymous slot 14336, named its identical
+second record @unnamed:14336 and retained one metadata record. Both routes
+accepted it before the change (C scratch fmp-reserved-record-probe-yoxggtus).
+The named record could replace the anonymous imported-index lookup. Named
+GameBINEntries and Objects records now reject that reserved namespace before
+output writes. Original duplicate parity remains identical to the independent
+control (20 links); fmp-identical-records-7ioahexr passes 24 negative routes,
+including the new collision, with all prior outputs and source hashes intact.
+Focused fmp-record-refusal-ihg4j1ye passes 18 cases; its source file invariance
+now uses SHA-256. CLI target rebuilt; this guard changes no forgecore code.
+Frozen 0b6be9c excludes it. No game launch or live-install write occurred.

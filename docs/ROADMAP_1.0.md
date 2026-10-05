@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 FMP named records cannot occupy the reserved `@unnamed:` identity
+namespace. A reproduced anonymous/named lookup collision now refuses both
+routes before writes. Original duplicate-record parity and 24 safe negative
+routes pass, alongside 18 focused record cases. Frozen 0b6be9c excludes this
+guard; its package acceptance is still in progress.
+
 2026-10-05 exact repeated FMP source/metadata identities now compose safely.
 Original Assasain retexture/flame flourish matches an independent deduplicated
 control (20 links) through both routes; 22 safe refusals and existing 16 record/

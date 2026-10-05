@@ -2,6 +2,16 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 named game records beginning `@unnamed:` refuse before output
+writes through direct apply and composition. That prefix identifies physical
+blank-name baseline slots; accepting a literal named record could overwrite
+the imported-index lookup and redirect anonymous metadata links. A crafted
+two-record/one-metadata variant reproduced acceptance through both routes
+before the guard. It now refuses with prior output unchanged. The original
+exact-repeat gate passes 24 negative routes and unchanged 20-link control
+parity; the focused legacy record gate passes 18 cases and checks actual
+source-package SHA-256 rather than a directory snapshot of a file.
+
 2026-10-05 redundant ChocolateBox metadata may coalesce when its parsed
 path/target sequence is identical and every GameBINEntries record for that
 owner agrees on ID, name, type, definition and raw payload. Reusing a name at

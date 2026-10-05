@@ -8618,6 +8618,9 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 ++replaced;
                 continue;
             }
+            if (e.name.starts_with("@unnamed:"))
+                throw std::runtime_error("FMP records: named entry " + e.name +
+                    " uses the reserved anonymous identity namespace; package was not applied.");
             auto data = pkg.entryData(e);
             const forge::bin::Entry* existing = game.find(e.name);
             if (existing != nullptr) {

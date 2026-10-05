@@ -123,6 +123,10 @@ def main():
     pointers = sum(len(g['targets']) for g in parsed['records'][0]['groups'])
     print('Original and one-metadata variant match independent control through both routes:', pointers, 'links', flush=True)
     mutations = []
+    changed = copy.deepcopy(one_meta_banks)
+    next(b for b in changed if b['name'] == b'GameBINEntries')['rows'][1]['symbol'] = b'@unnamed:14336'
+    fixture = work/'reserved-anonymous-name.fmp'; write_rows(fixture, raw, changed)
+    mutations.append(('reserved-anonymous-name', fixture))
     for label, change in [('source-payload', 'payload'), ('source-type', 'type'),
                           ('source-definition', 'definition'), ('wrong-anonymous-id', 'id'),
                           ('payload-one-metadata', 'payload-single'), ('type-one-metadata', 'type-single')]:
