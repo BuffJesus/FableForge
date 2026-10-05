@@ -7,8 +7,11 @@ small-bank scan reaches 439/577 without regressions. Counted mesh texture lists
 now account for multi-LOD switch distances, with one/three-LOD asset fixtures and
 safe malformed-list refusal. Inventory icon/title/detail references use their
 texture/text domains. Interrupted large-bank candidates are retained; the fixed
-full sweep is being prepared in an owned C: verification checkout after observed
-D: I/O contention. See HANDOFF_WORLD_UI for exact evidence and scope boundaries.
+full sweep is complete in the owned C: verification checkout: 635/821 accepted,
+185 refused and one timeout. The timeout passed a separate same-build retry,
+giving 636 successful offline imports; gameplay is a separate check. Non-staged
+mod-build publication now rolls back reported replacement failures. See
+HANDOFF_WORLD_UI for exact evidence and scope boundaries.
 
 2026-10-04 release checkpoint: the Forge-managed Aeon/controller route is
 published as prerelease `v0.18.1-rc.1` at tagged source `f5c763a` with green

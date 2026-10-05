@@ -177,6 +177,36 @@ int main() {
         return forge::bin::Entry{definition, "PROBE", 0, forge::defdecode::encode(record)};
     };
     Bytes shopValue; word(shopValue, 77);
+    const auto expressionSchema = forge::defschema::Schema::loadText(
+        R"({"EXPRESSION":{"prefix_len":3,"fields":[{"name":"SpriteGraphic","type":"int32"}]}})");
+    const auto expression = legacyEntry("EXPRESSION", "SpriteGraphic", "int32", shopValue);
+    const std::map<std::string, uint32_t> expressionTextures{{"HUD_EXPR_PROBE", 4321}};
+    const std::vector<forge::fmplinks::Link> expressionLinks{
+        {"222402816.ExpressionHudIconID", "HUD_EXPR_PROBE"}};
+    const auto linkedExpression = forge::fmplinks::relink(expression, targets,
+        expressionSchema, expressionLinks, false, nullptr, &expressionTextures);
+    auto expectedExpression = expression.data;
+    const uint32_t expressionIcon = 4321;
+    std::memcpy(expectedExpression.data() + 7, &expressionIcon, 4);
+    check(linkedExpression == expectedExpression,
+          "expression HUD icon changes only its texture ID word");
+    rejects([&] { forge::fmplinks::relink(expression, targets, expressionSchema,
+        expressionLinks); }, "expression HUD icon requires a texture identity map");
+    const auto expressionText = legacyEntry("EXPRESSION", "TextTag", "uint32", shopValue);
+    const auto expressionTextSchema = forge::defschema::Schema::loadText(
+        R"({"EXPRESSION":{"prefix_len":3,"fields":[{"name":"TextTag","type":"uint32"}]}})");
+    const std::map<std::string, uint32_t> expressionTexts{{"TEXT_EXPR_PROBE", 12345}};
+    const std::vector<forge::fmplinks::Link> expressionTextLinks{
+        {"4192721254.TEXT_EXPRESSION_ID", "TEXT_EXPR_PROBE"}};
+    const auto linkedExpressionText = forge::fmplinks::relink(expressionText, targets,
+        expressionTextSchema, expressionTextLinks, false, nullptr, nullptr, nullptr, &expressionTexts);
+    auto expectedExpressionText = expressionText.data;
+    const uint32_t expressionTextId = 12345;
+    std::memcpy(expectedExpressionText.data() + 7, &expressionTextId, 4);
+    check(linkedExpressionText == expectedExpressionText,
+          "expression text tag changes only its text ID word");
+    rejects([&] { forge::fmplinks::relink(expressionText, targets, expressionTextSchema,
+        expressionTextLinks); }, "expression text tag requires a text identity map");
     const auto shop = legacyEntry("CShopDef", "InitialHawkingPhrase", "?", shopValue);
     const auto hawking = forge::fmplinks::locate(shop, legacySchema,
                                                {"3449087046.HAWKING", "TEXT_PROBE"});

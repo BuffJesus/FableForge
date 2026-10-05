@@ -1,5 +1,42 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 weapon-expression reference domains
+
+`EXPRESSION.SpriteGraphic` now resolves the exact legacy HUD path
+`222402816.ExpressionHudIconID` to texture IDs, and `TextTag` resolves
+`4192721254.TEXT_EXPRESSION_ID` to text IDs. ChocolateBox controls 0D419900
+and F9E7D966 explicitly declare these domains. Previous generic integer handling
+looked for game records and refused valid packages. Exact-word unit tests also
+refuse missing asset maps rather than falling back to game records.
+
+`tools/test_fmp_expression_links.py` passes the three original named packages
+Expressions With Weapons, Hold weapon on some expressions and Hold weapon with
+Bloodlust Roar. Independent readers verify 47 HUD references and their text tags
+against baseline asset identities; direct and composed banks match. Evidence:
+`build/fmp-expression-links-izgrde5w/result.json`. Inputs remain unchanged and
+gameplay is untested. These three were refused in the frozen full sweep below;
+this follow-up brings individually demonstrated offline imports to 639/821,
+without rewriting that historical full report or claiming a new full sweep.
+
+## 2026-10-04 completed named-corpus asset-bank sweep
+
+Frozen source `8841ca1` in `C:\Users\Cornelio\FableForge-corpus-20261004`
+completed all 821 eligible original packages with texture and graphics writes
+enabled. `build/named-fmp-coverage-o7yy8338/result.json` records 635 accepted,
+128 FMP-link refusals, 38 other FMP refusals, 11 unavailable schemas, eight
+record refusals and one timeout. Archive, tool, baseline definitions/names and
+texture/graphics bank hashes remain unchanged. Tool SHA256 is
+`76b57a43c8602e69fab4d9bc2e86db1fa9567bf5820ad9ba37738a9395ed739a`.
+
+The single timeout, eligible index 29 `mods/Apprentice Suit.fmp`, passed a
+separate same-tool retry with a 180-second allowance in
+`build/named-fmp-coverage-h42tcd6w/result.json`. Thus 636 unique packages have
+successful offline import evidence, while the original full report retains its
+timeout. All 185 refusals remain unresolved by this gate. This is individual
+baseline import coverage, not multi-mod compatibility or gameplay validation.
+The original named ZIP is unchanged, SHA256
+`1fe02d6a1910d195b3b1c14895a013f7de17d3c9f8ef3cb2279cff82379791b8`.
+
 ## 2026-10-04 direct mod-build publication rollback
 
 Non-staged `mods merge` and registered `mods build` now publish their completed

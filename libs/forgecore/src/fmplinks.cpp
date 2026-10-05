@@ -371,6 +371,14 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     ((field.name == "ItemDescription" && link.path == "4197094506.TEXT_TITLE") ||
                      (field.name == "ItemDetails" && link.path == "1637763631.TEXT_DESCRIPTION")))
                     return {offset, i + 1, Destination::TextEntry};
+                // ChocolateBox control 0D419900 links the expression sprite
+                // to MainTextureID, rather than a game.bin record.
+                if (entry.definition == "EXPRESSION" && field.name == "SpriteGraphic" &&
+                    field.type == "int32" && link.path == "222402816.ExpressionHudIconID")
+                    return {offset, i + 1, Destination::TextureEntry};
+                if (entry.definition == "EXPRESSION" && field.name == "TextTag" &&
+                    field.type == "uint32" && link.path == "4192721254.TEXT_EXPRESSION_ID")
+                    return {offset, i + 1, Destination::TextEntry};
                 if (entry.definition == "SHOT" && field.type == "int32" &&
                     ((field.name == "PrimaryEffect" &&
                       link.path == "4071417874.Shot Projectile Holding Effect ID") ||
