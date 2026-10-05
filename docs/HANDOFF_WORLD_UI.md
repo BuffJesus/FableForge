@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 latest local FMP ZIP: scoped extracted checks
+
+Clean 42aa3f5 ZIP:
+dist/development/20261005-42aa3f5/FableForge-0.18.1-dev.42aa3f5.20261005-win64.zip
+SHA256: 70f277536410a40a7b544550994b046519297eb6ea461b26167690e07e9b176b.
+It includes the augmentation and opinion reaction fixes plus scratch-routing
+harness changes; all Release targets were current before packaging. Companion
+guide is alongside it. Under C:/Users/Cornelio/FableForge-asset-checks-20261005,
+package-smoke-1ve6qw5f/result.json passes both field-contributor layouts and FMP
+record refusal: three selected, 85 not run, zero reported skips; 108 identities
+and 122 links pass. The same extracted tool independently passes original
+opinion fixture jsp05b84 (306 links/14 refusals) and augmentation fixture dbsvzcyt
+(four links/six refusals). fmp-acceptance-audit.json verifies both fixture input
+tool hashes against PACKAGE_INFO: 8c3a6ed248d2228b79c67dcece3c236b5a9707a6cb7ac442257f38364d47cd42.
+This is scoped acceptance, not a full 88-workflow gate for this archive.
+
+Additional direct-only evidence: original Death Aug.fmp imports through the
+augmentation scalar binding. fmp-followup-probes-5m56l5w7/death-augmentation-audit.json
+independently checks its anonymous index-11382 CAugmentationDef against actual
+text/texture IDs and all untouched bytes of the 75-byte record. This does not
+establish composed-stack or gameplay compatibility for that second package.
+
 ## 2026-10-05 opinion reaction animation-name and dialogue links
 
 Original Getting Away With Murder Mod.fmp refused on OPINION_DEED_EFFECTS
