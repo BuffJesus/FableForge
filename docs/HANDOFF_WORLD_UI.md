@@ -1,5 +1,27 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 named texture-provider pairs
+
+`tools/audit_named_fmp_texture_pairs.py` tests five selected original pairs in
+both orders using the current local CLI. The complete report is
+C:/Users/Cornelio/FableForge-asset-checks-20261004/
+named-fmp-texture-pairs-iep_guk7/result.json. Helm positioned plus Helmet Edit -
+Dead Space Base and Artorias Texture builds in both orders. The selected-source
+mesh and provider texture are independently compared byte-for-byte (header,
+payload, type and ID); last source wins their overlapping mesh. Keeping the
+base/texture provider first retains the positioned mesh. Game/names hashes agree
+between orders; container output hashes are retained separately.
+
+Four other pairs refuse in both orders: Avanlance Fixed + Nerveshatter and
+Jack's Hooded Dark Will Robe + J3T MASK no alignment have descriptor/texture-ID
+mismatches; Hoods Pack Beta + Blue Ass Beta Textures now needs another suit;
+Ailias Sword of Freedom (Xbox) + Weapon Pack2Recolors has a schema gap. Prior
+output survives each refusal, and source/baseline/tool hashes remain unchanged.
+LOAD_ORDER records the exact named outcomes; none is a gameplay certification
+or an automatically declared dependency. The initial vlraqw_c harness incorrectly
+expected the consumer's mesh to win both orders; the corrected gate checks the
+last source. That failed attempt and its output remain retained.
+
 ## 2026-10-04 collision and texture-provider audit
 
 `tools/audit_named_fmp_asset_collisions.py` independently checks the source and

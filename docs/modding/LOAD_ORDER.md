@@ -2,6 +2,33 @@
 
 # Load order & conflict optimization — lessons from LOOT/Wrye Bash
 
+## 2026-10-04 named archive pair evidence
+
+These are offline composition checks against the retained Windows baseline,
+not gameplay compatibility rules or automatic dependency declarations. Five
+pairs were selected from exact missing-texture names whose candidate provider
+passed the frozen individual scan. Each was checked in both orders with current
+local Forge; source/package/baseline/tool hashes are retained in
+C:/Users/Cornelio/FableForge-asset-checks-20261004/
+named-fmp-texture-pairs-iep_guk7/result.json.
+
+| Consumer | Candidate provider | Both-order outcome |
+| --- | --- | --- |
+| Helm positioned | Helmet Edit - Dead Space Base and Artorias Texture | Builds; last source supplies MESH_HERO_DEAD_SPACE_HELM. Put the base/texture package first to retain the positioned mesh. |
+| Avanlance Fixed | Nerveshatter | Refuses: provided bump texture ID is absent from the consumer mesh descriptor. |
+| Hoods Pack Beta | Blue Ass Beta Textures | Texture prerequisite is supplied; still refuses missing HERO_SUIT_HEADBAND_BLACK. |
+| Jack's Hooded Dark Will Robe | J3T MASK no alignment | Refuses: provided mask texture ID is absent from the consumer mesh descriptor. |
+| Ailias Sword of Freedom (Xbox) | Weapon Pack2Recolors | Still refuses a CInventoryItemDef schema gap. |
+
+The successful helmet pair preserves the exact selected-source mesh header,
+payload, type and ID and the named provider texture bytes/ID in both orders.
+Its overlapping mesh produces different graphics outputs when reordered;
+that is intended conflict resolution. Every reported refusal preserves prior
+output. Sources and baseline are unchanged. A provider symbol match alone must
+remain a review hint: it can reveal further prerequisites or incompatible
+numeric references. Existing archive variants that were not selected remain
+untested in these pairs.
+
 The user asked how FableForge can take inspiration from Skyrim's load-order tools
 (LOOT et al.). Short version: borrow LOOT's **graph-based ordering** and
 **community masterlist**, borrow Wrye Bash's **record-level merge**, and exploit
