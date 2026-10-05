@@ -1051,6 +1051,11 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   Conflict checks still return the current contributors and flag the unavailable
   choice, so it can be reviewed or cleared before retrying. Choices with no current
   contributions remain saved and inactive.
+  Partial TNG `DeleteUIDs` removals apply after the thing merge. If a removal
+  deletes an edited thing, its row shows **removed** and the mods that requested
+  it. A saved choice that would restore that thing blocks the build; clear the
+  choice or disable the removal before retrying. Vanilla for a newly added thing
+  still means absence. Removed things have no provenance badge.
   Choosing a whole-file winner now records the baseline and all raw source
   versions shown by the last check. If those contents change, builds refuse and
   **Check conflicts** shows a **!** warning. Review the current file versions,

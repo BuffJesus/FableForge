@@ -390,6 +390,7 @@ static bool isModBaselineChoice(const App::ModConflict& conflict, const std::str
 }
 
 std::string App::modConflictWinner(const ModConflict& conflict) const {
+    if (!conflict.removalMods.empty()) return "removed";
     if (!conflict.pickable) return conflict.winner;
     if (modFileChoiceStale(conflict) && !conflict.mods.empty()) return conflict.mods.back();
     const auto pick = modPicks_.find(conflict.key);
@@ -411,6 +412,7 @@ bool App::modChoiceUnavailable(const ModConflict& conflict) const {
     if (!conflict.pickable) return false;
     const auto pick = modPicks_.find(conflict.key);
     if (pick == modPicks_.end()) return false;
+    if (!conflict.removalMods.empty()) return true;
     const auto& winner = pick->second;
     if (isModBaselineChoice(conflict, winner)) return false;
     return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
@@ -483,6 +485,7 @@ bool App::modConflictMatches(const ModConflict& conflict) const {
     if (contains(conflict.key) || contains(conflict.label) || contains(conflict.kind)) return true;
     if (const auto pick = modPicks_.find(conflict.key); pick != modPicks_.end() && contains(pick->second)) return true;
     for (const auto& mod : conflict.mods) if (contains(mod)) return true;
+    for (const auto& mod : conflict.removalMods) if (contains(mod)) return true;
     for (const auto& field : conflict.fields) {
         if (contains(field.field)) return true;
         if (const auto pick=modPicks_.find(field.choiceKey); pick!=modPicks_.end() && contains(pick->second)) return true;
@@ -518,7 +521,9 @@ std::map<std::string, App::ModOutcomes> App::modConflictOutcomes() const {
         } else {
             const auto winner = modConflictWinner(conflict);
             for (const auto& mod : conflict.mods)
-                (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(conflict.label);
+                if (std::find(conflict.removalMods.begin(), conflict.removalMods.end(), mod) == conflict.removalMods.end())
+                    (mod == winner ? outcomes[mod].won : outcomes[mod].lost).push_back(conflict.label);
+            for (const auto& mod : conflict.removalMods) outcomes[mod].won.push_back(conflict.label);
         }
     }
     return outcomes;
@@ -554,6 +559,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                 const std::string level = l.value("level", ""), thing = c.value("thing", "");
                 rows.push_back({"thing", "tng:" + level + "|" + thing, level + "  " + thing, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
                 rows.back().key = forge::modchoices::canonicalKey(rows.back().key);
+                rows.back().removalMods = mods(c.value("removal_mods", json::array()));
                 const auto mode = l.value("mode", "");
                 if ((mode == "new-level" || mode == "replaced" || mode == "single-editor") &&
                     !l.value("mods", json::array()).empty())
@@ -1037,11 +1043,14 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             if (ImGui::BeginCombo("##winner", shown.c_str())) {
                 if (ImGui::Selectable("load order", !picked)) modPick(c.key, "-");
                 auto_.registerWidget(("mod_load_order_" + std::to_string(i)).c_str());
-                for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
+                if (c.removalMods.empty())
+                    for (const auto& m : c.mods) if (ImGui::Selectable(m.c_str(), current == m && picked)) modPick(c.key, m);
                 const char* baselineLabel = c.kind == "texture" || c.kind == "mesh" ? "install baseline" :
                     c.fieldMerged ? "vanilla for conflicting fields" : "vanilla (retail)";
-                if (ImGui::Selectable(baselineLabel, current == "vanilla")) modPick(c.key, "vanilla");
-                auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());
+                if (c.removalMods.empty()) {
+                    if (ImGui::Selectable(baselineLabel, current == "vanilla")) modPick(c.key, "vanilla");
+                    auto_.registerWidget(("mod_vanilla_"+std::to_string(i)).c_str());
+                }
                 ImGui::EndCombo();
             }
             auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
@@ -1052,7 +1061,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 const bool strictChoice = c.kind == "record" || c.kind == "file" || c.kind == "texture" ||
                                           c.kind == "mesh" || c.kind == "fse" || c.kind == "string" ||
                                           c.kind == "thing" || c.kind == "quest";
-                const auto message = modFileChoiceStale(c) ?
+                const auto message = !c.removalMods.empty() ?
+                    "Saved choice cannot restore this thing while DeleteUIDs applies; clear the choice or disable the removal before building." :
+                    modFileChoiceStale(c) ?
                     "File contents changed since this choice was reviewed; choose again or clear it before building." :
                     "Saved choice " + modPicks_.at(c.key) +
                         (strictChoice ? " has no contribution here; review or clear it before building."
@@ -1061,6 +1072,14 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                 ImGui::TextColored(theme::vec(theme::Warn), "%s", message.c_str());
                 ImGui::PopTextWrapPos();
                 auto_.registerWidget(("mod_unavailable_choice_"+std::to_string(i)).c_str());
+                ImGui::PopFont();
+            }
+            if (!c.removalMods.empty()) {
+                std::string sources;
+                for (const auto& mod : c.removalMods) sources += (sources.empty() ? "" : ", ") + mod;
+                ImGui::PushFont(fontSmall_);
+                ImGui::TextWrapped("Removed by DeleteUIDs: %s", sources.c_str());
+                auto_.registerWidget(("mod_removal_"+std::to_string(i)).c_str());
                 ImGui::PopFont();
             }
             if (c.fieldMerged) {

@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 DeleteUIDs now agrees with effective winners, counts and provenance.
+Blocked choices refuse builds and remain reviewable/clearable; default TNG bytes
+are unchanged. Both 26/24-check layouts, existing TNG/casing checks and mixed
+50-command/Mods UI checks pass. Frozen b7ec186 ZIP excludes this increment;
+see HANDOFF_WORLD_UI for deletion priority and package acceptance boundaries.
+
 2026-10-05 duplicate named source text entries now refuse ambiguous composition,
 including repeats across sub-banks. Both 60-check layouts, both GUI sizes and
 real TextID checks pass. Unchanged-bank and case-sensitive-name behavior remain;

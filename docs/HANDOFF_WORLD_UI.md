@@ -1,5 +1,48 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 DeleteUIDs agrees with choices, reports and provenance
+
+FableForge retains its existing delete-after-union policy for partial TNGs.
+Removals now happen in the same parsed merge result before publication; final
+thing/applied/added counts exclude those removed contributions, provenance
+contains only surviving winners, and an empty map replaces an older output's
+stale provenance. Removal sources retain all identical-file contributor labels.
+A saved choice that would restore a subsequently removed thing refuses a build;
+review reports the effective winner as removed and keeps the choice clearable.
+Vanilla for a newly added thing already means absence and remains valid.
+Whole-file replacement/copy behavior remains unchanged.
+
+GUI rows show the removal owners, warn about a blocked saved choice, provide
+clearing without offering an ineffective contributor/baseline selection, and
+attribute the outcome to the deleting mods. Disabling the removal restores the
+original choice's validity. This does not assert EgoCore ordering parity:
+its inspected Mods/TngMerger.h deletes before each source's sequential merge;
+FableForge's existing multi-source deletion priority remains explicit.
+
+Pre-fix evidence mod-tng-deleted-choice-probe-hrv22dah/ shows six successful
+builds with absent selected things, false winner rows and ghost provenance.
+The new test passes 26 ordinary/native/UI checks at
+mod-tng-deletion-choices-2zphy04q/ and 24 complete-Data checks at
+mod-tng-deletion-choices-ey0klp6c/, under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/. It covers both source orders,
+original/new UIDs, strict failure preserving output and inputs, review/clearing,
+deletion-only sources, disabling a removal, identical deletion sources,
+staged-original review, exact undeployment and both GUI sizes. The compact
+screenshot is inspected. Seven retained reports independently confirm the new
+thing/applied/added counts. Both default orders preserve the exact pre-fix TNG
+bytes at mod-tng-default-delete-preservation-nznfq147/.
+
+Existing TNG contributors pass 36 at mod-tng-choice-contributors-ftx36lcp/;
+identical contributors pass 24 native at mod-tng-identical-contributors-h3li365t/;
+level casing passes 122 at mod-level-case-identity-ihrajf8k/; all four whole-file
+winner/window cases pass at mod-whole-file-winner-d8e5u_9_/. Mixed 50 commands and
+Mods UI pass at build/mods-corpus-dy47zi6h/. Release GUI/CLI rebuilt; core is
+unchanged from the previous 40-test gate. Package harness now defines 83
+workflows. Frozen b7ec186 archive excludes this increment; its 81-workflow
+acceptance is still completing a resumed suffix after one GUI timeout.
+No live writes or game launch. Previously owned build files left by an inactive
+order remain a separate publication-ownership gap; no unowned files are deleted.
+
 ## 2026-10-05 duplicate named source text entries refuse composition
 
 Each changed source language bank now requires unique nonempty symbolic names

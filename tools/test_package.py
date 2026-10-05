@@ -157,6 +157,9 @@ def main():
         run('mod_tng_identical_contributors' + suffix,
             [sys.executable, repo/'tools/test_mod_tng_identical_contributors.py',
              '--tool', package/'forge-tools.exe', '--work-root', work, *options])
+        run('mod_tng_deletion_choices' + suffix,
+            [sys.executable, repo/'tools/test_mod_tng_deletion_choices.py',
+             '--tool', package/'forge-tools.exe', '--work-root', work, *options])
     run('fmp_record_refusal', [sys.executable, repo/'tools/test_fmp_record_refusal.py',
         '--tool', package/'forge-tools.exe', '--cwd', cwd])
     run('retail', [sys.executable, repo / 'tools/retail_smoke.py', '--exe', package / 'forge.exe',

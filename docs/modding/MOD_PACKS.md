@@ -416,6 +416,11 @@ is now refused; those older counts are not complete-patch preservation proof. FS
 is a key-level union (own bytes per entry, `fse:<key>` picks, id clashes reported); an FSE-only folder is a
 tree source. EgoCore partial TNG mods (`[Settings]` + `Replace=true` / `DeleteUIDs:`, TngMerger.h) merge by
 UID into the level, deletions applied, even as the only editor.
+FableForge applies those deletions after its multi-source thing union. Reports
+name the removal sources, count the resulting things and omit removed UIDs from
+provenance. Saved choices that would restore a deleted thing refuse a build and
+remain reviewable/clearable in the Mods tab. A vanilla choice for a newly added
+thing already means absence. `Replace=true` keeps the existing whole-file path.
 
 Stress case from the plan's matrix (2026-09-20): Ultimate Spell Pack (18 fmps) + mfvicli Mods (35 fmps)
 on the same spell defs, `mods build --fields`: 54 mods, 897 changes, 605 records composed per field,
