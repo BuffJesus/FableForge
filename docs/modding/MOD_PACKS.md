@@ -19,6 +19,12 @@ invalid entry can be disabled or removed; enabled invalid names refuse builds,
 conflict checks and deploy before an existing stage is reverted. A bare merge
 also validates names inferred from its source paths.
 
+Enabled source labels must also be distinct under the order's case comparison.
+For example, bare merge cannot distinguish `first/Pack` from `second/Pack` in a
+saved `Pack` choice. Register them with different `--name` values and use
+`mods build`. Duplicate labels in a manually edited legacy order refuse before
+composition or stage reversion; disable or remove an affected entry by index.
+
 Saved whole-file choices refuse if their named winner no longer contributes to
 that file; review or clear the choice before building. Choices for files with
 no current contributors stay inactive. Selecting vanilla emits the existing

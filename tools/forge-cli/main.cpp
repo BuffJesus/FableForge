@@ -9412,12 +9412,14 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         throw std::runtime_error("choice review cannot stage a mod build");
     std::vector<std::string> sources;
     for (const auto& source : sourcePaths) sources.push_back(forge::modorder::normalizeSource(source).string());
+    std::vector<std::string> effectiveLabels;
     for (size_t i = 0; i < sources.size(); ++i) {
         const fs::path source(sources[i]);
         const auto label = i < labels.size() && !labels[i].empty() ? labels[i] :
             fs::is_directory(source) ? source.filename().string() : source.stem().string();
-        forge::modorder::requireLabel(label);
+        effectiveLabels.push_back(label);
     }
+    forge::modorder::requireLabels(effectiveLabels);
     preflightModRecipes(sources);
     if (allowCompleteData && (sources.empty() || !completeDataSource(sources.front())))
         throw std::runtime_error("The complete Data source is missing its compiled banks; restore the extracted mod files before building.");

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <set>
 #include <stdexcept>
 
 #include "nlohmann/json.hpp"
@@ -297,9 +298,9 @@ void setEnabled(Order& order, const std::string& nameOrIndex, bool enabled) {
 std::vector<std::string> buildLabels(const Order& order) {
     std::vector<std::string> out;
     for (const auto& e : order.mods) if (e.enabled) {
-        requireLabel(e.name);
         out.push_back(e.name);
     }
+    requireLabels(out);
     return out;
 }
 
@@ -310,6 +311,15 @@ void requireLabel(std::string_view label) {
         throw std::runtime_error("Mod name must be nonempty, without surrounding whitespace or control characters; choose another name with --name.");
     if (lower(std::string(label)) == "vanilla")
         throw std::runtime_error("Mod name vanilla is reserved for baseline choices; choose another name with --name.");
+}
+
+void requireLabels(const std::vector<std::string>& labels) {
+    std::set<std::string> seen;
+    for (const auto& label : labels) {
+        requireLabel(label);
+        if (!seen.insert(lower(label)).second)
+            throw std::runtime_error("Mod labels must be distinct (ignoring case); register each source with a different name using mods add --name.");
+    }
 }
 
 bool installsCompleteData(const Order& order) {

@@ -27,6 +27,9 @@ int main() {
         refuses([&] { (void)forge::modorder::buildLabels(invalidOrder); });
         invalidOrder.mods.front().enabled = false;
         require(forge::modorder::buildLabels(invalidOrder).empty(), "disabled legacy label blocked recovery");
+        refuses([&] { forge::modorder::requireLabels({"Pack", "Pack"}); });
+        refuses([&] { forge::modorder::requireLabels({"Pack", "pAcK"}); });
+        forge::modorder::requireLabels({"Pack A", "Pack B"});
         const auto legacy = mc::parse("# comment\r\nfile:data/a = Pack A \r\nrecord\tvanilla\nignored\n");
         require(legacy.picks.at("file:data/a") == "Pack A" && legacy.picks.at("record") == "vanilla",
                 "legacy choice parsing changed");

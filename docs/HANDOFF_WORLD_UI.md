@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 distinct labels before composition
+
+The existing whole-file choice path already refuses duplicate contributor
+labels, but mod-duplicate-tng-label-goo30b_d demonstrates two distinct bare
+sources named Pack: default yields health 30 while a saved Pack choice silently
+selects the first source's health 20. Under the C: evidence root, result.json
+retains both successful reports with indistinguishable contributor names.
+
+Shared modorder::requireLabels now validates each name and rejects duplicate
+enabled labels under the same case comparison used by order lookup/registration.
+buildSources validates before any deploy reversion; direct composition validates
+inferred source labels before recipes, complete layers or stage-original copying.
+Order loading/listing and index-based disable/remove recovery remain supported.
+Bare sources with equal names should be registered with distinct --name values
+then composed with mods build. No source renaming or automatic pick migration.
+
+Expanded label checks pass 43 native/both-size GUI cases in
+mod-label-refusal-lxr_ysld: earlier reserved/control-name checks plus same-name/
+case-alias bare refusals with default, source and vanilla picks; independent
+health 20/30/10 choices after distinct registration; duplicate legacy labels over
+build/conflicts/deploy with an existing stage, untouched output/install/sources,
+and index-based recovery/exact undeployment. Existing identical-TNG complete
+checks pass 24 in mod-tng-identical-contributors-3a0urve1. Current package harness
+still has 86 workflows; the label workflow is expanded rather than duplicated.
+All Release targets built; canonical core 40/40 passes in 31.29 seconds. Mixed
+50-command corpus and Mods UI pass at build/mods-corpus-9n4sm7sy.
+The frozen 60bafcf ZIP excludes this later distinct-label increment and keeps
+its earlier 26-case label acceptance; the frozen 087467d ZIP also excludes it.
+
 ## 2026-10-05 label-fix local ZIP: seven scoped extracted workflows
 
 Clean 60bafcf was packaged after all Release targets reported current:

@@ -108,6 +108,45 @@ def main():
             assert result.returncode == 0 and 'RESULT PASS' in log,log[-4000:]
             assert json.loads(order_path.read_text(encoding='utf-8'))['mods'] == []
             checks.append({'size':size,'actual_add_refusal_retained_form_and_retry':True})
+    from test_mod_tng_choice_contributors import tng, values, KEY
+    tng(root)
+    first = work/'first'/'Pack'; tng(first,20)
+    for leaf in ('Pack','pAcK'):
+        second = work/('second-'+leaf)/leaf; tng(second,30)
+        for choice in ('', KEY+'\tPack\n', KEY+'\tvanilla\n'):
+            picks.write_text(choice)
+            before = snapshot(root); out_before = snapshot(output)
+            sources_before = {str(p):snapshot(p) for p in (first,second)}
+            run('mods','merge',root,output,'--with',first,second,'--picks',picks,good=False)
+            assert snapshot(root) == before and snapshot(output) == out_before
+            assert sources_before == {str(p):snapshot(p) for p in (first,second)}
+            checks.append({'duplicate_inferred_label':leaf,'choice':choice,'refused_preserved':True})
+    second = work/'second-Pack'/'Pack'
+    run('mods','add',root,first,'--name','First Pack')
+    run('mods','add',root,second,'--name','Second Pack')
+    valid = json.loads(order_path.read_text(encoding='utf-8'))
+    for choice, expected in [('',30),(KEY+'\tFirst Pack\n',20),(KEY+'\tSecond Pack\n',30),(KEY+'\tvanilla\n',10)]:
+        picks.write_text(choice); run('mods','build',root,output,'--picks',picks)
+        assert values(output)[123456] == expected
+        checks.append({'distinct_registration_choice':choice,'independent_health':expected})
+    before_stage = {k:v for k,v in snapshot(root).items() if k != 'forge_mods.json'}
+    run('mods','deploy',root)
+    for alias in ('First Pack','fIrSt PaCk'):
+        invalid = json.loads(json.dumps(valid)); invalid['mods'][1]['name'] = alias
+        order_path.write_text(json.dumps(invalid),encoding='utf-8')
+        for command in (('mods','build',root,output),('mods','conflicts',root,'--json'),('mods','deploy',root)):
+            before = snapshot(root); out_before = snapshot(output)
+            failure = run(*command,good=False)
+            assert 'Mod labels must be distinct' in failure.stderr
+            assert snapshot(root) == before and snapshot(output) == out_before
+            checks.append({'duplicate_legacy_label':alias,'route':command[1],'staged_preserved':True})
+        run('mods','list',root)
+    run('mods','disable',root,'1'); run('mods','conflicts',root,'--json')
+    run('mods','remove',root,'1')
+    run('mods','undeploy',root)
+    assert values(root)[123456] == 10
+    assert {k:v for k,v in snapshot(root).items() if k != 'forge_mods.json'} == before_stage
+    checks.append({'duplicate_legacy_disable_remove_and_exact_baseline':True})
     (work/'result.json').write_text(json.dumps({'passed':True,'checks':checks},indent=2))
     print('PASS:',len(checks),'registration, choice identity, staged preservation and recovery checks')
 

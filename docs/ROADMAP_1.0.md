@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 enabled labels now remain distinct under order case comparison,
+including inferred bare-merge names. Ambiguous TNG selections are reproduced
+and refused before composition/reversion; uniquely named registered sources
+retain source/baseline selection. Label checks 43, core 40 and mixed corpus/UI
+pass. Both frozen 087467d/60bafcf ZIPs exclude this later change; see handoff.
+
 2026-10-05 clean 60bafcf local ZIP passes seven selected extracted workflows,
 covering label refusal, reviewed file choices, ownership and DeleteUIDs. Explicit
 79 omissions, zero fixture skips; 108 identities and 122 links pass. This is

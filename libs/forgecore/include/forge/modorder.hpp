@@ -62,6 +62,7 @@ std::vector<std::string> buildSources(const Order& order, const std::filesystem:
 std::vector<std::string> buildLabels(const Order& order);
 // Names must survive the choice text format and distinguish sources from vanilla.
 void requireLabel(std::string_view label);
+void requireLabels(const std::vector<std::string>& labels);
 // At most one complete Data installation, first among enabled sources.
 bool installsCompleteData(const Order& order);
 
