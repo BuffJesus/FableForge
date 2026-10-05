@@ -8586,6 +8586,7 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
     auto game = openDefs(baseRoot, "game.bin");
     size_t replaced = 0, added = 0;
     std::map<std::string, size_t> importedIndexes;
+    std::map<std::string, uint32_t> importedAnonymousTypes;
     // Two dialects carry game.bin records as raw payloads keyed by def name: ChocolateBox
     // (contentType 510, bank GameBINEntries, entries typed) and the older Fable Explorer
     // package (contentType 459: banks Settings / Objects / ObjectLinks / Text, entries
@@ -8600,12 +8601,20 @@ int fmpApply(const std::string& baseRoot, const std::string& fmpPath,
                 const auto key = forge::fmplinks::anonymousKey(index);
                 if (std::string_view(bankName) != "GameBINEntries" ||
                     index >= game.entries().size() || !game.entries()[index].name.empty() ||
-                    e.definition.empty() || e.definition != game.entries()[index].definition ||
-                    importedIndexes.contains(key))
+                    e.definition.empty() || e.definition != game.entries()[index].definition)
                     throw std::runtime_error("FMP records: unnamed entry " + std::to_string(index) +
                         " has no matching blank-name baseline identity; package was not applied.");
-                game.setEntryData(index, pkg.entryData(e));
+                auto data = pkg.entryData(e);
+                if (const auto prior = importedIndexes.find(key); prior != importedIndexes.end()) {
+                    if (prior->second != index || importedAnonymousTypes.at(key) != e.type ||
+                        game.entries()[index].data != data)
+                        throw std::runtime_error("FMP records: unnamed entry " + std::to_string(index) +
+                            " has conflicting repeated identity or payloads; package was not applied.");
+                    continue;
+                }
+                game.setEntryData(index, std::move(data));
                 importedIndexes[key] = index;
+                importedAnonymousTypes[key] = e.type;
                 ++replaced;
                 continue;
             }

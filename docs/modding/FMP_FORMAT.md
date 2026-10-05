@@ -2,6 +2,18 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 redundant ChocolateBox metadata may coalesce when its parsed
+path/target sequence is identical and every GameBINEntries record for that
+owner agrees on ID, name, type, definition and raw payload. Reusing a name at
+distinct IDs or with different bytes remains refused. Anonymous repeated
+imports validate the blank-name baseline slot and skip only identical type/
+payloads; conflicting repeats with a single metadata entry also refuse.
+Original Assasain retexture/flame flourish agrees with an independently rebuilt
+one-record control across both routes and all emitted banks (20 links).
+Twenty-two negative routes preserve prior output, including the real conflicting
+regeneration package and a separate texture-ID collision. Source FMP bytes stay
+unchanged; legacy ObjectLinks duplicates and other reference/asset guards remain.
+
 2026-10-05 CCreatureDef leading wound/expression links use a bounded prefix
 walk from byte three through the counted wound, appearance and expression
 blocks to the Stats marker. Legacy Skin Effects Array Link to ID/ID1..ID5

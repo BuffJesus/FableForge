@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 exact repeated FMP source/metadata identities now compose safely.
+Original Assasain retexture/flame flourish matches an independent deduplicated
+control (20 links) through both routes; 22 safe refusals and existing 16 record/
+27 bank cases pass. Conflicting named identities and the independent augmentation
+texture collision remain refused. Core 40 passes; frozen 997e065 excludes this
+increment. See handoff for identity rules and preservation evidence.
+
 2026-10-05 frozen f20e263 texture/float ZIP passes all 89 workflows across
 42 initial and 47 resumed successes; the initial GUI layout failure is retained.
 Zero uncovered/reported skips, 108 identities/122 links. Newer 997e065 creature

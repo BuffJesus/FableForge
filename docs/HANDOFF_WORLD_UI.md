@@ -1,5 +1,43 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 exact repeated FMP records and metadata
+
+Original Assasain retexture set and flame flourish for soa repeats the same
+anonymous CWeaponDef14336 payload and its metadata twice. Initial evidence at
+C: scratch fmp-duplicate-metadata-probe-9520y6fn identifies exact repeats; an
+independently rebuilt one-record/one-metadata derivative already imports under
+the earlier strict reader. The untouched original now imports too. Repeated
+ChocolateBox metadata coalesces only when parsed path/target sequences agree
+and every source record for that owner has the same ID, name, type, definition
+and raw payload. Different IDs or bytes under the same owner remain refused.
+Legacy ObjectLinks duplicates are still refused. Anonymous direct imports
+skip only matching repeated type/payloads after validating the blank-name slot;
+conflicting repeats refuse before publication, including with only one metadata
+entry. No unsupported link or asset-identity policy is relaxed.
+
+tools/test_fmp_identical_records.py passes the untouched original and an exact
+repeated-source/one-metadata variant against an independently deduplicated
+control through direct apply and final composition. All output inventories and
+bank hashes match each route's control; twenty named links remain. Twenty-two
+safe refusals cover changed source payload/type/definition/ID, single-metadata
+conflicts, changed/missing metadata targets, invalid ordered metadata, the real
+conflicting-named regeneration package and Augmentation Test's independent
+texture-ID collision. Every failure preserves prior output. Evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-identical-records-ug5o2ser/result.json; archive/tool/live input bank hashes
+and the original FMP remain unchanged. Normalization is a test control only;
+the product accepts the original directly and leaves its package bytes intact.
+
+Native tests cover named/anonymous exact coalescing and changed ID/type/
+definition/data/target refusal. All 40 core tests pass (32.43s); all Release
+targets build. After the final CLI-only repeated-type guard, the original gate,
+existing 16 record cases (build/fmp-record-refusal-vr4d9gef) and 27 bank cases
+(build/mod-bank-refusal-aqu0jaod) pass. Regeneration/Damage Tweaks remains
+refused because its repeated names bind distinct IDs and bytes, despite identical
+metadata. Augmentation Test reaches its actual texture-ID collision and remains
+refused through both routes. No gameplay or full historic-corpus claim is made.
+Frozen 997e065 and earlier archives exclude this increment.
+
 ## 2026-10-05 frozen texture/float ZIP: all 89 workflows covered
 
 Clean f20e263 ZIP at dist/development/20261005-f20e263/

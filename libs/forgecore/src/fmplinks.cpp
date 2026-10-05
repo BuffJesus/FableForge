@@ -1,5 +1,6 @@
 #include "forge/fmplinks.hpp"
 #include "forge/defdecode.hpp"
+#include <algorithm>
 #include <charconv>
 #include <cstring>
 #include <set>
@@ -252,6 +253,21 @@ CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
     tag(defdecode::fieldTag("Stats"));
     return result;
 }
+bool identicalGameOwners(const big::File& package, const std::string& owner) {
+    const auto* records = package.findBank("GameBINEntries");
+    if (!records) return false;
+    const big::Entry* first = nullptr;
+    std::vector<uint8_t> firstData;
+    for (const auto& entry : records->entries) {
+        const auto key = entry.name.empty() ? anonymousKey(entry.id) : entry.name;
+        if (key != owner) continue;
+        if (!first) { first = &entry; firstData = package.entryData(entry); continue; }
+        if (entry.id != first->id || entry.name != first->name || entry.type != first->type ||
+            entry.definition != first->definition || package.entryData(entry) != firstData)
+            return false;
+    }
+    return first != nullptr;
+}
 } // namespace
 
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
@@ -336,13 +352,26 @@ RecordLinks readGameLinks(const big::File& package) {
                 const auto& source = records->entries[entry.id - 1];
                 owner = source.name.empty() ? anonymousKey(source.id) : source.name;
             }
-            if (result.contains(owner)) fail("duplicate metadata owner " + owner);
-            try { result.emplace(owner, readMetadata(package.entryData(entry))); }
+            std::vector<Link> parsed;
+            try { parsed = readMetadata(package.entryData(entry)); }
             catch (const std::runtime_error& e) {
                 std::string reason = e.what();
                 if (reason.starts_with("FMP links: ")) reason.erase(0, 11);
                 fail(owner + ": " + reason);
             }
+            if (const auto prior = result.find(owner); prior != result.end()) {
+                const bool same = prior->second.size() == parsed.size() &&
+                    std::equal(prior->second.begin(), prior->second.end(), parsed.begin(),
+                        [](const auto& a, const auto& b) { return a.path == b.path && a.target == b.target; });
+                // Only redundant ChocolateBox metadata with unambiguous exact
+                // source record identities may coalesce. Same names at distinct
+                // IDs or with changed payloads remain ambiguous.
+                if (std::string_view(bankName) != "GameBINLinkMetaData" || !same ||
+                    !identicalGameOwners(package, owner))
+                    fail("duplicate metadata owner " + owner);
+                continue;
+            }
+            result.emplace(owner, std::move(parsed));
         }
     }
     return result;

@@ -53,6 +53,39 @@ int main() {
     const auto valid = metadata();
     const auto links = forge::fmplinks::readMetadata(valid);
     check(links.size() == 1 && links[0].path == "123._" && links[0].target == "TARGET", "forward refs, arrays and null padding");
+    {
+        forge::big::File repeated;
+        forge::big::Entry record; record.name = "OWNER"; record.definition = "TYPE";
+        record.id = 5; record.data = {1, 2, 3};
+        repeated.addBank("GameBINEntries", 0).entries = {record, record};
+        forge::big::Entry metadataEntry; metadataEntry.name = "OWNER"; metadataEntry.data = valid;
+        repeated.addBank("GameBINLinkMetaData", 1).entries = {metadataEntry, metadataEntry};
+        check(forge::fmplinks::readGameLinks(repeated).at("OWNER").size() == 1,
+              "identical metadata and exact repeated named source identity coalesce once");
+        for (int variant = 0; variant < 5; ++variant) {
+            auto badRepeated = repeated;
+            auto& changed = badRepeated.findBank("GameBINEntries")->entries[1];
+            if (variant == 0) changed.id++;
+            if (variant == 1) changed.definition = "OTHER_TYPE";
+            if (variant == 2) changed.data[0]++;
+            if (variant == 3) changed.type++;
+            if (variant == 4) {
+                auto& changedMetadata = badRepeated.findBank("GameBINLinkMetaData")->entries[1].data;
+                const auto target = std::search(changedMetadata.begin(), changedMetadata.end(),
+                                               "TARGET", "TARGET"+6);
+                check(target != changedMetadata.end(), "duplicate fixture target exists");
+                if (target != changedMetadata.end()) *target = 'X';
+            }
+            rejects([&] { forge::fmplinks::readGameLinks(badRepeated); },
+                    "different repeated identity/type/payload/metadata targets refuse");
+        }
+        for (auto& row : repeated.findBank("GameBINEntries")->entries) row.name.clear();
+        auto& anonymousMetadata = repeated.findBank("GameBINLinkMetaData")->entries;
+        anonymousMetadata[0].name.clear(); anonymousMetadata[0].id = 1;
+        anonymousMetadata[1].name.clear(); anonymousMetadata[1].id = 2;
+        check(forge::fmplinks::readGameLinks(repeated).at("@unnamed:5").size() == 1,
+              "ordered anonymous metadata duplicates resolve to the same exact source identity");
+    }
     const auto groups = forge::fmplinks::readMetadataGroups(metadataTwo());
     check(groups.size() == 1 && groups[0].path == "123._" &&
           groups[0].targets == std::vector<std::string>({"FIRST", "SECOND"}),
