@@ -308,6 +308,150 @@ int main() {
                 "missing creature animation identity map refuses");
     }
     {
+        const auto environmentSchema = forge::defschema::Schema::loadText(
+            R"({"ENVIRONMENT_THEME_DAY":{"prefix_len":3,"fields":[{"name":"Time","type":"Vector_CEnvironmentThemeDef"}]}})");
+        const char* members[] = {"TimeOfDay", "MoonLit", "FogStartZ", "FogEndZ", "SkyTexture0", "SkyTexture1",
+            "SkyTexture1Blend", "CloudLowerLayerTexture0", "CloudLowerLayerTexture1", "CloudLowerLayerTexture1Blend",
+            "CloudLowerLayerSpeedMultiplier", "CloudUpperLayerTexture0", "CloudUpperLayerTexture1",
+            "CloudUpperLayerTexture1Blend", "CloudUpperLayerSpeedMultiplier", "WaterColourToReflectionBlend",
+            "WaterAlphaFactor", "WaterSpecularHightlightFactor", "RainStrength", "SnowStrength", "MistAlpha",
+            "LightningFrequency", "GlowThresholdScale", "GlowBloomScale", "GlowMotionBlur", "ShadowFactor",
+            "FadedShadowFactor", "WaterRefractionBlendStart", "WaterRefractionBlendEnd", "WaterFlowSpeedFactor",
+            "WaterOscilationSpeed", "WaterSwellFactor", "WaterShoreSwellFactor", "WaterReflectionOffset"};
+        Bytes times; word(times, 2);
+        for (int row = 0; row < 2; ++row) {
+            for (const auto* member : members) {
+                word(times, forge::defdecode::fieldTag(member));
+                if (std::string_view(member) == "MoonLit") times.push_back(1);
+                else {
+                    uint32_t value = 0x3fa00000; // Distinguish floats from texture IDs.
+                    const std::string_view name(member);
+                    if (name == "SkyTexture0") value = row == 0 ? 0 : 41;
+                    if (name == "SkyTexture1") value = 42;
+                    if (name == "CloudLowerLayerTexture0" || name == "CloudUpperLayerTexture1") value = 0;
+                    if (name == "CloudLowerLayerTexture1") value = 43;
+                    if (name == "CloudUpperLayerTexture0") value = 44;
+                    word(times, value);
+                }
+            }
+        }
+        check(times.size() == 4 + 2 * 269, "environment rows retain the one-byte boolean and all tags");
+        const auto record = legacyEntry("ENVIRONMENT_THEME_DAY", "Time", "Vector_CEnvironmentThemeDef", times);
+        const auto pair = forge::fmplinks::readMetadata(metadataTwo("1743315694.unknown.1.Sky"));
+        check(pair.size() == 2 && pair[0].path == "1743315694.unknown.1.Sky.References.0.2" &&
+              pair[1].path == "1743315694.unknown.1.Sky.References.1.2",
+              "environment groups retain slot ordinal and complete metadata size");
+        const std::vector<forge::fmplinks::Link> links{
+            {"1743315694.unknown.0.Sky.References.0.1", "SKY"},
+            {"1743315694.unknown.1.Clouds.References.1.2", "CLOUD"}};
+        const std::map<std::string, uint32_t> textures{{"SKY", 2001}, {"CLOUD", 2002}};
+        auto expected = record.data;
+        // Independent fixed offsets: row0 SkyTexture1, row1 CloudUpperLayerTexture0.
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{{52, 2001}, {369, 2002}})
+            for (size_t n = 0; n < 4; ++n) expected[at+n] = uint8_t(value >> (8*n));
+        check(forge::fmplinks::relink(record, targets, environmentSchema, links,
+                  false, nullptr, &textures) == expected,
+              "environment links patch only selected texture words across sparse rows");
+        rejects([&] { forge::fmplinks::relink(record, targets, environmentSchema, links); },
+                "environment links cannot resolve through the game-record domain");
+        for (const auto* path : {"1743315694.unknown.2.Sky.References.0.1",
+                                "1743315694.unknown.0.Sky.References.1.1",
+                                "1743315694.unknown.1.Sky.References.0.1",
+                                "1743315694.unknown.0.Sky.References.0.2",
+                                "1743315694.unknown.0.sky.References.0.1"})
+            rejects([&] { forge::fmplinks::locate(record, environmentSchema, {path, "SKY"}); },
+                    "environment row, member and incomplete group ambiguity refuse");
+        for (int variant = 0; variant < 4; ++variant) {
+            auto bad = record;
+            if (variant == 0) bad.data[7] = 3;
+            if (variant == 1) bad.data.push_back(0);
+            if (variant == 2) bad.data[280] ^= 1; // Later row's first tag.
+            if (variant == 3) bad.data.resize(9);
+            rejects([&] { forge::fmplinks::locate(bad, environmentSchema, links[0]); },
+                    "environment validates complete counts and later row tags before patching");
+        }
+    }
+    {
+        const auto materialSchema = forge::defschema::Schema::loadText(
+            R"({"CMaterialDef":{"prefix_len":3,"fields":[{"name":"BlendedSwordHitEffects","type":"Map_VCBlendedParticleEffectSet__J"}]}})");
+        Bytes map; word(map, 2);
+        for (uint32_t key : {4u, 7u}) {
+            word(map, key); word(map, 985); word(map, 986); word(map, 0x3fa00000); word(map, 0x80000000);
+        }
+        const auto material = legacyEntry("CMaterialDef", "BlendedSwordHitEffects",
+            "Map_VCBlendedParticleEffectSet__J", map);
+        const auto pair = forge::fmplinks::readMetadata(metadataTwo("571592595.Blood Blending Effects.0.unknown"));
+        check(pair.size() == 2 && pair[0].path == "571592595.Blood Blending Effects.0.unknown.0" &&
+              pair[1].path == "571592595.Blood Blending Effects.0.unknown.1",
+              "material metadata retains both serialized particle-index slots");
+        const std::vector<forge::fmplinks::Link> materialLinks{
+            {"571592595.Blood Blending Effects.0.unknown.0", "SMALL"},
+            {"571592595.Blood Blending Effects.1.unknown.1", "LARGE"}};
+        const std::map<std::string, uint32_t> effects{{"SMALL", 2001}, {"LARGE", 2002}};
+        auto expected = material.data;
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{{15, 2001}, {39, 2002}})
+            for (size_t n = 0; n < 4; ++n) expected[at+n] = uint8_t(value >> (8*n));
+        check(forge::fmplinks::relink(material, targets, materialSchema, materialLinks,
+                  false, nullptr, nullptr, &effects) == expected,
+              "material particle indices relink without changing map keys or either float");
+        rejects([&] { forge::fmplinks::relink(material, targets, materialSchema, materialLinks); },
+                "material particle IDs require their own effect map");
+        for (const auto& path : {"571592595.Blood Blending Effects.2.unknown.0",
+                                "571592595.Blood Blending Effects.0.unknown.2",
+                                "571592595.Blood Blending Effects.0.Other.0"})
+            rejects([&] { forge::fmplinks::locate(material, materialSchema, {path, "SMALL"}); },
+                    "material row, pair member and exact path bounds refuse");
+        auto bad = material; bad.data[7] = 3;
+        rejects([&] { forge::fmplinks::locate(bad, materialSchema, materialLinks[0]); },
+                "material count must match its complete serialized map");
+        bad = material; bad.data.push_back(0);
+        rejects([&] { forge::fmplinks::locate(bad, materialSchema, materialLinks[0]); },
+                "material trailing map bytes refuse");
+        auto aliasMaterial = material; aliasMaterial.definition = "MATERIAL";
+        const auto aliasSchema = forge::defschema::Schema::loadText(
+            R"({"MATERIAL":{"prefix_len":3,"fields":[{"name":"BlendedSwordHitEffects","type":"Map_VCBlendedParticleEffectSet__J"}]}})");
+        check(forge::fmplinks::relink(aliasMaterial, targets, aliasSchema, materialLinks,
+                  false, nullptr, nullptr, &effects) == expected,
+              "retail MATERIAL alias retains the same serialized particle pair");
+        const auto vectorSchema = forge::defschema::Schema::loadText(
+            R"({"MATERIAL":{"prefix_len":3,"fields":[{"name":"SwordHitParticleEffect","type":"Vector_J"}]}})");
+        Bytes values; word(values, 2); word(values, 985); word(values, 986);
+        const auto vectorRecord = legacyEntry("MATERIAL", "SwordHitParticleEffect", "Vector_J", values);
+        const std::vector<forge::fmplinks::Link> vectorLinks{
+            {"1553013023.Blood Splatter Effects.1.MaterialEffectID2", "SMALL"}};
+        auto vectorExpected = vectorRecord.data;
+        for (size_t n = 0; n < 4; ++n) vectorExpected[15+n] = uint8_t(2001 >> (8*n));
+        check(forge::fmplinks::relink(vectorRecord, targets, vectorSchema, vectorLinks,
+                  false, nullptr, nullptr, &effects) == vectorExpected,
+              "material particle vectors use effect identities instead of game records");
+        check(forge::fmplinks::locate(vectorRecord, vectorSchema,
+            {"1553013023.SwordHitParticleEffect[i].0._", "SMALL"}).destination ==
+                  forge::fmplinks::Destination::EffectEntry,
+              "native material particle array names retain the effect domain");
+        rejects([&] { forge::fmplinks::relink(vectorRecord, targets, vectorSchema, vectorLinks); },
+                "material particle vectors cannot fall back to game entry identities");
+        for (const auto& path : {"1553013023.Blood Splatter Effects.2.MaterialEffectID2",
+                                "1553013023.Blood Splatter Effects.0.Unknown"})
+            rejects([&] { forge::fmplinks::locate(vectorRecord, vectorSchema, {path, "SMALL"}); },
+                    "material particle vector row and member bounds refuse");
+        for (int variant = 0; variant < 4; ++variant) {
+            auto malformed = vectorRecord;
+            if (variant == 0) malformed.data.resize(9); // Incomplete count word.
+            if (variant == 1) malformed.data[7] = 3; // Count exceeds available values.
+            if (variant == 2) {
+                for (size_t at = 7; at < 11; ++at) malformed.data[at] = 0xff;
+            }
+            if (variant == 3) malformed.data.push_back(0); // Undecoded tail.
+            rejects([&] { forge::fmplinks::locate(malformed, vectorSchema, vectorLinks[0]); },
+                    "material particle vectors require a bounded complete count and no tail");
+        }
+        auto collidingGameTargets = targets;
+        collidingGameTargets.addEntry("OBJECT", "SMALL", {0});
+        check(forge::fmplinks::relink(vectorRecord, collidingGameTargets, vectorSchema, vectorLinks,
+                  false, nullptr, nullptr, &effects) == vectorExpected,
+              "same-named game records cannot override material effect identities");
+    }
+    {
         const auto replacementSchema = forge::defschema::Schema::loadText(
             R"({"CTextureReplacementDef":{"prefix_len":3,"fields":[{"name":"Entries","type":"Vector_VCEntry_CTextureReplacementDef__"}]}})");
         Bytes pairs; word(pairs, 2); word(pairs, 77); word(pairs, 78); word(pairs, 79); word(pairs, 80);

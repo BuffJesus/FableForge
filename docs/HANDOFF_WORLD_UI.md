@@ -1,5 +1,83 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 original environment sky/cloud groups
+
+Original Enviroment Snowing now relinks all 214 named texture words across
+nine environment records through direct apply and composition. Time rows are
+counted, 269 bytes each: all 34 member tags and widths are checked, including
+the one-byte MoonLit. Sky addresses two texture members; Clouds addresses four
+lower/upper-layer members. Group occurrence and full cardinality survive metadata
+decoding. Only complete groups covering every nonzero slot are accepted;
+unresolved nonzero omissions are ambiguous and refuse before writes.
+
+Evidence: ChocolateBox data/def.xml control 67E8E2EE at
+D:/Code/Fable/ChocolateBox/ChocolateBox declares these exact repeated member
+names and MainTextureID destinations. Its DecompiledDLLs/FableMod.ContentManagement/
+FableMod/ContentManagement/ModPackage.cs CreateLinks traverses members in order,
+omitting unresolved/unnamed lookups; ContentManager.cs resolves MainTextureID
+through the texture bank. The native field order agrees with FableTLC's
+ghidra_out/decomp_schema_gap.c transfer export at 01a0c2f3. The ego_r Transfer
+symbol is separately 0046fa79; these addresses belong to different binaries.
+
+tools/test_fmp_environment_links.py passes the untouched original against
+both the copied source baseline and an explicitly derived scratch texture bank
+whose referenced IDs are reassigned. Every other byte of all nine records is
+unchanged and effective six-bank outputs match through both routes. Sixteen
+negative routes cover counts, later-row corruption, omitted/extra populated
+slots, wrong paths and missing textures; each preserves prior output. Original
+package/archive/tool/live-bank hashes are unchanged. Final evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-environment-links-nu_16x2i/result.json (earlier rbep3omb also passed).
+
+All Release targets build. Scoped defdecode/fmplinks/modchoices CTest passes
+3/3 in 0.99s, retained at build/environment-scoped-core-20261005.log. Existing
+material gate mq2kw9j5 passes nine words/14 safe negatives plus both complete
+original dependency refusals; record-refusal-rxggaqeb passes all 18 cases.
+The earlier 40-case core run belongs to the material checkpoint below, before
+this environment increment. No new full-suite, gameplay or frozen-ZIP claim.
+
+Initial independent probe environment-layout-3na39gas matches 30 texture words
+in ENVIRONMENT_THEME1 and every row tag/SunTilt boundary. Its failed predecessor
+3m6ycbba used the wrong bank name (MAIN_PC instead of GBANK_MAIN_PC). Winter Sky
+is a hero/hair package and supplies no second environment fixture
+(environment-winter-probe-9styl_2u/links.json). Next: environment Time-field
+source-choice preservation and a scoped packaged-tool acceptance checkpoint.
+
+## 2026-10-05 material particle references
+
+The existing material linker increment now has reviewed native serialization
+evidence and additional malformed-vector/domain-collision tests. MATERIAL and
+CMaterialDef BlendedSwordHitEffects use counted 20-byte map rows: key, two
+particle indices, then two floats. ego_r.exe TransferBinaryOut at 0047062b
+writes the indices before the floats, despite their interleaved in-memory
+layout; the map serializer at 00470a7e writes each key first. Evidence and
+executable identity are retained in C: asset-checks-20261005/
+material-serializer-ic9uzibg/result.json. The schema and original material
+record independently corroborate the count/stride and named effect identities.
+
+The labelled MATERIAL_FLESH_HUMAN derivative of Object Gravity Hammer passes
+nine effect words (two blend, seven vector), exact other record bytes and
+effective six-bank parity through direct apply and composition. Fourteen
+negative routes preserve prior output. The complete original remains refused
+for missing SAWTOOTH_GREATSWORD texture / MESH_SAWTOOTH_GREATSWORD dependencies;
+this derivative is not complete-package acceptance. Evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-material-links-xjcqlzx9/result.json. Its recorded executable SHA256
+d00f154b4cd86a7b599758947d10fa27bfd25a0e093a0bed87133f41a68136c1
+matched the material-checkpoint forge-tools binary before the environment
+increment above. Inputs were unchanged in that gate.
+
+The expanded FMP unit target passes truncated/oversized/mismatched vector
+counts, trailing bytes and a same-named game-record/effect collision. The
+first new collision test used the wrong fixture API and failed compilation;
+using bin::File::addEntry corrects the fixture and the rebuilt test passes.
+The all-target Release build is current. All 40 core tests pass together
+(577.19 seconds, including the audio test); the expanded FMP target was
+rebuilt and separately passed after the suite had already run that target.
+Retained complete suite log: build/material-core-20261005.log.
+Existing audio phase diagnostics remain in place. No gameplay or live-install
+writes were performed, and previous frozen ZIPs exclude this increment.
+
 ## 2026-10-05 exact repeated FMP records and metadata
 
 Original Assasain retexture set and flame flourish for soa repeats the same

@@ -1,5 +1,19 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 original Enviroment Snowing relinks 214 sky/cloud texture references
+across nine records, preserving every other byte. Both import routes pass
+original and reassigned-ID scratch banks plus sixteen safe negative routes.
+All Release targets build; scoped core 3/3, material and 18 record-refusal
+regressions pass. Next are Time-field source choices and scoped package checks.
+The earlier full forty-test run excludes this increment; see handoff.
+
+2026-10-05 material particle links now preserve map keys/floats and use effect
+identities for blended pairs and particle vectors. A labelled Gravity Hammer
+material derivative passes nine links, both routes and fourteen safe refusals;
+the full original still lacks dependencies. All 40 core tests pass and expanded
+vector/domain tests pass separately. This checkpoint precedes the environment
+binding above. See handoff for source evidence and acceptance scope.
+
 2026-10-05 frozen 0b6be9c duplicate/creature ZIP has audited passes for all 89
 workflows across 42 initial and 47 resumed successes. Both failed GUI attempts
 are retained; the resumed script exercises the compact dropdown on its actual

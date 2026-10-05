@@ -2,6 +2,31 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 ENVIRONMENT_THEME_DAY/CEnvironmentThemeDaySetDef Time groups
+`1743315694.unknown.<row>.Sky` and `.Clouds` relink texture-bank IDs. Each row
+has 34 tagged values (269 bytes); every tag/width and the complete count/length
+must agree. Metadata retains both occurrence and group size, addressing all
+nonzero sky or lower/upper cloud slots in member order. Incomplete groups refuse,
+including legacy metadata that omitted an unresolved nonzero reference. The
+two sky/four cloud fields follow native transfer order and ChocolateBox control
+67E8E2EE's MainTextureID declarations. No weather floats, booleans or tags change.
+Original Enviroment Snowing passes 214 words in nine records through both routes,
+including reassigned texture IDs in an explicitly derived scratch bank; sixteen
+negative routes preserve prior output. This is offline import evidence.
+
+2026-10-05 material blend groups `571592595.Blood Blending Effects.<row>.unknown`
+retain their two ordered particle references. Only MATERIAL/CMaterialDef's
+BlendedSwordHitEffects map is accepted: count followed by 20-byte rows containing
+a key, two effect IDs and two floats. Native ego_r serializers 0047062b and
+00470a7e establish this serialized order; the in-memory struct order differs.
+The five material particle vectors use effect-bank identities, with exact
+native member paths and three verified historic aliases. Complete counts,
+row/member bounds and byte lengths are validated before relinking. Keys,
+floats and all other bytes remain unchanged. A labelled material-only Gravity
+Hammer derivative passes nine links, both import routes and fourteen safe
+refusals. The full original remains refused for absent dependencies; neither
+full-package nor gameplay support is claimed. See HANDOFF_WORLD_UI for evidence.
+
 2026-10-05 legacy creature appearance groups beginning `4000099073.Unknown`
 address an alternative across the native body-part lists. Mesh groups visit
 each body part's selected alternative, then its skeletal configuration name

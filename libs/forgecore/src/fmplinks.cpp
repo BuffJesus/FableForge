@@ -286,6 +286,18 @@ bool identicalGameOwners(const big::File& package, const std::string& owner) {
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
     std::vector<Link> result;
     for (const auto& group : readMetadataGroups(bytes)) {
+        // ChocolateBox repeats Sky/Clouds names within a Time row. Keep the
+        // complete group size, including singletons, to reject omitted slots.
+        if (group.path.starts_with("1743315694.unknown.") &&
+            (group.path.ends_with(".Sky") || group.path.ends_with(".Clouds"))) {
+            const size_t limit = group.path.ends_with(".Sky") ? 2 : 4;
+            if (group.targets.empty() || group.targets.size() > limit)
+                fail("invalid environment texture reference count");
+            for (size_t index = 0; index < group.targets.size(); ++index)
+                result.push_back({group.path + ".References." + std::to_string(index) + "." +
+                                  std::to_string(group.targets.size()), group.targets[index]});
+            continue;
+        }
         // Legacy appearance groups transpose alternatives across body parts.
         // Carry both occurrence and original group size so locate() can reject
         // truncated/extra lists against the complete native prefix layout.
@@ -315,6 +327,15 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
         if (group.path == "4272390883.VillagePeopleID" && group.targets.size() == 2) {
             for (size_t i = 0; i < 2; ++i)
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
+            continue;
+        }
+        // CBlendedParticleEffectSet::TransferBinaryOut serializes both
+        // particle indices before both floats (ego_r 0047062b). The legacy
+        // material group addresses only that proven two-index pair.
+        if (group.path.starts_with("571592595.Blood Blending Effects.") &&
+            group.path.ends_with(".unknown") && group.targets.size() == 2) {
+            for (size_t index = 0; index < 2; ++index)
+                result.push_back({group.path + "." + std::to_string(index), group.targets[index]});
             continue;
         }
         // CWeaponDef.FlourishParticles contains two consecutive EffectIDs.
@@ -504,6 +525,54 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
     for (size_t i = 0; i < decoded.fields.size(); ++i) {
         const auto& field = decoded.fields[i]; offset += 4;
         if (field.tag == tag) {
+            if ((entry.definition == "ENVIRONMENT_THEME_DAY" ||
+                 entry.definition == "CEnvironmentThemeDaySetDef") && field.name == "Time" &&
+                (field.type == "Vector_CEnvironmentThemeDef" ||
+                 field.type == "vector<CEnvironmentThemeDef>") && parts.size() == 7 &&
+                parts[0] == "1743315694" && parts[1] == "unknown" &&
+                (parts[3] == "Sky" || parts[3] == "Clouds") && parts[4] == "References") {
+                // Native CEnvironmentThemeDef::Transfer and ChocolateBox
+                // 67E8E2EE agree on 34 tagged values / 269 bytes per row.
+                static constexpr std::string_view members[] = {
+                    "TimeOfDay", "MoonLit", "FogStartZ", "FogEndZ", "SkyTexture0", "SkyTexture1",
+                    "SkyTexture1Blend", "CloudLowerLayerTexture0", "CloudLowerLayerTexture1",
+                    "CloudLowerLayerTexture1Blend", "CloudLowerLayerSpeedMultiplier",
+                    "CloudUpperLayerTexture0", "CloudUpperLayerTexture1", "CloudUpperLayerTexture1Blend",
+                    "CloudUpperLayerSpeedMultiplier", "WaterColourToReflectionBlend", "WaterAlphaFactor",
+                    "WaterSpecularHightlightFactor", "RainStrength", "SnowStrength", "MistAlpha",
+                    "LightningFrequency", "GlowThresholdScale", "GlowBloomScale", "GlowMotionBlur",
+                    "ShadowFactor", "FadedShadowFactor", "WaterRefractionBlendStart", "WaterRefractionBlendEnd",
+                    "WaterFlowSpeedFactor", "WaterOscilationSpeed", "WaterSwellFactor",
+                    "WaterShoreSwellFactor", "WaterReflectionOffset"};
+                if (field.value.size() < 4) fail("truncated environment time rows");
+                const size_t count = read32(field.value, 0), wanted = number(parts[2]);
+                if (count > 4096 || count > (field.value.size() - 4) / 269 ||
+                    field.value.size() != 4 + count * 269 || wanted >= count)
+                    fail("invalid environment time row layout");
+                size_t cursor = 4;
+                std::vector<size_t> slots;
+                for (size_t row = 0; row < count; ++row) {
+                    for (const auto member : members) {
+                        if (read32(field.value, cursor) != defdecode::fieldTag(member))
+                            fail("invalid environment time member tag");
+                        cursor += 4;
+                        const bool selected = parts[3] == "Sky" ?
+                            (member == "SkyTexture0" || member == "SkyTexture1") :
+                            (member == "CloudLowerLayerTexture0" || member == "CloudLowerLayerTexture1" ||
+                             member == "CloudUpperLayerTexture0" || member == "CloudUpperLayerTexture1");
+                        if (row == wanted && selected && read32(field.value, cursor) != 0)
+                            slots.push_back(cursor);
+                        cursor += member == "MoonLit" ? 1 : 4;
+                    }
+                }
+                const size_t ordinal = number(parts[5]), expected = number(parts[6]);
+                // Support complete named nonzero slots only. Legacy metadata
+                // may also omit unresolved nonzero IDs: an incomplete group
+                // must refuse, since its surviving slot identities are unknown.
+                if (expected == 0 || expected != slots.size() || ordinal >= expected)
+                    fail("ambiguous environment texture slots");
+                return {offset + slots[ordinal], i + 1, Destination::TextureEntry};
+            }
             if (villagePair) {
                 if (villageOccurrence++ == villageIndex)
                     return {offset, i + 1, Destination::GameEntry};
@@ -823,6 +892,21 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (index >= count) fail("special effects reference index out of range");
                 return {offset + 4 + index * 8 + 4, i + 1, Destination::EffectEntry};
             }
+            if ((entry.definition == "MATERIAL" || entry.definition == "CMaterialDef") &&
+                field.name == "BlendedSwordHitEffects" &&
+                field.type == "Map_VCBlendedParticleEffectSet__J" && parts.size() == 5 &&
+                parts[0] == "571592595" && parts[1] == "Blood Blending Effects" &&
+                parts[3] == "unknown") {
+                if (field.value.size() < 4) fail("invalid blended particle effect map");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 20 ||
+                    field.value.size() != 4 + count * 20)
+                    fail("unsupported blended particle effect map layout");
+                const size_t row = number(parts[2]), member = number(parts[4]);
+                if (row >= count || member >= 2) fail("blended particle effect reference index out of range");
+                // Row: key, Particle1Index, Particle2Index, two float values.
+                return {offset + 8 + row * 20 + member * 4, i + 1, Destination::EffectEntry};
+            }
             // Suit maps contain {clothing-part enum, game.bin object index}
             // pairs. Relink only the value, preserving the enum key.
             if (entry.definition == "CHeroSuitDef" && field.name == "SuitParts" &&
@@ -903,6 +987,28 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             // Legacy array names themselves contain dots, e.g.
             // CameraList.Add(CAMERA). The last two tokens identify its item.
+            if ((entry.definition == "MATERIAL" || entry.definition == "CMaterialDef") &&
+                field.type == "Vector_J" &&
+                (field.name == "SlideFootParticleEffect" || field.name == "SwordHitParticleEffect" ||
+                 field.name == "KnockdownHitFloorParticleEffect" || field.name == "WindBlowDustEffect" ||
+                 field.name == "BerserkedSwordHitParticleEffect")) {
+                const bool nativePath = parts.size() == 4 && parts[3] == "_" &&
+                    parts[1] == field.name + "[i]";
+                const bool legacyPath = parts.size() == 4 &&
+                    ((field.name == "SwordHitParticleEffect" && parts[1] == "Blood Splatter Effects" &&
+                      parts[3] == "MaterialEffectID2") ||
+                     (field.name == "WindBlowDustEffect" && parts[1] == "Material Force Push Effect 2" &&
+                      parts[3] == "MaterialEffectID4") ||
+                     (field.name == "BerserkedSwordHitParticleEffect" && parts[1] == "Beserk Blood Splatter Effects" &&
+                      parts[3] == "MaterialEffectID5"));
+                if ((!nativePath && !legacyPath) || field.value.size() < 4)
+                    fail("unsupported material particle reference path");
+                const size_t count = read32(field.value, 0), index = number(parts[2]);
+                if (count > 4096 || count > (field.value.size() - 4) / 4 ||
+                    field.value.size() != 4 + count * 4 || index >= count)
+                    fail("invalid material particle reference vector");
+                return {offset + 4 + index * 4, i + 1, Destination::EffectEntry};
+            }
             if (parts.size() >= 4 && !parts.back().empty() && !parts[1].empty() &&
                 (field.type == "Vector_J" || field.type == "Vector_VCDefIndex__" ||
                  field.type == "Vector_VCDefString__")) {
