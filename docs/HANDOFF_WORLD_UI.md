@@ -1,5 +1,22 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 region descriptions and breath effects
+
+Exact REGION controls now map RegionDescription (`801675342.Region Description`)
+to text IDs and HeroBreathParticle (`435772141.Area Effects`) to effect IDs.
+ChocolateBox 2FC8984E/19F95AED and native schema field tags agree. Exact-word
+unit checks verify each domain and refuse absent asset maps.
+
+`tools/test_fmp_region_links.py` passes eleven original packages in
+`build/fmp-region-links-0seemwwc/result.json`: independent actual text/effect IDs,
+direct/composed definition-bank parity and unchanged source/baseline hashes.
+Packages include Bowerstone South Pole, both Bower Stone weapon-law variants,
+Darkwood Winter, Fable PAIN, Frostbitten Albion, No Crimes, REGION Restore,
+Regions Mod, Weapons & Spells in Bowerstone & Bordello, and Wep Mag Ban Lift
+Gold Cap Incr. All eleven were refused in the frozen sweep, bringing separately
+demonstrated individual offline imports to 653/821. This does not certify
+gameplay or combining those region mods with one another.
+
 ## 2026-10-04 scripted shop category defaults
 
 StockCategoryDefaults control 789AE61A uses the same verified tagged 64-byte row

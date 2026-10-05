@@ -379,6 +379,12 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 if (entry.definition == "EXPRESSION" && field.name == "TextTag" &&
                     field.type == "uint32" && link.path == "4192721254.TEXT_EXPRESSION_ID")
                     return {offset, i + 1, Destination::TextEntry};
+                if (entry.definition == "REGION" && field.name == "RegionDescription" &&
+                    field.type == "uint32" && link.path == "801675342.Region Description")
+                    return {offset, i + 1, Destination::TextEntry};
+                if (entry.definition == "REGION" && field.name == "HeroBreathParticle" &&
+                    field.type == "int32" && link.path == "435772141.Area Effects")
+                    return {offset, i + 1, Destination::EffectEntry};
                 if (entry.definition == "SHOT" && field.type == "int32" &&
                     ((field.name == "PrimaryEffect" &&
                       link.path == "4071417874.Shot Projectile Holding Effect ID") ||

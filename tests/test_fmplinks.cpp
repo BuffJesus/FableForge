@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+#include <tuple>
 
 namespace {
 using Bytes = std::vector<uint8_t>;
@@ -177,6 +178,29 @@ int main() {
         return forge::bin::Entry{definition, "PROBE", 0, forge::defdecode::encode(record)};
     };
     Bytes shopValue; word(shopValue, 77);
+    for (const auto& [fieldName, fieldType, path, destination] :
+         std::vector<std::tuple<std::string, std::string, std::string, forge::fmplinks::Destination>>{
+             {"RegionDescription", "uint32", "801675342.Region Description", forge::fmplinks::Destination::TextEntry},
+             {"HeroBreathParticle", "int32", "435772141.Area Effects", forge::fmplinks::Destination::EffectEntry}}) {
+        const auto regionSchema = forge::defschema::Schema::loadText(
+            "{\"REGION\":{\"prefix_len\":3,\"fields\":[{\"name\":\"" +
+            fieldName + "\",\"type\":\"" + fieldType + "\"}]}}");
+        const auto region = legacyEntry("REGION", fieldName, fieldType, shopValue);
+        const auto location = forge::fmplinks::locate(region, regionSchema, {path, "ASSET_PROBE"});
+        check(location.offset == 7 && location.destination == destination,
+              "region reference uses its explicit asset identity domain");
+        const std::map<std::string, uint32_t> assets{{"ASSET_PROBE", 14444}};
+        const std::vector<forge::fmplinks::Link> links{{path, "ASSET_PROBE"}};
+        const auto linked = forge::fmplinks::relink(region, targets, regionSchema, links, false,
+            nullptr, nullptr, destination == forge::fmplinks::Destination::EffectEntry ? &assets : nullptr,
+            destination == forge::fmplinks::Destination::TextEntry ? &assets : nullptr);
+        auto expected = region.data;
+        const uint32_t value = 14444;
+        std::memcpy(expected.data() + 7, &value, 4);
+        check(linked == expected, "region relinking changes only the asset word");
+        rejects([&] { forge::fmplinks::relink(region, targets, regionSchema, links); },
+                "region asset references refuse a missing asset map");
+    }
     const auto expressionSchema = forge::defschema::Schema::loadText(
         R"({"EXPRESSION":{"prefix_len":3,"fields":[{"name":"SpriteGraphic","type":"int32"}]}})");
     const auto expression = legacyEntry("EXPRESSION", "SpriteGraphic", "int32", shopValue);
