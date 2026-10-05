@@ -27,6 +27,17 @@ claimed. Both frozen 9bc59e8 and 46d5c91 ZIPs exclude this later increment.
 
 ## 2026-10-05 package timeout evidence and configurable scratch parent
 
+The C: Aeon retry at package-smoke-vjr53y5o passes Aeon/controller preservation,
+FMP refusal UI and Unicode paths, then retains a failed Unicode-image child:
+its second-size texture-add command exceeded the child's 120-second deadline
+while the fixture still used D: scratch. That run has three passes plus one
+failed check and no result.json. Unicode-image fixtures now also accept the
+owned --work-root and receive the package scratch parent. A same-hash resume
+from unicode_images at package-smoke-zcbb50_2 passes Unicode images and compiler
+paths on C:; later workflows are still running. These are separate retained
+attempts, not a single uninterrupted full acceptance. Both package resumptions
+live under C:/Users/Cornelio/FableForge-asset-checks-20261005.
+
 The full frozen 9bc59e8 extraction at build/package-smoke-vpvfa94h records 56
 passing workflows, then hits the 600-second parent timeout in Aeon/controller
 preservation. It has no result.json and is not full acceptance. Child evidence

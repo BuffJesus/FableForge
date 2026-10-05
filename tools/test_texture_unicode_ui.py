@@ -28,8 +28,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install', type=Path, required=True)
     parser.add_argument('--gui', type=Path, default=repo/'build/FableForge.exe')
+    parser.add_argument('--work-root', type=Path, default=repo/'build')
     args = parser.parse_args()
-    work = Path(tempfile.mkdtemp(prefix='texture-unicode-', dir=repo/'build')).resolve()
+    work_root = args.work_root.resolve()
+    work_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='texture-unicode-', dir=work_root)).resolve()
+    assert work.parent == work_root
     print('Evidence retained at', work, flush=True)
     gui = args.gui.resolve()
     cwd = work/'unrelated working directory'
