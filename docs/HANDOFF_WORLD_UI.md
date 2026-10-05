@@ -37,6 +37,12 @@ mod-staged-baseline-yd9y2cqv after separating Recipe source and recipe-output
 Mixed 50-command corpus plus Mods UI passes at build/mods-corpus-h62pky20.
 All Release targets are current; canonical core is unchanged from its 40-test
 gate. Package harness adds both ownership layouts (85 total).
+The owning source check_all gate also includes both Windows ownership layouts.
+An independent late-installation-failure probe passes in
+mod-stage-install-failure-62u6j0qv: a locked scratch TNG fails after output
+publication, retains a recovery manifest and valid receipt/output, and restores
+the install exactly after unlock; retry stages and undeploys exactly. No live
+installation writes. Probe script is retained at build/probe_mod_stage_install_failure.py.
 Frozen b7ec186 ZIP and its 81-workflow acceptance do not include this change.
 
 ## 2026-10-05 frozen local package covers 81 workflows across retained runs

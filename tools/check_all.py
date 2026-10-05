@@ -47,6 +47,10 @@ def main():
               [sys.executable, "tools/test_mod_bank_refusal.py"], capture_output=True)
     ok &= run("FMP record identity refusal and supported legacy replacements",
               [sys.executable, "tools/test_fmp_record_refusal.py"], capture_output=True)
+    if os.name == "nt":
+        for options in ([], ["--complete-data"]):
+            ok &= run("mod output ownership, rollback and fresh-only staging " + str(options),
+                      [sys.executable, "tools/test_mod_build_ownership.py", *options], capture_output=True)
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
