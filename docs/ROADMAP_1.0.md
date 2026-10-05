@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 contributor review follow-up: conflict checks report unavailable
+whole-file/texture/mesh choices without permitting publication. Builds remain
+strict. Both-size real dropdown recovery, clipping-aware warning captures,
+ordinary/complete-Data contributor checks and existing saved-choice recovery
+gates pass. See HANDOFF_WORLD_UI for retained evidence and fixture boundaries.
+
 2026-10-05 saved texture/mesh choices now refuse unavailable per-entry
 contributors instead of falling back to load order. Twenty focused direct/build
 checks, both original asset-layer suites, the 24-case whole-file gate and all

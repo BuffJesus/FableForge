@@ -57,6 +57,11 @@ void Automation::registerWidget(const char* id) {
         // the chain, moving its rect by every scroll already requested (ScrollToItem alone stops at the first)
         // the first window up the chain that can scroll: centre the item in it
         for (ImGuiWindow* w = ImGui::GetCurrentWindow(); w; w = (w->Flags & ImGuiWindowFlags_ChildWindow) ? w->ParentWindow : nullptr) {
+            // Auto-sized cards can report a real ScrollMax while clipped by
+            // their panel. The panel owns scrolling; moving the card itself
+            // leaves a wrapped message outside the parent's visible area.
+            if ((w->ChildFlags & ImGuiChildFlags_AutoResizeY) &&
+                (w->Flags & ImGuiWindowFlags_NoScrollWithMouse)) continue;
             if (w->ScrollMax.y < 1.0f) continue;   // an auto-sized card reports a float crumb
             if (w->ClipRect.Min.y>=w->ClipRect.Max.y) continue;
             const float centre = (a.y + b.y) * 0.5f;

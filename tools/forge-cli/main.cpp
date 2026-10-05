@@ -9002,13 +9002,14 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
 int modsMerge(const std::string&, const std::string&, const std::vector<std::string>&,
               const std::string&, bool, bool, const std::vector<std::string>&,
               const std::string&, const std::map<std::string, std::string>*, bool, json*,
-              std::vector<std::filesystem::path>*);
+              std::vector<std::filesystem::path>*, bool);
 
 int installCompleteData(const std::string& baseRoot, const std::string& outDir,
                         const std::vector<std::string>& sources, const std::string& fieldSchema,
                         bool doStage, bool jsonOutput, const std::vector<std::string>& labels,
                         const std::string& picksPath, const std::map<std::string, std::string>* loadedPicks,
-                        json* reportOut, std::vector<std::filesystem::path>* outputRemovals) {
+                        json* reportOut, std::vector<std::filesystem::path>* outputRemovals,
+                        bool reviewChoices) {
     namespace fs = std::filesystem;
     const fs::path source = fs::weakly_canonical(sources.front());
     const fs::path base = fs::weakly_canonical(baseRoot), output = fs::weakly_canonical(outDir);
@@ -9121,7 +9122,8 @@ int installCompleteData(const std::string& baseRoot, const std::string& outDir,
     const auto changes = workspace.path() / "following";
     json report;
     const int rc = modsMerge(effective.string(), changes.string(), following, fieldSchema, false,
-                             true, followingLabels, picksPath, loadedPicks, false, &report, outputRemovals);
+                             true, followingLabels, picksPath, loadedPicks, false, &report, outputRemovals,
+                             reviewChoices);
     if (rc) return rc;
     copyInstallTree(changes, prepared, true);
     // Empty following orders preserve the supplied complete BINs byte for byte.
@@ -9160,8 +9162,14 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& labels, const std::string& picksPath,
               const std::map<std::string, std::string>* loadedPicks = nullptr,
               bool allowCompleteData = false, json* reportOut = nullptr,
-              std::vector<std::filesystem::path>* outputRemovals = nullptr) {
+              std::vector<std::filesystem::path>* outputRemovals = nullptr,
+              bool reviewChoices = false) {
     namespace fs = std::filesystem;
+    // Conflict checks compose only in an owned temporary directory. Keep their
+    // contributor report available for clearing stale choices; published builds
+    // always retain strict winner validation.
+    if (reviewChoices && doStage)
+        throw std::runtime_error("choice review cannot stage a mod build");
     std::vector<std::string> sources;
     for (const auto& source : sourcePaths) sources.push_back(forge::modorder::normalizeSource(source).string());
     preflightModRecipes(sources);
@@ -9169,7 +9177,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         throw std::runtime_error("The complete Data source is missing its compiled banks; restore the extracted mod files before building.");
     if (allowCompleteData)
         return installCompleteData(baseRoot, outDir, sources, fieldSchema, doStage, jsonOutput,
-                                   labels, picksPath, loadedPicks, reportOut, outputRemovals);
+                                   labels, picksPath, loadedPicks, reportOut, outputRemovals, reviewChoices);
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -9759,18 +9767,21 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         json fileRows = json::array();
         for (const auto& [lower, who] : carriers) {
             const Carrier* win = &who.back();
-            bool overridden = false, keepBase = false;
+            bool overridden = false, keepBase = false, unavailable = false;
             if (auto pk = picks.file.find(lower); pk != picks.file.end()) {
                 overridden = true;
                 if (pk->second == "vanilla") keepBase = true;
                 else {
                     const auto selected = std::find_if(who.begin(), who.end(),
                         [&](const Carrier& c) { return c.label == pk->second; });
-                    if (selected == who.end())
-                        throw std::runtime_error("mods file choice: " + lower +
-                            " selects unavailable contributor " + pk->second +
-                            "; review or clear this saved choice");
-                    win = &*selected;
+                    if (selected == who.end()) {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods file choice: " + lower +
+                                " selects unavailable contributor " + pk->second +
+                                "; review or clear this saved choice");
+                        unavailable = true;
+                        overridden = false;
+                    } else win = &*selected;
                 }
             }
             bool agree = true;
@@ -9779,7 +9790,8 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 ++contested;
                 json mods = json::array();
                 for (const auto& c : who) mods.push_back(c.label);
-                json row={{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label}, {"overridden", overridden}};
+                json row={{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label},
+                          {"overridden", overridden}, {"choice_unavailable", unavailable}};
                 if (jsonOutput) {
                     // Raw source-file snapshots, not the later recipe/resource result
                     // and not choose-time fingerprints for persisted label picks.
@@ -9907,9 +9919,13 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const auto found = std::find_if(versions.begin(), versions.end(),
                         [&](const Version& v) { return v.mod == choice->second; });
                     if (found != versions.end()) { winner = &*found; overridden = true; }
-                    else throw std::runtime_error("mods texture choice: " + name +
-                        " selects unavailable contributor " + choice->second +
-                        "; review or clear the saved choice");
+                    else {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods texture choice: " + name +
+                                " selects unavailable contributor " + choice->second +
+                                "; review or clear the saved choice");
+                        unavailable = true;
+                    }
                 }
             }
             if (overridden) {
@@ -10045,9 +10061,13 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const auto found = std::find_if(versions.begin(), versions.end(),
                         [&](const Version& v) { return v.mod == choice->second; });
                     if (found != versions.end()) { winner = &*found; overridden = true; }
-                    else throw std::runtime_error("mods mesh choice: " + name +
-                        " selects unavailable contributor " + choice->second +
-                        "; review or clear the saved choice");
+                    else {
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods mesh choice: " + name +
+                                " selects unavailable contributor " + choice->second +
+                                "; review or clear the saved choice");
+                        unavailable = true;
+                    }
                 }
             }
             if (overridden) {
@@ -13854,7 +13874,9 @@ int main(int argc, char** argv) {
                     const albion::detail::TemporaryDirectory workspace("mods-conflicts-");
                     const auto& scratch = workspace.path();
                     if (!asJson) std::printf("dry run of %zu enabled mod(s) in order onto %s%s%s\n", sources.size(), root.c_str(), picksPath.empty() ? "" : ", picks from ", picksPath.c_str());
-                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson, mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order));
+                    const int rc = modsMerge(root, scratch.string(), sources, {}, false, asJson,
+                        mo::buildLabels(order), picksPath, nullptr, mo::installsCompleteData(order),
+                        nullptr, nullptr, /*reviewChoices*/ true);
                     return rc;
                 }
                 if (args[1] == "build") {

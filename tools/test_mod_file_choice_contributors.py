@@ -66,6 +66,12 @@ def main():
             result = run(*chosen, good=False)
             assert 'mods file choice:' in result.stderr and 'review or clear' in result.stderr
             assert winner in result.stderr and snapshot(output) == before
+            report = json.loads(run('mods', 'conflicts', root, '--picks', picks, '--json').stdout)
+            assert 'summary' in report and snapshot(output) == before
+            assert picks.read_text() == 'file:data/misc/shared.bin\t'+winner+'\n'
+            if failure in ('removed label', 'unrelated enabled source'):
+                row = next(r for r in report['files']['contested'] if r['path'] == 'data/misc/shared.bin')
+                assert row['choice_unavailable'] and not row['overridden'] and row['winner'] == 'PackB'
             (work/(route+'-'+failure.replace(' ', '-')+'.log')).write_text(result.stderr)
             (sources[0]/relative).write_bytes(b'first')
             checks.append({'route': route, 'case': failure, 'result': 'refused; prior files preserved'})

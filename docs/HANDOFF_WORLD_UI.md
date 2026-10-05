@@ -1,5 +1,38 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 unavailable choices remain reviewable
+
+Conflict checks now allow unavailable whole-file/texture/mesh choices only in
+their owned scratch composition. Reports mark the unavailable choice and show
+the current load-order winner; direct builds, registered builds and deployment
+retain strict refusal. Review mode propagates through complete-Data composition
+and cannot stage files. The GUI warning for these families asks for review or
+clearing before building, rather than implying the fallback can be deployed.
+
+The expanded asset contributor gate passes 32 cases, including real texture
+and mesh winner-menu clearing at 1440x900 and 800x600/1.5 scale. Evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+mod-asset-choice-contributors-_e_ggvym/result.json and its four captures/logs.
+The complete-Data variant passes 28 CLI cases in
+mod-asset-choice-contributors-zz875pt7/result.json; its definition banks are
+synthetic, not a complete-overhaul gameplay fixture. The earlier ordinary
+28-case report is mod-asset-choice-contributors-nmcmwnib/result.json.
+Whole-file preservation/removal/junction checks pass all 24 cases with added
+review-report assertions in mod-file-choice-contributors-vj1kmjtw/result.json.
+
+`test_mod_unavailable_choice.py` passes both sizes, preserves the unavailable
+pick through review, refuses the build without changing prior output, and
+clears via the actual dropdown before successfully rebuilding. Corrected
+evidence: build/mod-unavailable-choice-sw4341kf/. Initial t843ykzf captures
+revealed a compact warning clipped by its parent despite passing window-bound
+checks. Automation reveal now skips non-scrolling auto-sized cards and scrolls
+their parent panel; the test additionally requires the whole item inside its
+clip rectangle. The corrected compact capture was visually inspected.
+`test_mod_unreported_choices.py` also passes both-size saved-choice visibility,
+locked/unreadable refusal and retry, individual clearing and the >400-row case
+in build/mod-unreported-choices-h942xgrm/. CLI and GUI rebuilds pass. No game
+files, release packages or online publications changed.
+
 ## 2026-10-05 saved texture and mesh contributor refusal
 
 Texture and mesh entry choices now refuse when their saved winner is absent

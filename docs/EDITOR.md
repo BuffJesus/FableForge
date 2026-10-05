@@ -1036,9 +1036,10 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   other families reserve only vanilla, so a contributor named base remains a
   normal source choice. This checks
   the last report's contributors, not source content fingerprints.
-  Whole-file, FMP texture and FMP mesh choices refuse a build or conflict check
+  Whole-file, FMP texture and FMP mesh choices refuse a build
   when the selected source no longer contributes the selected file or entry.
-  Review or clear that choice before retrying. Choices with no current
+  Conflict checks still return the current contributors and flag the unavailable
+  choice, so it can be reviewed or cleared before retrying. Choices with no current
   contributions remain saved and inactive.
   A deploy also
   leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):

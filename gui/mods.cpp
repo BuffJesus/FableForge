@@ -1021,8 +1021,10 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             // A combo action may have just removed or replaced the saved choice.
             if (modChoiceUnavailable(c)) {
                 ImGui::PushFont(fontSmall_);
+                const bool strictChoice = c.kind == "file" || c.kind == "texture" || c.kind == "mesh";
                 const auto message = "Saved choice " + modPicks_.at(c.key) +
-                    " has no contribution here; load order applies.";
+                    (strictChoice ? " has no contribution here; review or clear it before building."
+                                  : " has no contribution here; load order applies.");
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
                 ImGui::TextColored(theme::vec(theme::Warn), "%s", message.c_str());
                 ImGui::PopTextWrapPos();

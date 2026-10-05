@@ -26,11 +26,11 @@ def main():
     root = work/'install'
     write_bank(root, (1, 2, 3, 4))
     sources = []
-    def cli(label, *arguments):
+    def cli(label, *arguments, good=True):
         result = subprocess.run([str(gui.with_name('forge-tools.exe')), *map(str, arguments)],
             cwd=cwd, capture_output=True, text=True, timeout=60)
         (work/(label+'.log')).write_text(result.stdout+result.stderr, encoding='utf-8')
-        assert result.returncode == 0, result.stdout+result.stderr
+        assert (result.returncode == 0) == good, result.stdout+result.stderr
         return result.stdout
     for label in ('PackA', 'base', 'PackB'):
         pack = work/label
@@ -47,9 +47,12 @@ def main():
         for source in (root, *sources) for p in source.rglob('*') if p.is_file()}
     report = json.loads(cli('conflicts', 'mods', 'conflicts', root, '--json'))
     assert report['files']['contested'][0]['winner'] == 'PackB'
+    assert report['files']['contested'][0]['choice_unavailable']
     output = work/'built'
-    cli('build', 'mods', 'build', root, output, '--json')
-    assert (output/'data/Misc/shared.txt').read_bytes() == b'PackB'
+    output.mkdir(); (output/'sentinel').write_bytes(b'keep prior output')
+    cli('build-refused', 'mods', 'build', root, output, '--json', good=False)
+    assert list(output.iterdir()) == [output/'sentinel']
+    assert (output/'sentinel').read_bytes() == b'keep prior output'
     for size, scale in [('1440x900', 1), ('800x600', 1.5)]:
         case = work/size
         case.mkdir()
@@ -78,6 +81,11 @@ def main():
         bounds = re.search(r'widget_rect mod_unavailable_choice_0 ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)',log)
         assert bounds, 'review-message rectangle not captured'
         left,top,right,bottom = map(float,bounds.groups())
+        clip = re.search(r'widget_clip_rect mod_unavailable_choice_0 ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)', log)
+        assert clip, 'review-message clipping rectangle not captured'
+        clip_left,clip_top,clip_right,clip_bottom = map(float,clip.groups())
+        assert clip_left <= left < right <= clip_right and clip_top <= top < bottom <= clip_bottom, \
+            'review message is clipped by its scrolling panel'
         png = (case/'unavailable.png').read_bytes()
         assert png[:8] == b'\x89PNG\r\n\x1a\n'
         width,height = struct.unpack_from('>II',png,16)
@@ -107,6 +115,9 @@ def main():
     log = Path(str(recovery)+'.log').read_text(encoding='utf-8')
     assert result.returncode == 0 and 'RESULT PASS' in log,log[-4000:]
     assert not picks.exists()
+    cli('cleared-build', 'mods', 'build', root, output, '--json')
+    assert (output/'data/Misc/shared.txt').read_bytes() == b'PackB'
+    assert (output/'sentinel').read_bytes() == b'keep prior output'
     picks.write_bytes(b'file:data/misc/shared.txt\tbase\n')
     report = json.loads(cli('base-source-report','mods','conflicts',root,'--json'))
     assert report['files']['contested'][0]['winner'] == 'base'
