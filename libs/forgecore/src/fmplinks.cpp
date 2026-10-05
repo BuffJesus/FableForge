@@ -480,6 +480,22 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 field.name == "Graphic" && field.type == "CEngineGraphic" &&
                 field.value.size() == 17 && link.path == "3361958702.Inventory HUD Icon")
                 return {offset + 4, i + 1, Destination::TextureEntry};
+            // ChocolateBox control 2755297F: counted old/new MainTextureID pairs.
+            if (entry.definition == "CTextureReplacementDef" && field.name == "Entries" &&
+                field.type == "Vector_VCEntry_CTextureReplacementDef__" && parts.size() == 4 &&
+                parts[0] == "659892607" && parts[1] == "CTextureReplacementDef_List" &&
+                (parts[3] == "Texture To Replace" || parts[3] == "Replacement Texture")) {
+                if (field.value.size() < 4) fail("invalid texture replacement count");
+                const size_t count = read32(field.value, 0);
+                if (count > 4096 || count > (field.value.size() - 4) / 8 ||
+                    field.value.size() != 4 + count * 8)
+                    fail("unsupported texture replacement layout");
+                const size_t index = number(parts[2]);
+                if (index >= count) fail("texture replacement index out of range");
+                return {offset + 4 + index * 8 +
+                        (parts[3] == "Replacement Texture" ? 4u : 0u), i + 1,
+                        Destination::TextureEntry};
+            }
             // ChocolateBox's CExperienceDef 1D81A73B control stores a
             // count followed by {experience threshold, EffectID} pairs.
             if (entry.definition == "CExperienceDef" &&

@@ -180,6 +180,42 @@ int main() {
     };
     Bytes shopValue; word(shopValue, 77);
     {
+        const auto replacementSchema = forge::defschema::Schema::loadText(
+            R"({"CTextureReplacementDef":{"prefix_len":3,"fields":[{"name":"Entries","type":"Vector_VCEntry_CTextureReplacementDef__"}]}})");
+        Bytes pairs; word(pairs, 2); word(pairs, 77); word(pairs, 78); word(pairs, 79); word(pairs, 80);
+        const auto replacement = legacyEntry("CTextureReplacementDef", "Entries",
+            "Vector_VCEntry_CTextureReplacementDef__", pairs);
+        const std::vector<forge::fmplinks::Link> replacementLinks{
+            {"659892607.CTextureReplacementDef_List.0.Texture To Replace", "OLD"},
+            {"659892607.CTextureReplacementDef_List.1.Replacement Texture", "NEW"}};
+        const std::map<std::string, uint32_t> textureMap{{"OLD", 1001}, {"NEW", 1002}};
+        auto expected = replacement.data;
+        auto putWord = [&](size_t at, uint32_t value) {
+            for (size_t n = 0; n < 4; ++n) expected[at+n] = uint8_t(value >> (8*n));
+        };
+        putWord(11, 1001); putWord(23, 1002);
+        check(forge::fmplinks::relink(replacement, targets, replacementSchema, replacementLinks,
+                  false, nullptr, &textureMap) == expected,
+              "texture replacement pairs change only selected old/new texture words");
+        check(forge::fmplinks::locate(replacement, replacementSchema, replacementLinks[0]).destination ==
+                  forge::fmplinks::Destination::TextureEntry, "replacement source uses texture identity");
+        for (const auto& path : {"659892607.CTextureReplacementDef_List.2.Texture To Replace",
+                                "659892607.CTextureReplacementDef_List.0.unknown"})
+            rejects([&] { forge::fmplinks::locate(replacement, replacementSchema, {path, "OLD"}); },
+                    "out-of-range and unverified texture replacement paths refuse");
+        for (int variant = 0; variant < 3; ++variant) {
+            auto malformed = replacement;
+            if (variant == 0) malformed.data[7] = 3;
+            if (variant == 1) malformed.data.push_back(0);
+            if (variant == 2) malformed.data[9] = 1;
+            rejects([&] { forge::fmplinks::locate(malformed, replacementSchema, replacementLinks[0]); },
+                    "texture replacement counts, trailing bytes and bounds refuse");
+        }
+        rejects([&] { forge::fmplinks::relink(replacement, targets, replacementSchema,
+                          replacementLinks, false, nullptr, nullptr); },
+                "texture replacement missing texture map refuses");
+    }
+    {
         const auto labelSchema = forge::defschema::Schema::loadText(
             R"({"INVENTORY_TYPE":{"prefix_len":3,"fields":[{"name":"InventoryName","type":"uint32"}]}})");
         const auto labelRecord = legacyEntry("INVENTORY_TYPE", "InventoryName", "uint32", shopValue);

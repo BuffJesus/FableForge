@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 verified texture replacement pairs now bind old/new texture IDs.
+Original Plate Helmet and Prophet 01 Upper Robe pass four links, exact other
+bytes, direct/composed bank parity and twenty safe refusals; all 40 core tests
+pass. Creature-prefix and Weapon4ID leads remain refused pending evidence.
+Frozen b4cebe2 excludes this increment; see handoff for scope.
+
 2026-10-05 finite definition floats now use shortest round-trip display text,
 distinguishing adjacent values and signed zero. Exact merge/build choices and
 both GUI sizes pass; all 40 core tests pass. Package harness adds this regression

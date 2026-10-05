@@ -2,6 +2,16 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 CTextureReplacementDef.Entries accepts the exact legacy
+659892607.CTextureReplacementDef_List.<index>.Texture To Replace and
+Replacement Texture paths. ChocolateBox control 2755297F stores a bounded
+count and pairs of MainTextureID words; native/schema Entries is a counted
+array. The linker validates complete count/size agreement, member spelling
+and index before changing a selected four-byte word. Both original Plate Helmet
+and Prophet 01 Upper Robe pass actual texture IDs, exact surrounding bytes and
+direct/composed bank parity; twenty malformed/missing-target cases preserve
+prior outputs. This is offline linking evidence, not gameplay verification.
+
 2026-10-04 historic wrapper support: 73 packages in the user's 2019 forum
 attachment corpus start with little-endian `12345` followed by one zlib stream
 containing a BIG FMP. The CLI's FMP list/extract/apply/rewrite paths now accept

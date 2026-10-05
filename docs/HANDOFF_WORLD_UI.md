@@ -1,5 +1,36 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 texture replacement old/new texture links
+
+Current importer probes at C: scratch fmp-texture-replacement-probe-l9vx_hr5
+reproduce original Plate Helmet and Prophet 01 Upper Robe refusals on Entries.
+ChocolateBox control 2755297F declares a count followed by two MainTextureID
+words per row. Native CTextureReplacementDef header and schema agree that
+Entries is a counted array. Exact legacy paths
+659892607.CTextureReplacementDef_List.<index>.Texture To Replace/Replacement Texture
+now bind to those texture identities only for the matching class/schema field.
+Counts above 4096, size/count disagreement, trailing bytes, invalid indices,
+unverified member paths and missing textures refuse. No other pair bytes change.
+
+tools/test_fmp_texture_replacement_links.py verifies both complete originals
+at C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-texture-replacement-links-y7f9cbuz/result.json: four links, exact surrounding
+record bytes, all emitted bank parity through direct/composed routes, twenty
+safe refusals preserving prior output and unchanged input hashes. Both routes
+use the same copied clean baseline. Native tests independently cover multiple
+rows, exact texture destinations/offsets, malformed counts/trailing bytes,
+indices, unknown paths and absent texture maps. All Release targets build;
+all 40 core tests pass (31.94s). No gameplay/full-corpus acceptance is claimed.
+Frozen b4cebe2 and earlier archives exclude this binding.
+
+Retained follow-up leads: skin-effect probes fmp-skin-effect-probe-9hexn2nh
+still refuse because CCreatureDef's leading composite blocks remain in the
+undecoded prefix. No raw-byte search binding was added. Weapon probes
+fmp-sheathed-weapon-probe-k7tqvj27 retain Weapon4ID refusals: ChocolateBox's
+9F6D0C83 InitialSheathedWeapon control declares an unlinked uint, conflicting
+with historic metadata's apparent weapon target. A game-index binding needs
+further evidence; no guessed slot substitution was added.
+
 ## 2026-10-05 float-fix ZIP: scoped extracted acceptance
 
 Clean b4cebe2 ZIP at dist/development/20261005-b4cebe2/
