@@ -53,6 +53,7 @@ def main():
     ap.add_argument("--script", type=Path, default=repo / "tests/ui/smoke.txt")
     ap.add_argument("--install", type=Path, help="explicit read-only source install")
     ap.add_argument("--cwd", type=Path, default=repo, help="working directory for the GUI process")
+    ap.add_argument("--compact", action="store_true", help="exercise the compact view-mode dropdown")
     a = ap.parse_args()
     work = Path(tempfile.mkdtemp(prefix="ui-smoke-", dir=repo / "build")).resolve()
     assert work.parent == (repo / "build").resolve()
@@ -60,12 +61,28 @@ def main():
     output = work / "ui"
     output.mkdir()
     script = work / a.script.name
-    script.write_text(a.script.read_text(encoding="utf-8").replace("build/ui", output.as_posix()), encoding="utf-8")
-    # The script clicks the wide-layout view chips. Saved window geometry and
-    # UI scale from another workflow must not select a compact toolbar instead.
-    command = [str(a.exe.resolve()), "--size", "1440x900", "--auto", str(script)]
+    desktop_size = None
+    if os.name == 'nt':
+        import ctypes
+        user32 = ctypes.windll.user32
+        desktop_size = (user32.GetSystemMetrics(0), user32.GetSystemMetrics(1))
+    compact = a.compact or (desktop_size is not None and desktop_size[0] < 1440)
+    script_text = a.script.read_text(encoding="utf-8").replace("build/ui", output.as_posix())
+    if compact:
+        for chip, mode in [('wireframe', 'Wireframe'), ('walkable', 'Walkable'),
+                           ('height', 'Height'), ('textured', 'Textured')]:
+            script_text = script_text.replace('click chip_' + chip,
+                'click combo_view_mode\nframes 2\nclick mode_view_' + mode +
+                '\nframes 2\nassert_state mode ' + mode)
+    script.write_text(script_text, encoding="utf-8")
+    # Exercise the toolbar presented on this desktop. Nested Windows test
+    # processes can have a 1024x768 desktop even when the caller has a wider one.
+    requested_size = "1044x788" if compact else "1440x900"
+    command = [str(a.exe.resolve()), "--size", requested_size, "--auto", str(script)]
     if a.install:
         command += ["--install", str(a.install.resolve())]
+    print('desktop size:', desktop_size, 'requested window:', requested_size,
+          'toolbar:', 'compact' if compact else 'wide', flush=True)
     t0 = time.time()
     r = subprocess.run(command, cwd=a.cwd.resolve(), capture_output=True, text=True, timeout=600,
                        env=dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN="1",
@@ -97,6 +114,8 @@ def main():
         for k, p in shots.items():
             if not os.path.exists(p): fails.append(f"missing screenshot {k}"); continue
             imgs[k] = Image.open(p)
+        if imgs:
+            print('captured window sizes:', sorted({img.size for img in imgs.values()}), flush=True)
         if len(imgs) == len(shots):
             # empty state: viewport is mostly background
             d, mean, bg = stats(imgs["01_empty.png"], viewport(imgs["01_empty.png"]))
@@ -128,6 +147,8 @@ def main():
             print("pixel assertions evaluated")
 
     (work / "report.json").write_text(json.dumps({"passed": not fails, "failures": fails,
+        "desktop_size": desktop_size, "requested_size": requested_size,
+        "toolbar": "compact" if compact else "wide",
         "pixel_checks": Image is not None, "seconds": dt}, indent=2), encoding="utf-8")
     if fails:
         print("UI SMOKE FAIL"); [print("  -", f) for f in fails]; return 1

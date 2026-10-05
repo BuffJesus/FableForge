@@ -339,3 +339,28 @@ including the new collision, with all prior outputs and source hashes intact.
 Focused fmp-record-refusal-ihg4j1ye passes 18 cases; its source file invariance
 now uses SHA-256. CLI target rebuilt; this guard changes no forgecore code.
 Frozen 0b6be9c excludes it. No game launch or live-install write occurred.
+
+## 2026-10-05 compact desktop package smoke
+
+Frozen 0b6be9c ZIP SHA-256
+95e4e15734a405d3b4a77ce7593a49c70adcbedcc7e457ee9c2861375ee005e7
+passed 42 workflows in package-smoke-lwbtweya before its wide-chip GUI script
+failed on a 1028x749 compact window. A diagnostic-only retry in
+package-smoke-4odpvi9m logged the child desktop as 1024x768, requested
+1440x900 and captured 1028x749. Both failures are retained; neither has a
+successful result. Earlier direct retry ui-smoke-s1d4ejkq passed wide chips.
+The desktop differs between executions; its external cause is not established.
+
+The smoke launcher now logs desktop/requested/captured dimensions and uses
+real compact dropdown clicks with explicit mode assertions on narrow desktops.
+It can also request that path with --compact. Existing pixel difference,
+terrain color, accent and GLB assertions remain. Compact ui-smoke-ntrzs7af
+and ui-smoke-nas91wm4 pass. Package child settings/cache roots are private.
+The same frozen ZIP tail is running in package-smoke-wxqrejsb; full acceptance
+is pending. No code in the frozen archive was changed by the harness repair.
+
+Actual extracted forge-tools identity matches PACKAGE_INFO in the original
+identical-record gate fmp-identical-records-s1qnzaxe/package-identity-audit.json:
+20 links, four control-equivalent outputs and 22 safe negative routes. This
+scoped audit excludes the later reserved namespace guard and is not a full
+package acceptance claim.

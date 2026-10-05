@@ -101,7 +101,8 @@ def main():
     print('packaged documentation links: PASS', links, flush=True)
     cwd = work / 'unrelated working directory'
     cwd.mkdir()
-    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', FORGE_PACKAGE_TOKEN='expanded')
+    env = dict(os.environ, FABLEFORGE_AUTOMATION_HIDDEN='1', FORGE_PACKAGE_TOKEN='expanded',
+               APPDATA=str(work/'appdata'), LOCALAPPDATA=str(work/'localappdata'))
     checks, not_run = [], []
     pending_start = args.start_at
     pending_only = set(args.only or [])
