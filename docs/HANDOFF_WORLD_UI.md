@@ -1,5 +1,25 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 environment Time source choices
+
+tools/test_fmp_environment_choices.py passes ten selections and two safe
+unavailable-contributor refusals through bare merge and registered build.
+Two explicitly labelled one-record derivatives use original Snowing Time
+blocks/metadata from ENVIRONMENT_THEME1 (eight rows) and ENVIRONMENT_THEME_BATTLE
+(two rows), targeting ENVIRONMENT_THEME1 with the baseline prefix/later fields.
+Order, either source and vanilla select the correct full Time field and its
+texture metadata; disabling/omitting the chosen source preserves prior output
+and picks, and clearing recovers Battle. The compound field has no scalar
+choice key, so its existing record-level choice selects it. Every later field
+remains baseline-identical. No original package is modified.
+
+Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-environment-choices-m1v0oj5w/result.json, with separate original/derivative
+hashes and unchanged input hashes. The first 1kdoyq_5 attempt had a fixture
+KeyError (read_bank rows do not carry an index); enumerating the bank fixes it.
+This follow-up adds no product behavior beyond eaa79f6. Scoped packaged-tool
+acceptance is next; all packages remain local.
+
 ## 2026-10-05 original environment sky/cloud groups
 
 Original Enviroment Snowing now relinks all 214 named texture words across
@@ -40,8 +60,8 @@ Initial independent probe environment-layout-3na39gas matches 30 texture words
 in ENVIRONMENT_THEME1 and every row tag/SunTilt boundary. Its failed predecessor
 3m6ycbba used the wrong bank name (MAIN_PC instead of GBANK_MAIN_PC). Winter Sky
 is a hero/hair package and supplies no second environment fixture
-(environment-winter-probe-9styl_2u/links.json). Next: environment Time-field
-source-choice preservation and a scoped packaged-tool acceptance checkpoint.
+(environment-winter-probe-9styl_2u/links.json). Time-field choice validation
+is completed above; a scoped packaged-tool acceptance checkpoint follows.
 
 ## 2026-10-05 material particle references
 

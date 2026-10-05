@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 environment Time choices retain the selected source's texture
+metadata across eight-row/two-row labelled derivatives. Ten merge/build
+selections and two safe unavailable refusals pass; all later fields and source
+inputs remain unchanged. No additional C++ change; scoped packaging is next.
+
 2026-10-05 original Enviroment Snowing relinks 214 sky/cloud texture references
 across nine records, preserving every other byte. Both import routes pass
 original and reassigned-ID scratch banks plus sixteen safe negative routes.
