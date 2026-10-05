@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 consolidated development ZIP at 928e38a passes all 61 extracted
+workflows, zero omitted/skipped checks, plus 108 identities and 120 doc links.
+It includes the subsequent contributor/staged-copy fixes. Three independent
+text-entry probes still demonstrate silently dropped malformed strings, changed
+groups and missing-baseline banks; these are next. See HANDOFF_WORLD_UI.
+
 2026-10-05 QST contributors: unavailable active registration winners now refuse
 publication, including single-editor/new-registry routes; single-contributor
 picks are honored. Original flags/absence and unrelated whole-file removals

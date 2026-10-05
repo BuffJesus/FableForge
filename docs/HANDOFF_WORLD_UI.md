@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 consolidated local development checkpoint
+
+Frozen application ZIP:
+dist/development/20261005-928e38a/FableForge-0.18.1-dev.928e38a.20261005-win64.zip.
+SHA256 b623689fec134988b3beaaff8f1eb35f48ddc946118836c1466068ebbb314fa0.
+The separate illustrated guide ZIP is alongside it. PACKAGE_INFO identifies
+checkout 928e38ae67c70af653252d313519f28015f6d322 with tracked_changes=false;
+that checkout field is not an executable provenance certificate. All Release
+targets were rebuilt from this checkout; the last functional core gate passes
+all 40 tests. No tags, release assets, external messages or gameplay probes.
+
+The single extracted-package run build/package-smoke-ezokltk5/result.json passes
+all 61 workflows, zero not_run and zero skipped. It checks 108 packaged file
+identities and 120 local Markdown links, extracting beneath literal percent /
+ampersand characters and running from an unrelated working directory. This
+includes ordinary/complete file-review and six contributor families, staged
+baseline projection, retail exports, normal/conflict/failure UI, Unicode paths,
+named FMP links, Setup recovery/locked/partial/ambiguous-stage cases, asset-view
+refresh after successful/failed deployment, and texture destination/write/
+export failures. Aeon/controller preserves 16362 records (6625 unnamed), checks
+14 links and expands control bindings 70 -> 141; baseline levels/assets stay
+unchanged. The retained donor fixture is build/aeon_controller_5wpa8a16/.
+This is offline/local package acceptance, not final release acceptance.
+
+While those checks ran, independent C: scratch probes confirmed text-entry
+publication gaps outside this gate's scope. In
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-text-payload-probe-bt6u_cxb/,
+a malformed selected string wins the report but the accepted output retains
+the original string, applied=0. In mod-text-group-probe-5yg80uyo/, a changed
+type-1 group likewise succeeds but retains member ID 1 instead of requested ID
+2. In mod-text-baseline-probe-fr3rhwnq/, a supplied English text.big without a
+corresponding baseline bank succeeds but emits no text bank. All probe inputs
+remain unchanged. Addressing these silently dropped changes is next; the ZIP
+remains frozen with these known limitations.
+
 ## 2026-10-05 quest-registration choice contributors
 
 Active QST registration choices now require a contributor that changed the
