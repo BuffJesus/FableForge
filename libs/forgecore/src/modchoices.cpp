@@ -7,6 +7,9 @@
 #include <sstream>
 #include <stdexcept>
 #include "nlohmann/json.hpp"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace forge::modchoices {
 namespace {
@@ -33,14 +36,43 @@ json content(const FileContent& value) {
 }
 } // namespace
 
+std::string filePathKey(std::string_view path) {
+    std::string result(path);
+#ifdef _WIN32
+    if (std::any_of(result.begin(), result.end(), [](unsigned char c) { return c >= 128; })) {
+        auto wide = std::filesystem::path(result).native();
+        for (auto& c : wide) {
+            if (c < 128 || (c >= 0xd800 && c <= 0xdfff)) continue;
+            wchar_t mapped = c;
+            const int needed = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE,
+                &c, 1, nullptr, 0, nullptr, nullptr, 0);
+            if (!needed) throw std::runtime_error("cannot map Windows file-path case");
+            if (needed != 1) continue;
+            if (LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE,
+                    &c, 1, &mapped, 1, nullptr, nullptr, 0) != 1)
+                throw std::runtime_error("cannot map Windows file-path case");
+            const int comparison = CompareStringOrdinal(&c, 1, &mapped, 1, TRUE);
+            if (!comparison) throw std::runtime_error("cannot compare Windows file-path case");
+            if (comparison == CSTR_EQUAL) c = mapped;
+        }
+        const auto utf8 = std::filesystem::path(wide).generic_u8string();
+        result.assign(reinterpret_cast<const char*>(utf8.data()), utf8.size());
+    }
+#endif
+    for (auto& c : result) {
+        if (c == '\\') c = '/';
+        else if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+    }
+    return result;
+}
+
 std::string canonicalKey(std::string_view key) {
+    if (key.starts_with("file:")) return "file:" + filePathKey(key.substr(5));
     std::string result(key);
     const size_t start = key.starts_with("tng:") || key.starts_with("qst:") ? 4 : 0;
     const size_t end = key.find('|', start);
     if (!start || end == std::string_view::npos) return result;
-    for (size_t i = start; i < end; ++i)
-        result[i] = result[i] == '\\' ? '/' :
-            static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
+    result.replace(start, end - start, filePathKey(key.substr(start, end - start)));
     return result;
 }
 
@@ -57,8 +89,7 @@ Choices parse(std::string_view text) {
                     throw std::runtime_error("file review key is not a file choice");
                 // File choices use case-insensitive paths in the composer. A
                 // differently cased annotation must protect that same choice.
-                std::transform(key.begin() + 5, key.end(), key.begin() + 5,
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                key = canonicalKey(key);
                 FileReview review;
                 review.winner = value.at("winner").get<std::string>();
                 if (review.winner.empty() || review.winner.find_first_of("\r\n\t") != std::string::npos)

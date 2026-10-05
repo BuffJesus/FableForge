@@ -51,6 +51,8 @@ def main():
               [sys.executable, "tools/test_mod_label_refusal.py"], capture_output=True)
     if os.name == "nt":
         for options in ([], ["--complete-data"]):
+            ok &= run("Windows Unicode file identity, choices and exact restoration " + str(options),
+                      [sys.executable, "tools/test_mod_unicode_file_identity.py", *options], capture_output=True)
             ok &= run("mod output ownership, rollback and fresh-only staging " + str(options),
                       [sys.executable, "tools/test_mod_build_ownership.py", *options], capture_output=True)
     dialogue = retail_dialogue_big()

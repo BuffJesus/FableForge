@@ -19,6 +19,13 @@ invalid entry can be disabled or removed; enabled invalid names refuse builds,
 conflict checks and deploy before an existing stage is reverted. A bare merge
 also validates names inferred from its source paths.
 
+Windows loose-file paths and the path part of TNG/QST choices group Unicode
+aliases using Windows ordinal case comparison, preserving the first spelling.
+This includes Latin and Cyrillic aliases; supplementary characters and Greek
+final sigma remain distinct where Windows treats them as different files.
+Unicode filenames use native filesystem paths when reading and writing merges.
+These checks cover loose files, not Unicode names inside engine archives.
+
 Enabled source labels must also be distinct under the order's case comparison.
 For example, bare merge cannot distinguish `first/Pack` from `second/Pack` in a
 saved `Pack` choice. Register them with different `--name` values and use

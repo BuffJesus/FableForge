@@ -33,6 +33,9 @@ struct Choices {
 // annotations are comments, so older readers still understand the choices.
 // TNG/QST paths use Windows file identity; entry/quest identities keep their case.
 std::string canonicalKey(std::string_view key);
+// File-path identity: slash/ASCII aliases plus Windows ordinal BMP casing.
+// Supplementary characters retain their spelling, matching Windows comparison.
+std::string filePathKey(std::string_view path);
 Choices parse(std::string_view text);
 Choices read(const std::filesystem::path& path, bool allowMissing = false);
 std::string serialize(const Choices& choices);

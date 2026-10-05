@@ -30,6 +30,19 @@ int main() {
         refuses([&] { forge::modorder::requireLabels({"Pack", "Pack"}); });
         refuses([&] { forge::modorder::requireLabels({"Pack", "pAcK"}); });
         forge::modorder::requireLabels({"Pack A", "Pack B"});
+        require(mc::filePathKey("Data\\Misc\\FILE.bin") == "data/misc/file.bin", "file path ASCII aliases changed");
+#ifdef _WIN32
+        require(mc::filePathKey("data/Misc/\xC3\x84lias.bin") == mc::filePathKey("DATA/MISC/\xC3\xA4lias.BIN"),
+                "Windows Latin path aliases did not coalesce");
+        require(mc::filePathKey("data/\xD0\x96.bin") == mc::filePathKey("data/\xD0\xB6.bin"),
+                "Windows Cyrillic path aliases did not coalesce");
+        require(mc::filePathKey("data/\xF0\x90\x90\x80.bin") != mc::filePathKey("data/\xF0\x90\x90\xA8.bin"),
+                "Windows-distinct supplementary paths were merged");
+        require(mc::filePathKey("data/\xCE\xA3.bin") != mc::filePathKey("data/\xCF\x82.bin"),
+                "Windows-distinct final sigma paths were merged");
+        require(mc::canonicalKey("tng:Dir/\xC3\xA4rea.TNG|uid:AbC") == "tng:dir/\xC3\x84rea.tng|uid:AbC",
+                "Unicode level path or case-sensitive thing identity changed");
+#endif
         const auto legacy = mc::parse("# comment\r\nfile:data/a = Pack A \r\nrecord\tvanilla\nignored\n");
         require(legacy.picks.at("file:data/a") == "Pack A" && legacy.picks.at("record") == "vanilla",
                 "legacy choice parsing changed");

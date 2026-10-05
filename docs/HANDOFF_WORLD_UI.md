@@ -1,5 +1,43 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 Windows Unicode loose-file identity and native merge I/O
+
+The retained probe mod-unicode-file-alias-u7r5ppa2 reproduced reversed raw-file
+load order for Älias.bin/älias.bin: separate ASCII-only carrier keys wrote the
+lowercase source last regardless of contributor order. Shared filePathKey now
+groups Windows ordinal BMP aliases across carriers, file/TNG/QST choice paths,
+review annotations, ownership receipts, baseline projection and output guards.
+It preserves first spelling and leaves thing/quest identities unchanged.
+Per-character mapping is accepted only when CompareStringOrdinal agrees;
+surrogates remain unchanged. Full Unicode uppercase would incorrectly group
+Deseret names that the actual Windows filesystem keeps distinct. The retained
+windows-file-casing-yczf_da7 probe compares API results with real file identity.
+API contracts: https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-comparestringordinal
+and https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-lcmapstringex.
+
+Extending tests to Ärea.tng/qst exposed narrow stream constructors: initial
+reads refused; correcting reads then produced a garbled output filename. Native
+filesystem-path stream constructors fix both shared byte I/O and the two merge
+writers without changing serialized payloads. Failed probes el4vul9j/16hhylmo
+and m0h4m60u/0t9_qisr remain diagnostic evidence, not passing checks.
+
+Evidence under C:/Users/Cornelio/FableForge-asset-checks-20261005:
+mod-unicode-file-identity-wf6u4lp8 passes 57 ordinary checks including both GUI
+sizes; mod-unicode-file-identity-7a1cgcii passes 55 complete-data checks. Both
+exercise contributor order, alias selections, independent distinct names,
+stale-review refusal, duplicate-owned-path refusal, source/output containment,
+disjoint TNG/QST union, unavailable contributors and exact stage restoration.
+Earlier current core tests pass all 40 (32.78s), level-case checks 122 at
+ppdkdt4s and ownership 58 at z6g85ab5. No core changes followed those checks.
+build/egocore-unicode-62j6esev passes compiler/module/environment/temp Unicode
+paths and failed-build preservation. Package gates add both layouts (88 total),
+The mixed real corpus and Mods UI pass all 50 commands at
+build/mods-corpus-j41huhue/result.json. Real TextID import passes 13 direct,
+shifted and original-link checks at fmp-new-text-links-5585irmc. All Release
+targets are current; Python compilation and diff checks pass.
+source gates add both Windows layouts. All existing frozen ZIPs exclude this
+increment. Unicode engine-archive entry names and gameplay are not certified.
+
 ## 2026-10-05 distinct-label ZIP: scoped extraction with tightened coverage guard
 
 dist/development/20261005-a87b34a/FableForge-0.18.1-dev.a87b34a.20261005-win64.zip

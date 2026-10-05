@@ -1248,7 +1248,7 @@ TngMergeResult mergeTngLabeled(const std::string& basePath,
         }
     }
     fs::create_directories(fs::path(outPath).parent_path());
-    std::ofstream ofs(outPath, std::ios::binary);
+    std::ofstream ofs(fs::path(outPath), std::ios::binary);
     const std::string serialized = out.serialize();
     ofs.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
     ofs.close();
@@ -1431,7 +1431,7 @@ forge::qst::MergeResult mergeQstLabeled(
 
     if (fs::path(outPath).has_parent_path())
         fs::create_directories(fs::path(outPath).parent_path());
-    std::ofstream ofs(outPath, std::ios::binary);
+    std::ofstream ofs(fs::path(outPath), std::ios::binary);
     const std::string serialized = result.merged.serialize();
     ofs.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
     return result;
@@ -7870,14 +7870,14 @@ bool filesIdentical(const std::filesystem::path& a, const std::filesystem::path&
 }
 
 std::vector<uint8_t> readAllBytes(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
+    std::ifstream f(std::filesystem::path(path), std::ios::binary);
     if (!f) throw std::runtime_error("cannot open " + path);
     return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)),
                                 std::istreambuf_iterator<char>());
 }
 
 void writeAllBytes(const std::string& path, const std::vector<uint8_t>& data) {
-    std::ofstream f(path, std::ios::binary);
+    std::ofstream f(std::filesystem::path(path), std::ios::binary);
     if (!f) throw std::runtime_error("cannot write " + path);
     f.write(reinterpret_cast<const char*>(data.data()), (std::streamsize)data.size());
 }
@@ -8942,7 +8942,7 @@ ModsPicks splitModsPicks(const std::map<std::string, std::string>& all) {
         else if (ns == "fse") p.fse[key] = v;
         else if (ns == "texture") p.texture[key] = v;
         else if (ns == "mesh") p.mesh[key] = v;
-        else if (ns == "file") { std::string lk = key; std::transform(lk.begin(), lk.end(), lk.begin(), ::tolower); p.file[lk] = v; }
+        else if (ns == "file") p.file[forge::modchoices::filePathKey(key)] = v;
         else if (ns == "defs") p.defs[key] = v;
         else p.defs[k] = v;
     }
@@ -9077,7 +9077,7 @@ void requireSafeModOutputPath(const std::filesystem::path& target,
 
 std::string modOutputKey(const std::filesystem::path& relative) {
 #ifdef _WIN32
-    return lowered(relative.generic_string());
+    return forge::modchoices::filePathKey(relative.generic_string());
 #else
     return relative.generic_string();
 #endif
@@ -9186,7 +9186,7 @@ std::optional<std::set<std::string>> ordinaryBaselinePaths(const std::vector<std
         for (const auto& item : fs::recursive_directory_iterator(source)) {
             if (item.is_symlink()) return std::nullopt;
             if (item.is_regular_file())
-                paths.insert(lowered(item.path().lexically_relative(source).generic_string()));
+                paths.insert(forge::modchoices::filePathKey(item.path().lexically_relative(source).generic_string()));
         }
     }
     return paths;
@@ -9200,11 +9200,11 @@ json copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
     std::map<std::string, forge::stage::RecoveryEntry> recovery;
     if (fs::exists(forge::stage::manifestPath(base)))
         for (const auto& entry : forge::stage::inspectRecovery(base))
-            recovery.emplace(lowered(fs::path(entry.relative).generic_string()), entry);
+            recovery.emplace(forge::modchoices::filePathKey(fs::path(entry.relative).generic_string()), entry);
     auto copy = [&](const fs::path& path) {
         const auto relative = path.lexically_relative(base);
         if (lowered(path.filename().string()).ends_with(".forgebak")) return;
-        const auto key = lowered(relative.generic_string());
+        const auto key = forge::modchoices::filePathKey(relative.generic_string());
         if (ordinaryPaths && !ordinaryPaths->contains(key)) {
             const auto extension = lowered(path.extension().string());
             const bool looseLevel = key.starts_with("data/levels/") &&
@@ -9214,7 +9214,7 @@ json copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
             if (!looseLevel && !languageText) return;
         }
         auto source = path;
-        if (const auto found = recovery.find(lowered(relative.generic_string())); found != recovery.end()) {
+        if (const auto found = recovery.find(key); found != recovery.end()) {
             if (!found->second.hadOriginal) return;
             source = found->second.backup;
         }
@@ -9823,8 +9823,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     };
     // key (path relative to data/Levels) -> [(label, absPath) that differ from base]
     const auto levelPathLess = [](const std::string& left, const std::string& right) {
-        return std::lexicographical_compare(left.begin(), left.end(), right.begin(), right.end(),
-            [](unsigned char a, unsigned char b) { return std::tolower(a) < std::tolower(b); });
+        return forge::modchoices::filePathKey(left) < forge::modchoices::filePathKey(right);
     };
     // Preserve the first spelling for reports/output while grouping every Windows alias.
     std::map<std::string, std::vector<std::pair<std::string, std::string>>, decltype(levelPathLess)>
@@ -10151,7 +10150,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             for (auto& de : fs::recursive_directory_iterator(s)) {
                 if (!de.is_regular_file()) continue;
                 const std::string rel = fs::relative(de.path(), s).generic_string();
-                std::string lower = rel; std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                std::string lower = forge::modchoices::filePathKey(rel);
                 if (lower == "forge_mods_build.json") continue; // output ownership is generated here, never imported
                 const std::string ext = de.path().extension().string();
                 std::string lext = ext; std::transform(lext.begin(), lext.end(), lext.begin(), ::tolower);
@@ -11026,9 +11025,7 @@ void requireModBuildOutput(const std::string& baseRoot, const std::string& outDi
     auto key = [](const std::filesystem::path& path) {
         auto result = std::filesystem::weakly_canonical(path);
 #ifdef _WIN32
-        auto text = result.native();
-        std::transform(text.begin(), text.end(), text.begin(), [](wchar_t c) { return wchar_t(std::towlower(c)); });
-        result = text;
+        result = forge::modchoices::filePathKey(result.generic_string());
 #endif
         return result;
     };

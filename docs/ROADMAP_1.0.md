@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 Windows Unicode loose-file identities now preserve contributor order,
+reviewed choices and output ownership. Native TNG/QST I/O retains Unicode names;
+57 ordinary/GUI and 55 complete-data checks pass, including exact stage restore.
+The package harness now includes 88 workflows; older frozen ZIPs exclude this
+increment. See HANDOFF_WORLD_UI for evidence and remaining scope.
+
 2026-10-05 distinct-label a87b34a ZIP passes seven selected extracted workflows
 under the child-skip guard: labels 43, fields, level casing and identical TNG
 copies. Explicit 79 not run, zero reported skips; 108 identities/122 links pass.
