@@ -13,6 +13,14 @@ import zipfile
 from urllib.parse import unquote
 
 
+def reported_fixture_skips(output):
+    """Recognize explicit fixture omissions, including legacy human-readable reports."""
+    marker = re.compile(r'^\s*(?:\[skip\]|skip(?:ped)?\b)|\bskipped\s*[:(]|'
+                        r'\b(?:check|test|part)\s+(?:is\s+)?skipped\b|'
+                        r'\b(?:corpus|inputs?|install)\b.*\bskipped\b', re.IGNORECASE)
+    return [line for line in output.splitlines() if marker.search(line)]
+
+
 def verify_package_identity(package):
     manifest = package / 'PACKAGE_INFO.json'
     if not manifest.exists():
@@ -108,11 +116,16 @@ def main():
         pending_start = None
         result = subprocess.run(list(map(str, command)), cwd=cwd, env=env,
             capture_output=True, text=True, timeout=600)
-        (work / (label + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
-        checks.append({'check': label, 'returncode': result.returncode})
+        output = result.stdout + result.stderr
+        (work / (label + '.log')).write_text(output, encoding='utf-8')
+        fixture_skips = reported_fixture_skips(output)
+        check = {'check': label, 'returncode': result.returncode}
+        if fixture_skips: check['fixture_skips'] = fixture_skips
+        checks.append(check)
         (work / 'progress.json').write_text(json.dumps({'archive': str(archive),
             'sha256': archive_hash, 'checks': checks, 'not_run': not_run}, indent=2), encoding='utf-8')
         assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+        assert not fixture_skips, f'{label}: child reported fixture skips; this workflow did not pass: {fixture_skips}'
         print(label + ': PASS', flush=True)
     run('defs', [package / 'forge-tools.exe', 'defs', 'list', args.root.resolve(), 'game.bin', 'OBJECT_HERO'])
     run('mod_bank_refusal', [sys.executable, repo/'tools/test_mod_bank_refusal.py',

@@ -1,5 +1,24 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 package children cannot hide omitted fixtures behind exit zero
+
+The package launcher previously labeled every zero-exit child PASS, even if its
+captured output reported missing fixture coverage. reported_fixture_skips now
+recognizes explicit SKIP markers and existing human-readable skipped-check/
+corpus/input/install reports. Such a child retains its zero return code plus
+fixture_skips in progress.json, then refuses acceptance before printing PASS or
+writing result.json. Deliberate --only/--start-at omissions remain not_run;
+external corpus omissions retain their existing separately reported scope.
+
+build/probe_package_child_skip.py exercises the actual extracted launcher with
+one controlled real subprocess that exits zero and prints the existing Aeon
+missing-input style. build/package-smoke-ubroa0kl retains that failure: identities
+108 and links 122 pass, progress records its explicit fixture omission, no result
+acceptance exists. This is a harness negative probe, not an Aeon or label workflow
+acceptance. Replaying all 85 real logs from package-smoke-gkkhl4ua through the
+new classifier finds no skipped fixtures; their existing acceptance remains.
+Python compilation and diff checks pass. No C++ or shipped executable change.
+
 ## 2026-10-05 frozen ownership/DeleteUIDs ZIP passes all 85 workflows
 
 dist/development/20261005-087467d/FableForge-0.18.1-dev.087467d.20261005-win64.zip
