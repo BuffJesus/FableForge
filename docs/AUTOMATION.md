@@ -167,6 +167,12 @@ The field-details, long-value, conflict-search and unavailable-choice fixtures
 accept `--gui <exe> --cwd <directory>` for extracted-package checks; scratch
 evidence still belongs to the script's checkout.
 
+`tools/test_mod_field_choice_contributors.py` checks direct definition merge,
+direct mod merge and registered build refusal for unavailable contested scalar
+choices, read-only review flags, exact selected/baseline values, inactive layouts
+and preserved input/output inventories. `--complete-data` adds synthetic complete
+definition banks; these checks do not launch the game.
+
 `tools/test_mod_unavailable_choice.py --install <root>` proves the displayed
 winner matches independently built output for an absent saved contributor.
 It checks preservation, choice-name search, real dropdown clearing, an ordinary

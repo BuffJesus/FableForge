@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 scalar contributor choices: unavailable contributors for current
+contested scalar fields now refuse builds while conflict checks remain reviewable.
+Both 33-case ordinary/complete-Data gates and both-size field-choice UI checks
+pass. Core code is unchanged from the 39-test gate. Whole-record fallback remains
+a separate follow-up; see HANDOFF_WORLD_UI.
+
 2026-10-05 file review key casing: review paths now use the same case-insensitive
 identity as CLI file choices; mixed-case annotations cannot bypass changed-byte
 refusal, and case-alias duplicates refuse. Both 28-case ordinary/complete-Data

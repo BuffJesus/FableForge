@@ -1086,8 +1086,10 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
                                 auto_.registerWidget(("mod_field_winner_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
                                 ImGui::PopID();
                                 if (modFieldChoiceUnavailable(c,field)) {
-                                    ImGui::TextColored(theme::vec(theme::Warn),"Saved field choice has no changed value here; record choice applies.");
+                                    ImGui::PushStyleColor(ImGuiCol_Text,theme::vec(theme::Warn));
+                                    ImGui::TextWrapped("Saved field choice unavailable. Review or clear it before building.");
                                     auto_.registerWidget(("mod_field_unavailable_"+std::to_string(i)+"_"+std::to_string(fieldIndex)).c_str());
+                                    ImGui::PopStyleColor();
                                 }
                             }
                             const std::string winner=modFieldWinner(c,field);

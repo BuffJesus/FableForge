@@ -4815,7 +4815,8 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::map<std::string, uint32_t>* textIds = nullptr,
               const std::vector<bool>* numericFmpRoots = nullptr,
               const std::vector<std::pair<std::string, std::map<std::string, uint32_t>>>*
-                  languageTextIds = nullptr) {
+                  languageTextIds = nullptr,
+              bool reviewChoices = false) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4992,6 +4993,19 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                 }
                 const auto fm = forge::defdecode::mergeFields(baseDec, dvs, pick, partPicks);
                 if (fm.ok) {
+                    std::set<size_t> unavailableFieldChoices;
+                    for (const auto& field : fm.conflicts) {
+                        const auto selected = partPicks.find(field.partIndex);
+                        if (selected == partPicks.end()) continue;
+                        const auto& winner = selected->second;
+                        if (winner == "vanilla" || winner == "base" || winner == "none" || winner == "-" ||
+                            std::find(field.mods.begin(), field.mods.end(), winner) != field.mods.end()) continue;
+                        if (!reviewChoices)
+                            throw std::runtime_error("mods field choice: " + name + " / " + field.part +
+                                " selects unavailable contributor " + winner +
+                                "; review or clear this saved choice");
+                        unavailableFieldChoices.insert(field.partIndex);
+                    }
                     merged.setEntryData(idx->second, fm.payload);
                     for (size_t vi = 0; vi < vers.size(); ++vi) {
                         if (vers[vi].links.empty()) continue;
@@ -5025,6 +5039,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
                             c.fieldDetails.push_back({{"field", field.part}, {"mods", field.mods},
                                 {"winner", field.winner}, {"part_index", field.partIndex},
                                 {"choice_key", fieldKeys.contains(field.partIndex) ? fieldKeys.at(field.partIndex) : ""},
+                                {"choice_unavailable", unavailableFieldChoices.contains(field.partIndex)},
                                 {"type", baseline.type}, {"base_value", forge::defdecode::formatValue(baseline)},
                                 {"values", values}});
                         }
@@ -9425,7 +9440,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                              plannedTextureIds ? &*plannedTextureIds : nullptr,
                              plannedEffectIds ? &*plannedEffectIds : nullptr,
                              plannedTextIds ? &*plannedTextIds : nullptr, &numericFmpRoots,
-                             hasNamedTextLinks ? &languageTextIds : nullptr);
+                             hasNamedTextLinks ? &languageTextIds : nullptr, reviewChoices);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
 

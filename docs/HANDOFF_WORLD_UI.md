@@ -1,5 +1,30 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 contested scalar choice contributors
+
+Currently supported, contested scalar choices now refuse an unavailable
+contributor before writing definition banks. This applies to standalone
+`defs merge`, direct mod merge and registered build, including complete-Data
+composition. Read-only conflict checking remains available and reports
+`choice_unavailable` per field; its current record/load-order fallback permits
+review only. The GUI asks for review/clear before building and wraps the warning.
+Schema/layout choices without a current matching conflict remain inactive.
+
+The synthetic reproduction at
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-def-choice-smpzust3/result.json
+shows the earlier silent fallbacks for both a removed label and an enabled mod
+without a changed value. The new gate passes 33 cases each in
+mod-field-choice-contributors-vdoh3ulm/ and mod-field-choice-contributors-97qkww23/
+(ordinary and synthetic complete Data). Exact independent values, all baseline
+aliases, explicit record-choice precedence, clear/inactive choices and full
+output/input preservation are checked. The CLI/GUI Release targets build.
+Both-size actual dropdown, warning clipping, saved-only filtering, locked-file
+retry and layout-change GUI regressions pass in build/mod-field-choices-diip813k/;
+the compact warning was visually inspected. Core code is unchanged from the
+preceding 39/39 core gate. Whole-record unavailable-label fallback from the same
+probe remains a separate follow-up; this change covers scalar field choices.
+The earlier d1ad2a4 ZIP remains frozen and excludes this change.
+
 ## 2026-10-05 case-insensitive file review identities
 
 A scratch probe demonstrated that a manually mixed-case review path was

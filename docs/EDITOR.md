@@ -1025,6 +1025,10 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   The choice resolves contested fields while independent edits keep merging.
   A mod only wins fields it changed; otherwise the field retains its load-order
   winner with an explanation. Vanilla restores contested fields in this mode.
+  An explicit scalar-field choice must select a contributor that changed that
+  currently contested field. An unavailable choice refuses builds; check conflicts
+  to review it, then choose a current contributor or clear it. Choices for a
+  different schema/layout remain saved and inactive.
   Search conflicts by name, kind, mod or field; **Saved choices only** shows
   explicit choices. Filtering precedes the 400-row display limit so later rows
   remain reachable. **Show all conflicts** clears both filters without changing
