@@ -9455,15 +9455,21 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 auto base = forge::big::File::open(basePath);
                 std::map<std::string, std::vector<uint8_t>> baseByName;
                 std::map<std::string, uint32_t> baseTypes;
+                std::map<std::string, std::vector<uint8_t>> baseHeaders;
+                std::optional<std::vector<uint8_t>> donorHeader;
                 using UnnamedIdentity = std::tuple<std::string, uint32_t, uint32_t>;
                 std::map<UnnamedIdentity, std::vector<const forge::big::Entry*>> baseUnnamed;
                 for (const auto& b : base.banks()) for (const auto& e : b.entries) if (e.name.empty())
                     baseUnnamed[{b.name, b.id, e.id}].push_back(&e);
+                for (const auto& b : base.banks()) for (const auto& e : b.entries)
+                    if (e.type == 0 && !donorHeader) donorHeader = e.subHeader;
                 for (const auto& b : base.banks()) for (const auto& e : b.entries) if (!e.name.empty()) {
                     baseByName[e.name] = base.entryData(e);
                     baseTypes[e.name] = e.type;
+                    baseHeaders[e.name] = e.subHeader;
                 }
-                struct Version { std::string mod; std::vector<uint8_t> data; uint32_t type; };
+                struct Version { std::string mod; std::vector<uint8_t> data; uint32_t type;
+                                 std::vector<uint8_t> header; };
                 std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
                 std::vector<std::string> order;
                 for (const auto& [label, c] : changers) {
@@ -9493,9 +9499,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                             }
                             auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
-                            if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type) continue;
+                            if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type &&
+                                baseHeaders.at(e.name) == e.subHeader) continue;
                             if (!versions.count(e.name)) order.push_back(e.name);
-                            versions[e.name].push_back({label, std::move(data), e.type});
+                            versions[e.name].push_back({label, std::move(data), e.type, e.subHeader});
                         }
                 }
                 for (const auto& name : order) {
@@ -9519,7 +9526,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                         }
                     }
                     bool agree = true;
-                    for (const auto& v : vs) if (v.data != vs.front().data || v.type != vs.front().type) { agree = false; break; }
+                    for (const auto& v : vs)
+                        if (v.data != vs.front().data || v.type != vs.front().type || v.header != vs.front().header) {
+                            agree = false; break;
+                        }
                     if (vs.size() > 1 && !agree) {
                         ++textKeysContested;
                         json mods = json::array();
@@ -9533,6 +9543,12 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
                             " has unsupported type " + std::to_string(win->type) +
                             "; only string entry changes can be composed");
+                    const auto originalHeader = baseHeaders.find(name);
+                    const auto expectedHeader = originalHeader != baseHeaders.end() ?
+                        std::optional<std::vector<uint8_t>>(originalHeader->second) : donorHeader;
+                    if (expectedHeader && win->header != *expectedHeader)
+                        throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
+                            " has unsupported TOC metadata changes; the selected entry metadata cannot be preserved");
                     try {
                         forge::textbig::upsertString(base, name, forge::textbig::decode(win->data, 0));
                         ++textKeysApplied;

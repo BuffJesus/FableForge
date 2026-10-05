@@ -1,5 +1,34 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 named text TOC changes are contributions
+
+Native FableTLC docs/formats/TEXT.md confirms type-0 Info stores the speaker index
+and type-2 NarratorList data is entirely in Info with zero payload bytes.
+The pre-fix independent probe mod-text-metadata-probe-feaezx5x/ accepted both
+TOC-only edits but retained baseline headers. Language contributor comparison
+and agreement now include subHeader bytes. Selected changed type-2 metadata
+refuses through the unsupported-type guard. Selected type-0 metadata must match
+the existing entry, or the canonical first type-0 donor for a new string;
+otherwise composition refuses explicitly instead of silently retaining another
+header. This does not add speaker/NarratorList remapping or opaque TOC rewriting.
+Valid selected contributors and vanilla still bypass unsupported losing deltas.
+
+tools/test_mod_text_metadata_refusal.py passes 33 ordinary checks at
+mod-text-metadata-refusal-o6vfwkpy/ and 33 complete-Data checks at
+mod-text-metadata-refusal-trba5l_x/. It covers merge/build/review, speaker-only
+and speaker-plus-content edits, real zero-payload NarratorList metadata edits,
+new-string donor mismatch and matching metadata, exact prior-output/input
+preservation and valid/vanilla recovery. The real donor TextID 13-case gate
+passes at fmp-new-text-links-ib4q1haa/. All these evidence paths use
+C:/Users/Cornelio/FableForge-asset-checks-20261005/.
+Both-size persistent error and exact same-process retry/undeploy checks pass at
+build/mod-action-error-o09y0qvv/; compact screenshot shows the full diagnostic.
+The mixed 50-command corpus plus Mods UI passes at build/mods-corpus-4gr0x2f6/.
+Only forge-tools rebuilt; no core changes or game launch/live writes.
+Package harness defines 71 workflows. Existing ZIPs remain frozen; a fresh
+local package acceptance run is next. Noncanonical trailing payload bytes and
+duplicate named entries remain separate unresolved composition cases.
+
 ## 2026-10-05 unnamed text entries refuse unsupported deltas
 
 The independent pre-fix probe mod-text-unnamed-probe-bgn04vkv/ accepted a changed

@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 text TOC metadata: speaker/NarratorList header deltas now count as
+contributions and selected unsupported metadata refuses instead of disappearing.
+Both 33-check ordinary/complete-Data gates, both-size GUI recovery, TextID 13 and
+mixed 50-command/Mods UI checks pass. Fresh local package acceptance is next;
+see HANDOFF_WORLD_UI for donor preservation and unsupported remapping boundaries.
+
 2026-10-05 unnamed text changes: new/changed/duplicate unnamed records now refuse
 ordinary composition while unchanged payloads/metadata survive. Ordinary 45-check,
 complete-Data 46-check, both-size GUI recovery and 13-case TextID gates pass.

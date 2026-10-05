@@ -133,6 +133,9 @@ def main():
         run('mod_text_unnamed_refusal' + suffix,
             [sys.executable, repo/'tools/test_mod_text_unnamed_refusal.py',
              '--tool', package/'forge-tools.exe', '--work-root', work, *options])
+        run('mod_text_metadata_refusal' + suffix,
+            [sys.executable, repo/'tools/test_mod_text_metadata_refusal.py',
+             '--tool', package/'forge-tools.exe', '--work-root', work, *options])
     run('mod_staged_baseline_projection',
         [sys.executable, repo/'tools/test_mod_staged_baseline_projection.py',
          '--tool', package/'forge-tools.exe', '--work-root', work])
@@ -150,7 +153,7 @@ def main():
         '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--cwd', cwd])
     run('mod_paths', [sys.executable, repo / 'tools/test_mod_gui_paths.py', '--gui', package / 'FableForge.exe',
         '--root', args.root.resolve(), '--cwd', cwd])
-    for mode in ('redeploy', 'report', 'missing', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed'):
+    for mode in ('redeploy', 'report', 'missing', 'unnamed', 'sibling', 'record', 'text', 'text-unnamed', 'text-metadata'):
         run('mod_action_' + mode, [sys.executable, repo / 'tools/test_mod_action_error_ui.py',
             '--gui', package / 'FableForge.exe', '--install', args.root.resolve(), '--mode', mode])
     skipped = []
