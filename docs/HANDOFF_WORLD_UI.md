@@ -2,6 +2,17 @@
 
 ## 2026-10-05 augmentation label and icon scalar links
 
+Clean 46d5c91 ZIP:
+dist/development/20261005-46d5c91/FableForge-0.18.1-dev.46d5c91.20261005-win64.zip
+SHA256: 5a46ae9efdce6a04a8cf3591f4f27bc4d73aef2311e95f379a1521b996c1decf.
+build/package-smoke-oz8bjqfe/result.json passes both record-contributor layouts
+and FMP record refusal: three selected, 85 not run, zero reported skips;
+108 identities/122 links pass. The extracted tool additionally passes the
+original augmentation fixture at fmp-augment-label-links-n10vb18y (four scalars,
+six refusals). augmentation-acceptance-audit.json links that manual result to
+the extracted tool identity 8cc2541dc0ea7e91de1e785e6265d90c9cfba8bdef841d396285b168fae1d9b0.
+This scope is not full 88-workflow acceptance. Companion guide is alongside it.
+
 Original Augments.fmp still refused at the current importer on CAugmentationDef
 Name; retained probe fmp-augment-name-probe-gwyz75qo confirms the exact reason.
 ChocolateBox controls 240E55DF/B6F76CB1 explicitly bind Name to TextID and

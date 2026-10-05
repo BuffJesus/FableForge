@@ -91,7 +91,8 @@ def main():
             refusals.append({'case': label, 'route': route, 'reason': failure.stderr.strip()})
     assert before == {str(p): digest(p) for p in inputs}
     (work/'result.json').write_text(json.dumps({'file': member, 'scalar_links': 4,
-        'refusals': refusals, 'inputs_unchanged': True, 'gameplay_tested': False}, indent=2))
+        'refusals': refusals, 'inputs_sha256': before,
+        'inputs_unchanged': True, 'gameplay_tested': False}, indent=2))
     print('PASS: four original augmentation scalar links, exact surrounding bytes, parity and six safe refusals')
 
 
