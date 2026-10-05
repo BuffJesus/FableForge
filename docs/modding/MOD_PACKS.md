@@ -17,8 +17,11 @@ no current contributors stay inactive. Selecting vanilla emits the existing
 baseline file bytes so a reused direct output restores that file. A baseline
 that lacks the file now removes that selected addition from a reused direct
 output. Removals and replacements share one rollback transaction. Redirected
-child files/directories in the output refuse publication. Choose-time content
-fingerprints are pending.
+child files/directories in the output refuse publication. Whole-file choices
+saved through the Mods UI record the reviewed baseline and contributor file
+identities. If those contents change, review and choose again or clear the choice
+before building. Legacy label-only choices remain supported without that review
+snapshot; a registration hash does not provide choose-time validation.
 
 Successful builds write `forge_mods_build.json` in the output root, recording
 generated file sizes and SHA256 identities. Reusing that output removes obsolete

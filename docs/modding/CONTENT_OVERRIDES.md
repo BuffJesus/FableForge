@@ -353,6 +353,14 @@ sequence remain backlog. The existing picks transaction/composer remain in use.
 
 ## 2026-10-03 changed-source choice audit
 
+Historical checkpoint: the audit and prototype below precede the implemented
+whole-file choose-time review. Current Mods UI choices save baseline and all
+contributor file identities in `# forge-file-review-v1` annotations. Changed
+reviewed content refuses build until the choice is refreshed or cleared; legacy
+label-only choices retain their earlier behavior. Definition-field fingerprints
+and portable profiles remain separate work. See [Mod packs](MOD_PACKS.md) and
+[the current handoff](../HANDOFF_WORLD_UI.md) for the supported contract.
+
 At primary checkpoint 27755ec, an independent tiny file-pack audit in the owning
 choice-review checkout demonstrates the existing contract: choose PackA's
 data/Misc/shared.txt, change that source from version 1 to version 2, then build.
