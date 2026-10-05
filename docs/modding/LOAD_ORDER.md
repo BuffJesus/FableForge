@@ -4,6 +4,12 @@
 
 ## 2026-10-04 named archive pair evidence
 
+Whole-file choices made in the current GUI also retain the baseline and raw
+contributor content snapshots shown at the last conflict check. Changes to those
+versions require another review and selection, or clearing the choice, before a
+build can publish. Legacy choices without snapshots remain supported. This is
+per-file review, not a full profile/package fingerprint or asset-ID relocation.
+
 These are offline composition checks against the retained Windows baseline,
 not gameplay compatibility rules or automatic dependency declarations. Five
 pairs were selected from exact missing-texture names whose candidate provider

@@ -1,5 +1,57 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 whole-file choice content reviews
+
+The GUI now records the baseline and complete set of raw file contributor
+identities from the last conflict report when a whole-file winner is chosen.
+SHA256, byte count and presence are persisted as versioned comment annotations
+in the same `forge_mods_picks.txt` transaction. Shared `forge::modchoices` parsing
+preserves legacy tab/equal rows; old unstamped choices remain supported. Changed
+reviewed bytes, baseline presence, contributor membership or a manually changed
+winner refuse publication. Reordering the same versions and unrelated files do
+not invalidate a review. Conflict checking remains read-only and flags changes;
+choosing again updates the review, clearing removes it. Metadata is loaded with
+the picks before a previous deployment is reverted.
+
+A new scratch stage check exposed an existing baseline inconsistency: review
+against installed mod bytes omitted the installed winner from its contributors.
+Non-staging ordinary review/build now reconstruct originals in owned scratch
+using `copyInstallBaseline` and the checked recovery manifest, as complete-Data
+composition already did. The staged installation is unchanged during review and
+build. Ordinary and synthetic complete-Data fingerprint gates each pass 26
+cases, including staged review, direct/registered builds, valid redeploy,
+malformed-metadata refusal before redeploy changes anything and exact undeploy
+restoration. Evidence under C:/Users/Cornelio/FableForge-asset-checks-20261005/:
+mod-file-choice-reviews-bix29ai9/result.json (ordinary) and
+mod-file-choice-reviews-b5btoynd/result.json (complete Data). Earlier 24/25-case
+reports remain retained; 1pz9y2lu records the missing-staged-contributor failure.
+
+All Release targets build and all 39 CTest cases pass, including review parsing,
+deterministic serialization, same-size identity changes and invalid metadata.
+The final affected CLI/GUI targets were rebuilt after the subsequent staged
+baseline and nested-scroll changes. Both-size file-content workflows pass in
+build/mod-file-content-tp_eaa2r/, including unchanged review bytes during refresh,
+build refusal, reselection, exact new output bytes, and full clipping-area checks
+for every version, absent baseline and warning. The compact warning was visually
+inspected. Initial bzjves2j retains the older diagnostic-shape binary failure;
+wrr7n13n, n88jflb0 and 4alrwq0b retain compact comparison/reveal failures.
+The conflict card now continuously measures changing expanded content, and
+automation reveal scrolls through both the child and parent with adjusted item
+coordinates. Other cards retain their previous sizing mode.
+
+Final unavailable-choice GUI checks pass both sizes in
+build/mod-unavailable-choice-f2y4g8ao/. Unreported choices, failed read/write retry
+and the >400-row case pass in build/mod-unreported-choices-43da_muj/. Scalar-field
+choices pass both sizes in build/mod-field-choices-zggwriv7/. The asset gate
+still passes 32 CLI/GUI checks in mod-asset-choice-contributors-y_g0tqdx/result.json;
+its 28-case complete-Data gate passes in mod-asset-choice-contributors-p_evxxgn/.
+The whole-file contributor/removal gate passes 24 cases in
+mod-file-choice-contributors-mvvcfocg/. No live game files or published packages
+changed. This does not fingerprint legacy choices automatically, later recipes,
+asset entries, all baseline-profile content or a complete source while saving
+a choice; it preserves the exact raw-file review from the last check and validates
+it during composition. Full corpus, package and gameplay checks remain separate.
+
 ## 2026-10-05 unavailable choices remain reviewable
 
 Conflict checks now allow unavailable whole-file/texture/mesh choices only in

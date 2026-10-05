@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 whole-file review fingerprints: new GUI choices preserve the raw
+baseline/contributor snapshots from the last check. Changed contents refuse
+builds and remain reviewable; legacy choices, stable reordering and unrelated
+files remain supported. Ordinary staged review/build now use scratch originals.
+Both 26-case ordinary/complete-Data gates, both-size comparison/reselection,
+existing choice/field/asset regressions and all 39 core tests pass. Scope and
+retained failed attempts are in HANDOFF_WORLD_UI; no package/gameplay claim.
+
 2026-10-05 contributor review follow-up: conflict checks report unavailable
 whole-file/texture/mesh choices without permitting publication. Builds remain
 strict. Both-size real dropdown recovery, clipping-aware warning captures,

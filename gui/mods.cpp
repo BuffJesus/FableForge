@@ -98,6 +98,7 @@ void App::resetModDestination() {
     thingOrigin_.clear(); originMods_.clear(); originFilter_.clear();
     refreshModOrder();
     modPicks_.clear();
+    modFileReviews_.clear();
     loadModPicks();
 }
 
@@ -284,48 +285,42 @@ void App::launchModsCommand(const std::string& cmd) {
 
 // Read a fresh candidate before editing so external choices are not overwritten.
 namespace {
-std::map<std::string, std::string> readModPicks(const fs::path& root) {
-    const auto path = root / "forge_mods_picks.txt";
-    std::map<std::string, std::string> picks;
-    if (!fs::exists(path)) return picks;
-    if (!fs::is_regular_file(path)) throw std::runtime_error("not a regular file: " + path.string());
-    std::ifstream in(path);
-    if (!in) throw std::runtime_error("cannot open " + path.string());
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        size_t sep = line.find('\t');
-        if (sep == std::string::npos) sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        auto key = line.substr(0, sep), winner = line.substr(sep + 1);
-        while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.pop_back();
-        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.front()))) winner.erase(winner.begin());
-        while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.back()))) winner.pop_back();
-        if (!key.empty()) picks[key] = winner;
-    }
-    if (in.bad() || !in.eof()) throw std::runtime_error("incomplete read of " + path.string());
-    return picks;
+forge::modchoices::Choices readModPicks(const fs::path& root) {
+    return forge::modchoices::read(root / "forge_mods_picks.txt", true);
+}
+forge::modchoices::FileReview fileReview(const App::ModConflict& row, const std::string& winner) {
+    forge::modchoices::FileReview result;
+    result.winner = winner;
+    result.baseline = {row.fileBaseline.present, row.fileBaseline.bytes, row.fileBaseline.sha256};
+    for (const auto& version : row.fileVersions)
+        if (!result.versions.emplace(version.mod, forge::modchoices::FileContent{
+            version.present, version.bytes, version.sha256}).second)
+            throw std::runtime_error("duplicate file contributor in conflict report: " + version.mod);
+    return result;
 }
 } // namespace
 
 void App::loadModPicks() {
-    try { modPicks_ = readModPicks(saveRoot()); }
+    try {
+        auto choices = readModPicks(saveRoot());
+        modPicks_ = std::move(choices.picks);
+        modFileReviews_ = std::move(choices.fileReviews);
+    }
     catch (const std::exception& e) {
         modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
     }
 }
 
-bool App::saveModPicks(const std::map<std::string, std::string>& picks) {
+bool App::saveModPicks(const forge::modchoices::Choices& choices) {
     try {
         detail::PendingBanks pending(saveRoot(), ".forge-mod-picks-");
-        if (picks.empty()) pending.remove("forge_mods_picks.txt");
+        if (choices.picks.empty()) pending.remove("forge_mods_picks.txt");
         else {
             std::ofstream out;
             out.exceptions(std::ios::failbit | std::ios::badbit);
             out.open(pending.prepare("forge_mods_picks.txt"), std::ios::binary);
-            out << "# FableForge: the winners picked on the Mods tab; forge-tools mods deploy reads this file\n";
-            for (const auto& [k, v] : picks) out << k << '\t' << v << '\n';
+            out << forge::modchoices::serialize(choices);
             out.close();
         }
         std::string error;
@@ -344,16 +339,26 @@ bool App::setModPick(const std::string& key, const std::string& winner) {
         fileWriteBlocked("mod conflict choice");
         return false;
     }
-    std::map<std::string, std::string> picks;
-    try { picks = readModPicks(saveRoot()); }
+    forge::modchoices::Choices choices;
+    try { choices = readModPicks(saveRoot()); }
     catch (const std::exception& e) {
         modsChoiceError_ = "Cannot read forge_mods_picks.txt. See Activity for the file error.";
         pushLog(std::string("mods: cannot read conflict choices: ") + e.what(), 2);
         return false;
     }
-    if (winner == "-") picks.erase(key); else picks[key] = winner;
-    if (!saveModPicks(picks)) return false;
-    modPicks_ = std::move(picks);
+    if (winner == "-") choices.picks.erase(key); else choices.picks[key] = winner;
+    choices.fileReviews.erase(key);
+    if (winner != "-" && key.starts_with("file:")) {
+        for (const auto& row : modConflicts_) {
+            if (row.key != key || !row.hasFileContent) continue;
+            if (winner == "vanilla" || std::find(row.mods.begin(), row.mods.end(), winner) != row.mods.end())
+                choices.fileReviews[key] = fileReview(row, winner);
+            break;
+        }
+    }
+    if (!saveModPicks(choices)) return false;
+    modPicks_ = std::move(choices.picks);
+    modFileReviews_ = std::move(choices.fileReviews);
     modsChoiceError_.clear();
     return true;
 }
@@ -385,6 +390,7 @@ static bool isModBaselineChoice(const App::ModConflict& conflict, const std::str
 
 std::string App::modConflictWinner(const ModConflict& conflict) const {
     if (!conflict.pickable) return conflict.winner;
+    if (modFileChoiceStale(conflict) && !conflict.mods.empty()) return conflict.mods.back();
     const auto pick = modPicks_.find(conflict.key);
     if (pick != modPicks_.end()) {
         const auto& winner = pick->second;
@@ -404,6 +410,14 @@ bool App::modChoiceUnavailable(const ModConflict& conflict) const {
     const auto& winner = pick->second;
     if (isModBaselineChoice(conflict, winner)) return false;
     return std::find(conflict.mods.begin(), conflict.mods.end(), winner) == conflict.mods.end();
+}
+
+bool App::modFileChoiceStale(const ModConflict& conflict) const {
+    if (!conflict.hasFileContent) return false;
+    const auto picked = modPicks_.find(conflict.key);
+    const auto reviewed = modFileReviews_.find(conflict.key);
+    return picked != modPicks_.end() && reviewed != modFileReviews_.end() &&
+        reviewed->second != fileReview(conflict, picked->second);
 }
 
 bool App::modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const {
@@ -922,7 +936,9 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
     if (modReportLoaded_) {
         const auto unreportedChoices = modUnreportedChoices();
         ImGui::SetCursorPosX(pad);
-        theme::beginCard("##modconflicts", inner);
+        // Expanded version comparisons and changing review warnings must keep
+        // contributing their full height to the surrounding scrolling panel.
+        theme::beginCard("##modconflicts", inner, true);
         theme::label("Conflicts");
         ImGui::PushFont(fontSmall_);
         theme::hint(modReportSummary_.c_str());
@@ -1002,7 +1018,7 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             }
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cardInner - comboW);
             const bool picked = modPicks_.contains(c.key);
-            const bool unavailable = modChoiceUnavailable(c);
+            const bool unavailable = modChoiceUnavailable(c) || modFileChoiceStale(c);
             const std::string current = modConflictWinner(c);
             const std::string shown = (unavailable ? "! " : picked ? "* " : "") + current;
             ImGui::SetNextItemWidth(comboW);
@@ -1019,12 +1035,14 @@ void App::drawModsPanel(float pad, float inner, float cardInner) {
             auto_.registerWidget(("mod_winner_" + std::to_string(i)).c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shown.c_str());
             // A combo action may have just removed or replaced the saved choice.
-            if (modChoiceUnavailable(c)) {
+            if (modChoiceUnavailable(c) || modFileChoiceStale(c)) {
                 ImGui::PushFont(fontSmall_);
                 const bool strictChoice = c.kind == "file" || c.kind == "texture" || c.kind == "mesh";
-                const auto message = "Saved choice " + modPicks_.at(c.key) +
-                    (strictChoice ? " has no contribution here; review or clear it before building."
-                                  : " has no contribution here; load order applies.");
+                const auto message = modFileChoiceStale(c) ?
+                    "File contents changed since this choice was reviewed; choose again or clear it before building." :
+                    "Saved choice " + modPicks_.at(c.key) +
+                        (strictChoice ? " has no contribution here; review or clear it before building."
+                                      : " has no contribution here; load order applies.");
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardInner);
                 ImGui::TextColored(theme::vec(theme::Warn), "%s", message.c_str());
                 ImGui::PopTextWrapPos();

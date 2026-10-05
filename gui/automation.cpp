@@ -55,19 +55,21 @@ void Automation::registerWidget(const char* id) {
     if (!revealTarget_.empty() && revealTarget_ == id) {
         // cards are child windows inside the scrolling panel: bring the item into view in each window up
         // the chain, moving its rect by every scroll already requested (ScrollToItem alone stops at the first)
-        // the first window up the chain that can scroll: centre the item in it
+        // Centre the item through the child and its parents. Each requested
+        // scroll moves the item's eventual rectangle for the next ancestor.
+        ImVec2 itemMin = a, itemMax = b;
         for (ImGuiWindow* w = ImGui::GetCurrentWindow(); w; w = (w->Flags & ImGuiWindowFlags_ChildWindow) ? w->ParentWindow : nullptr) {
-            // Auto-sized cards can report a real ScrollMax while clipped by
-            // their panel. The panel owns scrolling; moving the card itself
-            // leaves a wrapped message outside the parent's visible area.
-            if ((w->ChildFlags & ImGuiChildFlags_AutoResizeY) &&
-                (w->Flags & ImGuiWindowFlags_NoScrollWithMouse)) continue;
             if (w->ScrollMax.y < 1.0f) continue;   // an auto-sized card reports a float crumb
-            if (w->ClipRect.Min.y>=w->ClipRect.Max.y) continue;
-            const float centre = (a.y + b.y) * 0.5f;
-            const float visibleCentre=(w->ClipRect.Min.y+w->ClipRect.Max.y)*0.5f;
-            ImGui::SetScrollY(w, std::clamp(w->Scroll.y + centre - visibleCentre, 0.0f, w->ScrollMax.y));
-            break;
+            // InnerRect stays meaningful when the child is completely outside
+            // its parent's clipping rectangle.
+            const auto& visible = w->InnerRect;
+            if (visible.Min.y >= visible.Max.y) continue;
+            const float centre = (itemMin.y + itemMax.y) * 0.5f;
+            const float visibleCentre = (visible.Min.y + visible.Max.y) * 0.5f;
+            const float scroll = std::clamp(w->Scroll.y + centre - visibleCentre, 0.0f, w->ScrollMax.y);
+            const float movement = scroll - w->Scroll.y;
+            ImGui::SetScrollY(w, scroll);
+            itemMin.y -= movement; itemMax.y -= movement;
         }
         revealTarget_.clear();
     }

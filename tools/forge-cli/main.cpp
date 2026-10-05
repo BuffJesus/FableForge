@@ -71,6 +71,7 @@
 #include "forge/rangecodec.hpp"
 #include "forge/stage.hpp"
 #include "forge/modorder.hpp"
+#include "forge/modchoices.hpp"
 #include "miniz/miniz.h"
 #include "forge/egocore.hpp"
 #include "forge/stb.hpp"
@@ -1252,27 +1253,8 @@ int tngMerge(const std::string& basePath,
 // '#' comments. Winner = a mod's label or "vanilla" to keep base. Shared by
 // `defs merge --picks` and `qst merge --picks` (same GUI winner-picker output).
 std::map<std::string, std::string> loadPicks(const std::string& picksPath) {
-    std::map<std::string, std::string> picks;
-    if (picksPath.empty()) return picks;
-    if (!std::filesystem::is_regular_file(picksPath))
-        throw std::runtime_error("conflict choices are not a regular file: " + picksPath);
-    std::ifstream pf(picksPath);
-    if (!pf) throw std::runtime_error("cannot open conflict choices: " + picksPath);
-    std::string line;
-    while (std::getline(pf, line)) {
-        if (line.empty() || line[0] == '#') continue;
-        size_t sep = line.find('\t');
-        if (sep == std::string::npos) sep = line.find('=');
-        if (sep == std::string::npos) continue;
-        std::string rec = line.substr(0, sep);
-        std::string win = line.substr(sep + 1);
-        while (!rec.empty() && std::isspace((unsigned char)rec.back())) rec.pop_back();
-        while (!win.empty() && std::isspace((unsigned char)win.front())) win.erase(win.begin());
-        while (!win.empty() && std::isspace((unsigned char)win.back())) win.pop_back();
-        if (!rec.empty()) picks[rec] = win;
-    }
-    if (pf.bad() || !pf.eof()) throw std::runtime_error("cannot read conflict choices: " + picksPath);
-    return picks;
+    if (picksPath.empty()) return {};
+    return forge::modchoices::read(picksPath).picks;
 }
 
 // Decoded dump of a .qst quest registry (AddQuest flags + AddTestQuest entries).
@@ -9001,13 +8983,13 @@ void copyInstallBaseline(const std::filesystem::path& base, const std::filesyste
 // following layers. No cross-bank identity or raw-ID relocation is guessed here.
 int modsMerge(const std::string&, const std::string&, const std::vector<std::string>&,
               const std::string&, bool, bool, const std::vector<std::string>&,
-              const std::string&, const std::map<std::string, std::string>*, bool, json*,
+              const std::string&, const forge::modchoices::Choices*, bool, json*,
               std::vector<std::filesystem::path>*, bool);
 
 int installCompleteData(const std::string& baseRoot, const std::string& outDir,
                         const std::vector<std::string>& sources, const std::string& fieldSchema,
                         bool doStage, bool jsonOutput, const std::vector<std::string>& labels,
-                        const std::string& picksPath, const std::map<std::string, std::string>* loadedPicks,
+                        const std::string& picksPath, const forge::modchoices::Choices* loadedPicks,
                         json* reportOut, std::vector<std::filesystem::path>* outputRemovals,
                         bool reviewChoices) {
     namespace fs = std::filesystem;
@@ -9160,7 +9142,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
               const std::vector<std::string>& sourcePaths,
               const std::string& fieldSchema, bool doStage, bool jsonOutput,
               const std::vector<std::string>& labels, const std::string& picksPath,
-              const std::map<std::string, std::string>* loadedPicks = nullptr,
+              const forge::modchoices::Choices* loadedPicks = nullptr,
               bool allowCompleteData = false, json* reportOut = nullptr,
               std::vector<std::filesystem::path>* outputRemovals = nullptr,
               bool reviewChoices = false) {
@@ -9178,6 +9160,16 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (allowCompleteData)
         return installCompleteData(baseRoot, outDir, sources, fieldSchema, doStage, jsonOutput,
                                    labels, picksPath, loadedPicks, reportOut, outputRemovals, reviewChoices);
+    if (!doStage && fs::exists(forge::stage::manifestPath(baseRoot))) {
+        // Review and ordinary builds must use the same originals that Deploy
+        // restores before composing. Otherwise an installed winner disappears
+        // from its own contributors and a valid review looks stale.
+        const albion::detail::TemporaryDirectory originals("mods-originals-");
+        copyInstallBaseline(baseRoot, originals.path());
+        return modsMerge(originals.path().string(), outDir, sources, fieldSchema, false,
+                         jsonOutput, labels, picksPath, loadedPicks, false, reportOut,
+                         outputRemovals, reviewChoices);
+    }
     const albion::detail::TemporaryDirectory mergeWorkspace("mods-merge-");
     const fs::path& tmp = mergeWorkspace.path();
 
@@ -9192,7 +9184,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         for (auto& ch : leaf) if (!std::isalnum(static_cast<unsigned char>(ch))) ch = '_';
         return (tmp / (std::to_string(i) + "_" + leaf)).string();
     };
-    const ModsPicks picks = splitModsPicks(loadedPicks ? *loadedPicks : loadPicks(picksPath));
+    const auto choices = loadedPicks ? *loadedPicks : picksPath.empty() ?
+        forge::modchoices::Choices{} : forge::modchoices::read(picksPath);
+    const ModsPicks picks = splitModsPicks(choices.picks);
+    const auto& fileReviews = choices.fileReviews;
     json rep;   // `--json`: the one report, printed at the end
     {
         json srcs = json::array();
@@ -9786,26 +9781,46 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             }
             bool agree = true;
             for (size_t ci = 1; ci < who.size() && agree; ++ci) agree = filesIdentical(who[ci].src, who.front().src);
+            const auto reviewed = fileReviews.find("file:" + lower);
+            const auto choice = picks.file.find(lower);
+            const bool hasReview = reviewed != fileReviews.end() && choice != picks.file.end();
+            forge::modchoices::FileReview currentReview;
+            bool stale = false;
+            if (hasReview || (jsonOutput && who.size() > 1 && !agree)) {
+                currentReview.winner = choice != picks.file.end() ? choice->second : "";
+                currentReview.baseline = forge::modchoices::fileContent(fs::path(baseRoot) / who.back().rel);
+                for (const auto& c : who)
+                    if (!currentReview.versions.emplace(c.label, forge::modchoices::fileContent(c.src)).second)
+                        throw std::runtime_error("mods file choice: ambiguous contributor label " + c.label + " for " + lower);
+                stale = hasReview && reviewed->second != currentReview;
+                if (stale && !reviewChoices)
+                    throw std::runtime_error("mods file choice: " + lower +
+                        " contents changed since the saved choice was reviewed; check conflicts and choose again or clear it");
+                if (stale) {
+                    overridden = keepBase = false;
+                    win = &who.back();
+                }
+            }
             if (who.size() > 1 && !agree) {
                 ++contested;
                 json mods = json::array();
                 for (const auto& c : who) mods.push_back(c.label);
                 json row={{"path", lower}, {"mods", mods}, {"winner", keepBase ? "vanilla" : win->label},
-                          {"overridden", overridden}, {"choice_unavailable", unavailable}};
+                          {"overridden", overridden}, {"choice_unavailable", unavailable},
+                          {"choice_stale", stale}, {"choice_reviewed", hasReview}};
                 if (jsonOutput) {
                     // Raw source-file snapshots, not the later recipe/resource result
                     // and not choose-time fingerprints for persisted label picks.
-                    auto content=[](const fs::path& path) -> json {
-                        if (!fs::is_regular_file(path)) return {{"present",false}};
-                        return {{"present",true},{"bytes",fs::file_size(path)},
-                                {"sha256",forge::modorder::sha256Of(path)}};
+                    auto content=[](const forge::modchoices::FileContent& file) -> json {
+                        if (!file.present) return {{"present",false}};
+                        return {{"present",file.present},{"bytes",file.bytes},{"sha256",file.sha256}};
                     };
                     json versions=json::array();
                     for (const auto& c:who) {
-                        json version=content(c.src);version["mod"]=c.label;
+                        json version=content(currentReview.versions.at(c.label));version["mod"]=c.label;
                         versions.push_back(std::move(version));
                     }
-                    row["file_content"]={{"baseline",content(fs::path(baseRoot)/win->rel)},
+                    row["file_content"]={{"baseline",content(currentReview.baseline)},
                                          {"versions",std::move(versions)}};
                 }
                 fileRows.push_back(std::move(row));
@@ -13834,13 +13849,13 @@ int main(int argc, char** argv) {
                     mo::Order order;
                     std::vector<std::string> sources;
                     std::string picksPath;
-                    std::map<std::string, std::string> loadedPicks;
+                    forge::modchoices::Choices loadedPicks;
                     if (args[1] == "deploy") {
                         // Read user decisions before reverting; reuse this snapshot during the build.
                         order = mo::load(root);
                         sources = mo::buildSources(order, root);
                         picksPath = picksOverride.value_or(modsPicksDefault(root));
-                        loadedPicks = loadPicks(picksPath);
+                        if (!picksPath.empty()) loadedPicks = forge::modchoices::read(picksPath);
                         preflightModRecipes(sources);
                     }
                     // deploy = the install rebuilt from the order: a previous stage is reverted first (its

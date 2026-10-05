@@ -1903,6 +1903,8 @@ std::vector<std::string> App::stateDump() const {
             for (const auto& field : conflict.fields) unavailableChoices += modFieldChoiceUnavailable(conflict,field);
         }
     v.push_back("mods_unavailable_choices="+std::to_string(unavailableChoices));
+    v.push_back("mods_stale_file_choices="+std::to_string(std::count_if(
+        modConflicts_.begin(), modConflicts_.end(), [&](const ModConflict& c) { return modFileChoiceStale(c); })));
     const auto unreportedChoices = modUnreportedChoices();
     v.push_back("mods_unreported_choices="+std::to_string(unreportedChoices.size()));
     size_t matchingUnreportedChoices = 0;

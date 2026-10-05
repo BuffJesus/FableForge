@@ -1034,13 +1034,21 @@ live in `forge_mods_picks.txt` next to the order and deploy applies them. Choice
   remains available for review or clearing through the winner menu. Search
   includes saved choice names. Definition baseline aliases display as vanilla;
   other families reserve only vanilla, so a contributor named base remains a
-  normal source choice. This checks
-  the last report's contributors, not source content fingerprints.
+  normal source choice. Contributor availability uses the last report.
   Whole-file, FMP texture and FMP mesh choices refuse a build
   when the selected source no longer contributes the selected file or entry.
   Conflict checks still return the current contributors and flag the unavailable
   choice, so it can be reviewed or cleared before retrying. Choices with no current
   contributions remain saved and inactive.
+  Choosing a whole-file winner now records the baseline and all raw source
+  versions shown by the last check. If those contents change, builds refuse and
+  **Check conflicts** shows a **!** warning. Review the current file versions,
+  choose the winner again, or clear the choice. Refreshing alone preserves the
+  saved review. Reordering unchanged versions does not invalidate it. Existing
+  choices without a recorded review remain supported. These checks cover raw
+  file layers, not later recipe output, individual asset entries or an entire
+  baseline profile. On a staged install, review/build use copies of the recorded
+  originals without changing the deployed files.
   A deploy also
   leaves `forge_mods_provenance.json` (which mod placed or last changed each thing, by UID):
 the Edit tab badges those things in *Objects in this map*, *Placed by* filters the list

@@ -41,7 +41,7 @@ bool toggle(const char* label, bool* value);
 bool segmented(const char* id, int& value, std::initializer_list<const char*> options, float width);
 bool segmented(const char* id, int& value, const std::vector<const char*>& options, float width);
 void label(const char* text);
-void beginCard(const char* id, float width);
+void beginCard(const char* id, float width, bool alwaysResize = false);
 void endCard();
 
 } // namespace albion::gui::theme

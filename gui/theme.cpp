@@ -274,7 +274,7 @@ void label(const char* text) {
     ImGui::TextColored(vec(Muted), "%s", text);
 }
 
-void beginCard(const char* id, float width) {
+void beginCard(const char* id, float width, bool alwaysResize) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, vec(Bg2));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, S(10.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S(12), S(8)));
@@ -282,7 +282,9 @@ void beginCard(const char* id, float width) {
     // A card never scrolls itself: with fractional DPI sizes an auto-resized child can
     // end up with a sub-pixel ScrollMax, which makes ImGui route the mouse wheel to the
     // card (scrolling it by nothing) instead of the panel around it.
-    ImGui::BeginChild(id, ImVec2(width, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
+    ImGuiChildFlags flags = ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding;
+    if (alwaysResize) flags |= ImGuiChildFlags_AlwaysAutoResize;
+    ImGui::BeginChild(id, ImVec2(width, 0), flags,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 }
 

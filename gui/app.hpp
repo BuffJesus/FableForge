@@ -35,6 +35,7 @@
 #include "forge/dialoguetext.hpp"
 #include "forge/headpose.hpp"
 #include "forge/modorder.hpp"
+#include "forge/modchoices.hpp"
 #include "imgui.h"
 #include "foliageexport.hpp"
 #include "leveledit.hpp"
@@ -1058,6 +1059,7 @@ public:
                          std::vector<ModFileContent> fileVersions; };
     std::string modConflictWinner(const ModConflict& conflict) const;
     bool modChoiceUnavailable(const ModConflict& conflict) const;
+    bool modFileChoiceStale(const ModConflict& conflict) const;
     bool modFieldChoiceUnavailable(const ModConflict& conflict, const ModFieldConflict& field) const;
     static std::string modSavedChoiceLabel(const std::string& key);
     std::string modFieldWinner(const ModConflict& conflict, const ModFieldConflict& field) const;
@@ -1071,6 +1073,7 @@ private:
     char modConflictSearch_[192] = {};
     bool modChoicesOnly_ = false;
     std::map<std::string, std::string> modPicks_;
+    std::map<std::string, forge::modchoices::FileReview> modFileReviews_;
     bool modReportLoaded_ = false;
     std::string modReportSummary_;
     std::string modInstallSummary_;
@@ -1080,7 +1083,7 @@ private:
     size_t modAssetUnparsed_ = 0;
     std::string modAssetStatus_, modAssetError_;
     void loadModPicks();
-    bool saveModPicks(const std::map<std::string, std::string>& picks);
+    bool saveModPicks(const forge::modchoices::Choices& choices);
 public:
     size_t modConflictCount() const { return modConflicts_.size(); }
     // pick a winner for a conflict (by its key, or the first row when key is "*"); "-" = back to load order
