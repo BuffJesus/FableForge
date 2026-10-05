@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 float-fix ZIP: scoped extracted acceptance
+
+Clean b4cebe2 ZIP at dist/development/20261005-b4cebe2/
+FableForge-0.18.1-dev.b4cebe2.20261005-win64.zip has SHA256
+ed93a2b767191d254aa82ce69ef0f7501ed1486a8186f155b6bfe394d0f7789f.
+C: scratch package-smoke-e2ihx5po/result.json passes float values (both GUI
+sizes), both record-contributor layouts and FMP record refusal: four selected,
+85 not run, zero reported skips, 108 identities and 122 links. Original opinion
+fixture jzn90umm passes 306 links/14 refusals; original augmentation boxut2sx
+passes four links/six refusals. fmp-float-acceptance-audit.json verifies both
+input tool hashes against the extracted tool identity
+fcbe357ab61bbced1ff23a691277a7441282ebb28120b8fe32140f66e922c89e.
+This is scoped acceptance, not a full 89-workflow gate. The first command at
+package-smoke-cfusgjuh selected two incorrect workflow names and emitted no
+final result; that diagnostic remains retained.
+
 ## 2026-10-05 finite float conflict display and exact choices
 
 Six-digit %g formatting rendered distinct 0x41a00000/0x41a00001 contributors
