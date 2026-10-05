@@ -364,10 +364,11 @@ bool App::setModPick(const std::string& key, const std::string& winner) {
 }
 
 bool App::modPick(const std::string& key, const std::string& winner) {
+    const auto identity = forge::modchoices::canonicalKey(key);
     const ModConflict* row = nullptr;
     const ModFieldConflict* selectedField = nullptr;
     for (const auto& c : modConflicts_) {
-        if (key == "*" || c.key == key) { row = &c; break; }
+        if (key == "*" || c.key == identity) { row = &c; break; }
         for (const auto& field : c.fields)
             if (!field.choiceKey.empty() && field.choiceKey == key) { row = &c; selectedField = &field; break; }
         if (row) break;
@@ -552,6 +553,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
             for (const auto& c : l.value("conflicts", json::array())) {
                 const std::string level = l.value("level", ""), thing = c.value("thing", "");
                 rows.push_back({"thing", "tng:" + level + "|" + thing, level + "  " + thing, mods(c["mods"]), c.value("winner", ""), c.value("overridden", false)});
+                rows.back().key = forge::modchoices::canonicalKey(rows.back().key);
                 const auto mode = l.value("mode", "");
                 if ((mode == "new-level" || mode == "replaced" || mode == "single-editor") &&
                     !l.value("mods", json::array()).empty())
@@ -564,6 +566,7 @@ static void collectConflicts(const nlohmann::json& rep, std::vector<App::ModConf
                 std::vector<std::string> m;
                 for (const auto& w : c.value("wanted", json::array())) m.push_back(w.value("mod", ""));
                 rows.push_back({"quest", "qst:" + file + "|" + quest, file + "  " + quest, m, c.value("winner", ""), c.value("overridden", false)});
+                rows.back().key = forge::modchoices::canonicalKey(rows.back().key);
                 if (f.value("mode", "") == "single-editor" && !f.value("mods", json::array()).empty())
                     rows.back().wholeFileWinner = f["mods"].back().get<std::string>();
             }

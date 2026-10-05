@@ -9684,8 +9684,13 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         return materialized;
     };
     // key (path relative to data/Levels) -> [(label, absPath) that differ from base]
-    std::map<std::string, std::vector<std::pair<std::string, std::string>>> tngChangers;
-    std::map<std::string, std::vector<std::pair<std::string, std::string>>> qstChangers;
+    const auto levelPathLess = [](const std::string& left, const std::string& right) {
+        return std::lexicographical_compare(left.begin(), left.end(), right.begin(), right.end(),
+            [](unsigned char a, unsigned char b) { return std::tolower(a) < std::tolower(b); });
+    };
+    // Preserve the first spelling for reports/output while grouping every Windows alias.
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>, decltype(levelPathLess)>
+        tngChangers(levelPathLess), qstChangers(levelPathLess);
     if (fs::exists(baseLevels)) {
         for (size_t si = 0; si < sources.size(); ++si) {
             const std::string& s = contentRoots[si];
@@ -9694,7 +9699,9 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
             const std::string label = srcLabel(si);
             for (auto& de : fs::recursive_directory_iterator(srcLevels)) {
                 if (!de.is_regular_file()) continue;
-                const std::string ext = de.path().extension().string();
+                std::string ext = de.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                 if (ext != ".tng" && ext != ".qst") continue;
                 const std::string key =
                     fs::relative(de.path(), srcLevels).generic_string();
@@ -9727,9 +9734,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         json row{{"level", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
         std::map<std::string, std::string> levelPicks;
+        const auto choicePrefix = forge::modchoices::canonicalKey("tng:" + key + "|").substr(4);
         for (const auto& [k, v] : picks.tng)
-            if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|')
-                levelPicks[k.substr(key.size() + 1)] = v;
+            if (k.starts_with(choicePrefix) && k.size() > choicePrefix.size())
+                levelPicks[k.substr(choicePrefix.size())] = v;
         // EgoCore-style partial TNG mods (a [Settings] header, or far fewer things than the level)
         // merge even when they are the only editor: copying one would replace the level with its
         // handful of things. Replace=true asks for exactly that copy.
@@ -9826,9 +9834,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
         json row{{"file", key}, {"mods", json::array()}};
         for (const auto& [lbl, path] : changers) row["mods"].push_back(lbl);
         std::map<std::string, std::string> filePicks;
+        const auto choicePrefix = forge::modchoices::canonicalKey("qst:" + key + "|").substr(4);
         for (const auto& [k, v] : picks.qst)
-            if (k.size() > key.size() + 1 && k.compare(0, key.size(), key) == 0 && k[key.size()] == '|')
-                filePicks[k.substr(key.size() + 1)] = v;
+            if (k.starts_with(choicePrefix) && k.size() > choicePrefix.size())
+                filePicks[k.substr(choicePrefix.size())] = v;
         std::optional<forge::qst::MergeResult> choiceResult;
         if (changers.size() == 1 || !fs::exists(baseQst)) {
             // Single editor (or no base to 3-way against): take the last version.

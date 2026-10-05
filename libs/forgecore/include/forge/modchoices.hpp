@@ -31,6 +31,8 @@ struct Choices {
 
 // Legacy key<TAB>winner / key=winner rows remain supported. Optional review
 // annotations are comments, so older readers still understand the choices.
+// TNG/QST paths use Windows file identity; entry/quest identities keep their case.
+std::string canonicalKey(std::string_view key);
 Choices parse(std::string_view text);
 Choices read(const std::filesystem::path& path, bool allowMissing = false);
 std::string serialize(const Choices& choices);

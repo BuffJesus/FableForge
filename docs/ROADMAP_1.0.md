@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 level casing: TNG/QST filenames now coalesce across casing and uppercase
+extensions are composed. Saved path aliases share CLI/GUI identity while entry
+names keep their case. Ordinary/native/UI 126 and complete-Data 122 checks,
+compact WAD/stage restoration, all 40 core tests and mixed 50-command/Mods UI
+checks pass. The frozen ZIP excludes this increment; see HANDOFF_WORLD_UI.
+
 2026-10-05 local package at 2147246 passes all 71 extracted workflows, zero
 omitted/skipped, plus 108 file identities and 120 doc links. It includes text
 refusals and whole-file winner previews. New probes show case-only TNG/QST names

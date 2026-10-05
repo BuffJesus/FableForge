@@ -33,6 +33,17 @@ json content(const FileContent& value) {
 }
 } // namespace
 
+std::string canonicalKey(std::string_view key) {
+    std::string result(key);
+    const size_t start = key.starts_with("tng:") || key.starts_with("qst:") ? 4 : 0;
+    const size_t end = key.find('|', start);
+    if (!start || end == std::string_view::npos) return result;
+    for (size_t i = start; i < end; ++i)
+        result[i] = result[i] == '\\' ? '/' :
+            static_cast<char>(std::tolower(static_cast<unsigned char>(result[i])));
+    return result;
+}
+
 Choices parse(std::string_view text) {
     Choices result;
     std::istringstream input{std::string(text)};
@@ -74,7 +85,7 @@ Choices parse(std::string_view text) {
         while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.pop_back();
         while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.front()))) winner.erase(winner.begin());
         while (!winner.empty() && std::isspace(static_cast<unsigned char>(winner.back()))) winner.pop_back();
-        if (!key.empty()) result.picks[key] = winner;
+        if (!key.empty()) result.picks[canonicalKey(key)] = winner;
     }
     return result;
 }

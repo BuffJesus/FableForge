@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 level filenames and saved choices share file identity
+
+TNG/QST candidates now coalesce case-only relative paths while retaining the
+first authored spelling for reports/output. Uppercase extensions enter the
+specialized composer rather than silently disappearing from both layers.
+forge::modchoices::canonicalKey folds only the TNG/QST path portion (including
+backslash separators); thing/quest identities and contributor labels retain
+their case. CLI pick matching, GUI rows, persisted-choice reading and automation
+selection use this shared identity. Other choice families keep their behavior.
+
+The original four pre-fix casing probes now produce the intended deltas at
+mod-level-case-probe-vn4b0yiw/. tools/test_mod_level_case_identity.py passes 126
+ordinary/native/UI checks at mod-level-case-identity-8xrsfl0i/ and 122 synthetic
+complete-Data checks at mod-level-case-identity-rfjnzufv/. All paths share
+C:/Users/Cornelio/FableForge-asset-checks-20261005/. Coverage includes root and
+nested folders, case-only names, uppercase extensions in either load-order slot,
+disjoint edit union, mixed-case/backslash saved choices, actual-vs-unrelated
+contributors, strict refusal preserving prior output, vanilla, contributor picks,
+registered-order changes, both-size GUI alias review/selection/dropdown clearing,
+unchanged source inventories, staged review and exact undeployment.
+The compact WAD fixture independently verifies a changed loose TNG is repacked,
+the unrelated entry's payload/metadata and edited entry's non-payload metadata
+survive, and the original WAD/inventory return after undeployment. This fixture
+does not certify gameplay or arbitrary WAD headers.
+
+All Release targets build and all 40 core tests pass (27.40 seconds), including
+path normalization, last-row precedence and preserved case-sensitive identities.
+Existing ordinary TNG 36 native checks pass at mod-tng-choice-contributors-
+bpv0z32r/ and QST 38 at mod-qst-choice-contributors-vw8lsg5_/ in the same C: root.
+All four whole-file winner/window cases pass at mod-whole-file-winner-qosbccmk/.
+The real mixed 50-command corpus plus Mods UI passes at build/mods-corpus-4crmgpew/.
+No live writes or game launch. Package harness defines 73 workflows; frozen
+2147246 ZIP still has its recorded 71-workflow acceptance and excludes this fix.
+Remaining text trailing-byte/duplicate-symbol gaps remain as recorded below.
+
 ## 2026-10-05 consolidated 71-workflow local package checkpoint
 
 Frozen application ZIP:

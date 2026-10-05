@@ -20,6 +20,23 @@ int main() {
         require(legacy.picks.at("file:data/a") == "Pack A" && legacy.picks.at("record") == "vanilla",
                 "legacy choice parsing changed");
         require(legacy.fileReviews.empty(), "legacy picks gained reviews");
+        require(mc::canonicalKey("tng:FinalAlbion\\Arena.TNG|uid:AbC") ==
+                "tng:finalalbion/arena.tng|uid:AbC", "TNG path or thing identity changed incorrectly");
+        require(mc::canonicalKey("qst:FinalAlbion/Test.QST|ExistingQuest") ==
+                "qst:finalalbion/test.qst|ExistingQuest", "QST path or quest identity changed incorrectly");
+        for (const char* key : {"TEXT_RECORD", "text:English|SHARED", "tng:NoSeparator", "field:[1,2]"})
+            require(mc::canonicalKey(key) == key, "non-level or incomplete choice changed");
+        const auto aliases = mc::parse("tng:FinalAlbion\\Arena.TNG|uid:AbC\tPack A\n"
+            "tng:finalalbion/arena.tng|uid:AbC\tPack B\n"
+            "qst:FinalAlbion/TEST.QST|ExistingQuest\tPack MixedCase\n"
+            "qst:FinalAlbion/test.qst|existingquest\tvanilla\n");
+        require(aliases.picks.size() == 3 &&
+                aliases.picks.at("tng:finalalbion/arena.tng|uid:AbC") == "Pack B" &&
+                aliases.picks.at("qst:finalalbion/test.qst|ExistingQuest") == "Pack MixedCase" &&
+                aliases.picks.at("qst:finalalbion/test.qst|existingquest") == "vanilla",
+                "level aliases, last-row precedence or case-sensitive quest identities changed");
+        require(mc::parse(mc::serialize(aliases)).picks == aliases.picks,
+                "canonical level choices did not survive serialization");
         mc::Choices choices = legacy;
         mc::FileReview review;
         review.winner = "Pack A";
