@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 package timeout evidence and configurable scratch parent
+
+The full frozen 9bc59e8 extraction at build/package-smoke-vpvfa94h records 56
+passing workflows, then hits the 600-second parent timeout in Aeon/controller
+preservation. It has no result.json and is not full acceptance. Child evidence
+build/aeon_controller_ascggtde records successful native commands through its
+second controller decode, but no final fixture result; timeout-incident.json
+retains the distinction. No cause is inferred from this incomplete run.
+
+test_package and test_aeon_controller now accept --work-root; the package launcher
+passes its owned scratch parent to the Aeon child. Resolved temporary-child checks
+still guard cleanup and extraction. A same-hash retry from Aeon onward is running
+at C:/Users/Cornelio/FableForge-asset-checks-20261005/package-smoke-vjr53y5o.
+Prior passes are not repeated or promoted while that retry is incomplete.
+
+Future parent timeouts retain captured child output and an explicit timed_out
+failure with null returncode and timeout_seconds in progress.json before raising.
+No PASS or result.json is emitted. build/probe_package_child_timeout.py exercises
+a real short-lived Python child that prints then exceeds its 0.2-second deadline;
+package-smoke-34oc5civ retains the negative result and output under the C: parent.
+This is a controlled harness failure, not a bank workflow acceptance. Python
+compilation and diff checks pass; no executable changes in this increment.
+
 ## 2026-10-05 augmentation label and icon scalar links
 
 Clean 46d5c91 ZIP:

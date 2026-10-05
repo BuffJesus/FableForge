@@ -46,13 +46,16 @@ def main():
     parser.add_argument('--root', type=Path, default=Path(os.environ.get('FABLE_ROOT',
         r'C:\Programs\Steam\steamapps\common\Fable The Lost Chapters')))
     parser.add_argument('--corpus', type=Path, default=repo/'work/nexus_mods/_peek')
+    parser.add_argument('--work-root', type=Path, default=repo/'build', help='Parent for retained extraction and supported scratch workflows')
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument('--start-at', help='Run this named workflow and subsequent workflows; earlier checks are reported as not run')
     selection.add_argument('--only', nargs='+', help='Run only these named workflows; all others are reported as not run')
     args = parser.parse_args()
     archive = args.archive.resolve()
-    work = Path(tempfile.mkdtemp(prefix='package-smoke-', dir=repo / 'build')).resolve()
-    assert work.parent == (repo / 'build').resolve()
+    work_root = args.work_root.resolve()
+    work_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='package-smoke-', dir=work_root)).resolve()
+    assert work.parent == work_root
     print('evidence retained at', work, flush=True)
     unpack = work / 'package %FORGE_PACKAGE_TOKEN% & files'
     unpack.mkdir()
@@ -115,8 +118,19 @@ def main():
             not_run.append(label)
             return
         pending_start = None
-        result = subprocess.run(list(map(str, command)), cwd=cwd, env=env,
-            capture_output=True, text=True, timeout=600)
+        try:
+            result = subprocess.run(list(map(str, command)), cwd=cwd, env=env,
+                capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired as error:
+            def captured(value):
+                return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
+            output = captured(error.stdout) + captured(error.stderr)
+            (work / (label + '.log')).write_text(output, encoding='utf-8')
+            checks.append({'check': label, 'returncode': None, 'timed_out': True,
+                           'timeout_seconds': error.timeout})
+            (work / 'progress.json').write_text(json.dumps({'archive': str(archive),
+                'sha256': archive_hash, 'checks': checks, 'not_run': not_run}, indent=2), encoding='utf-8')
+            raise
         output = result.stdout + result.stderr
         (work / (label + '.log')).write_text(output, encoding='utf-8')
         fixture_skips = reported_fixture_skips(output)
@@ -206,7 +220,7 @@ def main():
             '--fmp', controller_fmp, '--aeon', aeon])
         run('aeon_controller_preservation', [sys.executable, repo/'tools/test_aeon_controller.py',
             '--tool', package/'forge-tools.exe', '--cwd', cwd, '--install', args.root.resolve(),
-            '--corpus', corpus, '--keep'])
+            '--corpus', corpus, '--work-root', work, '--keep'])
     else: skipped.append('fmp_named_links: controller/Aeon corpus unavailable')
     f2_fmp = corpus/'F2MeleeWeapons/F2MeleeWeaponPack.fmp'
     if f2_fmp.is_file():

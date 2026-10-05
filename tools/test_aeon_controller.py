@@ -34,6 +34,7 @@ def main():
     parser.add_argument('--install', type=Path, default=Path('C:/Programs/Steam/steamapps/common/Fable The Lost Chapters'))
     parser.add_argument('--tool', type=Path, default=REPO/'build/forge-tools.exe')
     parser.add_argument('--cwd', type=Path, default=REPO)
+    parser.add_argument('--work-root', type=Path, default=REPO/'build')
     args = parser.parse_args()
     corpus, retail, tool = args.corpus.resolve(), args.install.resolve(), args.tool.resolve()
     aeon = corpus/'AeonEdition'
@@ -48,7 +49,9 @@ def main():
     if missing:
         print('Aeon/controller check skipped: missing inputs', *missing, sep='\n  ')
         return 0
-    work = Path(tempfile.mkdtemp(prefix='aeon_controller_', dir=REPO/'build')).resolve()
+    work_root = args.work_root.resolve()
+    work_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix='aeon_controller_', dir=work_root)).resolve()
     print('Evidence retained at', work, flush=True)
     command_index = 0
     def run(*argv, refuse=False):
@@ -128,7 +131,7 @@ def main():
         if args.keep:
             print('scratch:', work)
         else:
-            assert work.parent == (REPO/'build').resolve() and work.name.startswith('aeon_controller_')
+            assert work.parent == work_root and work.name.startswith('aeon_controller_')
             shutil.rmtree(work)
 
 if __name__ == '__main__':
