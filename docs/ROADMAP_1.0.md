@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 frozen 087467d local ZIP passes all 85 extracted workflows in one run,
+zero omitted/reported skips; retained child logs contain no SKIP markers. All
+108 identities and 120 links pass. It includes DeleteUIDs and output ownership/
+fresh-only staging, excludes later label changes, and remains independent of
+60bafcf's seven-workflow scope. See HANDOFF_WORLD_UI for SHA and audit evidence.
+
 2026-10-05 enabled labels now remain distinct under order case comparison,
 including inferred bare-merge names. Ambiguous TNG selections are reproduced
 and refused before composition/reversion; uniquely named registered sources

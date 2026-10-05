@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 frozen ownership/DeleteUIDs ZIP passes all 85 workflows
+
+dist/development/20261005-087467d/FableForge-0.18.1-dev.087467d.20261005-win64.zip
+SHA256: d63a44d098d374ffebebe84b66c75a9f0c56b2c93d9c87c3d9632e0f9ecaa958.
+All Release targets were current at clean 087467d packaging; companion guide is
+alongside it. build/package-smoke-gkkhl4ua/result.json passes all 85 workflows in
+one uninterrupted extracted run, zero not-run entries and zero reported fixture
+skips. acceptance-audit.json independently checks all 85 unique successful rows,
+all retained child logs for SKIP markers (none), matching archive SHA and clean
+packaging-checkout metadata. The retained audit script is
+build/audit_package_acceptance_087467d.py. Extraction verifies 108 file identities
+and 120 Markdown links from unrelated cwd and literal token/percent/ampersand paths.
+
+This archive adds DeleteUIDs and output ownership/fresh-only --stage to the
+previous b7ec186 archive. It covers the real Aeon/controller preservation route,
+all selected contributor families/layouts, stage-original projection, Unicode
+paths/images/compiler, Mods persistent-error recovery, Setup restore/ambiguity/
+missing/orphan cases, all four asset-refresh paths and locked/invalid texture
+replacement/addition/export. No gameplay claim or live installation writes.
+The later reserved/distinct-label changes are excluded: 60bafcf retains separate
+seven-workflow scoped acceptance; latest distinct-label source has its 43-case,
+40-core and mixed 50-command/UI gates. All earlier frozen ZIPs remain untouched.
+
 ## 2026-10-05 distinct labels before composition
 
 The existing whole-file choice path already refuses duplicate contributor
