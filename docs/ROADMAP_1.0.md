@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 local d25dde7 material/environment ZIP passes four extracted workflows,
+108 identities/122 links, plus actual packaged-tool material, environment and
+Time-choice checks. Explicit 85 not run, zero skips. PACKAGE_INFO retains the
+tracked audio-test diagnostics flag; no clean/full-suite claim. See handoff.
+
 2026-10-05 environment Time choices retain the selected source's texture
 metadata across eight-row/two-row labelled derivatives. Ten merge/build
 selections and two safe unavailable refusals pass; all later fields and source

@@ -1,5 +1,28 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 material/environment local ZIP acceptance
+
+Local d25dde7 archive at dist/development/20261005-d25dde7/
+FableForge-0.18.1-dev.d25dde7.20261005-win64.zip has SHA256
+cbde162778785de6ebdc272ef2149bfa9fd4bdf249b5465277cceaceb9588521.
+package-smoke-lblk4oio passes both record-contributor layouts, FMP record
+refusal and GUI: four workflows, 85 not run, zero skips, 108 identities and
+122 documentation links. PACKAGE_INFO honestly records tracked_changes=true:
+the pre-existing tests/test_dialogueaudio.cpp phase diagnostics remain uncommitted.
+This is scoped acceptance of the actual shipped bytes, not a clean-checkout
+or full 89-workflow claim. The application and guide ZIPs remain local.
+
+The actual extracted forge-tools passes original/renumbered environment banks
+(5_4z3132: 214 words, nine exact records, sixteen safe negative routes), labelled
+Time choices (tpqo47j0: ten selections/two safe refusals), and the material
+derivative (ahhgc8l3: nine words/fourteen safe negatives plus both original
+dependency refusals). build/audit_environment_package.py verifies each actual
+tool hash against PACKAGE_INFO and records report hashes in the extraction's
+environment-material-acceptance-audit.json. Tool SHA256:
+03b1ce6de3295c33975058b4d8d874af902f672d8a4da4a36dd8bdafdc6b9015.
+All referenced evidence folders are under C:/Users/Cornelio/
+FableForge-asset-checks-20261005. No live files or gameplay were changed/tested.
+
 ## 2026-10-05 environment Time source choices
 
 tools/test_fmp_environment_choices.py passes ten selections and two safe
