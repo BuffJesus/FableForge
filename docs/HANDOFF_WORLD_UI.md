@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 consolidated 71-workflow local package checkpoint
+
+Frozen application ZIP:
+dist/development/20261005-2147246/FableForge-0.18.1-dev.2147246.20261005-win64.zip.
+SHA256 e56681f26d6640be087a90a89b93fa02c7135fba4d66269317f0182901cbb791.
+Separate illustrated guide ZIP is alongside it. All Release targets were current
+after rebuilding from clean 2147246f973b3e689bfcdade959982bd326bd209;
+PACKAGE_INFO records this checkout with tracked_changes=false, identifying the
+packaging tree rather than certifying executable provenance. Core is unchanged
+from the recorded 40-test gate. Earlier frozen ZIPs remain unchanged.
+
+The single extracted run build/package-smoke-ctoonml8/result.json passes all 71
+workflows, zero not_run and zero skipped, plus 108 file identities and 120 local
+Markdown links. It runs from an unrelated working directory beneath the literal
+percent/ampersand package path. It adds ordinary/complete text payload, unnamed
+and TOC refusal checks, all three both-size text action-error/retry modes, and
+whole-file TNG/QST winner previews to the previous full 61-workflow gate.
+All contributor families, staged-original projection, named FMP/Aeon/controller,
+retail exports, Unicode, Setup recovery, successful/failed asset refresh with
+separate roots, and texture destination/locked/invalid/add/export failures pass.
+This is offline/local development acceptance; no tags, publication, live-install
+writes, external messages or gameplay validation.
+
+Independent probes outside this gate retain further limitations. Under
+C:/Users/Cornelio/FableForge-asset-checks-20261005/mod-text-loss-probe-quz3ucdf/,
+accepted selected strings lose appended opaque bytes, and a duplicate named TOC
+entry silently chooses its second candidate. Under mod-level-case-probe-5xnjz3ai/,
+Test/test path casing splits TNG and QST candidates that name the same Windows
+file: disjoint edits overwrite each other. Uppercase .TNG/.QST are skipped by the
+specialized merge while excluded from ordinary file layers, returning successful
+outputs without their edits. All four cases preserve source inventories but fail
+the intended output delta. Initial eln9ogx3/ stopped when its two case-only
+workspace names collided; the corrected probe uses numeric subdirectories.
+Level filename/extension identity is next; payload/duplicate ambiguity follows.
+
 ## 2026-10-05 named text TOC changes are contributions
 
 Native FableTLC docs/formats/TEXT.md confirms type-0 Info stores the speaker index

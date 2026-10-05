@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 local package at 2147246 passes all 71 extracted workflows, zero
+omitted/skipped, plus 108 file identities and 120 doc links. It includes text
+refusals and whole-file winner previews. New probes show case-only TNG/QST names
+overwrite disjoint edits and uppercase extensions silently drop changes; these
+are next, followed by trailing text bytes and duplicate named entries.
+See HANDOFF_WORLD_UI for frozen artifact hashes and acceptance boundaries.
+
 2026-10-05 text TOC metadata: speaker/NarratorList header deltas now count as
 contributions and selected unsupported metadata refuses instead of disappearing.
 Both 33-check ordinary/complete-Data gates, both-size GUI recovery, TextID 13 and
