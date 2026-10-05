@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 frozen f20e263 texture/float ZIP passes all 89 workflows across
+42 initial and 47 resumed successes; the initial GUI layout failure is retained.
+Zero uncovered/reported skips, 108 identities/122 links. Newer 997e065 creature
+ZIP passes four scoped workflows plus actual extracted-tool prefix/choice gates;
+85 not run. These scopes exclude later duplicate-record work; see handoff.
+
 2026-10-05 counted creature prefixes now relink wound textures and facial
 animation graphics entries. Original No Scar Fade and Bruised and Bloodied
 (No Scars) pass 210 prefix links, all 258 creature-record links, exact other

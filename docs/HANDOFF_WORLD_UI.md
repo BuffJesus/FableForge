@@ -1,5 +1,41 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 frozen texture/float ZIP: all 89 workflows covered
+
+Clean f20e263 ZIP at dist/development/20261005-f20e263/
+FableForge-0.18.1-dev.f20e263.20261005-win64.zip has SHA256
+407a39ace15f7b52eee1330d3decb426c30f4b4e67a8dde638a0c5a279170798.
+All 89 distinct workflows pass across 42 initial successes at C: scratch
+package-smoke-a2yhgf4g and 47 resumed successes at package-smoke-qcuiluip.
+The tail explicitly records 42 not run; the combined audit covers every omitted
+workflow from the earlier same-hash evidence. No uncovered workflows or reported
+fixture skips remain. All 108 identities/122 links pass. This was not one
+uninterrupted run: the original GUI compact-layout failure remains retained.
+The retry only fixes launcher size/private settings; assertions/binaries match.
+
+build/audit_package_acceptance_f20e263.py verifies archive identity, package
+commit/clean metadata, all 89 unique workflow names and child logs. Its
+combined-acceptance.json is beside the final C: scratch result. This archive
+includes the Unicode, augmentation/opinion, finite-float and texture replacement
+increments, and excludes later creature-prefix and duplicate-record work.
+
+## 2026-10-05 frozen creature ZIP: scoped extracted acceptance
+
+Clean 997e065 ZIP at dist/development/20261005-997e065/
+FableForge-0.18.1-dev.997e065.20261005-win64.zip has SHA256
+e038cc927b294d281a9994abdbfe743f0b221c70ac5f358fc718528c48a82393.
+C: scratch package-smoke-r_wp485b/result.json passes both record-contributor
+layouts, finite floats at both GUI sizes and FMP record refusal: four selected,
+85 not run, zero reported skips; 108 identities/122 links pass. Its extracted
+tool independently passes the two original creature prefixes (tw6j75wy:
+210 prefix links, 258 creature links, forty refusals) and prefix selections
+(l6h3hefh: ten outputs, two safe unavailable refusals). The
+creature-acceptance-audit.json verifies both actual input tool hashes against
+the extracted tool identity
+a1b5e525d38b6d54256d4ff177067bf3b60aa1d6b5e3f83a55e185c2a8e1e380.
+This is scoped acceptance, not a full 89-workflow run. It includes creature
+prefix recovery/private GUI fixtures and excludes later duplicate-record work.
+
 ## 2026-10-05 original anonymous creature prefix choices
 
 tools/test_fmp_creature_prefix_choices.py composes original Bruised and Bloodied
