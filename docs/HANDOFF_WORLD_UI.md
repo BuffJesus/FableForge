@@ -1,5 +1,21 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-04 named archive provider index
+
+`tools/audit_named_fmp_providers.py` reads bounded inert BIG tables, normalizes
+bounded historic wrappers and verifies all catalogue payload hashes. It indexes
+1133 readable originals; nine unsupported layouts remain listed. No install or
+package execution occurs. Report `build/named-fmp-providers-xca73rzd/result.json`
+finds candidate providers for 31 of the frozen sweep's 67 missing-target rows,
+including lowercase legacy text banks. Input archive and coverage hashes are
+unchanged. Candidate package bank lists and frozen coverage status remain visible;
+matching a symbol is not a dependency declaration or compatibility test.
+
+Apple Packagev2 supplies OBJECT_APPLE_CARE. Five staff packages supply
+OBJECT_STAFF_YEW. All six are outside the original 821-package coverage scope,
+because they include lowercase `text`, so do not recommend installing them as
+verified dependencies. Their text spelling/payload support is a separate follow-up.
+
 ## 2026-10-04 region descriptions and breath effects
 
 Exact REGION controls now map RegionDescription (`801675342.Region Description`)

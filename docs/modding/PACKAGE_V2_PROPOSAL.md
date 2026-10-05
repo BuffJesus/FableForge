@@ -72,6 +72,19 @@ or missing required baseline is a build error shown in the Mods tab.
 
 ## Native edit model
 
+The named-corpus tests make these requirements concrete. Region descriptions,
+expression labels and shop dialogue use text IDs; HUD icons use texture IDs;
+breath particles use effect IDs. Four-byte storage does not identify the bank.
+Native operations must declare the target domain, with legacy path spelling
+retained as import provenance rather than becoming the new format's identity.
+
+Provider-index matches are review hints. The original Apple Store requires an
+OBJECT_APPLE_CARE record supplied by Apple Packagev2; staff shop edits have several
+possible providers. An author-declared dependency should name a package/version
+and expected provided symbols. Forge must show ambiguous candidates and importer
+limitations before recommending a provider. A same-name record alone establishes
+neither the intended version nor gameplay compatibility.
+
 Each operation has a typed target, expected base identity when needed, and an
 explicit action (`set`, `add`, `remove`, or `replace`). Numeric runtime IDs are
 output artifacts, not package identities.
