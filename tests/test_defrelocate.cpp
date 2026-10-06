@@ -112,6 +112,102 @@ int main(int argc, char** argv) {
     check(defrelocate::relocate(entry, schema, maps) == fixture(true),
           "simultaneous relocation preserves CRCs, floats, tags, nulls and non-reference words");
     check(entry.data == fixture(false), "source payload remains unchanged");
+    const auto ownerSchema = defschema::Schema::loadText(R"({
+        "BUILDING":{"fields":[{"name":"Value","type":"int32"}]},
+        "CThingBuildingDef":{"fields":[{"name":"Value","type":"int32"}]},
+        "HERO_ABILITY":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
+        "CHeroAbilityDef":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]},
+        "UNVERIFIED":{"fields":[{"name":"DummyObject","type":"?"},{"name":"Name","type":"?"}]}
+    })");
+    for (const auto* owner : {"BUILDING", "CThingBuildingDef"}) {
+        auto bytes = fixture(false); bytes.resize(17); field(bytes, "Value", {12345});
+        auto expected = fixture(true); expected.resize(17); field(expected, "Value", {12345});
+        bin::Entry building{owner, "BUILDING_PROBE", 0, bytes};
+        check(defrelocate::relocate(building, ownerSchema, maps) == expected,
+              "building component data/inheritance move while CRC/header/trailing scalar stay exact");
+        building.data[3] = 2;
+        rejects([&] { defrelocate::relocate(building, ownerSchema, maps); },
+                "building listing with wrong count refuses");
+    }
+    for (const auto* owner : {"HERO_ABILITY", "CHeroAbilityDef"}) {
+        bin::Entry hero{owner, "ABILITY_PROBE", 0, {1,0,1,0,0}};
+        field(hero.data, "DummyObject", {77}); field(hero.data, "Name", {12345});
+        auto expected = hero.data; expected[9] = 88;
+        check(defrelocate::relocate(hero, ownerSchema, maps) == expected,
+              "verified hero DummyObject moves as game index despite unknown schema storage type");
+        const defrelocate::Maps namesOnly{{},{{77,900}}};
+        check(defrelocate::relocate(hero, ownerSchema, namesOnly) == hero.data,
+              "hero DummyObject never treated as a name offset");
+        hero.data.resize(13); field(hero.data, "Name", {77});
+        rejects([&] { defrelocate::relocate(hero, ownerSchema, maps); },
+                "hero unrelated unknown scalar remains unresolved");
+        hero.data = {1,0,1,0,0}; field(hero.data, "DummyObject", {77,88});
+        field(hero.data, "Name", {12345});
+        rejects([&] { defrelocate::relocate(hero, ownerSchema, maps); },
+                "hero DummyObject incorrect width refuses");
+        hero.definition = "UNVERIFIED";
+        hero.data = {1,0,1,0,0}; field(hero.data, "DummyObject", {77});
+        field(hero.data, "Name", {12345});
+        rejects([&] { defrelocate::relocate(hero, ownerSchema, maps); },
+                "DummyObject field name alone does not establish reference semantics");
+    }
+    const auto heroTextSchema = defschema::Schema::loadText(R"({
+        "HERO_ABILITY":{"fields":[{"name":"LevDescription","type":"?"}]}
+    })");
+    bin::Entry descriptions{"HERO_ABILITY", "TEXT_IDS", 0, {1,0,1,0,0}};
+    field(descriptions.data, "LevDescription", {3,77,88,UINT32_MAX});
+    check(defrelocate::relocate(descriptions, heroTextSchema, maps) == descriptions.data,
+          "hero text IDs that collide with moved game/name IDs stay unchanged");
+    descriptions.data = {1,0,1,0,0}; field(descriptions.data, "LevDescription", {3,77});
+    rejects([&] { defrelocate::relocate(descriptions, heroTextSchema, maps); },
+            "truncated text vector cannot certify reference domain");
+    const auto brainSchema = defschema::Schema::loadText(R"({
+        "CBrainDef":{"fields":[{"name":"Behaviours","type":"Vector_VCBrainBehaviour__"}]}
+    })");
+    bin::Entry brain{"BRAIN", "BRAIN_PROBE", 0, {1,0,1,0,0}};
+    field(brain.data, "Behaviours", {2,77,60,1,88,48,1});
+    auto brainExpected = brain.data;
+    brainExpected[13] = uint8_t(900); brainExpected[14] = uint8_t(900 >> 8);
+    check(defrelocate::relocate(brain, brainSchema, maps) == brainExpected,
+          "nested brain names relocate independently of numeric game IDs and priority fields");
+    const defrelocate::Maps crossBoundary{{{15360,20000}}, {}};
+    check(defrelocate::relocate(brain, brainSchema, crossBoundary) == brain.data,
+          "unaligned match crossing known name-reference boundary is not rewritten");
+    brain.data = {1,0,1,0,0}; field(brain.data, "Behaviours", {1,77,88,1});
+    rejects([&] { defrelocate::relocate(brain, brainSchema, maps); },
+            "aligned brain parameter candidate is not inferred to be a reference");
+    brain.data = {1,0,1,0,0}; field(brain.data, "Behaviours", {2,77,60,1});
+    rejects([&] { defrelocate::relocate(brain, brainSchema, maps); },
+            "truncated brain row array refuses");
+    for (const auto* fieldName : {"DefaultStock", "StockCategoryDefaults"}) {
+        const auto shopSchema = defschema::Schema::loadText(std::string(R"({
+            "CShopDef":{"fields":[{"name":")") + fieldName + R"(","type":"?"}]}
+        })");
+        bin::Entry shop{"CShopDef", "SHOP_PROBE", 0, {1,0,1,0,0}};
+        word(shop.data, defdecode::fieldTag(fieldName)); word(shop.data, 2);
+        constexpr uint32_t tags[] = {0x0da8270b,0x03a7ab09,0x7afc0513,0x34fd91b8,
+                                     0x669cc35b,0xdc6d0e85,0x9e63ec0d,0x44f5c7a0};
+        for (size_t row = 0; row < 2; ++row)
+            for (size_t member = 0; member < 8; ++member) {
+                word(shop.data, tags[member]); word(shop.data, member ? 1000 + member : (row ? 88 : 77));
+            }
+        auto expected = shop.data; expected[17] = 88; expected[81] = 99;
+        check(defrelocate::relocate(shop, shopSchema, maps) == expected,
+              "both tagged shop stock layouts relocate objects with all remaining bytes exact");
+        const defrelocate::Maps namesOnly{{},{{77,900}}};
+        check(defrelocate::relocate(shop, shopSchema, namesOnly) == shop.data,
+              "shop object identities are not names.bin offsets");
+        auto malformedShop = shop; malformedShop.data[21] ^= 1;
+        rejects([&] { defrelocate::relocate(malformedShop, shopSchema, maps); },
+                "wrong shop row tag refuses before relocation");
+        malformedShop = shop; malformedShop.data.pop_back();
+        rejects([&] { defrelocate::relocate(malformedShop, shopSchema, maps); },
+                "truncated shop row refuses before relocation");
+        malformedShop = shop;
+        for (size_t i = 0; i < 4; ++i) malformedShop.data[25+i] = uint8_t(77u >> (8*i));
+        rejects([&] { defrelocate::relocate(malformedShop, shopSchema, maps); },
+                "unclassified shop parameter is not guessed to be an object reference");
+    }
     const defrelocate::Maps onlyNames{{}, {{77, 900}}};
     check(defrelocate::analyze(entry, schema, onlyNames).rewrites.size() == 2,
           "equal game IDs do not become names.bin offsets");

@@ -1,5 +1,16 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-06 Forge continuation adds a read-only namespace allocator preserving
+baseline identities and distinct additions. All 42 core tests pass; independent
+original Seasons/Secrets identity audits pass both orders (15,386 planned slots).
+Follow-up building/hero/brain/shop recovery and focused tests reduce BIN reference
+candidates to 179/0 by order, with independent exact payload-delta audits.
+Loose/WAD inventory covers 1,696 payloads; observed matches are unrelated UID
+or float substrings. BIG/STB raw inventory covers 44,569 entries; 306 candidate
+groups have verified texture/text domains, 480 remain unclassified. Compressed
+internals still need coverage. Composer refusal remains. Work is active;
+see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
+
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:
 verified component and typed references change; opaque matching integers refuse.
 All 41 core tests pass. Original Secrets' colliding sword reference passes an

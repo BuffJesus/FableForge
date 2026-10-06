@@ -37,6 +37,9 @@ public:
                      const std::filesystem::path& binPath);
 
     const std::vector<Entry>& entries() const { return entries_; }
+    // Loaded pool in exact order, including duplicate/unused strings and CRCs.
+    // Read-only namespace planning must retain names not used by table rows.
+    const std::vector<std::pair<uint32_t, std::string>>& originalNames() const { return names_; }
 
     // First entry with this exact name, or nullptr.
     const Entry* find(std::string_view name) const;

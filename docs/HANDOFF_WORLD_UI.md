@@ -1,5 +1,119 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-06 namespace allocation continuation (active)
+
+User resumed Forge work continuously until asked to stop. Checkout remains
+`D:/Code/FableForge`, `feat/editor-ui-shell`. New `forge::defnamespace::allocate`
+plans game slots and names offsets without writes. Baseline identities stay
+fixed; unique named additions coalesce by exact type/name, while anonymous,
+duplicate-name and baseline-name additions retain source-local identities.
+Changed maps are separate for game IDs and name offsets. Payloads in the plan
+remain unrelocated and are not safe to serialize. The composer refusal remains.
+
+All Release targets build and **42/42 core tests pass (83.84s)**, retained in
+`build/defnamespace-core-20261006.log`. Tests cover both orders, shorter sources,
+ordinal rebuilding, name lengths/CRCs, duplicate baseline offsets, ambiguous
+additions, malformed input and preservation. Existing unowned audio-test edits
+remain untouched. No package, live install write or gameplay claim.
+
+`tools/audit_defnamespace.py` independently decodes original input banks and
+checks all identities, injective source maps, baseline preservation, complete
+output slot coverage and exact CRC/string offsets. It hashes all four banks
+before/after plus the executable/schema. Both original orders pass against the
+retail-definition baseline in
+`C:/Users/Cornelio/FableForge-asset-checks-20261005/whole-bank-full-world-g3w0ktf2/baseline`:
+
+- `build/defnamespace-seasons-secrets-audit-20261006.json`: 15,386 planned game
+  slots, 14,206 names; Secrets moves 190 game IDs/173 name offsets, with 197
+  verified payload rewrites and **261 unresolved candidates**.
+- `build/defnamespace-secrets-seasons-audit-20261006.json`: same counts; Seasons
+  moves 18 game IDs/one name offset, with 12 verified rewrites and **two unresolved
+  candidates**. The first source in each order requires no changed maps.
+
+Original duplicate `OBJECT_OBJECT_SILVERKEY_CHEST_35` rows exposed an overly
+strict initial refusal; the final planner preserves each numeric identity.
+Anonymous identical payloads are not evidence of shared ownership. The planner
+may therefore reserve more rows than an ownership-aware future optimization.
+
+Follow-up resolved both reverse-order candidates. BUILDING_HUNTER_LODGE slot
+15087 offset 69 is `.CDefs.5.CDefDataEntry`; its reference now relocates.
+HERO_ABILITY_WILL_GHOST_SWORD slot 2532 offset 145 is a LevDescription **text ID**,
+not a game reference, and remains unchanged after count/length validation.
+Hero DummyObject is independently verified as a game reference and supported,
+but it was not the source of the reported candidate. Evidence:
+FableTLC `ghidra_out/donor_def_transfers.c` CHeroAbilityDef 019356a2 explicitly
+transfers DummyObject as CDefIndex; `struct_layouts_egor.tsv` agrees. Retail
+`def_transfers.c` CThingBuildingDef 00454B8E calls CThingBaseDef 00676BE0, which
+serializes the component set before fields. Existing `fmplinks::locate` binds
+the counted LevDescription vector to TextEntry, agreeing with donor/PDB layout.
+
+Focused final decoder/FMP/relocation/namespace tests pass **4/4** in
+`build/defnamespace-owner-relocation-final-20261006.log`. Updated independent
+reports `build/defnamespace-{secrets-seasons,seasons-secrets}-final-audit-20261006.json`
+also execute relocation and verify complete output payloads against independent
+word-only deltas. Secrets-first now has **13 rewrites / zero unresolved BIN
+candidates**; Seasons-first has **199 / 253**. The prior 42-test gate precedes
+this owner/domain increment. No cross-container or merged-bank claim follows.
+
+Brain follow-up: verified 12-byte CBrainBehaviour rows now enumerate their
+leading CDefString reference, retaining both integer parameters. This removes
+41 cross-boundary byte candidates without inventing game references. Tests
+cover independent domains, crossed boundaries, aligned opaque parameters and
+truncated rows. Four focused gates pass in `build/defnamespace-brain-relocation-20261006.log`;
+`build/defnamespace-seasons-secrets-brain-audit-20261006.json` retains **199
+rewrites / 212 unresolved** and independent full-payload delta checks.
+Evidence: existing FMP CreatureActionList layout; Ego_r CBrainBehaviour fields
+Name/Priority/ScriptAIPriority at 0/4/8; donor CBrainDef transfers this vector.
+
+External inventory for the unchanged Secrets-first Seasons maps completed:
+`build/audit_namespace_external_20261006.py` and
+`build/defnamespace-external-seasons-inventory-20261006.json`. It examined 1,696
+loose/WAD payloads: 846 LEVs, 846 TNGs, BWD, GTG and two WLDs (includes both
+loose copies and the renamed WAD). 846 palettes / 11,904 named theme slots have
+no moved ID; no moved named symbol occurs in the searched text. All examined
+file hashes stayed unchanged. Thirteen intentionally loose numeric substring
+matches are decimal fragments of position/orientation floats. The one raw
+binary match, BWD offset 6620 value 14841, is inside map slot 73
+MayorsHouseBedroom's 64-bit UID at [6619,6627), value 3799409. The existing native-
+grounded `wld_bwd.py` independently parses that owner and round-trips the entire
+BWD exactly. Review: `build/defnamespace-external-seasons-review-20261006.json`.
+These are candidate inventories, not a general external-reference verifier.
+
+Shop follow-up reuses the existing FMP locator to validate both DefaultStock
+and StockCategoryDefaults: eight tagged four-byte fields / 64 bytes, first value
+a game ID. Other integer values remain conservative candidates. An initial
+test caught legacy FMP control IDs being confused with native tag CRCs; final
+code uses the locator's exact legacy paths. Four focused gates pass in
+`build/defnamespace-shop-relocation-final-20261006.log`; the original corpus
+audit `build/defnamespace-seasons-secrets-shop-audit-20261006.json` verifies
+**232 rewrites / 179 unresolved**, all successful payloads independently checked.
+Native donor CShopDef 01BA75DB transfers both vectors as CShopItemDef subcomponents.
+
+Next: examine BIG/STB asset payloads and runtime-generated references, and
+recover further forward-order BIN layouts (largest groups: CCreatureDef 56,
+CONTROL_SCHEME 37, UI 22). A read-only canonical-container scan was launched via
+`python build/run_namespace_assets_20261006.py`, using
+`build/namespace_asset_scan_20261006.cpp` linked against this checkout's core.
+It completed with unchanged input hashes: 44,569 entries, 1,683,869,884 scanned
+payload/subheader bytes, 786 raw candidate groups. Result:
+`build/defnamespace-assets-seasons-inventory-20261006.json`. Raw compressed matches
+are not reference classifications.
+
+`build/run_namespace_asset_review_20261006.py` and its native reviewer then
+classified 306 groups: 293 are completely validated texture pixel/mip payloads
+and 13 are exact-roundtrip type-1 text groups (member IDs belong to text.big).
+All five source hashes again match. Retained output:
+`build/defnamespace-assets-seasons-domain-review-20261006.json`. **480 groups
+remain unclassified**: 403 STB, 75 mesh/animation/physics payload groups, and two
+mesh subheaders. STB frames and compressed mesh internals still require decoded
+reference coverage; absence/presence of raw candidates is not enough. Existing
+`stbbake::parseChunk`/`decodeFrame` can enumerate validated outer LZO frames while
+leaving unknown HDR spans explicit. No asset bytes were changed. All diagnostic
+jobs described above completed. The final full Release relink succeeds with
+brain/shop increments; their four focused tests pass as recorded above.
+Do not interpret the successful identity audits as permission to merge these
+banks; source-local payload and external references still need verification.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

@@ -1,5 +1,6 @@
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/fmplinks.hpp"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -60,9 +61,11 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     };
 
     // Existing fmplinks::locate's native-verified CDefs layout. Discovery is
-    // restricted to the OBJECT class; a similarly sized unknown prefix is not
-    // evidence that it contains a component listing.
-    if (entry.definition == "OBJECT" || entry.definition == "CObjectDef") {
+    // restricted to verified owners; a similarly sized unknown prefix is not
+    // evidence that it contains a component listing. Retail Building::Transfer
+    // 00454B8E calls ThingBase::Transfer 00676BE0 (component set before fields).
+    if (entry.definition == "OBJECT" || entry.definition == "CObjectDef" ||
+        entry.definition == "BUILDING" || entry.definition == "CThingBuildingDef") {
         if (decoded.prefixLen >= 5) {
             const size_t count = size_t(entry.data[3]) | size_t(entry.data[4]) << 8;
             if (decoded.prefixLen == 5 + count * 12) {
@@ -81,10 +84,21 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     for (const auto& field : decoded.fields) {
         cover(at, 4); // Field tag CRC.
         at += 4;
-        const bool index = field.type == "CDefIndex";
+        // Donor CHeroAbilityDef::Transfer 019356A2 explicitly transfers
+        // DummyObject as CDefIndex; Ego_r PDB +168 agrees. The retail alias
+        // schema still spells this field '?'. Other unknown fields stay opaque.
+        const bool heroDummy = (entry.definition == "HERO_ABILITY" || entry.definition == "CHeroAbilityDef") &&
+            field.name == "DummyObject" && field.type == "?";
+        const bool index = field.type == "CDefIndex" || heroDummy;
         const bool name = field.type == "CDefString";
         const bool indices = field.type == "Vector_VCDefIndex__" || field.type == "vector<CDefIndex>";
         const bool names = field.type == "Vector_VCDefString__" || field.type == "vector<CDefString>";
+        const bool heroText = (entry.definition == "HERO_ABILITY" || entry.definition == "CHeroAbilityDef") &&
+            field.name == "LevDescription" && field.type == "?";
+        const bool brainBehaviours = (entry.definition == "BRAIN" || entry.definition == "CBrainDef") &&
+            field.name == "Behaviours" && field.type == "Vector_VCBrainBehaviour__";
+        const bool shopStock = entry.definition == "CShopDef" && field.type == "?" &&
+            (field.name == "DefaultStock" || field.name == "StockCategoryDefaults");
         if (index || name) {
             if (field.value.size() != 4) fail(entry, "invalid reference width for " + field.name);
             reference(at, index ? Domain::GameEntry : Domain::NameOffset, field.name);
@@ -97,6 +111,48 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             for (size_t i = 0; i < count; ++i)
                 reference(at + 4 + i * 4, indices ? Domain::GameEntry : Domain::NameOffset,
                           field.name + "[" + std::to_string(i) + "]");
+        } else if (shopStock) {
+            if (field.value.size() < 4) fail(entry, "truncated shop stock list");
+            const size_t count = word(field.value, 0);
+            if (!count) {
+                if (field.value.size() != 4) fail(entry, "invalid empty shop stock list");
+            } else {
+                // Reuse the FMP locator's complete count/stride/eight-tag
+                // verification instead of maintaining a second tag table.
+                // These are legacy FMP control IDs, not native field-tag CRCs.
+                const auto path = field.name == "DefaultStock" ?
+                    "3996108785.CShopDefArrayList1.0.ItemForSell" : "2023417370.unknown.0.Unknown";
+                const auto first = fmplinks::locate(entry, schema, {path, {}});
+                if (first.offset != at + 8 || first.destination != fmplinks::Destination::GameEntry)
+                    fail(entry, "shop stock locator disagrees with decoded field");
+                for (size_t i = 0; i < count; ++i) {
+                    for (size_t member = 0; member < 8; ++member) cover(at + 4 + i * 64 + member * 8, 4);
+                    reference(at + 8 + i * 64, Domain::GameEntry, field.name + "[" + std::to_string(i) + "].Item");
+                }
+            }
+            cover(at, 4);
+        } else if (brainBehaviours) {
+            // The verified FMP CreatureActionList layout and Ego_r PDB agree:
+            // 12-byte CBrainBehaviour = CDefString, Priority, ScriptAIPriority.
+            // Establish reference boundaries; do not infer references from the
+            // two remaining integer parameters, even when their values match.
+            if (field.value.size() < 4) fail(entry, "truncated brain behaviour list");
+            const size_t count = word(field.value, 0);
+            if (count > 4096 || count > (field.value.size() - 4) / 12 ||
+                field.value.size() != 4 + count * 12)
+                fail(entry, "invalid brain behaviour list length");
+            cover(at, 4);
+            for (size_t i = 0; i < count; ++i)
+                reference(at + 4 + i * 12, Domain::NameOffset, "Behaviours[" + std::to_string(i) + "].Name");
+        } else if (heroText) {
+            // Donor 019356A2/PDB: vector<long>; fmplinks::locate's verified
+            // LevDescription path binds its elements to TextEntry, a separate
+            // namespace. Equal game/name IDs must never change these words.
+            if (field.value.size() < 4) fail(entry, "truncated hero text vector");
+            const size_t count = word(field.value, 0);
+            if (count > (field.value.size() - 4) / 4 || field.value.size() != 4 + count * 4)
+                fail(entry, "invalid hero text vector length");
+            cover(at, field.value.size());
         } else if ((field.type == "float" && field.value.size() == 4) ||
                    ((field.type == "bool" || field.type == "uint8") && field.value.size() == 1)) {
             cover(at, field.value.size());
