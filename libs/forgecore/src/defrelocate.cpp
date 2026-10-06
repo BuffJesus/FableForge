@@ -148,6 +148,20 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             (entry.definition == "OPINION_DEED_MASK" && field.name == "DeedEnabled" &&
              field.type == "Map__NW4EOpinionDeedType__");
         const bool stringMap = field.type == "Map_VCCharString__K" || field.type == "Map_VCCharString__J";
+        const bool sound = entry.definition == "SOUND_SETUP" || entry.definition == "CSoundSetupDef";
+        const bool music = sound && field.name == "MusicEntries" && field.type == "Vector_VCMusicEntry__";
+        const bool musicSet = sound && field.name == "MusicSetEntries" && field.type == "Vector_VCMusicSetEntry__";
+        const bool reverb = sound && field.name == "ReverbEnvironmentEntries" && field.type == "Vector_VCReverbEnvironmentEntry__";
+        const bool reactionFrequency = (entry.definition == "OPINION_REACTION_MANAGER" ||
+            entry.definition == "COpinionReactionManagerDef") && field.name == "Frequency" &&
+            field.type == "CReactionFrequencyTraitsArray";
+        const bool reactionMatches = (entry.definition == "OPINION_REACTION_MANAGER" ||
+            entry.definition == "COpinionReactionManagerDef") && field.name == "Matches" &&
+            field.type == "V__list_PAVCReactionMatch__V__allocator_PAVCReactionMatch___std___std__";
+        const bool statLevels = (entry.definition == "HERO_STATS" || entry.definition == "CHeroStatsDef") &&
+            field.name == "StatLevels" && field.type == "vector<CAbilityTrackDef>";
+        const bool tavernScoreText = entry.definition == "CTavernGameDef" &&
+            field.name == "BestScore" && field.type == "?";
         const bool primitiveVector = field.type == "Vector_J" || field.type == "Vector_K" ||
             field.type == "Vector_int32" || field.type == "Vector_uint32" || field.type == "Vector_float" || heroCosts;
         const bool primitiveMap = field.type == "Map_JJ" || field.type == "Map_KK" ||
@@ -185,6 +199,112 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             if (location.offset != at || location.destination != fmplinks::Destination::TextEntry)
                 fail(entry, "text locator disagrees with decoded field");
             cover(at, 4);
+        } else if (tavernScoreText) {
+            // GetBestScore 0273CB00 passes CTavernGameDef +B4 to GetText
+            // 022D72F0, which resolves it through the game text bank.
+            if (field.value.size() != 4) fail(entry, "invalid tavern score text width");
+            cover(at, 4);
+        } else if (statLevels) {
+            // Native transfers 01A0E34C/01A0F440. UI 023B058A passes both
+            // nested Description and MaxedOutDescription to GetInventoryText.
+            size_t cursor = 0;
+            auto tagged = [&](std::string_view member, bool scalar, bool separateDomain) {
+                const size_t width = scalar ? 8 : 4;
+                if (cursor > field.value.size() || width > field.value.size() - cursor ||
+                    word(field.value, cursor) != defdecode::fieldTag(member))
+                    fail(entry, "invalid stat track member " + std::string(member));
+                cover(at + cursor, scalar && separateDomain ? 8 : 4);
+                cursor += width;
+            };
+            auto counted = [&](size_t minimum) {
+                if (cursor > field.value.size() || field.value.size() - cursor < 4)
+                    fail(entry, "truncated stat track count");
+                const size_t count = word(field.value, cursor);
+                cover(at + cursor, 4); cursor += 4;
+                if (count > (field.value.size() - cursor) / minimum) fail(entry, "invalid stat track count");
+                return count;
+            };
+            const auto tracks = counted(24);
+            for (size_t i = 0; i < tracks; ++i) {
+                tagged("ExperienceStat", true, true);
+                tagged("Abilities", false, false);
+                const auto levels = counted(24);
+                for (size_t j = 0; j < levels; ++j) {
+                    tagged("ExperienceCost", true, false); // retain opaque integer semantics
+                    tagged("AbilityUnlocked", true, true); // EHeroAbility, not a definition ID
+                    tagged("Description", true, true); // text bank
+                }
+                tagged("MaxedOutDescription", true, true); // text bank
+            }
+            if (cursor != field.value.size()) fail(entry, "trailing stat track bytes");
+        } else if (reactionMatches) {
+            // 01FF2940 writes count, type and virtual body. Types 0/1 write
+            // two integers/six floats, 2 writes three/six, 3 three/nine.
+            // Type 4 writes one integer, counted float opinions, radius.
+            if (field.value.size() < 4) fail(entry, "truncated reaction matches");
+            const size_t count = word(field.value, 0);
+            if (count > (field.value.size() - 4) / 16) fail(entry, "invalid reaction match count");
+            cover(at, 4);
+            size_t cursor = 4;
+            for (size_t i = 0; i < count; ++i) {
+                if (cursor > field.value.size() || field.value.size() - cursor < 4)
+                    fail(entry, "truncated reaction match type");
+                const auto kind = word(field.value, cursor);
+                if (kind > 4) fail(entry, "unknown reaction match type");
+                cover(at + cursor, 4); cursor += 4;
+                const size_t integers = kind < 2 ? 2 : kind < 4 ? 3 : 1;
+                if (integers * 4 > field.value.size() - cursor) fail(entry, "truncated reaction match parameters");
+                for (size_t j = 1; j < integers; ++j) primitiveBoundaries.push_back(at + cursor + j * 4);
+                cursor += integers * 4;
+                size_t floats = kind == 3 ? 9 : 6;
+                if (kind == 4) {
+                    if (field.value.size() - cursor < 4) fail(entry, "truncated reaction opinion count");
+                    floats = word(field.value, cursor);
+                    cover(at + cursor, 4); cursor += 4;
+                    if (floats >= (field.value.size() - cursor) / 4)
+                        fail(entry, "truncated reaction opinions or radius");
+                    ++floats; // trailing sphere radius
+                }
+                if (floats > (field.value.size() - cursor) / 4) fail(entry, "truncated reaction match floats");
+                cover(at + cursor, floats * 4); cursor += floats * 4;
+            }
+            if (cursor != field.value.size()) fail(entry, "trailing reaction match bytes");
+        } else if (reactionFrequency) {
+            // Native 01FEF150/01FEEEF0: two groups of 79 discriminated
+            // frequency traits. Writers 01F1A280/01F1A970/01F1AF40 serialize
+            // only floats, frame counts and a bool; never object pointers.
+            size_t cursor = 0;
+            for (size_t i = 0; i < 158; ++i) {
+                if (cursor > field.value.size() || field.value.size() - cursor < 4)
+                    fail(entry, "truncated reaction frequency traits");
+                const auto kind = word(field.value, cursor); cursor += 4;
+                if (kind > 3) fail(entry, "unknown reaction frequency trait kind");
+                const size_t length = kind == 0 ? 0 : kind == 1 ? 8 : kind == 2 ? 20 : 21;
+                if (length > field.value.size() - cursor) fail(entry, "truncated reaction frequency body");
+                if (kind == 3 && field.value[cursor] > 1) fail(entry, "invalid reaction frequency boolean");
+                cursor += length;
+            }
+            if (cursor != field.value.size()) fail(entry, "trailing reaction frequency bytes");
+            cover(at, field.value.size());
+        } else if (music || musicSet || reverb) {
+            // Native binary writers 019D7BA4/019D7E11/019D8052, corroborated
+            // by PDB members: music is u32/name/f32/bool; set is three i32;
+            // reverb is 21 floats. Numeric music IDs remain opaque here.
+            if (field.value.size() < 4) fail(entry, "truncated sound entries");
+            const size_t count = word(field.value, 0), stride = music ? 13 : musicSet ? 12 : 84;
+            if (count > (field.value.size() - 4) / stride || field.value.size() != 4 + count * stride)
+                fail(entry, "invalid sound entry count");
+            cover(at, 4);
+            if (reverb) cover(at + 4, field.value.size() - 4);
+            else if (musicSet) {
+                for (size_t offset = 4; offset < field.value.size(); offset += 4)
+                    primitiveBoundaries.push_back(at + offset);
+            } else for (size_t i = 0; i < count; ++i) {
+                const size_t row = 4 + i * stride;
+                if (field.value[row + 12] > 1) fail(entry, "invalid music cache boolean");
+                reference(at + row + 4, Domain::NameOffset, "MusicEntries[" + std::to_string(i) + "].Filename");
+                cover(at + row + 8, 5);
+            }
         } else if (stringMap) {
             // Native map<32-bit key,CCharString>: count, then key/ASCIIZ pairs.
             // Keep aligned key values opaque; inline strings are not offsets.

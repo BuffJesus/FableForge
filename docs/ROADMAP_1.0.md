@@ -4,9 +4,10 @@
 baseline identities and distinct additions. All 42 core tests pass; independent
 original Seasons/Secrets identity audits pass both orders (15,386 planned slots).
 Follow-up building/hero/brain/shop/creature/control recovery and primitive
-boundaries and native expression lookup reduce BIN candidates to 18/0 by order
-(241/13 verified rewrites), with independent exact
-payload-delta audits and focused tests. Original FMP appearance regression
+boundaries, native expression lookup and nested sound/opinion/UI layouts now
+leave zero unresolved BIN candidates in both orders (241/13 verified rewrites),
+with independent exact payload-delta audits. All 42 core tests pass after the
+final increment. Original FMP appearance regression
 passes 204 references and 34 safe negative routes after shared-parser changes.
 Loose/WAD inventory covers 1,696 payloads; observed matches are unrelated UID
 or float substrings. BIG/STB raw inventory covers 44,569 entries; 306 candidate

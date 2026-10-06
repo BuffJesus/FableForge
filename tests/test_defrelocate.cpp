@@ -285,6 +285,90 @@ int main(int argc, char** argv) {
         auto badText = text; badText.data.insert(badText.data.begin()+11,0);
         rejects([&] { defrelocate::relocate(badText,textSchema,maps); }, "oversized text field cannot certify its domain");
     }
+    const auto statSchema = defschema::Schema::loadText(R"({
+        "HERO_STATS":{"fields":[{"name":"StatLevels","type":"vector<CAbilityTrackDef>"}]},
+        "CTavernGameDef":{"fields":[{"name":"BestScore","type":"?"}]}})");
+    bin::Entry stat{"HERO_STATS","NESTED_TEXT",0,{1,0,1}};
+    field(stat.data,"StatLevels",{1}); field(stat.data,"ExperienceStat",{77});
+    field(stat.data,"Abilities",{1}); field(stat.data,"ExperienceCost",{1});
+    field(stat.data,"AbilityUnlocked",{77}); field(stat.data,"Description",{77});
+    field(stat.data,"MaxedOutDescription",{77});
+    check(defrelocate::relocate(stat,statSchema,maps)==stat.data,
+          "nested stat text and enum fields retain values equal to changed IDs");
+    auto badStat=stat; badStat.data[31]=77;
+    rejects([&] { defrelocate::relocate(badStat,statSchema,maps); }, "nested stat integer cost remains opaque");
+    badStat=stat; badStat.data[27]^=1;
+    rejects([&] { defrelocate::relocate(badStat,statSchema,maps); }, "every nested stat tag must match");
+    badStat=stat; badStat.data[23]=2;
+    rejects([&] { defrelocate::relocate(badStat,statSchema,maps); }, "nested stat count must fit all members");
+    badStat=stat; badStat.data.push_back(0);
+    rejects([&] { defrelocate::relocate(badStat,statSchema,maps); }, "nested stat trailing data refuses");
+    bin::Entry tavern{"CTavernGameDef","SCORE_LABEL",0,{1,0,1}};
+    field(tavern.data,"BestScore",{77});
+    check(defrelocate::relocate(tavern,statSchema,maps)==tavern.data,
+          "tavern score label belongs to the text bank");
+    word(tavern.data,0);
+    rejects([&] { defrelocate::relocate(tavern,statSchema,maps); }, "tavern text field must be four bytes");
+    const auto matchSchema = defschema::Schema::loadText(R"({
+        "OPINION_REACTION_MANAGER":{"fields":[{"name":"Matches",
+          "type":"V__list_PAVCReactionMatch__V__allocator_PAVCReactionMatch___std___std__"}]}})");
+    for (uint32_t kind=0;kind<=4;++kind) {
+        bin::Entry match{"OPINION_REACTION_MANAGER","MATCHES",0,{1,0,1}};
+        field(match.data,"Matches",{1,kind,1});
+        if (kind<4) { word(match.data,60); if(kind>=2) word(match.data,3); }
+        else word(match.data,2); // two opinion floats, followed by radius
+        const size_t floats=kind==4 ? 3 : kind==3 ? 9 : 6;
+        for(size_t i=0;i<floats;++i) word(match.data,77);
+        const defrelocate::Maps matchMaps{{{77,88},{15360,20000}}, {}};
+        check(defrelocate::relocate(match,matchSchema,matchMaps)==match.data,
+              "reaction variant floats and integer boundaries retain colliding bytes");
+        auto badMatch=match; badMatch.data[15]=77;
+        rejects([&] { defrelocate::relocate(badMatch,matchSchema,matchMaps); }, "reaction integer parameters stay opaque");
+        badMatch=match; badMatch.data[11]=5;
+        rejects([&] { defrelocate::relocate(badMatch,matchSchema,matchMaps); }, "unknown reaction match type refuses");
+        badMatch=match; badMatch.data.pop_back();
+        rejects([&] { defrelocate::relocate(badMatch,matchSchema,matchMaps); }, "incomplete reaction match body refuses");
+    }
+    const auto frequencySchema = defschema::Schema::loadText(R"({
+        "OPINION_REACTION_MANAGER":{"fields":[{"name":"Frequency","type":"CReactionFrequencyTraitsArray"}]}})");
+    bin::Entry frequency{"OPINION_REACTION_MANAGER","FREQUENCIES",0,{1,0,1}};
+    word(frequency.data,defdecode::fieldTag("Frequency"));
+    word(frequency.data,1); word(frequency.data,77); word(frequency.data,88);
+    word(frequency.data,2); for (size_t i=0;i<5;++i) word(frequency.data,77);
+    word(frequency.data,3); frequency.data.push_back(1);
+    for (size_t i=0;i<5;++i) word(frequency.data,77);
+    for (size_t i=3;i<158;++i) word(frequency.data,0);
+    check(defrelocate::relocate(frequency,frequencySchema,maps) == frequency.data,
+          "all frequency variants preserve float and frame-count values across colliding IDs");
+    auto badFrequency = frequency; badFrequency.data[7] = 4;
+    rejects([&] { defrelocate::relocate(badFrequency,frequencySchema,maps); }, "unknown frequency discriminant refuses");
+    badFrequency = frequency; badFrequency.data.pop_back();
+    rejects([&] { defrelocate::relocate(badFrequency,frequencySchema,maps); }, "frequency table requires both 79-element groups");
+    badFrequency = frequency; badFrequency.data[47] = 2;
+    rejects([&] { defrelocate::relocate(badFrequency,frequencySchema,maps); }, "frequency boolean must be canonical");
+    badFrequency = frequency; badFrequency.data.push_back(0);
+    rejects([&] { defrelocate::relocate(badFrequency,frequencySchema,maps); }, "frequency table cannot have opaque trailing bytes");
+    const auto soundSchema = defschema::Schema::loadText(R"({
+        "SOUND_SETUP":{"fields":[{"name":"MusicEntries","type":"Vector_VCMusicEntry__"},
+            {"name":"MusicSetEntries","type":"Vector_VCMusicSetEntry__"},
+            {"name":"ReverbEnvironmentEntries","type":"Vector_VCReverbEnvironmentEntry__"}]}})");
+    bin::Entry sound{"SOUND_SETUP","SOUND_DOMAINS",0,{1,0,1}};
+    field(sound.data,"MusicEntries",{1,5,77,77}); sound.data.push_back(1);
+    field(sound.data,"MusicSetEntries",{1,1,60,3});
+    field(sound.data,"ReverbEnvironmentEntries",{1});
+    for (size_t i=0; i<21; ++i) word(sound.data,77);
+    const defrelocate::Maps soundMaps{{{77,88},{15360,20000}}, {{77,900}}};
+    auto soundExpected = sound.data; soundExpected[15] = 132; soundExpected[16] = 3;
+    check(defrelocate::relocate(sound,soundSchema,soundMaps) == soundExpected,
+          "music names relocate independently while gain/reverb bits and integer boundaries preserve data");
+    auto badSound = sound; badSound.data[23] = 2;
+    rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "invalid music boolean refuses");
+    badSound = sound; badSound.data[11] = 77;
+    rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "opaque music ID is not treated as a game reference");
+    badSound = sound; badSound.data[7] = 2;
+    rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "music row count must match full value");
+    badSound = sound; badSound.data.pop_back();
+    rejects([&] { defrelocate::relocate(badSound,soundSchema,soundMaps); }, "reverb row must contain all 21 floats");
     const auto expressionSchema = defschema::Schema::loadText(R"({
         "CExpressionSubDef":{"fields":[{"name":"ExpressionDef","type":"int32"}]}})");
     bin::Entry expression{"CExpressionSubDef","EXPRESSION_OWNER",0,{0,0,0}};

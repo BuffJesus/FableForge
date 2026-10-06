@@ -172,6 +172,45 @@ then finds their E8 callers. This was a read-only Ghidra query with no analysis.
 Remaining BIN candidates: opinion manager 13, sound setup three, hero stats one,
 tavern game one. Asset-reference coverage and ownership still block composition.
 
+Nested-layout completion: both original orders now have **zero unresolved BIN
+candidates**, with **241 verified rewrites Seasons-first / 13 Secrets-first**.
+Reports: `build/defnamespace-{seasons-secrets,secrets-seasons}-nested-audit-20261006.json`.
+All Release targets build and **42/42 core tests pass (24.11s)** in
+`build/defnamespace-nested-core-20261006.log`. No merged-bank writer, asset
+reference acceptance or gameplay claim follows from this bounded BIN result.
+
+- Sound binary writers 019D7BA4/019D7E11/019D8052 verify 13-byte music rows
+  (ID/name-offset/float/bool), 12-byte music sets and 84-byte reverb float arrays.
+  Only filenames relocate; numeric music IDs remain conservative. Evidence:
+  `namespace-nested-transfers-20261006.c` plus Ego_r PDB member layouts.
+- Reaction frequency uses two groups of 79 discriminated traits. Native
+  01FEF150/01FEEEF0 and three type getters establish null/linear/periodic/count
+  layouts; their bodies contain only floats, frame counters and a bool.
+  Original data has 66 null, 34 linear and 58 controlled-count entries, exactly
+  2,122 bytes. Tests also exercise periodic entries and malformed variants.
+- Reaction matches use a counted tagged union (01FF2940). Types 0/1 have two
+  integers and six floats, type 2 three/six, type 3 three/nine, and type 4 one
+  integer plus counted float opinions and radius. Native serializers and type
+  getters are retained in `namespace-reaction-match-{transfers,types}-20261006.c`;
+  `namespace-opinion-set-20261006.c` establishes the counted float body.
+  Integer parameters remain opaque; only their boundaries and known floats
+  are excluded. Original list is 122 rows / 5,288 bytes (types 0/2/3).
+- Hero StatLevels uses nested tagged CAbilityTrackDef/CAbilityTrackLevelDef
+  vectors. Transfers 01A0E34C/01A0F440 establish all tags/counts; UI 023B058A
+  routes Description/+4C and MaxedOutDescription/+5C to GetInventoryText
+  023653FE, which resolves text-bank entries. Original array: ten tracks,
+  76 levels, exactly 2,068 bytes. Costs remain opaque integers.
+- Tavern BestScore is the text label, not the saved numeric score: native
+  0273CB00 loads definition +B4 into GetText 022D72F0. The field remains exact.
+  `namespace-ui-text-consumers-20261006.c`, `namespace-final-text-readers-20261006.c`
+  and the final readers' headless log retain the calls and key disassembly.
+
+All new layout branches validate full lengths, counts, discriminants, tags and
+boolean widths before returning an accepted analysis. Synthetic checks cover
+both domains, malformed bodies, opaque aligned integers and untouched bytes.
+Read-only native queries used the same FableWin hash above. Next work is
+external asset-reference/ownership coverage; composer refusal remains in place.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
