@@ -136,5 +136,36 @@ int main() {try {
     const auto& tree=forge::foliage::brushCatalog().at(14);
     if(tree.meshIdx!=7734 || tree.shadowMeshIdx!=7741 || tree.zspriteMeshIdx!=7734)
         throw std::runtime_error("seed palette native role order changed");
+    auto setWord=[](Bytes& b,size_t at,uint32_t v) {
+        for(unsigned i=0;i<4;++i)b.at(at+i)=uint8_t(v>>(8*i));
+    };
+    auto relocateRecord=[&](uint32_t base,uint32_t chunk) {
+        auto copy=record;
+        for(const auto [at,relative]:{std::pair<size_t,uint32_t>{32,92},{36,113},
+                                     {88,238},{92,112},{113,125}})
+            setWord(copy,at,base+relative);
+        setWord(copy,4,chunk);return copy;
+    };
+    // Manifest order A,B differs from physical order B,A.
+    Bytes common;word(common,2);common.push_back('A');common.push_back(0);word(common,254);
+    common.push_back('B');common.push_back(0);word(common,16);
+    append(common,relocateRecord(16,7));append(common,relocateRecord(254,8));
+    const auto commonOriginal=common;const auto maps=validateCommon(common);
+    if(common!=commonOriginal || maps.size()!=2 || maps[0].name!="A" || maps[1].name!="B" ||
+       maps[0].logicalOffset!=254 || maps[0].record.info.bankFileIndex!=8 ||
+       maps[1].logicalOffset!=16 || maps[1].record.info.bankFileIndex!=7)
+        throw std::runtime_error("common manifest order or ownership changed");
+    for(size_t n=0;n<common.size();++n)refuses([&]{validateCommon(Bytes(common.begin(),common.begin()+n));});
+    if(!validateCommon(Bytes(4)).empty())throw std::runtime_error("empty common manifest changed");
+    auto badCommon=common;badCommon.push_back(0);refuses([&]{validateCommon(badCommon);});
+    badCommon=common;setWord(badCommon,0,0xffffffffu);refuses([&]{validateCommon(badCommon);});
+    badCommon=common;badCommon[4]=0;refuses([&]{validateCommon(badCommon);});
+    badCommon=common;badCommon[10]='A';refuses([&]{validateCommon(badCommon);});
+    for(uint32_t offset:{0u,15u,17u,254u,0xffffffffu}) {
+        badCommon=common;setWord(badCommon,12,offset);refuses([&]{validateCommon(badCommon);});
+    }
+    badCommon=common;setWord(badCommon,16+88,253);refuses([&]{validateCommon(badCommon);});
+    badCommon=common;setWord(badCommon,254+4,7);refuses([&]{validateCommon(badCommon);});
+    refuses([&]{validateCommon(Bytes{1,0,0,0,'n','o','n','u','l',1,1,1,1});});
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

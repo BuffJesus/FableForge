@@ -729,9 +729,17 @@ The descriptor loaders are 02CC7450/02E3B150; texture/collection palette loaders
 are 02DEF110/02E36BE0/02E46970. All Release targets build; **46/46 tests pass
 (35.03s)** in `build/stb-common-storage-core-20261006.log`.
 
-Next: validate the common entry's complete name/offset manifest and whole STB
-ownership/metadata, then remaining world admission. Census shows the manifest
-occupies 23,344 bytes followed by all records contiguously through byte 331,156.
+The common entry's complete name/offset manifest now validates through
+`stbstorage::validateCommon`, retaining manifest order while checking physical
+record coverage, unique nonempty names, distinct offsets and chunk IDs, complete
+record layouts and exact entry end. Native format: OpenStaticMapsUsingCommonRetailHeader
+02D62360. Original-corpus audit `build/stb-common-manifest-review-20261006.json`
+accepts all 446 maps: 23,344 manifest bytes followed by records contiguously through
+byte 331,156, with the original source hash unchanged. Tests include shuffled
+physical order, every truncated prefix, duplicate identities, overlaps, gaps,
+malformed counts/names and suffixes. All Release targets build; **46/46 tests
+pass (30.62s)** in `build/stb-common-manifest-core-20261006.log`.
+Next: whole STB ownership/metadata, then remaining world admission.
 Corrected foliage roles: native collection Load 02E46970 / Save 02E49ED0 store
 mesh, **shadow**, **z-sprite** IDs in that order; core foliage parseRecord and
 stbbake palette emission now follow that order. Seed field names are corrected

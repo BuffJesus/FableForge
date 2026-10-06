@@ -2,6 +2,8 @@
 #include "forge/stbbake.hpp"
 #include "forge/rangecodec.hpp"
 #include <algorithm>
+#include <numeric>
+#include <set>
 #include <span>
 #include <stdexcept>
 
@@ -182,5 +184,37 @@ MapRecord validateMapRecord(const std::vector<uint8_t>& record,uint32_t logicalO
         c.take(4);for(int j=0;j<5;++j)c.flag();c.take(3);
     }
     c.finish();return result;
+}
+std::vector<CommonMap> validateCommon(const std::vector<uint8_t>& body) {
+    // OpenStaticMapsUsingCommonRetailHeader 02D62360 reads a signed count,
+    // then ASCIIZ name / signed logical offset pairs before seeking records.
+    Reader c{body};const auto count=c.word();
+    if(count>(body.size()-c.p)/6)
+        throw std::runtime_error("stbstorage: common manifest count exceeds entry");
+    std::vector<CommonMap> maps;maps.reserve(count);std::set<std::string> names;
+    for(uint32_t i=0;i<count;++i) {
+        CommonMap map;
+        for(uint8_t ch=c.byte();ch;ch=c.byte())map.name.push_back(char(ch));
+        if(map.name.empty() || !names.insert(map.name).second)
+            throw std::runtime_error("stbstorage: empty or duplicate common map name");
+        map.logicalOffset=c.word();maps.push_back(std::move(map));
+    }
+    std::vector<size_t> order(maps.size());std::iota(order.begin(),order.end(),0);
+    std::sort(order.begin(),order.end(),[&](size_t a,size_t b) {
+        return maps[a].logicalOffset<maps[b].logicalOffset;
+    });
+    size_t next=c.p;std::set<int32_t> chunks;
+    for(size_t i=0;i<order.size();++i) {
+        auto& map=maps[order[i]];
+        const size_t end=i+1<order.size()?maps[order[i+1]].logicalOffset:body.size();
+        if(map.logicalOffset!=next || end<=next || end>body.size())
+            throw std::runtime_error("stbstorage: common records overlap or leave gaps");
+        const std::vector<uint8_t> bytes(body.begin()+next,body.begin()+end);
+        map.record=validateMapRecord(bytes,map.logicalOffset);
+        if(!chunks.insert(map.record.info.bankFileIndex).second)
+            throw std::runtime_error("stbstorage: common records share a chunk ID");
+        next=end;
+    }
+    c.p=next;c.finish();return maps;
 }
 }

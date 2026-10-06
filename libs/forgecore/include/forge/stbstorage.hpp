@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <vector>
 #include "forge/stbinfo.hpp"
 
@@ -30,4 +31,14 @@ struct MapRecord {
 // offset within the common entry. Returns chunk pointers for separate ownership
 // checks. Legacy development checksum words are preserved, not used as spans.
 MapRecord validateMapRecord(const std::vector<uint8_t>& record,uint32_t logicalOffset);
+struct CommonMap {
+    std::string name;
+    uint32_t logicalOffset=0;
+    MapRecord record;
+};
+// Validate the entire retail common entry: count, unique nonempty names,
+// unique offsets and chunk IDs, followed by contiguous supported map records.
+// Returns manifest order, which need not match physical record order. Chunk
+// pointers and bank IDs still require archive-level ownership checks.
+std::vector<CommonMap> validateCommon(const std::vector<uint8_t>& body);
 }
