@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 creature optional references pass 18 source selections and four
+safe unavailable-source refusals, covering new/existing records and vanilla
+through merge/build with moved identities. Full original/control regression
+also passes; no additional C++ change. See handoff for labelled fixture scope.
+
 2026-10-05 native sheathed-weapon/leader recovery admits original Raise Dead
 New, Spearanimsbeta3, Thunder Transform Mod and Winter Sky. Both routes match
 prior-tool controls; four reordered-identity cases and eight safe refusals pass.

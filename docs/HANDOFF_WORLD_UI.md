@@ -1,5 +1,29 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 creature optional-reference source choices
+
+Extended tools/test_fmp_creature_optional_links.py verifies 18 selections and
+four safe unavailable-contributor refusals through bare merge and registered
+build. Labelled null/positive derivatives use a unique named creature, first
+absent and then seeded into a derived baseline. The existing baseline uses a
+third object/creature pair so both mod versions contribute both grouped fields.
+Record choice selects their metadata together; the two opaque parts expose no
+scalar choice key. Vanilla restores exact baseline bytes. Null sheath remains
+zero while the null leader follows its moved identity; positive references
+follow moved object/creature identities. Every other decoded record is unchanged.
+Disabled-source refusals preserve prior outputs and picks; clearing the choice
+restores the available contributor. Original packages, derived choice packages,
+tools and live bank hashes remain unchanged.
+
+Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-creature-optional-x2n7uwuv/result.json. The same run revalidates all four
+originals against the old packaged-tool controls, four reordered-bank cases
+and eight malformed/reference refusals. Initial psshrmgi attempt correctly
+failed a fixture assumption: GHOSTLY_SWORD already exists in the installed
+bank. The unique-name derivative explicitly exercises the absent-record case.
+No additional C++ change, gameplay test or live write. The previous forty-core
+pass remains applicable; the frozen d25dde7 ZIP excludes the creature increment.
+
 ## 2026-10-05 creature sheathed-weapon and leader identities
 
 Original Raise Dead New, Spearanimsbeta3, Thunder Transform Mod and Winter Sky

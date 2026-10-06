@@ -173,7 +173,7 @@ def main():
     source = next(b['rows'][0] for b in selected_banks if b['name'] == b'GameBINEntries')
     sheath_at = source['data'].index(bytes.fromhex('9f6d0c83'))+4
     leader_at = source['data'].index(bytes.fromhex('7c8444e3'))+4
-    shifted_checks = []
+    shifted_checks, choice_sources, choice_expected = [], [], {}
     for mode in ('null', 'positive'):
         fixture_banks = copy.deepcopy(selected_banks)
         row = next(b['rows'][0] for b in fixture_banks if b['name'] == b'GameBINEntries')
@@ -189,6 +189,7 @@ def main():
                 if group['path'] == LEADER: group['targets'] = [LIEUTENANT]
         meta['data'] = metadata(fixture_groups)
         fixture = work/('shifted-'+mode+'.fmp'); write_rows(fixture, raw, fixture_banks)
+        choice_sources.append(fixture)
         control_banks = copy.deepcopy(fixture_banks)
         next(b['rows'][0] for b in control_banks if b['name'] == b'GameBINLinkMetaData')['data'] = metadata(
             [g for g in fixture_groups if g['path'] not in (SHEATH, LEADER)])
@@ -204,6 +205,7 @@ def main():
             struct.pack_into('<I', data, leader_at, shifted_ids[NULL if mode == 'null' else LIEUTENANT])
             wanted['data'] = bytes(data)
             assert actual == expected, (mode, route)
+            choice_expected['shifted-'+mode] = wanted['data']
             shifted_checks.append({'mode': mode, 'route': route, 'fixture_sha256': digest(fixture),
                                    'only_two_reference_words_differ_from_prior_control': True})
         print('Reordered baseline', mode, 'both routes: PASS', flush=True)
@@ -229,12 +231,96 @@ def main():
             failed = run(args.tool, *command(route, shifted, fixture, output), good=False)
             assert 'FMP links:' in failed.stderr and snapshot(output) == before_output
             refusals.append({'case': label, 'route': route, 'reason': failed.stderr.strip()})
+    # Competing sources must retain the metadata belonging to the chosen bytes.
+    # First use an absent record, then a labelled existing-record baseline whose
+    # two words differ from both sources. All other bytes stay identical.
+    choice_folder = work/'choice-sources'; choice_folder.mkdir()
+    choice_owner = 'FORGE_OPTIONAL_LINK_CHOICE_FIXTURE'
+    assert choice_owner not in shifted_ids
+    renamed_sources = []
+    for package in choice_sources:
+        package_raw = package.read_bytes(); banks = read_rows(package_raw)
+        for bank in banks:
+            for row in bank['rows']:
+                assert row['symbol'] == owner.encode()
+                row['symbol'] = choice_owner.encode()
+        renamed = choice_folder/package.name
+        write_rows(renamed, package_raw, banks); renamed_sources.append(renamed)
+    owner, choice_sources = choice_owner, renamed_sources
+    choices, choice_refusals = [], []
+    picks = work/'choices.txt'
+    source_hashes = {str(p): digest(p) for p in choice_sources}
+    for baseline_kind in ('absent', 'existing'):
+        choice_base = shifted
+        if baseline_kind == 'existing':
+            choice_base = work/'choice-existing-baseline'
+            seeded = copy.deepcopy(shifted_records)
+            data = bytearray(choice_expected['shifted-null'])
+            other_object = next(i for i, r in enumerate(seeded)
+                                if i > 0 and r['definition'] == 'OBJECT' and r['name'] != SWORD)
+            other_creature = next(i for i, r in enumerate(seeded)
+                                  if r['definition'] == 'CREATURE' and r['name'] != LIEUTENANT)
+            struct.pack_into('<I', data, sheath_at, other_object)
+            struct.pack_into('<I', data, leader_at, other_creature)
+            choice_expected['vanilla'] = bytes(data)
+            seeded.append({'name': owner, 'definition': 'CREATURE', 'data': bytes(data)})
+            rewrite_bank(shifted, choice_base, seeded)
+            assert read_bank(choice_base) == seeded
+            for relative in relatives[2:]:
+                target = choice_base/relative; target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(shifted/relative, target)
+        for package in choice_sources:
+            run(args.tool, 'mods', 'add', choice_base, package, '--name', package.stem)
+        for route in ('merge', 'build'):
+            output = work/('choice-'+baseline_kind+'-'+route)
+            command = ['mods', route, choice_base, output]
+            if route == 'merge': command += ['--with', *choice_sources]
+            for choice in ('', 'shifted-null', 'shifted-positive', *(['vanilla'] if baseline_kind == 'existing' else [])):
+                picks.write_text(owner+'\t'+choice+'\n' if choice else '', encoding='utf-8')
+                saved = picks.read_bytes()
+                report = json.loads(run(args.tool, *command, '--picks', picks, '--json').stdout)
+                winner = choice or 'shifted-positive'
+                actual = read_bank(output)
+                result = next(r for r in actual if r['name'] == owner)
+                assert result['data'] == choice_expected[winner], (baseline_kind, route, choice)
+                assert [r for r in actual if r['name'] != owner] == shifted_records
+                conflict = next(c for c in report['defs']['conflicts'] if c['record'] == owner)
+                assert conflict['field_merged'] == (baseline_kind == 'existing')
+                if baseline_kind == 'absent': assert conflict['winner'] == winner
+                else:
+                    assert len(conflict['field_conflicts']) == 2
+                    assert all(f['winner'] == winner and f['choice_key'] == ''
+                               for f in conflict['field_conflicts'])
+                assert picks.read_bytes() == saved
+                choices.append({'baseline': baseline_kind, 'route': route,
+                                'choice': choice or 'order', 'winner': winner})
+        run(args.tool, 'mods', 'disable', choice_base, 'shifted-null')
+        for route in ('merge', 'build'):
+            output = work/('choice-'+baseline_kind+'-'+route)
+            command = ['mods', route, choice_base, output]
+            if route == 'merge': command += ['--with', choice_sources[1]]
+            picks.write_text(owner+'\tshifted-null\n', encoding='utf-8')
+            saved, prior = picks.read_bytes(), snapshot(output)
+            failure = run(args.tool, *command, '--picks', picks, '--json', good=False)
+            assert 'unavailable contributor shifted-null' in failure.stderr
+            assert snapshot(output) == prior and picks.read_bytes() == saved
+            choice_refusals.append({'baseline': baseline_kind, 'route': route,
+                                    'reason': failure.stderr.strip()})
+            picks.write_text('', encoding='utf-8')
+            run(args.tool, *command, '--picks', picks, '--json')
+            assert next(r['data'] for r in read_bank(output) if r['name'] == owner) == choice_expected['shifted-positive']
+            choices.append({'baseline': baseline_kind, 'route': route,
+                            'choice': 'clear-unavailable', 'winner': 'shifted-positive'})
+        print('Source choices', baseline_kind, 'both routes: PASS', flush=True)
+    assert source_hashes == {str(p): digest(p) for p in choice_sources}
     for path, raw, _ in originals: assert path.read_bytes() == raw
     assert before == {str(p): digest(p) for p in inputs}
     (work/'result.json').write_text(json.dumps({'originals': reports, 'shifted_checks': shifted_checks,
-        'refusals': refusals, 'derived_baseline_swaps': swaps, 'inputs_sha256': before,
+        'refusals': refusals, 'choices': choices, 'choice_refusals': choice_refusals,
+        'choice_sources_sha256': source_hashes, 'derived_baseline_swaps': swaps, 'inputs_sha256': before,
         'inputs_unchanged': True, 'gameplay_tested': False}, indent=2))
-    print('PASS: four originals, four reordered-bank cases, eight safe negative routes', flush=True)
+    print('PASS: four originals, four reordered-bank cases, eight safe negative routes,',
+          len(choices), 'source choices,', len(choice_refusals), 'safe unavailable refusals', flush=True)
 
 
 if __name__ == '__main__':
