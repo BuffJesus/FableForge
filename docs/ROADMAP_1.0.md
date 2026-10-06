@@ -16,8 +16,9 @@ STB inventory decodes 140,025 frames; all 4,035 candidate-bearing frames now
 have structural owners. Complete native-layout parsing places 4,096 occurrences
 in 3,446 local-detail frames in float/normal-array domains. The 589 terrain
 frames and 76 raw occurrences now have geometry/texture or file-offset domains;
-native fixed-count directory evidence resolves the audit anomaly. Full inner
-compression coverage and graphics groups remain pending, as does a correction
+native fixed-count directory evidence resolves the audit anomaly. All 140,025
+owned frames now parse completely; 401 inner-codec matches are geometry fields.
+Graphics coverage and the opposite order remain pending, as does a correction
 to the core sentinel-based directory helper. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 

@@ -289,6 +289,25 @@ without outer matches may still hide candidates in inner compression. Complete
 owned-frame coverage, the 77 graphics groups, opposite-order external coverage,
 and composer integration remain pending. No divergent-bank admission yet.
 
+Complete owned-frame follow-up now passes in
+`build/defnamespace-stb-all-domains-seasons-20261006.json`, produced by
+`namespace_stb_all_domains_20261006.cpp` and its Python hash wrapper. All
+140,025 frames / 1,051,982,805 decoded bytes match the original outer inventory:
+21,904 foreground, 95,895 background, 22,226 local-detail. Every body consumes
+exactly with no ownership/layout errors. Local detail totals 36,131 mesh,
+70,013 repeated-mesh and 8,961 z-sprite primitives; no candidate overlaps the
+still-unclassified z-sprite fields. All outer candidate counts remain unchanged.
+The all-frame pass finds 401 inner-codec matches, including 389 additional
+frames that had no outer match: 254 landscape vertex occurrences cross normal/
+UV fields (record offsets 10/11); 134 water vertex occurrences cross wave/depth
+u16 fields (offset 10); 13 edge occurrences cross UV/next-record float fields
+or u16 vertex indices (16-byte offset 14 / 20-byte offset 11). These are not
+definition references. Report retains every outer/nested candidate and errors,
+plus aggregate counts for clean frames. Source hash remains unchanged. Current
+Seasons STB moved-value coverage is complete for this input; this is still a
+scratch audit, not a reusable composer admission check. Graphics coverage and
+the opposite source order are the active next steps.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
