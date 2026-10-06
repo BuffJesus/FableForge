@@ -44,7 +44,10 @@ disagreements. Independent decoding and native fetch-offset logic confirm those
 headers must remain refused. Verified entry counts are now 39,313/39,457.
 Strict physics review, including a verified subset of text cloth commands, now
 accepts all 1,383 entries per pack, raising verified BIG entries to 40,696/40,840.
-Compiled meshes remain unsupported by reusable admission.
+Compiled-mesh review now validates all 3,400/3,428 original entries, including
+complete LOD/ghost bodies and supported cloth. BIG verification reaches
+44,096/44,268; the only Secrets refusals are four malformed animations and three
+texture headers. STB/world admission and composer integration remain pending.
 All 45 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

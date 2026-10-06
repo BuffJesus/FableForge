@@ -615,6 +615,34 @@ to **40,696/40,840**, with source hashes unchanged. All Release targets build;
 **45/45 tests pass (24.46s)** in `build/cloth-text-core-20261006.log`.
 Next: compiled-mesh complete storage review. Composer refusal remains.
 
+Compiled-mesh review is now reusable as `meshstorage::validateStorage` and wired
+into external BIG review for MBANK_ALLMESHES and MBANK_ENGINE mesh types. It checks
+complete Info, every counted LOD and an optional complete ghost LOD, known vertex
+layouts, bounded arrays, strict chunked LZO framing, local geometry/hierarchy and
+the supported binary cloth program. Volumes, generators, exported cloth particles
+and unknown layouts refuse. This proves stored domains, not geometry quality or
+complete asset-ID/topology consistency. Preview remains a separate partial reader.
+
+The full-field census found helper records as the sole previously unclassified
+field present in these packs (3,289/3,408 buffers). Native stats LoadBinary 031E53B0
+and InitialiseFromFileData 031E2E40, plus PDB 20-byte pair layout, establish name
+CRC, position floats and local bone index. Evidence:
+`build/namespace-mesh-stats-storage-20261006.c`,
+`namespace-mesh-full-census-{seasons,secrets}-20261006.json` and stricter
+`namespace-mesh-strict-{seasons,secrets}-20261006.json`. Both scratch scans consume
+all 3,400/3,428 entries and 11,831/11,950 LOD/ghost bodies without errors.
+
+`build/defexternal-mesh-entry-review-20261006.json` now verifies **44,096/44,268**
+original BIG entries with unchanged source hashes. Seasons has no refusals among
+the four reviewed archives; Secrets retains exactly four malformed animations
+and three cutlass texture-header failures. The shared engine unit box uses the
+same validated mesh layout. Tests cover complete raw/compressed geometry, helper
+names, ghost storage, all prefix truncations, metadata tails, unknown layouts,
+excessive counts, compressed-packet suffixes and local binary cloth constraints.
+All Release targets build; **45/45 tests pass (42.58s)** in
+`build/mesh-storage-core-20261006.log`. No repair, original asset write or composer
+admission was performed. Next: promote remaining STB/world reference review.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

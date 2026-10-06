@@ -86,6 +86,81 @@ static void physicsChecks() {
     require(!accepts(cloth(declarations+"Particle name=P0 x=0 y=0 z=0 alpha=1\n")),
             "duplicate cloth symbol accepted");
 }
+static void half(Bytes& b,uint16_t v) {b.push_back(uint8_t(v));b.push_back(uint8_t(v>>8));}
+static Bytes meshBlock(const Bytes& raw,bool compressed=true) {
+    require(raw.size()>=3,"test block too short");Bytes b;
+    if(raw.size()>3) {
+        if(compressed) {
+            auto packed=forge::lzo::compress(raw.data(),raw.size()-3);
+            half(b,uint16_t(packed.size()));append(b,packed);
+        } else {half(b,0);b.insert(b.end(),raw.begin(),raw.end()-3);}
+    }
+    b.insert(b.end(),raw.end()-3,raw.end());return b;
+}
+static Bytes meshInfo(const Bytes& payload) {
+    Bytes b;word(b,15360);b.resize(44);word(b,1);word(b,uint32_t(payload.size()));
+    word(b,0);word(b,1);word(b,15361);return b;
+}
+static void meshChecks() {
+    auto accepts=[](const Bytes& payload) {
+        return forge::defexternal::reviewBigEntry("MBANK_ALLMESHES",1,meshInfo(payload),payload).definitionIndependent;
+    };
+    Bytes b{'M',0,0};b.resize(b.size()+40);
+    half(b,1);half(b,0);half(b,3);half(b,0);half(b,0);
+    Bytes helper;word(helper,15360);helper.resize(16);word(helper,0xffffffff);
+    append(b,meshBlock(helper));append(b,Bytes{'H','P',0});
+    word(b,1);word(b,1);word(b,0);word(b,0);b.resize(b.size()+5+48);
+    word(b,0);append(b,Bytes{'m',0});for(int i=0;i<5;++i)word(b,15360+i);
+    b.resize(b.size()+8+5);
+    word(b,0);const auto repeats=b.size();word(b,1);b.resize(b.size()+20);
+    word(b,1);word(b,0);word(b,3);word(b,1);word(b,3);
+    const auto format=b.size();word(b,4);word(b,1);word(b,0);
+    word(b,1);word(b,0);b.resize(b.size()+3);word(b,0); // static block
+    b.resize(b.size()+32);word(b,12);word(b,0);
+    const auto vertexBlock=b.size();append(b,meshBlock(Bytes(36)));
+    append(b,meshBlock(Bytes{0,0,1,0,2,0},false));
+    const auto clothCount=b.size();word(b,0);
+    const auto original=b;require(accepts(b),"complete mesh storage refused");
+    require(b==original,"mesh review modified input");
+    auto info=meshInfo(b);auto pair=b;append(pair,b);
+    require(forge::defexternal::reviewBigEntry("MBANK_ENGINE",1,info,b).definitionIndependent,"engine mesh refused");
+    require(forge::defexternal::reviewBigEntry("MBANK_ALLMESHES",5,info,pair).definitionIndependent,"ghost mesh refused");
+    pair.push_back(0);require(!forge::defexternal::reviewBigEntry("MBANK_ALLMESHES",5,info,pair).definitionIndependent,"ghost tail accepted");
+    info.push_back(0);require(!forge::defexternal::reviewBigEntry("MBANK_ALLMESHES",1,info,b).definitionIndependent,"mesh info tail accepted");
+    b[format]=99;require(!accepts(b),"unknown vertex layout accepted");b=original;
+    for(size_t i=0;i<4;++i)b[repeats+i]=255;
+    require(!accepts(b),"unbounded repeats accepted");b=original;
+    b[49]=1;require(!accepts(b),"unreviewed volume accepted");b=original;
+    b[51]=1;require(!accepts(b),"unreviewed generator accepted");b=original;
+    b[2]=2;require(!accepts(b),"nonboolean mesh flag accepted");b=original;
+    // Add a byte inside the declared compressed packet after its end marker.
+    const size_t n=size_t(b[vertexBlock])|(size_t(b[vertexBlock+1])<<8);
+    b.insert(b.begin()+vertexBlock+2+n,0);b[vertexBlock]=uint8_t(n+1);b[vertexBlock+1]=uint8_t((n+1)>>8);
+    require(!accepts(b),"LZO packet suffix accepted");b=original;
+    for(size_t n=0;n<b.size();++n)require(!accepts(Bytes(b.begin(),b.begin()+n)),"truncated mesh accepted");
+    Bytes program;word(program,333);word(program,0);program.resize(program.size()+12);word(program,0);
+    program.resize(program.size()+19); // gravity/wind, dragging, acceleration, damping
+    for(int i=0;i<7;++i)word(program,0); // all geometry/index arrays
+    program.resize(program.size()+5);word(program,0);word(program,0);word(program,0);
+    auto withCloth=[&](const Bytes& source) {
+        Bytes result(original.begin(),original.begin()+clothCount);word(result,1);
+        word(result,0);word(result,0);word(result,uint32_t(source.size()));append(result,meshBlock(source));return result;
+    };
+    require(accepts(withCloth(program)),"complete compiled cloth refused");
+    auto constrained=program;Bytes constraints;word(constraints,2);word(constraints,1);word(constraints,16);
+    word(constraints,0);word(constraints,1);word(constraints,15360);word(constraints,0);
+    constrained[4]=uint8_t(constraints.size());
+    constrained[20]=2;constrained.insert(constrained.begin()+24,32,0);
+    constrained.insert(constrained.begin()+8,constraints.begin(),constraints.end());
+    require(accepts(withCloth(constrained)),"local cloth constraint refused");
+    constrained[8+12]=2;
+    require(!accepts(withCloth(constrained)),"cloth constraint exceeded local particle table");
+    constrained[8+12]=0;constrained[8]=6;
+    require(!accepts(withCloth(constrained)),"unknown constraint opcode accepted");
+    program[0]=0;require(!accepts(withCloth(program)),"unknown cloth version accepted");program[0]=77;
+    program.push_back(0);require(!accepts(withCloth(program)),"compiled cloth suffix accepted");program.pop_back();
+    program[program.size()-12]=1;require(!accepts(withCloth(program)),"unreviewed exported cloth particle accepted");
+}
 static int audit(const std::filesystem::path& root) {
     nlohmann::json report{{"scope","read-only supported external BIG-entry layouts; not installation admission"},
         {"root",root.string()},{"files",nlohmann::json::array()}};
@@ -107,6 +182,7 @@ int main(int argc,char** argv) {try {
     if(argc==2)return audit(argv[1]);
     if(argc!=1)return 2;
     physicsChecks();
+    meshChecks();
     using forge::defexternal::reviewBigEntry;
     require(!reviewBigEntry("UNKNOWN",0,{},{}).definitionIndependent,"empty unknown entry accepted");
     require(!reviewBigEntry("MBANK_ALLMESHES",1,Bytes(64),{}).definitionIndependent,"mesh implicitly accepted");

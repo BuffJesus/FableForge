@@ -1,6 +1,7 @@
 #include "forge/defexternal.hpp"
 #include "forge/animation.hpp"
 #include "forge/physics.hpp"
+#include "forge/meshstorage.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/textbig.hpp"
 
@@ -19,6 +20,11 @@ Review reviewBigEntry(std::string_view bank, uint32_t type,
             if (!checked.ok || checked.consumed!=payload.size())
                 return {false,checked.errors.empty()?"texture storage was not fully validated":checked.errors.front()};
             return {true,"texture dimensions, format, byte sizes and complete pixel/mip storage"};
+        }
+        if ((bank=="MBANK_ALLMESHES" || bank=="MBANK_ENGINE") &&
+            (type==1 || type==2 || type==4 || type==5)) {
+            meshstorage::validateStorage(subHeader,payload);
+            return {true,"complete supported mesh geometry, local hierarchy and texture asset storage"};
         }
         if (bank=="MBANK_ALLMESHES" && type==3) {
             if (!subHeader.empty()) return {false,"unsupported physics info size"};
