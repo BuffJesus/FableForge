@@ -113,6 +113,12 @@ acceptance evidence.
 
 ## Retained local evidence
 
+The subsequent relocation core checkpoint does not expand this accepted stack
+matrix. It verifies a hypothetical repair of Secrets' sword component reference
+and preserves all other payload bytes; all 41 core tests pass. Namespace
+allocation and references outside the definition banks remain unfinished.
+See [the sleep checkpoint](HANDOFF_WORLD_UI.md) for evidence and resume steps.
+
 Under `C:/Users/Cornelio/FableForge-asset-checks-20261005/`:
 
 - `controller-stacks-probe-0xyivsfk/result.json`: initial small/stress/layer probes.

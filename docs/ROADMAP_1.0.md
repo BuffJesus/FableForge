@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:
+verified component and typed references change; opaque matching integers refuse.
+All 41 core tests pass. Original Secrets' colliding sword reference passes an
+independent exact-byte audit. Namespace allocation, external references and
+composer integration remain unfinished; Seasons+Secrets still refuse together.
+User requested a pause. Resume steps and evidence are in HANDOFF_WORLD_UI.md.
+
 2026-10-05 namespace-preserving whole-bank composition admits original Seasons
 and Albion Secrets with Controller first/last, including script/frontend banks,
 text IDs/narrator metadata and world composition. UFP's 32-source lifecycle and

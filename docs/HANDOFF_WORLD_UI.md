@@ -1,5 +1,84 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 sleep checkpoint: verified payload relocation core
+
+User requested a safe checkpoint and pause until tomorrow. Checkout remains
+`D:/Code/FableForge`, branch `feat/editor-ui-shell`. The previous whole-bank
+composition implementation is committed at `d660937`; this checkpoint adds the
+reference-repair building block without enabling divergent-bank composition.
+
+New `forge::defrelocate` analyzes source-local game-entry and name-offset maps
+separately. It discovers OBJECT/CObjectDef CDefs data/inheritance references
+using the existing verified listing layout, and explicitly typed CDefIndex /
+CDefString scalars and vectors. CRCs, field tags, counts, floats and nulls stay
+unchanged. A byte scan identifies possible references in otherwise opaque
+regions; it never supplies rewrite locations. Unknown matching int32/uint32
+values remain unresolved. `relocate` refuses the entire payload when any such
+candidate remains. Source bytes and maps are const; rewrites are simultaneous.
+Decoding must have verified tags and round-trip exactly. Unknown classes with
+CDefs-shaped prefixes are not inferred to have component listings.
+
+Validation: all Release targets build; all **41 core tests pass in 23.84s** in
+`build/defrelocate-core-20261005.log`. New tests cover numeric domain collisions,
+chained mappings without cascading, nulls, byte preservation, malformed counts,
+reference widths, missing/unverified tags, and refusal without partial output.
+The existing FMP and decoder tests also pass in the focused three-test run.
+
+Read-only real-corpus audit mode of `fableforge_defrelocate_tests.exe` takes:
+`root schema gameFrom gameTo nameFrom nameTo`. Both original overhaul trees
+were audited with `15195 15368 410976 500000` and the repo schema. These are
+**hypothetical mappings**, not allocated output identities. Secrets' 16,790
+records across game/script/frontend yield exactly one verified rewrite:
+OBJECT_F2_RUSTY_LONGSWORD, game index 15266, payload offset 33,
+`.CDefs.2.CDefDataEntry`. Seasons' 16,618 records yield no rewrites. Neither has
+unresolved candidates for these mappings. Independent Python parsing verified
+Secrets' entire resulting payload against a copy with only the offset-33 word
+changed. Final-binary reruns match those reports and input hashes remain unchanged.
+Reports `build/defrelocate-{secrets,seasons}-audit.json` retain exact before/after
+bytes, source hashes, schema hash, test-executable hash and explicit scope.
+
+Resume with namespace allocation and cross-container reference coverage, then
+integrate this core into the composer before field/record choices. In particular:
+
+1. Preserve the fixed baseline, allocate distinct added identities, and derive
+   each source's record/name maps without making load order discard additions.
+2. Establish external-reference handling for packed levels, other assets and
+   numeric text references. Absence of candidates in the three BIN payload
+   banks is not a whole-mod safety proof. General typed nested fields and other
+   component-owning classes also need reference inventory coverage.
+3. Apply source-local mappings before three-way comparisons; retain granular
+   record/field choices and per-source reference ownership. Test both overhaul
+   orders, controller/mixed stacks and transactional failure preservation.
+
+The composer still refuses the Seasons+Secrets collision. No merged divergent
+bank, new package, publication, live install write or gameplay validation was
+performed. Existing unowned `tests/test_dialogueaudio.cpp` diagnostics remain
+dirty and excluded from this checkpoint. No build/test jobs remain running.
+
+## 2026-10-05 divergent overhaul namespace investigation
+
+Read-only inventory `build/audit_whole_bank_namespace_collision.py` writes
+`build/whole-bank-namespace-collision-audit.json`, including SHA-256 hashes of
+each source's game/script/frontend/names banks. Seasons and Secrets have only
+one conflicting shared game slot: 15195. Their name pools first differ at
+entry 14032, string offset 410976. Seasons ends there with `RATS_01`; Secrets
+continues with `CInventoryItemDef_F2_RUSTY_LONGSWORD` and its later additions.
+
+Every-byte candidate scans of decoded game/script/frontend payloads find no
+Seasons occurrences of 15195, offset 410976 or the RATS_01 name CRC. Secrets
+contains one 15195 candidate: OBJECT_F2_RUSTY_LONGSWORD at payload offset 33,
+the known OBJECT CDefs[2].CDefDataEntry location. Neither source contains a
+payload candidate for its colliding name's offset or CRC. Literal-name searches
+across 450 loose TNG/WLD/QST files per source find neither colliding name.
+RATS_01's payload and all candidate locations are retained in the JSON.
+
+This narrows the next relocation investigation; it does not authorize treating
+RATS_01 as unreferenced. Packed levels, other assets, numeric text references
+and runtime-generated references remain unaudited. Integer candidates are not
+automatically typed references. No writer or support boundary changed here.
+The intended result remains distinct identities for both additions followed by
+ordinary granular conflict choices, with no mod-name-specific exception.
+
 ## 2026-10-05 whole-bank namespaces and granular overhaul composition
 
 User requested support for the refused overhauls and reiterated granular load
