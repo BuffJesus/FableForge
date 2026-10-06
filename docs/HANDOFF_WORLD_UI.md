@@ -342,6 +342,29 @@ compiled-mesh subheaders; full inner-buffer scanning of compiled meshes is
 still needed. Source-order/general admission and the core directory-helper
 correction remain pending. Existing production code/tests are unchanged.
 
+Compiled-mesh follow-up passes all 3,400 mesh entries and 11,831 counted/ghost
+LOD bodies in `build/defnamespace-mesh-domains-seasons-20261006.json`.
+`namespace_mesh_domains_20261006.cpp` traces the canonical chunked-LZO framing
+and EgoCore MeshParser's full fields, including helpers/volumes/generators,
+bones, materials, geometry blocks and cloth streams. Unknown fields/tails stay
+explicitly unresolved. All 22 outer matches and 204 decoded-buffer matches have
+known domains; there are no parse errors or unresolved candidate occurrences.
+The two original descriptor hits at +48 are first-LOD byte sizes (14842/14853),
+not references. Inner hits: 196 vertex geometry, four keyframe floats, and four
+matches crossing NameCRC/Parent in 60-byte C3DBone2 records. The latter occur
+at decoded offset 3483 in two LODs each of MESH_NYMPH_QUEEN_01 and
+MESH_NYMPH_SUCCUBUS_01. PDB struct_layouts_egor.tsv and EgoCore C3DBone agree:
+CRC +0, local parent +4, original child count +8, matrix +12. Every decoded
+parent is validated against its bone count, excluding self-parenting.
+
+This clears the remaining observed Seasons graphics groups, with inner-buffer
+coverage of every supported graphics entry family. Reports remain scratch
+evidence rather than composer admission code. The sources' STB files are
+byte-identical (898,464,256 bytes), but opposite-order moved identities differ
+and still require their own scan. Graphics and script.bin differ by source;
+frontend.bin is byte-identical. Opposite-order external coverage and other
+compiled-bank reference coverage are next, before integration.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
