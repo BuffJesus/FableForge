@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 local 07caf52 development ZIP verifies the latest creature, script-feat
+and component changes using the actual extracted tool. Four scoped package
+workflows, 108 identities/122 links and all three focused corpus audits pass;
+85 package workflows unrun, zero skips. No publication/runtime claim. See handoff.
+
 2026-10-05 exact ChocolateBox component/village/creature aliases admit original
 Knothole Glade Children (Anniversary) in TLC scratch import. Four original/derived
 cases match prior-tool controls across all six banks; twelve safe refusals,

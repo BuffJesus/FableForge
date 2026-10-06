@@ -1,5 +1,44 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 packaged creature, feat and component acceptance
+
+Local development archive dist/development/20261005-07caf52/
+FableForge-0.18.1-dev.07caf52.20261005-win64.zip has SHA256
+322c56020c230e8bf5887900436cb85dd6dce9714797ee213b50b30e9c1b154f.
+It includes the creature optional references/source-choice coverage, script feat
+references and ChocolateBox component/village aliases. All Release targets and
+forty core tests passed at the preceding checkpoint. No subsequent C++ changes.
+The package gate in package-smoke-tttal12d passes four selected workflows:
+ordinary/complete-Data record contributors, FMP record refusal and GUI. All 108
+file identities and 122 document links pass. Other 85 workflows are explicitly
+not run, zero skips; this is not full-package-suite acceptance. PACKAGE_INFO
+honestly retains tracked_changes=true for the pre-existing audio-test diagnostics.
+
+The actual extracted forge-tools.exe has SHA256
+8c097c85e37e05a2679e6a957105b9b0b9ecba63a0f75c460bee520a21e73b7b.
+It passes all three actual-tool audits against the retained d25dde7 control:
+
+- fmp-creature-optional-3gtj238o: four originals, four reordered-bank cases,
+  eight safe reference refusals, eighteen source selections/four unavailable
+  refusals across merge/build and absent/existing records.
+- fmp-script-feats-n8hs4c_z: six original/derived imports, twenty-five original
+  feat references and twelve safe refusals.
+- fmp-component-aliases-jql5fkmv: four original/derived imports with six-bank
+  parity and twelve safe refusals.
+
+All evidence folders are under C:/Users/Cornelio/FableForge-asset-checks-20261005.
+build/audit_creature_feat_package.py checks actual tool hashes against the
+manifest and all reports, archive identity and exercised counts. Its result is
+package-smoke-tttal12d/creature-feat-component-acceptance-audit.json, including
+report hashes. Application/guide archives remain local; no publication or live
+writes. Gameplay/Anniversary-runtime validation is still outside this evidence.
+
+The remaining three transformation failures use empty `.CDefs.<index>.` member
+names. Read-only inspection found inheritance-like targets, but the available
+ChocolateBox DefinitionType.cs explicitly names that member InheritedEntryID.
+No empty-name alias was added on target resemblance alone; earlier probe files
+retain the original metadata for further exporter-version investigation.
+
 ## 2026-10-05 village and component metadata aliases
 
 Original Knothole Glade Children (Anniversary) now imports offline through both
