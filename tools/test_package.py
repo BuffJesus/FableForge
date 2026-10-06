@@ -146,6 +146,8 @@ def main():
     run('defs', [package / 'forge-tools.exe', 'defs', 'list', args.root.resolve(), 'game.bin', 'OBJECT_HERO'])
     run('mod_bank_refusal', [sys.executable, repo/'tools/test_mod_bank_refusal.py',
         '--tool', package/'forge-tools.exe', '--cwd', cwd])
+    run('mod_whole_bank_layout', [sys.executable, repo/'tools/test_mod_whole_bank_layout.py',
+        '--tool', package/'forge-tools.exe', '--work-root', work])
     run('mod_label_refusal', [sys.executable, repo/'tools/test_mod_label_refusal.py',
         '--tool', package/'forge-tools.exe', '--gui', package/'FableForge.exe',
         '--install', args.root.resolve(), '--work-root', work])

@@ -57,10 +57,10 @@ def main():
             cmd += ['--with', *([complete] if complete else []), valid, broken]
             if complete: cmd += ['--install-data']
         return cmd+['--picks', picks, '--json']
-    cases = [('speaker index only', 'SHARED', dict(original['SHARED'], header=struct.pack('<I', 1)), 'unsupported TOC metadata changes'),
-             ('speaker plus content', 'SHARED', dict(valid_records['SHARED'], header=struct.pack('<I', 1)), 'unsupported TOC metadata changes'),
+    cases = [('speaker index only', 'SHARED', dict(original['SHARED'], header=struct.pack('<I', 2)), 'unsupported TOC metadata changes'),
+             ('speaker plus content', 'SHARED', dict(valid_records['SHARED'], header=struct.pack('<I', 2)), 'unsupported TOC metadata changes'),
              ('narrator list only', '[NarratorList]', dict(original['[NarratorList]'], header=struct.pack('<I', 2)+b'Speaker\0HERO\0'), 'unsupported type 2'),
-             ('new string metadata', 'NEW', dict(valid_records['SHARED'], id=4, header=struct.pack('<I', 1)), 'unsupported TOC metadata changes')]
+             ('new string metadata', 'NEW', dict(valid_records['SHARED'], id=4, header=struct.pack('<I', 2)), 'unsupported TOC metadata changes')]
     for route in ('merge', 'build', 'conflicts'):
         output = work/route; bank(broken/rel, name, original); picks.write_text('')
         run(*command(route, output))
@@ -101,6 +101,29 @@ def main():
             assert actual['NEW']['header'] == original['SHARED']['header'] and actual['NEW']['id'] == 4
             assert decoded(actual['NEW']['payload'])[0] == 'alternate'
         checks.append({'route': route, 'matching_new_string_metadata': True})
+        # A real speaker change has matching payload and narrator-list index.
+        payload = bytearray('spoken'.encode('utf-16-le')+b'\0\0')
+        for value in (b'SpeechBank', b'FARMER', b''):
+            payload += struct.pack('<I', len(value))+value
+        payload += struct.pack('<I', 0)
+        changed['NEW'] = dict(changed['NEW'], header=struct.pack('<I', 1), payload=bytes(payload))
+        bank(broken/rel, name, changed); run(*command(route, output))
+        if route != 'conflicts':
+            actual = entries(output/rel, name, None, True)
+            assert actual['NEW']['header'] == struct.pack('<I', 1)
+            assert decoded(actual['NEW']['payload'])[1][1] == b'FARMER'
+            assert actual['NEW']['payload'] == bytes(payload)
+            assert actual['[NarratorList]']['header'] == original['[NarratorList]']['header']
+        checks.append({'route': route, 'validated_speaker_metadata_preserved': True})
+        # Some real mod strings deliberately carry a different payload speaker;
+        # preserving a valid source index must not rewrite either representation.
+        changed['SHARED'] = dict(valid_records['SHARED'], header=struct.pack('<I', 1))
+        bank(broken/rel, name, changed); run(*command(route, output))
+        if route != 'conflicts':
+            actual = entries(output/rel, name, None, True)['SHARED']
+            assert actual['header'] == struct.pack('<I', 1)
+            assert actual['payload'] == valid_records['SHARED']['payload']
+        checks.append({'route': route, 'authored_speaker_difference_preserved': True})
     (work/'result.json').write_text(json.dumps({'ok': True, 'checks': checks, 'complete_data': args.complete_data}, indent=2))
     print('PASS:', len(checks), 'text metadata refusal/recovery checks')
 

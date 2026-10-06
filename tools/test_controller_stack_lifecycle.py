@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--corpus', type=Path, default=repo/'work/nexus_mods/_peek')
     parser.add_argument('--tool', type=Path, default=repo/'build/forge-tools.exe')
     parser.add_argument('--work-root', type=Path, default=repo/'build')
+    parser.add_argument('--with-ufp', action='store_true', help='Include the original UFP game.bin patch')
     args = parser.parse_args()
     args.work_root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='controller-stack-lifecycle-', dir=args.work_root)).resolve()
@@ -61,6 +62,10 @@ def main():
     labels = ['ControllerFMP', 'ControllerDLL', *[p.stem for p in ultimate+better],
               small[0].stem, 'WaterWader', 'EnableSprint']
     assert len(set(labels)) == len(labels) == 31
+    if args.with_ufp:
+        patch = corpus/'UnofficialFablePatch/Patches/game.bin.patch'
+        sources.append(patch); labels.append('UnofficialFablePatch')
+        inputs.append(patch); before[str(patch)] = digest(patch)
     for source, label in zip(sources, labels):
         run(args.tool, 'mods', 'add', base, source, '--name', label)
     expected_controller = package_records(controller)['GameBINEntries']
@@ -89,7 +94,7 @@ def main():
 
     build('controller-first', 2.25)
     for label in ('ControllerFMP', 'ControllerDLL'):
-        run(args.tool, 'mods', 'move', base, label, '30')
+        run(args.tool, 'mods', 'move', base, label, str(len(sources)-1))
     build('controller-last', 2.25)
     for package in reversed(better): run(args.tool, 'mods', 'move', base, package.stem, '0')
     report = build('spell-order-reversed', 2.0)
@@ -109,7 +114,8 @@ def main():
     for label in ('ControllerFMP', 'ControllerDLL'): run(args.tool, 'mods', 'disable', base, label)
     run(args.tool, 'mods', 'build', base, out, '--picks', picks, '--json')
     control = work/'without-controller'
-    run(args.tool, 'mods', 'merge', base, control, '--with', *better, *ultimate, *extras, '--json')
+    extra_tail = [patch] if args.with_ufp else []
+    run(args.tool, 'mods', 'merge', base, control, '--with', *better, *ultimate, *extras, *extra_tail, '--json')
     for filename in ('game.bin', 'names.bin'):
         assert (out/'data/CompiledDefs'/filename).read_bytes() == (control/'data/CompiledDefs'/filename).read_bytes()
     assert not list(out.rglob('FableControllerSupport.dll'))
@@ -126,8 +132,9 @@ def main():
     (work/'result.json').write_text(json.dumps({'checks': checks, 'sources': list(map(str, sources)),
         'unavailable_choice_refusal': failure.stderr.strip(), 'disable_and_remove_match_independent_stack': True,
         'inputs_sha256': before, 'baseline_sources': list(map(str, baseline_sources)),
-        'baseline_data_unchanged': True, 'inputs_unchanged': True, 'gameplay_tested': False}, indent=2))
-    print('PASS: 31-source controller stack, field choices, disable/remove/readd and unchanged inputs', flush=True)
+        'baseline_data_unchanged': True, 'inputs_unchanged': True, 'with_ufp': args.with_ufp,
+        'gameplay_tested': False}, indent=2))
+    print(f'PASS: {len(sources)}-source controller stack, field choices, disable/remove/readd and unchanged inputs', flush=True)
 
 
 if __name__ == '__main__':

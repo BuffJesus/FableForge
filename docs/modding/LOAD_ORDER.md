@@ -2,6 +2,21 @@
 
 # Load order & conflict optimization — lessons from LOOT/Wrye Bash
 
+## Whole-bank composition and granular choices
+
+Source order provides defaults. Record and supported scalar-field choices remain
+independent overrides, including unnamed components in verified whole-bank
+namespaces. Script/frontend record choices are bank-scoped; the game, script and
+frontend banks can select different winners for the same field name. Stable
+numeric identities must be established before applying those choices.
+
+The current whole-bank path reserves compatible slots and name offsets. It does
+not resolve divergent namespaces by picking a whole overhaul, and it does not
+yet relocate arbitrary references. The next work is reference-aware identity
+resolution for colliding banks, followed by finer array/component/world choices
+where their formats support independent decisions. Full category-specific load
+orders and automatic gameplay-compatibility rules are not implemented.
+
 ## 2026-10-04 named archive pair evidence
 
 Whole-file choices made in the current GUI also retain the baseline and raw

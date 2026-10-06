@@ -4808,8 +4808,8 @@ int modsAnalyze(const std::string& baseRoot,
 // A picks file (record<TAB>winner, one per line; winner = a mod's folder name or
 // "vanilla") OVERRIDES load order PER CONFLICT — this is what the GUI's per-row
 // winner picker produces, letting users resolve each conflict however they want.
-// Unnamed components cannot be matched safely across independently edited banks;
-// refuse changed/new unnamed rows rather than silently omitting their edits.
+// Whole-bank unnamed components compose only within a verified shared numeric
+// namespace. Divergent namespaces require reference relocation first.
 // Writes <outDir>/names.bin + <outDir>/<bin>. mods are in load order.
 // Only unique named fixed-size scalars get persisted field choices initially.
 // Layout identity excludes values/relocated IDs and includes the whole ordered
@@ -4849,6 +4849,30 @@ void requireUnchangedUnnamedEntries(const forge::bin::File& base, const forge::b
         std::to_string(count) + " changed or new unnamed definition entries (first index " +
         std::to_string(first) + "). Unnamed components have no safe cross-bank identity. " +
         "Install this overhaul first and use its intact files as the baseline, then add supported named mods.");
+}
+
+bool hasChangedUnnamedEntries(const forge::bin::File& base, const forge::bin::File& mod) {
+    for (size_t i = 0; i < mod.entries().size(); ++i) {
+        const auto& e = mod.entries()[i];
+        if (e.name.empty() && (i >= base.entries().size() || !base.entries()[i].name.empty() ||
+            e.definition != base.entries()[i].definition ||
+            e.indexInDefinition != base.entries()[i].indexInDefinition ||
+            e.data != base.entries()[i].data)) return true;
+    }
+    return false;
+}
+
+// Whole banks carry numeric references without FMP relocation metadata. Reserve
+// their shared namespace and appended slots before allocating FMP additions.
+void reserveWholeBankLayout(forge::bin::File& planned, const forge::bin::File& source,
+                           const std::string& label) {
+    try {
+        planned.extendStableLayout(source);
+    } catch (const std::exception& error) {
+        throw std::runtime_error("Cannot compose changed or new unnamed definition entries from '" +
+            label + "': " + error.what() +
+            ". This bank needs reference relocation before its identities can be combined.");
+    }
 }
 
 // Mods composition currently writes game.bin only. Sibling banks can be carried
@@ -4916,7 +4940,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
               const std::vector<bool>* numericFmpRoots = nullptr,
               const std::vector<std::pair<std::string, std::map<std::string, uint32_t>>>*
                   languageTextIds = nullptr,
-              bool reviewChoices = false) {
+              bool reviewChoices = false, bool preserveWholeLayout = false) {
     namespace fs = std::filesystem;
 
     // Per-conflict overrides: record -> winning mod ("vanilla" = keep base).
@@ -4929,20 +4953,34 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     if (!fieldSchemaPath.empty())
         schema = forge::defschema::Schema::load(fieldSchemaPath);
 
-    auto merged = openDefs(baseRoot, bin);
+    const auto baseline = openDefs(baseRoot, bin);
+    auto merged = baseline;
+    std::vector<bool> fixedBankRoots(modRoots.size(), false);
+    for (size_t mi = 0; mi < modRoots.size(); ++mi) {
+        if (numericFmpRoots && numericFmpRoots->at(mi)) continue;
+        const auto source = openDefs(modRoots[mi], bin);
+        if (!preserveWholeLayout && !hasChangedUnnamedEntries(baseline, source)) continue;
+        const auto label = rootLabels ? rootLabels->at(mi) : fs::path(modRoots[mi]).filename().string();
+        reserveWholeBankLayout(merged, source, label);
+        fixedBankRoots[mi] = true;
+    }
 
-    // Snapshot base payloads BEFORE mutating. Blank-name records have stable
-    // numeric identity only for FMPs that named the matching baseline index.
+    // Snapshot baseline payloads separately from the reserved layout so appended
+    // whole-bank rows remain additions and existing rows retain three-way diffs.
     std::map<std::string, std::vector<uint8_t>> baseData;
     std::map<std::string, std::string> baseDef;  // name -> definition type
     std::map<std::string, size_t> nameToIndex;
+    std::map<std::string, size_t> nameCounts;
+    for (const auto& entry : merged.entries()) if (!entry.name.empty()) ++nameCounts[entry.name];
     for (size_t i = 0; i < merged.entries().size(); ++i) {
         const auto& e = merged.entries()[i];
-        const auto key = e.name.empty() ? forge::fmplinks::anonymousKey(i) : e.name;
+        const auto key = e.name.empty() || nameCounts[e.name] > 1 ? forge::fmplinks::anonymousKey(i) : e.name;
         if (!e.name.empty() && e.name.starts_with("@unnamed:"))
             throw std::runtime_error("game.bin name collides with internal numeric identity: " + e.name);
-        baseData[key] = e.data;
-        baseDef[key] = e.definition;
+        if (i < baseline.entries().size()) {
+            baseData[key] = baseline.entries()[i].data;
+            baseDef[key] = e.definition;
+        }
         nameToIndex[key] = i;
     }
 
@@ -4959,17 +4997,22 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         const std::string modName = rootLabels && mi < rootLabels->size() ? (*rootLabels)[mi] : fs::path(modRoot).filename().string();
         const auto mod = openDefs(modRoot, bin);
         const bool numeric = numericFmpRoots && mi < numericFmpRoots->size() && numericFmpRoots->at(mi);
-        if (!numeric) requireUnchangedUnnamedEntries(merged, mod, bin, modName);
+        if (!numeric && !fixedBankRoots[mi]) requireUnchangedUnnamedEntries(baseline, mod, bin, modName);
         for (size_t entryIndex = 0; entryIndex < mod.entries().size(); ++entryIndex) {
             const auto& me = mod.entries()[entryIndex];
-            if (me.name.empty() && !numeric) continue;
+            if (me.name.empty() && !numeric && !fixedBankRoots[mi]) continue;
             if (me.name.empty() && (entryIndex >= merged.entries().size() ||
                 !merged.entries()[entryIndex].name.empty() ||
                 me.definition != merged.entries()[entryIndex].definition ||
                 me.indexInDefinition != merged.entries()[entryIndex].indexInDefinition))
                 throw std::runtime_error("FMP numeric identity changed at game.bin index " +
                                          std::to_string(entryIndex));
-            const auto key = me.name.empty() ? forge::fmplinks::anonymousKey(entryIndex) : me.name;
+            const bool duplicateName = !me.name.empty() && nameCounts[me.name] > 1;
+            if (duplicateName && (entryIndex >= merged.entries().size() ||
+                me.name != merged.entries()[entryIndex].name ||
+                me.definition != merged.entries()[entryIndex].definition))
+                throw std::runtime_error("whole-bank duplicate name has ambiguous numeric identity: " + me.name);
+            const auto key = me.name.empty() || duplicateName ? forge::fmplinks::anonymousKey(entryIndex) : me.name;
             auto bit = baseData.find(key);
             const bool isAdd = bit == baseData.end();
             const bool isChange = !isAdd && me.data != bit->second;
@@ -4978,7 +5021,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             std::vector<forge::fmplinks::Link> links;
             if (rootLinks) {
                 if (rootLinks->size() != modRoots.size()) throw std::runtime_error("FMP links: source count mismatch");
-                const auto found = rootLinks->at(mi).find(key);
+                const auto found = rootLinks->at(mi).find(duplicateName ? me.name : key);
                 if (found != rootLinks->at(mi).end()) links = found->second;
             }
             changes[key].push_back({modName, me.definition, me.data, std::move(links)});
@@ -5017,7 +5060,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         // whole-record selection as the writer. Existing identities stay fixed.
         auto identities = merged;
         for (const auto& name : order) {
-            if (baseData.contains(name)) continue;
+            if (nameToIndex.contains(name)) continue;
             const auto pk = picks.find(name);
             const auto* winner = chooseWhole(changes.at(name), pk == picks.end() ? "" : pk->second);
             if (winner) identities.addEntry(winner->definition, name, winner->data);
@@ -5062,6 +5105,13 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         auto pk = picks.find(name);
         const std::string pick = pk != picks.end() ? pk->second : std::string();
 
+        if (inBase && !baseData.contains(name)) {
+            if (pick == "vanilla" || pick == "base" || pick == "none" || pick == "-")
+                throw std::runtime_error("Cannot remove reserved whole-bank record " + name +
+                    ": other records may reference its numeric slot; choose a contributing source");
+            ++addedTotal;
+        }
+
         // Single mod touches it, and it exists (or is a lone add): apply as-is.
         // every mod that carries the same bytes agrees: no conflict, the shared version applies
         bool agree = true;
@@ -5082,7 +5132,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         for (const auto& v : vers) c.mods.push_back(v.mod);
 
         bool didFieldMerge = false;
-        if (schema && inBase) {
+        if (schema && inBase && baseData.contains(name)) {
             const auto* def = forge::defdecode::resolveType(
                 *schema, baseDef[name], baseData[name]);
             bool aligned = def != nullptr;
@@ -9559,16 +9609,35 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
     if (!jsonOutput) std::printf("normalized %zu source(s) -> %zu game-root(s); field-level merge:\n",
                 sources.size(), roots.size());
     json defsRep;
-    // Check every normalized game bank first, retaining the actionable unnamed
-    // refusal for overhauls, then validate banks this composer cannot apply.
+    // Plan whole-bank namespaces before writes, then validate sibling banks.
     const auto baselineDefs = openDefs(baseRoot, "game.bin");
+    auto plannedDefs = baselineDefs;
+    std::set<std::string> wholeBankSources;
+    std::map<std::string, std::vector<std::string>> siblingRoots, siblingLabels;
+    for (size_t i = 0; i < roots.size(); ++i) {
+        if (numericFmpRoots.at(i)) continue;
+        const auto source = openDefs(roots[i], "game.bin");
+        if (hasChangedUnnamedEntries(baselineDefs, source)) {
+            reserveWholeBankLayout(plannedDefs, source, rootLabels[i]);
+            wholeBankSources.insert(roots[i]);
+            for (const char* bank : {"script.bin", "frontend.bin"}) {
+                if (!fs::exists(fs::path(roots[i]) / "data/CompiledDefs" / bank)) continue;
+                siblingRoots[bank].push_back(roots[i]);
+                siblingLabels[bank].push_back(rootLabels[i]);
+            }
+        }
+    }
+    for (const auto& [bank, bankRoots] : siblingRoots) {
+        const auto baselineBank = openDefs(baseRoot, bank);
+        auto plan = baselineBank;
+        for (size_t i = 0; i < bankRoots.size(); ++i)
+            reserveWholeBankLayout(plan, openDefs(bankRoots[i], bank), siblingLabels.at(bank)[i]);
+    }
     for (size_t i = 0; i < roots.size(); ++i)
-        if (!numericFmpRoots.at(i))
-            requireUnchangedUnnamedEntries(baselineDefs, openDefs(roots[i], "game.bin"), "game.bin", rootLabels[i]);
-    for (size_t i = 0; i < roots.size(); ++i)
-        requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
+        if (!wholeBankSources.contains(roots[i])) requireUnchangedSiblingBanks(baseRoot, roots[i], rootLabels[i]);
     for (size_t i = 0; i < contentRoots.size(); ++i)
-        if (fs::is_directory(contentRoots[i])) requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
+        if (fs::is_directory(contentRoots[i]) && !wholeBankSources.contains(contentRoots[i]))
+            requireUnchangedSiblingBanks(baseRoot, contentRoots[i], srcLabel(i));
     // Prepare the text union in scratch before linking game.bin. Final text IDs
     // must reflect load order and picks, including names added by earlier mods.
     const fs::path textPlanRoot = tmp / "text-plan";
@@ -9597,16 +9666,25 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 const fs::path basePath = lang.path() / "text.big";
                 if (!fs::exists(basePath)) continue;
                 const std::string langName = lang.path().filename().string();
-                std::vector<std::pair<std::string, std::string>> changers;   // (label, path)
+                std::vector<std::tuple<std::string, std::string, bool>> changers; // label, path, fixed numeric ids
                 for (size_t ri = 0; ri < contentRoots.size(); ++ri) {
                     const fs::path p = fs::path(contentRoots[ri]) / "data" / "lang" / lang.path().filename() / "text.big";
-                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string())) changers.push_back({srcLabel(ri), p.string()});
+                    if (fs::exists(p) && readAllBytes(p.string()) != readAllBytes(basePath.string()))
+                        changers.push_back({srcLabel(ri), p.string(), wholeBankSources.contains(contentRoots[ri])});
                 }
                 if (changers.empty()) continue;
                 auto base = forge::big::File::open(basePath);
                 std::map<std::string, std::vector<uint8_t>> baseByName;
                 std::map<std::string, uint32_t> baseTypes;
                 std::map<std::string, std::vector<uint8_t>> baseHeaders;
+                std::map<std::string, uint32_t> fixedTextIds;
+                std::map<uint32_t, std::string> occupiedTextIds;
+                uint64_t nextTextId = 0;
+                for (const auto& b : base.banks()) for (const auto& e : b.entries) {
+                    occupiedTextIds[e.id] = e.name;
+                    if (!e.name.empty()) fixedTextIds[e.name] = e.id;
+                    nextTextId = std::max(nextTextId, uint64_t(e.id) + 1);
+                }
                 std::optional<std::vector<uint8_t>> donorHeader;
                 using UnnamedIdentity = std::tuple<std::string, uint32_t, uint32_t>;
                 std::map<UnnamedIdentity, std::vector<const forge::big::Entry*>> baseUnnamed;
@@ -9620,10 +9698,10 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     baseHeaders[e.name] = e.subHeader;
                 }
                 struct Version { std::string mod; std::vector<uint8_t> data; uint32_t type;
-                                 std::vector<uint8_t> header; };
+                                 std::vector<uint8_t> header; bool speakerHeader = false; };
                 std::map<std::string, std::vector<Version>> versions;   // string name -> every changer's version, in load order
                 std::vector<std::string> order;
-                for (const auto& [label, c] : changers) {
+                for (const auto& [label, c, fixedIds] : changers) {
                     auto f = forge::big::File::open(c);
                     auto remainingUnnamed = baseUnnamed;
                     std::set<std::string> namedEntries;
@@ -9652,12 +9730,30 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                             if (!namedEntries.insert(e.name).second)
                                 throw std::runtime_error("mods text entry: " + langName + "/" + e.name +
                                     " from " + label + "; duplicate named entries cannot be composed");
+                            if (fixedIds) {
+                                const auto named = fixedTextIds.find(e.name);
+                                const auto occupied = occupiedTextIds.find(e.id);
+                                if ((named != fixedTextIds.end() && named->second != e.id) ||
+                                    (occupied != occupiedTextIds.end() && occupied->second != e.name))
+                                    throw std::runtime_error("whole-bank text identity collision: " + langName + "/" +
+                                        e.name + " from " + label + " requires ID " + std::to_string(e.id));
+                                fixedTextIds[e.name] = e.id;
+                                occupiedTextIds[e.id] = e.name;
+                                nextTextId = std::max(nextTextId, uint64_t(e.id) + 1);
+                            }
                             auto data = f.entryData(e);
                             const auto it = baseByName.find(e.name);
                             if (it != baseByName.end() && it->second == data && baseTypes.at(e.name) == e.type &&
                                 baseHeaders.at(e.name) == e.subHeader) continue;
                             if (!versions.count(e.name)) order.push_back(e.name);
-                            versions[e.name].push_back({label, std::move(data), e.type, e.subHeader});
+                            bool speakerHeader = false;
+                            if (const auto* baselineBank = base.findBank(b.name); baselineBank && e.type == 0) {
+                                try {
+                                    speakerHeader = forge::textbig::compatibleSpeakerHeader(*baselineBank, b, e,
+                                        forge::textbig::decode(data, 0));
+                                } catch (const std::exception&) { /* selected payload validation follows below */ }
+                            }
+                            versions[e.name].push_back({label, std::move(data), e.type, e.subHeader, speakerHeader});
                         }
                 }
                 for (const auto& name : order) {
@@ -9693,7 +9789,12 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                                             {"winner", keepBase ? "vanilla" : win->mod},
                                             {"overridden", overridden}, {"choice_unavailable", unavailable}});
                     }
-                    if (keepBase) continue;
+                    if (keepBase) {
+                        if (!baseByName.contains(name) && fixedTextIds.contains(name))
+                            throw std::runtime_error("Cannot remove reserved whole-bank text entry " + langName + "/" +
+                                name + ": definitions may reference its numeric ID; choose a contributing source");
+                        continue;
+                    }
                     if (win->type != 0)
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
                             " has unsupported type " + std::to_string(win->type) +
@@ -9701,14 +9802,27 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     const auto originalHeader = baseHeaders.find(name);
                     const auto expectedHeader = originalHeader != baseHeaders.end() ?
                         std::optional<std::vector<uint8_t>>(originalHeader->second) : donorHeader;
-                    if (expectedHeader && win->header != *expectedHeader)
+                    if (expectedHeader && win->header != *expectedHeader && !win->speakerHeader)
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
                             " has unsupported TOC metadata changes; the selected entry metadata cannot be preserved");
                     try {
                         const auto value = forge::textbig::decode(win->data, 0);
                         if (forge::textbig::encode(value) != win->data)
                             throw std::runtime_error("selected payload cannot be preserved by the string codec");
-                        forge::textbig::upsertString(base, name, value);
+                        std::optional<uint32_t> id;
+                        if (const auto fixed = fixedTextIds.find(name); fixed != fixedTextIds.end()) id = fixed->second;
+                        else {
+                            if (nextTextId > UINT32_MAX) throw std::runtime_error("text entry IDs exhausted");
+                            id = uint32_t(nextTextId++);
+                        }
+                        const auto inserted = forge::textbig::upsertString(base, name, value, id);
+                        for (auto& entry : base.findBank(inserted.bank)->entries)
+                            if (entry.id == inserted.id) {
+                                // The authoring helper fills an empty identifier;
+                                // composition must retain the selected raw payload.
+                                entry.data = win->data;
+                                if (win->speakerHeader) entry.subHeader = win->header;
+                            }
                         ++textKeysApplied;
                     } catch (const std::exception& error) {
                         throw std::runtime_error("mods text entry: " + langName + "/" + name + " from " + win->mod +
@@ -9806,6 +9920,41 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                              hasNamedTextLinks ? &languageTextIds : nullptr, reviewChoices);
     if (rc != 0) return rc;
     if (jsonOutput) rep["defs"] = defsRep;
+
+    // Sibling banks share the completed game name pool. Its stable prefix keeps
+    // all source offsets valid; each bank reserves its own numeric record slots.
+    for (const auto& [bank, bankRoots] : siblingRoots) {
+        const auto siblingBase = tmp / ("baseline-" + bank);
+        const auto defs = siblingBase / "data/CompiledDefs";
+        fs::create_directories(defs);
+        fs::copy_file(fs::path(baseRoot) / "data/CompiledDefs" / bank, defs / bank,
+                      fs::copy_options::overwrite_existing);
+        fs::copy_file(fs::path(outDir) / "data/CompiledDefs/names.bin", defs / "names.bin",
+                      fs::copy_options::overwrite_existing);
+        std::map<std::string, std::string> bankPicks;
+        const std::string prefix = bank + ":";
+        for (const auto& [key, winner] : picks.defs) {
+            if (key.starts_with("field:")) bankPicks[key] = winner;
+            else if (key.starts_with(prefix)) bankPicks[key.substr(prefix.size())] = winner;
+        }
+        json bankReport;
+        const int result = mergeDefs(siblingBase.string(), outDir, bank, bankRoots, "", schemaPath,
+            jsonOutput, jsonOutput ? &bankReport : nullptr, &bankPicks, &siblingLabels.at(bank),
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, reviewChoices, true);
+        if (result != 0) return result;
+        if (jsonOutput) {
+            rep["definition_banks"][bank] = bankReport;
+            for (const char* counter : {"applied", "added", "record_conflicts", "field_merged_records",
+                                        "auto_merged_fields", "field_conflicts", "overridden"})
+                rep["defs"]["summary"][counter] = rep["defs"]["summary"][counter].get<size_t>() +
+                    bankReport["summary"][counter].get<size_t>();
+            for (auto row : bankReport["conflicts"]) {
+                row["bank"] = bank;
+                row["record"] = prefix + row["record"].get<std::string>();
+                rep["defs"]["conflicts"].push_back(std::move(row));
+            }
+        }
+    }
 
     // --- Level TNG merge (loose .tng under data/Levels of content roots) -------
     // An FMP's WAD bank is staged above, so its TNGs join this merge too.
@@ -10722,7 +10871,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                     if (!c.bwd.empty()) layers.push_back({c.label, forge::bwd::File::parse(c.bwd)});
                     else layers.push_back({c.label, forge::bwd::compileFromWld(forge::wld::File::parse(c.wld), dims)});
                 } catch (const std::exception& e) {
-                    std::fprintf(stderr, "world %s: %s (its world files are skipped)\n", c.label.c_str(), e.what());
+                    throw std::runtime_error("world source '" + c.label + "' could not be composed: " + e.what());
                 }
             }
             forge::worldmerge::Report wrep;
@@ -10741,7 +10890,7 @@ int modsMerge(const std::string& baseRoot, const std::string& outDir,
                 for (const auto& n : wrep.notes) std::printf("  note: %s\n", n.c_str());
             }
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "world merge failed: %s\n", e.what());
+            throw std::runtime_error("world merge failed: " + std::string(e.what()));
         }
     }
 

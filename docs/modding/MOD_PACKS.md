@@ -59,20 +59,33 @@ Undeploy an existing stage first. A running target game or existing EgoCore
 deployment refuses before output publication. Output publication and installation
 are separate operations; an installation failure uses the usual stage recovery.
 
-Compiled-definition composition refuses sources carrying changed or new unnamed
-entries. Such components have no safe cross-bank identity; silently ignoring them
-would produce an incomplete overhaul. Install an overhaul first and select its
-intact installation as the baseline, then add supported named mods. Unchanged
-unnamed copies of that baseline remain allowed. Sparse named-only sources are
-allowed; absent unnamed rows are not treated as deletions. This guard does not
-validate arbitrary raw-ID references in named-only source banks.
+Whole-bank sources with unnamed edits can compose when their shared record slots,
+definition ordinals and name-pool prefixes agree. Existing unnamed edits enter
+the same record/field conflict system as named edits. Appended slots and name
+offsets are reserved before FMP additions, retaining numeric references. Duplicate
+record names use distinct slot identities instead of overwriting another row.
+Incompatible slot assignments or diverging name pools refuse with a specific
+identity diagnostic; general reference relocation remains open. An intact overhaul
+installation can still serve as the baseline for compatible following mods.
+Shorter compatible source prefixes do not delete baseline additions. Sparse
+named-only sources also do not delete absent components, and this path does not
+validate arbitrary raw-ID references in those sources.
 
-Composition currently applies `game.bin` definitions. A source carrying changed
-`script.bin` or `frontend.bin` refuses before output instead of silently dropping
-those banks. Unchanged copies remain allowed, including compression-only re-saves
-whose entries and existing name offsets are unchanged. A partial source containing
-only a changed sibling bank also refuses. Use an intact installation as baseline
-when those banks are part of an overhaul.
+Accepted whole-bank sources also compose `script.bin` and `frontend.bin` when
+their respective numeric namespaces agree. Those banks share the final name
+pool and retain independent granular choices. Their record keys are scoped as
+`script.bin:<record>` or `frontend.bin:<record>`; field keys already include the
+bank. A partial changed sibling bank outside this verified whole-bank path still
+refuses. Unchanged copies and semantic compression-only re-saves remain allowed.
+
+Whole-bank text additions reserve their numeric IDs before ordinary additions.
+Valid four-byte narrator indices can retain their source metadata when narrator
+lists agree; authored payload bytes, including empty identifiers, are preserved.
+Changing narrator lists or colliding numeric text IDs still requires further
+relocation support. A choice cannot remove a newly reserved definition/text slot
+while an active whole-bank source may reference it; choose a contributor or remove
+the owning source. World composition failures abort publication instead of silently
+skipping the failed layer.
 
 FMP application refuses nonempty unsupported banks before writing package content.
 Supported banks are GameBINEntries, supported GameBINLinkMetaData, Objects,
@@ -82,8 +95,8 @@ Texture and mesh replacements retain their baseline name, ID and type. New
 entries with IDs already owned by another symbol refuse; arbitrary asset-ID
 relocation remains open. Empty exporter bank placeholders are allowed. FMP export
 also refuses changed/new unnamed components and changed sibling banks, so it cannot
-report success after omitting those edits. These checks do not add script/frontend
-composition or general cross-bank relocation support.
+report success after omitting those edits. FMP script/frontend import and general
+cross-bank relocation remain unsupported.
 
 A named FMP record can replace an existing symbol; new named records also need
 a definition type. An existing named record can still be replaced by a legacy
@@ -93,16 +106,17 @@ identity or relocate one across overhauls. Its supported fields participate in
 load order and conflict selection. An explicit type that differs from the
 existing baseline type refuses. These identity failures abort the whole package
 before writes, including earlier valid contributions. This exception applies to
-FMP records with verified numeric identities; the loose-tree unnamed guard above
-remains in use.
+FMP records with verified numeric identities; whole-bank trees use the namespace
+validation described above.
 
 Individual choices are available for contested unique named scalar fields in
 clean field-merged definitions: int32, uint32, float, bool, uint8, CDefIndex and
 CDefString with their expected byte widths. They override the record choice;
-clearing one restores its record/order default. Unavailable or unchanged chosen
-sources retain the saved choice while the record choice applies. Unique and
-identical edits still auto-merge. Arrays, prefixes and unnamed fields retain
-record-level selection in the GUI.
+clearing one restores its record/order default. Saved field choices stay active
+when contributors disappear or agree. An unavailable or unchanged selected source
+refuses a build and remains reviewable; the review reports the current fallback.
+Unselected independent and identical edits auto-merge. Arrays, prefixes and
+unnamed fields retain record-level selection in the GUI.
 
 The existing tab-separated choices file stores field keys as `field:` followed
 by a compact JSON array `[bank, record, definition, layoutSHA256, partIndex,
@@ -483,9 +497,11 @@ superseded by `docs/walkthrough/aeon-controller/index.html`.
 The earlier retail-plus-Aeon *composition* recipe lost 766 changed unnamed
 components and omitted unnamed additions; named-link, binding, level and
 DirectGraphic checks did not establish complete overhaul preservation. That
-route now refuses. The same guard rejects Unofficial Fable Patch's 25 unnamed
-edits over the current baseline. Earlier composition counts in this document
-are historical container checks, not preservation evidence.
+route was subsequently refused. The newer namespace-preserving path above now
+accepts UFP's unnamed edits and compatible whole banks, with independent
+preservation checks in [Controller stack coverage](../CONTROLLER_STACK_COVERAGE.md).
+The older Aeon composition counts remain historical container checks and do not
+establish preservation for that route.
 
 The three-source CLI fixture starts from a copied retail baseline, installs
 complete Aeon 5.03, and then adds the FMP and runtime. Every Aeon definition

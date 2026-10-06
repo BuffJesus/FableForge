@@ -132,6 +132,13 @@ def main():
                 index = next(i for i, entry in enumerate(entries) if not entry['name'])
                 entries[index] = dict(entries[index], data=entries[index]['data']+b'unsupported-unnamed-edit')
                 rewrite_bank(root, bad, entries)
+                # Changed payloads in stable slots are supported. Make this a
+                # genuine incompatible-identity case for the refusal UI.
+                import struct
+                bank = bad/'data/CompiledDefs/game.bin'
+                raw = bytearray(bank.read_bytes())
+                struct.pack_into('<I', raw, 21+index*12, 0x7fffffff)
+                bank.write_bytes(raw)
             elif args.mode == 'record':
                 from test_fmp_record_refusal import write_fmp
                 from test_fmp_links import read_bank

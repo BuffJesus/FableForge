@@ -5,6 +5,34 @@
 #include <stdexcept>
 
 namespace forge::textbig {
+bool compatibleSpeakerHeader(const big::Bank& baseline, const big::Bank& source,
+                             const big::Entry& record, const Entry& value) {
+    if (record.type != 0 || record.subHeader.size() != 4 || value.type != 0) return false;
+    const auto narrator = [](const big::Bank& bank) -> const big::Entry* {
+        const big::Entry* result = nullptr;
+        for (const auto& entry : bank.entries) if (entry.type == 2) {
+            if (result || entry.name != "[NarratorList]" || entry.length != 0 || !entry.data.empty()) return nullptr;
+            result = &entry;
+        }
+        return result;
+    };
+    const auto* a = narrator(baseline);
+    const auto* b = narrator(source);
+    if (!a || !b || a->subHeader != b->subHeader || b->subHeader.size() < 4) return false;
+    const auto u32 = [](const std::vector<uint8_t>& bytes, size_t offset) {
+        return uint32_t(bytes[offset]) | uint32_t(bytes[offset+1]) << 8 |
+               uint32_t(bytes[offset+2]) << 16 | uint32_t(bytes[offset+3]) << 24;
+    };
+    const auto count = u32(b->subHeader, 0), selected = u32(record.subHeader, 0);
+    if (selected >= count || count > b->subHeader.size() - 4) return false;
+    size_t cursor = 4;
+    for (uint32_t i = 0; i < count; ++i) {
+        while (cursor < b->subHeader.size() && b->subHeader[cursor] != 0) ++cursor;
+        if (cursor == b->subHeader.size()) return false;
+        ++cursor;
+    }
+    return cursor == b->subHeader.size();
+}
 namespace {
 
 uint32_t rd32(const std::vector<uint8_t>& b, size_t p) {

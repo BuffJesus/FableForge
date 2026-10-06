@@ -1,5 +1,6 @@
 #include "forge/bin.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -242,6 +243,34 @@ const Entry* File::find(std::string_view name) const {
         if (entry.name == name) return &entry;
     }
     return nullptr;
+}
+
+void File::extendStableLayout(const File& source) {
+    std::map<std::string, int32_t> ordinals;
+    for (size_t i = 0; i < source.entries_.size(); ++i) {
+        const auto& entry = source.entries_[i];
+        if (entry.indexInDefinition != ordinals[entry.definition]++)
+            throw std::runtime_error("whole-bank noncanonical definition ordinal at slot " + std::to_string(i));
+    }
+    for (size_t i = 0; i < std::min(entries_.size(), source.entries_.size()); ++i) {
+        const auto& a = entries_[i];
+        const auto& b = source.entries_[i];
+        if (a.name != b.name || a.definition != b.definition || a.indexInDefinition != b.indexInDefinition)
+            throw std::runtime_error("whole-bank numeric slot " + std::to_string(i) +
+                " has incompatible identities (" + a.definition + "/" + a.name +
+                " versus " + b.definition + "/" + b.name + ")");
+    }
+    for (size_t i = 0; i < std::min(names_.size(), source.names_.size()); ++i)
+        if (names_[i] != source.names_[i])
+            throw std::runtime_error("whole-bank name pools diverge at entry " + std::to_string(i) +
+                                     "; numeric name references require relocation");
+    if (binHeader_.size() != source.binHeader_.size() ||
+        (binHeader_.size() > 1 && binHeader_[1] != source.binHeader_[1]))
+        throw std::runtime_error("whole-bank platform headers disagree");
+    if (source.entries_.size() > entries_.size())
+        entries_.insert(entries_.end(), source.entries_.begin() + entries_.size(), source.entries_.end());
+    if (source.names_.size() > names_.size())
+        names_.insert(names_.end(), source.names_.begin() + names_.size(), source.names_.end());
 }
 
 void File::setEntryData(size_t index, std::vector<uint8_t> data) {

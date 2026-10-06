@@ -71,7 +71,7 @@ def rewrite_bank(original, output, entries):
         table+struct.pack('<I', total)+b''.join(chunks))
 
 
-def read_bank(root):
+def read_bank(root, bank='game.bin'):
     folder = root/'data/CompiledDefs'
     names_data = (folder/'names.bin').read_bytes()
     names, pos = {}, 20
@@ -79,7 +79,7 @@ def read_bank(root):
         end = names_data.index(0,pos+4)
         names[pos+4-20] = names_data[pos+4:end].decode('ascii')
         pos = end+1
-    data = (folder/'game.bin').read_bytes()
+    data = (folder/bank).read_bytes()
     count = u32(data,9)
     chunk_pos = 13+count*12
     chunks = [struct.unpack_from('<II',data,chunk_pos+4+i*8) for i in range(u32(data,chunk_pos))]

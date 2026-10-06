@@ -58,6 +58,11 @@ public:
     void setEntryData(size_t index, std::vector<uint8_t> data);
     size_t addEntry(std::string definition, std::string name,
                     std::vector<uint8_t> data);
+    // Reserve a whole bank's numeric namespace without changing existing
+    // payloads. Shared record identities and name-pool prefixes must agree.
+    // Appended records retain their original slots and names retain offsets.
+    // Rejects incompatible layouts before mutating this File.
+    void extendStableLayout(const File& source);
     void save(const std::filesystem::path& namesPath,
               const std::filesystem::path& binPath) const;
 

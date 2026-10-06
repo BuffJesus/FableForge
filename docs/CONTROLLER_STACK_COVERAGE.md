@@ -61,14 +61,55 @@ controller builds plus refusal, disable and removal checks.
   for `OBJECT_HERO_MASK_STEALTH / CAppearanceModifierDef`. That collection mixes
   complete packages, modular variants and item packs; it is not a sensible
   default installation.
-- Treating Project Seasons or Albion Secrets as another definition layer over
-  the retail snapshot refuses respectively 33 or 203 unnamed changed/new
-  entries. The successful complete-baseline cases above use a different route.
-- The Unofficial Fable Patch definition patch plus the 31-source stack (32 total)
-  against the retail definition backups refuses 25 unnamed changed/new entries.
+- Combining Project Seasons and Albion Secrets still collides at game slot
+  15,195: Seasons has `CREATURE_GENERATION_FAMILY / RATS_01`; Secrets has
+  `CInventoryItemDef / CInventoryItemDef_F2_RUSTY_LONGSWORD`. Their diverging
+  extensions require reference relocation, not another whole-mod winner.
 
-These refusals preserve prior output. They remain unsupported combinations;
-successful Controller Support composition elsewhere does not resolve them.
+The earlier blanket unnamed-entry refusals for each overhaul and UFP are now
+superseded by the whole-bank path below. Other refused combinations remain open.
+
+## Whole-bank follow-up
+
+Whole-bank trees now reserve compatible record slots and name offsets, then
+compose changes through the ordinary record/scalar-field conflict system. Source
+order remains the default; it does not replace granular choices. Compatible
+script/frontend banks participate with bank-scoped choices. Whole-bank text IDs
+and valid narrator indices are preserved, including authored empty identifiers.
+World-merge errors now refuse publication instead of returning partial success.
+
+Both original overhaul trees compose with Controller Support first and last
+against an owned scratch stock-WAD baseline. It uses the retail definition
+backups plus the available installed asset/world snapshot. Independent audits
+preserve all 15,196 Seasons / 15,368 Secrets original game slots and every
+non-controller payload, exact script/frontend records, and all 29,085 / 29,161
+text IDs, types, headers and payloads. Fourteen controller references and its
+DLL pass; world composition completes. No gameplay test or live deployment.
+
+The 32-source UFP lifecycle now passes order changes, saved field choices,
+disable/remove/re-add and unchanged inputs. The GUI independently selects game,
+script and frontend field winners at 1440x900 and 800x600, with exact output-byte
+checks. Changed narrator lists, arbitrary raw-bank relocation and incompatible
+overhaul namespaces remain outside this increment.
+
+Each overhaul also passes as a source in a 32-source stack: Controller FMP/DLL,
+all eighteen Ultimate spell FMPs, eight Better modular FMPs and the three small
+additions, with Controller last. The independent audit limits permitted payload
+changes to the actual FMP records (including No Baldness's eight numeric slots),
+preserves the overhaul's remaining records and text IDs, and checks world merge.
+This retains the alternative-spell stress-test caveat above.
+
+Evidence under the root below: `whole-bank-overhaul-acceptance-hyisxwen` (first),
+`whole-bank-overhaul-acceptance-8_d3b_p9` (last),
+`controller-stack-lifecycle-7q1j3y_o` (UFP lifecycle), and
+`mod-whole-bank-layout-uxf30xy2` (twenty GUI/synthetic namespace and world-refusal
+checks). `whole-bank-overhaul-acceptance-k090si9f` contains the two 32-source
+overhaul stacks. The existing corpus lifecycle also passes in
+`D:/Code/FableForge/build/mods-corpus-etfehv_h`, including UFP over a shorter
+retail prefix while preserving compatible baseline additions.
+The earlier `whole-bank-overhauls-hayikdlh` exploratory outputs had an incomplete
+world baseline and exposed the partial-success bug; they are not full-build
+acceptance evidence.
 
 ## Retained local evidence
 

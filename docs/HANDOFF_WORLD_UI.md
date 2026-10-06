@@ -1,5 +1,70 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 whole-bank namespaces and granular overhaul composition
+
+User requested support for the refused overhauls and reiterated granular load
+order/conflict control. The implementation reserves compatible numeric record
+slots and name-pool prefixes, then feeds changed unnamed components through the
+existing record/scalar-field choices. Appended whole-bank rows precede FMP
+additions; duplicate named rows retain distinct numeric identities. Source
+prefixes shorter than the baseline retain compatible baseline additions.
+Noncanonical ordinals, conflicting slots and diverging pools still refuse.
+
+Eligible whole-bank sources also compose script/frontend banks against the
+completed game name pool. Record choices are bank-scoped; scalar keys already
+include bank identity. Whole-bank text IDs are reserved before ordinary additions.
+Native FableTLC docs/formats/TEXT.md proves the four-byte narrator index and
+type-2 narrator list. Compatible lists permit preserving valid source indices,
+including authored disagreement with payload speaker strings. Exact selected
+payloads are retained after the authoring helper, preserving empty identifiers.
+World source/merge errors now throw instead of silently skipping world layers.
+
+Original Seasons and Secrets trees each pass Controller first and last against
+the owned stock-WAD fixture in whole-bank-full-world-g3w0ktf2. It combines retail
+definition backups with the available installed asset/world snapshot; no live
+write or gameplay validation. Independent audits retain every non-controller
+game payload and slot, exact script/frontend records, all text IDs/types/headers/
+payloads, the DLL and fourteen controller references. World merge completes.
+Evidence: whole-bank-overhaul-acceptance-hyisxwen and -8_d3b_p9, under
+C:/Users/Cornelio/FableForge-asset-checks-20261005. The earlier incomplete-world
+probe whole-bank-overhauls-hayikdlh exposed the swallowed-error bug and is not
+full-build acceptance evidence.
+
+The UFP 32-source lifecycle passes in controller-stack-lifecycle-7q1j3y_o.
+The extended synthetic/GUI test passes twenty checks in
+mod-whole-bank-layout-uxf30xy2, including independent bank-field selections at
+1440x900 and 800x600, shorter-prefix preservation, reserved text IDs, malformed
+namespace refusals and world-failure preservation. Text metadata checks pass 39
+cases in ordinary mode (mod-text-metadata-refusal-drppr2ot) and complete-Data mode
+(-fwwuiq8f). Existing bank-refusal tests pass 27 cases (build/mod-bank-refusal-0s7q3c6h);
+the updated unnamed-identity GUI error fixture passes both sizes in
+build/mod-action-error-a1yh1va5. Core gate build/whole-bank-core-20261005.log had
+39 passes and one dialogueaudio timeout under concurrent work; the isolated
+dialogueaudio rerun passes in 0.24s. Earlier core gate passed all forty. Existing
+audio diagnostic edits remain unowned/uncommitted.
+The final quiet core gate passes all forty in 37.27s:
+build/whole-bank-core-quiet-20261005.log.
+
+Both original overhauls also pass as sources in 32-source Ultimate/Better/small-
+mod/controller stacks, Controller last: whole-bank-overhaul-acceptance-k090si9f.
+The audit allows only actual package targets (including eight numeric No Baldness
+rows) to differ from the overhaul and independently retains all other definition
+payloads/identities and text IDs. tools/test_mod_whole_bank_overhauls.py records
+input hashes and complete=true. Existing corpus lifecycle passes in
+build/mods-corpus-etfehv_h, including pristine-backup UFP over a baseline with an
+extra compatible record. That regression exposed an unnecessary source-size
+refusal; compatible shorter prefixes now retain baseline additions. Both 45-case
+scalar contributor modes pass again in mod-field-choice-contributors-wk0l1wt0 and
+-emgjjuvm. The synthetic whole-bank test is wired into check_all and the package
+gate; package gate now has an additional workflow beyond the historical 89.
+
+Remaining: Seasons plus Secrets collide at game slot 15195 (RATS_01 versus
+CInventoryItemDef_F2_RUSTY_LONGSWORD); general reference relocation is not solved.
+The mfvicli complete/modular stress stack's duplicate FMP metadata owner remains
+separate. Array/component/world-level UI choices and category-specific order are
+not implemented by this increment. Do not replace these limits with blanket
+"any combo" or gameplay claims. No new packaged binary yet.
+
 ## 2026-10-05 broader Controller Support stacks and saved scalar choices
 
 User explicitly requested large/small/many-mod combinations beyond Aeon.

@@ -4,12 +4,12 @@ The **Mods** tab keeps one ordered list of every mod you want, builds them
 together onto the selected installation and can undo the whole deploy. Supported
 named definition records and level objects merge individually.
 
-Whole overhauls can contain unnamed definition components that Forge cannot yet
-match safely between edited banks. Changed or newly added unnamed source entries
-stop the build instead of silently losing edits. Install and verify the overhaul
-first, then choose its intact game folder as the baseline for supported named
-mods. Do not add that overhaul again as a source. An unchanged unnamed baseline
-copy is allowed; a sparse named-only source does not delete absent components.
+Whole overhauls can also merge unnamed components when their record identities
+agree with the baseline and other active banks. Their supported fields use the
+same conflict choices as smaller mods. When two banks assign different content
+to the same identity, Forge reports the collision instead of silently dropping
+edits. Using an intact overhaul installation as the baseline remains an option;
+in that case, do not add the same overhaul again as a source.
 
 ![Two mods in the load order](img/mods_load_order.png)
 

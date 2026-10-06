@@ -1,5 +1,12 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 namespace-preserving whole-bank composition admits original Seasons
+and Albion Secrets with Controller first/last, including script/frontend banks,
+text IDs/narrator metadata and world composition. UFP's 32-source lifecycle and
+bank-scoped scalar choices in the GUI pass. Divergent overhaul namespaces still
+need reference relocation; granular overrides remain central. See handoff and
+[Controller stack coverage](CONTROLLER_STACK_COVERAGE.md) for offline evidence.
+
 2026-10-05 broader Controller Support checks pass twelve mixed modular/overhaul
 baseline combinations and a 31-source order/choice/disable/remove/re-add lifecycle.
 That lifecycle exposed and fixed saved scalar choices being ignored after sources

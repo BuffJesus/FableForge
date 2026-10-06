@@ -40,6 +40,13 @@ Entry decode(const std::vector<uint8_t>& payload, int type);
 // Type 2 narrator lists are intentionally not synthesized by this API.
 std::vector<uint8_t> encode(const Entry& entry);
 
+// Type-0 Info is a four-byte index into the bank's type-2 NarratorList.
+// A header can be copied unchanged when both lists agree and its index exists.
+// Preserve authored differences from the payload's separate speaker string.
+// Malformed/ambiguous lists return false.
+bool compatibleSpeakerHeader(const big::Bank& baseline, const big::Bank& source,
+                             const big::Entry& record, const Entry& value);
+
 struct UpsertResult {
     uint32_t id = 0;
     std::string name;
