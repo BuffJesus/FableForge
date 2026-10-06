@@ -226,13 +226,17 @@ int main(int argc, char** argv) {
     rejects([&] { defrelocate::relocate(badControls,controlSchema,maps); },
             "control category alias cannot bypass native tag verification");
     for (const auto* container : {"Vector_J","Vector_K","Vector_int32","Vector_uint32",
-                                  "Vector_float","Map_JJ","Map_KK","Map_JK","Map_KJ"}) {
-        const auto containerSchema = defschema::Schema::loadText(std::string(R"({
-            "PROBE":{"fields":[{"name":"Array","type":")") + container + R"("},
+                                  "Vector_float","Map_JJ","Map_KK","Map_JK","Map_KJ",
+                                  "Map_JW4EIdleStateGroup__"}) {
+        const bool idle = std::string_view(container) == "Map_JW4EIdleStateGroup__";
+        const std::string owner = idle ? "CIdleSchedulerDef" : "PROBE";
+        const std::string member = idle ? "Period" : "Array";
+        const auto containerSchema = defschema::Schema::loadText(std::string("{\"") + owner +
+            "\":{\"fields\":[{\"name\":\"" + member + "\",\"type\":\"" + container + R"("},
                 {"name":"Index","type":"CDefIndex"}]}})");
         const bool isMap = std::string_view(container).starts_with("Map_");
-        bin::Entry probe{"PROBE","BOUNDARIES",0,{1,0,1}};
-        word(probe.data,defdecode::fieldTag("Array")); word(probe.data,isMap ? 1 : 2);
+        bin::Entry probe{owner,"BOUNDARIES",0,{1,0,1}};
+        word(probe.data,defdecode::fieldTag(member)); word(probe.data,isMap ? 1 : 2);
         word(probe.data,1); word(probe.data,60); field(probe.data,"Index",{77});
         const defrelocate::Maps boundaryMaps{{{15360,20000},{77,88}}, {}};
         auto expected = probe.data; expected[expected.size()-4] = 88;
@@ -250,6 +254,80 @@ int main(int argc, char** argv) {
         rejects([&] { defrelocate::relocate(truncated,containerSchema,boundaryMaps); },
                 "invalid primitive container count refuses before boundary classification");
     }
+    for (const auto* owner : {"OPINION_REACTION_MASK", "OPINION_DEED_MASK"}) {
+        const bool reaction = std::string_view(owner) == "OPINION_REACTION_MASK";
+        const std::string member = reaction ? "ReactionEnabled" : "DeedEnabled";
+        const auto maskSchema = defschema::Schema::loadText(std::string("{\"") + owner +
+            "\":{\"fields\":[{\"name\":\"" + member + "\",\"type\":\"" +
+            (reaction ? "?" : "Map__NW4EOpinionDeedType__") + "\"}]}}");
+        bin::Entry mask{owner,"MASK",0,{1,0,1}};
+        word(mask.data,defdecode::fieldTag(member)); word(mask.data,2);
+        word(mask.data,77); mask.data.push_back(1); word(mask.data,88); mask.data.push_back(0);
+        check(defrelocate::relocate(mask,maskSchema,maps) == mask.data,
+              "opinion enum and boolean values retain colliding namespace IDs");
+        auto badMask = mask; badMask.data.back() = 2;
+        rejects([&] { defrelocate::relocate(badMask,maskSchema,maps); }, "noncanonical opinion boolean refuses");
+        badMask = mask; badMask.data[7] = 3;
+        rejects([&] { defrelocate::relocate(badMask,maskSchema,maps); }, "truncated opinion mask refuses");
+    }
+    for (const auto* owner : {"CInventoryItemDef", "REGION", "HERO_ABILITY"}) {
+        const std::string member = std::string_view(owner) == "CInventoryItemDef" ? "ItemDetails" :
+            std::string_view(owner) == "REGION" ? "RegionDescription" : "MaxedOutDescription";
+        const auto textSchema = defschema::Schema::loadText(std::string("{\"") + owner +
+            "\":{\"fields\":[{\"name\":\"" + member + "\",\"type\":\"" +
+            (std::string_view(owner) == "HERO_ABILITY" ? "?" : "uint32") +
+            "\"},{\"name\":\"Index\",\"type\":\"CDefIndex\"}]}}");
+        bin::Entry text{owner,"TEXT_DOMAIN",0,{1,0,1}};
+        word(text.data,defdecode::fieldTag(member)); word(text.data,77); field(text.data,"Index",{77});
+        auto expected = text.data; expected[expected.size()-4] = 88;
+        check(defrelocate::relocate(text,textSchema,maps) == expected,
+              "verified FMP text domain is preserved while a game reference relocates");
+        auto badText = text; badText.data.insert(badText.data.begin()+11,0);
+        rejects([&] { defrelocate::relocate(badText,textSchema,maps); }, "oversized text field cannot certify its domain");
+    }
+    const auto expressionSchema = defschema::Schema::loadText(R"({
+        "CExpressionSubDef":{"fields":[{"name":"ExpressionDef","type":"int32"}]}})");
+    bin::Entry expression{"CExpressionSubDef","EXPRESSION_OWNER",0,{0,0,0}};
+    field(expression.data,"ExpressionDef",{77});
+    auto expressionExpected = expression.data; expressionExpected[7] = 88;
+    check(defrelocate::relocate(expression,expressionSchema,maps) == expressionExpected,
+          "native expression field follows global definition IDs, not colliding name offsets");
+    for (const auto sentinel : {0u,0xfffffffeu}) {
+        auto nullExpression = expression;
+        for (size_t i=0; i<4; ++i) nullExpression.data[7+i] = uint8_t(sentinel >> (i*8));
+        const defrelocate::Maps nullMaps{{{sentinel,99}}, {}};
+        check(defrelocate::relocate(nullExpression,expressionSchema,nullMaps) == nullExpression.data,
+              "nonpositive expression sentinels retain native null behavior");
+    }
+    const defrelocate::Maps invalidExpression{{{77,0}}, {}};
+    rejects([&] { defrelocate::relocate(expression,expressionSchema,invalidExpression); },
+            "real expression reference cannot become a null expression");
+    auto oversizedExpression = expression; word(oversizedExpression.data,88);
+    rejects([&] { defrelocate::relocate(oversizedExpression,expressionSchema,maps); },
+            "expression reference width must match the native scalar");
+    const auto stringMapSchema = defschema::Schema::loadText(R"({
+        "UI":{"fields":[{"name":"ActionMap","type":"Map_VCCharString__K"}]}})");
+    bin::Entry stringMap{"UI","STRING_BOUNDARY",0,{1,0,1}};
+    field(stringMap.data,"ActionMap",{2,1}); stringMap.data.push_back('A'); stringMap.data.push_back(0);
+    word(stringMap.data,60); stringMap.data.push_back('M'); stringMap.data.push_back(0);
+    const defrelocate::Maps stringMaps{{{15360,20000}}, {}};
+    check(defrelocate::relocate(stringMap,stringMapSchema,stringMaps) == stringMap.data,
+          "inline string terminators establish boundaries before unknown integer keys");
+    auto badStringMap = stringMap; badStringMap.data.pop_back();
+    rejects([&] { defrelocate::relocate(badStringMap,stringMapSchema,stringMaps); }, "unterminated string map refuses");
+    badStringMap = stringMap; badStringMap.data.push_back(1);
+    rejects([&] { defrelocate::relocate(badStringMap,stringMapSchema,stringMaps); }, "string map trailing bytes refuse");
+    badStringMap = stringMap; badStringMap.data[17] = 0; badStringMap.data[18] = 60;
+    rejects([&] { defrelocate::relocate(badStringMap,stringMapSchema,stringMaps); }, "aligned string map integer key stays unknown");
+    const auto costSchema = defschema::Schema::loadText(R"({
+        "HERO_ABILITY":{"fields":[{"name":"StaminaCost","type":"?"}]}})");
+    bin::Entry cost{"HERO_ABILITY","COST_BOUNDARY",0,{1,0,1}};
+    field(cost.data,"StaminaCost",{2,1,60});
+    const defrelocate::Maps costMaps{{{15360,20000}}, {}};
+    check(defrelocate::relocate(cost,costSchema,costMaps) == cost.data,
+          "native hero cost vector excludes cross-element byte matches");
+    cost.data[7] = 3;
+    rejects([&] { defrelocate::relocate(cost,costSchema,costMaps); }, "hero cost vector count must match");
     const defrelocate::Maps onlyNames{{}, {{77, 900}}};
     check(defrelocate::analyze(entry, schema, onlyNames).rewrites.size() == 2,
           "equal game IDs do not become names.bin offsets");

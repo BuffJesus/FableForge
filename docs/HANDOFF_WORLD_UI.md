@@ -147,6 +147,31 @@ includes tool, scanner, allocation and core-library hashes.
 Next: recover remaining forward-order BIN layouts and decoded asset reference
 domains, retaining unknown spans explicitly. No divergent composer admission.
 
+The next verified increment reaches **241 rewrites / 18 unresolved** in
+`build/defnamespace-seasons-secrets-expression-audit-20261006.json`; reverse order
+remains **13 / zero** in `build/defnamespace-secrets-seasons-expression-audit-20261006.json`.
+Four focused tests pass in `build/defnamespace-expression-relocation-20261006.log`.
+It adds idle Period map boundaries (donor 01BBBBA3), opinion enum/boolean maps
+(0193B908/0193BE86), hero integer cost-vector boundaries (019356A2), and
+counted integer-key/ASCIIZ-value maps. Integer keys remain opaque; full lengths,
+terminators and canonical booleans are checked. Existing FMP locators verify
+inventory/region/hero text IDs before excluding them from definition remapping.
+
+CExpressionSubDef.ExpressionDef is now a verified game reference despite its
+plain int32 schema type. FableWin CTCExpression::OnCreate 0269BF40 reads +28 and
+passes it to GetDef<CExpressionDef> 01DFC5A0, which uses GetPDefFromGlobalIndex
+only for positive signed values. Null/nonpositive values are preserved and
+positive references cannot relocate into that null range. Retail Transfer
+004DE881 and donor 01BAE669/PDB agree on field offset +28. Native evidence:
+`build/namespace-expression-owner-20261006.c`, `namespace-expression-getdef-20261006.c`
+and matching `*-headless-20261006.log` files include consequential disassembly.
+Executable SHA256 is A9D6D0977D9D7FC8242DA4292AE7ED92E926CA80364A95C003D9B9F689E41845.
+Direct caller queries initially found none; original-byte scan
+`namespace_expression_calls_20261006.py` resolves E9 stubs 0185172C/018215BD,
+then finds their E8 callers. This was a read-only Ghidra query with no analysis.
+Remaining BIN candidates: opinion manager 13, sound setup three, hero stats one,
+tavern game one. Asset-reference coverage and ownership still block composition.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

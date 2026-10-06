@@ -112,6 +112,8 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
         // schema still spells this field '?'. Other unknown fields stay opaque.
         const bool heroDummy = (entry.definition == "HERO_ABILITY" || entry.definition == "CHeroAbilityDef") &&
             field.name == "DummyObject" && field.type == "?";
+        const bool expression = entry.definition == "CExpressionSubDef" &&
+            field.name == "ExpressionDef" && field.type == "int32";
         const bool index = field.type == "CDefIndex" || heroDummy;
         const bool name = field.type == "CDefString";
         const bool indices = field.type == "Vector_VCDefIndex__" || field.type == "vector<CDefIndex>";
@@ -124,10 +126,35 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             (field.name == "DefaultStock" || field.name == "StockCategoryDefaults");
         const bool controls = (entry.definition == "CONTROL_SCHEME" || entry.definition == "CControlsDef") &&
             field.name == "Controls" && field.type == "Vector_VCActionInputControl__";
+        // Existing FMP bindings certify these scalar text domains. Ask the
+        // locator to validate the actual owner/tag/width before covering bytes.
+        std::string textPath;
+        if (entry.definition == "CInventoryItemDef" && field.type == "uint32") {
+            if (field.name == "ItemDescription") textPath = "4197094506.TEXT_TITLE";
+            if (field.name == "ItemDetails") textPath = "1637763631.TEXT_DESCRIPTION";
+        }
+        if (entry.definition == "REGION" && field.type == "uint32" && field.name == "RegionDescription")
+            textPath = "801675342.Region Description";
+        if (entry.definition == "HERO_ABILITY" && field.type == "?" && field.name == "MaxedOutDescription") {
+            const auto tag = defdecode::fieldTag(field.name);
+            const auto legacy = (tag >> 24) | ((tag >> 8) & 0xff00u) |
+                ((tag << 8) & 0xff0000u) | (tag << 24);
+            textPath = std::to_string(legacy) + ".HeroAbilityMasteredTextGUI_ID";
+        }
+        const bool heroCosts = (entry.definition == "HERO_ABILITY" || entry.definition == "CHeroAbilityDef") &&
+            field.type == "?" && (field.name == "StaminaCost" || field.name == "ExperienceCostsToUpgrade");
+        const bool opinionMask =
+            (entry.definition == "OPINION_REACTION_MASK" && field.name == "ReactionEnabled" && field.type == "?") ||
+            (entry.definition == "OPINION_DEED_MASK" && field.name == "DeedEnabled" &&
+             field.type == "Map__NW4EOpinionDeedType__");
+        const bool stringMap = field.type == "Map_VCCharString__K" || field.type == "Map_VCCharString__J";
         const bool primitiveVector = field.type == "Vector_J" || field.type == "Vector_K" ||
-            field.type == "Vector_int32" || field.type == "Vector_uint32" || field.type == "Vector_float";
+            field.type == "Vector_int32" || field.type == "Vector_uint32" || field.type == "Vector_float" || heroCosts;
         const bool primitiveMap = field.type == "Map_JJ" || field.type == "Map_KK" ||
             field.type == "Map_JK" || field.type == "Map_KJ" ||
+            // CIdleSchedulerDef::Transfer 01BBBBA3: map<EIdleStateGroup,long>.
+            (entry.definition == "CIdleSchedulerDef" && field.name == "Period" &&
+             field.type == "Map_JW4EIdleStateGroup__") ||
             ((entry.definition == "UI" || entry.definition == "CUIDef") && field.name == "Sprites" &&
              field.type == "Map_JW4ETableSprites_NUISystem__");
         if (index || name) {
@@ -142,6 +169,49 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             for (size_t i = 0; i < count; ++i)
                 reference(at + 4 + i * 4, indices ? Domain::GameEntry : Domain::NameOffset,
                           field.name + "[" + std::to_string(i) + "]");
+        } else if (expression) {
+            // CTCExpression::OnCreate 0269BF40 reads +28; GetDef<CExpressionDef>
+            // 01DFC5A0 uses GetPDefFromGlobalIndex only for signed values > 0.
+            if (field.value.size() != 4) fail(entry, "invalid expression index width");
+            const auto value = word(field.value, 0);
+            if (value && value <= INT32_MAX) {
+                const auto found = maps.gameEntries.find(value);
+                if (found != maps.gameEntries.end() && (!found->second || found->second > INT32_MAX))
+                    fail(entry, "expression index cannot relocate to a null value");
+                reference(at, Domain::GameEntry, field.name);
+            } else cover(at, 4);
+        } else if (!textPath.empty()) {
+            const auto location = fmplinks::locate(entry, schema, {textPath, {}});
+            if (location.offset != at || location.destination != fmplinks::Destination::TextEntry)
+                fail(entry, "text locator disagrees with decoded field");
+            cover(at, 4);
+        } else if (stringMap) {
+            // Native map<32-bit key,CCharString>: count, then key/ASCIIZ pairs.
+            // Keep aligned key values opaque; inline strings are not offsets.
+            if (field.value.size() < 4) fail(entry, "truncated string map");
+            const size_t count = word(field.value, 0);
+            if (count > (field.value.size() - 4) / 5) fail(entry, "invalid string map count");
+            size_t cursor = 4;
+            cover(at, 4);
+            for (size_t i = 0; i < count; ++i) {
+                if (cursor > field.value.size() || field.value.size() - cursor < 5)
+                    fail(entry, "truncated string map row");
+                const size_t start = cursor + 4;
+                const auto end = std::find(field.value.begin() + start, field.value.end(), uint8_t(0));
+                if (end == field.value.end()) fail(entry, "unterminated string map value");
+                cursor = size_t(end - field.value.begin()) + 1;
+                cover(at + start, cursor - start);
+            }
+            if (cursor != field.value.size()) fail(entry, "trailing string map bytes");
+        } else if (opinionMask) {
+            // Donor transfers 0193B908/0193BE86: enum key + one-byte bool.
+            if (field.value.size() < 4) fail(entry, "truncated opinion mask");
+            const size_t count = word(field.value, 0);
+            if (count > (field.value.size() - 4) / 5 || field.value.size() != 4 + count * 5)
+                fail(entry, "invalid opinion mask length");
+            for (size_t i = 0; i < count; ++i)
+                if (field.value[4 + i * 5 + 4] > 1) fail(entry, "invalid opinion mask boolean");
+            cover(at, field.value.size());
         } else if (primitiveVector || primitiveMap) {
             // Counted primitive vectors/maps serialize four-byte words (pairs
             // for maps). Integer semantics stay unknown, but a reference may
