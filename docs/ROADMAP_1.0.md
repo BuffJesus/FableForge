@@ -18,8 +18,12 @@ in 3,446 local-detail frames in float/normal-array domains. The 589 terrain
 frames and 76 raw occurrences now have geometry/texture or file-offset domains;
 native fixed-count directory evidence resolves the audit anomaly. All 140,025
 owned frames now parse completely; 401 inner-codec matches are geometry fields.
-Graphics coverage and the opposite order remain pending, as does a correction
-to the core sentinel-based directory helper. Composer refusal remains. Work is active;
+Seasons graphics coverage now passes; opposite-order Secrets STB, physics and
+compiled-mesh coverage also passes. Four original Secrets animations have
+inconsistent chunk lengths, with three unresolved candidate occurrences.
+Secrets level/text/texture outliers and a correction to the core sentinel-based
+directory helper remain pending. All three compiled BIN banks are already
+covered by the identity/relocation audits. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:

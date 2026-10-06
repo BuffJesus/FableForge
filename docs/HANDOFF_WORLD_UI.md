@@ -361,9 +361,71 @@ This clears the remaining observed Seasons graphics groups, with inner-buffer
 coverage of every supported graphics entry family. Reports remain scratch
 evidence rather than composer admission code. The sources' STB files are
 byte-identical (898,464,256 bytes), but opposite-order moved identities differ
-and still require their own scan. Graphics and script.bin differ by source;
-frontend.bin is byte-identical. Opposite-order external coverage and other
-compiled-bank reference coverage are next, before integration.
+and required their own scan. Graphics and script.bin differ by source;
+frontend.bin is byte-identical. Correction: the existing namespace audit already
+analyzes game.bin, script.bin and frontend.bin in both orders; its zero-unresolved
+result covers all three. Only game.bin requires rewrites in these fixtures.
+
+Opposite-order follow-up now covers Secrets' 190 moved game IDs / 173 name
+offsets. The raw inventory is `defnamespace-assets-secrets-inventory-20261006.json`
+under build: 44,748 entries / 1,690,851,016 bytes / 7,245 candidate groups.
+Independent hash wrappers verify unchanged original inputs throughout. Results:
+
+- `defnamespace-stb-all-domains-secrets-20261006.json` covers the same 140,025
+  owned frames / 1,051,982,805 decoded bytes, with zero ownership/layout errors.
+  All 185,048 local-detail, 17,712 terrain outer and 1,141 raw occurrences have
+  known domains. All 10,140 inner-codec occurrences are geometry/index fields.
+  Native z-sprite Load/Save 02EDF3D0/02EE2420 and PDB CObject resolve 4,718
+  matches in serialized 68-byte objects: matrix 48, scale 4, sphere 16 bytes.
+  The separate render-entry array remains opaque but has no moved-value hits.
+- `defnamespace-physics-domains-secrets-20261006.json` covers 1,383 entries /
+  11,516,724 decoded bytes, 2,605 occurrences, zero errors/unresolved. Native
+  VGRP reader 033D9A10 establishes local bone index, count, and six-byte
+  vertex-index/weight pairs; export `namespace-cloth-vgrp-load-20261006.c`.
+- `defnamespace-mesh-domains-secrets-20261006.json` covers 3,428 entries /
+  11,950 LOD bodies, 1,717 outer and 23,757 inner occurrences, zero errors or
+  unresolved matches. PDB dummy records are CRC + matrix + local bone index.
+  Native particle-program reader 033351A0, simulation reader 03332C50 and
+  constraint execution 03335CB0 establish cloth counts, geometry, local particle
+  indices and floats. Constraint opcodes 0/1 are balanced repeat controls;
+  2/3 hold two particle indices/two floats, 4 three indices/one float, and 5
+  a float sphere. Payload lengths and particle bounds are checked. Simulation
+  alpha arrays are floats; render-vertex records contain two ushort indices.
+  Evidence: `namespace-cloth-{vgrp-load,simulation,constraints,execute}-20261006.c`.
+- `defnamespace-animation-domains-secrets-20261006.json` decompresses all 3,435
+  images / 106,988,031 bytes but **four fail the canonical chunk reader**:
+  entries 3061, 3063, 3080 and 3096. Original declared XSEQ/ANRT chunk lengths
+  exceed parent/image bounds. Of 4,416 candidate occurrences, three remain
+  unresolved in these malformed tails. Do not count this as full acceptance.
+  Raw failing images and `inspect_namespace_animation_errors_20261006.py` are
+  retained. Native AMSK readers 03208750/03208830 establish a count followed
+  by EBOOL bytes, correcting the earlier tentative mask interpretation; XALO
+  0340DF60/0340E120 stores version 1 and allocation byte count. Export:
+  `namespace-animation-mask-allocation-20261006.c`.
+
+Secrets loose/WAD inventory (`defnamespace-external-secrets-inventory-20261006.json`)
+covers 1,697 payloads, including 846 LEVs/846 TNGs and an additional TGA. Its
+11,904 named ground-theme slots contain no moved IDs. Review remains pending
+for 359 LEV/five BWD binary candidate groups and 220 numeric text matches;
+symbol matches alone do not establish stored-offset references. The updated
+texture/text reviewer resolves three exact-roundtrip type-0 text groups and
+eight header groups inside frame/mip byte sizes, including one crossed boundary.
+It now classifies 1,317 raw groups. Two sky textures (IDs 388/391) are DXT5:
+native GetAsD3DPixelFormat 03023FB0 indexes the 36-byte table at 044BC4B0;
+entry 35 at 044BC99C contains DXT5, type 7, eight bits per pixel. GetInit
+0308E4D0 maps that type to the observed six-byte tail {5,8,0,0,0,0}.
+Direct original-byte disassembly/table evidence is retained in
+`namespace-pixel-native-20261006.txt` with executable hash. Reusing the DXT3
+size/framing checker through an explicitly labelled private descriptor checks
+the identical 16-byte block layout, but both original textures run short at
+mip 8 (five bytes remain where a 16-byte block is required). They remain
+unclassified; format identification alone does not certify their payloads.
+The validator's existing "0x35" error is misleading: 35 is decimal (0x23).
+Scratch findings do not enable the
+composer. Production code is unchanged since the recorded 42-test gate.
+Next: finish external domains, investigate the four malformed animations,
+correct the core fixed-count directory caller, then build reusable admission
+and relocation integration with independent output-delta checks.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
