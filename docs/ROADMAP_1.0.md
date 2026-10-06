@@ -12,8 +12,11 @@ passes 204 references and 34 safe negative routes after shared-parser changes.
 Loose/WAD inventory covers 1,696 payloads; observed matches are unrelated UID
 or float substrings. BIG/STB raw inventory covers 44,569 entries; 306 candidate
 groups have verified texture/text domains, 480 remain unclassified. Compressed
-STB inventory decodes 140,025 frames; 4,035 contain candidate bytes whose
-reference domains still need coverage. Composer refusal remains. Work is active;
+STB inventory decodes 140,025 frames; all 4,035 candidate-bearing frames now
+have structural owners. Complete native-layout parsing places 4,096 occurrences
+in 3,446 local-detail frames in float/normal-array domains. The 589 terrain
+frames, raw spans and graphics groups still need domain coverage; one foreground
+directory anomaly is under investigation. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:

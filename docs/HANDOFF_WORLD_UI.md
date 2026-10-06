@@ -211,6 +211,40 @@ both domains, malformed bodies, opaque aligned integers and untouched bytes.
 Read-only native queries used the same FableWin hash above. Next work is
 external asset-reference/ownership coverage; composer refusal remains in place.
 
+STB ownership follow-up traces all 4,035 candidate-bearing decoded frames to
+common-header descriptors and native tree/group tables across 446 maps:
+95 foreground, 494 background and 3,446 local-detail frames; none remains
+unowned. Read-only reports are
+`build/defnamespace-stb-frame-owners-local-detail-seasons-20261006.json` and
+`build/defnamespace-stb-detail-domains-seasons-20261006.json`, with scanner,
+tool, core and input hashes. These still use the Secrets-first Seasons maps.
+All source hashes remain unchanged. Ownership is separate from domain coverage.
+
+Native exports `build/namespace-localdetail-load-20261006.c` and
+`build/namespace-localdetail-collection-20261006.c` establish collection load
+02E35E70 (local palette index), mesh load 02EDD230, repeated mesh load 02EDDEB0
+and z-sprite load 02EDF3D0, with paired saves 02EE1D70/02EE2420. Same debug
+executable identity and read-only Ghidra settings as above. The bounded scratch
+parser consumes all 3,446 local-detail bodies exactly: 3,004 mesh and 16,583
+repeated-mesh primitives, no z-sprite primitives in this candidate-bearing set.
+It rescans every candidate occurrence, including those beyond the inventory's
+first sixteen sample offsets, and checks each total against the inventory.
+All 4,096 occurrences fall in float domains: 3,802 paired-vector, 163 matrix/
+scalar and 131 normal-array occurrences (the latter span includes padding).
+No occurrence overlaps unresolved subsection tails or z-sprite data. This is
+fixture-specific domain evidence, not a general STB relocation implementation.
+
+The 589 foreground/background bodies round-trip through their existing codecs,
+but opaque tails/texture spans still require domain review. The 71 raw STB
+spans and 77 graphics payload/subheader groups also remain pending. One
+foreground-directory anomaly is retained for map 73, BanditCamp_Filler_06:
+the sentinel-based parser reaches invalid bounds at directory offset 4100.
+The map is 64x224; a dimension-bounded directory may explain this, but native
+count/termination evidence is being checked before changing the core parser.
+All its candidate-bearing frames nevertheless have background/local-detail
+owners. No production code or composer admission changed in this increment;
+the existing 42/42 core result remains applicable. Work continues.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
