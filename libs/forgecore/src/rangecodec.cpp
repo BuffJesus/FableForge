@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -56,29 +57,33 @@ inline void storeElem(uint8_t* dst, uint32_t v, size_t stride) {
 
 } // namespace
 
-std::vector<uint8_t> decode(const uint8_t* p, size_t blockLen, size_t count, size_t stride) {
+static std::vector<uint8_t> decodeImpl(const uint8_t* p, size_t blockLen, size_t count, size_t stride,
+                                     bool exact) {
     if (blockLen < 1) throw std::runtime_error("rangecodec: empty block");
+    if(stride && count>std::numeric_limits<size_t>::max()/stride)
+        throw std::runtime_error("rangecodec: output size overflow");
     const uint8_t* end = p + blockLen;
     std::vector<uint8_t> out(count * stride);
 
     // RAW / stored fast path (flags == 0): verbatim element bytes follow.
     if (p[0] == 0) {
         size_t total = count * stride;
-        if (blockLen < 1 + total) throw std::runtime_error("rangecodec: RAW block too short");
-        std::memcpy(out.data(), p + 1, total);
+        if (blockLen-1 < total) throw std::runtime_error("rangecodec: RAW block too short");
+        if (exact && blockLen-1 != total) throw std::runtime_error("rangecodec: RAW block suffix");
+        if(total)std::memcpy(out.data(), p + 1, total);
         return out;
     }
 
     // Compressed path: a sequence of column descriptors, one per output column of
     // width `stride` (the decoder walks `param_4 += stride` per column). `desc` is
     // the descriptor flag byte; the loop ends when a descriptor has its high bit set.
+    if(blockLen<2)throw std::runtime_error("rangecodec: missing descriptor");
     uint8_t desc = p[1];
     const uint8_t* q = p + 2;            // pbVar12
-    uint8_t* colBase = out.data();       // param_4
     size_t columnBytes = 0;
 
     auto need = [&](const uint8_t* at, size_t n) {
-        if (at + n > end) throw std::runtime_error("rangecodec: truncated stream");
+        if (n > size_t(end-at)) throw std::runtime_error("rangecodec: truncated stream");
     };
 
     while (true) {
@@ -93,6 +98,7 @@ std::vector<uint8_t> decode(const uint8_t* p, size_t blockLen, size_t count, siz
 
         need(q, 1);
         uint8_t bitW = *q;               // bVar2: bits-per-packed-value
+        if(bitW>32)throw std::runtime_error("rangecodec: invalid bit width");
         uint32_t vBits = bitW;
         ++q;                             // puVar13 = pbVar12 + 1
 
@@ -125,7 +131,8 @@ std::vector<uint8_t> decode(const uint8_t* p, size_t blockLen, size_t count, siz
         int bitPos = (vBits == 0) ? 0 : 32; // iVar9: force a fresh word load first
         uint32_t curWord = 0;               // local_9c
 
-        uint8_t* dst = colBase;
+        uint8_t* dst = out.data();
+        if(count)dst+=columnBytes;
         for (size_t row = 0; row < count; ++row) {
             uint32_t raw;
             if (vBits == 0x20) {
@@ -155,19 +162,26 @@ std::vector<uint8_t> decode(const uint8_t* p, size_t blockLen, size_t count, siz
             v |= orBias;
             if (desc & 0x10) v = (v + addBias) & mask;            // post-bias add
             storeElem(dst, v, b0);
-            dst += stride;                                        // param_3 stride
+            if(row+1<count)dst += stride;                          // param_3 stride
         }
 
         // Next descriptor byte, and advance the column base by this column's width.
         need(q, 1);
         desc = *q;
-        colBase += b0;
         columnBytes += b0;
         q += 1;
     }
     if (columnBytes != stride)
         throw std::runtime_error("rangecodec: descriptor columns do not fill stride");
+    if(exact && q!=end)throw std::runtime_error("rangecodec: compressed block suffix");
     return out;
+}
+
+std::vector<uint8_t> decode(const uint8_t* p, size_t blockLen, size_t count, size_t stride) {
+    return decodeImpl(p,blockLen,count,stride,false);
+}
+std::vector<uint8_t> decodeExact(const uint8_t* p, size_t blockLen, size_t count, size_t stride) {
+    return decodeImpl(p,blockLen,count,stride,true);
 }
 
 std::vector<uint8_t> encodeRaw(const uint8_t* elems, size_t count, size_t stride) {

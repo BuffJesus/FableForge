@@ -643,6 +643,32 @@ All Release targets build; **45/45 tests pass (42.58s)** in
 `build/mesh-storage-core-20261006.log`. No repair, original asset write or composer
 admission was performed. Next: promote remaining STB/world reference review.
 
+STB terrain-frame promotion adds `stbstorage::validateForeground/Background`:
+complete known geometry, inline DXT1, water and edge arrays, using exact nested
+range decoding. Background parsing follows native offsets directly, without the
+preview reader's candidate search. Native Load 02CDF860 sets shared indices after
+the vertex load exactly when detail mode equals 1; the initial local-only attempt
+refused 25,470 frames, leading to this correction and explicit branch tests.
+Evidence: `namespace-background-storage-20261006.c` and constructor export under
+build. Foreground parsing and texture handling reuse existing core codecs.
+
+`rangecodec::decodeExact` rejects raw/compressed suffixes. Both decode modes now
+guard missing descriptors, output-size multiplication and invalid bit widths;
+column walking avoids pointers beyond the decoded array. Existing `decode`
+retains suffix tolerance for preservation callers. Synthetic tests cover all
+prefix truncations of emitted range forms, suffixes, overflow, both background
+index branches, water-only storage, both water strides and all four edge arrays.
+
+`build/defnamespace-stb-exact-range-seasons-20261006.json` verifies exact nested
+range framing. `build/defnamespace-stb-storage-seasons-20261006.json` then validates
+all **21,904 foreground and 95,895 background frames** with the new core APIs.
+The full walker still covers 140,025 owned frames / 1,051,982,805 decoded bytes;
+22,226 local-detail frames remain scratch-only. Zero final layout/ownership
+errors; original STB hash unchanged (the two packs carry the same STB bytes).
+All Release targets build; **46/46 tests pass (22.94s)** in
+`build/stb-storage-core-20261006.log`. Remaining: local-detail full-domain review,
+STB archive/common-header admission, loose/WAD world review and composer integration.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

@@ -48,6 +48,33 @@ void roundTrip(const std::vector<uint8_t>& data, const char* what) {
     ++g_roundtrips; g_rtIn += data.size(); g_rtOut += enc.size();
 }
 
+void checkExactRange() {
+    using namespace forge::rangecodec;
+    auto require=[](bool ok,const char* why) {
+        if(!ok) {std::fprintf(stderr,"RANGE FAIL %s\n",why);++g_fail;}
+    };
+    auto refuses=[&](const std::vector<uint8_t>& b,size_t count,size_t stride) {
+        try {decodeExact(b.data(),b.size(),count,stride);return false;}
+        catch(const std::runtime_error&) {return true;}
+    };
+    std::vector<uint8_t> values(7*16);
+    for(size_t i=0;i<values.size();++i)values[i]=uint8_t(i*13);
+    for(auto block:{encodeRaw(values),encodeByteColumns(values.data(),7,16),
+                   encodeFieldColumns(values.data(),7,16,{4,4,2,2,4}),encodeNative(values.data(),7,16)}) {
+        require(decodeExact(block.data(),block.size(),7,16)==values,"exact decode changed bytes");
+        for(size_t n=0;n<block.size();++n)
+            require(refuses({block.begin(),block.begin()+n},7,16),"truncated range block accepted");
+        block.push_back(0);
+        require(refuses(block,7,16),"range suffix accepted");
+        require(decode(block.data(),block.size(),7,16)==values,"ordinary reader lost suffix tolerance");
+    }
+    require(refuses({1},1,1),"missing first descriptor accepted");
+    require(refuses({1,0,33,0x80},1,1),"oversized bit width accepted");
+    require(refuses({0},size_t(-1),2),"output size overflow accepted");
+    require(refuses({1,0x80},1,1),"unwritten output column accepted");
+    require(decodeExact(reinterpret_cast<const uint8_t*>(""),1,0,1).empty(),"empty raw array refused");
+}
+
 void checkEncoderSynthetic() {
     std::vector<uint8_t> v;
     for (size_t n = 0; n <= 40; ++n) { v.assign(n, 'a'); roundTrip(v, "run-of-a"); }
@@ -225,6 +252,7 @@ void checkCorrupt() {
 
 int main() {
     if (lzo_init() != LZO_E_OK) { std::fprintf(stderr, "minilzo init failed\n"); return 1; }
+    checkExactRange();
     checkCorrupt();
     checkEncoderSynthetic();
     fs::path root;

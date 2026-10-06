@@ -68,6 +68,10 @@ add_executable(forge src/main.cpp ${CLI_SOURCES})
 target_link_libraries(forge PRIVATE fableforge)
 
 enable_testing()
+add_executable(fableforge_stbstorage_tests tests/test_stbstorage.cpp)
+target_link_libraries(fableforge_stbstorage_tests PRIVATE forgecore_slice)
+add_test(NAME fableforge_stbstorage_tests COMMAND fableforge_stbstorage_tests)
+
 add_executable(fableforge_defexternal_tests tests/test_defexternal.cpp)
 target_link_libraries(fableforge_defexternal_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_defexternal_tests COMMAND fableforge_defexternal_tests)

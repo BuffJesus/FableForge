@@ -48,7 +48,10 @@ Compiled-mesh review now validates all 3,400/3,428 original entries, including
 complete LOD/ghost bodies and supported cloth. BIG verification reaches
 44,096/44,268; the only Secrets refusals are four malformed animations and three
 texture headers. STB/world admission and composer integration remain pending.
-All 45 tests pass.
+Reusable STB terrain review now validates all 21,904 foreground and 95,895
+background frames, including exact nested range storage and native shared-index
+selection. Local detail and whole-container/world admission remain pending.
+All 46 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
