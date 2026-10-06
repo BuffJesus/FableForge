@@ -209,12 +209,14 @@ struct CreaturePrefix {
     struct Model { size_t mesh = 0; std::vector<size_t> textures; };
     std::vector<std::vector<Model>> bodies;
     std::vector<size_t> skeletons;
+    std::vector<size_t> structuralWords;
 };
 CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
     // Native CCreatureDef leading counted-pointer blocks, described by
     // ChocolateBox FFF38E28/237DCBE3/F0F1CA81. Walk boundaries; never search
     // opaque bytes for an apparent reference tag.
     size_t cursor = 3;
+    CreaturePrefix result;
     auto skip = [&](size_t length) {
         if (cursor > bytes.size() || length > bytes.size() - cursor)
             fail("truncated creature prefix layout");
@@ -222,15 +224,18 @@ CreaturePrefix creaturePrefix(std::span<const uint8_t> bytes) {
     };
     auto word = [&]() { const auto value = read32(bytes, cursor); cursor += 4; return value; };
     auto tag = [&](uint32_t expected) {
+        const auto at = cursor;
         if (word() != expected) fail("unsupported creature prefix control layout");
+        result.structuralWords.push_back(at);
     };
     auto count = [&](size_t minimum) {
+        const auto at = cursor;
         const size_t value = word();
         if (value > 4096 || cursor > bytes.size() || value > (bytes.size() - cursor) / minimum)
             fail("invalid creature prefix count");
+        result.structuralWords.push_back(at);
         return value;
     };
-    CreaturePrefix result;
     tag(defdecode::fieldTag("WoundMorphs"));
     result.wounds = count(44); result.woundRows = cursor; skip(result.wounds * 44);
     tag(0x01ab6ceeu);
@@ -282,6 +287,27 @@ bool identicalGameOwners(const big::File& package, const std::string& owner) {
     return first != nullptr;
 }
 } // namespace
+
+CreaturePrefixLayout creaturePrefixLayout(std::span<const uint8_t> bytes) {
+    const auto prefix = creaturePrefix(bytes);
+    CreaturePrefixLayout result;
+    result.structuralWords = prefix.structuralWords;
+    for (size_t row = 0; row < prefix.wounds; ++row)
+        for (size_t slot = 0; slot < 6; ++slot)
+            result.references.push_back({prefix.woundRows + row * 44 + 8 + slot * 4, 0, Destination::TextureEntry});
+    for (const auto& body : prefix.bodies) for (const auto& model : body) {
+        result.references.push_back({model.mesh, 0, Destination::MeshEntry});
+        for (const auto texture : model.textures) {
+            result.references.push_back({texture, 0, Destination::TextureEntry});
+            result.references.push_back({texture + 4, 0, Destination::TextureEntry});
+        }
+    }
+    for (const auto skeleton : prefix.skeletons)
+        result.references.push_back({skeleton, 0, Destination::NameOffset});
+    for (size_t row = 0; row < prefix.expressions; ++row)
+        result.references.push_back({prefix.expressionRows + row * 12 + 8, 0, Destination::MeshEntry});
+    return result;
+}
 
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
     std::vector<Link> result;

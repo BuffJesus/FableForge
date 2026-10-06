@@ -27,6 +27,14 @@ RecordLinks readGameLinks(const big::File& package);
 enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry, TextureEntry, EffectEntry, TextEntry,
                          OptionalObjectEntry };
 struct Location { size_t offset, part; Destination destination; };
+struct CreaturePrefixLayout {
+    std::vector<Location> references;
+    std::vector<size_t> structuralWords; // validated four-byte tags/counts
+};
+// Enumerate verified references and structural words in a decoded prefix.
+// Reuses the same counted-layout validation as FMP path lookup. Unclassified
+// prefix bytes are deliberately omitted; malformed/unsupported layouts throw.
+CreaturePrefixLayout creaturePrefixLayout(std::span<const uint8_t> prefix);
 Location locate(const bin::Entry& entry, const defschema::Schema& schema,
                 const Link& link);
 

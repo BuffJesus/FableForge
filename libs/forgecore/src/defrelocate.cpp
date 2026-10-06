@@ -37,6 +37,10 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     // An opaque payload with no candidate needs no schema interpretation.
     if (result.unresolved.empty()) return result;
     const auto* type = defdecode::resolveType(schema, entry.definition, entry.data);
+    // Native category alias verified by CControlsDef::Transfer (01939BE8) and
+    // the literal Controls/toggle tags in CONTROL_SCHEME payloads. Keep this
+    // recovery local; it does not change editor field-merge eligibility.
+    if (!type && entry.definition == "CONTROL_SCHEME") type = schema.find("CControlsDef");
     if (!type) return result;
     const auto decoded = defdecode::decode(entry.data, *type);
     if (!decoded.clean() || defdecode::encode(decoded) != entry.data ||
@@ -46,6 +50,7 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     // Covered bytes belong to verified structural/scalar/reference fields.
     // A four-byte reference cannot straddle those established boundaries.
     std::vector<bool> covered(entry.data.size(), false);
+    std::vector<size_t> primitiveBoundaries;
     auto cover = [&](size_t at, size_t size) {
         if (at > covered.size() || size > covered.size() - at)
             fail(entry, "reference layout exceeds payload");
@@ -80,6 +85,24 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             }
         }
     }
+    if (entry.definition == "CCreatureDef") {
+        fmplinks::CreaturePrefixLayout layout;
+        try { layout = fmplinks::creaturePrefixLayout(decoded.prefix); }
+        catch (const std::runtime_error&) {
+            // Unsupported prefix variants retain all candidate matches. No
+            // partial reference list escapes the shared layout verifier.
+        }
+        for (const auto offset : layout.structuralWords) cover(offset, 4);
+        for (const auto& location : layout.references) {
+            if (location.destination == fmplinks::Destination::NameOffset)
+                reference(location.offset, Domain::NameOffset,
+                          "CreaturePrefix.Name@" + std::to_string(location.offset));
+            else if (location.destination == fmplinks::Destination::MeshEntry ||
+                     location.destination == fmplinks::Destination::TextureEntry)
+                cover(location.offset, 4); // separate asset namespaces, retain bytes
+            else fail(entry, "unexpected creature prefix reference domain");
+        }
+    }
     size_t at = decoded.prefixLen;
     for (const auto& field : decoded.fields) {
         cover(at, 4); // Field tag CRC.
@@ -99,6 +122,14 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             field.name == "Behaviours" && field.type == "Vector_VCBrainBehaviour__";
         const bool shopStock = entry.definition == "CShopDef" && field.type == "?" &&
             (field.name == "DefaultStock" || field.name == "StockCategoryDefaults");
+        const bool controls = (entry.definition == "CONTROL_SCHEME" || entry.definition == "CControlsDef") &&
+            field.name == "Controls" && field.type == "Vector_VCActionInputControl__";
+        const bool primitiveVector = field.type == "Vector_J" || field.type == "Vector_K" ||
+            field.type == "Vector_int32" || field.type == "Vector_uint32" || field.type == "Vector_float";
+        const bool primitiveMap = field.type == "Map_JJ" || field.type == "Map_KK" ||
+            field.type == "Map_JK" || field.type == "Map_KJ" ||
+            ((entry.definition == "UI" || entry.definition == "CUIDef") && field.name == "Sprites" &&
+             field.type == "Map_JW4ETableSprites_NUISystem__");
         if (index || name) {
             if (field.value.size() != 4) fail(entry, "invalid reference width for " + field.name);
             reference(at, index ? Domain::GameEntry : Domain::NameOffset, field.name);
@@ -111,6 +142,27 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
             for (size_t i = 0; i < count; ++i)
                 reference(at + 4 + i * 4, indices ? Domain::GameEntry : Domain::NameOffset,
                           field.name + "[" + std::to_string(i) + "]");
+        } else if (primitiveVector || primitiveMap) {
+            // Counted primitive vectors/maps serialize four-byte words (pairs
+            // for maps). Integer semantics stay unknown, but a reference may
+            // not straddle two distinct serialized primitive values.
+            if (field.value.size() < 4) fail(entry, "truncated primitive container");
+            const size_t count = word(field.value, 0), stride = primitiveMap ? 8 : 4;
+            if (count > (field.value.size() - 4) / stride || field.value.size() != 4 + count * stride)
+                fail(entry, "invalid primitive container length");
+            cover(at, 4);
+            if (field.type == "Vector_float") cover(at + 4, field.value.size() - 4);
+            else for (size_t offset = 4; offset < field.value.size(); offset += 4)
+                primitiveBoundaries.push_back(at + offset);
+        } else if (controls) {
+            // CActionInputControl is five device/action enum words followed by
+            // a C2DVector (Ego_r PDB, defdecode's verified 28-byte renderer).
+            // None belongs to the game-entry or names-offset namespaces.
+            if (field.value.size() < 4) fail(entry, "truncated input control list");
+            const size_t count = word(field.value, 0);
+            if (count > (field.value.size() - 4) / 28 || field.value.size() != 4 + count * 28)
+                fail(entry, "invalid input control list length");
+            cover(at, field.value.size());
         } else if (shopStock) {
             if (field.value.size() < 4) fail(entry, "truncated shop stock list");
             const size_t count = word(field.value, 0);
@@ -161,9 +213,12 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
         // their C++ storage type does not tell us their reference domain.
         at += field.value.size();
     }
+    std::sort(primitiveBoundaries.begin(), primitiveBoundaries.end());
     std::erase_if(result.unresolved, [&](const Candidate& candidate) {
-        return std::any_of(covered.begin() + candidate.offset, covered.begin() + candidate.offset + 4,
-                           [](bool byte) { return byte; });
+        const auto next = std::upper_bound(primitiveBoundaries.begin(), primitiveBoundaries.end(), candidate.offset);
+        return (next != primitiveBoundaries.end() && *next < candidate.offset + 4) ||
+            std::any_of(covered.begin() + candidate.offset, covered.begin() + candidate.offset + 4,
+                        [](bool byte) { return byte; });
     });
     return result;
 }

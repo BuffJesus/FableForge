@@ -1,4 +1,5 @@
 #include "forge/fmplinks.hpp"
+#include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -236,6 +237,26 @@ int main() {
         word(prefix, 0x01ab6d32); word(prefix, forge::defdecode::fieldTag("Stats")); word(prefix, 0);
         word(prefix, forge::defdecode::fieldTag("InitialActions")); word(prefix, 0);
         const forge::bin::Entry prefixRecord{"CCreatureDef", "PREFIX_PROBE", 0, prefix};
+        const auto enumerated = forge::fmplinks::creaturePrefixLayout(
+            forge::defdecode::decode(prefixRecord, prefixSchema).prefix);
+        check(enumerated.references.size() == 14 && !enumerated.structuralWords.empty(),
+              "creature prefix enumerates verified reference domains and structural words");
+        auto relocatable = prefixRecord;
+        for (size_t n = 0; n < 4; ++n) relocatable.data[skeletonAt+n] = uint8_t(500000u >> (8*n));
+        auto relocatedExpected = relocatable.data;
+        for (size_t n = 0; n < 4; ++n) relocatedExpected[skeletonAt+n] = uint8_t(600000u >> (8*n));
+        const forge::defrelocate::Maps prefixMaps{
+            {{70,170},{9,109},{100,200},{124,224}},{{500000,600000}}};
+        check(forge::defrelocate::relocate(relocatable,prefixSchema,prefixMaps) == relocatedExpected,
+              "creature skeleton offsets relocate while colliding texture/mesh IDs stay exact");
+        auto unsupported = relocatable; unsupported.data[59] ^= 0xff;
+        rejects([&] { forge::defrelocate::relocate(unsupported,prefixSchema,prefixMaps); },
+                "unsupported creature prefix refuses without partial namespace relocation");
+        auto counted = prefixRecord;
+        for (size_t n = 0; n < 4; ++n) counted.data[meshAt+12+n] = uint8_t(777u >> (8*n));
+        const forge::defrelocate::Maps crossing{{{777u << 8,222222}}, {}};
+        check(forge::defrelocate::relocate(counted,prefixSchema,crossing) == counted.data,
+              "candidate crossing validated creature array count boundary stays unchanged");
         const std::vector<forge::fmplinks::Link> prefixLinks{
             {"4294151720.Skin Effects Array.0.Link to ID5", "SKIN"},
             {"4042377857.unknown.1.Animations", "ANIMATION"}};

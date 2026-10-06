@@ -208,6 +208,48 @@ int main(int argc, char** argv) {
         rejects([&] { defrelocate::relocate(malformedShop, shopSchema, maps); },
                 "unclassified shop parameter is not guessed to be an object reference");
     }
+    const auto controlSchema = defschema::Schema::loadText(R"({
+        "CControlsDef":{"fields":[{"name":"Controls","type":"Vector_VCActionInputControl__"},
+                                    {"name":"Index","type":"CDefIndex"}]}
+    })");
+    bin::Entry controls{"CONTROL_SCHEME","CONTROLS_PROBE",0,{1,1,1,0,0}};
+    field(controls.data,"Controls",{1,77,88,77,88,77,88,77});
+    field(controls.data,"Index",{77});
+    auto controlExpected = controls.data;
+    controlExpected[controlExpected.size()-4] = 88;
+    check(defrelocate::relocate(controls,controlSchema,maps) == controlExpected,
+          "input enum/direction words preserve colliding IDs while a real reference still relocates");
+    auto badControls = controls; badControls.data[9] = 2;
+    rejects([&] { defrelocate::relocate(badControls,controlSchema,maps); },
+            "input control count must match the full 28-byte row array");
+    badControls = controls; badControls.data[5] ^= 1;
+    rejects([&] { defrelocate::relocate(badControls,controlSchema,maps); },
+            "control category alias cannot bypass native tag verification");
+    for (const auto* container : {"Vector_J","Vector_K","Vector_int32","Vector_uint32",
+                                  "Vector_float","Map_JJ","Map_KK","Map_JK","Map_KJ"}) {
+        const auto containerSchema = defschema::Schema::loadText(std::string(R"({
+            "PROBE":{"fields":[{"name":"Array","type":")") + container + R"("},
+                {"name":"Index","type":"CDefIndex"}]}})");
+        const bool isMap = std::string_view(container).starts_with("Map_");
+        bin::Entry probe{"PROBE","BOUNDARIES",0,{1,0,1}};
+        word(probe.data,defdecode::fieldTag("Array")); word(probe.data,isMap ? 1 : 2);
+        word(probe.data,1); word(probe.data,60); field(probe.data,"Index",{77});
+        const defrelocate::Maps boundaryMaps{{{15360,20000},{77,88}}, {}};
+        auto expected = probe.data; expected[expected.size()-4] = 88;
+        check(defrelocate::relocate(probe,containerSchema,boundaryMaps) == expected,
+              "primitive container boundaries reject crossed-byte matches while typed references relocate");
+        auto aligned = probe;
+        for (size_t i = 0; i < 4; ++i) aligned.data[11+i] = uint8_t(15360u >> (8*i));
+        if (std::string_view(container) == "Vector_float") {
+            auto floatExpected = aligned.data; floatExpected[floatExpected.size()-4] = 88;
+            check(defrelocate::relocate(aligned,containerSchema,boundaryMaps) == floatExpected,
+                  "float vector bits are preserved even when equal to moved IDs");
+        } else rejects([&] { defrelocate::relocate(aligned,containerSchema,boundaryMaps); },
+                       "aligned integer container matches still require reference evidence");
+        auto truncated = probe; truncated.data[7] = 3;
+        rejects([&] { defrelocate::relocate(truncated,containerSchema,boundaryMaps); },
+                "invalid primitive container count refuses before boundary classification");
+    }
     const defrelocate::Maps onlyNames{{}, {{77, 900}}};
     check(defrelocate::analyze(entry, schema, onlyNames).rewrites.size() == 2,
           "equal game IDs do not become names.bin offsets");

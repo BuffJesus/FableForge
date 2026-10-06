@@ -3,12 +3,15 @@
 2026-10-06 Forge continuation adds a read-only namespace allocator preserving
 baseline identities and distinct additions. All 42 core tests pass; independent
 original Seasons/Secrets identity audits pass both orders (15,386 planned slots).
-Follow-up building/hero/brain/shop recovery and focused tests reduce BIN reference
-candidates to 179/0 by order, with independent exact payload-delta audits.
+Follow-up building/hero/brain/shop/creature/control recovery and primitive
+boundaries reduce BIN candidates to 57/0 by order, with independent exact
+payload-delta audits and focused tests. Original FMP appearance regression
+passes 204 references and 34 safe negative routes after shared-parser changes.
 Loose/WAD inventory covers 1,696 payloads; observed matches are unrelated UID
 or float substrings. BIG/STB raw inventory covers 44,569 entries; 306 candidate
 groups have verified texture/text domains, 480 remain unclassified. Compressed
-internals still need coverage. Composer refusal remains. Work is active;
+STB inventory decodes 140,025 frames; 4,035 contain candidate bytes whose
+reference domains still need coverage. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:

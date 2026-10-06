@@ -89,9 +89,7 @@ audit `build/defnamespace-seasons-secrets-shop-audit-20261006.json` verifies
 **232 rewrites / 179 unresolved**, all successful payloads independently checked.
 Native donor CShopDef 01BA75DB transfers both vectors as CShopItemDef subcomponents.
 
-Next: examine BIG/STB asset payloads and runtime-generated references, and
-recover further forward-order BIN layouts (largest groups: CCreatureDef 56,
-CONTROL_SCHEME 37, UI 22). A read-only canonical-container scan was launched via
+The subsequent external investigation used a read-only canonical-container scan via
 `python build/run_namespace_assets_20261006.py`, using
 `build/namespace_asset_scan_20261006.cpp` linked against this checkout's core.
 It completed with unchanged input hashes: 44,569 entries, 1,683,869,884 scanned
@@ -113,6 +111,41 @@ jobs described above completed. The final full Release relink succeeds with
 brain/shop increments; their four focused tests pass as recorded above.
 Do not interpret the successful identity audits as permission to merge these
 banks; source-local payload and external references still need verification.
+
+Creature/control/primitive follow-up reduces Seasons-first to **232 rewrites /
+57 unresolved BIN candidates** in
+`build/defnamespace-seasons-secrets-primitive-audit-20261006.json`.
+`fmplinks::creaturePrefixLayout` exposes the existing verified parser's texture,
+mesh and skeletal-name slots plus structural tags/counts. Relocation preserves
+asset domains and maps names; unsupported prefix variants stay unresolved.
+The 56 observed creature candidates crossed a validated count word boundary.
+CONTROL_SCHEME locally resolves CControlsDef with exact tag/roundtrip checks;
+its counted 28-byte CActionInputControl rows hold five input enums and a 2D
+direction, not definition references (Ego_r layout and donor 01939BE8).
+This accounts for 37 further matches. Fixed-width primitive arrays/maps now
+exclude matches crossing element boundaries; aligned opaque integer matches
+still refuse. Float vectors retain their bits. Counts must match full lengths.
+
+Four focused tests pass in `build/defnamespace-primitive-relocation-20261006.log`.
+The shared creature parser also passes the original FMP appearance regression:
+`build/fmp-creature-appearance-441cjrvk`, 204 appearance references / 34 safe
+negative routes, both import/composer paths, independently checked payload
+deltas and unchanged input hashes. This used the original named archive at
+`D:/Downloads/fabletlcmod-named-20261002.zip` and the baseline above. The earlier
+42-test gate predates these follow-ups.
+
+Decoded STB inventory is retained in
+`build/defnamespace-stb-decoded-seasons-20261006.json`, produced by
+`build/run_namespace_stb_frames_20261006.py` and its canonical-core C++ scanner.
+All 473 entries yield 140,025 validated LZO frames / 1,051,982,805 decoded bytes.
+There are 4,035 frames with candidate bytes and 71 unframed spans with candidates.
+Of matched frames, 95 round-trip through the foreground codec (87 retain an
+opaque tail), while 3,940 are unclassified. Codec success is not a reference
+domain classification. The source STB hash is unchanged; report provenance
+includes tool, scanner, allocation and core-library hashes.
+
+Next: recover remaining forward-order BIN layouts and decoded asset reference
+domains, retaining unknown spans explicitly. No divergent composer admission.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
