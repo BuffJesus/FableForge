@@ -1,5 +1,53 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 Script Balance feat string references
+
+Original Script Balance now imports through direct apply and composition.
+The repeated 3147235600.unknown.<row>.unknown metadata describes FeatName,
+Verb and ItemReward, all NamesBINOffset references. SCRIPT_DEF/CScriptDef's
+Feats vector uses 111-byte rows: fifteen tagged fields, including three
+one-byte booleans. Every row/tag and the exact count/length are validated before
+patching. Metadata carries occurrence and total count even for singletons;
+minus-one string sentinels are omitted, zero remains a possible name offset,
+and an omitted populated slot refuses rather than shifting later metadata.
+No schema boundaries or other script fields changed.
+
+Evidence: ego_r.exe SHA256
+aeb372d37adce0b17affc0744eb20c3fe75d05c5a80cd134b0a4a7f5d607ea96,
+CFeatDef::Transfer 00f9bff0 and PDB CFeatDef layout establish field order/types;
+the native Verb name fills the local schema's unnamed second field. Native
+report sheathed-weapon-native-ljajomkp/result.json is retained under the C:
+asset-checks-20261005 root. ChocolateBox BB970110 links only those three words
+at row offsets 4, 12 and 52. Its later flat int/byte description is not used to
+infer native boolean positions. Original payload tags independently agree with
+all fifteen native fields and twelve rows (build/probe_feat_layout.py).
+
+tools/test_fmp_script_feat_links.py passes six original/derived imports and
+twelve safe negative routes. Original/stale-offset cases each relink 25 words;
+a labelled sparse-first-row derivative relinks 23. Independently parsed final
+names offsets determine the expected values. Controls remove only feat metadata
+and run through the actual old d25dde7 extracted tool; every other decoded game
+record byte and all five other effective banks match. Direct/composed game banks
+also match byte for byte. Missing names, omitted/extra slots, invalid row indices,
+later-row tag corruption and wrong counts preserve prior outputs. Report:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-script-feats-qk_pw_6z/result.json. Archive, tools and live banks remain unchanged.
+All Release targets build; all forty core tests pass in 24.16s
+(build/script-feat-core-20261005.log). No gameplay claim; frozen d25dde7 excludes
+this increment and the preceding creature-reference changes.
+
+Remaining-link probes wrcrp9j1 (before) and agg_qjp7 (after) retain eight original
+outcomes. Getting Away With Murder already passes; its old corpus refusal is
+stale. Pray/Puke Expression remain correctly refused: their metadata labels
+OpinionDeedType as `CKickableDef Kicked Sprite` targeting GRAPHIC_ANIM_DUST_01.
+Native CCreatureAction_PerformExpression::Initialise 005217c0 passes definition
++84 to PostDeed, and PeekPDeedEffectsDef 006fcb50 uses that enum to index its
+deed table before resolving a definition. It is not a graphics-bank identity.
+PDB confirms the member type/offset; native reports b9y7zls0 and _nr_6fqk retain
+the instructions. Do not add a graphics alias to admit these contradictory
+packages. Knothole Glade Children still has the repeated `4272390883._` group;
+the three transformation originals still have an unsupported CDef member.
+
 ## 2026-10-05 creature optional-reference source choices
 
 Extended tools/test_fmp_creature_optional_links.py verifies 18 selections and

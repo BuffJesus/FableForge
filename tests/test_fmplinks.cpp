@@ -308,6 +308,53 @@ int main() {
                 "missing creature animation identity map refuses");
     }
     {
+        const auto featSchema = forge::defschema::Schema::loadText(
+            R"({"SCRIPT_DEF":{"prefix_len":3,"fields":[{"name":"Feats","type":"vector<CFeatDef>"}]}})");
+        const char* members[] = {"FeatName", "Verb", "TimeLimit", "TargetNumber", "GoldReward", "XPReward",
+            "ItemReward", "NoBlocking", "KN_AttackType", "KN_Perfect", "KN_CreatureType",
+            "GF_FromRegion", "GF_ToRegion", "GF_NoTeleporting", "CO_ItemName"};
+        Bytes feats; word(feats, 2);
+        for (int row = 0; row < 2; ++row) {
+            for (const std::string_view member : members) {
+                word(feats, forge::defdecode::fieldTag(member));
+                if (member == "NoBlocking" || member == "KN_Perfect" || member == "GF_NoTeleporting")
+                    feats.push_back(1);
+                else word(feats, row == 0 && member == "Verb" ? 0xffffffffu : 0);
+            }
+        }
+        const auto record = legacyEntry("SCRIPT_DEF", "Feats", "vector<CFeatDef>", feats);
+        const auto pair = forge::fmplinks::readMetadata(metadataTwo("3147235600.unknown.0.unknown"));
+        check(pair.size() == 2 && pair[0].path == "3147235600.unknown.0.unknown.References.0.2" &&
+              pair[1].path == "3147235600.unknown.0.unknown.References.1.2",
+              "script feat groups retain complete occurrence information");
+        const std::vector<forge::fmplinks::Link> links{
+            {pair[0].path, "A"}, {pair[1].path, "B"},
+            {"3147235600.unknown.1.unknown.References.1.3", "A"}};
+        auto expected = record.data;
+        for (const auto& [at, value] : std::vector<std::pair<size_t, uint32_t>>{{15, 15}, {63, 21}, {134, 15}})
+            for (size_t n = 0; n < 4; ++n) expected[at+n] = uint8_t(value >> (8*n));
+        check(forge::fmplinks::relink(record, targets, featSchema, links) == expected,
+              "feat names use saved name offsets, skip minus-one and preserve zero-valued references and unrelated bytes");
+        for (const auto* path : {"3147235600.unknown.2.unknown.References.0.3",
+                                "3147235600.unknown.0.unknown.References.0.1",
+                                "3147235600.unknown.0.unknown.References.0.3",
+                                "3147235600.unknown.0.unknown.References.2.2",
+                                "3147235600.unknown.0.Unknown.References.0.2"})
+            rejects([&] { forge::fmplinks::locate(record, featSchema, {path, "A"}); },
+                    "feat indices, incomplete groups and unverified aliases refuse");
+        for (int variant = 0; variant < 4; ++variant) {
+            auto bad = record;
+            if (variant == 0) bad.data[7] = 3;
+            if (variant == 1) bad.data.push_back(0);
+            if (variant == 2) bad.data[122] ^= 1;
+            if (variant == 3) bad.data.resize(9);
+            rejects([&] { forge::fmplinks::locate(bad, featSchema, links[0]); },
+                    "feat counts, tails, truncation and later-row tags are validated before writes");
+        }
+        rejects([&] { forge::fmplinks::relink(record, targets, featSchema,
+            std::vector<forge::fmplinks::Link>{{links[0].path, "MISSING"}}); }, "missing feat name refuses");
+    }
+    {
         const auto environmentSchema = forge::defschema::Schema::loadText(
             R"({"ENVIRONMENT_THEME_DAY":{"prefix_len":3,"fields":[{"name":"Time","type":"Vector_CEnvironmentThemeDef"}]}})");
         const char* members[] = {"TimeOfDay", "MoonLit", "FogStartZ", "FogEndZ", "SkyTexture0", "SkyTexture1",

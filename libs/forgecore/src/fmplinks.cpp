@@ -286,6 +286,16 @@ bool identicalGameOwners(const big::File& package, const std::string& owner) {
 std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
     std::vector<Link> result;
     for (const auto& group : readMetadataGroups(bytes)) {
+        // Feats repeats "unknown" for three CDefString values. Preserve the
+        // list size even for a singleton so omitted populated slots refuse.
+        if (group.path.starts_with("3147235600.unknown.") && group.path.ends_with(".unknown")) {
+            if (group.targets.empty() || group.targets.size() > 3)
+                fail("invalid script feat reference count");
+            for (size_t index = 0; index < group.targets.size(); ++index)
+                result.push_back({group.path + ".References." + std::to_string(index) + "." +
+                                  std::to_string(group.targets.size()), group.targets[index]});
+            continue;
+        }
         // ChocolateBox repeats Sky/Clouds names within a Time row. Keep the
         // complete group size, including singletons, to reject omitted slots.
         if (group.path.starts_with("1743315694.unknown.") &&
@@ -525,6 +535,40 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
     for (size_t i = 0; i < decoded.fields.size(); ++i) {
         const auto& field = decoded.fields[i]; offset += 4;
         if (field.tag == tag) {
+            if ((entry.definition == "SCRIPT_DEF" || entry.definition == "CScriptDef") &&
+                field.name == "Feats" && field.type == "vector<CFeatDef>" && parts.size() == 7 &&
+                parts[0] == "3147235600" && parts[1] == "unknown" && parts[3] == "unknown" &&
+                parts[4] == "References") {
+                // CFeatDef::Transfer (ego_r 00f9bff0): 15 tagged values,
+                // three one-byte bools, 111 bytes per row. ChocolateBox
+                // BB970110 links only FeatName, Verb and ItemReward, in order.
+                static constexpr std::string_view members[] = {
+                    "FeatName", "Verb", "TimeLimit", "TargetNumber", "GoldReward", "XPReward",
+                    "ItemReward", "NoBlocking", "KN_AttackType", "KN_Perfect", "KN_CreatureType",
+                    "GF_FromRegion", "GF_ToRegion", "GF_NoTeleporting", "CO_ItemName"};
+                if (field.value.size() < 4) fail("truncated script feat rows");
+                const size_t count = read32(field.value, 0), wanted = number(parts[2]);
+                if (count > 4096 || count > (field.value.size() - 4) / 111 ||
+                    field.value.size() != 4 + count * 111 || wanted >= count)
+                    fail("invalid script feat row layout");
+                size_t cursor = 4;
+                std::vector<size_t> slots;
+                for (size_t row = 0; row < count; ++row) {
+                    for (const auto member : members) {
+                        if (read32(field.value, cursor) != defdecode::fieldTag(member))
+                            fail("invalid script feat member tag");
+                        cursor += 4;
+                        if (row == wanted && (member == "FeatName" || member == "Verb" || member == "ItemReward") &&
+                            read32(field.value, cursor) != 0xffffffffu)
+                            slots.push_back(cursor);
+                        cursor += member == "NoBlocking" || member == "KN_Perfect" || member == "GF_NoTeleporting" ? 1 : 4;
+                    }
+                }
+                const size_t ordinal = number(parts[5]), expected = number(parts[6]);
+                if (expected != slots.size() || expected == 0 || ordinal >= slots.size())
+                    fail("script feat reference count or index disagrees with native layout");
+                return {offset + slots[ordinal], i + 1, Destination::NameOffset};
+            }
             if ((entry.definition == "ENVIRONMENT_THEME_DAY" ||
                  entry.definition == "CEnvironmentThemeDaySetDef") && field.name == "Time" &&
                 (field.type == "Vector_CEnvironmentThemeDef" ||

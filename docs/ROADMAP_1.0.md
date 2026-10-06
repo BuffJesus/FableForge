@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 original Script Balance imports with 25 feat string references across
+twelve native-layout rows. Six original/derived cases and twelve safe refusals
+pass against prior-tool controls; all forty core tests pass. Contradictory
+Pray/Puke expression enum metadata remains refused on native evidence. See handoff.
+
 2026-10-05 creature optional references pass 18 source selections and four
 safe unavailable-source refusals, covering new/existing records and vanilla
 through merge/build with moved identities. Full original/control regression

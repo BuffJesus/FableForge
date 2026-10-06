@@ -2,6 +2,19 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 SCRIPT_DEF/CScriptDef Feats metadata
+`3147235600.unknown.<row>.unknown` contains ordered NamesBINOffset references
+for FeatName, Verb and ItemReward. Native CFeatDef::Transfer 00f9bff0 establishes
+fifteen tagged values / 111 bytes per row, with booleans interleaved at
+NoBlocking, KN_Perfect and GF_NoTeleporting. Validate the complete vector and
+every tag before touching the three linked words at row offsets 4, 12 and 52.
+Metadata occurrences retain group size, including singletons; only minus-one
+sentinels are omitted. A missing populated slot is ambiguous and refuses.
+Other feat strings, enums, booleans, rewards and tags stay byte-identical.
+Original Script Balance passes 25 references through direct and composed import;
+stale-offset/sparse derivatives and twelve safe refusals verify name-domain
+resolution and byte preservation. See HANDOFF_WORLD_UI for native/tool hashes.
+
 2026-10-05 CREATURE `2674723971.Weapon4ID` addresses InitialSheathedWeapon
 inside the validated RangedWeaponDef/InitialSheathedWeapon/PBrain/interaction
 block. Native creation accepts positive OBJECT indices only; source zero with
