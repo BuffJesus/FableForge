@@ -1,8 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <span>
 #include <vector>
 #include "forge/stbinfo.hpp"
+#include "forge/stb.hpp"
 
 namespace forge::stbstorage {
 // Validate complete decoded terrain-frame storage domains, including nested
@@ -41,4 +43,21 @@ struct CommonMap {
 // Returns manifest order, which need not match physical record order. Chunk
 // pointers and bank IDs still require archive-level ownership checks.
 std::vector<CommonMap> validateCommon(const std::vector<uint8_t>& body);
+struct BankEntry {
+    stb::Entry entry; // crc is the native state-block CRC; devName is filename 0.
+    uint32_t checksum=0;
+    bool sea=false;
+    uint32_t seaCutoutCRC=0;
+};
+struct BankMetadata {
+    uint32_t alignment=0,maximumId=0,tableOffset=0;
+    std::vector<BankEntry> entries;
+};
+// Review the exact 32-byte BBB header and entire trailing TOC, independently of
+// payload decoding. Supported subset: format 115 / STB 174, finalized bank,
+// one data type (0), one filename per entry, empty map/common info or sea v22
+// info at stream position 0. Checks unique identities and disjoint aligned
+// payload spans before the TOC; does not inspect gap bytes or payload contents.
+BankMetadata validateBankMetadata(std::span<const uint8_t> header,
+                                  std::span<const uint8_t> table,uint64_t fileSize);
 }

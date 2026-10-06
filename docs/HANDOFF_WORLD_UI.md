@@ -776,7 +776,24 @@ The table prefix is a data-type histogram, not a fixed development header.
 Original STB has one type (0, 473 entries), one filename per entry, and only the
 26 sea entries carry info (16 bytes each). Existing general reader/writer loops
 assume this one-type/one-filename subset; do not claim arbitrary BBB support.
-Remaining whole-bank admission must validate this metadata and chunk ownership.
+`stbstorage::validateBankMetadata` now validates the exact header and whole TOC
+for the supported subset (bank format 115 / STB version 174 / finalized flag,
+one type 0 histogram, one filename per entry, empty map/common info and sea v22
+info at stream position 0). It checks unique names/IDs, maximum-ID bounds,
+aligned disjoint payload spans before the TOC, exact metadata lengths/end, and
+retains state-block CRC, entry checksum and sea cutout CRC as separate fields.
+Additional native evidence: `namespace-stb-bank-{fields,version}-20261006.c`.
+
+`build/stb-bank-metadata-review-20261006.json` passes all 473 original entries,
+446 common-map name/ID bindings, 26 sea payloads and 3,597 palette rows, with
+zero unowned entries and only zero alignment gaps. Source hash is unchanged.
+The entry-binding and gap checks remain in the scratch audit; the reusable core
+checks metadata/spans, not map chunk contents or padding bytes. Tests exercise
+truncations, corrupt lengths/counts/versions, ID limits/duplicates, overlapping
+payloads, filename counts, sea metadata and appended sparse-bank outputs.
+All Release targets build; **46/46 tests pass (36.73s)** in
+`build/stb-bank-metadata-core-20261006.log`. Next: complete chunk ownership,
+including raw edge-height/shore blocks, and remaining world admission.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 

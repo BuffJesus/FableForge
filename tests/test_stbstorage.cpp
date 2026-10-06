@@ -187,6 +187,41 @@ int main() {try {
     };
     entryRow(7,"B",chunkAt,8);entryRow(8,"A",secondChunkAt,8);
     entryRow(31,"__STATIC_MAP_COMMON_HEADER__",commonAt,uint32_t(common.size()));
+    const Bytes header(bank.begin(),bank.begin()+32),table(bank.begin()+tableAt,bank.end());
+    const auto metadata=validateBankMetadata(header,table,bank.size());
+    if(metadata.maximumId!=31 || metadata.entries.size()!=3 || metadata.entries[0].entry.devName!="B")
+        throw std::runtime_error("native bank metadata changed");
+    for(size_t n=0;n<header.size();++n)
+        refuses([&]{validateBankMetadata(std::span(header).first(n),table,bank.size());});
+    for(size_t n=0;n<table.size();++n)
+        refuses([&]{validateBankMetadata(header,std::span(table).first(n),tableAt+n);});
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{0,0},{4,114},{8,173},{12,0},
+                              {16,0},{16,3},{20,30},{24,4},{28,0xffffffffu}}) {
+        auto bad=header;setWord(bad,at,value);refuses([&]{validateBankMetadata(bad,table,bank.size());});
+    }
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{0,2},{4,1},{8,4},{12,41},
+                              {16,0},{16,32},{20,1},{24,0xffffffffu},{28,65},
+                              {36,0xffffffffu},{45,0},{45,2},{58+4,7},{58+16,64}}) {
+        auto bad=table;setWord(bad,at,value);refuses([&]{validateBankMetadata(header,bad,tableAt+bad.size());});
+    }
+    auto suffixTable=table;suffixTable.push_back(0);
+    refuses([&]{validateBankMetadata(header,suffixTable,tableAt+suffixTable.size());});
+    // Independent sea metadata uses a length-prefixed 12-byte native info block.
+    Bytes seaTable;word(seaTable,1);word(seaTable,0);word(seaTable,1);
+    for(uint32_t v:{42u,1u,0u,8u,64u,0x12345678u})word(seaTable,v);
+    const std::string seaName="__ENGINE_SEA_STATIC_MAP_BANK_FILE__test";
+    auto seaString=[&]{word(seaTable,uint32_t(seaName.size()));seaTable.insert(seaTable.end(),seaName.begin(),seaName.end());};
+    seaString();word(seaTable,0x87654321u);word(seaTable,1);seaString();word(seaTable,16);
+    const auto seaInfoAt=seaTable.size();for(uint32_t v:{12u,22u,0u,0xfedcba98u})word(seaTable,v);
+    auto seaHeader=header;setWord(seaHeader,20,1);setWord(seaHeader,24,1);setWord(seaHeader,28,128);
+    const auto seaMetadata=validateBankMetadata(seaHeader,seaTable,128+seaTable.size());
+    if(!seaMetadata.entries[0].sea || seaMetadata.entries[0].seaCutoutCRC!=0xfedcba98u ||
+       seaMetadata.entries[0].checksum!=0x87654321u || seaMetadata.entries[0].entry.crc!=0x12345678u)
+        throw std::runtime_error("sea bank metadata fields lost");
+    for(const auto [at,value]:{std::pair<size_t,uint32_t>{seaInfoAt,11},{seaInfoAt+4,21},
+                              {seaInfoAt+8,1},{seaInfoAt-4,15}}) {
+        auto bad=seaTable;setWord(bad,at,value);refuses([&]{validateBankMetadata(seaHeader,bad,128+bad.size());});
+    }
     forge::TemporaryDirectory scratch(std::filesystem::temp_directory_path(),"stb-sparse-append-");
     const auto source=scratch.path()/"source.stb",destination=scratch.path()/"appended.stb";
     {std::ofstream out(source,std::ios::binary);out.write(reinterpret_cast<const char*>(bank.data()),bank.size());}
@@ -199,6 +234,8 @@ int main() {try {
         for(size_t at:{20,24,28})std::copy_n(bank.begin()+at,4,prefix.begin()+at);
         if(prefix!=bank)throw std::runtime_error("append changed original bank storage");
         const auto archive=forge::stb::Archive::open(destination);
+        const auto tableOffset=archive.tableOffset();
+        validateBankMetadata(std::span(output).first(32),std::span(output).subspan(tableOffset),output.size());
         const auto* commonEntry=archive.findEntry("__STATIC_MAP_COMMON_HEADER__");
         const auto appendedMaps=validateCommon(archive.read(*commonEntry));
         if(appendedMaps.size()!=2+added || archive.entries().back().id!=31+added ||

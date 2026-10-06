@@ -55,7 +55,9 @@ frame validation to all 140,025 owned STB frames. The 26 separate sea payloads
 also validate. All 446 common records and 3,597 numeric palette rows validate,
 including frame-to-palette bounds checks. The complete common manifest now
 validates its 446 unique map/chunk identities and exact contiguous record coverage.
-Whole-container metadata/ownership and world admission remain pending.
+Reusable bank metadata validation covers all 473 entries; scratch audit verifies
+all map name/ID bindings, sea entries and zero alignment gaps. Complete chunk
+ownership and remaining world admission are still pending.
 Foliage palette read/write now uses native main/shadow/z-sprite order and retains
 the complete runtime settings block; all 3,597 original rows rewrite exactly.
 Appending maps now writes the actual maximum STB entry ID, preserving native

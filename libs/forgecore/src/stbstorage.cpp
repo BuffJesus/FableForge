@@ -217,4 +217,66 @@ std::vector<CommonMap> validateCommon(const std::vector<uint8_t>& body) {
     }
     c.p=next;c.finish();return maps;
 }
+BankMetadata validateBankMetadata(std::span<const uint8_t> header,
+                                  std::span<const uint8_t> table,uint64_t fileSize) {
+    // CBankFile ctor 02F8F860 / ReadFileInformation 02F99600; static-map
+    // GetDataFormatVersion 02D5AE90. Header word +20 is the maximum index.
+    Reader h{header};
+    if(h.word()!=0x42424242u || h.word()!=115 || h.word()!=174 || h.word()!=1)
+        throw std::runtime_error("stbstorage: unsupported bank header");
+    BankMetadata result;result.alignment=h.word();result.maximumId=h.word();
+    const auto count=h.word();result.tableOffset=h.word();h.finish();
+    const uint64_t toc=result.tableOffset;
+    if(!result.alignment || (result.alignment&(result.alignment-1)) ||
+       toc<32 || toc%result.alignment || toc>fileSize || fileSize-toc!=table.size())
+        throw std::runtime_error("stbstorage: invalid bank alignment or table span");
+    Reader c{table};
+    // ReadEntryList 02F9A180: data-type histogram followed by live entries.
+    if(c.word()!=1 || c.word()!=0 || c.word()!=count || count>(table.size()-c.p)/44)
+        throw std::runtime_error("stbstorage: unsupported bank data-type histogram");
+    auto name=[&] {
+        const auto n=c.word();const auto at=c.take(n);
+        if(!n || std::find(table.begin()+at,table.begin()+at+n,0)!=table.begin()+at+n)
+            throw std::runtime_error("stbstorage: unsupported empty or embedded-NUL bank name");
+        return std::string(reinterpret_cast<const char*>(table.data()+at),n);
+    };
+    std::set<uint32_t> ids;std::set<std::string> names;
+    result.entries.reserve(count);
+    for(uint32_t i=0;i<count;++i) {
+        if(c.word()!=42)throw std::runtime_error("stbstorage: invalid bank entry magic");
+        BankEntry item;auto& entry=item.entry;
+        entry.id=c.word();entry.type=c.word();entry.size=c.word();entry.offset=c.word();entry.crc=c.word();
+        entry.name=name();item.checksum=c.word();
+        if(c.word()!=1)throw std::runtime_error("stbstorage: unsupported bank filename count");
+        entry.devName=name();const auto infoSize=c.word();const auto infoAt=c.take(infoSize);
+        if(!entry.id || entry.id>result.maximumId || entry.type ||
+           !ids.insert(entry.id).second || !names.insert(entry.name).second)
+            throw std::runtime_error("stbstorage: invalid or duplicate bank entry identity");
+        if(!entry.size || entry.offset<32 || entry.offset%result.alignment ||
+           uint64_t(entry.offset)+entry.size>toc)
+            throw std::runtime_error("stbstorage: invalid bank payload span");
+        item.sea=entry.name.starts_with("__ENGINE_SEA_STATIC_MAP_BANK_FILE__");
+        if(item.sea) {
+            // SaveSea 02E5AA70 writes the size prefix; the PDB info block is
+            // {version, stream position, cutout CRC}, saved by 02E5A5B0.
+            Reader info{table.subspan(infoAt,infoSize)};
+            if(info.word()!=12 || info.word()!=22 || info.word()!=0)
+                throw std::runtime_error("stbstorage: unsupported sea bank info");
+            item.seaCutoutCRC=info.word();info.finish();
+        } else if(infoSize)throw std::runtime_error("stbstorage: unknown bank entry info");
+        result.entries.push_back(std::move(item));
+    }
+    c.finish();
+    std::vector<size_t> order(result.entries.size());std::iota(order.begin(),order.end(),0);
+    std::sort(order.begin(),order.end(),[&](size_t a,size_t b) {
+        return result.entries[a].entry.offset<result.entries[b].entry.offset;
+    });
+    uint64_t end=32;
+    for(size_t i:order) {
+        const auto& entry=result.entries[i].entry;
+        if(entry.offset<end)throw std::runtime_error("stbstorage: overlapping bank payloads");
+        end=uint64_t(entry.offset)+entry.size;
+    }
+    return result;
+}
 }
