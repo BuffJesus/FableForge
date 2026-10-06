@@ -1,6 +1,7 @@
 #include "forge/stbstorage.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/rangecodec.hpp"
+#include <algorithm>
 #include <span>
 #include <stdexcept>
 
@@ -133,5 +134,53 @@ void validateSea(const std::vector<uint8_t>& body) {
     if(vertices)c.range(vertices,12);
     if(indices)c.range(indices,2);
     c.finish();
+}
+MapRecord validateMapRecord(const std::vector<uint8_t>& record,uint32_t logicalOffset) {
+    if(record.size()<stbinfo::kInfoBlockSize)
+        throw std::runtime_error("stbstorage: truncated common record");
+    MapRecord result;result.info=stbinfo::readInfoBlock(record.data());const auto& info=result.info;
+    if(info.versionID!=1 || info.bankFileIndex<=0 || info.mapWidth<=0 || info.mapHeight<=0 ||
+       info.mapWidth%16 || info.mapHeight%16 || info.headerEndPtr<0 ||
+       uint64_t(info.headerEndPtr)!=uint64_t(logicalOffset)+record.size())
+        throw std::runtime_error("stbstorage: unsupported common record header");
+    // ReadMapInfoBlock 02D5C230 / WriteMapInfoBlock 02D67EA0 establish all
+    // stored fields. OpenRetailStaticMap 02D5BC40 does not use the development
+    // checksum-block fields; do not reinterpret their retained values as IDs.
+    const auto encoded=stbinfo::writeInfoBlock(info);
+    if(!std::equal(encoded.begin(),encoded.end(),record.begin()))
+        throw std::runtime_error("stbstorage: common info did not round-trip");
+    Reader c{record};c.take(stbinfo::kInfoBlockSize);
+    auto atLogical=[&](uint32_t pointer) {
+        if(uint64_t(pointer)!=uint64_t(logicalOffset)+c.p)
+            throw std::runtime_error("stbstorage: noncontiguous common record layout");
+    };
+    atLogical(uint32_t(info.landscapeMapPtr));
+    const auto texturePos=c.word(),textureSize=c.word();
+    result.foregroundDirectory=c.word();result.backgroundRoot=c.word();result.backgroundSpan=c.word();
+    atLogical(texturePos);
+    // CEngineTexturePalette::Load 02DEF110: external IDs need only this flag.
+    if(textureSize!=1 || !c.flag())throw std::runtime_error("stbstorage: unsupported texture palette");
+    atLogical(uint32_t(info.localDetailMapPtr));
+    const auto detailPos=c.word();result.detailRootSpan=c.word();
+    // OpenStaticMap 02E3B150 reads the complete 12-byte descriptor, then seeks
+    // to the root and loads its 44-byte header and collection palette.
+    c.flag();for(int i=0;i<3;++i)if(c.byte())throw std::runtime_error("stbstorage: unknown descriptor padding");
+    atLogical(detailPos);result.detailRootInRecord=uint32_t(c.p);
+    if(result.detailRootSpan!=record.size()-c.p)
+        throw std::runtime_error("stbstorage: detail header span mismatch");
+    c.take(44); // sphere/fade, mask, file-block triple and local cell rectangle
+    if(!c.flag())throw std::runtime_error("stbstorage: named mesh palette is unsupported");
+    result.detailPaletteCount=c.word();
+    if(result.detailPaletteCount>(record.size()-c.p)/64)
+        throw std::runtime_error("stbstorage: detail palette exceeds record");
+    for(uint32_t i=0;i<result.detailPaletteCount;++i) {
+        // Collection type Load 02E46970: three mesh-bank IDs then the PDB
+        // 52-byte PlainDataBlock (floats, alpha ref, primitive/cache enums,
+        // five booleans and three unused padding bytes).
+        c.take(12+36);
+        if(c.word()>2)throw std::runtime_error("stbstorage: unknown palette primitive type");
+        c.take(4);for(int j=0;j<5;++j)c.flag();c.take(3);
+    }
+    c.finish();return result;
 }
 }

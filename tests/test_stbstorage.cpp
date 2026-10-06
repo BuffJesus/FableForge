@@ -86,5 +86,30 @@ int main() {try {
     auto badSea=sea;badSea.push_back(0);refuses([&]{validateSea(badSea);});
     badSea=sea;for(size_t i=0;i<4;++i)badSea[i]=255;refuses([&]{validateSea(badSea);});
     badSea=sea;badSea[8]=38;badSea.insert(badSea.begin()+12+37,0);refuses([&]{validateSea(badSea);});
+    // Independent wire-order common record, with one numeric asset palette row.
+    Bytes record;
+    for(uint32_t v:{1u,15360u,0u,16u,16u,0u,0u,0u,4096u+92,4096u+113,
+                    10u,0u,0u,0u,0x12345678u,0x76543210u,0u,0u,0u,0u,0u,0u,4096u+238})word(record,v);
+    word(record,4096+112);word(record,1);word(record,2048);word(record,4096);word(record,100);
+    record.push_back(1);word(record,4096+125);word(record,113);word(record,1);
+    record.resize(record.size()+44);record.push_back(1);word(record,1);
+    word(record,15360);word(record,15361);word(record,15362);record.resize(record.size()+52);
+    record.back()=0xab; // PDB padding is retained and ignored by the native reader.
+    const auto reviewed=validateMapRecord(record,4096);
+    if(reviewed.detailPaletteCount!=1 || reviewed.detailRootInRecord!=125 ||
+       reviewed.info.bankFileIndex!=15360 || uint32_t(reviewed.info.checksumBlockFilePtr)!=0x12345678u)
+        throw std::runtime_error("common record fields changed");
+    for(size_t n=0;n<record.size();++n)refuses([&]{validateMapRecord(Bytes(record.begin(),record.begin()+n),4096);});
+    refuses([&]{validateMapRecord(record,4097);});
+    auto malformed=record;malformed[0]=2;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[32]=0;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[112]=0;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[121]=2;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[122]=1;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[117]=0;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[169]=0;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[170]=2;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[222]=3;refuses([&]{validateMapRecord(malformed,4096);});
+    malformed=record;malformed[230]=2;refuses([&]{validateMapRecord(malformed,4096);});
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

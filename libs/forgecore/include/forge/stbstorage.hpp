@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include "forge/stbinfo.hpp"
 
 namespace forge::stbstorage {
 // Validate complete decoded terrain-frame storage domains, including nested
@@ -18,4 +19,15 @@ std::vector<uint32_t> validateLocalDetail(const std::vector<uint8_t>& body);
 // Validate a separate sea-entry payload (counts, range-coded XYZ floats and
 // uint16 indices). Its BBB extra metadata requires separate archive review.
 void validateSea(const std::vector<uint8_t>& body);
+
+struct MapRecord {
+    stbinfo::StaticMapInfoBlock info;
+    uint32_t foregroundDirectory=0,backgroundRoot=0,backgroundSpan=0;
+    uint32_t detailRootInRecord=0,detailRootSpan=0,detailPaletteCount=0;
+};
+// Supported retail common-record subset: version 1, contiguous descriptors,
+// global texture IDs and numeric mesh palettes. logicalOffset is this record's
+// offset within the common entry. Returns chunk pointers for separate ownership
+// checks. Legacy development checksum words are preserved, not used as spans.
+MapRecord validateMapRecord(const std::vector<uint8_t>& record,uint32_t logicalOffset);
 }

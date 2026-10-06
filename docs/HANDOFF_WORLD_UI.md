@@ -710,6 +710,36 @@ and palette boundaries still need complete admission. In particular, the two
 words currently labeled checksum-block pointer/size by `stbinfo` require native
 verification before treating them as bounded file spans. Composer remains refused.
 
+Common-record storage now validates via `stbstorage::validateMapRecord`, returning
+Info plus frame/root offsets and the local-detail palette count for ownership
+checks. Supported subset: version 1, contiguous descriptors, external texture IDs,
+numeric mesh palettes, exact record end and complete known runtime fields.
+All **446 records / 307,812 bytes / 3,597 palette rows** pass in
+`build/stb-common-storage-review-20261006.json`. Full frame-to-palette bounds checks
+also pass in `build/defnamespace-stb-bound-storage-seasons-20261006.json`; all
+140,025 decoded frame layouts remain accepted and source hash unchanged.
+
+Native Read/WriteMapInfoBlock 02D5C230/02D67EA0 confirms existing field names and
+wire order. OpenRetailStaticMap 02D5BC40 uses the common landscape/detail roots
+without loading the development dependency-checksum block, unlike
+ProcessMapRebuildCheck 02D65F80. Retain those legacy checksum words unchanged;
+they are not game IDs or bounded retail entry spans. Evidence:
+`namespace-staticmap-{info,checksum,runtime,retail-open,retail-map,descriptors}-20261006.c`.
+The descriptor loaders are 02CC7450/02E3B150; texture/collection palette loaders
+are 02DEF110/02E36BE0/02E46970. All Release targets build; **46/46 tests pass
+(35.03s)** in `build/stb-common-storage-core-20261006.log`.
+
+Next: validate the common entry's complete name/offset manifest and whole STB
+ownership/metadata, then remaining world admission. Census shows the manifest
+occupies 23,344 bytes followed by all records contiguously through byte 331,156.
+Separate finding to fix: native collection Load 02E46970 / Save 02E49ED0 store
+mesh, **shadow**, **z-sprite** IDs in that order; core foliage parseRecord and
+stbbake palette emission currently label/write the last two in reverse order.
+Original Seasons confirms physical slot +4 names MESH_OAK_SHADOW (7741) /
+MESH_WW_PINE_LARGE_SHADOW_01 (7616), while +8 names the source tree mesh.
+Do not infer pack-specific numeric mesh identities from the hard-coded seed table.
+Composer still refuses divergent namespaces.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
