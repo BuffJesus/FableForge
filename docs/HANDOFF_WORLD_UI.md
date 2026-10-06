@@ -245,6 +245,50 @@ All its candidate-bearing frames nevertheless have background/local-detail
 owners. No production code or composer admission changed in this increment;
 the existing 42/42 core result remains applicable. Work continues.
 
+Further STB review resolves that directory anomaly: native constructor 02CC6DC0
+uses width/16 and height/16; UpdateForeground 02CC7860 reads exactly their
+product times GetFileHeaderSize 02CC8410 (36 bytes). GenerateStaticMapEntry
+02CCA940 likewise writes that many headers, without a required terminator.
+Exports are `build/namespace-foreground-{directory,grid}-20261006.c`.
+The scratch audit now reads the fixed count; all 446 maps validate with no
+ownership errors. **Core `parseQuadDir` still uses a sentinel heuristic** and
+needs a separate caller-aware correction; its existing default must not be
+mistaken for a complete native directory reader. No core change was made here.
+
+The final `build/defnamespace-stb-detail-domains-seasons-20261006.json` now
+also covers all 589 candidate-bearing terrain frames, their 617 outer candidate
+occurrences, and all 76 raw candidates across the 71 unframed spans:
+
+- Every background inline texture validates the exact 19-byte header and one
+  DXT1 level (format 1027, dimensions divisible by four, width*height/2 bytes),
+  then reproduces its original bytes. Candidate spans lie in texture/geometry
+  data, including some matches crossing adjacent span boundaries.
+- Foreground water tails (87) and background trailers (494) consume exactly.
+  Native edge load 02E03980 and helpers 02E045F0/02E046F0/02E047F0/02E048F0
+  establish the four counted range-compressed arrays with strides 20/16/60/56.
+  Water load 02E673B0 uses 289 packed 66-byte foreground vertices. Background
+  water load/save 02E052B0/02E055E0 select stride 56 for types 1/2/6/8 and
+  stride 12 for sea types 3/4/5; both variants occur. The 12-byte sea vertex is
+  three floats, confirmed by CTVertexSeaBackgroundBase in the PDB layout export.
+  Evidence: `namespace-terrain-tail-load-20261006.c`,
+  `namespace-terrain-water-edge-20261006.c`,
+  `namespace-water-background-save-20261006.c`, under `build`.
+- 5,010 water/edge range blocks decode, plus the background landscape buffers.
+  Scanning their decoded data against all moved identities finds six matches:
+  three cross foreground water wave/depth 16-bit fields; three cross packed
+  normal/UV fields in landscape vertices. They are not definition references.
+- All 76 raw occurrences have complete four-byte coverage in validated file
+  offsets/spans: 49 background LOD triples, nine background child triples,
+  nine detail group triples, seven foreground offset/span pairs and two detail
+  node triples. Raw byte matches do not rewrite these structural offsets.
+
+The source hash remains unchanged; report provenance includes each scratch
+header and allocation report. This completes domain review of the **observed
+outer candidate-bearing STB subset**, not every compressed payload: frames
+without outer matches may still hide candidates in inner compression. Complete
+owned-frame coverage, the 77 graphics groups, opposite-order external coverage,
+and composer integration remain pending. No divergent-bank admission yet.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
