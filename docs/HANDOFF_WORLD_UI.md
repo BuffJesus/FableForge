@@ -524,6 +524,31 @@ bounded walker agrees on those four malformed images; all input hashes remain
 unchanged. All Release targets build; **44/44 core tests pass (26.61s)** in
 `build/animation-storage-core-20261006.log`.
 
+Reusable `defexternal::reviewBigEntry` now verifies complete supported PC texture,
+English text/group/narrator and 3DAF animation entries as independent of game IDs
+and name offsets. It validates exact subheader sizes and supported storage; unknown
+banks/types, opaque tails and malformed entries refuse even without raw candidate
+matches. It does not certify archive metadata, cross-asset links, other external
+files or installation admission. The composer remains unchanged.
+
+`tools/audit_defexternal.py` records read-only full-entry review and before/after
+archive hashes. `build/defexternal-entry-review-20261006.json` verifies 39,312
+Seasons / 39,456 Secrets entries. All English text entries and frontend textures
+pass. Unimplemented graphics mesh/physics layouts remain refused (4,783/4,811),
+as do the four Secrets animations. Full texture coverage exposes additional cases
+that did not appear in the moved-ID candidate review: shared ICE_BUMP_PC ID 480
+uses unsupported decimal format 24; Secrets CUTLASS_MASTER_DIFF/NORM/SPEC IDs
+6421/6422/6423 have measured/declared mip-0 sizes 102811/98006, 92662/69036 and
+7638/7818. These are unresolved validation disagreements, not a proven corruption
+diagnosis. Next: resolve their storage semantics and promote the remaining
+verified external layouts; retain all refusals until supported.
+
+Tests exercise unknown empty entries, unsupported mesh/texture types, exact
+subheader boundaries, text/local-ID domains, truncated payloads and malformed
+animations. All Release targets build; **45/45 core tests pass (22.90s)** in
+`build/defexternal-entry-core-20261006.log`. No source archives or live installs
+were changed; unrelated audio-test edits remain excluded.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

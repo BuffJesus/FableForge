@@ -36,7 +36,11 @@ while retaining source ownership and real conflicts; independent audits check
 all 30,564 contributors in both orders. External admission and composer integration
 remain unfinished. Animation decoding now uses native child boundaries and a
 separate strict storage validator rejects opaque/malformed layouts; complete
-corpus checks retain exactly four original Secrets failures. All 44 tests pass.
+corpus checks retain exactly four original Secrets failures. Reusable external
+BIG-entry review covers textures, text and animations; full-entry audits verify
+39,312/39,456 entries while retaining unsupported layouts. Full texture review
+also exposes format-24 and three Secrets mip-size disagreements for recovery.
+All 45 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
