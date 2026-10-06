@@ -1,5 +1,10 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 exact ChocolateBox component/village/creature aliases admit original
+Knothole Glade Children (Anniversary) in TLC scratch import. Four original/derived
+cases match prior-tool controls across all six banks; twelve safe refusals,
+the classic Knothole regression and all forty core tests pass. No runtime claim.
+
 2026-10-05 original Script Balance imports with 25 feat string references across
 twelve native-layout rows. Six original/derived cases and twelve safe refusals
 pass against prior-tool controls; all forty core tests pass. Contradictory

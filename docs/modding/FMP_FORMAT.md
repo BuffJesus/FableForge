@@ -2,6 +2,16 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 newer ChocolateBox aliases use existing verified layouts:
+`4272390883._` is the ordered two-teacher group; both it and `VillagePeopleID`
+require exactly two targets. `1537122114.Components.Add.<index>.Component`
+is the first names-offset word of a nine-byte component row. CREATURE `_`
+members for E8590FBA, 94329282, 6F56ABB8, 230384B2, 15F4931B and 23C3CE1A
+address the existing guarded weapon, brain and combat words. No generic `_`
+fallback is added. Original wrapped Knothole Glade Children (Anniversary)
+matches a metadata-spelling-only prior-tool control across all six banks in
+TLC scratch import. Runtime Anniversary compatibility remains untested.
+
 2026-10-05 SCRIPT_DEF/CScriptDef Feats metadata
 `3147235600.unknown.<row>.unknown` contains ordered NamesBINOffset references
 for FeatName, Verb and ItemReward. Native CFeatDef::Transfer 00f9bff0 establishes

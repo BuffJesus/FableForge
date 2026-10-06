@@ -1,5 +1,40 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 village and component metadata aliases
+
+Original Knothole Glade Children (Anniversary) now imports offline through both
+apply and composition. It uses ChocolateBox's newer `4272390883._` teacher
+pair, `1537122114.Components.Add.<index>.Component` names and six CREATURE `_`
+aliases for primary/secondary weapons, PBrain and combat definitions. These
+select the existing proven layouts/domains; no serializer or schema changed.
+ChocolateBox def.xml controls FEA782E3, 5B9E9F42, E8590FBA, 94329282, 6F56ABB8,
+230384B2, 15F4931B and 23C3CE1A explicitly name these members and destinations.
+Component records retain count, nine-byte row and existing tail validation;
+creature aliases retain every nearby-tag check. Both teacher spellings now
+require exactly two targets, closing the old singleton fallback that could
+silently address only the first repeated field.
+
+tools/test_fmp_component_aliases.py passes four original/derived imports and
+twelve safe negative routes. The original wrapped-zlib file is unchanged.
+Controls rewrite only metadata spellings and are processed by the actual old
+d25dde7 extracted tool; all six effective bank hashes match. A labelled derivative
+sets the two teachers to distinct girl/boy targets, independently checking their
+ordered final indices. Missing/extra teacher targets, old-spelling singletons,
+invalid component indices/members and missing component names preserve output.
+Evidence: C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-component-aliases-2pctt5eo/result.json. Initial -7ca7e8_r attempt incorrectly
+treated wrapper magic 12345 as a length; the test now checks the actual format.
+Archive/tool/live-bank hashes remain unchanged. This proves TLC scratch import
+and metadata parity, not Anniversary runtime support or gameplay compatibility.
+
+The original classic Knothole test still passes four definitions, both teacher
+links, eighteen creature references and the village marker
+(build/component-alias-classic-20261005.log). All Release targets build and
+all forty core tests pass in 31.66s (build/component-alias-core-20261005.log).
+No live files changed. Frozen d25dde7 excludes this increment and the preceding
+creature/feat changes. Follow-up probe 0x88weu4 records current original outcomes;
+the three transformation CDef-member failures and two expression refusals remain.
+
 ## 2026-10-05 Script Balance feat string references
 
 Original Script Balance now imports through direct apply and composition.

@@ -849,6 +849,12 @@ int main() {
     expectedVillage[15] = expectedVillage[16] = expectedVillage[17] = expectedVillage[18] = 0;
     check(linkedVillage == expectedVillage && village.data == originalVillage,
           "both repeated MaleTeacher references change only their own words");
+    references = {{"4272390883._.0", "B"}, {"4272390883._.1", "A"}};
+    check(forge::fmplinks::relink(village, targets, villageSchema, references) == expectedVillage,
+          "underscore village alias preserves the two distinct ordered fields");
+    const auto underscoreVillage = forge::fmplinks::readMetadata(metadataTwo("4272390883._"));
+    check(underscoreVillage.size() == 2 && underscoreVillage[1].path == "4272390883._.1",
+          "underscore village metadata retains both occurrences");
     references = {{"4272390883.VillagePeopleID.2", "A"}};
     rejects([&] { forge::fmplinks::relink(village, targets, villageSchema, references); },
             "out-of-range repeated village reference refuses");
@@ -882,6 +888,9 @@ int main() {
     expectedCreature[47] = 1; expectedCreature[48] = expectedCreature[49] = expectedCreature[50] = 0;
     check(linkedCreature == expectedCreature && creature.data == originalCreature,
           "nested creature weapon and brain links change only their validated words");
+    for (auto& link : references) link.path = link.path.substr(0, link.path.find('.')) + "._";
+    check(forge::fmplinks::relink(creature, targets, creatureSchema, references) == expectedCreature,
+          "underscore weapon and brain aliases retain existing layout guards");
     auto malformedCreature = creature;
     malformedCreature.data[11] ^= 1;
     rejects([&] { forge::fmplinks::relink(malformedCreature, targets, creatureSchema, references); },
@@ -1001,6 +1010,11 @@ int main() {
     put(89, 1); put(102, 1); put(110, 0);
     check(linkedAsset == expectedAsset && assetCreature.data == originalAsset,
           "nested creature texture, body/eye mesh and combat words relink without other edits");
+    for (size_t i = 3; i < references.size(); ++i)
+        references[i].path = references[i].path.substr(0, references[i].path.find('.')) + "._";
+    check(forge::fmplinks::relink(assetCreature, targets, assetCreatureSchema,
+              references, false, &creatureMeshes, &creatureTextures) == expectedAsset,
+          "underscore combat aliases preserve surrounding graphics and boolean bytes");
     rejects([&] { forge::fmplinks::relink(assetCreature, targets, assetCreatureSchema,
                                          references, false, &creatureMeshes); },
             "missing named creature texture refuses");

@@ -334,7 +334,8 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes) {
         // the same field tag. ChocolateBox records their two links as one
         // VillagePeopleID group, in field order. Keep the occurrence in the
         // internal path so field selection remains exact after composition.
-        if (group.path == "4272390883.VillagePeopleID" && group.targets.size() == 2) {
+        if (group.path == "4272390883.VillagePeopleID" || group.path == "4272390883._") {
+            if (group.targets.size() != 2) fail("ambiguous village teacher reference count");
             for (size_t i = 0; i < 2; ++i)
                 result.push_back({group.path + "." + std::to_string(i), group.targets[i]});
             continue;
@@ -521,7 +522,7 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                          ((id << 8) & 0xff0000u) | (id << 24);
     const bool villagePair = entry.definition == "CVillagePeopleDef" &&
         parts.size() == 3 && parts[0] == "4272390883" &&
-        parts[1] == "VillagePeopleID";
+        (parts[1] == "VillagePeopleID" || parts[1] == "_");
     size_t villageOccurrence = 0;
     size_t villageIndex = 0;
     if (villagePair) {
@@ -1086,7 +1087,8 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             // Only the first u32 of the addressed record is a named link.
             if (field.name == "Components" &&
                 (field.type == "CThingComponentSet" || field.type == "?") &&
-                parts.size() == 4 && parts[1] == "CTC List" && parts[3] == "CTC Name") {
+                ((parts.size() == 4 && parts[1] == "CTC List" && parts[3] == "CTC Name") ||
+                 (parts.size() == 5 && parts[1] == "Components" && parts[2] == "Add" && parts[4] == "Component"))) {
                 if (field.value.size() < 8) fail("invalid component reference path");
                 const size_t count = read32(field.value, 0);
                 if (count > (field.value.size() - 4) / 9 || count > 4096)
@@ -1094,7 +1096,7 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                 const size_t tail = field.value.size() - 4 - count * 9;
                 if (tail != 4 && tail != 104)
                     fail("unsupported component tail layout");
-                const size_t index = number(parts[2]);
+                const size_t index = number(parts[parts.size() - 2]);
                 if (index >= count) fail("component reference index out of range");
                 return {offset + 4 + index * 9, i + 1, Destination::NameOffset};
             }
@@ -1271,9 +1273,9 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
             }
             fail("unsupported CREATURE decay effect layout in " + entry.name);
         }
-        const bool primary = link.path == "3898150842.Weapon1ID";
-        const bool secondary = link.path == "2486342274.Weapon2ID";
-        const bool brain = link.path == "1867951032.BrainID";
+        const bool primary = link.path == "3898150842.Weapon1ID" || link.path == "3898150842._";
+        const bool secondary = link.path == "2486342274.Weapon2ID" || link.path == "2486342274._";
+        const bool brain = link.path == "1867951032.BrainID" || link.path == "1867951032._";
         const bool sheathed = link.path == "2674723971.Weapon4ID";
         if (primary || secondary || brain || sheathed) {
             size_t nestedOffset = decoded.prefixLen;
@@ -1297,9 +1299,9 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
         const bool torsoTexture = link.path == "3896642804.TorsoMainTextureID";
         const bool model = link.path == "3361958702.Model ID";
         const bool eye = link.path == "2104816530.Model Eye ID";
-        const bool attack = link.path == "587433138.AttackStyleID";
-        const bool combat1 = link.path == "368349979.CombatType1ID";
-        const bool combat2 = link.path == "600034842.CombatType2ID";
+        const bool attack = link.path == "587433138.AttackStyleID" || link.path == "587433138._";
+        const bool combat1 = link.path == "368349979.CombatType1ID" || link.path == "368349979._";
+        const bool combat2 = link.path == "600034842.CombatType2ID" || link.path == "600034842._";
         if (torsoTexture || model || eye || attack || combat1 || combat2) {
             size_t nestedOffset = decoded.prefixLen;
             for (size_t i = 0; i < decoded.fields.size(); ++i) {
