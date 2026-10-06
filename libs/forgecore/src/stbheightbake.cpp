@@ -130,7 +130,11 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     }
 
     const auto chunk = forge::stbbake::parseChunk(chunkBytes);
+    const QuadDirectoryLayout directory{options.foregroundDirectoryOffset,
+        size_t(lev.width() / 16) * size_t(lev.height() / 16)};
+    const auto quadDir = parseQuadDir(chunk, directory);
     forge::stbbake::EmitOptions opt;
+    opt.foregroundDirectory = directory;
     opt.highCompressionEdits = true;
     opt.preservePhysicalLayout = true;
 
@@ -166,11 +170,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     // cells without a foreground mesh with a zero frame pointer (fillers)
     size_t expectedForegroundFrames = 0;
     {
-        const auto dir = forge::stbbake::parseQuadDir(chunk);
-        for (const auto& e : dir) if (e.frameOffset != 0) ++expectedForegroundFrames;
-        if (dir.empty())
-            expectedForegroundFrames = static_cast<size_t>(lev.width() / 16) *
-                                       static_cast<size_t>(lev.height() / 16);
+        for (const auto& e : quadDir) if (e.frameOffset != 0) ++expectedForegroundFrames;
     }
     if (foreground.size() != expectedForegroundFrames)
         throw std::runtime_error("expected " + std::to_string(expectedForegroundFrames) +
@@ -671,7 +671,7 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     std::fill(authoredChunk.begin() + foregroundWrite,
               authoredChunk.begin() + foregroundRegionEnd, uint8_t(0));
     size_t foregroundDirectoryRewired = 0;
-    for (const auto& entry : forge::stbbake::parseQuadDir(chunk)) {
+    for (const auto& entry : quadDir) {
         for (const auto& move : foregroundMoves) {
             if (entry.frameOffset != move.oldStart) continue;
             // record layout (retail, parseQuadDir): {frameOffset @0, frameSpan @4, aabb @8, flags @32}
@@ -685,7 +685,6 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
     }
     if (foregroundDirectoryRewired != foreground.size())
         throw std::runtime_error("not every foreground frame had a directory record");
-    const auto quadDir = forge::stbbake::parseQuadDir(chunk);
     // Quad-directory XY bounds are still in the donor chunk's world
     // coordinates at this point.  Vertex and patch retargeting above
     // deliberately relocates the authored mesh to worldX/worldY, but
@@ -723,12 +722,12 @@ HeightfieldBakeResult bakeHeightfield(const std::vector<uint8_t>& chunkBytes,
         authoredZBounds.emplace_back(minZ, maxZ);
     }
     const size_t boundsUpdated =
-        forge::stbbake::updateQuadDirZBounds(authoredChunk, authoredZBounds);
+        forge::stbbake::updateQuadDirZBounds(authoredChunk, authoredZBounds, directory);
     // The quad-directory AABBs are still at the donor's world origin.
     // Relocate them onto this map's origin, or every entry falls
     // outside the InfoBlock box the engine streams against.
     const size_t quadXYTranslated = forge::stbbake::translateQuadDirXY(
-        authoredChunk, float(worldX) - donorMinX, float(worldY) - donorMinY);
+        authoredChunk, float(worldX) - donorMinX, float(worldY) - donorMinY, directory);
         notef("seam samples: %zu neighbor-resolved, %zu clamped locally",
                 resolvedNeighborSamples.size(), clampedWorldSamples.size());
     notef("baked %zu LEV-driven composed patches + %zu foreground frames "

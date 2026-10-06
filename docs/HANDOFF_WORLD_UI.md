@@ -423,9 +423,44 @@ unclassified; format identification alone does not certify their payloads.
 The validator's existing "0x35" error is misleading: 35 is decimal (0x23).
 Scratch findings do not enable the
 composer. Production code is unchanged since the recorded 42-test gate.
-Next: finish external domains, investigate the four malformed animations,
-correct the core fixed-count directory caller, then build reusable admission
-and relocation integration with independent output-delta checks.
+External candidate review subsequently passes in
+`build/defnamespace-external-secrets-review-20261006.json`, with unchanged input
+hashes. All 2,082 raw occurrences have verified domains: 243 terrain-cell,
+1,826 navigation and 13 BWD occurrences. BWD independently round-trips exactly;
+matches occupy map UIDs/string boundaries or local world integers. All 220
+numeric text matches are partial floating-point coordinate/orientation tokens.
+The bounded LEV walker verifies full cell grids and every navigation section of
+each candidate-bearing LEV; the canonical nav parser/emitter independently
+round-trips those files exactly. Child/neighbour IDs resolve within each local
+tree. PDB CFileFormatHeightMapCell establishes byte +9 TextureBlendAlpha and
++18 MinimapZone; CNavigationPosition +8 is the layer index. No moved atmosphere
+palette ID occurs in reviewed files. The exhaustive raw inventory also has no
+unreviewed candidate-bearing level files. Tools:
+`review_namespace_external_secrets_20261006.py` and
+`namespace_lev_roundtrip_20261006.cpp`; provenance hashes are in the report.
+
+Foreground-directory correction is now implemented. `QuadDirectoryLayout`
+supplies the owning physical offset and exact cell count; the parser preserves
+zero entries, needs no terminator, and rejects truncation/frame overlap before
+edits. Height baking derives `(width/16)*(height/16)` from the LEV and passes the
+same layout through emission and bounds edits. Its offset is caller-selectable
+(all 446 examined maps use 0x800). The legacy metadata-free diagnostic also stops
+before decoded frames, but remains a heuristic for callers without ownership.
+Existing authored serialization keeps its zero padding record unchanged.
+
+`tests/test_stbquaddir.cpp` covers the native 56-record/32-byte-padding boundary,
+an interior zero cell, truncated/overflowing counts, decoded-frame overlap,
+exact XY/Z-only changes and byte-identical emission. Read-only corpus report
+`build/fixed-quaddir-corpus-20261006.json` checks all 446 maps / 21,904 entries /
+140,025 decoded frames, zero errors. On original BanditCamp_Filler_06, independently
+constructed expected bytes equal the XY/Z edit result and preserve every other
+byte. Source STB hash remains unchanged. All Release targets build; **43/43 core
+tests pass (34.55s)** in `build/fixed-quaddir-core-20261006.log`. Existing unowned
+audio-test changes remain excluded from this work. No live install writes.
+
+Next: investigate the four malformed animations/two short texture mip tails,
+then build reusable admission and relocation integration with independent
+output-delta checks. Composer refusal remains.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 

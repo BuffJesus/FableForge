@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -822,13 +823,23 @@ BackgroundFrameLayout layoutBackgroundFrames(
     const std::vector<AuthoredBackgroundPatch>& patches,
     size_t startOffset, size_t alignment = 2048);
 
-// Locate the foreground patch-header directory and parse its live entries up to
-// the first all-zero terminator. `dirBase` is the native 0x800 base.
+struct QuadDirectoryLayout {
+    size_t offset = 0x800;
+    size_t entryCount = 0; // (mapWidth / 16) * (mapHeight / 16), including empty cells
+};
+
+// Native fixed-count foreground directory. No terminator is required; zero
+// records are cells too. Rejects truncation and overlap with decoded frames.
+std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, QuadDirectoryLayout layout);
+
+// Legacy diagnostic for chunks without owning map metadata. Stops at an all-zero
+// record or the next decoded frame. Writers with map dimensions use the overload
+// above; padding is not a native terminator contract.
 std::vector<QuadEntry> parseQuadDir(const Chunk& chunk, size_t dirBase = 0x800);
 
 // STEP 5: inverse of parseQuadDir — serialize the live entries as the 0x24-byte
-// record array [flags, frameOffset, frameSpan, 6×f32 aabb] followed by a single
-// all-zero 0x24 terminator record (parseQuadDir stops at frameOffset==span==0).
+// record array [frameOffset, frameSpan, 6×f32 aabb, flags] followed by a single
+// zero padding record for existing authored layouts. Native readers use a count.
 // Gate: generateQuadDir(parseQuadDir(donor)) reproduces the donor's entry bytes.
 std::vector<uint8_t> generateQuadDir(const std::vector<QuadEntry>& entries);
 
@@ -841,11 +852,13 @@ std::vector<uint8_t> generateQuadDir(const std::vector<QuadEntry>& entries);
 // when a baked chunk is relocated to a new map origin: retail keeps every AABB
 // inside its own map's InfoBlock box (10257/10257 live entries, zero
 // exceptions), so leaving donor coordinates in place corrupts the directory.
-size_t translateQuadDirXY(std::vector<uint8_t>& chunkBytes, float dx, float dy);
+size_t translateQuadDirXY(std::vector<uint8_t>& chunkBytes, float dx, float dy,
+                         std::optional<QuadDirectoryLayout> directory = std::nullopt);
 
 size_t updateQuadDirZBounds(
     std::vector<uint8_t>& chunkBytes,
-    const std::vector<std::pair<float, float>>& zBounds);
+    const std::vector<std::pair<float, float>>& zBounds,
+    std::optional<QuadDirectoryLayout> directory = std::nullopt);
 
 // --- Retarget (the WHITE-landscape workstream) -----------------------------
 // A donor chunk already geometry-relocated to ForgeTest coords still has to have
@@ -911,6 +924,7 @@ struct EmitOptions {
     // physical file-block references stable without needing to discover/rebase
     // every foreground and local-detail pointer.
     bool preservePhysicalLayout = false;
+    std::optional<QuadDirectoryLayout> foregroundDirectory;
 };
 
 // Round `pos` up to the next multiple of `align` (align a power of two or any >0).
