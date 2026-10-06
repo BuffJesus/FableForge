@@ -308,6 +308,40 @@ Seasons STB moved-value coverage is complete for this input; this is still a
 scratch audit, not a reusable composer admission check. Graphics coverage and
 the opposite source order are the active next steps.
 
+Graphics follow-up now covers every Seasons animation and physics image, not
+just entries with raw matches. Read-only reports/wrappers:
+`build/defnamespace-animation-domains-seasons-20261006.json` /
+`run_namespace_animation_domains_20261006.py` and
+`build/defnamespace-physics-domains-seasons-20261006.json` /
+`run_namespace_physics_domains_20261006.py`. Each records allocation, source,
+scanner/tool/core hashes; graphics.big is unchanged.
+
+- All 3,435 animation entries decode (106,987,047 bytes, 213,728 tracks), with
+  46 candidate occurrences and no unresolved occurrences/errors. They fall in
+  quaternion/position pools, palette indices or count/chunk boundaries. The
+  scanner retains unknown superchunk prefixes, AMSK and XALO as unresolved
+  domains; no moved-value match overlaps them. In particular, AMSK lengths
+  need not be multiples of four: EgoCore AnimParser pads a final partial word
+  when reading the byte payload. No general bone-mask semantic claim is made.
+  Grammar/field boundaries cross-check canonical animation.cpp and the local
+  EgoCore AnimParser; FableTLC ANIM.md routes the independent format evidence.
+- All 1,383 physics entries decode (11,516,724 bytes), with 130 occurrences
+  and no unresolved occurrences/errors: 69 chunk boundaries, 60 vertex-float
+  matches and one convex-plane float. The latter is MESH_GUILD_EXTERIOR_03
+  [PHYSICS], entry 5938, decoded offset 682, value 14795. Native HCVL readers/
+  writers 033CF820/033CFAB0 establish version 1, cstring, plane count and
+  four-float planes; export `namespace-physics-convex-20261006.c` under build.
+  Native SMTH writer 033DCAA0 appends a zero dword after count/masks; reader
+  033DCA10 reads only count/masks. This explains the original audit's extra
+  four-byte tails, and does not require changing the existing physics writer.
+  Export: `namespace-physics-smoothing-20261006.c`.
+
+These resolve the 57 raw animation and six raw physics hit groups. Remaining
+Seasons raw graphics groups are twelve compiled-mesh payload groups and two
+compiled-mesh subheaders; full inner-buffer scanning of compiled meshes is
+still needed. Source-order/general admission and the core directory-helper
+correction remain pending. Existing production code/tests are unchanged.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
