@@ -573,10 +573,34 @@ and explicit preview refusal. All Release targets build; **45/45 tests pass
 
 Next external promotion: strict physics storage. Native material 0347CC20 and
 submesh 033D8A30 prefixes are retained in `namespace-physics-material-prefix-20261006.c`.
-A scratch full-layout experiment refuses 1,380/1,383 entries in each pack at MTLE
-(engine material); the previous candidate-only audit had no moved-ID match there.
-Recover this layout before production admission. Scratch experiment files are
+A scratch full-layout experiment initially refused 1,380/1,383 entries in each pack
+at MTLE; native type getters distinguish this material extension from EMTL engine
+materials. Reader 0347D1B0 consumes an ignored ULONG and a self-illumination ULONG,
+eight bytes total (`namespace-physics-material-extension-20261006.c`). The previous
+candidate-only audit had no moved-ID match there. Scratch experiment files are
 `namespace_physics_strict_20261006.cpp` and `namespace-physics-strict-*-20261006.json`.
+
+`physics::validateStorage` and the external BIG reviewer now cover supported 3DMF
+physics layouts with exact root/parent consumption, no unknown chunks, bounded
+arrays/strings, versioned helpers, native masks/tails and complete raw/LZO framing.
+This establishes stored field domains, not geometry quality or hierarchy topology.
+New native evidence: `namespace-physics-helpers-maps-20261006.c` (033CEAC0 helper
+points, 033CF1A0 versioned dummy objects, 0347D720 map type/description/filename)
+and `namespace-physics-bone-20261006.c` (033D93D0 local hierarchy/matrix/name).
+The scratch full-layout walker and core review both accept **1,382/1,383** physics
+entries in each original pack. Updated `defexternal-physics-entry-review-20261006.json`
+verifies 40,695/40,839 BIG entries, preserving all source hashes. Remaining graphics
+refusals are compiled meshes (3,400/3,428), the four Secrets animations and one
+shared physics entry: ID 3944 `MESH_MINION_WARDOG_STATUE[PHYSICS]`.
+
+That entry contains version-2 CLTH with name `ClothWardog`, no compiled bytes and
+a 10,051-byte text particle program. Its container reader is native 034BD940,
+retained in `namespace-physics-cloth-chunk-20261006.c`. Program semantics remain
+unreviewed, so the production verifier refuses it. Next: recover this program's
+numeric domains and the remaining compiled-mesh layouts before composer admission.
+Tests cover complete raw/compressed physics, unknown code, oversized arrays,
+short matrices, helper versions, smoothing tails and recursion bounds. All Release
+targets build; **45/45 tests pass (25.43s)** in `build/physics-storage-core-20261006.log`.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 

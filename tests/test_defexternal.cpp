@@ -2,6 +2,7 @@
 #include "forge/terraintex.hpp"
 #include "forge/textbig.hpp"
 #include "forge/big.hpp"
+#include "forge/lzo.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <iostream>
@@ -11,6 +12,49 @@ using Bytes=std::vector<uint8_t>;
 static void require(bool value,const char* reason) {if(!value)throw std::runtime_error(reason);}
 static void word(Bytes& bytes,uint32_t value) {
     for(unsigned i=0;i<4;++i)bytes.push_back(uint8_t(value>>(i*8)));
+}
+static void append(Bytes& bytes,const Bytes& more) {bytes.insert(bytes.end(),more.begin(),more.end());}
+static Bytes chunk(const char* tag,const Bytes& body) {
+    Bytes bytes(tag,tag+4);word(bytes,uint32_t(body.size()));append(bytes,body);return bytes;
+}
+static Bytes physicsImage(const Bytes& children) {
+    Bytes bytes;word(bytes,0x3e3e3e3e);append(bytes,Bytes{'3','D','M','F'});
+    word(bytes,1);word(bytes,0);append(bytes,chunk("3DRT",children));word(bytes,0);return bytes;
+}
+static void physicsChecks() {
+    using forge::defexternal::reviewBigEntry;
+    auto accepts=[](const Bytes& bytes) {
+        return reviewBigEntry("MBANK_ALLMESHES",3,{},bytes).definitionIndependent;
+    };
+    Bytes material{'M',0};word(material,15360);material.push_back(1);material.resize(material.size()+24);
+    Bytes extension;word(extension,1);word(extension,15361);append(material,chunk("MTLE",extension));
+    Bytes map;word(map,0);append(map,Bytes{'D',0,'f','i','l','e',0});append(material,chunk("MMAP",map));
+    Bytes children=chunk("MTLS",chunk("MTRL",material));
+    Bytes helper;word(helper,3);helper.resize(helper.size()+60);helper.push_back(1);
+    helper.resize(helper.size()+20);append(helper,Bytes{'H',0});append(children,chunk("HLPR",chunk("HDMY",helper)));
+    Bytes vertices;word(vertices,1);vertices.resize(vertices.size()+32);
+    Bytes primitive;word(primitive,15360);append(primitive,chunk("VERT",vertices));
+    Bytes tris;word(tris,1);tris.resize(tris.size()+6);append(primitive,chunk("TRIS",tris));
+    Bytes smoothing;word(smoothing,1);word(smoothing,15360);word(smoothing,0);
+    append(primitive,chunk("SMTH",smoothing));append(children,chunk("PRIM",primitive));
+    auto raw=physicsImage(children);const auto before=raw;
+    require(accepts(raw),"complete physics local domains refused");
+    require(raw==before,"physics review modified input");
+    Bytes compressed;word(compressed,uint32_t(raw.size()));append(compressed,forge::lzo::compress(raw.data(),raw.size()));
+    require(accepts(compressed),"compressed physics refused");
+    compressed.push_back(0);require(!accepts(compressed),"physics compressed tail accepted");
+    require(!reviewBigEntry("MBANK_ALLMESHES",3,Bytes(4),raw).definitionIndependent,"physics opaque info accepted");
+    raw.back()=1;require(!accepts(raw),"physics unknown footer accepted");
+    Bytes overflow;word(overflow,UINT32_MAX);
+    require(!accepts(physicsImage(chunk("VERT",overflow))),"physics unbounded array accepted");
+    smoothing.back()=1;
+    require(!accepts(physicsImage(chunk("SMTH",smoothing))),"nonzero smoothing extension accepted");
+    require(!accepts(physicsImage(chunk("CLTH",Bytes(8)))),"unreviewed cloth accepted");
+    require(!accepts(physicsImage(chunk("BONE",Bytes(63)))),"short bone matrix accepted");
+    helper[0]=4;require(!accepts(physicsImage(chunk("HDMY",helper))),"unknown helper version accepted");
+    auto deep=chunk("TRFM",Bytes(48));
+    for(unsigned i=0;i<18;++i)deep=chunk("HLPR",deep);
+    require(!accepts(physicsImage(deep)),"unbounded physics recursion accepted");
 }
 static int audit(const std::filesystem::path& root) {
     nlohmann::json report{{"scope","read-only supported external BIG-entry layouts; not installation admission"},
@@ -32,6 +76,7 @@ static int audit(const std::filesystem::path& root) {
 int main(int argc,char** argv) {try {
     if(argc==2)return audit(argv[1]);
     if(argc!=1)return 2;
+    physicsChecks();
     using forge::defexternal::reviewBigEntry;
     require(!reviewBigEntry("UNKNOWN",0,{},{}).definitionIndependent,"empty unknown entry accepted");
     require(!reviewBigEntry("MBANK_ALLMESHES",1,Bytes(64),{}).definitionIndependent,"mesh implicitly accepted");

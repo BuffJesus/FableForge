@@ -15,7 +15,7 @@ struct Review {
 // Review complete known BIG entry layouts for independence from game.bin IDs
 // and names.bin offsets. No raw-value absence or file hash implies acceptance.
 // Unknown banks/types, opaque layouts and malformed inputs return false.
-// Scope: supported PC textures, English text entries, and 3DAF animations.
+// Scope: supported PC textures, English text, 3DAF animation and 3DMF physics.
 // Does not certify archive metadata, other entries, asset-ID links, or a source
 // installation. A composer must account for every external file separately.
 Review reviewBigEntry(std::string_view bank, uint32_t type,

@@ -1,5 +1,6 @@
 #include "forge/defexternal.hpp"
 #include "forge/animation.hpp"
+#include "forge/physics.hpp"
 #include "forge/terraintex.hpp"
 #include "forge/textbig.hpp"
 
@@ -18,6 +19,11 @@ Review reviewBigEntry(std::string_view bank, uint32_t type,
             if (!checked.ok || checked.consumed!=payload.size())
                 return {false,checked.errors.empty()?"texture storage was not fully validated":checked.errors.front()};
             return {true,"texture dimensions, format, byte sizes and complete pixel/mip storage"};
+        }
+        if (bank=="MBANK_ALLMESHES" && type==3) {
+            if (!subHeader.empty()) return {false,"unsupported physics info size"};
+            physics::validateStorage(payload);
+            return {true,"complete supported 3DMF geometry, material and local hierarchy storage"};
         }
         if (bank=="MBANK_ALLMESHES" && (type==6 || type==7 || type==9)) {
             // C3DAnimationInfo serialization: duration, non-looping duration,
