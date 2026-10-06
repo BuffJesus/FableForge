@@ -86,4 +86,44 @@ void validateBackground(const std::vector<uint8_t>& body) {
     }
     c.backgroundTrailer();c.finish();
 }
+std::vector<uint32_t> validateLocalDetail(const std::vector<uint8_t>& body) {
+    Reader c{body};
+    auto count=[&](size_t minimum) {
+        const auto n=c.word();
+        if(n>(body.size()-c.p)/minimum)throw std::runtime_error("stbstorage: local-detail count exceeds frame");
+        return size_t(n);
+    };
+    const auto collections=count(12);std::vector<uint32_t> paletteIndices;
+    paletteIndices.reserve(collections);
+    // Collection Load 02E35E70; primitives 02EDD230, 02EDDEB0, 02EDF3D0.
+    for(size_t collection=0;collection<collections;++collection) {
+        if(c.word()>1)throw std::runtime_error("stbstorage: invalid render-update flag");
+        paletteIndices.push_back(c.word());
+        const auto primitives=count(44);
+        for(size_t primitive=0;primitive<primitives;++primitive) {
+            const auto kind=c.word();c.take(40); // AABB and bounding sphere
+            if(kind==0) {c.take(52);continue;} // matrix and scale floats
+            if(kind>2)throw std::runtime_error("stbstorage: unknown local-detail primitive");
+            const auto objects=count(16);
+            if(!objects)throw std::runtime_error("stbstorage: empty repeated object array");
+            if(kind==2) {
+                c.take(objects*68); // CObject matrix, scale, bounding sphere
+                // Native allocates CObjectEntry in NEnginePrimitiveManagerRepeatedZSprites:
+                // PDB size 16: WorldPos C3DVector + WorldSphereRadius float.
+                c.take(objects*16);continue;
+            }
+            c.take(4+objects*32); // maximum scale and two vector arrays
+            if(c.flag())c.take(((objects+3)&~size_t(3))*12); // padded normals
+            if(c.flag())c.take(objects); // wind delays
+            if(c.flag()) {
+                const auto sections=count(80);
+                if(!sections)throw std::runtime_error("stbstorage: empty subsection array");
+                // Native Save 02EE1D70 writes CSubsectionElement[sections]. PDB:
+                // 64 sphere-float bytes, 12 local count/index bytes, four Pad bytes.
+                c.take(sections*80);
+            }
+        }
+    }
+    c.finish();return paletteIndices;
+}
 }

@@ -66,5 +66,19 @@ int main() {try {
         for(size_t stride:{20,16,60,56}) {word(edges,1);range(edges,Bytes(stride));}
     }
     edges.push_back(0);validateBackground(edges);
+    Bytes detail;word(detail,1);word(detail,1);word(detail,15360);word(detail,3);
+    word(detail,0);detail.resize(detail.size()+40+52);
+    word(detail,1);detail.resize(detail.size()+40);word(detail,1);detail.resize(detail.size()+4+32);
+    detail.push_back(1);detail.resize(detail.size()+4*12);detail.push_back(1);detail.push_back(7);
+    detail.push_back(1);word(detail,1);detail.resize(detail.size()+76);word(detail,15360); // unused Pad bytes
+    const auto spriteKind=detail.size();word(detail,2);detail.resize(detail.size()+40);word(detail,1);
+    detail.resize(detail.size()+68);word(detail,15360);detail.resize(detail.size()+12);
+    if(validateLocalDetail(detail)!=std::vector<uint32_t>{15360})throw std::runtime_error("local palette index changed");
+    for(size_t n=0;n<detail.size();++n)refuses([&]{validateLocalDetail(Bytes(detail.begin(),detail.begin()+n));});
+    auto badDetail=detail;badDetail.push_back(0);refuses([&]{validateLocalDetail(badDetail);});
+    badDetail=detail;badDetail[spriteKind]=3;refuses([&]{validateLocalDetail(badDetail);});
+    badDetail=detail;badDetail[4]=2;refuses([&]{validateLocalDetail(badDetail);});
+    badDetail=detail;badDetail[0]=255;refuses([&]{validateLocalDetail(badDetail);});
+    if(!validateLocalDetail(Bytes(4)).empty())throw std::runtime_error("empty detail frame changed");
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -669,6 +669,28 @@ All Release targets build; **46/46 tests pass (22.94s)** in
 `build/stb-storage-core-20261006.log`. Remaining: local-detail full-domain review,
 STB archive/common-header admission, loose/WAD world review and composer integration.
 
+Local-detail promotion now adds `stbstorage::validateLocalDetail`, returning
+collection-local palette indices for a later common-header bounds check. All
+three primitive kinds consume exactly: mesh transforms, repeated-mesh vector /
+normal / wind / subsection arrays, and z-sprite objects plus render entries.
+Native z-sprite Load 02EDF3D0 allocates the 16-byte
+`NEnginePrimitiveManagerRepeatedZSprites::CObjectEntry`; PDB fields are WorldPos
+and WorldSphereRadius. `CSubsectionElement` is 80 bytes: 64 sphere floats, 12
+local count/index bytes and four Pad bytes. These resolve the remaining scratch
+labels without relying on absence of moved-ID matches. Native exports remain
+`namespace-localdetail-load-20261006.c`; PDB evidence is in FableTLC's
+`ghidra_out/struct_layouts_egor.tsv`.
+
+`build/defnamespace-stb-storage-all-seasons-20261006.json` now exercises core
+validation on all **140,025 owned frames**, including 22,226 local-detail bodies
+with 36,131 mesh, 70,013 repeated-mesh and 8,961 z-sprite primitives. No layout or
+ownership errors; original STB hash unchanged. Tests cover all primitive forms,
+nonzero unused padding, palette-index preservation, every prefix truncation and
+unknown kinds/flags/counts/tails. All Release targets build; **46/46 tests pass
+(25.91s)** in `build/stb-detail-storage-core-20261006.log`.
+Whole-STB/common-header and loose/WAD world admission remain pending; composer
+still refuses divergent namespaces.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
