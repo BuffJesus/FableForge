@@ -506,7 +506,23 @@ review retains exactly the same four reader failures and 213,448 parsed tracks.
 All Release targets build; **44/44 core tests pass (21.88s)** in
 `build/animation-native-boundaries-core-20261006.log`. This remains a preview
 decoder, not complete external-reference admission: unknown bounded chunks
-may be skipped. Work continues on a strict storage-validation path.
+may be skipped.
+
+`animation::validateStorage` now supplies the strict payload path: complete root
+framing and parent consumption, known chunks only, count/EBOOL masks, version-one
+allocation hints, name/float timing events, zero header padding and an optional
+four-byte zero image footer. Compressed inputs require complete LZO consumption.
+Native LoadChunkedFile 03468D60 and TimingEvent::ReadFromFile 0347A720 are retained
+in `build/namespace-animation-storage-framing-20261006.c`. Unknown layouts refuse;
+the API does not validate BIG subheaders or cross-asset links. Tests cover opaque
+children, raw/compressed inputs, unexpected bytes, short masks and unknown hint
+versions. Complete original-bank reports `namespace-animation-strict-seasons-20261006.json`
+and `namespace-animation-strict-secrets-20261006.json` each examine 3,435 images.
+Seasons has no errors; Secrets retains exactly four storage refusals (3061 root
+footer/length disagreement, 3063/3080/3096 root exceeds image). The independent
+bounded walker agrees on those four malformed images; all input hashes remain
+unchanged. All Release targets build; **44/44 core tests pass (26.61s)** in
+`build/animation-storage-core-20261006.log`.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 

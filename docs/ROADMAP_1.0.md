@@ -34,7 +34,10 @@ All three compiled BIN banks are already covered by the identity/relocation
 audits. Game contributor preparation now relocates versions before comparison
 while retaining source ownership and real conflicts; independent audits check
 all 30,564 contributors in both orders. External admission and composer integration
-remain unfinished. Composer refusal remains. Work is active;
+remain unfinished. Animation decoding now uses native child boundaries and a
+separate strict storage validator rejects opaque/malformed layouts; complete
+corpus checks retain exactly four original Secrets failures. All 44 tests pass.
+Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:

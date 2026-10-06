@@ -1,5 +1,6 @@
 #include "forge/animation.hpp"
 #include "forge/big.hpp"
+#include "forge/lzo.hpp"
 #include "forge/lipsync_preset.hpp"
 
 #include <filesystem>
@@ -81,6 +82,36 @@ static void nativeBoundaries() {
     try {forge::animation::decode(image(chunk("AOBJ",Bytes{'R',0})));}
     catch(const std::runtime_error&) {rejected=true;}
     require(rejected,"missing native next-sibling word accepted");
+    auto refuses=[](const Bytes& candidate) {
+        try {forge::animation::validateStorage(candidate);return false;}
+        catch(const std::runtime_error&) {return true;}
+    };
+    require(refuses(bytes),"strict storage validation accepted opaque child");
+    Bytes validObject{'R',0};word(validObject,UINT32_MAX);append(validObject,trackChunk("REAL"));
+    Bytes mask;word(mask,2);mask.push_back(0);mask.push_back(1);
+    append(validObject,chunk("AMSK",mask));
+    Bytes hint;word(hint,1);word(hint,4096);
+    Bytes validChildren=chunk("AOBJ",validObject);append(validChildren,chunk("XALO",hint));
+    Bytes event{'E',0};word(event,std::bit_cast<uint32_t>(0.5f));
+    append(validChildren,chunk("HLPR",chunk("TMEV",event)));
+    auto valid=image(validChildren);const auto unchanged=valid;
+    forge::animation::validateStorage(valid);
+    require(valid==unchanged,"storage validation changed input");
+    Bytes compressed;word(compressed,uint32_t(valid.size()));
+    append(compressed,forge::lzo::compress(valid.data(),valid.size()));
+    forge::animation::validateStorage(compressed);
+    compressed.push_back(0);require(refuses(compressed),"compressed trailing data accepted");
+    auto noFooter=valid;noFooter.resize(noFooter.size()-4);
+    forge::animation::validateStorage(noFooter);
+    valid.back()=1;require(refuses(valid),"unknown image footer accepted");
+    valid=unchanged;valid.push_back(0);require(refuses(valid),"extra image byte accepted");
+    auto shortParent=validChildren;shortParent.push_back(0);
+    require(refuses(image(shortParent)),"short parent tail accepted");
+    mask.back()=2;require(refuses(image(chunk("AMSK",mask))),"invalid mask boolean accepted");
+    mask.pop_back();require(refuses(image(chunk("AMSK",mask))),"short mask accepted");
+    hint[0]=2;require(refuses(image(chunk("XALO",hint))),"unknown allocation version accepted");
+    event.push_back(0);require(refuses(image(chunk("TMEV",event))),"trailing event byte accepted");
+    valid=unchanged;valid[16]='J';require(refuses(valid),"unknown root accepted");
 }
 
 int main(int argc,char** argv) {
