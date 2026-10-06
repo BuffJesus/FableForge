@@ -31,7 +31,8 @@ struct MapRecord {
 // Supported retail common-record subset: version 1, contiguous descriptors,
 // global texture IDs and numeric mesh palettes. logicalOffset is this record's
 // offset within the common entry. Returns chunk pointers for separate ownership
-// checks. Legacy development checksum words are preserved, not used as spans.
+// checks. Legacy generation edge/shore/checksum words are preserved, not used
+// as spans into retail payloads.
 MapRecord validateMapRecord(const std::vector<uint8_t>& record,uint32_t logicalOffset);
 struct CommonMap {
     std::string name;

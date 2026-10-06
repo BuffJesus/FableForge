@@ -795,6 +795,26 @@ All Release targets build; **46/46 tests pass (36.73s)** in
 `build/stb-bank-metadata-core-20261006.log`. Next: complete chunk ownership,
 including raw edge-height/shore blocks, and remaining world admission.
 
+Follow-up resolves that auxiliary-block question: **do not parse edge-height or
+shore spans in retail map payloads**. UpdateStaticMapPass1 02D66C80 writes them
+to a separate buffered generation stream, then writes the retail discriminator,
+landscape and local-detail stream separately. The shared info retains those old
+offsets/sizes. OpenRetailStaticMap 02D5BC40 loads only the runtime roots and does
+not copy/use the edge/shore/checksum spans. Arena's edge pointer 0 / size 9,254,
+for example, describes the generation stream; retail byte 0 is a discriminator.
+Native exports: `namespace-stb-{map-auxiliary,edge-shore-layout,retail-generation}-20261006.c`.
+The generation-only edge palette really does contain definition IDs/names, but
+that layout is absent here and must not be inferred from legacy retail words.
+`stbinfo.hpp` now documents the pointer domains accurately.
+
+Complete raw coverage audit `build/defnamespace-stb-chunk-coverage-seasons-20261006.json`
+follows foreground directories, background trees, local-detail tables and all
+140,025 owned frames, plus the retail leading discriminator. Across 446 chunks,
+all **40,861,364 uncovered bytes are zero**, with no layout/ownership errors and
+the original source hash unchanged. All 1,051,982,805 decoded bytes still pass
+the existing storage validators. This is scratch evidence; next promote the
+bounded ownership walk and padding checks into reusable core before admission.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
