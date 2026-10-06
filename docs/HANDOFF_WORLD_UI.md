@@ -549,6 +549,35 @@ animations. All Release targets build; **45/45 core tests pass (22.90s)** in
 `build/defexternal-entry-core-20261006.log`. No source archives or live installs
 were changed; unrelated audio-test edits remain excluded.
 
+V8U8 storage is now supported (validation only; preview/encoding still refuse).
+Native pixel-table entry 24 at 044BC810 maps to D3DFMT_V8U8 (60), type 6,
+16 bits/pixel; GetInit 0308E4D0 emits `{4,16,8,8,0,0}`. Evidence is in
+`namespace-pixel-native-20261006.txt` and `namespace-texture-header-mips-20261006.c`.
+ICE_BUMP_PC now validates its 7,505-byte compressed base region and 2,720 raw
+tail bytes. Updated full-entry report `defexternal-v8u8-entry-review-20261006.json`
+verifies 39,313/39,457 entries with unchanged original archive hashes. All Seasons
+textures now pass; three cutlass headers remain refused.
+
+The cutlass disagreements are confirmed independently by the FableTLC Python
+LZO decoder (`build/verify_texture_storage_20261006.py`, bytecode disabled;
+`texture-storage-independent-20261006.json`). Their remaining mip lengths consume
+the files exactly only at the measured boundaries. Native CFrameData::BeginLoading
+031277F0 uses `CompressedMipmapSizes[0]` to advance the fetch offset when skipping
+the base mip (`namespace-texture-mip-fetch-20261006.c`). Thus the declared mip-1
+offsets are 4,805 / 23,626 bytes early and 180 bytes late respectively; these
+cannot be treated as ignorable header hints. No repair was applied.
+
+V8U8 tests cover raw/compressed mip lengths, tiny linear surfaces, malformed tails
+and explicit preview refusal. All Release targets build; **45/45 tests pass
+(22.89s)** in `build/v8u8-storage-core-20261006.log`.
+
+Next external promotion: strict physics storage. Native material 0347CC20 and
+submesh 033D8A30 prefixes are retained in `namespace-physics-material-prefix-20261006.c`.
+A scratch full-layout experiment refuses 1,380/1,383 entries in each pack at MTLE
+(engine material); the previous candidate-only audit had no moved-ID match there.
+Recover this layout before production admission. Scratch experiment files are
+`namespace_physics_strict_20261006.cpp` and `namespace-physics-strict-*-20261006.json`.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

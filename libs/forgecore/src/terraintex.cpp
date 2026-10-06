@@ -25,6 +25,7 @@ namespace {
 constexpr uint8_t kTailDXT1[6] = {0x03, 0x04, 0, 0, 0, 0};
 constexpr uint8_t kTailDXT3[6] = {0x02, 0x08, 0, 0, 0, 0};
 constexpr uint8_t kTailDXT5[6] = {0x05, 0x08, 0, 0, 0, 0};
+constexpr uint8_t kTailV8U8[6] = {0x04, 0x10, 8, 8, 0, 0};
 constexpr uint8_t kTailARGB[6] = {0x01, 0x20, 8, 8, 8, 8};
 
 uint16_t readU16(const uint8_t* p) {
@@ -70,6 +71,7 @@ const uint8_t* pixelFormatTail(uint32_t format) {
         case kFormatDXT1: return kTailDXT1;
         case kFormatDXT3: return kTailDXT3;
         case kFormatDXT5: return kTailDXT5;
+        case kFormatV8U8: return kTailV8U8;
         case kFormatARGB: return kTailARGB;
         default: return nullptr;
     }
@@ -80,6 +82,7 @@ const char* pixelFormatName(uint32_t format) {
         case kFormatDXT1: return "DXT1";
         case kFormatDXT3: return "DXT3";
         case kFormatDXT5: return "DXT5";
+        case kFormatV8U8: return "V8U8";
         case kFormatARGB: return "A8R8G8B8";
         default: return "unknown";
     }
@@ -87,6 +90,7 @@ const char* pixelFormatName(uint32_t format) {
 
 size_t mipRawLength(uint32_t format, uint32_t w, uint32_t h) {
     if ((format & 0xFF) == kFormatARGB) return size_t(w) * size_t(h) * 4;
+    if ((format & 0xFF) == kFormatV8U8) return size_t(w) * size_t(h) * 2;
     const size_t unit = (format & 0xFF) == kFormatDXT1 ? 8 : 16;
     return size_t((w + 3) / 4) * size_t((h + 3) / 4) * unit;
 }
@@ -308,8 +312,9 @@ DecodedMip0 decodeMip0(const std::vector<uint8_t>& info,
         return out;
     }
     const TextureInfo& i = validation.info;
-    if ((i.pixelFormat & 0xFF) == kFormatDXT5) {
-        out.error = "DXT5 storage is valid but the texture preview decoder does not support DXT5";
+    if ((i.pixelFormat & 0xFF) == kFormatDXT5 || (i.pixelFormat & 0xFF) == kFormatV8U8) {
+        const std::string formatName=pixelFormatName(i.pixelFormat);
+        out.error = formatName + " storage is valid but the texture preview decoder does not support " + formatName;
         return out;
     }
     out.width = powerOfTwoUp(i.allocWidth);

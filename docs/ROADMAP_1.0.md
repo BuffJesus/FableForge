@@ -39,7 +39,9 @@ separate strict storage validator rejects opaque/malformed layouts; complete
 corpus checks retain exactly four original Secrets failures. Reusable external
 BIG-entry review covers textures, text and animations; full-entry audits verify
 39,312/39,456 entries while retaining unsupported layouts. Full texture review
-also exposes format-24 and three Secrets mip-size disagreements for recovery.
+also exposed V8U8, now validated in both packs, and three Secrets cutlass mip-size
+disagreements. Independent decoding and native fetch-offset logic confirm those
+headers must remain refused. Verified entry counts are now 39,313/39,457.
 All 45 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

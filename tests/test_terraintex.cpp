@@ -65,6 +65,22 @@ int main() {
         u32(info,12,99);
         result=validateTextureEntry(info,pixels);
         CHECK(!result.ok && result.errors.at(0)=="unsupported pixel format 99");
+        info=header(kFormatV8U8);info[16]=0;u32(info,20,128);pixels.assign(170,0);
+        result=validateTextureEntry(info,pixels);
+        CHECK(result.ok && result.consumed==170);
+        CHECK(result.mipRawSizes==std::vector<size_t>({128,32,8,2}));
+        CHECK(mipRawLength(kFormatV8U8,1,1)==2);
+        preview=decodeMip0(info,pixels);
+        CHECK(!preview.ok && preview.bytes.empty() && preview.error.find("V8U8")!=std::string::npos);
+        compressed=forge::lzo::compress(pixels.data(),125);
+        payload={uint8_t(compressed.size()),uint8_t(compressed.size()>>8)};
+        payload.insert(payload.end(),compressed.begin(),compressed.end());
+        payload.insert(payload.end(),pixels.begin()+125,pixels.end());
+        u32(info,24,uint32_t(compressed.size()+5));
+        CHECK(validateTextureEntry(info,payload).ok);
+        payload.pop_back();CHECK(!validateTextureEntry(info,payload).ok);
+        u32(info,24,0);info[30]=0;result=validateTextureEntry(info,pixels);
+        CHECK(!result.ok && result.errors.at(0).find("CPixelFormatInit tail")!=std::string::npos);
         std::cout<<checks<<" texture storage checks passed\n";
         return 0;
     }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}

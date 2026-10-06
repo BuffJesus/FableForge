@@ -47,13 +47,14 @@ namespace forge::terraintex {
 
 // ---------------------------------------------------------------- pixel format
 constexpr uint32_t kFormatARGB = 0x01;  // A8R8G8B8
+constexpr uint32_t kFormatV8U8 = 0x18;  // signed two-channel bump map; validation only
 constexpr uint32_t kFormatDXT1 = 0x1F;
 constexpr uint32_t kFormatDXT3 = 0x20;
 constexpr uint32_t kFormatDXT5 = 0x23;  // validation only; preview/encoder remain unsupported
 
 // CPixelFormatInit tail bytes {Type,ColourDepth,R,G,B,A} per format.
 const uint8_t* pixelFormatTail(uint32_t format);   // nullptr if unknown
-const char* pixelFormatName(uint32_t format);      // "DXT1" / "DXT3" / "DXT5" / "A8R8G8B8"
+const char* pixelFormatName(uint32_t format);      // "DXT1" / "DXT3" / "DXT5" / "V8U8" / "A8R8G8B8"
 // Uncompressed byte length of one linear mip surface.
 size_t mipRawLength(uint32_t format, uint32_t w, uint32_t h);
 
