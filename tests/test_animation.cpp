@@ -44,8 +44,48 @@ struct Crc {
     uint32_t finish() const {return ~value;}
 };
 
+using Bytes=std::vector<uint8_t>;
+static void word(Bytes& bytes,uint32_t value) {
+    for(unsigned i=0;i<4;++i) bytes.push_back(uint8_t(value>>(i*8)));
+}
+static void append(Bytes& bytes,const Bytes& more) {bytes.insert(bytes.end(),more.begin(),more.end());}
+static Bytes chunk(const char* tag,const Bytes& body) {
+    Bytes bytes(tag,tag+4);word(bytes,uint32_t(body.size()));append(bytes,body);return bytes;
+}
+static Bytes trackChunk(const char* name) {
+    Bytes bytes;word(bytes,0);word(bytes,UINT32_MAX);
+    while(*name)bytes.push_back(uint8_t(*name++));bytes.push_back(0);
+    bytes.push_back(0);word(bytes,std::bit_cast<uint32_t>(30.0f));
+    word(bytes,0);word(bytes,0);word(bytes,0);word(bytes,0);
+    return chunk("XSEQ",bytes);
+}
+static Bytes image(const Bytes& children) {
+    Bytes bytes;word(bytes,0x3e3e3e3e);append(bytes,Bytes{'3','D','A','F'});
+    word(bytes,0);word(bytes,0); // empty copyright and alignment
+    Bytes root{1};word(root,std::bit_cast<uint32_t>(1.0f));append(root,children);
+    append(bytes,chunk("ANRT",root));word(bytes,0);return bytes;
+}
+static void nativeBoundaries() {
+    Bytes object{'R','I','G',0};word(object,UINT32_MAX);
+    append(object,chunk("JUNK",trackChunk("DECOY")));
+    append(object,trackChunk("REAL"));
+    const auto bytes=image(chunk("AOBJ",object));
+    const auto parsed=forge::animation::decode(bytes);
+    require(parsed.rigName=="RIG" && parsed.tracks.size()==1 &&
+            parsed.tracks[0].boneName=="REAL","opaque child signature became a track");
+    Bytes children=chunk("JUNK",chunk("AOBJ",object));
+    append(children,chunk("AOBJ",object));
+    require(forge::animation::decode(image(children)).tracks.size()==1,
+            "opaque root child signature became an object");
+    bool rejected=false;
+    try {forge::animation::decode(image(chunk("AOBJ",Bytes{'R',0})));}
+    catch(const std::runtime_error&) {rejected=true;}
+    require(rejected,"missing native next-sibling word accepted");
+}
+
 int main(int argc,char** argv) {
     try {
+        nativeBoundaries();
         bool rejected=false;
         try {forge::animation::decode({});}
         catch(const std::runtime_error&) {rejected=true;}

@@ -495,6 +495,19 @@ All Release targets build; **44/44 core tests pass (23.06s)** in
 `build/defnamespace-prepared-core-20261006.log`. Next remains reusable external
 admission, followed by composer integration and choice-preservation checks.
 
+Animation decoding now follows the native ANRT five-byte prefix and AOBJ
+ASCIIZ-name/SLONG-next-sibling prefix exactly, replacing child-signature searches.
+An opaque chunk containing a valid-looking XSEQ/AOBJ must not create phantom
+tracks. New regression fixtures exercise both cases and a missing sibling word.
+All 3,435 original Seasons images retain 210,743 object tracks / 2,985 helpers;
+the independently established 36-phoneme CRC remains `fbeecd06` (1,614 tracks),
+in `build/animation-native-boundaries-seasons-20261006.log`. Updated Secrets
+review retains exactly the same four reader failures and 213,448 parsed tracks.
+All Release targets build; **44/44 core tests pass (21.88s)** in
+`build/animation-native-boundaries-core-20261006.log`. This remains a preview
+decoder, not complete external-reference admission: unknown bounded chunks
+may be skipped. Work continues on a strict storage-validation path.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

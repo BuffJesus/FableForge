@@ -97,17 +97,6 @@ Track parseTrack(const std::vector<uint8_t>& image,size_t start,size_t end) {
 
 bool signature(const uint8_t* p,const char* s) {return std::memcmp(p,s,4)==0;}
 
-size_t findChild(const std::vector<uint8_t>& image,size_t from,size_t end,bool object) {
-    for(size_t p=from;p+8<=end;++p) {
-        const uint8_t* at=image.data()+p;
-        const bool known=object ?
-            (signature(at,"XSEQ")||signature(at,"SEQ0")||signature(at,"AMSK")) :
-            (signature(at,"HLPR")||signature(at,"AOBJ")||signature(at,"XALO"));
-        if(known && u32(at+4)<=end-(p+8)) return p;
-    }
-    return end;
-}
-
 void chunks(const std::vector<uint8_t>& image,size_t start,size_t end,
             Animation& animation,bool helper,int depth) {
     if(depth>16) throw std::runtime_error("animation: excessive chunk nesting");
@@ -128,13 +117,17 @@ void chunks(const std::vector<uint8_t>& image,size_t start,size_t end,
             if(size<5) throw std::runtime_error("animation: short ANRT");
             animation.cyclic=image[body]!=0;
             animation.duration=std::bit_cast<float>(u32(image.data()+body+1));
-            const size_t child=findChild(image,body+5,next,false);
-            if(child<next) chunks(image,child,next,animation,helper,depth+1);
+            // Native RootChunk::ReadFromFile (03205B00) consumes an EBOOL
+            // and float, then reads children immediately at that boundary.
+            chunks(image,body+5,next,animation,helper,depth+1);
         } else if(signature(at,"AOBJ")) {
             Cursor c{image,body,next};
             animation.rigName=c.string();
-            const size_t child=findChild(image,c.p,next,true);
-            if(child<next) chunks(image,child,next,animation,false,depth+1);
+            // ObjectChunk::ReadFromFile (03208430): ASCIIZ name, SLONG
+            // NextSiblingIndex, then children. Never search payload bytes
+            // for a signature that could belong to an opaque child.
+            c.dword();
+            chunks(image,c.p,next,animation,false,depth+1);
         } else if(signature(at,"HLPR")) {
             chunks(image,body,next,animation,true,depth+1);
         } else if(signature(at,"MVEC")) {
