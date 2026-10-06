@@ -732,12 +732,21 @@ are 02DEF110/02E36BE0/02E46970. All Release targets build; **46/46 tests pass
 Next: validate the common entry's complete name/offset manifest and whole STB
 ownership/metadata, then remaining world admission. Census shows the manifest
 occupies 23,344 bytes followed by all records contiguously through byte 331,156.
-Separate finding to fix: native collection Load 02E46970 / Save 02E49ED0 store
+Corrected foliage roles: native collection Load 02E46970 / Save 02E49ED0 store
 mesh, **shadow**, **z-sprite** IDs in that order; core foliage parseRecord and
-stbbake palette emission currently label/write the last two in reverse order.
+stbbake palette emission now follow that order. Seed field names are corrected
+without changing their original numeric triples. The reader also retains all
+13 runtime-setting words, including unused padding, for palette rewrites.
 Original Seasons confirms physical slot +4 names MESH_OAK_SHADOW (7741) /
 MESH_WW_PINE_LARGE_SHADOW_01 (7616), while +8 names the source tree mesh.
 Do not infer pack-specific numeric mesh identities from the hard-coded seed table.
+Distinct-ID authored fixtures verify native wire order independently of the
+reader; read/rewrite tests preserve settings and padding. Original-corpus audit
+`build/foliage-palette-review-20261006.json` checks all 3,597 palette rows across
+446 records and proves exact row rewrites (empty palettes have no rows to test),
+with original STB hash unchanged. All **46/46 tests pass (37.27s)** in
+`build/foliage-palette-core-20261006.log`. This proves palette storage preservation,
+not new z-sprite authoring or runtime rendering behavior.
 Composer still refuses divergent namespaces.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core

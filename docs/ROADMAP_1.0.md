@@ -55,6 +55,8 @@ frame validation to all 140,025 owned STB frames. The 26 separate sea payloads
 also validate. All 446 common records and 3,597 numeric palette rows validate,
 including frame-to-palette bounds checks. The complete common manifest,
 whole-container metadata/ownership and world admission remain pending.
+Foliage palette read/write now uses native main/shadow/z-sprite order and retains
+the complete runtime settings block; all 3,597 original rows rewrite exactly.
 All 46 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

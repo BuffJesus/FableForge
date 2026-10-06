@@ -1783,8 +1783,8 @@ EmptyLocalDetailSection buildType0LocalDetailSection(
         appendU32(tail, static_cast<uint32_t>(palette.size()));
         for (const auto& type : palette) {
             appendU32(tail, type.meshIdx);
-            appendU32(tail, type.zspriteMeshIdx);
             appendU32(tail, type.shadowMeshIdx);
+            appendU32(tail, type.zspriteMeshIdx);
             bool exact = false;
             for (uint32_t v : type.runtimeSettings) exact = exact || v != 0;
             if (exact) {

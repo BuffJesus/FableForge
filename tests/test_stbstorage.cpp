@@ -1,6 +1,7 @@
 #include "forge/stbstorage.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/rangecodec.hpp"
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 using Bytes=std::vector<uint8_t>;
@@ -111,5 +112,29 @@ int main() {try {
     malformed=record;malformed[170]=2;refuses([&]{validateMapRecord(malformed,4096);});
     malformed=record;malformed[222]=3;refuses([&]{validateMapRecord(malformed,4096);});
     malformed=record;malformed[230]=2;refuses([&]{validateMapRecord(malformed,4096);});
+    // Load/Save 02E46970/02E49ED0 use main, shadow, z-sprite on disk.
+    // Distinct IDs catch a symmetric reader/writer swap; padding must survive.
+    auto palette=forge::foliage::readPalette(record.data(),record.size(),169);
+    const auto& entry=palette.entries.at(0);
+    if(entry.meshIdx!=15360 || entry.shadowMeshIdx!=15361 || entry.zspriteMeshIdx!=15362 ||
+       entry.runtimeSettings[12]!=0xab000000u)
+        throw std::runtime_error("native foliage palette roles/settings lost");
+    forge::stbbake::LocalDetailQuadHeader root;root.cellBounds[2]=root.cellBounds[3]=16;
+    const auto emit=[&](const std::vector<forge::foliage::FoliageType>& types) {
+        return forge::stbbake::buildType0LocalDetailSection(0,2048,root,types,{{}},{});
+    };
+    const auto rewritten=emit(palette.entries);
+    if(!std::equal(record.begin()+169,record.end(),rewritten.bytes.begin()+rewritten.headerOffset+44))
+        throw std::runtime_error("foliage palette wire bytes changed");
+    forge::foliage::FoliageType authored;
+    authored.meshIdx=101;authored.shadowMeshIdx=202;authored.zspriteMeshIdx=303;
+    const auto generated=emit({authored});
+    Bytes expected{1};word(expected,1);word(expected,101);word(expected,202);word(expected,303);
+    expected.resize(69);
+    if(!std::equal(expected.begin(),expected.end(),generated.bytes.begin()+generated.headerOffset+44))
+        throw std::runtime_error("authored foliage palette roles reversed");
+    const auto& tree=forge::foliage::brushCatalog().at(14);
+    if(tree.meshIdx!=7734 || tree.shadowMeshIdx!=7741 || tree.zspriteMeshIdx!=7734)
+        throw std::runtime_error("seed palette native role order changed");
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
