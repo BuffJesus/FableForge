@@ -55,6 +55,36 @@ static void physicsChecks() {
     auto deep=chunk("TRFM",Bytes(48));
     for(unsigned i=0;i<18;++i)deep=chunk("HLPR",deep);
     require(!accepts(physicsImage(deep)),"unbounded physics recursion accepted");
+    auto cloth=[](std::string_view source,uint8_t compiled=0) {
+        Bytes body;word(body,2);append(body,Bytes{'C',0});word(body,15360);
+        body.insert(body.end(),source.begin(),source.end());body.push_back(0);body.push_back(compiled);
+        return physicsImage(chunk("CLTH",body));
+    };
+    const std::string declarations=
+        "Particle name=P0 x=15360 y=0 z=0 alpha=1\n"
+        "Particle name=P1 x=0 y=1 z=0 alpha=0.5\n"
+        "Vertex name=V0 x=0 y=0 z=1\nTexCoord u=0 v=1\n";
+    const std::string program=declarations+
+        "Triangle a=P0 b=P1 c=V0 ta=0 tb=0 tc=0\n"
+        "Distance a=P0 b=P1 dist=2.5 strength=0.7\n"
+        "SetRenderMode bezier=0\nSetDragging enable=1 rotational=0 strength=0.25\n"
+        "SetAcceleration enable=1 damping=0.5\nSetWindStrength strength=1.17\nSetGravityStrength strength=0\n";
+    require(accepts(cloth(program)),"supported local cloth language refused");
+    require(!accepts(cloth(program,1)),"compiled cloth silently accepted");
+    require(!accepts(cloth(declarations+"Distance a=P0 b=V0 dist=1 strength=1\n")),
+            "distance constraint accepted a non-particle symbol");
+    require(!accepts(cloth(declarations+"Triangle a=P0 b=P1 c=MISSING ta=0 tb=0 tc=0\n")),
+            "undefined cloth symbol accepted");
+    require(!accepts(cloth(declarations+"Triangle a=P0 b=P1 c=V0 ta=0 tb=1 tc=0\n")),
+            "cloth UV index exceeded its local table");
+    require(!accepts(cloth(program+"Unknown def=15360\n")),"unknown cloth command accepted");
+    require(!accepts(cloth("SetWindStrength strength=1 def=15360\n")),"unknown cloth parameter accepted");
+    require(!accepts(cloth("SetWindStrength strength=1 strength=2\n")),"duplicate cloth parameter accepted");
+    require(!accepts(cloth("SetWindStrength strength=nan\n")),"nonfinite cloth number accepted");
+    require(!accepts(cloth("SetRenderMode bezier=2\n")),"invalid cloth boolean accepted");
+    require(!accepts(cloth("SetWindStrength\n")),"missing cloth parameter accepted");
+    require(!accepts(cloth(declarations+"Particle name=P0 x=0 y=0 z=0 alpha=1\n")),
+            "duplicate cloth symbol accepted");
 }
 static int audit(const std::filesystem::path& root) {
     nlohmann::json report{{"scope","read-only supported external BIG-entry layouts; not installation admission"},

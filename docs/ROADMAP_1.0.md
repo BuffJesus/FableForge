@@ -42,9 +42,9 @@ BIG-entry review covers textures, text and animations; full-entry audits verify
 also exposed V8U8, now validated in both packs, and three Secrets cutlass mip-size
 disagreements. Independent decoding and native fetch-offset logic confirm those
 headers must remain refused. Verified entry counts are now 39,313/39,457.
-Strict physics review now accepts 1,382/1,383 entries per pack, raising verified
-BIG entries to 40,695/40,839. One shared text cloth program and compiled meshes
-remain unsupported by reusable admission.
+Strict physics review, including a verified subset of text cloth commands, now
+accepts all 1,383 entries per pack, raising verified BIG entries to 40,696/40,840.
+Compiled meshes remain unsupported by reusable admission.
 All 45 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

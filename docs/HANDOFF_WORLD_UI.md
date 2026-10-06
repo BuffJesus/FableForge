@@ -602,6 +602,19 @@ Tests cover complete raw/compressed physics, unknown code, oversized arrays,
 short matrices, helper versions, smoothing tails and recursion bounds. All Release
 targets build; **45/45 tests pass (25.43s)** in `build/physics-storage-core-20261006.log`.
 
+Text cloth follow-up now admits the shared statue entry. Native text parser
+033388E0 and local symbol lookup 0333CFB0 establish the observed ten commands:
+particles, vertices, UVs, triangles, distances and five simulation settings.
+`physics::validateStorage` checks this explicit subset, exact parameters, finite
+numbers, booleans and local symbol/UV references. Unknown commands/parameters
+and compiled cloth remain refused. Independent script review resolves 381 local
+symbol references and 243 UV indices (`build/cloth-text-independent-20261006.json`).
+The full original-bank audit `build/defexternal-cloth-text-entry-review-20261006.json`
+now accepts all **1,383 physics entries per pack**, raising verified BIG entries
+to **40,696/40,840**, with source hashes unchanged. All Release targets build;
+**45/45 tests pass (24.46s)** in `build/cloth-text-core-20261006.log`.
+Next: compiled-mesh complete storage review. Composer refusal remains.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

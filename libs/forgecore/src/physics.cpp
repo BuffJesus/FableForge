@@ -1,5 +1,10 @@
 #include "forge/physics.hpp"
 #include "forge/lzo.hpp"
+#include <charconv>
+#include <cmath>
+#include <map>
+#include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -21,8 +26,10 @@ struct Reader {
             uint32_t(bytes[at+2])<<16 | uint32_t(bytes[at+3])<<24;
     }
     void boolean() {if(bytes[take(1)]>1)throw std::runtime_error("physics: invalid boolean");}
-    void string() {
-        while(remaining())if(bytes[take(1)]==0)return;
+    std::string_view string() {
+        const auto start=pos;
+        while(remaining())if(bytes[take(1)]==0)
+            return {reinterpret_cast<const char*>(bytes.data()+start),pos-start-1};
         throw std::runtime_error("physics: unterminated string");
     }
     std::string_view tag() {
@@ -35,6 +42,79 @@ struct Reader {
         take(size_t(count)*stride);
     }
 };
+
+// Native CParticleScriptParser::Parse 033388E0 and symbol lookup 0333CFB0.
+// This deliberately supports a bounded subset with explicit parameter sets.
+// Numbers are floats, booleans or local texture-coordinate indices; symbolic
+// particle/vertex references resolve only within the current program.
+void particleText(std::string_view text) {
+    std::set<std::string> particles,vertices;
+    size_t texCoords=0,lineNumber=0;
+    std::istringstream lines{std::string(text)};
+    std::string line;
+    while(std::getline(lines,line)) {
+        ++lineNumber;
+        auto fail=[&](const std::string& why) {
+            throw std::runtime_error("physics: cloth line "+std::to_string(lineNumber)+": "+why);
+        };
+        std::istringstream tokens(line);
+        std::string command,token;
+        if(!(tokens>>command))continue;
+        std::map<std::string,std::string> parameters;
+        while(tokens>>token) {
+            const auto eq=token.find('=');
+            if(eq==std::string::npos || eq==0 || eq+1==token.size() ||
+               token.find('=',eq+1)!=std::string::npos)fail("unsupported parameter syntax");
+            if(!parameters.emplace(token.substr(0,eq),token.substr(eq+1)).second)
+                fail("duplicate parameter");
+        }
+        auto get=[&](const char* key) {
+            const auto found=parameters.find(key);
+            if(found==parameters.end())fail(std::string("missing ")+key);
+            const auto value=found->second;parameters.erase(found);return value;
+        };
+        auto real=[&](const char* key) {
+            const auto value=get(key);float number=0;
+            const auto parsed=std::from_chars(value.data(),value.data()+value.size(),number);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size() || !std::isfinite(number))
+                fail(std::string("invalid float ")+key);
+        };
+        auto boolean=[&](const char* key) {
+            const auto value=get(key);if(value!="0" && value!="1")fail(std::string("invalid boolean ")+key);
+        };
+        auto reference=[&](const char* key,bool particleOnly) {
+            const auto name=get(key);
+            if(!particles.contains(name) && (particleOnly || !vertices.contains(name)))
+                fail("unknown local symbol "+name);
+        };
+        if(command=="Particle" || command=="Vertex") {
+            const auto name=get("name");
+            for(const unsigned char ch:name)
+                if(!((ch>='A'&&ch<='Z') || (ch>='a'&&ch<='z') || (ch>='0'&&ch<='9') || ch=='_'))
+                    fail("unsupported symbol spelling");
+            if(particles.contains(name) || vertices.contains(name))fail("duplicate local symbol");
+            real("x");real("y");real("z");
+            if(command=="Particle") {real("alpha");particles.insert(name);}
+            else vertices.insert(name);
+        } else if(command=="TexCoord") {real("u");real("v");++texCoords;}
+        else if(command=="Triangle") {
+            for(const char* key:{"a","b","c"})reference(key,false);
+            for(const char* key:{"ta","tb","tc"}) {
+                const auto value=get(key);uint32_t index=0;
+                const auto parsed=std::from_chars(value.data(),value.data()+value.size(),index);
+                if(parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size() || index>=texCoords)
+                    fail("texture coordinate index exceeds local table");
+            }
+        } else if(command=="Distance") {
+            reference("a",true);reference("b",true);real("dist");real("strength");
+        } else if(command=="SetRenderMode")boolean("bezier");
+        else if(command=="SetDragging") {boolean("enable");boolean("rotational");real("strength");}
+        else if(command=="SetAcceleration") {boolean("enable");real("damping");}
+        else if(command=="SetWindStrength" || command=="SetGravityStrength")real("strength");
+        else fail("unsupported command "+command);
+        if(!parameters.empty())fail("unsupported parameter "+parameters.begin()->first);
+    }
+}
 
 void chunks(Reader& stream,unsigned depth) {
     if(depth>16)throw std::runtime_error("physics: excessive chunk nesting");
@@ -68,6 +148,12 @@ void chunks(Reader& stream,unsigned depth) {
         } else if(tag=="BONE") {
             // Native 033D93D0: four local hierarchy IDs, matrix, optional name.
             c.take(64);if(c.remaining())c.string();children=true;
+        } else if(tag=="CLTH") {
+            // Native 034BD940: version, name, local material, source and compiled flag.
+            if(c.word()!=2)throw std::runtime_error("physics: unsupported cloth version");
+            c.string();c.take(4);const auto source=c.string();
+            if(c.bytes[c.take(1)]!=0)throw std::runtime_error("physics: compiled cloth is unsupported");
+            particleText(source);children=true;
         } else if(tag=="PRIM") {c.take(4);children=true;} // local material index
         else if(tag=="VGRP") {c.take(4);c.array(6);children=true;} // bone, u16 vertex + float weight
         else if(tag=="HCVL") {
