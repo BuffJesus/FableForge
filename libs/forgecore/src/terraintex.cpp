@@ -24,6 +24,7 @@ namespace {
 // banks (FableTLC docs/TEXTURE_WRITER.md; matches EgoCore TextureBuilder).
 constexpr uint8_t kTailDXT1[6] = {0x03, 0x04, 0, 0, 0, 0};
 constexpr uint8_t kTailDXT3[6] = {0x02, 0x08, 0, 0, 0, 0};
+constexpr uint8_t kTailDXT5[6] = {0x05, 0x08, 0, 0, 0, 0};
 constexpr uint8_t kTailARGB[6] = {0x01, 0x20, 8, 8, 8, 8};
 
 uint16_t readU16(const uint8_t* p) {
@@ -68,6 +69,7 @@ const uint8_t* pixelFormatTail(uint32_t format) {
     switch (format & 0xFF) {
         case kFormatDXT1: return kTailDXT1;
         case kFormatDXT3: return kTailDXT3;
+        case kFormatDXT5: return kTailDXT5;
         case kFormatARGB: return kTailARGB;
         default: return nullptr;
     }
@@ -77,6 +79,7 @@ const char* pixelFormatName(uint32_t format) {
     switch (format & 0xFF) {
         case kFormatDXT1: return "DXT1";
         case kFormatDXT3: return "DXT3";
+        case kFormatDXT5: return "DXT5";
         case kFormatARGB: return "A8R8G8B8";
         default: return "unknown";
     }
@@ -124,7 +127,7 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
 
     const uint8_t* tail = pixelFormatTail(fmt);
     if (tail == nullptr) {
-        v.errors.push_back("unsupported pixel format 0x" +
+        v.errors.push_back("unsupported pixel format " +
                            std::to_string(i.pixelFormat));
         return v;
     }
@@ -164,7 +167,15 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
         v.warnings.push_back("volume texture with a mip chain: slice count per "
                              "level is assumed to halve");
 
-    const size_t mip0Raw = mipRawLength(fmt, surfaceW, surfaceH) * depth;
+    // CGraphicDataBank::LoadGraphicFrame (031238F0) reads each surface's
+    // GetByteLength (030C5F90): Width * Height * ColourDepth >> 3. Native
+    // DXT5 therefore stores 4/1 bytes for 2x2/1x1 tails, not 16-byte blocks.
+    // Keep the established DXT1/DXT3 writer contract separate from this path.
+    const auto storedMipLength = [&](uint32_t width, uint32_t height) {
+        return fmt == kFormatDXT5 ? size_t(width) * height
+                                 : mipRawLength(fmt, width, height);
+    };
+    const size_t mip0Raw = storedMipLength(surfaceW, surfaceH) * depth;
     if (i.frameDataSize != mip0Raw)
         v.errors.push_back("FrameDataSize " + std::to_string(i.frameDataSize) +
                            " != uncompressed mip-0 size " + std::to_string(mip0Raw));
@@ -173,7 +184,7 @@ TextureValidation validateTextureEntry(const std::vector<uint8_t>& info,
     uint32_t w = surfaceW, h = surfaceH;
     uint32_t d = depth;
     for (uint32_t level = 0; level < mips; ++level) {
-        const size_t raw = mipRawLength(fmt, w, h) * d;
+        const size_t raw = storedMipLength(w, h) * d;
         v.mipRawSizes.push_back(raw);
         if (level == 0 && i.mipSize0 > 0) {
             // Fable chunked-LZO region: chunks cover raw-3 bytes, then 3 raw
@@ -297,6 +308,10 @@ DecodedMip0 decodeMip0(const std::vector<uint8_t>& info,
         return out;
     }
     const TextureInfo& i = validation.info;
+    if ((i.pixelFormat & 0xFF) == kFormatDXT5) {
+        out.error = "DXT5 storage is valid but the texture preview decoder does not support DXT5";
+        return out;
+    }
     out.width = powerOfTwoUp(i.allocWidth);
     out.height = powerOfTwoUp(i.allocHeight);
     const uint32_t fmt = i.pixelFormat & 0xFF;

@@ -20,13 +20,16 @@ native fixed-count directory evidence resolves the audit anomaly. All 140,025
 owned frames now parse completely; 401 inner-codec matches are geometry fields.
 Seasons graphics coverage now passes; opposite-order Secrets STB, physics and
 compiled-mesh coverage also passes. Four original Secrets animations have
-inconsistent chunk lengths, with three unresolved candidate occurrences.
-Secrets LEV/BWD and numeric-text candidates now have verified domains; two DXT5
-textures remain short under the mip-block checker. The core foreground-directory
+inconsistent chunk lengths; bounded diagnostic recovery locates their remaining
+candidates but does not admit the malformed images. Secrets LEV/BWD and numeric
+text candidates have verified domains. Native surface-length evidence resolves
+both DXT5 sky textures, including their four-byte/one-byte final mips; core
+storage validation now supports them. DXT5 preview remains unsupported.
+The core foreground-directory
 reader now supports native fixed counts, passed through height baking and bounds
 edits; its metadata-free diagnostic stops before frames. All 446 original maps
 pass the directory audit, with bounds-only byte preservation on the anomaly
-fixture. All Release targets build and all 43 core tests pass.
+fixture. All Release targets build and all 44 core tests pass.
 All three compiled BIN banks are already
 covered by the identity/relocation audits. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

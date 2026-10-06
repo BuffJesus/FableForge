@@ -395,8 +395,11 @@ Independent hash wrappers verify unchanged original inputs throughout. Results:
 - `defnamespace-animation-domains-secrets-20261006.json` decompresses all 3,435
   images / 106,988,031 bytes but **four fail the canonical chunk reader**:
   entries 3061, 3063, 3080 and 3096. Original declared XSEQ/ANRT chunk lengths
-  exceed parent/image bounds. Of 4,416 candidate occurrences, three remain
-  unresolved in these malformed tails. Do not count this as full acceptance.
+  exceed parent/image bounds. Follow-up bounded diagnostic recovery classifies
+  all 4,416 candidate occurrences; the three formerly unresolved matches are
+  within track bone/parent words (3063:+8809, 3080:+9760, 3096:+7531).
+  Four canonical-reader errors and six overlong-container diagnostics remain.
+  This does not establish full acceptance or authorize length repairs.
   Raw failing images and `inspect_namespace_animation_errors_20261006.py` are
   retained. Native AMSK readers 03208750/03208830 establish a count followed
   by EBOOL bytes, correcting the earlier tentative mask interpretation; XALO
@@ -410,19 +413,20 @@ for 359 LEV/five BWD binary candidate groups and 220 numeric text matches;
 symbol matches alone do not establish stored-offset references. The updated
 texture/text reviewer resolves three exact-roundtrip type-0 text groups and
 eight header groups inside frame/mip byte sizes, including one crossed boundary.
-It now classifies 1,317 raw groups. Two sky textures (IDs 388/391) are DXT5:
+It now classifies 1,319 raw groups. Two sky textures (IDs 388/391) are DXT5:
 native GetAsD3DPixelFormat 03023FB0 indexes the 36-byte table at 044BC4B0;
 entry 35 at 044BC99C contains DXT5, type 7, eight bits per pixel. GetInit
 0308E4D0 maps that type to the observed six-byte tail {5,8,0,0,0,0}.
 Direct original-byte disassembly/table evidence is retained in
-`namespace-pixel-native-20261006.txt` with executable hash. Reusing the DXT3
-size/framing checker through an explicitly labelled private descriptor checks
-the identical 16-byte block layout, but both original textures run short at
-mip 8 (five bytes remain where a 16-byte block is required). They remain
-unclassified; format identification alone does not certify their payloads.
-The validator's existing "0x35" error is misleading: 35 is decimal (0x23).
-Scratch findings do not enable the
-composer. Production code is unchanged since the recorded 42-test gate.
+`namespace-pixel-native-20261006.txt` with executable hash. The initial DXT3
+descriptor probe incorrectly assumed GPU block minimums for stored mip tails.
+Native LoadGraphicFrame 031238F0 calls CSurface::GetByteLength 030C5F90:
+`Width * Height * ColourDepth >> 3`, including 4/1 bytes at 2x2/1x1 for DXT5.
+Exports `namespace-texture-mip-loading-20261006.c` and
+`namespace-texture-surface-size-20261006.c` establish this contract. Both original
+512x512 textures now validate their compressed base mip and entire 87,381-byte
+tail using the original descriptor. No input bytes changed. The texture/text
+report records the updated reviewer library hash. Composer refusal remains.
 External candidate review subsequently passes in
 `build/defnamespace-external-secrets-review-20261006.json`, with unchanged input
 hashes. All 2,082 raw occurrences have verified domains: 243 terrain-cell,
@@ -458,9 +462,21 @@ byte. Source STB hash remains unchanged. All Release targets build; **43/43 core
 tests pass (34.55s)** in `build/fixed-quaddir-core-20261006.log`. Existing unowned
 audio-test changes remain excluded from this work. No live install writes.
 
-Next: investigate the four malformed animations/two short texture mip tails,
-then build reusable admission and relocation integration with independent
-output-delta checks. Composer refusal remains.
+DXT5 storage validation is now in `terraintex`, with GPU allocation sizes kept
+separate. Preview decoding explicitly refuses DXT5; existing BC1/BC2 writer
+contracts are unchanged. Unsupported-format diagnostics now use honest decimal
+values. `tests/test_terraintex.cpp` covers raw/compressed framing, exact tiny mip
+tails, truncation, extra bytes, descriptor mismatch and existing BC2 preview.
+All Release targets build; **44/44 core tests pass (27.09s)** in
+`build/dxt5-storage-core-20261006.log`.
+
+Native animation SuperChunkRead 0346B0C0 verifies child sizes against remaining
+parent bytes and seeks to declared child ends. Its export is
+`namespace-animation-chunk-loading-20261006.c`; malformed lengths are not ignored
+by the native loader. The diagnostic walker can inspect bounded child tracks in
+overlong ANRT/AOBJ containers while retaining errors; it is not an admission
+parser. Next: build reusable admission and relocation integration with independent
+output-delta checks, retaining explicit malformed-animation refusals.
 
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
