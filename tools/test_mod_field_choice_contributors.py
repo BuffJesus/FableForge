@@ -84,6 +84,44 @@ def main():
         picks.write_text(''); run(*command)
         assert read_values(output) == (11, 21, 31, 5)
         checks.append({'route': route, 'case': 'clear', 'accepted': True})
+    agreeing = work/'Agreeing'; write_bank(agreeing, (10, 22, 3, 4))
+    for scenario, surviving, expected, contributors in [
+        ('single-record-writer', [sources[0]], (10, 20, 3, 4), ['PackA']),
+        ('single-field-writer', [sources[0], sources[2]], (10, 21, 31, 4), ['PackA']),
+        ('agreeing-writers', [sources[0], agreeing], (10, 22, 3, 4), ['PackA', 'Agreeing']),
+        ('no-field-writer', [sources[2]], (1, 21, 31, 4), []),
+    ]:
+        collapsed = work/scenario; write_bank(collapsed, (1, 2, 3, 4))
+        for source in surviving: run('mods', 'add', collapsed, source)
+        for route in ('merge', 'build', 'defs'):
+            output = work/(scenario+'-'+route)
+            command = (['defs', 'merge', collapsed, output, 'game.bin', *surviving,
+                        '--fields', repo/'docs/re_reference/def_schema.json'] if route == 'defs'
+                       else ['mods', route, collapsed, output])
+            if route == 'merge': command += ['--with', *surviving]
+            command += ['--picks', picks]
+            picks.write_text(''); run(*command)
+            assert read_values(output) == expected
+            (output/'sentinel').write_bytes(b'previous collapsed output')
+            before = snapshot(output)
+            picks.write_text(key+'\tRemovedPack\n'); saved = picks.read_bytes()
+            failed = run(*command, good=False)
+            assert 'selects unavailable contributor RemovedPack' in failed.stderr
+            assert snapshot(output) == before and picks.read_bytes() == saved
+            review = json.loads(run('mods', 'conflicts', collapsed, '--picks', picks, '--json').stdout)
+            selected = next(f for c in review['defs']['conflicts'] for f in c['field_conflicts']
+                            if f['choice_key'] == key)
+            assert selected['choice_unavailable'] and selected['mods'] == contributors
+            picks.write_text(key+'\tvanilla\n'); run(*command)
+            assert read_values(output) == (1, *expected[1:])
+            if contributors:
+                picks.write_text(key+'\t'+contributors[-1]+'\n'); run(*command)
+                assert read_values(output) == expected
+            identity = json.loads(key[6:]); identity[3] = 'inactive-layout'
+            picks.write_text('field:'+json.dumps(identity, separators=(',', ':'))+'\tRemovedPack\n')
+            run(*command); assert read_values(output) == expected
+            checks.append({'route': route, 'case': scenario, 'refused_preserved_reviewable': True,
+                           'baseline_and_available_choices': True, 'inactive_layout_ignored': True})
     assert before_inputs == {str(p): snapshot(p) for p in inputs}
     (work/'result.json').write_text(json.dumps({'checks': checks, 'inputs_unchanged': True,
                                                'complete_data': args.complete_data}, indent=2))

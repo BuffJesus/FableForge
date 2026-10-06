@@ -1,5 +1,32 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 broader Controller Support stacks and saved scalar choices
+
+User explicitly requested large/small/many-mod combinations beyond Aeon.
+[Controller stack coverage](CONTROLLER_STACK_COVERAGE.md) records the matrix,
+exact offline limits, refusals, scripts and retained evidence. Twelve modular
+and large-baseline combinations pass (13/23/30/31 sources, plus five-source
+overhaul baselines), including Project Seasons and Albion Secrets with complete
+Data as their baseline. All retain 141 controller bindings, both UI records,
+the DLL and fourteen references. Layering overhauls, the all-mfvicli stress stack,
+and UFP's 32-source case still refuse ambiguous/unnamed records.
+
+The 31-source registered lifecycle exposed a real bug in 07caf52: disabling
+BetterBerserk silently bypassed its saved SpeedMultiplier choice. Explicit
+scalar choices now survive one-writer/agreeing/no-changing-field cases; missing
+contributors refuse before writes and remain reviewable. Selected baseline
+values and metadata ownership persist. Obsolete-layout keys remain inactive.
+The lifecycle passes order changes, choices, refusal preservation, disable,
+remove and re-add, with independent controller-free bank comparison and input
+hash preservation. All forty core tests and both 45-case contributor modes pass;
+existing scalar-choice GUI checks pass at both sizes. See coverage for reports.
+
+The frozen 07caf52 ZIP finished its remaining 85 workflows: the combined audit
+now establishes all 89 distinct workflows, zero uncovered/skipped, using the
+same archive hash as below. This supersedes the earlier limited-gate status,
+but that ZIP still has the newly discovered scalar-choice bug and needs replacing
+after this fix. No publication or live install writes.
+
 ## 2026-10-05 packaged creature, feat and component acceptance
 
 Local development archive dist/development/20261005-07caf52/

@@ -5047,6 +5047,14 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
     size_t applied = 0, addedTotal = 0, overridden = 0;
     size_t fieldMergedRecords = 0, autoFields = 0, fieldConflictParts = 0;
 
+    std::set<std::string> recordsWithFieldPicks;
+    for (const auto& [key, winner] : picks) {
+        if (!key.starts_with("field:")) continue;
+        const auto identity = json::parse(key.substr(6), nullptr, false);
+        if (identity.is_array() && identity.size() == 6 && identity[0] == bin && identity[1].is_string())
+            recordsWithFieldPicks.insert(identity[1].get<std::string>());
+    }
+
     for (const auto& name : order) {
         const auto& vers = changes[name];
         auto idx = nameToIndex.find(name);
@@ -5058,7 +5066,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
         // every mod that carries the same bytes agrees: no conflict, the shared version applies
         bool agree = true;
         for (const auto& v : vers) if (v.data != vers.front().data || v.definition != vers.front().definition) { agree = false; break; }
-        if (vers.size() == 1 || (agree && pick.empty())) {
+        if ((vers.size() == 1 || (agree && pick.empty())) && !recordsWithFieldPicks.contains(name)) {
             const auto& v = vers.front();
             if (inBase) merged.setEntryData(idx->second, v.data);
             else { nameToIndex[name] = merged.addEntry(v.definition, name, v.data);
@@ -5068,7 +5076,7 @@ int mergeDefs(const std::string& baseRoot, const std::string& outDir,
             continue;
         }
 
-        // >1 mod touches it -> conflict candidate. Try field-level merge first.
+        // Multiple versions or a saved field choice require field-level review.
         Conflict c;
         c.record = name;
         for (const auto& v : vers) c.mods.push_back(v.mod);

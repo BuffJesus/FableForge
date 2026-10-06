@@ -98,8 +98,8 @@ struct FieldMerge {
                                          // or "vanilla"
         size_t partIndex = 0;             // 0 = prefix, otherwise field index + 1
     };
-    std::vector<Conflict> conflicts;     // parts >1 mod changed to differing
-                                         // values (load-order/pick decided)
+    std::vector<Conflict> conflicts;     // differing values or explicit part
+                                         // choices requiring contributor review
 };
 
 // `versions` = (modName, decoded) for each mod that changed this record, in load
@@ -109,9 +109,10 @@ struct FieldMerge {
 // Returns ok=false if base or any version is not clean() or the field layouts
 // do not align (different def types) -- the caller must then merge whole-record.
 // Optional partPicks use this decode's indices (0 prefix, fields index+1).
-// They override `pick` only for a true conflict and an eligible changing source
-// or baseline alias. An unavailable source falls back to the record choice.
-// Independent/identical edits keep auto-merging. Indices beyond this decode
+// They override `pick` for an eligible changing source or baseline alias, even
+// after contributors disappear or agree. An unavailable source falls back to
+// the record choice and stays in conflicts so callers can refuse or review it.
+// Unselected independent/identical edits keep auto-merging. Indices beyond this decode
 // throw; callers must establish persistent identity separately from these indices.
 FieldMerge mergeFields(const Decoded& base,
                        const std::vector<std::pair<std::string, Decoded>>& versions,

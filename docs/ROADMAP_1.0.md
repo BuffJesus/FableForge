@@ -1,5 +1,13 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 broader Controller Support checks pass twelve mixed modular/overhaul
+baseline combinations and a 31-source order/choice/disable/remove/re-add lifecycle.
+That lifecycle exposed and fixed saved scalar choices being ignored after sources
+disappear or agree. All forty core tests and both 45-case contributor modes pass.
+Frozen 07caf52 now passes all 89 package workflows but predates this fix.
+See [Controller stack coverage](CONTROLLER_STACK_COVERAGE.md) for exact combinations,
+unsupported identity cases and offline-only scope; no gameplay claim.
+
 2026-10-05 local 07caf52 development ZIP verifies the latest creature, script-feat
 and component changes using the actual extracted tool. Four scoped package
 workflows, 108 identities/122 links and all three focused corpus audits pass;

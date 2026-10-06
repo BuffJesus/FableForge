@@ -200,20 +200,32 @@ FieldMerge mergeFields(
                 changerIndices.push_back(m);
             }
         }
-        if (changers.empty()) { dst = baseVal; return; }
+        const bool hasPartPick = partPicks.contains(partIndex);
+        if (changers.empty()) {
+            dst = baseVal;
+            if (hasPartPick) {
+                FieldMerge::Conflict c;
+                c.part = partName;
+                c.partIndex = partIndex;
+                c.winner = "vanilla";
+                r.conflicts.push_back(std::move(c));
+            }
+            return;
+        }
 
         bool allSame = true;
         for (size_t k = 1; k < changerVals.size(); ++k) {
             if (*changerVals[k] != *changerVals[0]) { allSame = false; break; }
         }
-        if (changers.size() == 1 || allSame) {
+        if (!hasPartPick && (changers.size() == 1 || allSame)) {
             dst = *changerVals[0];
             r.autoMerged.push_back(partName);
             r.sourceVersions[partIndex] = changerIndices.front();
             return;
         }
 
-        // True conflict: pick override, else load order (last changer wins).
+        // Conflicting values or a saved part choice: retain contributor evidence
+        // even after disabling sources leaves a single writer or agreeing values.
         FieldMerge::Conflict c;
         c.part = partName;
         c.partIndex = partIndex;

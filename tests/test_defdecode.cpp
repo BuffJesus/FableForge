@@ -128,12 +128,23 @@ int main() {
           "part choices cannot bypass the existing incompatible-layout refusal");
     const auto unique = forge::defdecode::mergeFields(base, {{"first",first},{"last",independent}},
                                                      "last", {{1,"vanilla"}});
-    check(unique.sourceVersions[1] == 0 && unique.payload == chosen.payload,
-          "part baseline choice leaves unique edits auto-merged");
+    check(!unique.sourceVersions[1] && unique.payload[5] == 1,
+          "saved baseline part choice survives collapse to one changing source");
     const auto same = forge::defdecode::mergeFields(base, {{"first",first},{"last",first}},
                                                    "last", {{1,"vanilla"}});
-    check(same.payload == agreement.payload && same.sourceVersions == agreement.sourceVersions,
-          "part baseline choice leaves identical edits auto-merged");
+    check(same.payload[5] == 1 && !same.sourceVersions[1],
+          "saved baseline part choice survives agreement between sources");
+    const auto single = forge::defdecode::mergeFields(base, {{"first",first}}, {}, {{1,"missing"}});
+    check(single.payload == forge::defdecode::encode(first) && single.conflicts.size() == 1 &&
+          single.conflicts[0].mods == std::vector<std::string>{"first"},
+          "missing saved source remains reviewable with one surviving writer");
+    const auto samePick = forge::defdecode::mergeFields(base, {{"first",first},{"last",first}}, {}, {{1,"last"}});
+    check(samePick.payload == agreement.payload && samePick.sourceVersions[1] == 1,
+          "agreeing sources retain explicitly selected metadata ownership");
+    const auto noChange = forge::defdecode::mergeFields(base, {{"first",base}}, {}, {{1,"missing"}});
+    check(noChange.payload == forge::defdecode::encode(base) && noChange.conflicts.size() == 1 &&
+          noChange.conflicts[0].mods.empty() && !noChange.sourceVersions[1],
+          "saved source with no remaining field edits remains reviewable");
     bool refused = false;
     try { (void)forge::defdecode::mergeFields(base, {{"first",first}}, {}, {{3,"first"}}); }
     catch (const std::invalid_argument&) { refused = true; }
