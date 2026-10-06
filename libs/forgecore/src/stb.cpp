@@ -105,7 +105,7 @@ Archive Archive::open(const fs::path& path) {
     }
     file.seekg(16, std::ios::beg);
     const uint32_t alignment = readU32(file, "alignment");
-    (void)readU32(file, "entry count plus header");
+    (void)readU32(file, "maximum entry id");
     const uint32_t entryCount = readU32(file, "entry count");
     const uint32_t tableOffset = readU32(file, "table offset");
 
@@ -466,7 +466,10 @@ void appendStaticMaps(const fs::path& srcPath, const fs::path& outPath,
     for (size_t i = 0; i < newRows.size(); ++i)
         appendEntry(newRows[i].map->entryName, newRows[i].id, chunkOffsets[i],
                     uint32_t(newRows[i].map->chunk.size()));
-    patchU32(out, 20, entryCount + uint32_t(maps.size()) + 1);
+    // Native ReadEntryList 02F9A180 allocates maxIndex + 1 slots and checks
+    // every entry ID against maxIndex. Sparse banks need their actual last ID,
+    // independent of the number of live entries (WriteFileInformation 02F9ACC0).
+    patchU32(out, 20, newRows.back().id);
     patchU32(out, 24, entryCount + uint32_t(maps.size()));
     patchU32(out, 28, newTableOffset);
 

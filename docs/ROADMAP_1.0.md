@@ -58,6 +58,8 @@ validates its 446 unique map/chunk identities and exact contiguous record covera
 Whole-container metadata/ownership and world admission remain pending.
 Foliage palette read/write now uses native main/shadow/z-sprite order and retains
 the complete runtime settings block; all 3,597 original rows rewrite exactly.
+Appending maps now writes the actual maximum STB entry ID, preserving native
+entry-table capacity for sparse banks; one/multiple append regressions pass.
 All 46 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

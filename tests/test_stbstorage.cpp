@@ -1,7 +1,10 @@
 #include "forge/stbstorage.hpp"
 #include "forge/stbbake.hpp"
 #include "forge/rangecodec.hpp"
+#include "forge/stb.hpp"
+#include "forge/temporarydirectory.hpp"
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 using Bytes=std::vector<uint8_t>;
@@ -167,5 +170,45 @@ int main() {try {
     badCommon=common;setWord(badCommon,16+88,253);refuses([&]{validateCommon(badCommon);});
     badCommon=common;setWord(badCommon,254+4,7);refuses([&]{validateCommon(badCommon);});
     refuses([&]{validateCommon(Bytes{1,0,0,0,'n','o','n','u','l',1,1,1,1});});
+    // BBB's header +20 is maximum entry ID, not live count + 1. Sparse
+    // source IDs must remain addressable after one or several map appends.
+    Bytes bank;
+    for(uint32_t v:{0x42424242u,115u,174u,1u,64u,31u,3u,0u})word(bank,v);
+    auto alignBank=[&]{bank.resize((bank.size()+63)/64*64);};
+    alignBank();const auto chunkAt=uint32_t(bank.size());bank.resize(bank.size()+8,0x5a);
+    alignBank();const auto secondChunkAt=uint32_t(bank.size());bank.resize(bank.size()+8,0x5a);
+    alignBank();const auto commonAt=uint32_t(bank.size());append(bank,common);
+    alignBank();const auto tableAt=uint32_t(bank.size());setWord(bank,28,tableAt);
+    word(bank,1);word(bank,0);word(bank,3);
+    auto sizedString=[&](const std::string& s){word(bank,uint32_t(s.size()));bank.insert(bank.end(),s.begin(),s.end());};
+    auto entryRow=[&](uint32_t id,const std::string& name,uint32_t at,uint32_t length) {
+        for(uint32_t v:{42u,id,0u,length,at,0u})word(bank,v);
+        sizedString(name);word(bank,0);word(bank,1);sizedString(name);word(bank,0);
+    };
+    entryRow(7,"B",chunkAt,8);entryRow(8,"A",secondChunkAt,8);
+    entryRow(31,"__STATIC_MAP_COMMON_HEADER__",commonAt,uint32_t(common.size()));
+    forge::TemporaryDirectory scratch(std::filesystem::temp_directory_path(),"stb-sparse-append-");
+    const auto source=scratch.path()/"source.stb",destination=scratch.path()/"appended.stb";
+    {std::ofstream out(source,std::ios::binary);out.write(reinterpret_cast<const char*>(bank.data()),bank.size());}
+    for(size_t added:{size_t(1),size_t(2)}) {
+        std::vector<forge::stb::StaticMapAppend> additions;
+        for(size_t i=0;i<added;++i)additions.push_back({"new"+std::to_string(i),"new"+std::to_string(i),Bytes(8,0xa5),record});
+        forge::stb::appendStaticMaps(source,destination,additions);
+        std::ifstream in(destination,std::ios::binary);const Bytes output((std::istreambuf_iterator<char>(in)),{});
+        auto prefix=Bytes(output.begin(),output.begin()+bank.size());
+        for(size_t at:{20,24,28})std::copy_n(bank.begin()+at,4,prefix.begin()+at);
+        if(prefix!=bank)throw std::runtime_error("append changed original bank storage");
+        const auto archive=forge::stb::Archive::open(destination);
+        const auto* commonEntry=archive.findEntry("__STATIC_MAP_COMMON_HEADER__");
+        const auto appendedMaps=validateCommon(archive.read(*commonEntry));
+        if(appendedMaps.size()!=2+added || archive.entries().back().id!=31+added ||
+           output.at(20)!=31+added || output.at(21) || output.at(22) || output.at(23))
+            throw std::runtime_error("append maximum entry ID does not cover sparse entries");
+        for(size_t i=0;i<added;++i) {
+            const auto* entry=archive.findEntry("new"+std::to_string(i));
+            if(!entry || entry->id!=32+i || archive.read(*entry)!=Bytes(8,0xa5))
+                throw std::runtime_error("sparse appended payload lost");
+        }
+    }
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

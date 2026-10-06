@@ -757,6 +757,27 @@ with original STB hash unchanged. All **46/46 tests pass (37.27s)** in
 not new z-sprite authoring or runtime rendering behavior.
 Composer still refuses divergent namespaces.
 
+Further native bank metadata review (`build/namespace-stb-bank-metadata-20261006.c`)
+identifies header +20 as **maximum entry ID**, not live entry count plus one:
+ReadEntryList 02F9A180 allocates maxIndex+1 and bounds entry IDs; WriteFileInformation
+02F9ACC0 writes the actual highest initialized ID. `appendStaticMaps` now writes
+its last allocated ID. Sparse-bank fixtures (IDs 7, 8, 31) append one/two maps,
+check IDs 32/33 and header capacity, validate the relocated complete common entry,
+and preserve every original byte except the three intended header words.
+All Release targets build; **46/46 tests pass (33.43s)** in
+`build/stb-sparse-append-core-20261006.log`.
+
+Metadata census `build/stb-container-metadata-inventory-20261006.json` accounts for
+473 entries / 66,048 TOC bytes, with 645,492 zero alignment bytes outside live
+payloads. Its legacy `dev_id`/`dev_type` labels are misleading: native ReadEntryList
+and InternalWriteEntryList 02F9B120 prove these are **entry checksum / filename
+count**, followed by that many presized strings and an info-size/blob pair.
+The table prefix is a data-type histogram, not a fixed development header.
+Original STB has one type (0, 473 entries), one filename per entry, and only the
+26 sea entries carry info (16 bytes each). Existing general reader/writer loops
+assume this one-type/one-filename subset; do not claim arbitrary BBB support.
+Remaining whole-bank admission must validate this metadata and chunk ownership.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
