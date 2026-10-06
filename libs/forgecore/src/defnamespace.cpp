@@ -106,4 +106,29 @@ Plan allocate(Input baseline, std::span<const Input> sources) {
     }
     return plan;
 }
+Prepared prepare(Input baseline, std::span<const Input> sources,
+                 const defschema::Schema& schema) {
+    Prepared result;
+    result.allocation = allocate(baseline, sources);
+    result.sources.reserve(sources.size());
+    for (size_t si = 0; si < sources.size(); ++si) {
+        const auto& map = result.allocation.sources[si];
+        auto& contributors = result.sources.emplace_back();
+        contributors.reserve(sources[si].entries.size());
+        for (size_t slot = 0; slot < sources[si].entries.size(); ++slot) {
+            const auto moved = map.gameEntries.find(uint32_t(slot));
+            const auto target = moved == map.gameEntries.end() ? uint32_t(slot) : moved->second;
+            auto entry = sources[si].entries[slot];
+            try {
+                entry.data = defrelocate::relocate(entry, schema, map);
+            } catch (const std::exception& error) {
+                throw std::runtime_error("definition namespace: source " + std::to_string(si) +
+                    " game.bin slot " + std::to_string(slot) + ": " + error.what());
+            }
+            entry.indexInDefinition = result.allocation.entries.at(target).indexInDefinition;
+            contributors.push_back({target, std::move(entry)});
+        }
+    }
+    return result;
+}
 } // namespace forge::defnamespace

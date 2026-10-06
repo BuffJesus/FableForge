@@ -1,4 +1,6 @@
 #include "forge/defnamespace.hpp"
+#include "forge/defdecode.hpp"
+#include "forge/modorder.hpp"
 #include <array>
 #include <cstdio>
 #include <stdexcept>
@@ -19,14 +21,28 @@ int audit(int argc, char** argv) {
     std::vector<defnamespace::Input> inputs;
     for (const auto& file : files) inputs.push_back({file.entries(), file.originalNames()});
     const auto plan = defnamespace::allocate({baseline.entries(), baseline.originalNames()}, inputs);
+    std::optional<defnamespace::Prepared> prepared;
+    std::string preparationError;
+    try { prepared=defnamespace::prepare({baseline.entries(),baseline.originalNames()},inputs,schema); }
+    catch (const std::exception& e) { preparationError=e.what(); }
     nlohmann::json report{{"scope", "Read-only namespace and BIN reference audit; no external-reference or writer acceptance"},
         {"baseline", argv[1]}, {"entries", plan.entries.size()}, {"names", plan.names.size()},
-        {"sources", nlohmann::json::array()}};
+        {"sources", nlohmann::json::array()}, {"preparation_error",preparationError}};
     for (size_t i = 0; i < files.size(); ++i) {
         const auto& maps = plan.sources[i];
         nlohmann::json source{{"root", argv[i + 3]}, {"game_map", maps.gameEntries},
             {"name_map", maps.nameOffsets}, {"rewrites", 0}, {"unresolved", 0},
             {"records", nlohmann::json::array()}};
+        if (prepared) {
+            source["prepared_game"]=nlohmann::json::array();
+            for (const auto& contribution : prepared->sources[i]) {
+                const auto& e=contribution.entry;
+                source["prepared_game"].push_back({{"target",contribution.targetSlot},
+                    {"definition",e.definition},{"name",e.name},{"ordinal",e.indexInDefinition},
+                    {"payload_sha256",modorder::sha256OfBytes(std::string_view(
+                        reinterpret_cast<const char*>(e.data.data()),e.data.size()))}});
+            }
+        }
         for (const auto* bank : {"game.bin", "script.bin", "frontend.bin"}) {
             const auto file = open(argv[i + 3], bank);
             for (size_t slot = 0; slot < file.entries().size(); ++slot) {
@@ -162,5 +178,48 @@ int main(int argc, char** argv) {
           "individual duplicate baseline name offsets preserved");
     check(a[2].indexInDefinition == 1 && b[2].indexInDefinition == 1 &&
           bn.size() == 4 && base.size() == 2, "inputs unchanged after successes and failures");
+    // Source-local references must be normalized before version comparison.
+    const auto schema = defschema::Schema::loadText(R"({
+        "SCALAR":{"prefix_len":3,"fields":[{"name":"Index","type":"CDefIndex"}]}
+    })");
+    auto payload = [](uint32_t reference) {
+        std::vector<uint8_t> bytes{1,0,0};
+        for (auto word : {defdecode::fieldTag("Index"), reference})
+            for (unsigned i=0;i<4;++i) bytes.push_back(uint8_t(word>>(i*8)));
+        return bytes;
+    };
+    std::vector<bin::Entry> prepBase{{"SCALAR","BASE",0,payload(UINT32_MAX)}};
+    auto pa=prepBase, pb=prepBase;
+    pa.push_back({"SCALAR","A",1,payload(2)});
+    pa.push_back({"SCALAR","SHARED",2,payload(2)});
+    pb.push_back({"SCALAR","SHARED",1,payload(1)});
+    pb.push_back({"SCALAR","",2,payload(1)});
+    std::vector<Name> pn{{1,"SCALAR"},{2,"BASE"}};
+    std::array<Input,2> prepInputs{{{pa,pn},{pb,pn}}};
+    const auto prepared=prepare({prepBase,pn},prepInputs,schema);
+    check(prepared.sources[0][2].targetSlot==2 && prepared.sources[1][1].targetSlot==2,
+          "shared contributors retain separate source ownership at one output slot");
+    check(prepared.sources[0][2].entry.data==prepared.sources[1][1].entry.data &&
+          prepared.sources[1][1].entry.data==payload(2),
+          "equivalent source-local references agree after relocation");
+    check(prepared.sources[1][1].entry.indexInDefinition==2 &&
+          prepared.sources[1][2].targetSlot==3 &&
+          prepared.sources[1][2].entry.indexInDefinition==3 &&
+          prepared.sources[1][2].entry.data==payload(2),
+          "anonymous contributor gets planned identity and its own relocated payload");
+    pb[1].data=payload(UINT32_MAX);
+    const auto conflicting=prepare({prepBase,pn},prepInputs,schema);
+    check(conflicting.sources[0][2].entry.data!=conflicting.sources[1][1].entry.data,
+          "preparation preserves real conflicts instead of choosing a winner");
+    check(pb[2].data==payload(1) && pb[2].indexInDefinition==2,
+          "preparation leaves source references and ordinals unchanged");
+    std::array<Input,1> shorter{{{std::span(prepBase).first(0),pn}}};
+    check(prepare({prepBase,pn},shorter,schema).sources[0].empty(),
+          "short source does not contribute fabricated baseline rows");
+    pb[2].data={1,0,0,0}; // moved ID in an unrecognized payload
+    rejects([&] { prepare({prepBase,pn},prepInputs,schema); },
+          "unknown candidate refuses preparation of the entire source set");
+    check(pb[2].data==std::vector<uint8_t>({1,0,0,0}) && pa[2].data==payload(2),
+          "failed preparation preserves all inputs");
     return failures ? 1 : 0;
 }

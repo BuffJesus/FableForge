@@ -478,6 +478,23 @@ overlong ANRT/AOBJ containers while retaining errors; it is not an admission
 parser. Next: build reusable admission and relocation integration with independent
 output-delta checks, retaining explicit malformed-animation refusals.
 
+`defnamespace::prepare` now allocates and relocates game-bank contributors before
+version comparison. Source/slot ownership stays explicit, target ordinals follow
+the planned layout, shorter sources contribute no fabricated rows, and conflicting
+versions remain separate. Any unresolved payload refuses preparation without input
+mutation. The allocation's stored payloads remain source-local; this API does not
+admit external files or sibling banks and is not wired into the composer yet.
+Synthetic checks cover equivalent relocated references, real conflicts, anonymous
+ownership, missing rows and refusal. Independent original-bank reports
+`build/defnamespace-prepared-seasons-secrets-20261006.json` and
+`build/defnamespace-prepared-secrets-seasons-20261006.json` check all 30,564 source
+contributors per order: exact identities, target slots/ordinals and payload SHA256
+against independently applied word deltas. Both retain 15,386 slots / 14,206 names,
+241/13 rewrites and zero unresolved BIN candidates; input hashes are unchanged.
+All Release targets build; **44/44 core tests pass (23.06s)** in
+`build/defnamespace-prepared-core-20261006.log`. Next remains reusable external
+admission, followed by composer integration and choice-preservation checks.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains

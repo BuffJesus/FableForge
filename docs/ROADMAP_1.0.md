@@ -30,8 +30,11 @@ reader now supports native fixed counts, passed through height baking and bounds
 edits; its metadata-free diagnostic stops before frames. All 446 original maps
 pass the directory audit, with bounds-only byte preservation on the anomaly
 fixture. All Release targets build and all 44 core tests pass.
-All three compiled BIN banks are already
-covered by the identity/relocation audits. Composer refusal remains. Work is active;
+All three compiled BIN banks are already covered by the identity/relocation
+audits. Game contributor preparation now relocates versions before comparison
+while retaining source ownership and real conflicts; independent audits check
+all 30,564 contributors in both orders. External admission and composer integration
+remain unfinished. Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.
 
 2026-10-05 sleep checkpoint adds a tested definition-payload relocation core:

@@ -52,6 +52,7 @@ def audit(tool, schema, baseline, sources):
     ambiguous = {name for count in counts for name, n in count.items() if n > 1}
     baseline_named = {entry['name'] for entry in base if entry['name']}
     owners = {}
+    prepared_sources = []
     for si, (root, bank, source) in enumerate(zip(sources, decoded, report['sources'], strict=True)):
         mapping = dict(source['game_map'])
         assert len(mapping) == len(source['game_map'])
@@ -81,6 +82,7 @@ def audit(tool, schema, baseline, sources):
                 assert new == old and name == base_names[old]
             assert target_names.setdefault(new, name) == name, (root, old, new, name)
         banks = {'game.bin': bank}
+        expected_game = [entry['data'] for entry in bank]
         for row in source['records']:
             if 'after_hex' not in row:
                 assert row['unresolved'], 'missing successful relocated payload'
@@ -99,7 +101,29 @@ def audit(tool, schema, baseline, sources):
                 assert domain[rewrite['before']] == rewrite['after']
                 struct.pack_into('<I', expected, offset, rewrite['after'])
             assert bytes.fromhex(row['after_hex']) == expected, 'unintended relocated payload delta'
+            if row['bank'] == 'game.bin':
+                expected_game[row['slot']] = bytes(expected)
+        if 'prepared_game' in source:
+            assert len(source['prepared_game']) == len(bank), 'fabricated/missing contributors'
+            for old, (entry, prepared, expected) in enumerate(zip(
+                    bank, source['prepared_game'], expected_game, strict=True)):
+                assert prepared['target'] == mapping.get(old, old), 'wrong prepared owner slot'
+                assert (prepared['definition'], prepared['name']) == identity(entry)
+                assert prepared['payload_sha256'] == hashlib.sha256(expected).hexdigest(), \
+                    'prepared payload differs from independent exact deltas'
+            prepared_sources.append(source['prepared_game'])
     assert set(targets) == set(range(report['entries'])), 'missing/unowned output slots'
+    ordinals = {}
+    counts_by_definition = Counter()
+    for target in range(report['entries']):
+        definition = targets[target][0]
+        ordinals[target] = counts_by_definition[definition]
+        counts_by_definition[definition] += 1
+    for prepared in prepared_sources:
+        for entry in prepared:
+            assert entry['ordinal'] == ordinals[entry['target']], 'wrong prepared ordinal'
+    if not report.get('preparation_error'):
+        assert len(prepared_sources) == len(sources), 'missing prepared sources'
     at = 4
     for offset, (_, name) in sorted(target_names.items()):
         assert offset == at, 'name overlap or gap'
@@ -115,6 +139,9 @@ def audit(tool, schema, baseline, sources):
         'all name references retain exact CRC/string', 'name pool has no overlaps or gaps',
         'successful relocated payloads match exact independent word deltas',
         'all input bank hashes unchanged']
+    if len(prepared_sources) == len(sources):
+        report['independent_checks'].append(
+            'all prepared game contributors preserve ownership, canonical ordinals and exact payload deltas')
     return report
 
 
