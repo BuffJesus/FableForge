@@ -80,5 +80,11 @@ int main() {try {
     badDetail=detail;badDetail[4]=2;refuses([&]{validateLocalDetail(badDetail);});
     badDetail=detail;badDetail[0]=255;refuses([&]{validateLocalDetail(badDetail);});
     if(!validateLocalDetail(Bytes(4)).empty())throw std::runtime_error("empty detail frame changed");
+    Bytes sea;word(sea,3);word(sea,3);range(sea,Bytes(36));range(sea,Bytes{0,0,1,0,2,0});
+    validateSea(sea);validateSea(Bytes(8));
+    for(size_t n=0;n<sea.size();++n)refuses([&]{validateSea(Bytes(sea.begin(),sea.begin()+n));});
+    auto badSea=sea;badSea.push_back(0);refuses([&]{validateSea(badSea);});
+    badSea=sea;for(size_t i=0;i<4;++i)badSea[i]=255;refuses([&]{validateSea(badSea);});
+    badSea=sea;badSea[8]=38;badSea.insert(badSea.begin()+12+37,0);refuses([&]{validateSea(badSea);});
     std::cout<<"terrain storage checks passed\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

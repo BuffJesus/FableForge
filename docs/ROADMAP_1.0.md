@@ -51,8 +51,8 @@ texture headers. STB/world admission and composer integration remain pending.
 Reusable STB terrain review now validates all 21,904 foreground and 95,895
 background frames, including exact nested range storage and native shared-index
 selection. Local-detail review adds all 22,226 bodies, bringing reusable decoded
-frame validation to all 140,025 owned STB frames. Whole-container/common-header
-and world admission remain pending.
+frame validation to all 140,025 owned STB frames. The 26 separate sea payloads
+also validate. Whole-container/common-header and world admission remain pending.
 All 46 tests pass.
 Composer refusal remains. Work is active;
 see HANDOFF_WORLD_UI.md for commands, evidence and next recovery targets.

@@ -15,4 +15,7 @@ void validateBackground(const std::vector<uint8_t>& body);
 // local palette index in storage order so an archive-level caller can validate
 // the common-header palette separately; these are not global definition IDs.
 std::vector<uint32_t> validateLocalDetail(const std::vector<uint8_t>& body);
+// Validate a separate sea-entry payload (counts, range-coded XYZ floats and
+// uint16 indices). Its BBB extra metadata requires separate archive review.
+void validateSea(const std::vector<uint8_t>& body);
 }

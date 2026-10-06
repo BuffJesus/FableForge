@@ -126,4 +126,12 @@ std::vector<uint32_t> validateLocalDetail(const std::vector<uint8_t>& body) {
     }
     c.finish();return paletteIndices;
 }
+void validateSea(const std::vector<uint8_t>& body) {
+    // CWaterSeaGenerator::LoadSea 02E5A8F0 / SaveSea 02E5AA70:
+    // two signed counts, then an optional range block for each nonempty array.
+    Reader c{body};const auto vertices=c.word(),indices=c.word();
+    if(vertices)c.range(vertices,12);
+    if(indices)c.range(indices,2);
+    c.finish();
+}
 }

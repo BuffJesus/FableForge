@@ -691,6 +691,25 @@ unknown kinds/flags/counts/tails. All Release targets build; **46/46 tests pass
 Whole-STB/common-header and loose/WAD world admission remain pending; composer
 still refuses divergent namespaces.
 
+Separate sea payloads now validate through `stbstorage::validateSea`. Native
+CWaterSeaGenerator LoadSea 02E5A8F0 / SaveSea 02E5AA70 store two counts followed
+by range-coded XYZ float records (12 bytes) and uint16 indices. The 26 original
+sea entries / 3,774,026 bytes all pass with unchanged STB hash in
+`build/stb-sea-storage-review-20261006.json`; native export is
+`namespace-sea-storage-20261006.c`. Their separate BBB extra blocks contain a
+12-byte version/stream-position/cutout-CRC record with its size prefix; that
+metadata is inventoried but not yet admitted (`stb-sea-metadata-inventory-20261006.json`).
+Truncation, suffix, count overflow and inner range suffix tests pass. All Release
+targets build; **46/46 tests pass (30.38s)** in `build/stb-sea-storage-core-20261006.log`.
+
+Next common-header investigation is scratch-only:
+`namespace_stb_common_inventory_20261006.cpp` and
+`stb-common-record-inventory-20261006.json` enumerate 446 records, with first three
+read-only extracts `stb-common-record-{0,1,2}-20261006.bin`. The common descriptor
+and palette boundaries still need complete admission. In particular, the two
+words currently labeled checksum-block pointer/size by `stbinfo` require native
+verification before treating them as bounded file spans. Composer remains refused.
+
 ## 2026-10-05 sleep checkpoint: verified payload relocation core
 
 User requested a safe checkpoint and pause until tomorrow. Checkout remains
