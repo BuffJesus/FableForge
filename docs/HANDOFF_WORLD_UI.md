@@ -1,5 +1,50 @@
 # World view and UI continuation - 2026-09-29
 
+## 2026-10-05 creature sheathed-weapon and leader identities
+
+Original Raise Dead New, Spearanimsbeta3, Thunder Transform Mod and Winter Sky
+now import through direct apply and composition. Each formerly stopped at
+Weapon4ID and, after its recovery, LeaderTypeDef. Both fields are inside existing
+opaque schema parts; exact local tags/byte lengths are validated before writing.
+No schema boundary or unrelated field byte changes were introduced.
+
+Native ego_r.exe SHA256
+aeb372d37adce0b17affc0744eb20c3fe75d05c5a80cd134b0a4a7f5d607ea96:
+CThingCreatureBase::CreateDefaultWeapons 005404b0 checks CThingCreatureDef+EC
+at 00540509 and calls CThingObject::Create at 0054054c only if positive.
+That field is InitialSheathedWeapon in PDB layout. Zero metadata named
+NULLDEF_CHeroMorphDef must retain literal zero even when that record moves.
+Positive targets must be positive OBJECT indices; contradictory null metadata,
+wrong types, missing selected targets and unverified negative named sentinels
+refuse. ChocolateBox's newer unlinked uint declaration was insufficient alone;
+the actual native use resolves that earlier uncertainty.
+
+IsMyDeadLeader 006c9ac0 instead compares LeaderTypeDef (+144) with the dead
+thing's DefGlobalIndex (ushort +9C) at 006c9b27..006c9b2e. This is an ordinary
+named game-record identity, not the sheathed weapon's zero sentinel. PDB layout
+and installed-bank values corroborate both fields: 515/517 sheathed values are
+zero, two name OBJECT_SUMMONER_SWORD_01; 506 leader values are zero, eleven name
+CREATURE_HOBBE_LIEUTENANT. The installed data is not claimed pristine. Native
+instruction reports: C: asset-checks-20261005/sheathed-weapon-native-2b87cxjl
+and -49rju981/result.json. Initial inventory OnInitialActivate inspection did
+not access this definition field; -9r2wre2p is retained as a negative lead.
+
+tools/test_fmp_creature_optional_links.py passes four untouched originals
+against independent controls processed by the actual old d25dde7 packaged tool:
+omit just the two zero-valued metadata groups, retain every source record and
+other group, and compare all effective bank bytes through both routes. Explicit
+derived bank/record cases move the null label and positive sword/leader targets;
+only the two expected words differ from prior-tool control across four cases.
+Eight negative routes preserve prior output. Evidence:
+C:/Users/Cornelio/FableForge-asset-checks-20261005/
+fmp-creature-optional-i_sx3eji/result.json, including both actual tool hashes,
+original/control hashes and unchanged input hashes. This is offline evidence.
+
+All Release targets build; all 40 core tests pass together (28.46s), saved in
+build/creature-optional-core-20261005.log. Environment 9oqp15d_ retains its
+214 links/reassigned IDs/16 safe negatives, and record-refusal-zefn09h7 passes
+all 18 cases. No gameplay or live writes. Frozen d25dde7 excludes this increment.
+
 ## 2026-10-05 material/environment local ZIP acceptance
 
 Local d25dde7 archive at dist/development/20261005-d25dde7/

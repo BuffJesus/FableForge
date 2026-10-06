@@ -840,6 +840,71 @@ int main() {
     rejects([&] { forge::fmplinks::relink(malformedCreature, targets, creatureSchema, references); },
             "unexpected nested creature tag refuses");
 
+    {
+        forge::bin::File objectTargets;
+        objectTargets.addEntry("BRAIN", "PADDING", {0});
+        objectTargets.addEntry("OBJECT", "SWORD", {0});
+        objectTargets.addEntry("CHeroMorphDef", "NULLDEF_CHeroMorphDef", {0});
+        objectTargets.addEntry("BRAIN", "WRONG_TYPE", {0});
+        const std::vector<forge::fmplinks::Link> nullLink{{"2674723971.Weapon4ID", "NULLDEF_CHeroMorphDef"}};
+        const auto location = forge::fmplinks::locate(creature, creatureSchema, nullLink[0]);
+        check(location.offset == 39 && location.part == 2 &&
+              location.destination == forge::fmplinks::Destination::OptionalObjectEntry,
+              "sheathed weapon belongs to the containing RangedWeaponDef part");
+        check(forge::fmplinks::relink(creature, objectTargets, creatureSchema, nullLink) == originalCreature,
+              "zero sheathed weapon stays absent when the named null record moves to index two");
+        const forge::bin::File noTargets;
+        check(forge::fmplinks::relink(creature, noTargets, creatureSchema, nullLink) == originalCreature,
+              "a native null sentinel has no object dependency");
+        const std::vector<forge::fmplinks::Link> swordLink{{"2674723971.Weapon4ID", "SWORD"}};
+        rejects([&] { forge::fmplinks::relink(creature, objectTargets, creatureSchema, swordLink); },
+                "null sheathed word cannot acquire a weapon through inconsistent metadata");
+        auto armed = creature; armed.data[39] = 123;
+        auto armedExpected = originalCreature; armedExpected[39] = 1;
+        check(forge::fmplinks::relink(armed, objectTargets, creatureSchema, swordLink) == armedExpected,
+              "positive sheathed weapon follows the final object index and preserves every other byte");
+        rejects([&] { forge::fmplinks::relink(armed, noTargets, creatureSchema, swordLink); },
+                "selected missing sheathed object refuses");
+        check(forge::fmplinks::relink(armed, noTargets, creatureSchema, swordLink, true) == armed.data,
+              "unselected missing sheathed object can defer to final composition");
+        for (const auto* name : {"WRONG_TYPE", "PADDING", "NULLDEF_CHeroMorphDef"}) {
+            const std::vector<forge::fmplinks::Link> wrong{{"2674723971.Weapon4ID", name}};
+            rejects([&] { forge::fmplinks::relink(armed, objectTargets, creatureSchema, wrong); },
+                    "positive sheathed references cannot bind other definition categories");
+        }
+        forge::bin::File zeroObject;
+        zeroObject.addEntry("OBJECT", "SWORD", {0});
+        rejects([&] { forge::fmplinks::relink(armed, zeroObject, creatureSchema, swordLink); },
+                "object index zero would silently erase the weapon and refuses");
+        for (size_t at : {size_t(35), size_t(43), size_t(51)}) {
+            auto malformed = armed; malformed.data[at] ^= 1;
+            rejects([&] { forge::fmplinks::relink(malformed, objectTargets, creatureSchema, swordLink); },
+                    "all grouped sheathed/brain/interaction tags must match");
+        }
+        auto negative = armed;
+        for (size_t at = 39; at < 43; ++at) negative.data[at] = 0xff;
+        rejects([&] { forge::fmplinks::relink(negative, objectTargets, creatureSchema, swordLink); },
+                "unverified negative-sentinel named metadata refuses");
+        const auto leaderSchema = forge::defschema::Schema::loadText(
+            R"({"CREATURE":{"prefix_len":3,"fields":[{"name":"DeferHitsIfBehindHitter","type":"?"}]}})");
+        Bytes leaderValue{1}; word(leaderValue, forge::defdecode::fieldTag("LeaderTypeDef")); word(leaderValue, 0);
+        const auto leader = legacyEntry("CREATURE", "DeferHitsIfBehindHitter", "?", leaderValue);
+        const std::vector<forge::fmplinks::Link> leaderLinks{{"2089043171.GameBINEntryID", "NULLDEF_CHeroMorphDef"}};
+        auto leaderExpected = leader.data; leaderExpected[12] = 2;
+        check(forge::fmplinks::relink(leader, objectTargets, leaderSchema, leaderLinks) == leaderExpected,
+              "leader identity follows the bank index even when the sheathed-weapon null remains zero");
+        for (int variant = 0; variant < 3; ++variant) {
+            auto malformed = leader;
+            if (variant == 0) malformed.data[8] ^= 1;
+            if (variant == 1) malformed.data.push_back(0);
+            if (variant == 2) malformed.data.pop_back();
+            rejects([&] { forge::fmplinks::relink(malformed, objectTargets, leaderSchema, leaderLinks); },
+                    "leader reference requires the complete bool/tag/value group");
+        }
+        rejects([&] { forge::fmplinks::relink(leader, noTargets, leaderSchema, leaderLinks); },
+                "leader identity remains a named dependency");
+    }
+
     const auto assetCreatureSchema = forge::defschema::Schema::loadText(
         R"({"CREATURE":{"prefix_len":3,"fields":[{"name":"Damage","type":"?"},{"name":"Graphic","type":"?"},{"name":"ResetCombatTypeOnUnsheatheDefaultWeapons","type":"?"}]}})");
     forge::defdecode::Decoded assetDecoded;

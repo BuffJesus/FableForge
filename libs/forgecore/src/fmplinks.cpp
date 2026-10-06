@@ -1199,6 +1199,20 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
     // controls under its first unresolved field. Validate the complete local
     // tag sequence before addressing a native ChocolateBox weapon/brain link.
     if (entry.definition == "CREATURE" && parts.size() == 2) {
+        if (link.path == "2089043171.GameBINEntryID") {
+            size_t nestedOffset = decoded.prefixLen;
+            for (size_t i = 0; i < decoded.fields.size(); ++i) {
+                const auto& field = decoded.fields[i]; nestedOffset += 4;
+                // IsMyDeadLeader (ego_r 006c9ac0) compares LeaderTypeDef
+                // with the dead thing's DefGlobalIndex, rather than testing
+                // a zero sentinel as InitialSheathedWeapon does.
+                if (field.name == "DeferHitsIfBehindHitter" && field.value.size() == 9 &&
+                    read32(field.value, 1) == defdecode::fieldTag("LeaderTypeDef"))
+                    return {nestedOffset + 5, i + 1, Destination::GameEntry};
+                nestedOffset += field.value.size();
+            }
+            fail("unsupported CREATURE leader type layout in " + entry.name);
+        }
         if (link.path == "754446624.unknown") {
             size_t nestedOffset = decoded.prefixLen;
             for (size_t i = 0; i < decoded.fields.size(); ++i) {
@@ -1216,7 +1230,8 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
         const bool primary = link.path == "3898150842.Weapon1ID";
         const bool secondary = link.path == "2486342274.Weapon2ID";
         const bool brain = link.path == "1867951032.BrainID";
-        if (primary || secondary || brain) {
+        const bool sheathed = link.path == "2674723971.Weapon4ID";
+        if (primary || secondary || brain || sheathed) {
             size_t nestedOffset = decoded.prefixLen;
             for (size_t i = 0; i < decoded.fields.size(); ++i) {
                 const auto& field = decoded.fields[i]; nestedOffset += 4;
@@ -1225,11 +1240,12 @@ Location locate(const bin::Entry& entry, const defschema::Schema& schema, const 
                     read32(field.value, 4) == defdecode::fieldTag("PrimaryMeleeWeaponDef") &&
                     read32(field.value, 12) == defdecode::fieldTag("SecondaryMeleeWeaponDef"))
                     return {nestedOffset + (primary ? 8u : 16u), i + 1, Destination::GameEntry};
-                if (brain && field.name == "RangedWeaponDef" && field.value.size() == 28 &&
+                if ((brain || sheathed) && field.name == "RangedWeaponDef" && field.value.size() == 28 &&
                     read32(field.value, 4) == defdecode::fieldTag("InitialSheathedWeapon") &&
                     read32(field.value, 12) == defdecode::fieldTag("PBrain") &&
                     read32(field.value, 20) == defdecode::fieldTag("CreatureInteractionType"))
-                    return {nestedOffset + 16, i + 1, Destination::GameEntry};
+                    return {nestedOffset + (sheathed ? 8u : 16u), i + 1,
+                            sheathed ? Destination::OptionalObjectEntry : Destination::GameEntry};
                 nestedOffset += field.value.size();
             }
             fail("unsupported CREATURE weapon/brain field layout in " + entry.name);
@@ -1289,6 +1305,23 @@ std::vector<uint8_t> relink(const bin::Entry& entry, const bin::File& targets,
         if (location.destination == Destination::GameEntry) {
             const auto* found = targets.find(link.target);
             if (found) target = uint32_t(found - targets.entries().data());
+        } else if (location.destination == Destination::OptionalObjectEntry) {
+            // CThingCreatureBase::CreateDefaultWeapons (ego_r 005404b0)
+            // creates an object only for InitialSheathedWeapon > 0. Historic
+            // exporters label zero with game.bin entry zero's unrelated name.
+            const auto source = read32(entry.data, location.offset);
+            if (source == 0) {
+                if (link.target != "NULLDEF_CHeroMorphDef")
+                    fail("null sheathed weapon has inconsistent named metadata");
+                target = 0;
+            } else if (source > 0x7fffffffu) {
+                fail("unsupported negative sheathed weapon metadata");
+            } else if (const auto* found = targets.find(link.target)) {
+                const auto index = size_t(found - targets.entries().data());
+                if (found->definition != "OBJECT" || index == 0 || index > 0x7fffffffu)
+                    fail("sheathed weapon target is not a positive OBJECT entry");
+                target = uint32_t(index);
+            }
         } else if (location.destination == Destination::MeshEntry) {
             if (meshIds) {
                 const auto found = meshIds->find(link.target);

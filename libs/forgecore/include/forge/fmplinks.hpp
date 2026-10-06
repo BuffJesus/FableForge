@@ -24,7 +24,8 @@ std::vector<Link> readMetadata(std::span<const uint8_t> bytes);
 std::vector<LinkGroup> readMetadataGroups(std::span<const uint8_t> bytes);
 RecordLinks readGameLinks(const big::File& package);
 
-enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry, TextureEntry, EffectEntry, TextEntry };
+enum class Destination { GameEntry, NameOffset, NameCrc, MeshEntry, TextureEntry, EffectEntry, TextEntry,
+                         OptionalObjectEntry };
 struct Location { size_t offset, part; Destination destination; };
 Location locate(const bin::Entry& entry, const defschema::Schema& schema,
                 const Link& link);

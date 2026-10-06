@@ -2,6 +2,18 @@
 
 # .fmp (Fable Mod Package) format — reverse-engineered
 
+2026-10-05 CREATURE `2674723971.Weapon4ID` addresses InitialSheathedWeapon
+inside the validated RangedWeaponDef/InitialSheathedWeapon/PBrain/interaction
+block. Native creation accepts positive OBJECT indices only; source zero with
+legacy NULLDEF_CHeroMorphDef metadata retains zero independently of that named
+record's final index. Contradictory null/negative metadata and invalid positive
+object targets refuse. `2089043171.GameBINEntryID` addresses LeaderTypeDef after
+DeferHitsIfBehindHitter's byte; native code compares it with DefGlobalIndex, so
+it relinks as an ordinary game identity. Both exact grouped layouts are checked.
+Four untouched originals agree with prior-tool controls across both routes;
+reordered-bank cases distinguish native zero semantics from named identity.
+See HANDOFF_WORLD_UI for native addresses, hashes and preservation evidence.
+
 2026-10-05 ENVIRONMENT_THEME_DAY/CEnvironmentThemeDaySetDef Time groups
 `1743315694.unknown.<row>.Sky` and `.Clouds` relink texture-bank IDs. Each row
 has 34 tagged values (269 bytes); every tag/width and the complete count/length
@@ -79,7 +91,8 @@ alpha or appearance bytes are rewritten. Original No Scar Fade and Bruised
 and Bloodied (No Scars) pass 210 prefix links, exact full creature-record bytes
 after all 258 links, direct/composed bank parity and forty safe refusals.
 Their appearance model/skeletal lists are empty; nonempty nested layouts have
-synthetic native coverage only. The separate Weapon4ID path remains refused.
+synthetic native coverage only at that checkpoint. Weapon4ID was subsequently
+recovered with the native object/sentinel contract documented above.
 
 2026-10-05 CTextureReplacementDef.Entries accepts the exact legacy
 659892607.CTextureReplacementDef_List.<index>.Texture To Replace and

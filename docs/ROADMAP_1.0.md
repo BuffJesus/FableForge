@@ -1,5 +1,11 @@
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
+2026-10-05 native sheathed-weapon/leader recovery admits original Raise Dead
+New, Spearanimsbeta3, Thunder Transform Mod and Winter Sky. Both routes match
+prior-tool controls; four reordered-identity cases and eight safe refusals pass.
+Sheathed zero remains a sentinel; leader identities follow moved records.
+All 40 core tests pass. Frozen d25dde7 excludes this increment; see handoff.
+
 2026-10-05 local d25dde7 material/environment ZIP passes four extracted workflows,
 108 identities/122 links, plus actual packaged-tool material, environment and
 Time-choice checks. Explicit 85 not run, zero skips. PACKAGE_INFO retains the
