@@ -2,6 +2,7 @@
 #include "definitionwrite.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/defedit.hpp"
+#include "forge/unicode.hpp"
 #include <charconv>
 #include <algorithm>
 #include <cstring>
@@ -10,12 +11,22 @@ inline bool printableString(const forge::defdecode::DecodedField& field) {
     return field.type=="CCharString" && !field.value.empty() && field.value.size()<=128 && field.value.back()==0 &&
         std::all_of(field.value.begin(),field.value.end()-1,[](unsigned char c){return c>=32 && c<=126;});
 }
+inline bool printableWideText(const std::string& text) {
+    if(text.size()>127) return false;
+    try {
+        std::vector<uint8_t> encoded;forge::unicode::appendUtf16z(encoded,text);
+        for(size_t i=0;i+2<encoded.size();i+=2)
+            if(encoded[i+1]==0 && (encoded[i]<32 || (encoded[i]>=127 && encoded[i]<=159))) return false;
+        return true;
+    } catch(const std::exception&) {return false;}
+}
 inline bool printableWideString(const forge::defdecode::DecodedField& field) {
     if(field.type!="CWideString" || field.value.size()<2 || field.value.size()>256 || field.value.size()%2 ||
        field.value[field.value.size()-2]!=0 || field.value.back()!=0) return false;
-    for(size_t i=0;i+2<field.value.size();i+=2)
-        if(field.value[i]<32 || field.value[i]>126 || field.value[i+1]!=0) return false;
-    return true;
+    try {
+        size_t cursor=0;const auto text=forge::unicode::readUtf16z(field.value,cursor);
+        return cursor==field.value.size() && printableWideText(text);
+    } catch(const std::exception&) {return false;}
 }
 inline bool fieldEditable(const forge::defdecode::DecodedField& field) {
     return !field.name.empty() && ((field.type=="bool" && field.value.size()==1) ||
@@ -44,7 +55,7 @@ inline std::string fieldValue(const forge::defdecode::DecodedField& field) {
         const int rgba[]={field.value[2],field.value[1],field.value[0],field.value[3]};return colourValue(rgba);
     }
     if(printableWideString(field)) {
-        std::string text;for(size_t i=0;i+2<field.value.size();i+=2) text+=char(field.value[i]);return text;
+        size_t cursor=0;return forge::unicode::readUtf16z(field.value,cursor);
     }
     if(printableString(field)) return std::string(field.value.begin(),field.value.end()-1);
     return forge::defdecode::formatValue(field);
@@ -66,9 +77,13 @@ inline bool replaceField(const std::filesystem::path& sourceNames,const std::fil
         if(target) throw std::runtime_error("Definition field name is ambiguous.");target=&candidate;
     }
     if(!target || !fieldEditable(*target)) throw std::runtime_error("Choose a confirmed editable field.");
-    if((target->type=="CCharString" || target->type=="CWideString") && (value.size()>127 ||
+    if(target->type=="CCharString" && (value.size()>127 ||
        std::any_of(value.begin(),value.end(),[](unsigned char c){return c<32 || c>126;})))
         throw std::runtime_error("Definition text accepts up to 127 printable ASCII characters.");
+    if(target->type=="CWideString") {
+        if(!printableWideText(value))
+            throw std::runtime_error("Wide definition text accepts up to 127 UTF-8 bytes without control characters.");
+    }
     // Preserve the exact original representation when the draft is unchanged,
     // including noncanonical true bytes and existing NaN payload bits.
     if(fieldValue(*target)==value) return false;

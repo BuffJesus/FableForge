@@ -121,6 +121,8 @@ def main():
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
+        ok &= run("retail GUI Unicode definition delta, identity preservation and Restore",
+                  [sys.executable, "tools/test_definition_wide_retail.py", "--install", install_root], capture_output=True)
         ok &= run("retail lipsync byte roundtrip", [os.path.join("build", "fableforge_lipsync_tests.exe"), dialogue])
         ok &= run("retail dialogue LUT/lipsync join", [os.path.join("build", "fableforge_lut_tests.exe"), os.path.dirname(dialogue)])
         ok &= run("retail dialogue subtitle join", [os.path.join("build", "fableforge_dialoguetext_tests.exe"), install_root])
@@ -338,7 +340,7 @@ def main():
               [sys.executable, "tools/test_definition_groups_ui.py"], capture_output=True)
     ok &= run("Definition scalar drafts, real inputs, destinations, stale guards, close review and Restore",
               [sys.executable, "tools/test_definition_edit_ui.py"], capture_output=True)
-    ok &= run("Definition wide ASCII drafts, native encoding, real inputs and protected Unicode originals",
+    ok &= run("Definition wide Unicode drafts, native encoding, real inputs and protected malformed originals",
               [sys.executable, "tools/test_definition_wide_edit_ui.py"], capture_output=True)
     ok &= run("Definition integer bounds, signed name references and exact field deltas",
               [sys.executable, "tools/test_definition_integer_bounds.py"], capture_output=True)

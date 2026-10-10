@@ -1081,6 +1081,14 @@ Definitions inspection uses `assets_tab 6`, `wait_definitions`, `definition_bank
 
 Definition scalar drafts use `definition_edit <field-index>`, `definition_value <value>`, `definition_save`, and `definition_cancel`. The edit/value/save `_refused` variants check refusals. `definition_editing` and `definition_edit_failed` report draft state. Saving reselects the explicit native index, even when another record has a numeric name.
 
+CWideString drafts accept strict UTF-8 up to 127 bytes (not characters). Real
+`input_text` includes supplementary input through 32-bit ImGui characters. C0/C1
+controls refuse at Save; malformed UTF-8 and byte-overflow values refuse in the
+automation setter. Narrow strings and clone names retain ASCII-only input.
+`definition_wide` independently checks native UTF-16LE bytes and malformed-original
+refusal. `definition_wide_retail` drives both window sizes against read-only retail
+inputs, compares every record/table/name byte and restores only owned output.
+
 Definition clone drafts use `definition_clone` (or the real
 `btn_definition_clone` control), `definition_value <new-name>`, `definition_save`
 and `definition_cancel`. `definition_clone_refused` checks draft/load refusal;

@@ -200,6 +200,9 @@ add_test(NAME fableforge_lut_tests COMMAND fableforge_lut_tests)
 add_executable(fableforge_unicode_tests tests/test_unicode.cpp)
 target_link_libraries(fableforge_unicode_tests PRIVATE forgecore_slice)
 add_test(NAME fableforge_unicode_tests COMMAND fableforge_unicode_tests)
+add_executable(fableforge_definitionfield_tests tests/test_definitionfield.cpp)
+target_link_libraries(fableforge_definitionfield_tests PRIVATE fableforge)
+add_test(NAME fableforge_definitionfield_tests COMMAND fableforge_definitionfield_tests)
 
 add_executable(fableforge_dialoguetext_tests tests/test_dialoguetext.cpp)
 target_link_libraries(fableforge_dialoguetext_tests PRIVATE forgecore_slice)
@@ -234,6 +237,8 @@ if(WIN32)
     ${IMGUI_DIR}/imgui_impl_dx11.cpp
   )
   target_include_directories(albion_imgui PUBLIC ${IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/vendor/ImGuizmo)
+  # Keep supplementary Unicode input intact in the GUI and all ImGui consumers.
+  target_compile_definitions(albion_imgui PUBLIC IMGUI_USE_WCHAR32)
   target_link_libraries(albion_imgui PUBLIC d3d11 dxgi d3dcompiler dwmapi ole32 shell32 uuid)
 
   add_executable(FableForge WIN32

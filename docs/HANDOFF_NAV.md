@@ -1,4 +1,4 @@
-> Active continuation: [GUI definition cloning](HANDOFF_GUI_CLONE_2026-10-10.md) in its owned C development worktree. RC2 is published with a verified asset hash; stable 0.18.0 stays latest. GUI clone source/retail and extracted development-package checks pass.
+> Active continuation: [GUI Unicode definition drafts](HANDOFF_GUI_UNICODE_2026-10-10.md) in the owned C development worktree. Source and exact extracted Unicode checks pass; the clone/context head has green Windows CI. RC2 remains published unchanged. Broader UI font fallback is next.
 
 # Navigation lane, 2026-09-27
 

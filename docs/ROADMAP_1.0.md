@@ -1,4 +1,4 @@
-> Active continuation: [GUI definition cloning](HANDOFF_GUI_CLONE_2026-10-10.md) in its owned C development worktree. RC2 is published with a verified asset hash; stable 0.18.0 stays latest. GUI clone source/retail and extracted development-package checks pass.
+> Active continuation: [GUI Unicode definition drafts](HANDOFF_GUI_UNICODE_2026-10-10.md) in the owned C development worktree. Source and exact extracted Unicode checks pass; the clone/context head has green Windows CI. RC2 remains published unchanged. Broader UI font fallback is next.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2494,3 +2494,21 @@ Archive SHA256: `9be422f1097e0cee629a5450de6e4a8e230217b93da711438b5d66d668d26e3
 The packaged retail GUI check also passes the ready-context requirement and Restore.
 The initial clone checkpoint and RC2 archive remain intact. See the GUI clone
 handoff for evidence; Unicode GUI wide-string authoring is next.
+
+### GUI Unicode wide-string authoring, 2026-10-10
+
+The development GUI edits complete valid CWideString originals and drafts up to
+127 UTF-8 bytes using the proven strict native UTF-16LE converter. Supplementary
+input is preserved through a shared 32-bit ImGui character ABI. C0/C1 controls,
+malformed surrogates/UTF-8, overlong originals and incomplete/opaque-tailed strings
+refuse. Narrow strings and clone names remain ASCII-only. Exact no-ops keep original
+bytes; transactional publication and all existing draft/write guards remain.
+Five targeted CTests, 42 GUI wide cases, 24 narrow neighbors and the both-size
+14,764-record retail Unicode delta/Restore check pass. The final control tightening
+passes targeted reruns. Exact extracted acceptance passes 113 identities, 132 links,
+nine selected workflows, 119 not run and zero skips. Archive SHA256:
+`ed71aa9bf5ee94ad2d155b24de6fdc71c7af4e457531a4950ec92c53294cd74a`.
+The packaged retail GUI check preserves all identities, unrelated payloads and names,
+and passes Restore with native hashes unchanged. Broader font
+coverage remains open: Latin/Greek render, but inspected CJK/emoji use replacement
+glyphs despite correct stored bytes. See [Unicode handoff](HANDOFF_GUI_UNICODE_2026-10-10.md).

@@ -1442,15 +1442,15 @@ Game-bank records with a confirmed `GroupDef` reference offer **Open group**. It
 
 Definition `CRGBColour` CLI input uses red, green, blue, alpha (0-255; omitted alpha defaults to 255). The writer converts to the native blue, green, red, alpha byte order. Existing unexpected lengths refuse.
 
-Inline CCharString and CWideString drafts accept up to 127 printable ASCII characters, including empty text. Unicode input is filtered. Existing non-ASCII, long, unterminated or opaque-tailed strings remain read-only and exact. The shared writer requires one complete NUL-terminated original string before replacement. Unsupported wide strings and name-table references remain inspectable.
+Inline CCharString drafts accept up to 127 printable ASCII characters, including empty text. Non-ASCII narrow input is filtered; legacy byte strings remain read-only and exact. CWideString drafts accept valid Unicode up to 127 UTF-8 bytes, including supplementary characters and empty text. Existing Unicode values within that limit can be edited or saved unchanged. C0/C1 controls, malformed encoding, overlong originals, missing terminators and opaque trailers remain unsupported. The shared writer requires one complete NUL-terminated original string before replacement.
 
-CWideString uses UTF-16LE with a final zero code unit, without a count prefix. The CLI writer currently accepts ASCII text for this type and refuses non-ASCII input; existing Unicode values remain intact until an explicit supported replacement. Odd lengths, missing or embedded terminators and opaque trailers refuse before writes.
+CWideString uses UTF-16LE with a final zero code unit, without a count prefix. CLI and GUI edits use strict UTF-8 conversion. Odd lengths, malformed surrogates, missing or embedded terminators and opaque trailers refuse before writes. Unchanged supported drafts retain their exact original bytes.
 
 Definitions are grouped by type and confirmed game-bank group. Search includes group names and native indices. Opening a definition expands its tree and reveals the selected row.
 
 Confirmed object Graphic fields offer Open model by native ID. Missing or ambiguous IDs preserve the current preview. Definition drafts protect this navigation.
 
-Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. The GUI currently edits short printable ASCII wide strings; other originals remain inspectable.
+Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. GUI Unicode authoring is part of the development continuation after rc.2. Glyph availability depends on the installed UI font: accented Latin and Greek were inspected, while CJK and emoji currently show replacement glyphs even though input and saved bytes remain intact. Unsupported originals remain inspectable.
 
 Terrain-theme texture fields offer Open texture for confirmed positive main-bank IDs. Unsupported and ambiguous targets preserve the current preview; definition drafts protect navigation.
 

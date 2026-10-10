@@ -251,6 +251,9 @@ def main():
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_wide', [sys.executable, repo / 'tools/test_definition_wide_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_wide_retail', [sys.executable, repo / 'tools/test_definition_wide_retail.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_integer_bounds', [sys.executable, repo / 'tools/test_definition_integer_bounds.py',
         '--tool', package / 'forge-tools.exe', '--work-root', work])
     run('definition_wide_layout', [sys.executable, repo / 'tools/test_definition_wide_layout.py',

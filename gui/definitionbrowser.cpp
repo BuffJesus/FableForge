@@ -19,6 +19,7 @@ namespace albion::gui {
 namespace fs=std::filesystem;
 namespace {
 int definitionASCIIChar(ImGuiInputTextCallbackData* data) {return data->EventChar<32 || data->EventChar>126;}
+int definitionUnicodeChar(ImGuiInputTextCallbackData* data) {return data->EventChar<32 || (data->EventChar>=127 && data->EventChar<=159);}
 std::string definitionLower(std::string value) {
     for(auto& c:value) c=char(std::tolower(static_cast<unsigned char>(c)));return value;
 }
@@ -121,8 +122,11 @@ void App::browseDefinition(const std::string& name) {
     setDefinitionBank("game.bin");definitionSearch_[0]=0;definitionType_.clear();definitionFilterDirty_=true;definitionBrowseRequest_=name;
 }
 bool App::setDefinitionEditValue(const std::string& value) {
-    if(!definitionEditing_ || value.size()>=sizeof definitionEditValue_ ||
-       std::any_of(value.begin(),value.end(),[](unsigned char c){return c==0 || c>=128;})) return false;
+    if(!definitionEditing_ || value.size()>=sizeof definitionEditValue_) return false;
+    if(definitionEditType_=="CWideString") {
+        try {std::vector<uint8_t> validated;forge::unicode::appendUtf16z(validated,value);}
+        catch(const std::exception&) {return false;}
+    } else if(std::any_of(value.begin(),value.end(),[](unsigned char c){return c==0 || c>=128;})) return false;
     std::snprintf(definitionEditValue_,sizeof definitionEditValue_,"%s",value.c_str());definitionEditConfirm_=false;return true;
 }
 bool App::beginDefinitionEdit(size_t field) {
@@ -139,7 +143,11 @@ bool App::beginDefinitionEdit(size_t field) {
         definitionEditExpectedNames_=definitionFile_.originalNames();definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
         definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;definitionCloning_=false;
-        definitionNameSearch_[0]=0;setDefinitionEditValue(definitionwrite::fieldValue(selected));return true;
+        definitionNameSearch_[0]=0;
+        if(!setDefinitionEditValue(definitionwrite::fieldValue(selected))) {
+            definitionEditing_=false;throw std::runtime_error("The field value does not fit a supported definition draft.");
+        }
+        return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
 bool App::beginDefinitionClone() {
@@ -331,9 +339,10 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
             } else ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_);
         } else {
             const bool text=definitionCloning_ || definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
-            if(text) ImGui::TextDisabled("%s",definitionCloning_?"New name (up to 127 ASCII characters)":"Text (up to 127 ASCII characters)");
+            const bool wide=definitionEditType_=="CWideString";
+            if(text) ImGui::TextDisabled("%s",definitionCloning_?"New name (up to 127 ASCII characters)":wide?"Unicode text (up to 127 UTF-8 bytes)":"Text (up to 127 ASCII characters)");
             ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_,
-                text?ImGuiInputTextFlags_CallbackCharFilter:0,text?definitionASCIIChar:nullptr);
+                text?ImGuiInputTextFlags_CallbackCharFilter:0,text?(wide?definitionUnicodeChar:definitionASCIIChar):nullptr);
         }
         auto_.registerWidget("input_definition_edit_value");
         if(!definitionEditConfirm_) {
