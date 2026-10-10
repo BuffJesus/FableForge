@@ -435,6 +435,11 @@ SkinBinding readSkin(const GltfBuffers& g,size_t skinIndex,size_t meshNode,
         commonRoot=root;
         binding.joints.push_back({ni,parents[ni],nodes.at(ni).value("name",std::string()),*worlds[ni],identity()});
     }
+    std::map<size_t,size_t> ordinals;
+    for(size_t i=0;i<binding.joints.size();++i) ordinals.emplace(binding.joints[i].sourceNode,i);
+    for(auto& joint:binding.joints)
+        for(auto parent=joint.parentNode;parent;parent=parents[*parent])
+            if(const auto found=ordinals.find(*parent);found!=ordinals.end()) {joint.parentJoint=found->second;break;}
     if(skin.contains("inverseBindMatrices")) {
         const size_t index=gltfSize(skin,"inverseBindMatrices");const auto& acc=g.doc.at("accessors").at(index);
         if(acc.at("type")!="MAT4" || gltfSize(acc,"componentType")!=5126 || acc.value("normalized",false) ||
@@ -931,6 +936,81 @@ std::array<double,16> inverseBindInFable(const std::array<float,16>& source) {
         result[row*4+3]=100.0*signs[row]*source[12+axes[row]];
     }
     result[15]=1;
+    return result;
+}
+
+std::vector<forge::meshcompose::SkinnedPrimitive> mapSkinToDonor(
+    const Model& model,const std::vector<forge::meshpreview::Bone>& donor) {
+    const auto fail=[](const std::string& reason) {throw std::runtime_error("donor skin mapping: "+reason);};
+    if(donor.empty() || donor.size()>256) fail("donor must have 1-256 local bones");
+    if(model.prims.empty() || model.skins.size()!=model.prims.size()) fail("missing aligned skin primitives");
+    std::map<std::string,std::vector<size_t>> donorNames;
+    for(size_t i=0;i<donor.size();++i) {
+        donorNames[donor[i].name].push_back(i);
+        if(donor[i].parent<-1 || donor[i].parent>=int32_t(donor.size())) fail("invalid donor parent");
+        for(float value:donor[i].inverseBind) if(!std::isfinite(value)) fail("nonfinite donor inverse bind");
+        const auto& m=donor[i].inverseBind;
+        if(m[12]!=0 || m[13]!=0 || m[14]!=0 || m[15]!=1) fail("non-affine donor inverse bind");
+    }
+    for(size_t i=0;i<donor.size();++i) {
+        size_t depth=0;
+        for(int32_t p=int32_t(i);p>=0;p=donor[size_t(p)].parent)
+            if(++depth>donor.size()) fail("cyclic donor hierarchy");
+    }
+    std::vector<forge::meshcompose::SkinnedPrimitive> result;
+    for(size_t part=0;part<model.prims.size();++part) {
+        const auto& skin=model.skins[part];
+        if(skin.influences.size()!=model.prims[part].verts.size()) fail("missing per-vertex weights");
+        std::map<std::string,std::vector<size_t>> sourceNames;
+        for(size_t i=0;i<skin.joints.size();++i) {
+            sourceNames[skin.joints[i].name].push_back(i);
+            if(skin.joints[i].parentJoint && *skin.joints[i].parentJoint>=skin.joints.size()) fail("invalid source parent joint");
+        }
+        std::vector<std::optional<size_t>> mapped(skin.joints.size());
+        std::vector<bool> required(skin.joints.size(),false);
+        for(const auto& vertex:skin.influences) {
+            double total=0;std::vector<bool> seen(skin.joints.size(),false);
+            for(const auto& influence:vertex) {
+                if(influence.bone>=skin.joints.size() || !std::isfinite(influence.weight) || influence.weight<0) fail("invalid source influence");
+                if(influence.weight==0) continue;
+                if(seen[influence.bone]) fail("duplicate positive source influence");
+                seen[influence.bone]=true;required[influence.bone]=true;total+=influence.weight;
+            }
+            if(!std::isfinite(total) || std::abs(total-1)>1e-5) fail("source weights must sum to one");
+        }
+        // Validate donor ancestor closure as well as directly weighted joints.
+        // A partial donor root can have additional source ancestors above it.
+        for(size_t first=0;first<required.size();++first) if(required[first]) {
+            size_t current=first,depth=0;
+            while(!mapped[current]) {
+                if(++depth>skin.joints.size()) fail("cyclic source hierarchy");
+                const auto& joint=skin.joints[current];const auto& name=joint.name;
+                const auto found=donorNames.find(name);
+                if(name.empty() || sourceNames.at(name).size()!=1 || found==donorNames.end() || found->second.size()!=1)
+                    fail("missing or ambiguous joint name '"+name+"'");
+                const size_t slot=found->second[0];const auto converted=inverseBindInFable(joint.inverseBind);
+                for(size_t k=0;k<16;++k) {
+                    const double expected=donor[slot].inverseBind[k];
+                    const double tolerance=(k<12 && k%4==3?0.001:1e-5)+1e-5*std::max(std::abs(expected),std::abs(converted[k]));
+                    if(std::abs(converted[k]-expected)>tolerance) fail("inverse bind mismatch for '"+name+"'");
+                }
+                mapped[current]=slot;
+                if(donor[slot].parent<0) break;
+                if(!joint.parentJoint) fail("missing source parent for '"+name+"'");
+                const size_t parent=*joint.parentJoint;
+                if(skin.joints[parent].name!=donor[size_t(donor[slot].parent)].name) fail("parent mismatch for '"+name+"'");
+                current=parent;
+            }
+        }
+        forge::meshcompose::SkinnedPrimitive primitive;primitive.geometry=model.prims[part];
+        for(const auto& vertex:skin.influences) {
+            std::vector<forge::meshcompose::Influence> weights;
+            for(const auto& influence:vertex) if(influence.weight>0)
+                weights.push_back({uint16_t(*mapped[influence.bone]),influence.weight});
+            primitive.skin.push_back(std::move(weights));
+        }
+        result.push_back(std::move(primitive));
+    }
     return result;
 }
 

@@ -1,4 +1,5 @@
 #include "meshimport.hpp"
+#include "forge/meshpreview.hpp"
 #include "nlohmann/json.hpp"
 #include <bit>
 #include <chrono>
@@ -81,6 +82,50 @@ int main() {
         }
         const auto load=[&](const Fixture& f){save(path,f);return albion::meshimport::loadSkinnedModel(path);};
         const auto refuses=[&](const Fixture& f,const char* label) {bool failed=false;try {load(f);}catch(const std::exception&) {failed=true;}require(failed,label);++checks;};
+        const auto authored=load(fixture());
+        std::vector<forge::meshpreview::Bone> donor(2);
+        donor[0].name="ROOT";donor[0].parent=-1;donor[1].name="CHILD";donor[1].parent=0;
+        for(auto& bone:donor) bone.inverseBind={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+        donor[1].inverseBind[3]=-100;
+        const auto mapped=albion::meshimport::mapSkinToDonor(authored,donor);
+        require(mapped.size()==1 && mapped[0].skin[0][0].bone==1 && mapped[0].skin[1][0].bone==0 &&
+                mapped[0].skin[2][0].weight==.5 && mapped[0].geometry.verts[1].x==100,
+                "donor remap changed geometry, weights or used source order");++checks;
+        require(authored.skins[0].joints[0].parentJoint==1 && !authored.skins[0].joints[1].parentJoint,
+                "nearest joint hierarchy not retained");++checks;
+        const auto mappingRefuses=[&](const albion::meshimport::Model& input,const std::vector<forge::meshpreview::Bone>& bones,const char* label) {
+            bool rejected=false;try {albion::meshimport::mapSkinToDonor(input,bones);}catch(const std::exception&) {rejected=true;}
+            require(rejected,label);++checks;
+        };
+        auto badDonor=donor;badDonor[1].name="child";mappingRefuses(authored,badDonor,"case-folded joint accepted");
+        badDonor=donor;badDonor.push_back(donor[1]);mappingRefuses(authored,badDonor,"ambiguous donor joint accepted");
+        badDonor=donor;badDonor[0].parent=1;mappingRefuses(authored,badDonor,"cyclic donor accepted");
+        badDonor=donor;badDonor[1].parent=2;mappingRefuses(authored,badDonor,"invalid donor parent accepted");
+        badDonor=donor;badDonor[1].inverseBind[3]=-99;mappingRefuses(authored,badDonor,"wrong donor bind accepted");
+        badDonor=donor;badDonor[1].inverseBind[0]=std::nanf("");mappingRefuses(authored,badDonor,"nonfinite donor bind accepted");
+        badDonor=donor;badDonor[1].inverseBind[15]=0;mappingRefuses(authored,badDonor,"projective donor bind accepted");
+        auto badSource=authored;badSource.skins[0].joints[2].name="CHILD";mappingRefuses(badSource,donor,"ambiguous source joint accepted");
+        badSource=authored;badSource.skins[0].joints[0].parentJoint.reset();mappingRefuses(badSource,donor,"missing parent chain accepted");
+        badSource=authored;badSource.skins[0].joints[0].parentJoint=2;mappingRefuses(badSource,donor,"wrong parent chain accepted");
+        badSource=authored;badSource.skins[0].influences[0].clear();mappingRefuses(badSource,donor,"empty source weights silently root-bound");
+        badSource=authored;badSource.skins[0].influences[0][0].bone=4;mappingRefuses(badSource,donor,"invalid source joint accepted");
+        badSource=authored;badSource.skins[0].influences[0].push_back({0,.5});mappingRefuses(badSource,donor,"duplicate source influence accepted");
+        // Non-joint scene nodes may sit between joints without changing the
+        // effective joint hierarchy. Unused unmatched source joints are retained.
+        auto throughNode=fixture();throughNode.doc["nodes"].push_back({{"children",{2}}});
+        throughNode.doc["nodes"][1]["children"]={5,3,4};
+        const auto throughModel=load(throughNode);
+        require(throughModel.skins[0].joints[0].parentNode==5 && throughModel.skins[0].joints[0].parentJoint==1 &&
+                albion::meshimport::mapSkinToDonor(throughModel,donor)[0].skin[0][0].bone==1,
+                "non-joint ancestor broke donor mapping");++checks;
+        auto posed=authored;posed.skins[0].joints[0].world[12]=900;
+        require(albion::meshimport::mapSkinToDonor(posed,donor)[0].geometry.verts[1].x==100,"default pose mistaken for bind pose");++checks;
+        auto childOnly=authored;for(auto& weights:childOnly.skins[0].influences) weights={{0,1}};
+        auto partial=std::vector<forge::meshpreview::Bone>{donor[1]};partial[0].parent=-1;
+        require(albion::meshimport::mapSkinToDonor(childOnly,partial)[0].skin[0][0].bone==0,"partial donor root rejected");++checks;
+        badDonor=donor;badDonor[0].inverseBind[3]=10;mappingRefuses(childOnly,badDonor,"unweighted required ancestor bind not checked");
+        badDonor=donor;badDonor[1].inverseBind[3]-=.0001f;
+        require(albion::meshimport::mapSkinToDonor(authored,badDonor)[0].skin[0][0].bone==1,"float bind jitter rejected");++checks;
         for(bool shorts:{false,true}) for(size_t weights:{5126u,5121u,5123u}) {
             const auto m=load(fixture(shorts,weights));require(m.prims.size()==1 && m.skins.size()==1,"skin/primitive alignment");
             const auto& p=m.prims[0];const auto& s=m.skins[0];
@@ -124,6 +169,11 @@ int main() {
         auto gap=f;auto& gapAttrs=gap.doc["meshes"][0]["primitives"][0]["attributes"];
         gapAttrs["JOINTS_2"]=4;gapAttrs["WEIGHTS_2"]=5;gapAttrs.erase("JOINTS_1");gapAttrs.erase("WEIGHTS_1");refuses(gap,"nonconsecutive skin sets accepted");
         auto duplicate=f;duplicate.data[jointOffset]=0;refuses(duplicate,"positive duplicate across weight sets accepted");
+        auto fullDonor=donor;
+        for(const auto& name:{"OTHER","LAST"}) {auto bone=donor[0];bone.name=name;bone.parent=0;fullDonor.push_back(bone);}
+        const auto fourWeights=albion::meshimport::mapSkinToDonor(load(f),fullDonor);
+        require(fourWeights[0].skin[0].size()==4 && fourWeights[0].skin[0][2].bone==2 && fourWeights[0].skin[0][3].weight==.25,
+                "donor mapping prematurely reduced positive weights");++checks;
         auto malformed=f;malformed.doc["meshes"][0]["primitives"][0]["attributes"]["JOINTS_01"]=4;refuses(malformed,"leading-zero skin set accepted");
         f=fixture();f.doc["nodes"].push_back({{"mesh",0},{"skin",0},{"translation",{20,0,0}}});f.doc["scenes"][0]["nodes"].push_back(5);
         const auto repeated=load(f);require(repeated.prims.size()==2 && repeated.skins.size()==2 && repeated.skins[1].meshNode==5 && repeated.prims[1].verts[1].x==100,"repeated skinned instances lost identity or baked pose");++checks;

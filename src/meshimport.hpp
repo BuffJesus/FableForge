@@ -19,6 +19,7 @@
 #include <optional>
 
 #include "forge/meshcompose.hpp"
+namespace forge::meshpreview { struct Bone; }
 
 namespace albion::meshimport {
 
@@ -28,6 +29,7 @@ struct SkinJoint {
     std::string name;
     // Original glTF coordinates/metres, column-major. Not donor transforms.
     std::array<float,16> world{},inverseBind{};
+    std::optional<size_t> parentJoint; // nearest ancestor in skin.joints, through non-joint nodes
 };
 struct SkinBinding {
     size_t sourceSkin=0,meshNode=0;
@@ -60,6 +62,13 @@ Model loadSkinnedModel(const std::filesystem::path& path);
 // C maps glTF metres (x,y,z) to Fable centimetres (x,-z,y)*100.
 // Returns a row-major affine matrix. Does not establish donor compatibility.
 std::array<double,16> inverseBindInFable(const std::array<float,16>& gltfMatrix);
+// Read-only donor remapping. Exact unique names for positive-weight joints and
+// donor ancestors; checks nearest-joint parent chains and converted inverse binds.
+// Bind tolerance: 1e-5 linear / 0.001 cm translation absolute + 1e-5 relative.
+// Retains geometry and every positive weight; does not compose/publish or prove
+// animation/runtime compatibility. Donor roots may be partial source subtrees.
+std::vector<forge::meshcompose::SkinnedPrimitive> mapSkinToDonor(
+    const Model& model,const std::vector<forge::meshpreview::Bone>& donor);
 
 struct ImportRequest {
     std::filesystem::path model;

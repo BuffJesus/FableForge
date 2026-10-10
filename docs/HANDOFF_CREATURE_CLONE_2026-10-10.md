@@ -966,3 +966,32 @@ joint-name resolution, hierarchy validation or donor compatibility proof; those
 remain the next implementation step. Shipping executables/checkpoints unchanged.
 Rebuilt skin/static input targets; all three focused skin-input, static-input and
 skinned-composition CTests pass. Skin-input executable reports 45 checks PASS.
+
+Read-only mapSkinToDonor now resolves every positive-weight source joint by
+exact unique name to a 1-256-slot decoded donor. Required donor ancestors also
+resolve and validate binds, even if unweighted. SkinJoint.parentJoint retains
+nearest skin-joint ancestry through non-joint scene nodes; parent chains must
+match donor names. Partial donor roots may have extra source ancestors above
+them; unrelated unweighted source joints need not exist in the donor. Empty,
+missing or ambiguous required names refuse, as do invalid donor parents/cycles,
+nonfinite/projective donor binds, bad source influences/weight totals and parent
+or bind mismatches. Source default pose is not used as a bind pose. All positive
+influences survive unchanged except their local slot indices; strongest-three
+reduction remains exclusively the composer's job. Geometry is copied unchanged.
+
+Comparison uses converted inverse binds with absolute tolerance 1e-5 for linear
+terms, 0.001 cm for translation, plus 1e-5 relative. This is an explicit import
+policy for float authoring jitter, not a recovered engine tolerance. Native donor
+export round-trip evidence is still required before promoting the import card.
+API takes decoded bones; future publication must derive both decoded bones and
+raw skeleton spans from the same freshly validated donor payload, not mix inputs.
+No bank writer, shipping app rebuild, package update or runtime proof in this step.
+Validation complete: final affected-target build succeeded. The same initially
+delayed CTest invocation (exec session 77476) completed terminal exit zero: all
+three focused skin-input, static-input and skinned-composition tests PASS. Direct
+skin-input run reports 66 checks PASS, including remapping, intermediate non-joint
+ancestry, unused joints, partial donor roots, unweighted required ancestor binds,
+default-pose independence, float jitter and retention of four positive influences.
+No test restart or acceptance from an old log. Next: exercise authored glTF input
+and mapped composition against native donor exports with independent readback,
+then owned-bank/private-definition publication and the creature import card.
