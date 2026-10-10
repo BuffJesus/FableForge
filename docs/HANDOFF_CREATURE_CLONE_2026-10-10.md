@@ -767,3 +767,22 @@ the final gate adds specific error-log assertions to exclude unrelated refusals.
 Production code unchanged. Registered unconditional source gate; no rebuild or
 broad-suite repetition needed. Pack destinations and named model chooser remain
 next before new extracted-package acceptance. Existing packages/RC2 unchanged.
+
+Body-binding pack GUI gate passes eight both-size cases in
+`creature-body-pack-ui-j0m04p_v`: fresh publication with creation tracking and
+Restore, existing-pack source preference and in-place Restore, destination switch
+refusal, and a manifest removed after the draft barrier. Existing pack starts
+with model 20 while base starts with 10; rebinding the pack to 10 must perform
+a real edit, proving the pack donor is used rather than the base no-op donor.
+Independent record checks require only the four-byte model word to change;
+raw names, base files, manifest and unrelated pack files remain exact. Existing
+bank backup remains exact after Restore, matching default keep-backup behavior;
+fresh files and creation markers are removed. Refusals retain drafts, log the
+specific reason and leave destinations unchanged except intentional manifest
+removal. Initial harness packets lzoqsg4z/7xgrx3lb exposed incorrect expectations
+for an unchanged names backup and default retained bank backup; corrected to the
+actual preservation contract, with full restored inventory checks. Tiny fixture
+helper accepts an initial model ID; default stale-source fixtures unchanged.
+Registered unconditional gate. No production changes, rebuild, broad-suite or
+package claim. Next: named model chooser and new extracted-package acceptance;
+custom skinned import and skeleton/runtime compatibility remain outstanding.
