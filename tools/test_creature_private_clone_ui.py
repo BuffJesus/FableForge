@@ -8,11 +8,13 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
+import time
 from audit_creature_visual_graph import analyze, listing
 from test_definition_edit_ui import click
 from test_fmp_links import read_bank
+from test_texture_lookup import texture_bank
 
-MODES=('save','cancel','duplicate-body','empty-root','empty-body','empty-appearance','destination','close-review')
+MODES=('save','cancel','duplicate-body','empty-root','empty-body','empty-appearance','destination','close-review','stale-bank','stale-names')
 
 def main():
     repo=Path(__file__).resolve().parents[1]
@@ -57,6 +59,13 @@ def main():
         for size,scale in [('1440x900',1),('800x600',1.5)]:
             for mode in args.only or MODES:
                 case=work/(size+'-'+mode);case.mkdir();output=case/'output'
+                input_root=native;owned_paths=None
+                if mode.startswith('stale-'):
+                    input_root=case/'source';compiled=input_root/'data/CompiledDefs';compiled.mkdir(parents=True)
+                    owned_paths=[compiled/'game.bin',compiled/'names.bin']
+                    owned_paths[0].write_bytes(source_bank);owned_paths[1].write_bytes(source_pool)
+                    levels=input_root/'data/Levels/FinalAlbion';levels.mkdir(parents=True);(levels/'unused.lev').write_bytes(b'')
+                    texture_bank(input_root/'data/graphics/pc/textures.big',[(1,'Existing',20)])
                 names=['FORGE_GUI_PRIVATE_ROOT','FORGE_GUI_PRIVATE_BODY','FORGE_GUI_PRIVATE_APPEARANCE']
                 if mode=='duplicate-body':names[1]=originals[donor['index']]['name']
                 if mode.startswith('empty-'):names[('root','body','appearance').index(mode[6:])]=''
@@ -69,8 +78,9 @@ def main():
                     if name:lines+=click(widget)+['input_text '+name,'frames 3']
                 lines+=[f'screenshot {(case/"draft.png").as_posix()}']
                 if mode=='cancel':lines+=click('btn_definition_edit_cancel')+['assert_state definition_editing 0']
-                elif mode=='duplicate-body' or mode.startswith('empty-') or mode=='destination':
+                elif mode=='duplicate-body' or mode.startswith(('empty-','stale-')) or mode=='destination':
                     if mode=='destination':lines+=[f'set saveroot {(case/"other-output").as_posix()}','wait_definitions','frames 3']
+                    if mode.startswith('stale-'):lines+=[f'screenshot {(case/"barrier.png").as_posix()}','frames 300']
                     lines+=['definition_save_refused','assert_state definition_editing 1','definition_cancel']
                 else:
                     if mode=='close-review':
@@ -81,12 +91,28 @@ def main():
                         'assert_state definition_editing 0',f'assert_state definition_selected {slots[0]}',
                         f'screenshot {(case/"created.png").as_posix()}']
                 lines+=['quit'];script=case/'private.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
-                result=subprocess.run([str(args.gui.resolve()),'--install',str(native),'--size',size,'--auto',str(script)],
-                    cwd=repo,capture_output=True,text=True,encoding='utf-8',timeout=150,
-                    env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
-                (case/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
+                changed=None
+                with (case/'output.log').open('w',encoding='utf-8') as log:
+                    process=subprocess.Popen([str(args.gui.resolve()),'--install',str(input_root),'--size',size,'--auto',str(script)],
+                        cwd=repo,stdout=log,stderr=subprocess.STDOUT,
+                        env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
+                    try:
+                        if owned_paths:
+                            deadline=time.monotonic()+60
+                            while not (case/'barrier.png').exists() and process.poll() is None and time.monotonic()<deadline:time.sleep(.02)
+                            assert (case/'barrier.png').exists(),'private draft barrier not reached'
+                            selected=0 if mode=='stale-bank' else 1
+                            changed=bytearray(owned_paths[selected].read_bytes());changed[0]^=1
+                            owned_paths[selected].write_bytes(changed)
+                        returncode=process.wait(timeout=150)
+                    finally:
+                        if process.poll() is None:process.terminate();process.wait(timeout=10)
                 trace=Path(str(script)+'.log').read_text(encoding='utf-8')
-                assert result.returncode==0 and 'RESULT PASS' in trace and 'FAIL ' not in trace,trace[-7000:]
+                assert returncode==0 and 'RESULT PASS' in trace and 'FAIL ' not in trace,trace[-7000:]
+                if owned_paths:
+                    assert owned_paths[0].read_bytes()==(changed if mode=='stale-bank' else source_bank)
+                    assert owned_paths[1].read_bytes()==(changed if mode=='stale-names' else source_pool)
+                    assert not list(input_root.rglob('*.forge-orig')),'stale refusal created originals'
                 if mode in ('save','close-review'):
                     created=read_bank(output);assert len(created)==len(originals)+3 and created[:len(originals)]==originals
                     for node,slot,name,data in zip(nodes,slots,names,expected):

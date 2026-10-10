@@ -458,3 +458,17 @@ allows scoped continuation. Every packet verifies source hashes unchanged.
 Next: private stale-bank/name source checks on a small owned definition fixture,
 missing/unresolved and inherited-donor GUI probes, then a new development package
 with extracted checks. Existing shared GUI archive remains untouched.
+
+GUI checkpoint 96e440c committed and pushed. Private stale-source gate now covers
+owned game/name pairs with a screenshot barrier before deliberate header changes.
+Session 43238 completed successfully: `creature-private-ui-wuxluix8` passes four
+stale-bank/stale-names cases across both window sizes. Refusal retains the draft,
+creates no output or originals and leaves the deliberately changed fixture pair
+exact. Native source SHA256 remains unchanged. Each pair is 907,995 + 397,006 bytes;
+only a tiny synthetic texture bank and empty level marker accompany it, not any
+copied game/texture archives. The default gate now covers ten modes at both sizes;
+sixteen prior private checks are reused, not rerun. Publisher CI 38076414718 still
+live at last observation; no repeat build/test needed for this test-only change.
+
+Next: missing/unresolved and inherited-donor GUI probes, then development package
+validation. No gameplay or full new release claim.
