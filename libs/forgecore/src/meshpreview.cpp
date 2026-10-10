@@ -200,11 +200,12 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
     if(bones) {
         const size_t count=size_t(bones);
         c.need(count*2);
+        const std::vector<uint8_t> indicesRaw(c.b.begin()+c.p,c.b.begin()+c.p+count*2);
         std::vector<uint16_t> globalIds(count);
         for(auto& id:globalIds) id=c.u16();
         const auto namesRaw=fableLzo(c,size_t(boneNames));
         const auto bonesRaw=fableLzo(c,count*60);
-        fableLzo(c,count*48); // bind-pose TRS; retained by the source archive
+        const auto keyframesRaw=fableLzo(c,count*48);
         const auto ibmsRaw=fableLzo(c,count*64);
         result.bones.reserve(count);
         size_t namePos=0;
@@ -231,6 +232,7 @@ Geometry decodeLod0(const std::vector<uint8_t>& payload, uint32_t meshType) {
                     throw std::runtime_error("meshpreview: nonfinite inverse bind matrix");
             result.bones.push_back(std::move(bone));
         }
+        result.skeletonBlocks=SkeletonBlocks{indicesRaw,namesRaw,bonesRaw,keyframesRaw,ibmsRaw};
     }
     c.skip(48);
     for(int32_t i=0;i<materials;++i){

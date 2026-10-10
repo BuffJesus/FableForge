@@ -16,14 +16,16 @@ int main(int argc,char** argv) {
     try {
         if(argc!=2) throw std::runtime_error("pass retail graphics.big");
         struct Case {uint32_t id;size_t bones;const char* last;uint32_t crc;
-                     size_t skinned;uint32_t skinCrc;};
+                     size_t skinned;uint32_t skinCrc;uint32_t rawCrc;};
         // Independent FableTLC mesh_rw.clone_skeleton oracle: CRC32 of each
         // bone's global ID, NUL-terminated name, parent and normalized IBM.
-        constexpr std::array<Case,5> cases={{{4521,27,"EYE_SET_L",0x12e44699u,1131,0x0a120a63u},
-            {5121,28,"EYE_SET_R",0xd8ebec00u,1012,0xe8945f52u},
-            {5150,28,"EYE_SET_R",0x480a3c2fu,846,0x9a81b8a7u},
-            {3985,17,"COLD_BREATH",0x60d20858u,757,0x6398ee17u},
-            {5110,27,"EYE_SET_R",0x22d4bb4eu,822,0xfc4567b6u}}};
+        // Raw CRC concatenates clone_skeleton's indices/names/bones/TRS/IBMs
+        // without normalization or padding changes (independent Python oracle).
+        constexpr std::array<Case,5> cases={{{4521,27,"EYE_SET_L",0x12e44699u,1131,0x0a120a63u,0x23ca606au},
+            {5121,28,"EYE_SET_R",0xd8ebec00u,1012,0xe8945f52u,0xf62e93d9u},
+            {5150,28,"EYE_SET_R",0x480a3c2fu,846,0x9a81b8a7u,0x9d6a7aaau},
+            {3985,17,"COLD_BREATH",0x60d20858u,757,0x6398ee17u,0xcaf34886u},
+            {5110,27,"EYE_SET_R",0x22d4bb4eu,822,0xfc4567b6u,0x8bc2ee81u}}};
         for(const auto& expected:cases) {
             const auto geometry=forge::meshpreview::readLod0(
                 std::filesystem::path(argv[1]),expected.id);
@@ -49,6 +51,18 @@ int main(int argc,char** argv) {
                 for(float value:bone.inverseBind) u32(std::bit_cast<uint32_t>(value));
             }
             crc=~crc;
+            require(geometry.skeletonBlocks.has_value(),"missing raw donor skeleton blocks");
+            const auto& raw=*geometry.skeletonBlocks;
+            require(raw.indices.size()==expected.bones*2 && raw.bones.size()==expected.bones*60 &&
+                    raw.keyframes.size()==expected.bones*48 && raw.inverseBinds.size()==expected.bones*64,
+                    "raw donor skeleton span lengths");
+            uint32_t rawCrc=0xffffffffu;
+            for(const auto* block:{&raw.indices,&raw.names,&raw.bones,&raw.keyframes,&raw.inverseBinds})
+                for(uint8_t value:*block) {
+                    rawCrc^=value;
+                    for(int bit=0;bit<8;++bit) rawCrc=(rawCrc>>1)^((rawCrc&1)?0xedb88320u:0);
+                }
+            require(~rawCrc==expected.rawCrc,"raw donor skeleton differs from Python clone_skeleton");
             if(crc!=expected.crc)
                 std::cerr << "mesh " << expected.id << " CRC " << std::hex << crc
                           << " expected " << expected.crc << std::dec << '\n';

@@ -45,6 +45,7 @@ int main(int argc,char** argv) {
             material.reflectId=texture-2;material.illumId=texture-3;
             const auto textured=forge::meshcompose::composeStatic("MESH_TEXTURE_IDS",{primitive},{material},false);
             const auto decoded=mp::decodeLod0(textured.payload,1);
+            check(!decoded.skeletonBlocks,"static mesh has no raw skeleton donor");
             const auto& maps=decoded.materials.at(0);
             check(uint64_t(maps.diffuseTexture)==texture && uint64_t(maps.bumpTexture)==texture-1 &&
                   uint64_t(maps.reflectionTexture)==texture-2 && uint64_t(maps.alphaMapTexture)==texture-3,

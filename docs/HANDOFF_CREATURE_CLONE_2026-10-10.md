@@ -836,3 +836,33 @@ trial or in-game compatibility. Source CTests reused from the accepted chooser
 checkpoint; no core writer change. Navigation/roadmap routing now points to this
 checkpoint. Next: custom skinned body import against donor skeleton evidence and
 the remaining compatibility/placement/runtime validation, preserving full scope.
+
+Custom skinned-import foundation: canonical meshpreview::Geometry now retains an
+optional SkeletonBlocks containing the decoded donor global-ID, name, C3DBone,
+bind-pose TRS and full inverse-bind matrix byte spans. Existing Bone is a preview
+representation that normalizes IBM padding and previously discarded TRS, so it
+cannot alone reconstruct the donor. Zero-bone meshes have no donor blocks.
+Existing decoder validation still precedes successful return; no writer or install
+mutation added. This supplies exact raw records to the upcoming skinned composer,
+not a substitute for arbitrary geometry, weights, palette partition or import UI.
+
+Independent read-only Python mesh_rw.clone_skeleton oracle on installed graphics
+produced concatenated five-span CRC32 values: 3985=caf34886, 4521=23ca606a,
+5110=8bc2ee81, 5121=f62e93d9, 5150=9d6a7aaa. Direct rebuilt
+fableforge_meshskeleton_tests native gate passes all five (17-28 bones each),
+raw lengths/checksums plus the existing normalized-bone and skin CRC assertions.
+Graphics SHA256 observed: 8b909c4036a89840413f66828d855ee3ccf29796feaeb1f05f36727a5086f617.
+Focused rebuilt meshbounds/headpose CTests both pass; static controls explicitly
+require absence of donor skeleton spans. No broad-suite/GUI/package claim. Shipping
+GUI/tools require rebuild after the public Geometry layout change; immutable body
+checkpoint stays as validated, without this foundation.
+
+Evidence inspected: FableTLC docs/formats/MESH.md sections 3/8/9/10 and addon
+mesh_rw.py clone_skeleton, _write_skeleton and encode_skin; locally available
+EgoCore-git MeshParser.h confirms five u16 optional-header counts and raw bone
+block shapes. Current preview reader combines packed-name/volume counts and
+does not walk volume/generator blocks; do not extend donor acceptance to those
+headers without resolving this known layout gap. Accepted head donors exercise
+the existing supported path. Next: complete skinned composer using raw skeleton
+spans, authored influences and bounded multi-block palettes, then geometry import
+and owned bank/definition publication. Runtime compatibility remains unproven.
