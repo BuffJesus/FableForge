@@ -33,7 +33,7 @@ def main():
     work=Path(tempfile.mkdtemp(prefix='retail-definition-group-picker-',dir=args.work_root.resolve()))
     print('Evidence retained at',work,flush=True);cases=0
     for record_name,family in (('OBJECT_FENCE_TEMPLATE','THING_GROUP'),('BUILDING_VILLAGE_TEMPLATE','THING_GROUP'),
-                               ('GROUND_BLEACHEDLONGGRASS','ENGINE_THEME_GROUP')):
+                               ('CREATURE_VILLAGER_TEMPLATE','THING_GROUP'),('GROUND_BLEACHEDLONGGRASS','ENGINE_THEME_GROUP')):
         owners=[i for i,r in enumerate(records) if r['name']==record_name];assert len(owners)==1
         owner=owners[0];record=records[owner];key=struct.pack('<I',tag('GroupDef'));assert record['data'].count(key)==1
         start=record['data'].index(key)+4;old_group=struct.unpack_from('<I',record['data'],start)[0]

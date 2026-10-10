@@ -1,4 +1,4 @@
-> Active continuation: [confirmed GroupDef picker](HANDOFF_GROUP_PICKER_2026-10-10.md) in the owned C development worktree. Final 32 synthetic and six retail-copy cases plus eight extracted workflows pass. Two unrelated corpus workflows skip explicitly. RC2 remains unchanged.
+> Active continuation: [Creature GroupDef schema recovery](HANDOFF_CREATURE_GROUP_2026-10-10.md) in the owned C development worktree. Original-byte/PDB evidence confirms int32; all 517 retail records, eight real picker cases and five extracted workflows pass. Two unrelated corpus skips remain explicit. RC2 remains unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2550,3 +2550,23 @@ neighbors), 120 not run and two unrelated missing-corpus skips. SHA256:
 `cf6d013ef97fd8fe3fcf128f3dcebf8c156a3d272a32d852bed4750b8cc733dd`.
 No full-suite, clean-machine or gameplay claim. See
 [GroupDef handoff](HANDOFF_GROUP_PICKER_2026-10-10.md).
+
+### Creature GroupDef schema recovery, 2026-10-10
+
+The prior villager read-only limitation is now resolved for GroupDef only. Original
+FableWin bytes, derived/base transfer bodies and PDB names confirm the inherited
+signed int32 type. All 517 retail Creature records independently match unique
+four-byte boundaries and decoded values. No neighboring unknown types change.
+Eight real Object/Building/Creature/theme picker cases pass at both sizes with
+exact unrelated records/identities/names, Restore and unchanged native hashes.
+Both affected CTests pass; compact Creature picker inspected.
+
+Separate archive SHA256:
+`495961b1ab015cc6c6fab6c1508050184be1b9144fa715ad4c93eaad176effb7`.
+Exact extracted acceptance passes 116 identities, 138 links and five selected
+workflows (including the extracted-schema 517-record check, eight retail edits,
+32 synthetic cases and tree/group neighbors), 124 not run and two unrelated
+missing-corpus FMP skips. No full-suite, clean-machine or gameplay claim.
+The debug-evidence skill required native/PDB confirmation before promotion;
+format-I/O required independent boundaries and unchanged-byte/Restore checks.
+See [Creature schema handoff](HANDOFF_CREATURE_GROUP_2026-10-10.md).

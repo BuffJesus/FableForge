@@ -123,6 +123,8 @@ def main():
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
+        ok &= run("Creature GroupDef schema, independent boundaries and all retail records",
+                  [sys.executable, "tools/test_creature_group_schema.py", "--install", install_root], capture_output=True)
         ok &= run("retail group picker families, exact field deltas and Restore",
                   [sys.executable, "tools/test_definition_group_retail.py", "--install", install_root], capture_output=True)
         ok &= run("retail GUI Unicode definition delta, identity preservation and Restore",

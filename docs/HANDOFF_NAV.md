@@ -1,4 +1,4 @@
-> Active continuation: [confirmed GroupDef picker](HANDOFF_GROUP_PICKER_2026-10-10.md) in the owned C development worktree. Final 32 synthetic and six retail-copy cases plus eight extracted workflows pass. Two unrelated corpus workflows skip explicitly. RC2 remains unchanged.
+> Active continuation: [Creature GroupDef schema recovery](HANDOFF_CREATURE_GROUP_2026-10-10.md) in the owned C development worktree. Original-byte/PDB evidence confirms int32; all 517 retail records, eight real picker cases and five extracted workflows pass. Two unrelated corpus skips remain explicit. RC2 remains unchanged.
 
 # Navigation lane, 2026-09-27
 

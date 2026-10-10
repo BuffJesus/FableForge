@@ -33257,7 +33257,7 @@
       },
       {
         "name": "GroupDef",
-        "type": "?"
+        "type": "int32"
       },
       {
         "name": "RenderFadeDistance",

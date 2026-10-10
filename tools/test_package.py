@@ -256,6 +256,9 @@ def main():
     run('definition_group_retail', [sys.executable, repo / 'tools/test_definition_group_retail.py',
         '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
         '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_group_schema', [sys.executable, repo / 'tools/test_creature_group_schema.py',
+        '--install', args.root.resolve(), '--tool', package / 'forge-tools.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
     run('definition_wide', [sys.executable, repo / 'tools/test_definition_wide_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_wide_retail', [sys.executable, repo / 'tools/test_definition_wide_retail.py',
