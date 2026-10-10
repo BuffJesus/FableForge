@@ -1,4 +1,4 @@
-> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Canonical animation boundaries now resolve appearance findings; 494 of 502 observed three-node graphs have no unresolved candidates, eight root findings remain. Private append/ownership plan is next; no eligibility claim. RC2 unchanged.
+> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Coordinated core API passes 494 native donors and 23 expected refusals with exact prior-bank preservation. Typed paired publication, CLI and GUI are next; no runtime/full-feature claim. RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

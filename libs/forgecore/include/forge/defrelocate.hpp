@@ -37,11 +37,13 @@ struct Analysis {
 // a conservative rejection guard, never a source of rewrite locations.
 // This is not an audit of references in other containers or runtime code.
 Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema,
-                 const Maps& maps);
+                 const Maps& maps, bool validateKnownLayouts = false);
 
 // Returns a copy with only verified reference words changed. Any unresolved
 // candidate refuses the entire operation; entry and maps always stay const.
+// validateKnownLayouts also parses recognized layouts when there is no moved-ID
+// candidate. It does not validate opaque fields or certify runtime eligibility.
 std::vector<uint8_t> relocate(const bin::Entry& entry, const defschema::Schema& schema,
-                              const Maps& maps);
+                              const Maps& maps, bool validateKnownLayouts = false);
 
 } // namespace forge::defrelocate

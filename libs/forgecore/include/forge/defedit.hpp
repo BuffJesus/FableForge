@@ -78,6 +78,22 @@ size_t cloneEntry(bin::File& file, std::string_view donorName, std::string newNa
 size_t cloneCreature(bin::File& file, const defschema::Schema& schema,
                      size_t donorIndex, std::string newName);
 
+struct CreatureVisualCloneResult {
+    size_t rootIndex, bodyIndex, appearanceIndex;
+};
+// Append a private root/CCreatureDef/CAppearanceDef graph in memory. Explicit
+// names must be unique printable ASCII (127-byte maximum) and introduce no
+// compiled-name CRC ambiguity. Only the two selected visual CDefs rows receive
+// new component indices/new-root original parents; every other CDefs row stays
+// byte-identical, retaining shared gameplay ownership. Verified references in
+// all three payloads relocate; unresolved candidates refuse the whole plan.
+// All prior slots and loaded name records stay exact. A disposable File holds
+// every append until validation succeeds, so refusal never mutates the caller.
+// Models, textures and animations remain shared. No files/publication here.
+CreatureVisualCloneResult cloneCreatureVisuals(bin::File& file,
+                     const defschema::Schema& schema, size_t donorIndex,
+                     std::string rootName, std::string bodyName, std::string appearanceName);
+
 // The raw value bytes of one field (everything between its tag and the next
 // tag), for the types encodeValue does not parse -- maps, vectors, nested
 // structs. Same entry/field location rules as setField.

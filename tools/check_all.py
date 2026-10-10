@@ -129,6 +129,8 @@ def main():
         ok &= run("Read-only Creature animation boundaries and numeric candidate observations",
                   [sys.executable, "tools/audit_creature_animation.py", "--install", install_root,
                    "--payload-exe", "build/fableforge_defrelocate_tests.exe"], capture_output=True)
+        ok &= run("Private Creature visual API, localized ownership, atomic refusal and independent paired output",
+                  [sys.executable, "tools/test_creature_visual_clone_api.py", "--install", install_root], capture_output=True)
         ok &= run("Creature donor self-reference layout and independent relocation audit",
                   [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
         ok &= run("Retail paired Creature clone, self-only deltas and Restore",

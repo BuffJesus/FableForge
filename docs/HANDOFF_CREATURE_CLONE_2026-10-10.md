@@ -317,3 +317,41 @@ Next: implement the coordinated root/body/appearance append plan. Selected visua
 rows must receive new component indices and localized new-root original parents;
 unselected shared gameplay rows retain their original-parent bytes. Do not use
 a value-wide old-parent map or mark borrowed components as privately owned.
+
+## Coordinated private visual core API
+
+Animation coverage head cdce763 Windows CI 38073837976 passed. New core API
+`defedit::cloneCreatureVisuals` appends root/CCreatureDef/CAppearanceDef with
+three explicit bounded ASCII names, native signed index limits and no new compiled
+name-CRC ambiguity. Donor and selected original-parent rows must be clean counted
+Creature listings with exactly one correctly typed/matching visual component.
+Selected rows receive their new component index and new-root original parent.
+All twelve bytes of every unselected CDefs row remain exact, including shared
+gameplay data/parent references that might otherwise match the relocation map.
+Other verified graph references relocate, while models/textures/animations remain
+shared. A disposable File holds all payload/metadata appends until a noexcept
+commit; any later component-name/capacity/ordinal/refusal leaves the caller exact.
+
+Known-layout validation can now be requested even without matching moved IDs.
+Private cloning uses it, so malformed recognized reference/Animation layouts
+cannot bypass checks via a no-candidate no-op. It does not validate opaque fields
+or certify all runtime behavior. An initial truncation fixture targeted an opaque
+integer, which deliberately has no full layout validation; corrected to the
+known reference field. Synthetic ownership/inheritance, clone-of-clone, namespace,
+late-name, count/type/owner/layout and pre-mutation refusal cases pass.
+
+Seven affected/neighbor CTests pass (new private API, prior shared Creature API,
+generic clone, relocation, namespaces, FMP links and BIN serialization). Inventory
+is 57 CTests; not a full-suite claim. Native `creature-private-api-asz7xrrz` accepts
+494 donors and makes 23 expected non-mutating refusals: fifteen missing visual
+shapes and eight unresolved root payloads. Output has 16,246 records (14,764 prior
+plus 1,482 private additions). Independent raw audit checks exact selected-owner
+deltas, all prior payloads, full original numeric-table prefix, original name-pool
+records, new ordinals/name CRCs and reload. Source SHA256 unchanged; only paired
+definition-bank evidence is emitted, not copied full installs or assets. Earlier
+kk14wvqv packet lacked the integrated numeric-table/ordinal/CRC checks; final
+asz7xrrz includes them. No private publisher, CLI, GUI, archive or gameplay claim.
+
+Next: a typed paired publisher contract that recomputes the whole three-record
+plan against the fresh source, followed by the private CLI and GUI controls.
+Keep prior shared/exact modes and their tested checkpoint intact.

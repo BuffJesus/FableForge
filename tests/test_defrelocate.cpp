@@ -581,6 +581,11 @@ int main(int argc, char** argv) {
     auto emptyExpected=emptyAnimation.data;emptyExpected[23]=132;emptyExpected[24]=3;
     check(defrelocate::relocate(emptyAnimation,animationSchema,animationMaps)==emptyExpected,
           "empty animation set still relocates only DefaultGroup");
+    badAnimation=emptyAnimation;badAnimation.data.insert(badAnimation.data.end()-5,0);
+    check(defrelocate::relocate(badAnimation,animationSchema,{})==badAnimation.data,
+          "default no-change relocation does not interpret an untouched payload");
+    rejects([&] {defrelocate::relocate(badAnimation,animationSchema,{},true);},
+            "explicit known-layout validation checks Animation even with no changed IDs");
     const auto expressionSchema = defschema::Schema::loadText(R"({
         "CExpressionSubDef":{"fields":[{"name":"ExpressionDef","type":"int32"}]}})");
     bin::Entry expression{"CExpressionSubDef","EXPRESSION_OWNER",0,{0,0,0}};

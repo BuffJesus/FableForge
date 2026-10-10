@@ -16,7 +16,8 @@ uint32_t word(const std::vector<uint8_t>& data, size_t at) {
 }
 }
 
-Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const Maps& maps) {
+Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const Maps& maps,
+                 bool validateKnownLayouts) {
     std::set<uint32_t> changed;
     for (const auto* domain : {&maps.gameEntries, &maps.nameOffsets}) {
         for (const auto& [before, after] : *domain) {
@@ -29,13 +30,13 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
         }
     }
     Analysis result;
-    if (changed.empty()) return result;
+    if (changed.empty() && !validateKnownLayouts) return result;
     for (size_t at = 0; at + 4 <= entry.data.size(); ++at) {
         const auto value = word(entry.data, at);
         if (changed.contains(value)) result.unresolved.push_back({at, value});
     }
     // An opaque payload with no candidate needs no schema interpretation.
-    if (result.unresolved.empty()) return result;
+    if (result.unresolved.empty() && !validateKnownLayouts) return result;
     const auto* type = defdecode::resolveType(schema, entry.definition, entry.data);
     // Native category alias verified by CControlsDef::Transfer (01939BE8) and
     // the literal Controls/toggle tags in CONTROL_SCHEME payloads. Keep this
@@ -490,8 +491,9 @@ Analysis analyze(const bin::Entry& entry, const defschema::Schema& schema, const
     return result;
 }
 
-std::vector<uint8_t> relocate(const bin::Entry& entry, const defschema::Schema& schema, const Maps& maps) {
-    const auto analysis = analyze(entry, schema, maps);
+std::vector<uint8_t> relocate(const bin::Entry& entry, const defschema::Schema& schema, const Maps& maps,
+                              bool validateKnownLayouts) {
+    const auto analysis = analyze(entry, schema, maps, validateKnownLayouts);
     if (!analysis.unresolved.empty()) {
         const auto& first = analysis.unresolved.front();
         fail(entry, "unclassified possible reference " + std::to_string(first.value) +
