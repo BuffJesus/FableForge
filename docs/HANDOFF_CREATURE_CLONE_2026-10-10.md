@@ -614,3 +614,17 @@ diagnostic now explicitly stops structural interpretation at its marker.
 No Stats grammar, graphics-bank identity/type, skeleton or runtime compatibility
 claim. Targeted linker/relocation tests pass; registered the retail audit in
 check_all without repeating the broad suite. Test executable mode is read-only.
+
+Graphics identity follow-up passes in packet `creature-body-model-audit-faubfraq`.
+The independent mmap directory walk preserves duplicate IDs instead of silently
+collapsing them and reads no mesh payloads. All 1,745 body slots resolve uniquely
+in MBANK_ALLMESHES, all with stored type 5. Graphics SHA256 checked before/after
+by streaming; all compiled-bank hashes also unchanged. No large copies created.
+Audit observations now include per-slot target name/type and missing/ambiguous
+counts; check_all requests --graphics. These identities/types do not prove
+skeleton compatibility or successful rendering. Existing selectModelById refuses
+missing/ambiguous IDs before clearing preview, but a unique undecodable mesh can
+still clear preview and fail decode; do not overstate that preservation contract.
+Next: body-slot preview through this guarded selector, then typed binding with
+independent exact four-byte delta and recovery checks. Custom skinned import is
+still outstanding; no writer or package changed by this metadata audit.
