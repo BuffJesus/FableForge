@@ -1022,3 +1022,24 @@ validation changed. Rebuilt test harness and normal 66-case CTest also PASS.
 No copied banks, native writes, shipping rebuild or checkpoint replacement.
 Next: owned graphics/texture and private-definition transactional publication,
 then creature import card, placement and runtime evidence.
+
+Production prepareSkinnedMesh now prepares a new BIGB type-5 entry from a loaded
+authored Model, unique donor ID, mesh name and material vector. It reads a single
+donor payload and derives both decoded bones and raw skeleton spans from that
+same decode, closing the mixed-donor gap in ad-hoc composition. Exactly one
+MBANK_ALLMESHES is required; names and IDs are checked against every entry type.
+Duplicate selected donor IDs, existing/new-invalid names, wrong container/type,
+missing donor/bank and exhausted ID capacity refuse. Entry gets next bank-local
+ID, native new-record magic 42, donor devFileType, composed Info and payload.
+Mandatory readback verifies all five retained donor spans. Archive is const and
+never appended/serialized/published here. Publication still must guard sources,
+destination namespace, recovery/Restore and game-running state transactionally.
+
+Native gate now routes all ten outputs through this production preparation API,
+checks the entry metadata and adds six preflight refusal cases per donor (30
+total). Independent Python readback and five authored-name mismatch refusals
+again PASS for all five donors, packet skinned-input-donors-e2hokgxi. Native
+graphics hash unchanged; no full-bank copies. Rebuilt affected targets and all
+three focused CTests PASS. No shipping executable/package rebuild or runtime
+claim. Coordinated graphics/texture/private-definition publication remains next;
+existing clone publisher's exact private-clone contract is deliberately unchanged.

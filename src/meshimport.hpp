@@ -20,6 +20,7 @@
 
 #include "forge/meshcompose.hpp"
 namespace forge::meshpreview { struct Bone; }
+namespace forge::big { class File; struct Entry; }
 
 namespace albion::meshimport {
 
@@ -69,6 +70,14 @@ std::array<double,16> inverseBindInFable(const std::array<float,16>& gltfMatrix)
 // animation/runtime compatibility. Donor roots may be partial source subtrees.
 std::vector<forge::meshcompose::SkinnedPrimitive> mapSkinToDonor(
     const Model& model,const std::vector<forge::meshpreview::Bone>& donor);
+// Prepare one new type-5 BIGB entry without mutating/publishing the archive.
+// A unique donor payload supplies both decoded bones and retained raw skeleton.
+// Name and next bank-local ID are checked against all MBANK_ALLMESHES types.
+// Readback verifies retained skeleton spans; caller must revalidate source and
+// destination state in its coordinated bank/definition publication transaction.
+forge::big::Entry prepareSkinnedMesh(const Model& model,const forge::big::File& graphics,
+    uint32_t donorId,const std::string& meshName,
+    const std::vector<forge::meshcompose::Material>& materials,bool compress=true);
 
 struct ImportRequest {
     std::filesystem::path model;

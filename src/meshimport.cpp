@@ -1014,6 +1014,43 @@ std::vector<forge::meshcompose::SkinnedPrimitive> mapSkinToDonor(
     return result;
 }
 
+forge::big::Entry prepareSkinnedMesh(const Model& model,const forge::big::File& graphics,
+    uint32_t donorId,const std::string& meshName,
+    const std::vector<forge::meshcompose::Material>& materials,bool compress) {
+    const auto fail=[](const std::string& reason) {throw std::runtime_error("skinned mesh preparation: "+reason);};
+    if(graphics.magic()!="BIGB") fail("requires BIGB graphics");
+    if(!meshName.starts_with("MESH_") || !validName(meshName.substr(5))) fail("invalid new mesh name");
+    const forge::big::Bank* bank=nullptr;
+    for(const auto& candidate:graphics.banks()) if(candidate.name=="MBANK_ALLMESHES") {
+        if(bank) fail("ambiguous MBANK_ALLMESHES");bank=&candidate;
+    }
+    if(!bank) fail("missing MBANK_ALLMESHES");
+    const forge::big::Entry* source=nullptr;uint32_t maximum=0;
+    for(const auto& entry:bank->entries) {
+        maximum=std::max(maximum,entry.id);
+        if(entry.name==meshName) fail("new mesh name already exists");
+        if(entry.id==donorId) {if(source) fail("ambiguous donor ID");source=&entry;}
+    }
+    if(!source || source->type!=5) fail("requires unique type-5 donor");
+    if(maximum==UINT32_MAX) fail("no free mesh entry ID");
+    const auto donor=forge::meshpreview::decodeLod0(graphics.entryData(*source),5);
+    if(!donor.skeletonBlocks) fail("donor has no raw skeleton");
+    const auto prims=mapSkinToDonor(model,donor.bones);
+    auto composed=forge::meshcompose::composeSkinned(meshName,prims,materials,*donor.skeletonBlocks,compress);
+    const auto verified=forge::meshpreview::decodeLod0(composed.payload,5);
+    const auto& original=*donor.skeletonBlocks;
+    if(!verified.skeletonBlocks) fail("readback lost donor skeleton");
+    const auto& actual=*verified.skeletonBlocks;
+    if(actual.indices!=original.indices || actual.names!=original.names || actual.bones!=original.bones ||
+       actual.keyframes!=original.keyframes || actual.inverseBinds!=original.inverseBinds)
+        fail("readback changed donor skeleton");
+    if(composed.payload.size()>UINT32_MAX) fail("composed payload exceeds BIG capacity");
+    forge::big::Entry result;result.name=meshName;result.id=maximum+1;result.type=5;
+    result.magic=42;result.devFileType=source->devFileType;
+    result.length=uint32_t(composed.payload.size());result.data=std::move(composed.payload);
+    result.subHeader=std::move(composed.info);return result;
+}
+
 Model loadModel(const fs::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });

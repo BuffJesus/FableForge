@@ -63,23 +63,38 @@ static int donorGate(char** argv) {
     const auto donor=forge::meshpreview::decodeLod0(archive.entryData(*entry),5);
     require(bool(donor.skeletonBlocks),"missing donor raw skeleton");
     const auto model=albion::meshimport::loadSkinnedModel(argv[4]);
-    const auto mapped=albion::meshimport::mapSkinToDonor(model,donor.bones);
     const auto output=fs::absolute(argv[5]);require(!fs::exists(output),"donor output must be fresh");
     forge::meshcompose::Material material;material.name="native donor import test";
-    std::vector<forge::meshcompose::Composed> meshes;
+    std::vector<forge::big::Entry> meshes;
     for(bool compressed:{false,true}) {
-        auto mesh=forge::meshcompose::composeSkinned("MESH_IMPORTED_"+idText,mapped,{material},*donor.skeletonBlocks,compressed);
-        const auto readback=forge::meshpreview::decodeLod0(mesh.payload,5);
+        auto mesh=albion::meshimport::prepareSkinnedMesh(model,archive,id,"MESH_IMPORTED_"+idText,{material},compressed);
+        uint32_t maximum=0;for(const auto& existing:bank->entries) maximum=std::max(maximum,existing.id);
+        require(mesh.id==maximum+1 && mesh.type==5 && mesh.magic==42 && mesh.devFileType==entry->devFileType &&
+                mesh.length==mesh.data.size() && mesh.name=="MESH_IMPORTED_"+idText,"prepared entry metadata invalid");
+        const auto readback=forge::meshpreview::decodeLod0(mesh.data,5);
         require(readback.skeletonBlocks && readback.skeletonBlocks->indices==donor.skeletonBlocks->indices &&
             readback.skeletonBlocks->names==donor.skeletonBlocks->names && readback.skeletonBlocks->bones==donor.skeletonBlocks->bones &&
             readback.skeletonBlocks->keyframes==donor.skeletonBlocks->keyframes && readback.skeletonBlocks->inverseBinds==donor.skeletonBlocks->inverseBinds,
             "imported donor spans changed");
         meshes.push_back(std::move(mesh));
     }
+    const auto refuses=[&](const forge::big::File& candidate,const std::string& name,const char* reason) {
+        bool rejected=false;
+        try {albion::meshimport::prepareSkinnedMesh(model,candidate,id,name,{material});}
+        catch(const std::exception& e) {rejected=std::string(e.what()).find(reason)!=std::string::npos;}
+        require(rejected,"preparation guard did not refuse with expected reason");
+    };
+    refuses(archive,entry->name,"new mesh name already exists");
+    refuses(archive,"MESH_bad","invalid new mesh name");
+    auto bad=archive;bad.setMagic(std::string("B\0\0\0",4));refuses(bad,"MESH_TEST","requires BIGB");
+    bad=archive;bad.banks().push_back(*bank);refuses(bad,"MESH_TEST","ambiguous MBANK_ALLMESHES");
+    bad=archive;bad.findBank("MBANK_ALLMESHES")->entries.push_back(*entry);refuses(bad,"MESH_TEST","ambiguous donor ID");
+    bad=archive;forge::big::Entry exhausted;exhausted.id=UINT32_MAX;
+    bad.findBank("MBANK_ALLMESHES")->entries.push_back(exhausted);refuses(bad,"MESH_TEST","no free mesh entry ID");
     require(fs::create_directories(output),"cannot create fresh donor output");
     for(size_t i=0;i<meshes.size();++i) {
         const auto stem=i?"compressed":"stored";
-        for(const auto& [suffix,bytes]:std::array<std::pair<std::string,const Bytes*>,2>{{{".mesh",&meshes[i].payload},{".info",&meshes[i].info}}}) {
+        for(const auto& [suffix,bytes]:std::array<std::pair<std::string,const Bytes*>,2>{{{".mesh",&meshes[i].data},{".info",&meshes[i].subHeader}}}) {
             std::ofstream stream(output/(std::string(stem)+suffix),std::ios::binary);
             stream.write(reinterpret_cast<const char*>(bytes->data()),std::streamsize(bytes->size()));require(bool(stream),"donor output write failed");
         }
