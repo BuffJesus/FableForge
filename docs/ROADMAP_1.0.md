@@ -1,4 +1,4 @@
-> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Core, paired publication, CLI and 26 both-size private GUI checks pass. Extracted private checkpoint passes nine workflows; 130 not run/two unrelated skips. Body/appearance navigation and custom body asset work are next; no runtime/full-feature claim. RC2 unchanged.
+> Active continuation: [Creature visual workflows](HANDOFF_CREATURE_CLONE_2026-10-10.md). Private cloning, body/appearance navigation, body-model binding and named model choice are implemented. Body checkpoint extracted acceptance passes nine selected workflows; 138 not run/two unrelated skips. Custom skinned import and skeleton/runtime compatibility remain next; no full-feature claim. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 

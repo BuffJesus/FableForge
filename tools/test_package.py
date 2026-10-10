@@ -239,6 +239,21 @@ def main():
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('creature_private_clone_cli', [sys.executable, repo / 'tools/test_creature_private_clone_cli.py',
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_visual_navigation', [sys.executable, repo / 'tools/test_creature_visual_navigation_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_visual_navigation_fixture', [sys.executable, repo / 'tools/test_creature_visual_navigation_fixture_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_body_preview', [sys.executable, repo / 'tools/test_creature_body_preview_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_body_publication', [sys.executable, repo / 'tools/test_creature_body_publication.py',
+        '--install', args.root.resolve(), '--tools', package / 'forge-tools.exe', '--forge', package / 'forge.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
+    run('creature_body_binding', [sys.executable, repo / 'tools/test_creature_body_binding_ui.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+        '--cwd', cwd, '--work-root', work])
+    for fixture_name in ('stale', 'pack', 'model_picker'):
+        run('creature_body_' + fixture_name, [sys.executable, repo / ('tools/test_creature_body_' + fixture_name + '_ui.py'),
+            '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     for donor_policy in ('first', 'inherited', 'missing', 'unresolved'):
         run('creature_private_clone_ui_' + donor_policy, [sys.executable, repo / 'tools/test_creature_private_clone_ui.py',
             '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',

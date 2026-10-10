@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--gui',type=Path,default=repo/'build/FableForge.exe')
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
     work=Path(tempfile.mkdtemp(prefix='creature-body-model-picker-ui-',dir=args.work_root.resolve()))
     print('Evidence retained at',work,flush=True);cases=0
@@ -56,13 +57,13 @@ def main():
             script=case/'picker.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
             with (case/'output.log').open('w',encoding='utf-8') as log:
                 result=subprocess.run([str(args.gui.resolve()),'--install',str(root),'--size',size,'--auto',str(script)],
-                    cwd=repo,stdout=log,stderr=subprocess.STDOUT,timeout=90,
+                    cwd=args.cwd.resolve(),stdout=log,stderr=subprocess.STDOUT,timeout=90,
                     env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
             trace=Path(str(script)+'.log').read_text(encoding='utf-8')
             assert result.returncode==0 and 'RESULT PASS' in trace and 'FAIL ' not in trace,trace[-6000:]
             assert read_bank(output)==expected,'named model choice changed more than one word or chose wrong ID'
             assert (output/'data/CompiledDefs/names.bin').read_bytes()==originals[root/'data/CompiledDefs/names.bin']
-            result=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=repo,capture_output=True,text=True,timeout=60)
+            result=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=60)
             assert result.returncode==0,result.stdout+result.stderr
             assert not list(output.rglob('*.bin')) and not list(output.rglob('*.forge-created'))
             assert {p:p.read_bytes() for p in root.rglob('*') if p.is_file()}==originals,'source fixture changed'

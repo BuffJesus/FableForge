@@ -809,3 +809,30 @@ no retail asset copies. Registered chooser gate and documented GUI semantics.
 Existing immutable packages/RC2 do not include these changes. Next is a fresh
 development package with extracted acceptance, then the outstanding custom
 skinned-import/compatibility work. No broad-suite or runtime claim.
+
+Fresh immutable development checkpoint:
+`dist/development/20261010-creature-body-gui/FableForge-0.18.1-dev-win64.zip`,
+SHA256 `eccdbb4d78a876b60f7987dd9d57425f4d7651999f5a08947ff0b4ec2558cebf`.
+Application 37.2 MB, separate guide 0.83 MB. Shipping targets built in this owned
+cache before packaging. Manifest records packaging checkout e8ea956 with tracked
+test-harness edits, not a clean-checkout/executable-provenance guarantee. Earlier
+archives, release tags and RC2 untouched. Package includes navigation, body preview,
+body binding and named choice; it does not include custom skinned import.
+
+Extracted acceptance terminal-success packet `package-smoke-zcdunryg` verifies
+117 file identities and 141 documentation links, and passes nine workflows:
+private clone CLI (28 cases), native visual navigation, synthetic navigation,
+native body preview, native body-binding CLI publication/Restore plus fifteen
+refusals, native both-size body draft controls (12 cases), stale-source fixtures
+(8), pack routing/Restore (8), named model chooser (12). Executables run from the
+extracted path containing literal percent/ampersand characters, with unrelated
+working directory and private profiles. Five body harnesses now accept explicit
+--cwd; package runner registers all eight new visual/body workflows. Native
+compiled/graphics hashes unchanged; only independent compiled-definition outputs
+and tiny synthetic assets used, no full asset-bank copies. Report: 138 workflows
+not run; two unrelated missing-corpus skips (named FMP links, F2 refusal UI).
+This is focused extracted acceptance, not the full offline suite, clean-machine
+trial or in-game compatibility. Source CTests reused from the accepted chooser
+checkpoint; no core writer change. Navigation/roadmap routing now points to this
+checkpoint. Next: custom skinned body import against donor skeleton evidence and
+the remaining compatibility/placement/runtime validation, preserving full scope.

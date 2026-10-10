@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--schema',type=Path,default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args();native=args.install.resolve()
     assert not args.work_root.resolve().is_relative_to(native)
     inputs=sorted((native/'data/CompiledDefs').glob('*.bin'))+[native/'data/graphics/graphics.big']
@@ -51,7 +52,7 @@ def main():
                  [str(args.publisher.resolve()),'--body-publish',str(native),str(args.schema.resolve()),str(output),
                   str(choice['entry']),str(choice['body_part']),str(choice['alternative']),str(choice['replacement'])])
         result=subprocess.run(command,
-                              cwd=repo,capture_output=True,text=True,timeout=120)
+                              cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=120)
         (work/f'publisher-{number}.log').write_text(result.stdout+result.stderr,encoding='utf-8')
         assert result.returncode==0,result.stdout+result.stderr
         proof=json.loads(result.stdout);assert proof['offset']==choice['offset'] and proof['old_model_id' if args.tools else 'old_id']==choice['id']
@@ -63,7 +64,7 @@ def main():
         assert bank.read_bytes()[:13+12*len(records)]==source_bank[:13+12*len(records)],'identity/header table changed'
         assert names.read_bytes()==source_names,'name pool changed'
         for path in (bank,names):assert Path(str(path)+'.forge-created').is_file()
-        restored=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=repo,
+        restored=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=args.cwd.resolve(),
                                 capture_output=True,text=True,timeout=60)
         (work/f'restore-{number}.log').write_text(restored.stdout+restored.stderr,encoding='utf-8')
         assert restored.returncode==0,restored.stdout+restored.stderr
@@ -84,7 +85,7 @@ def main():
         variants+=[command+['--unknown'],command+['--out',str(refusal)],command[:8]+command[10:],
                    command[:10]+command[12:],command[:-3]+['--out']]
         for index,variant in enumerate(variants):
-            result=subprocess.run(variant,cwd=repo,capture_output=True,text=True,timeout=60)
+            result=subprocess.run(variant,cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=60)
             (work/f'refusal-{index}.log').write_text(result.stdout+result.stderr,encoding='utf-8')
             assert result.returncode!=0,'invalid binding command accepted'
             assert not refusal.parent.exists(),'refused command created output'

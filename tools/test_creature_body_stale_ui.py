@@ -48,6 +48,7 @@ def main():
     parser.add_argument('--gui',type=Path,default=repo/'build/FableForge.exe')
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
     work=Path(tempfile.mkdtemp(prefix='creature-body-stale-ui-',dir=args.work_root.resolve()))
     print('Evidence retained at',work,flush=True);cases=0
@@ -70,7 +71,7 @@ def main():
             changed=None
             with (case/'output.log').open('w',encoding='utf-8') as log:
                 process=subprocess.Popen([str(args.gui.resolve()),'--install',str(root),'--size',size,'--auto',str(script)],
-                                         cwd=repo,stdout=log,stderr=subprocess.STDOUT,
+                                         cwd=args.cwd.resolve(),stdout=log,stderr=subprocess.STDOUT,
                                          env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
                 try:
                     if mode!='save':
@@ -93,7 +94,7 @@ def main():
             if mode=='save':
                 expected=read_bank(root);payload=bytearray(expected[0]['data']);struct.pack_into('<I',payload,27,20);expected[0]['data']=bytes(payload)
                 assert read_bank(output)==expected,'synthetic GUI body delta differs'
-                result=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=repo,capture_output=True,text=True,timeout=60)
+                result=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=60)
                 assert result.returncode==0,result.stdout+result.stderr
                 assert not list(output.rglob('*.bin')) and not list(output.rglob('*.forge-created'))
             else:assert not output.exists(),'stale refusal created output'

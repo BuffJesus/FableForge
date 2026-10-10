@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--gui',type=Path,default=repo/'build/FableForge.exe')
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args();native=args.install.resolve()
     assert not args.work_root.resolve().is_relative_to(native)
     inputs=sorted((native/'data/CompiledDefs').glob('*.bin'))+[native/'data/graphics/graphics.big']
@@ -59,7 +60,7 @@ def main():
                 lines+=click('btn_definition_save_confirm')+['wait_ready','wait_definitions','frames 3','assert_state definition_editing 0']
             lines+=['quit'];script=case/'binding.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
             result=subprocess.run([str(args.gui.resolve()),'--install',str(native),'--size',size,'--auto',str(script)],
-                                  cwd=repo,env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',
+                                  cwd=args.cwd.resolve(),env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',
                                   APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')),
                                   capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=120)
             (case/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
@@ -71,7 +72,7 @@ def main():
                 assert read_bank(output)==expected,'GUI body delta differs'
                 bank=output/'data/CompiledDefs/game.bin';names=bank.parent/'names.bin'
                 assert names.read_bytes()==(native/'data/CompiledDefs/names.bin').read_bytes()
-                restore=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=repo,
+                restore=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],cwd=args.cwd.resolve(),
                                        capture_output=True,text=True,timeout=60)
                 assert restore.returncode==0,restore.stdout+restore.stderr
                 assert not bank.exists() and not names.exists()
