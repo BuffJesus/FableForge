@@ -494,3 +494,33 @@ Registered all three donor-policy checks in the native optional gate. Next:
 commit this test checkpoint and create a separately named private-GUI development
 archive, then verify its identities, documentation and selected extracted checks.
 The older shared-GUI archive and public RC2 must remain unchanged.
+
+Donor-policy checkpoint 07a84cb committed/pushed. All three shipping targets are
+current; forge.exe required relinking while GUI/tools were already up to date.
+Added unrelated-cwd routing to the private CLI/GUI scripts and extracted-package
+workflow registrations. Generated CLI.md unchanged: it documents forge.exe,
+whereas private forge-tools syntax is in shipped EDITOR.md and tool help.
+
+Fresh local package (no public publication):
+`dist/development/20261010-creature-private-gui/FableForge-0.18.1-dev-win64.zip`
+SHA256 6422b166165a6aac34e8d51dbacb72b0f40c0ca71fd896ac82574619be4746c9,
+37.2 MB. Existing shared-GUI archive hash remains
+51d135c1e95f4fb51cfe4a501f164a7064aa3c1577d4467c137c789a54ffca4e.
+Package manifest accurately records checkout 07a84cb with tracked_changes=true
+for three test-harness changes; it is not a clean-checkout/executable-provenance
+claim. Archive will not be overwritten just to refresh that metadata.
+
+Extracted gate is live in session 28722, packet `package-smoke-oey2hj9e`:
+all 117 identities and 141 links pass, defs/shared CLI/private CLI pass so far.
+Nine workflows were requested, including all private donor policies and shared
+GUI/selector regressions. Observe this handle through completion, recording
+omissions/skips accurately. No broad-suite/live-game/other-machine claim.
+
+Extracted progress: private first/inherited/missing/unresolved GUI workflows now
+all pass using packaged GUI/Restore/schema from an unrelated working directory.
+That includes twenty first-donor controls/draft/stale-source checks plus six donor
+policy cases. Together with defs and both CLI checks, seven requested workflows
+have passed. Session 28722 remains live in shared GUI regression, with selector
+still to follow; retain the same archive and handle. Do not report all nine or
+final omitted/skipped counts before result.json exists. Test-harness changes are
+ready to commit independently of the still-running final regression.

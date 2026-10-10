@@ -18,6 +18,7 @@ def main():
     parser.add_argument('--tool',type=Path,default=repo/'build/forge-tools.exe')
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     args=parser.parse_args()
     work=Path(tempfile.mkdtemp(prefix='creature-private-cli-',dir=args.work_root.resolve()))
     print('Evidence retained at',work,flush=True)
@@ -53,7 +54,7 @@ def main():
         output=output_root or work/f'case-{cases}';target=output/'data/CompiledDefs/game.bin'
         result=subprocess.run([str(args.tool.resolve()),'defs','clone-creature-private',str(input_bank or bank),donor,
             root_name,body_name,appearance_name,'--schema',str(schema),'--out',str(target),'--json'],
-            cwd=repo,capture_output=True,text=True,encoding='utf-8',timeout=60)
+            cwd=args.cwd.resolve(),capture_output=True,text=True,encoding='utf-8',timeout=60)
         (work/f'case-{cases}.log').write_text(result.stdout+result.stderr,encoding='utf-8');cases+=1
         assert (result.returncode==0)==accepted,result.stdout+result.stderr
         assert bank.read_bytes()==original and names.read_bytes()==old_pool
@@ -96,7 +97,7 @@ def main():
             assert Path(str(target)+'.forge-orig').read_bytes()==original
             assert Path(str(target_names)+'.forge-orig').read_bytes()==old_pool
             restored=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],
-                cwd=repo,capture_output=True,text=True,timeout=60)
+                cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=60)
             assert restored.returncode==0,restored.stdout+restored.stderr
         assert target.read_bytes()==prior_bank and target_names.read_bytes()==prior_names
     (work/'result.json').write_text(json.dumps({'passed':True,'cases':cases})+'\n',encoding='utf-8')

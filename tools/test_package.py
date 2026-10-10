@@ -237,6 +237,13 @@ def main():
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
     run('creature_clone_cli', [sys.executable, repo / 'tools/test_creature_clone_cli.py',
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_private_clone_cli', [sys.executable, repo / 'tools/test_creature_private_clone_cli.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    for donor_policy in ('first', 'inherited', 'missing', 'unresolved'):
+        run('creature_private_clone_ui_' + donor_policy, [sys.executable, repo / 'tools/test_creature_private_clone_ui.py',
+            '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe',
+            '--schema', package / 'docs/re_reference/def_schema.json', '--donor-policy', donor_policy,
+            '--cwd', cwd, '--work-root', work, *([] if donor_policy=='first' else ['--only','save'])])
     run('creature_clone_retail', [sys.executable, repo / 'tools/test_creature_clone_retail.py',
         '--install', args.root.resolve(), '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe',
         '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])

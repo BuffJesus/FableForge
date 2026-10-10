@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--payload-exe',type=Path,default=repo/'build/fableforge_defrelocate_tests.exe')
     parser.add_argument('--schema',type=Path,default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--cwd',type=Path,default=repo)
     parser.add_argument('--only',nargs='+',choices=MODES)
     parser.add_argument('--donor-policy',choices=('first','inherited','missing','unresolved'),default='first')
     args=parser.parse_args();native=args.install.resolve()
@@ -108,7 +109,7 @@ def main():
                 changed=None
                 with (case/'output.log').open('w',encoding='utf-8') as log:
                     process=subprocess.Popen([str(args.gui.resolve()),'--install',str(input_root),'--size',size,'--auto',str(script)],
-                        cwd=repo,stdout=log,stderr=subprocess.STDOUT,
+                        cwd=args.cwd.resolve(),stdout=log,stderr=subprocess.STDOUT,
                         env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
                     try:
                         if owned_paths:
@@ -136,7 +137,7 @@ def main():
                     assert pool.read_bytes()[20:len(source_pool)]==source_pool[20:]
                     for path in (bank,pool):assert Path(str(path)+'.forge-created').is_file()
                     restore=subprocess.run([str(args.forge.resolve()),'restore','--install',str(output)],
-                        cwd=repo,capture_output=True,text=True,timeout=60)
+                        cwd=args.cwd.resolve(),capture_output=True,text=True,timeout=60)
                     assert restore.returncode==0,restore.stdout+restore.stderr
                     assert not bank.exists() and not pool.exists()
                 else:
