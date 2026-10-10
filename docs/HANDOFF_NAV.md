@@ -1,4 +1,4 @@
-> Latest session checkpoint: [2026-10-09 bedtime handoff](HANDOFF_2026-10-09.md). Resume the isolated RC2 checkout on C; local build passed, full tests/package gates pending.
+> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
 
 # Navigation lane, 2026-09-27
 
