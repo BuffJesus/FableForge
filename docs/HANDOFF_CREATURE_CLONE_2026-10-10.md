@@ -713,3 +713,21 @@ platforms do not run these lock cases. No all-races/full-matrix claim.
 The locking handle is released after observing refusal. Temporary fixture cleanup
 remains confined to its exclusively created test directory. Next: explicit-index
 body-binding CLI with required schema/graphics/output paths, then GUI drafts.
+
+Body-binding CLI implemented: forge-tools defs bind-body-model <game.bin>
+<entry-index> <body-part> <alternative> <model-id> --schema <schema.json>
+--graphics <graphics.big> --out <game.bin> [--names <names.bin>] [--json].
+Selectors are explicit complete unsigned decimal indices, not name lookups;
+overflow, duplicate/unknown options and missing required paths refuse. The CLI
+captures raw sources, uses the canonical setter and typed publisher, and reports
+old/new IDs plus runtime_compatibility_verified=false. Assets remain shared.
+GUI draft integration is still pending. Existing packages/RC2 unchanged.
+
+New executable builds. CLI retail gate passes in packet
+`creature-body-publication-749nycre`: two native four-byte publication/Restore
+cases and fifteen selector/option/range/class refusals. Native compiled/graphics
+hashes unchanged; no asset copies. Registered source gate and documented syntax
+in EDITOR.md/tool help (generated CLI.md describes forge.exe, not forge-tools).
+Neighboring private-clone CLI regression passes all 28 cases in packet
+`creature-private-cli-56lfcfgv` using the same rebuilt executable. No broad-suite
+claim; next is GUI body-binding drafts and save/cancel/stale-source coverage.

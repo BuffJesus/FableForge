@@ -15,6 +15,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',type=Path,required=True)
     parser.add_argument('--publisher',type=Path,default=repo/'build/fableforge_creaturevisualclone_tests.exe')
+    parser.add_argument('--tools',type=Path,help='Exercise the public forge-tools CLI instead of the test publisher')
     parser.add_argument('--forge',type=Path,default=repo/'build/forge.exe')
     parser.add_argument('--schema',type=Path,default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
@@ -43,12 +44,17 @@ def main():
     source_names=(native/'data/CompiledDefs/names.bin').read_bytes()
     for number,choice in enumerate(choices):
         output=work/f'output-{number}'
-        result=subprocess.run([str(args.publisher.resolve()),'--body-publish',str(native),str(args.schema.resolve()),str(output),
-                               str(choice['entry']),str(choice['body_part']),str(choice['alternative']),str(choice['replacement'])],
+        command=([str(args.tools.resolve()),'defs','bind-body-model',str(native/'data/CompiledDefs/game.bin'),
+                  str(choice['entry']),str(choice['body_part']),str(choice['alternative']),str(choice['replacement']),
+                  '--schema',str(args.schema.resolve()),'--graphics',str(inputs[-1]),'--out',str(output/'data/CompiledDefs/game.bin'),'--json']
+                 if args.tools else
+                 [str(args.publisher.resolve()),'--body-publish',str(native),str(args.schema.resolve()),str(output),
+                  str(choice['entry']),str(choice['body_part']),str(choice['alternative']),str(choice['replacement'])])
+        result=subprocess.run(command,
                               cwd=repo,capture_output=True,text=True,timeout=120)
         (work/f'publisher-{number}.log').write_text(result.stdout+result.stderr,encoding='utf-8')
         assert result.returncode==0,result.stdout+result.stderr
-        proof=json.loads(result.stdout);assert proof['offset']==choice['offset'] and proof['old_id']==choice['id']
+        proof=json.loads(result.stdout);assert proof['offset']==choice['offset'] and proof['old_model_id' if args.tools else 'old_id']==choice['id']
         expected=[dict(record) for record in records]
         data=bytearray(expected[choice['entry']]['data']);struct.pack_into('<I',data,choice['offset'],choice['replacement'])
         expected[choice['entry']]['data']=bytes(data)
@@ -65,7 +71,27 @@ def main():
         assert not list(output.rglob('*.forge-created')),'Restore left creation records'
         assert hashes()==before,'native inputs changed'
         print('Native component',choice['entry'],'exact four-byte publication and Restore: PASS',flush=True)
-    (work/'result.json').write_text(json.dumps(dict(passed=True,choices=choices,source_hashes=before,
+    negative_cases=0
+    if args.tools:
+        choice=choices[0];refusal=work/'refused'/'game.bin'
+        command=[str(args.tools.resolve()),'defs','bind-body-model',str(native/'data/CompiledDefs/game.bin'),
+                 str(choice['entry']),str(choice['body_part']),str(choice['alternative']),str(choice['replacement']),
+                 '--schema',str(args.schema.resolve()),'--graphics',str(inputs[-1]),'--out',str(refusal),'--json']
+        variants=[]
+        for position,value in [(4,'-1'),(4,'9116junk'),(4,'0x23'),(4,'18446744073709551616'),(4,'999999'),(4,'0'),
+                               (5,'9999'),(6,'9999'),(7,'4294967296'),(7,'999999')]:
+            changed=list(command);changed[position]=value;variants.append(changed)
+        variants+=[command+['--unknown'],command+['--out',str(refusal)],command[:8]+command[10:],
+                   command[:10]+command[12:],command[:-3]+['--out']]
+        for index,variant in enumerate(variants):
+            result=subprocess.run(variant,cwd=repo,capture_output=True,text=True,timeout=60)
+            (work/f'refusal-{index}.log').write_text(result.stdout+result.stderr,encoding='utf-8')
+            assert result.returncode!=0,'invalid binding command accepted'
+            assert not refusal.parent.exists(),'refused command created output'
+            negative_cases+=1
+        assert hashes()==before,'CLI refusal changed native input'
+        print(negative_cases,'CLI selector/option/range refusals: PASS',flush=True)
+    (work/'result.json').write_text(json.dumps(dict(passed=True,choices=choices,source_hashes=before,negative_cases=negative_cases,
                                                   runtime_compatibility_verified=False),indent=2)+'\n',encoding='utf-8')
 
 
