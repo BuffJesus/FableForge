@@ -1,3 +1,5 @@
+> Latest session checkpoint: [2026-10-09 bedtime handoff](HANDOFF_2026-10-09.md). Resume the isolated RC2 checkout on C; local build passed, full tests/package gates pending.
+
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
 Ordered dialogue-tag controls pass source checks at both window sizes and an

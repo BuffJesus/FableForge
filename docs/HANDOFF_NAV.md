@@ -1,3 +1,5 @@
+> Latest session checkpoint: [2026-10-09 bedtime handoff](HANDOFF_2026-10-09.md). Resume the isolated RC2 checkout on C; local build passed, full tests/package gates pending.
+
 # Navigation lane, 2026-09-27
 
 Checkout: `D:/Code/FableForge-nav`, branch `feat/nav-thing-lines`, starting commit
