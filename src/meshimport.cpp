@@ -298,7 +298,7 @@ template<typename Value = float>
 std::vector<Value> readAccessor(const GltfBuffers& g, size_t index, int& comps) {
     const auto& acc=g.doc.at("accessors").at(index);
     const std::string type=acc.at("type").get<std::string>();
-    comps=type=="SCALAR" ? 1 : type=="VEC2" ? 2 : type=="VEC3" ? 3 : type=="VEC4" ? 4 : 0;
+    comps=type=="SCALAR" ? 1 : type=="VEC2" ? 2 : type=="VEC3" ? 3 : type=="VEC4" ? 4 : type=="MAT4" ? 16 : 0;
     if(!comps) throw std::runtime_error("unsupported accessor type "+type);
     const size_t count=gltfSize(acc,"count"),ct=gltfInteger(acc.at("componentType"),"componentType");
     const bool norm=acc.value("normalized",false);
@@ -414,9 +414,94 @@ struct NormalTransform {
     }
 };
 
-Model loadGltf(const fs::path& path) {
+SkinBinding readSkin(const GltfBuffers& g,size_t skinIndex,size_t meshNode,
+                     const std::vector<std::optional<Mat4>>& worlds,
+                     const std::vector<std::optional<size_t>>& parents) {
+    const auto& skin=g.doc.at("skins").at(skinIndex);const auto& nodes=g.doc.at("nodes");
+    const auto& joints=skin.at("joints");
+    if(!joints.is_array() || joints.empty() || joints.size()>65536) throw std::runtime_error("invalid glTF skin joint count");
+    SkinBinding binding;binding.sourceSkin=skinIndex;binding.meshNode=meshNode;
+    std::vector<bool> used(worlds.size(),false);std::optional<size_t> commonRoot;
+    if(skin.contains("skeleton")) binding.skeletonRoot=gltfSize(skin,"skeleton");
+    for(const auto& joint:joints) {
+        const size_t ni=gltfInteger(joint,"joint node");
+        if(ni>=worlds.size() || !worlds[ni] || used[ni])
+            throw std::runtime_error("skin joint is missing, repeated or outside the selected scene");
+        used[ni]=true;size_t root=ni;bool foundSkeleton=!binding.skeletonRoot;
+        for(std::optional<size_t> ancestor=ni;ancestor;ancestor=parents[*ancestor]) {
+            root=*ancestor;if(binding.skeletonRoot==ancestor) foundSkeleton=true;
+        }
+        if(!foundSkeleton || (commonRoot && *commonRoot!=root)) throw std::runtime_error("skin joints lack the declared/common scene root");
+        commonRoot=root;
+        binding.joints.push_back({ni,parents[ni],nodes.at(ni).value("name",std::string()),*worlds[ni],identity()});
+    }
+    if(skin.contains("inverseBindMatrices")) {
+        const size_t index=gltfSize(skin,"inverseBindMatrices");const auto& acc=g.doc.at("accessors").at(index);
+        if(acc.at("type")!="MAT4" || gltfSize(acc,"componentType")!=5126 || acc.value("normalized",false) ||
+           gltfSize(acc,"count")<joints.size() || gltfSize(acc,"count")>1048576)
+            throw std::runtime_error("invalid glTF inverse-bind accessor");
+        if(acc.contains("bufferView") && g.doc.at("bufferViews").at(gltfSize(acc,"bufferView")).contains("byteStride"))
+            throw std::runtime_error("inverse-bind buffer view must not define byteStride");
+        int comps=0;const auto values=readAccessor(g,index,comps);
+        for(size_t i=0;i<binding.joints.size();++i) {
+            auto& matrix=binding.joints[i].inverseBind;std::copy_n(values.begin()+16*i,16,matrix.begin());
+            if(matrix[3]!=0 || matrix[7]!=0 || matrix[11]!=0 || matrix[15]!=1)
+                throw std::runtime_error("inverse-bind matrix must be affine");
+        }
+    }
+    return binding;
+}
+void readSkinAttributes(const GltfBuffers& g,const json& attributes,size_t count,SkinBinding& binding) {
+    struct Set {std::vector<float> joints,weights;size_t weightType;};
+    std::map<size_t,Set> sets;
+    for(const auto& [name,index]:attributes.items()) if(name.starts_with("JOINTS_") || name.starts_with("WEIGHTS_")) {
+        const size_t prefix=name.starts_with("JOINTS_")?7:8;const std::string_view suffix(name.data()+prefix,name.size()-prefix);
+        size_t set=0;const auto parsed=std::from_chars(suffix.data(),suffix.data()+suffix.size(),set);
+        if(suffix.empty() || parsed.ec!=std::errc{} || parsed.ptr!=suffix.data()+suffix.size() || std::to_string(set)!=suffix)
+            throw std::runtime_error("invalid glTF skin attribute set index");
+        sets.try_emplace(set);
+    }
+    if(sets.empty() || !sets.contains(0)) throw std::runtime_error("skinned primitive requires JOINTS_0 and WEIGHTS_0");
+    size_t next=0;
+    for(auto& [set,data]:sets) {
+        if(set!=next++) throw std::runtime_error("glTF skin attribute sets must be consecutive");
+        for(bool joints:{true,false}) {
+            const auto name=std::string(joints?"JOINTS_":"WEIGHTS_")+std::to_string(set);
+            if(!attributes.contains(name)) throw std::runtime_error("unpaired glTF skin attribute set");
+            const size_t index=gltfSize(attributes,name.c_str());const auto& acc=g.doc.at("accessors").at(index);
+            const size_t component=gltfSize(acc,"componentType");const bool norm=acc.value("normalized",false);
+            if(acc.at("type")!="VEC4" || gltfSize(acc,"count")!=count ||
+               (joints? (norm || (component!=5121 && component!=5123)):
+                !((component==5126 && !norm) || ((component==5121 || component==5123) && norm))))
+                throw std::runtime_error("invalid glTF joint/weight accessor shape or encoding");
+            int comps=0;auto values=readAccessor(g,index,comps);
+            if(joints) data.joints=std::move(values);else {data.weights=std::move(values);data.weightType=component;}
+        }
+    }
+    binding.influences.resize(count);
+    for(size_t v=0;v<count;++v) {
+        double total=0;uint64_t exactTotal=0;bool integerOnly=true;
+        for(const auto& [set,data]:sets) for(size_t k=0;k<4;++k) {
+            const size_t ordinal=size_t(data.joints[4*v+k]);const float weight=data.weights[4*v+k];
+            if(ordinal>=binding.joints.size() || weight<0 || weight>1) throw std::runtime_error("glTF joint index or weight is out of range");
+            total+=weight;
+            if(data.weightType==5126) integerOnly=false;
+            else exactTotal+=uint64_t(std::lround(double(weight)*(data.weightType==5121?255:65535)))*(data.weightType==5121?257:1);
+            if(weight==0) continue;
+            auto& influences=binding.influences[v];
+            if(std::any_of(influences.begin(),influences.end(),[&](const auto& i){return i.bone==ordinal;}))
+                throw std::runtime_error("joint has repeated positive weights for one vertex");
+            influences.push_back({uint16_t(ordinal),weight});
+        }
+        if(integerOnly?exactTotal!=65535:std::abs(total-1)>1e-5) throw std::runtime_error("glTF vertex weights must sum to one");
+    }
+}
+
+Model loadGltf(const fs::path& path,bool skinned=false) {
     Model model;
     const GltfBuffers g = openGltf(path);
+    if(skinned && g.doc.contains("animations") && !g.doc.at("animations").empty())
+        model.notes.push_back("glTF animation tracks are not imported; skin metadata retains the default joint transforms and inverse binds");
     for (const auto& extension : g.doc.value("extensionsUsed", json::array()))
         model.notes.push_back("ignored optional glTF extension: " + extension.get<std::string>());
     if (!g.doc.contains("meshes") || !g.doc.at("meshes").is_array() || g.doc.at("meshes").empty())
@@ -442,43 +527,53 @@ Model loadGltf(const fs::path& path) {
     };
     // Traverse the selected scene iteratively: malformed cycles and deep valid
     // hierarchies must not exhaust the process stack. Preserve depth-first order.
-    struct MeshInstance {size_t mesh;Mat4 world;json weights;};
+    struct MeshInstance {size_t mesh;Mat4 world;json weights;std::optional<size_t> skin;size_t node;};
     std::vector<MeshInstance> instances;
+    const auto nodes=g.doc.value("nodes",json::array());
+    if(!nodes.is_array()) throw std::runtime_error("nodes is not an array");
+    std::vector<std::optional<Mat4>> worlds(nodes.size());
+    std::vector<std::optional<size_t>> parents(nodes.size());
     if (g.doc.contains("scenes") && !g.doc["scenes"].empty()) {
         const size_t sceneIndex = gltfSize(g.doc, "scene");
         if (!g.doc["scenes"].is_array() || sceneIndex >= g.doc["scenes"].size())
             throw std::runtime_error("invalid default scene index");
         const auto& scene = g.doc["scenes"][sceneIndex];
-        const auto nodes = g.doc.value("nodes", json::array());
-        if (!nodes.is_array()) throw std::runtime_error("nodes is not an array");
         std::vector<bool> visited(nodes.size(), false);
-        std::vector<std::pair<size_t, Mat4>> pending;
-        auto enqueue = [&](const json& children, const Mat4& parent) {
+        struct Pending {size_t node;Mat4 world;std::optional<size_t> parent;};
+        std::vector<Pending> pending;
+        auto enqueue = [&](const json& children, const Mat4& parent,std::optional<size_t> parentNode) {
             if (!children.is_array()) throw std::runtime_error("node list is not an array");
             for (auto it = children.rbegin(); it != children.rend(); ++it)
-                pending.emplace_back(gltfInteger(*it, "node index"), parent);
+                pending.push_back({gltfInteger(*it, "node index"), parent,parentNode});
         };
-        enqueue(scene.value("nodes", json::array()), identity());
+        enqueue(scene.value("nodes", json::array()), identity(),std::nullopt);
         while (!pending.empty()) {
-            const auto [ni, parent] = pending.back(); pending.pop_back();
+            const auto [ni, parent,parentNode] = pending.back(); pending.pop_back();
             if (ni >= nodes.size()) throw std::runtime_error("scene references a missing node");
             const auto& n = nodes[ni];
             if (visited[ni]) throw std::runtime_error("scene contains a cycle or repeated node");
             visited[ni] = true;
-            if(n.contains("mesh") && n.contains("skin"))
+            if(!skinned && n.contains("mesh") && n.contains("skin"))
                 throw std::runtime_error("active glTF skin is unsupported; bake the posed shape into a static mesh before export");
             const Mat4 world = mul(parent, nodeMatrix(n));
             if (!std::all_of(world.begin(), world.end(), [](float v) { return std::isfinite(v); }))
                 throw std::runtime_error("node world transform is not finite");
-            if (n.contains("mesh")) instances.push_back({gltfSize(n, "mesh"),world,n.value("weights",json{})});
-            enqueue(n.value("children", json::array()), world);
+            worlds[ni]=world;parents[ni]=parentNode;
+            if (n.contains("mesh")) {
+                if(skinned && !n.contains("skin")) throw std::runtime_error("skinned import requires skin on every selected mesh instance");
+                instances.push_back({gltfSize(n, "mesh"),skinned?identity():world,n.value("weights",json{}),
+                    n.contains("skin")?std::optional<size_t>(gltfSize(n,"skin")):std::nullopt,ni});
+            }
+            enqueue(n.value("children", json::array()), world,ni);
         }
     } else {
+        if(skinned) throw std::runtime_error("skinned glTF requires a selected scene and joint hierarchy");
         // With no scenes, import the asset as a mesh library.
-        for (size_t mi = 0; mi < g.doc["meshes"].size(); ++mi) instances.push_back({mi,identity(),json{}});
+        for (size_t mi = 0; mi < g.doc["meshes"].size(); ++mi) instances.push_back({mi,identity(),json{},std::nullopt,0});
     }
 
-    for (const auto& [mi, world, nodeWeights] : instances) {
+    for (const auto& [mi, world, nodeWeights,skinIndex,meshNode] : instances) {
+        const auto binding=skinned?std::optional<SkinBinding>(readSkin(g,*skinIndex,meshNode,worlds,parents)):std::nullopt;
         const NormalTransform normalTransform(world);
         const auto& mesh = g.doc["meshes"].at(size_t(mi));
         if (!mesh.is_object() || !mesh.contains("primitives") || !mesh.at("primitives").is_array() || mesh.at("primitives").empty())
@@ -584,7 +679,10 @@ Model loadGltf(const fs::path& path) {
                 }
                 // a mirrored node transform flips the winding
                 if (normalTransform.determinant < 0) for (auto& f : p.faces) std::swap(f[1], f[2]);
-                if (!p.faces.empty()) model.prims.push_back(std::move(p));
+                if (!p.faces.empty()) {
+                    if(binding) {auto skin=*binding;readSkinAttributes(g,attrs,nv,skin);model.skins.push_back(std::move(skin));}
+                    model.prims.push_back(std::move(p));
+                }
             } catch (const std::exception& error) {
                 throw std::runtime_error("glTF mesh " + std::to_string(mi) + " primitive " + std::to_string(pi) + ": " + error.what());
             }
@@ -806,13 +904,7 @@ bool validName(const std::string& n) {
 
 } // namespace
 
-Model loadModel(const fs::path& path) {
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-    Model model;
-    if (ext == ".glb" || ext == ".gltf") model=loadGltf(path);
-    else if (ext == ".obj") model=loadObj(path);
-    else throw std::runtime_error("unsupported model format " + ext + " (.glb, .gltf or .obj)");
+static void appendUvNotes(Model& model) {
     for (size_t part=0;part<model.prims.size();++part) {
         size_t clipped=0;
         for (const auto& uv:model.prims[part].uvs)
@@ -820,6 +912,28 @@ Model loadModel(const fs::path& path) {
                 ++clipped;
         if (clipped) model.notes.push_back("model part "+std::to_string(part+1)+": texture coordinates exceed the supported range on "+
             std::to_string(clipped)+" vertices; import clips these coordinates. Reduce texture tiling to preserve the mapping.");
+    }
+}
+
+Model loadModel(const fs::path& path) {
+    std::string ext = path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    Model model;
+    if (ext == ".glb" || ext == ".gltf") model=loadGltf(path);
+    else if (ext == ".obj") model=loadObj(path);
+    else throw std::runtime_error("unsupported model format " + ext + " (.glb, .gltf or .obj)");
+    appendUvNotes(model);return model;
+}
+
+Model loadSkinnedModel(const fs::path& path) {
+    auto ext=path.extension().string();std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return char(std::tolower(c));});
+    if(ext!=".glb" && ext!=".gltf") throw std::runtime_error("skinned import requires glTF or GLB joint/weight data");
+    auto model=loadGltf(path,true);
+    if(model.prims.empty() || model.skins.size()!=model.prims.size()) throw std::runtime_error("no skinned triangle geometry in selected scene");
+    appendUvNotes(model);
+    for(size_t part=0;part<model.skins.size();++part) {
+        size_t reduced=0;for(const auto& influences:model.skins[part].influences) if(influences.size()>3) ++reduced;
+        if(reduced) model.notes.push_back("model part "+std::to_string(part+1)+": "+std::to_string(reduced)+" vertices have more than three influences; Fable composition keeps the strongest three");
     }
     return model;
 }

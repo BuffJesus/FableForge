@@ -908,3 +908,48 @@ the donor local skeleton without silently stripping skin, then owned graphics /
 texture and private-definition publication with GUI selection and readback.
 Optional-header volume/generator decoder gap remains as previously recorded;
 do not claim all native donors supported. Existing validated packages unchanged.
+
+Authored glTF skin input now has a distinct read-only loadSkinnedModel API,
+reusing the existing GLB/sidecar buffers, topology and sparse accessor reader.
+Model.skins parallels geometry primitives and retains source skin/mesh-node IDs,
+joint-array order, source-node/parent identity, names, default scene-world and
+inverse-bind matrices in original glTF metres/column-major form. Geometry is
+converted to Fable coordinates without baking the skinned mesh node transform.
+Khronos glTF 2.0 sections 3.7.3/3.7.2 explicitly require this distinction from the
+static importer (https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#skins).
+Static loadModel still refuses selected active skins; uninstantiated skin
+declarations keep prior static behavior. No caller is switched to the new loader.
+
+Reads paired consecutive JOINTS_n/WEIGHTS_n sets, VEC4/count-matched byte/ushort
+joints and float or normalized byte/ushort weights. Retains every positive
+influence, including higher sets; notes identify vertices exceeding the
+composer's strongest-three capacity. Missing/out-of-scene/repeated joint nodes,
+missing common/declared root, invalid matrices, attribute encodings/indices,
+negative/nonfinite/duplicate positive weights and invalid total weights refuse.
+Integer totals checked exactly in a common 65535 denominator; float tolerance
+1e-5. Undefined IBMs become identity. Meaningful source matrices are retained,
+not claimed to match donor bind poses. Source joint cap 65536; IBM accessor cap
+1048576 matrices. Selected mesh instances currently must all be skinned; mixed
+rigid attachments require intentional handling, never silent stripping. Active
+morphs remain refused, animation tracks not imported (explicit note). Shared UV
+clipping notes now apply to both readers, with static messages unchanged.
+
+New registered fableforge_skinnedinput_tests passes 36 checks: six joint/weight
+encoding combinations, ignored mesh-node pose/winding, exact joint order and
+world/IBM translation, default IBM identity, malformed scenes/spans/encodings/
+weights, static boundary, all-positive higher-set preservation/reduction note,
+attribute-index/duplicate guards, repeated mesh instances, sparse joints,
+quantized total rejection, IBM stride rejection and sidecar glTF. Existing
+meshinput and skinnedcompose CTests pass against rebuilt libraries (three focused
+tests total). Initial test fixture compilation had one missing JSON brace;
+corrected fixture, no production validation change. Temporary fixtures tiny;
+test-created directory validated within the resolved temp root and removed on
+success. No retail input changes, full asset copies, shipping GUI rebuild or new
+archive. No full glTF conformance or runtime compatibility claim.
+
+Next: resolve used source joint names uniquely to donor local slots and validate
+coordinate-converted inverse binds/hierarchy before feeding the composer. Then
+owned graphics/texture and private definition publication, creature import card
+and placement/runtime evidence. Reading metadata is not compatibility proof;
+the complete custom-body workflow remains unfinished. Existing checkpoints stay
+as previously validated.

@@ -16,15 +16,30 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "forge/meshcompose.hpp"
 
 namespace albion::meshimport {
 
+struct SkinJoint {
+    size_t sourceNode=0;
+    std::optional<size_t> parentNode;
+    std::string name;
+    // Original glTF coordinates/metres, column-major. Not donor transforms.
+    std::array<float,16> world{},inverseBind{};
+};
+struct SkinBinding {
+    size_t sourceSkin=0,meshNode=0;
+    std::optional<size_t> skeletonRoot;
+    std::vector<SkinJoint> joints; // skin.joints order; influence indices refer here
+    std::vector<std::vector<forge::meshcompose::Influence>> influences;
+};
 struct Model {
     std::vector<forge::meshcompose::Primitive> prims;   // one per glTF primitive / OBJ material group, in Fable space
     std::vector<std::string> materialNames;             // per slot
     std::vector<std::string> notes;
+    std::vector<SkinBinding> skins; // loadSkinnedModel only, parallel to prims
 };
 
 // .glb / .gltf (embedded or sidecar buffers; POSITION, NORMAL, TEXCOORD_0, indices;
@@ -36,6 +51,11 @@ struct Model {
 
 // Notes identify texture coordinates that will clip in the static writer.
 Model loadModel(const std::filesystem::path& path);
+// Selected-scene glTF/GLB skinned instances only. Retains every positive weight
+// set and joint/bind metadata for subsequent donor compatibility validation.
+// Does not apply pose or skinned mesh-node transforms to the authored vertices,
+// map joints to a donor, compose bytes or publish banks. Static loader unchanged.
+Model loadSkinnedModel(const std::filesystem::path& path);
 
 struct ImportRequest {
     std::filesystem::path model;
