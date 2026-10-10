@@ -71,6 +71,13 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
 size_t cloneEntry(bin::File& file, size_t donorIndex, std::string newName);
 size_t cloneEntry(bin::File& file, std::string_view donorName, std::string newName);
 
+// Distinct Creature clone: relocate only verified self references to the final
+// append index, preserving shared components, all prior records and name offsets.
+// Requires a clean CREATURE CDefs layout; unresolved matching words refuse before
+// mutation. No private appearance/body cloning or publication is performed here.
+size_t cloneCreature(bin::File& file, const defschema::Schema& schema,
+                     size_t donorIndex, std::string newName);
+
 // The raw value bytes of one field (everything between its tag and the next
 // tag), for the types encodeValue does not parse -- maps, vectors, nested
 // structs. Same entry/field location rules as setField.

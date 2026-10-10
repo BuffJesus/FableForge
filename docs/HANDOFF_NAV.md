@@ -1,4 +1,4 @@
-> Active continuation: [Creature donor self-reference foundation](HANDOFF_CREATURE_CLONE_2026-10-10.md). All 517 donors independently audited: 1,521 verified self slots, 509 relocation-eligible and eight unresolved/refused. Distinct clone publication remains next; generic exact cloning and RC2 remain unchanged.
+> Active continuation: [distinct Creature clone API](HANDOFF_CREATURE_CLONE_2026-10-10.md). Independent retail container gate passes 508 clones and nine refusals with unchanged prior records/pool/native hashes. Paired CLI publication/Restore is next; generic exact cloning and RC2 remain unchanged.
 
 # Navigation lane, 2026-09-27
 

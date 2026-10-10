@@ -1,4 +1,4 @@
-> Active continuation: [Creature donor self-reference foundation](HANDOFF_CREATURE_CLONE_2026-10-10.md). All 517 donors independently audited: 1,521 verified self slots, 509 relocation-eligible and eight unresolved/refused. Distinct clone publication remains next; generic exact cloning and RC2 remain unchanged.
+> Active continuation: [distinct Creature clone API](HANDOFF_CREATURE_CLONE_2026-10-10.md). Independent retail container gate passes 508 clones and nine refusals with unchanged prior records/pool/native hashes. Paired CLI publication/Restore is next; generic exact cloning and RC2 remain unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2583,3 +2583,13 @@ feature is claimed for this foundation; generic clone still copies exact bytes.
 Distinct self-retargeted cloning and own appearance/body references remain next.
 Picker head b49dcf2 passes Windows CI 38065042651. See
 [creature donor handoff](HANDOFF_CREATURE_CLONE_2026-10-10.md).
+
+Distinct defedit::cloneCreature now precomputes strict self-only relocation before
+canonical append. Shared entries, loaded pool and all prior slots remain exact;
+unknown matches/empty listings refuse before mutation. Generic clone remains an
+exact byte copy. Five affected CTests pass (inventory 56, not full suite), and the
+independent retail container gate passes 508 appended donors plus nine refusals,
+including exact identities, name crc0/ordinals, original raw pool and per-clone
+deltas with unchanged native hashes. Paired publication/Restore and GUI promotion
+remain next; own appearance/body cloning remains unfinished. No new package or
+gameplay claim. Schema head d2678ed CI 38065569483 passes.

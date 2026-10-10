@@ -1,4 +1,5 @@
 #include "forge/defedit.hpp"
+#include "forge/defrelocate.hpp"
 #include "forge/unicode.hpp"
 
 #include <cctype>
@@ -351,6 +352,28 @@ SetFieldResult setField(bin::File& file, const defschema::Schema& schema,
 
 size_t cloneEntry(bin::File& file,size_t donorIndex,std::string newName) {
     return file.cloneEntry(donorIndex,std::move(newName));
+}
+size_t cloneCreature(bin::File& file,const defschema::Schema& schema,size_t donorIndex,std::string newName) {
+    if(donorIndex>=file.entries().size() || file.entries()[donorIndex].definition!="CREATURE")
+        throw std::runtime_error("creature clone: choose a Creature donor by its native index");
+    if(file.entries().size()>=UINT32_MAX)
+        throw std::runtime_error("creature clone: append index exceeds the game reference domain");
+    const auto& donor=file.entries()[donorIndex];
+    const auto decoded=defdecode::decode(donor,schema);
+    if(!decoded.clean() || defdecode::encode(decoded)!=donor.data || donor.data.size()<5 ||
+       decoded.fields.empty() || decoded.fields.front().name!="Components" ||
+       std::any_of(decoded.fields.begin(),decoded.fields.end(),[](const auto& field){return !field.tagOk;}))
+        throw std::runtime_error("creature clone: donor has no verified component layout");
+    const size_t count=size_t(donor.data[3]) | size_t(donor.data[4])<<8;
+    if(!count || decoded.prefixLen!=5+count*12)
+        throw std::runtime_error("creature clone: donor component listing is empty or malformed");
+    const auto landing=uint32_t(file.entries().size());
+    // Compute and reject every unsupported candidate before appending. The exact
+    // clone validates the new name, payload capacity and whole-bank ordinals.
+    auto payload=defrelocate::relocate(donor,schema,{{{uint32_t(donorIndex),landing}}, {}});
+    const auto appended=file.cloneEntry(donorIndex,std::move(newName));
+    file.setEntryData(appended,std::move(payload));
+    return appended;
 }
 size_t cloneEntry(bin::File& file,std::string_view donorName,std::string newName) {
     if(donorName.empty()) throw std::runtime_error("defedit clone: use an index for an unnamed donor");

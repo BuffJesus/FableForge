@@ -7,6 +7,7 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
+import sys
 from test_fmp_links import read_bank
 from test_mod_field_details import tag
 
@@ -22,6 +23,7 @@ def main():
     parser.add_argument('--install',type=Path,required=True)
     parser.add_argument('--exe',type=Path,default=repo/'build/fableforge_defrelocate_tests.exe')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--clone-api',action='store_true',help='Also exercise the Creature clone API against this verified audit')
     args=parser.parse_args();native=args.install.resolve()
     inputs=sorted((native/'data/CompiledDefs').glob('*.bin'))
     hashes={str(path):digest(path) for path in inputs}
@@ -59,6 +61,9 @@ def main():
     report.update(accepted=accepted,blocked=blocked,verified_self_slots=total_rewrites,
         native_hashes_unchanged=hashes,independent_delta_checks_passed=True)
     (work/'result.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    if args.clone_api:
+        subprocess.run([sys.executable,str(repo/'tools/test_creature_clone_api.py'),'--install',str(native),
+            '--audit-report',str(work/'result.json'),'--work-root',str(args.work_root.resolve())],check=True)
     print('Independent CDefs/self-only deltas: PASS',len(rows),'donors;',accepted,'eligible,',blocked,
           'unresolved,',total_rewrites,'verified slots',flush=True)
 

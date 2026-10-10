@@ -124,7 +124,7 @@ def main():
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
         ok &= run("Creature donor self-reference layout and independent relocation audit",
-                  [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root], capture_output=True)
+                  [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
         ok &= run("Creature GroupDef schema, independent boundaries and all retail records",
                   [sys.executable, "tools/test_creature_group_schema.py", "--install", install_root], capture_output=True)
         ok &= run("retail group picker families, exact field deltas and Restore",

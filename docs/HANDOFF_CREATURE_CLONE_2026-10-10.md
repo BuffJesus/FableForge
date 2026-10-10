@@ -72,3 +72,45 @@ the roadmap, not completed by shared-component self-retargeting.
 The dev/format-I/O/debug-evidence procedures selected the shared relocator,
 native inheritance evidence and independent raw-byte audit. No new package,
 full-suite, clean-machine or gameplay claim for this foundation.
+
+## Distinct in-memory clone API continuation
+
+Starting at committed/pushed e5d6e8e, defedit::cloneCreature now requires an explicit
+native Creature donor index, clean exact decode/encode and a nonempty counted CDefs
+prefix beginning before Components. It precomputes self-only defrelocate output,
+so unknown candidates refuse before mutation; canonical clone validates name,
+capacity and all existing ordinals before append. Only the appended payload gets
+the moved data. Shared component/appearance/body entries, original payloads/slots
+and loaded names remain unchanged. Generic exact clone is unchanged.
+
+New synthetic CTest exercises both self-reference members, equal-valued CRC and
+shared references, invalid indices/types/names, wrong counts, unknown matches,
+empty listings, refusal non-mutation and unchanged generic cloning. Five targeted
+clone/relocation/namespace/FMP CTests pass; final empty-list tightening rerun passes.
+CTest inventory is now 56; no full-suite claim.
+
+Optional test-executable retail mode writes only a fresh directory outside the
+native install. It appends each accepted donor, verifies all prior records and
+loaded names stay exact, saves and reopens every result. Independent Python gate
+compares all 14,764 original records, exact identity rows/header, original raw pool
+body, appended native ordinals/new-name crc0 and each self-only four-byte delta.
+It verifies refusal counts against the input-hash-bound independent reference audit.
+508 clones pass; eight unresolved donors plus empty NULLDEF_CREATURE refuse.
+Donors whose CDefs are inherited with no own self slot keep those references exact.
+This is a memory/container API check, not transactional publication or Restore.
+
+Final combined source gate passes at `creature-self-refs-ydr_bbo3` and
+`creature-clone-api-enor6zsk`; native input hashes unchanged. First API probe
+`creature-clone-api-nia6lhpi` hit a Python assertion KeyError because the independent
+reader omits ordinals. Corrected to read the raw identity table; subsequent
+`creature-clone-api-weu1kk0z` and final gate pass. No core defect was inferred from
+that harness failure. Source gate chains `audit_creature_self_refs.py --clone-api`
+with its own verified report, avoiding fixed evidence-path dependencies.
+
+Schema head d2678ed Windows CI 38065569483 passed; foundation head e5d6e8e
+run 38065970643 is live. No new GUI package for this API-only continuation.
+Next: commit/push, then expose this distinct mode through the paired definition
+publisher/CLI and verify transactional backup/rollback/Restore before GUI promotion.
+Own appearance/body cloning remains unfinished roadmap work, not replaced by
+shared-component cloning. Project procedures required preservation and independent
+raw-delta proof before promoting the in-memory API.
