@@ -642,3 +642,24 @@ and render; four draft guards retain state. Compact render visually inspected.
 All compiled-bank and graphics hashes unchanged. This is individual body-part
 preview, not assembled/animated NPC or skeleton compatibility. Registered the
 gate; broad suite not rerun and existing archives/public RC2 unchanged.
+
+## In-memory body model rebinding
+
+defedit::setCreatureBodyModel now targets an explicit CCreatureDef entry index,
+body-part index and alternative index using the validated canonical prefix.
+The entire decode/encode must be clean/exact, and the complete prefix must parse
+before changing anything. Both current and replacement IDs must resolve uniquely
+to type-5 entries in exactly one MBANK_ALLMESHES bank. All checks and payload-copy
+allocation precede mutation; only the selected four-byte word changes. Same ID
+is a validated byte-exact no-op. Names, identities, other records and all mesh/
+texture/animation bytes remain unchanged. This is memory only, not publication.
+
+Targeted fmplinks and defrelocate CTests pass. Added exact intended-delta/no-op
+checks plus twelve refusal cases for entry/class/body/alternative, missing ID,
+wrong current/replacement types, duplicate ID/bank, absent bank, later malformed
+marker and truncated component; every refusal verifies all records unchanged.
+No runtime/skeleton compatibility claim follows from type checks. Publisher/CLI/
+GUI promotion and independent retail output/recovery acceptance remain required.
+Reuse existing-entry guarded publication, but add a typed recomputation contract
+and stale graphics identity checks rather than treating arbitrary changed payloads
+as a verified body binding. Existing packages and RC2 remain unchanged.

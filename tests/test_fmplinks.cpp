@@ -1,6 +1,7 @@
 #include "forge/fmplinks.hpp"
 #include "forge/defrelocate.hpp"
 #include "forge/defdecode.hpp"
+#include "forge/defedit.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -253,6 +254,48 @@ int main() {
         check(shiftedLayout.bodyModels.size()==1 && shiftedLayout.bodyModels[0].bodyPart==1 &&
               shiftedLayout.bodyModels[0].offset==meshAt+4,
               "empty leading body part is not renumbered in body model slots");
+        {
+            forge::bin::File bank;
+            bank.addEntry("CCreatureDef","BODY",prefix);
+            bank.addEntry("OTHER","UNCHANGED",{9,0,0,0});
+            forge::big::File graphics;
+            auto& meshes=graphics.addBank("MBANK_ALLMESHES",0);
+            for(const auto id:{9u,99u}) {
+                forge::big::Entry mesh;mesh.id=id;mesh.type=5;mesh.name=std::to_string(id);
+                meshes.entries.push_back(std::move(mesh));
+            }
+            auto changed=bank;
+            const auto result=forge::defedit::setCreatureBodyModel(changed,prefixSchema,0,0,0,99,graphics);
+            auto expectedBody=prefix;
+            for(size_t n=0;n<4;++n)expectedBody[meshAt+n]=uint8_t(99u>>(8*n));
+            check(result.offset==meshAt && result.oldModelId==9 && result.newModelId==99 &&
+                  changed.entries()[0].data==expectedBody && changed.entries()[1].data==bank.entries()[1].data &&
+                  changed.originalNames()==bank.originalNames(),"body binding changes only one verified model word");
+            forge::defedit::setCreatureBodyModel(changed,prefixSchema,0,0,0,99,graphics);
+            check(changed.entries()[0].data==expectedBody,"same body model is an exact no-op");
+            const auto refused=[&](forge::bin::File input,size_t entry,size_t body,size_t alternative,
+                                   uint32_t id,const forge::big::File& assets) {
+                const auto original=input.entries();
+                rejects([&]{forge::defedit::setCreatureBodyModel(input,prefixSchema,entry,body,alternative,id,assets);},
+                        "invalid body binding refuses");
+                bool exact=input.entries().size()==original.size();
+                for(size_t n=0;n<original.size();++n)exact &= input.entries()[n].data==original[n].data &&
+                    input.entries()[n].name==original[n].name && input.entries()[n].definition==original[n].definition;
+                check(exact,"body binding refusal does not mutate any record");
+            };
+            refused(bank,99,0,0,99,graphics);refused(bank,1,0,0,99,graphics);
+            refused(bank,0,1,0,99,graphics);refused(bank,0,0,1,99,graphics);
+            refused(bank,0,0,0,999,graphics);
+            auto wrong=graphics;wrong.banks()[0].entries[1].type=1;refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks()[0].entries[0].type=9;refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks()[0].entries.push_back(wrong.banks()[0].entries[1]);
+            refused(bank,0,0,0,99,wrong);
+            wrong=graphics;wrong.banks().push_back(wrong.banks()[0]);refused(bank,0,0,0,99,wrong);
+            refused(bank,0,0,0,99,forge::big::File{});
+            auto malformed=prefix;malformed[endMarkerAt]^=1;
+            auto invalid=bank;invalid.setEntryData(0,malformed);refused(invalid,0,0,0,99,graphics);
+            invalid=bank;invalid.setEntryData(0,{1,0,1});refused(invalid,0,0,0,99,graphics);
+        }
         auto relocatable = prefixRecord;
         for (size_t n = 0; n < 4; ++n) relocatable.data[skeletonAt+n] = uint8_t(500000u >> (8*n));
         auto relocatedExpected = relocatable.data;

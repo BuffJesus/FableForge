@@ -1,5 +1,6 @@
 #include "forge/defedit.hpp"
 #include "forge/defrelocate.hpp"
+#include "forge/fmplinks.hpp"
 #include "forge/unicode.hpp"
 
 #include <cctype>
@@ -19,6 +20,42 @@
 #include "forge/defdecode.hpp"
 
 namespace forge::defedit {
+CreatureBodyModelResult setCreatureBodyModel(bin::File& file,const defschema::Schema& schema,
+        size_t entryIndex,size_t bodyPart,size_t alternative,uint32_t modelId,const big::File& graphics) {
+    const auto refuse=[](const char* text){throw std::runtime_error(std::string("defedit body model: ")+text);};
+    if(entryIndex>=file.entries().size())refuse("entry index out of range");
+    const auto& entry=file.entries()[entryIndex];
+    if(entry.definition!="CCreatureDef")refuse("requires CCreatureDef");
+    const auto decoded=defdecode::decode(entry,schema);
+    if(!decoded.clean() || defdecode::encode(decoded)!=entry.data)refuse("requires clean exact decode");
+    const auto layout=fmplinks::creaturePrefixLayout(decoded.prefix);
+    const auto slot=std::find_if(layout.bodyModels.begin(),layout.bodyModels.end(),[&](const auto& value){
+        return value.bodyPart==bodyPart && value.alternative==alternative;
+    });
+    if(slot==layout.bodyModels.end())refuse("body part or alternative is absent");
+    uint32_t old=0;
+    for(size_t n=0;n<4;++n)old|=uint32_t(entry.data.at(slot->offset+n))<<(8*n);
+    const big::Bank* meshes=nullptr;
+    for(const auto& bank:graphics.banks())if(bank.name=="MBANK_ALLMESHES") {
+        if(meshes)refuse("ambiguous mesh bank");meshes=&bank;
+    }
+    if(!meshes)refuse("missing mesh bank");
+    for(const auto id:{old,modelId}) {
+        const big::Entry* target=nullptr;
+        for(const auto& mesh:meshes->entries)if(mesh.id==id) {
+            if(target)refuse("ambiguous mesh ID");target=&mesh;
+        }
+        if(!target)refuse("missing mesh ID");
+        if(target->type!=5)refuse("requires skinned type-5 mesh");
+    }
+    const CreatureBodyModelResult result{entryIndex,bodyPart,alternative,slot->offset,old,modelId};
+    if(old!=modelId) {
+        auto data=entry.data;
+        for(size_t n=0;n<4;++n)data[slot->offset+n]=uint8_t(modelId>>(8*n));
+        file.setEntryData(entryIndex,std::move(data));
+    }
+    return result;
+}
 namespace {
 
 // Split "a,b,c" into pieces (no trimming beyond surrounding spaces per piece).

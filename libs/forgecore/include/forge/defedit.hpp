@@ -32,6 +32,7 @@
 #include <string_view>
 
 #include "forge/bin.hpp"
+#include "forge/big.hpp"
 #include "forge/defschema.hpp"
 
 namespace forge::defedit {
@@ -47,6 +48,20 @@ struct SetFieldResult {
     size_t oldPayloadSize = 0;  // payload byte length before the edit
     size_t newPayloadSize = 0;  // payload byte length after the edit
 };
+
+struct CreatureBodyModelResult {
+    size_t entryIndex, bodyPart, alternative, offset;
+    uint32_t oldModelId, newModelId;
+};
+// Change exactly one RandomAppearanceMorph body-model word in memory. Requires
+// a clean exact CCreatureDef decode, complete supported prefix and unique type-5
+// current/replacement IDs in one MBANK_ALLMESHES bank. No mesh payload, texture,
+// names or other definition bytes change. Invalid requests refuse before mutation.
+// Identity/type checks do NOT establish skeleton or runtime compatibility.
+// Callers must publish through the guarded existing-entry transaction.
+CreatureBodyModelResult setCreatureBodyModel(bin::File& file,
+    const defschema::Schema& schema,size_t entryIndex,size_t bodyPart,size_t alternative,
+    uint32_t modelId,const big::File& graphics);
 
 // Edit one field of the entry named `entryName` (empty name never matches;
 // use the index overload for unnamed sub-defs). Locates the field by CRC tag,
