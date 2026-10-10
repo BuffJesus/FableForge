@@ -1081,6 +1081,16 @@ Definitions inspection uses `assets_tab 6`, `wait_definitions`, `definition_bank
 
 Definition scalar drafts use `definition_edit <field-index>`, `definition_value <value>`, `definition_save`, and `definition_cancel`. The edit/value/save `_refused` variants check refusals. `definition_editing` and `definition_edit_failed` report draft state. Saving reselects the explicit native index, even when another record has a numeric name.
 
+Definition clone drafts use `definition_clone` (or the real
+`btn_definition_clone` control), `definition_value <new-name>`, `definition_save`
+and `definition_cancel`. `definition_clone_refused` checks draft/load refusal;
+`definition_cloning` distinguishes a clone from a field draft. Real name entry
+uses `input_definition_edit_value`; `btn_definition_save` and
+`btn_definition_save_confirm` exercise the Create confirmation. The
+`definition_clone_ui` package workflow covers game/frontend/script banks,
+numeric/unnamed/duplicate-name donors, folder/pack outputs, stale sources,
+invalid names, cancellation, Close/Install guards and paired Restore at both sizes.
+
 `definition_group` reports the validated game-bank group entry index, or `-`. `btn_definition_group` follows it by index after the current frame, protecting numeric names and the current decoded view.
 
 Definition vector drafts expose `input_definition_vector_0`, `_1` and (for C3DVector) `_2` for real coordinate input. `definition_value` accepts the existing comma-separated writer syntax for these drafts. The dedicated `definition_vectors` package workflow independently verifies every other payload byte, exact no-ops and malformed input/layout refusals at both sizes.

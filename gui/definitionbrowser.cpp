@@ -2,6 +2,7 @@
 #include "theme.hpp"
 #include "windowsprocess.hpp"
 #include "definitionfield.hpp"
+#include "definitionclone.hpp"
 #include "definitionread.hpp"
 #include "texturebrowse.hpp"
 #include "modpack.hpp"
@@ -137,11 +138,65 @@ bool App::beginDefinitionEdit(size_t field) {
         definitionEditIndex_=*definitionSelected_;definitionEditExpected_=definitionFile_.entries()[definitionEditIndex_];
         definitionEditExpectedNames_=definitionFile_.originalNames();definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
-        definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;
+        definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;definitionCloning_=false;
         definitionNameSearch_[0]=0;setDefinitionEditValue(definitionwrite::fieldValue(selected));return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
+bool App::beginDefinitionClone() {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(definitionEditing_) throw std::runtime_error("Save or cancel the current definition draft first.");
+        if(definitionsBusy() || modFilesBusy() || !definitionSelected_ ||
+           definitionPaths()!=std::pair{definitionLoadedNames_,definitionLoadedBank_})
+            throw std::runtime_error("Choose a record from the current loaded definition bank.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
+        definitionwrite::verifyEntries(definitionFile_,current);
+        definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
+        definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
+        definitionCloneFile_=std::move(current);
+        definitionEditIndex_=*definitionSelected_;
+        definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        const auto& donor=definitionFile_.entries()[definitionEditIndex_];
+        definitionEditField_=donor.name.empty()?"(unnamed record)":donor.name;
+        definitionEditType_="clone";definitionEditing_=true;definitionCloning_=true;
+        definitionEditConfirm_=false;definitionEditValue_[0]=0;return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
+}
+bool App::saveDefinitionClone() {
+    definitionEditError_.clear();definitionEditSuccess_.clear();
+    try {
+        if(!definitionEditing_ || !definitionCloning_) throw std::runtime_error("Choose a record to clone first.");
+        if(definitionsBusy() || modReadersBusy() || gameWriteBlocked("clone definition")) throw std::runtime_error("Wait for loads and writes, and close the destination game.");
+        const auto destination=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
+        if(definitionPaths()!=std::pair{definitionEditNames_,definitionEditBank_} || destination!=definitionEditDestination_)
+            throw std::runtime_error("Definition source or destination changed; start the clone again.");
+        if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before cloning.");
+        if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
+        if(definitionwrite::cloneBytes(definitionEditNames_)!=definitionCloneNamesBytes_ ||
+           definitionwrite::cloneBytes(definitionEditBank_)!=definitionCloneBankBytes_)
+            throw std::runtime_error("The source bank or name pool changed; start the clone again.");
+        auto cloned=definitionCloneFile_;
+        const auto added=forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
+        definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true);
+        definitionEditSuccess_="Created "+std::string(definitionEditValue_)+".";
+        definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;
+        definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();
+        definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=added;
+        if(definitionBank_=="game.bin") {
+            const auto targetRoot=destination.parent_path().parent_path().parent_path();
+            if(packDest_.empty() || (!ctx_.gameRoot().empty() && paths::resolvedPath(targetRoot)==paths::resolvedPath(ctx_.gameRoot()))) {
+                defThumbs_.clear();defList_.clear();themeGroupOf_.clear();envDefs_.clear();soundDefs_.clear();familyNames_.clear();issuesRev_=~0ull;
+                ctxError_.clear();reloadWhenContextReady_=true;
+                startContextLoad(packDest_.empty()?saveRoot():packDest_);
+            }
+        }
+        rescanBackups();pushLog(definitionEditSuccess_,3);return true;
+    } catch(const std::exception& error) {definitionEditError_=error.what();pushLog("clone definition: "+definitionEditError_,1);return false;}
+}
 bool App::saveDefinitionEdit() {
+    if(definitionCloning_) return saveDefinitionClone();
     definitionEditError_.clear();definitionEditSuccess_.clear();
     try {
         if(!definitionEditing_) throw std::runtime_error("Choose a field to edit first.");
@@ -179,8 +234,16 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
     }
     ImGui::SetCursorPosX(pad);theme::beginCard("##definitionbrowser",inner,true);theme::label("Definitions");
     drawPackDestination(cardInner,true);
+    if(!definitionEditing_) {
+        ImGui::BeginDisabled(definitionsBusy() || modFilesBusy() || !definitionSelected_);
+        if(theme::ghostButton("Clone selected definition",ImVec2(cardInner,0))) beginDefinitionClone();
+        auto_.registerWidget("btn_definition_clone");ImGui::EndDisabled();
+    }
     if(definitionEditing_) {
-        ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
+        if(definitionCloning_) {
+            ImGui::TextWrapped("Clone %s",definitionEditField_.c_str());
+            theme::hint("Copies this record unchanged. References keep their existing targets.");
+        } else ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
         ImGui::TextWrapped("Destination: %s",definitionEditDestination_.string().c_str());
         if(definitionEditType_=="CDefString") {
             std::string preview=definitionEditValue_;
@@ -267,19 +330,19 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                 if(changed) setDefinitionEditValue(definitionwrite::vectorValue(values,count));
             } else ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_);
         } else {
-            const bool text=definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
-            if(text) ImGui::TextDisabled("Text (up to 127 ASCII characters)");
+            const bool text=definitionCloning_ || definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
+            if(text) ImGui::TextDisabled("%s",definitionCloning_?"New name (up to 127 ASCII characters)":"Text (up to 127 ASCII characters)");
             ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_,
                 text?ImGuiInputTextFlags_CallbackCharFilter:0,text?definitionASCIIChar:nullptr);
         }
         auto_.registerWidget("input_definition_edit_value");
         if(!definitionEditConfirm_) {
-            if(theme::ghostButton("Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
+            if(theme::ghostButton(definitionCloning_?"Create definition":"Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
             auto_.registerWidget("btn_definition_save");
-            if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionEditConfirm_=false;}
+            if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();}
             auto_.registerWidget("btn_definition_edit_cancel");
         } else {
-            const int answer=confirmRow("Write this field to the destination bank?","Save",cardInner,S(28),"btn_definition_save_confirm");
+            const int answer=confirmRow(definitionCloning_?"Create this definition in the destination bank?":"Write this field to the destination bank?",definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
             if(answer>0) saveDefinitionEdit();if(answer) definitionEditConfirm_=false;
         }
     }

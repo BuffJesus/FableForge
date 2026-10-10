@@ -1,4 +1,4 @@
-> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
+> Active continuation: [GUI definition cloning](HANDOFF_GUI_CLONE_2026-10-10.md) in its owned C development worktree. RC2 is published with a verified asset hash; stable 0.18.0 stays latest. GUI clone source/retail and extracted development-package checks pass.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2456,3 +2456,26 @@ forge-tools defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--nam
 Thirty-five CLI cases pass: exact/numeric/unnamed/duplicate-index donors, invalid selectors/names, fresh and in-place publication, existing outputs, incompatible/missing pools, orphan recovery, physical aliases, rollback after a locked name-file rename, Restore and running-owner/junction refusal using an owned dummy helper. Original source files remain exact. Both clone/BIN-writer CTest targets pass. A full retail-bank export preserves all 14,764 prior records and identity-table rows, appends the exact donor and one correctly keyed name, and restores creation outputs without changing native hashes. Nineteen field-publication and fourteen selector neighbors pass. C evidence: definition-clone-038ldrlw, retail-definition-clone-export-rdt8kq3r, definition-publication-lz8k6ia0 and definition-selector-a95ictqb. GUI cloning remains pending.
 
 The user explicitly requested GitHub milestone releases/updates on 2026-10-09. Prepare 0.18.1-rc.2 as a prerelease in the isolated C release checkout, preserving the working lane and excluding the separately owned test_dialogueaudio.cpp edits. Existing GitHub rc.1 is retained; do not overwrite it. Source publication, CI and exact RC2 package validation are in progress.
+
+## GUI definition clone continuation, 2026-10-10
+
+The isolated development branch adds Clone selected definition, a bounded new-name
+draft and Create confirmation around the proven paired publisher. Prior records,
+identity slots and name offsets remain intact; references retain their original
+targets. Opaque, numeric-named, unnamed and indexed duplicate-name donors are supported.
+Whole captured source bank/name bytes, destination identity, pack validity and
+compatible outputs are checked before publication. Shared definition draft state
+protects Close and Install; the created record is reselected by explicit index.
+
+Thirty-eight real-control GUI cases pass at both sizes across game/frontend/script
+banks, folder/pack output, refusals, cancellation, stale sources and Restore.
+All 34 neighboring scalar-draft cases and both core clone/BIN-writer targets pass.
+Actual retail inputs through the new GUI preserve all 14,764 prior records and raw
+identity rows; independent donor/key/ordinal checks and explicit-output Restore pass,
+with native compiled-bank hashes unchanged. The development-version rebuild and
+extracted package pass: 112 identities, 132 links, seven selected workflows,
+120 not run and zero skips. Archive SHA256:
+`73fb4dae506f4a387bc26bcf64e464a1276c29253e77f0aae6ad6cb92c5a9349`.
+The packaged GUI also passes the independent retail clone/Restore check.
+This is separate from RC2's unchanged archive; no full-suite or live-game claim.
+Evidence and resume: [GUI clone handoff](HANDOFF_GUI_CLONE_2026-10-10.md).

@@ -1465,4 +1465,17 @@ Definition CDefString fields show a readable name when their byte offset identif
 Four-byte definition name references can now be edited with an existing-name chooser. Search finds names or byte offsets; duplicate names appear with distinct offsets. No name stores -1. Saving keeps the existing name pool and refuses stale references. Original unsupported offsets can remain unchanged.
 
 
-The CLI can clone a definition: `forge-tools defs clone <bank.bin> <donor-name-or-index> <new-name> --out <output-bank.bin>`. It copies the whole donor payload and saves the bank/name-pool pair with recovery records. Existing outputs must match the loaded bank and pool. GUI clone controls are still pending.
+Select a record in Assets > Definitions and choose **Clone selected definition**.
+Enter a unique name of up to 127 ASCII characters, then choose **Create definition**
+and confirm. The copy keeps every field and reference target from its donor;
+it does not copy the records those references point to. Named and unnamed records
+can be donors, including records whose fields cannot be decoded by the inspector.
+The new record is selected after saving. Save folders and valid pack destinations
+use the existing destination chooser; Cancel and Close/Install protection retain
+the draft until you save or discard it. Changed sources or destinations refuse.
+Restore recovers the bank and its names together, or removes a newly created pair.
+
+The CLI provides the same operation with `forge-tools defs clone <bank.bin>
+<donor-name-or-index> <new-name> --out <output-bank.bin>`. Existing outputs must
+match the loaded bank and pool. GUI cloning is part of the development continuation
+after rc.2; the published rc.2 candidate contains the CLI operation.

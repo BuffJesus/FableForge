@@ -589,6 +589,8 @@ public:
     bool setDefinitionBank(const std::string& bank);
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
+    bool beginDefinitionClone();
+    bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
     bool definitionsBusy() const {return definitionFuture_.valid();}
@@ -619,6 +621,9 @@ private:
     char definitionSearch_[256]={};
     bool definitionLoaded_=false,definitionFilterDirty_=true;
     bool definitionEditing_=false,definitionEditConfirm_=false;
+    bool definitionCloning_=false;
+    forge::bin::File definitionCloneFile_;
+    std::vector<uint8_t> definitionCloneNamesBytes_,definitionCloneBankBytes_;
     size_t definitionEditIndex_=0;
     forge::bin::Entry definitionEditExpected_;
     std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;

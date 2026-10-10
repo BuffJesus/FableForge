@@ -322,6 +322,8 @@ def main():
               [sys.executable, "tools/test_definition_vector_edit_ui.py"], capture_output=True)
     ok &= run("Definition donor cloning, paired publication, rollback and exact Restore",
               [sys.executable, "tools/test_definition_clone.py"], capture_output=True)
+    ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",
+              [sys.executable, "tools/test_definition_clone_ui.py"], capture_output=True)
     ok &= run("Definition existing-name picker, exact field deltas, invalid offsets and Restore",
               [sys.executable, "tools/test_definition_name_picker_ui.py"], capture_output=True)
     ok &= run("Definition owning names offsets, duplicate names, refresh and source preservation",

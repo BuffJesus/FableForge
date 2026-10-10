@@ -1,4 +1,4 @@
-> Latest session checkpoint: [2026-10-10 continuation](HANDOFF_2026-10-10.md). RC2 passes all 54 CTests and 57 selected extracted workflows; GitHub release integration is next.
+> Active continuation: [GUI definition cloning](HANDOFF_GUI_CLONE_2026-10-10.md) in its owned C development worktree. RC2 is published with a verified asset hash; stable 0.18.0 stays latest. GUI clone source/retail and extracted development-package checks pass.
 
 # Navigation lane, 2026-09-27
 

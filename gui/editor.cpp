@@ -4198,7 +4198,7 @@ void App::drawUnsavedPrompt() {
             if (worldPendingCount())
                 ImGui::TextColored(theme::vec(theme::Muted), "%zu pending world change%s not written.", worldPendingCount(), worldPendingCount() == 1 ? "" : "s");
             if(definitionEditing_)
-                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition field draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str());
+                ImGui::TextColored(theme::vec(theme::Muted),"%s has an open definition %s draft. Review and save it from Assets > Definitions before closing.",definitionEditField_.c_str(),definitionCloning_?"clone":"field");
             if (textEditing_)
                 ImGui::TextColored(theme::vec(theme::Muted),
                     "%s has an open text draft. Review and save it from Assets > Text before closing.",textEditName_.c_str());

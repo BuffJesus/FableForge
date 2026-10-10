@@ -233,6 +233,8 @@ def main():
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_clone', [sys.executable, repo / 'tools/test_definition_clone.py',
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('definition_clone_ui', [sys.executable, repo / 'tools/test_definition_clone_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_name_picker', [sys.executable, repo / 'tools/test_definition_name_picker_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_name_labels', [sys.executable, repo / 'tools/test_definition_name_labels_ui.py',

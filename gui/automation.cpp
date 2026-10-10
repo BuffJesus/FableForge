@@ -697,6 +697,9 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
+    else if(cmd=="definition_clone" || cmd=="definition_clone_refused") {
+        if(app.beginDefinitionClone()!=(cmd=="definition_clone")) fail("definition clone returned an unexpected result");else note("ok   "+line);++pc_;
+    }
     else if(cmd=="definition_edit" || cmd=="definition_edit_refused") {
         size_t field=0;const auto parsed=std::from_chars(rest.data(),rest.data()+rest.size(),field);
         const bool ok=parsed.ec==std::errc{} && parsed.ptr==rest.data()+rest.size() && app.beginDefinitionEdit(field);
@@ -709,7 +712,8 @@ bool Automation::tick(App& app) {
         if(app.saveDefinitionEdit()!=(cmd=="definition_save")) fail("definition save returned an unexpected result");else note("ok   "+line);++pc_;
     }
     else if(cmd=="definition_cancel") {
-        app.definitionEditing_=false;app.definitionEditConfirm_=false;note("ok   "+line);++pc_;
+        app.definitionEditing_=false;app.definitionCloning_=false;app.definitionEditConfirm_=false;
+        app.definitionCloneFile_={};app.definitionCloneNamesBytes_.clear();app.definitionCloneBankBytes_.clear();note("ok   "+line);++pc_;
     }
     else if(cmd=="wait_definitions") {
         app.pollDefinitions();waitOn(!app.definitionsBusy() && app.definitionLoaded_,"definitions");
