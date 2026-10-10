@@ -472,3 +472,25 @@ live at last observation; no repeat build/test needed for this test-only change.
 
 Next: missing/unresolved and inherited-donor GUI probes, then development package
 validation. No gameplay or full new release claim.
+
+Stale-source checkpoint a49ec80 push session 33618 completed successfully. An
+overlapping ordinary Git status read hit shared D: loose-object permission errors;
+use the established C: object directory plus D: alternate rather than deleting,
+overwriting or repairing shared objects. Other safe task work continued.
+
+Private donor-policy gate now selects supported inherited, missing-visual and
+unresolved donors from the independently decoded source graph. `lx3e4x9z` passes
+two inherited-donor saves: root 264 borrowed appearance from original parent 262;
+the new selected parent is localized to the new root, all unselected triples and
+prior records/pool stay exact, and Restore succeeds. `o2b2ybnl` passes two missing
+visual-donor preflight refusals (root 113); `k4hez073` passes two unresolved-donor
+preflight refusals. Both unsupported cases leave no draft/output and native hashes
+unchanged. An initial unresolved selector accessed a missing-visual root absent
+from canonical payload observations; restored the explicit shape check before the
+lookup, then the gate passed. Production logic unchanged. Six new both-size cases
+reuse the same GUI binary; prior twenty private checks are not repeated.
+
+Registered all three donor-policy checks in the native optional gate. Next:
+commit this test checkpoint and create a separately named private-GUI development
+archive, then verify its identities, documentation and selected extracted checks.
+The older shared-GUI archive and public RC2 must remain unchanged.

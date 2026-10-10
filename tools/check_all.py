@@ -133,6 +133,10 @@ def main():
                   [sys.executable, "tools/test_creature_visual_clone_api.py", "--install", install_root], capture_output=True)
         ok &= run("Private Creature GUI controls at both sizes, independent native deltas and Restore",
                   [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root], capture_output=True)
+        for donor_policy in ("inherited", "missing", "unresolved"):
+            ok &= run("Private Creature GUI donor policy " + donor_policy,
+                      [sys.executable, "tools/test_creature_private_clone_ui.py", "--install", install_root,
+                       "--donor-policy", donor_policy, "--only", "save"], capture_output=True)
         ok &= run("Creature donor self-reference layout and independent relocation audit",
                   [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
         ok &= run("Retail paired Creature clone, self-only deltas and Restore",

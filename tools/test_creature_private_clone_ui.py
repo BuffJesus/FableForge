@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--schema',type=Path,default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--work-root',type=Path,default=repo/'build')
     parser.add_argument('--only',nargs='+',choices=MODES)
+    parser.add_argument('--donor-policy',choices=('first','inherited','missing','unresolved'),default='first')
     args=parser.parse_args();native=args.install.resolve()
     assert not args.work_root.resolve().is_relative_to(native),'evidence must be outside the source install'
     paths=[native/'data/CompiledDefs'/name for name in ('game.bin','names.bin')]
@@ -36,12 +37,20 @@ def main():
         capture_output=True,text=True,timeout=120)
     assert result.returncode==0,result.stderr
     payloads={row['root']:row['payloads'] for row in json.loads(result.stdout)['records']}
-    donor=next(row for row in graph['records'] if not row['issues'] and
-        not any(payload['unresolved'] for payload in payloads[row['index']]))
+    preflight=args.donor_policy in ('missing','unresolved')
+    def matches(row):
+        if args.donor_policy=='missing':return bool(row['issues'])
+        if row['issues']:return False
+        unresolved=any(payload['unresolved'] for payload in payloads[row['index']])
+        if args.donor_policy=='unresolved':return not row['issues'] and unresolved
+        return not row['issues'] and not unresolved and (args.donor_policy=='first' or
+            any(component['owner']!=row['index'] for component in row['visual_rows']))
+    donor=next(row for row in graph['records'] if matches(row))
     nodes=[donor['index']]+[row['component'] for row in donor['visual_rows']]
     slots=list(range(len(originals),len(originals)+3));maps=dict(zip(nodes,slots))
     expected=[]
-    for number,(node,payload) in enumerate(zip(nodes,payloads[donor['index']])):
+    observed_payloads=[] if preflight else payloads[donor['index']]
+    for number,(node,payload) in enumerate(zip(nodes,observed_payloads)):
         data=bytearray(originals[node]['data'])
         for rewrite in payload['rewrites']:
             assert rewrite['domain']=='game' and rewrite['before'] in maps
@@ -57,7 +66,7 @@ def main():
     print('Evidence retained at',work,flush=True);cases=0
     try:
         for size,scale in [('1440x900',1),('800x600',1.5)]:
-            for mode in args.only or MODES:
+            for mode in (('save',) if preflight else args.only or MODES):
                 case=work/(size+'-'+mode);case.mkdir();output=case/'output'
                 input_root=native;owned_paths=None
                 if mode.startswith('stale-'):
@@ -71,6 +80,7 @@ def main():
                 if mode.startswith('empty-'):names[('root','body','appearance').index(mode[6:])]=''
                 lines=['wait_maps','wait_ready',f'set uiscale {scale}',f'set saveroot {output.as_posix()}',
                     'assets_tab 6','wait_definitions',f'definition_select {donor["index"]}','frames 3']
+                start_lines=list(lines)
                 lines+=click('btn_definition_clone_creature_private')+['assert_state definition_editing 1']
                 lines+=['definition_clone_refused','definition_clone_creature_refused',
                     'definition_bank_refused frontend.bin','assert_state definition_editing 1']
@@ -90,6 +100,10 @@ def main():
                     lines+=click('btn_definition_save_confirm')+['wait_ready','wait_definitions','frames 3',
                         'assert_state definition_editing 0',f'assert_state definition_selected {slots[0]}',
                         f'screenshot {(case/"created.png").as_posix()}']
+                if preflight:
+                    # A refused donor must never open the three-name draft.
+                    lines=start_lines+click('btn_definition_clone_creature_private')+[
+                        'assert_state definition_editing 0',f'screenshot {(case/"refused.png").as_posix()}']
                 lines+=['quit'];script=case/'private.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
                 changed=None
                 with (case/'output.log').open('w',encoding='utf-8') as log:
@@ -113,7 +127,7 @@ def main():
                     assert owned_paths[0].read_bytes()==(changed if mode=='stale-bank' else source_bank)
                     assert owned_paths[1].read_bytes()==(changed if mode=='stale-names' else source_pool)
                     assert not list(input_root.rglob('*.forge-orig')),'stale refusal created originals'
-                if mode in ('save','close-review'):
+                if mode in ('save','close-review') and not preflight:
                     created=read_bank(output);assert len(created)==len(originals)+3 and created[:len(originals)]==originals
                     for node,slot,name,data in zip(nodes,slots,names,expected):
                         assert created[slot]==dict(originals[node],name=name,data=data)
@@ -131,6 +145,7 @@ def main():
     finally:
         assert {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}==hashes,'native inputs changed'
     (work/'result.json').write_text(json.dumps({'passed':True,'cases':cases,'donor':donor['index'],
+        'donor_policy':args.donor_policy,'visual_original_parents':[row['owner'] for row in donor['visual_rows']],
         'native_hashes':hashes,'full_install_copies':False,'gameplay_tested':False},indent=2)+'\n',encoding='utf-8')
 
 
