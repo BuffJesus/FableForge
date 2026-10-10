@@ -123,6 +123,8 @@ def main():
     dialogue = retail_dialogue_big()
     if dialogue:
         install_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(dialogue))))
+        ok &= run("retail group picker families, exact field deltas and Restore",
+                  [sys.executable, "tools/test_definition_group_retail.py", "--install", install_root], capture_output=True)
         ok &= run("retail GUI Unicode definition delta, identity preservation and Restore",
                   [sys.executable, "tools/test_definition_wide_retail.py", "--install", install_root], capture_output=True)
         ok &= run("retail lipsync byte roundtrip", [os.path.join("build", "fableforge_lipsync_tests.exe"), dialogue])
@@ -342,6 +344,8 @@ def main():
               [sys.executable, "tools/test_definition_groups_ui.py"], capture_output=True)
     ok &= run("Definition scalar drafts, real inputs, destinations, stale guards, close review and Restore",
               [sys.executable, "tools/test_definition_edit_ui.py"], capture_output=True)
+    ok &= run("Definition group picker, exact indices, target families and stale identity refusal",
+              [sys.executable, "tools/test_definition_group_picker_ui.py"], capture_output=True)
     ok &= run("Definition wide Unicode drafts, native encoding, real inputs and protected malformed originals",
               [sys.executable, "tools/test_definition_wide_edit_ui.py"], capture_output=True)
     ok &= run("Definition integer bounds, signed name references and exact field deltas",

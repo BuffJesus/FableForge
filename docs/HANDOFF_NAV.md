@@ -1,4 +1,4 @@
-> Active continuation: [UI glyph fallback](HANDOFF_GUI_FONTS_2026-10-10.md) in the owned C development worktree. Unicode pushed-head CI and exact extracted font acceptance pass. Confirmed definition-reference controls are the next authoring gap. RC2 remains published unchanged.
+> Active continuation: [confirmed GroupDef picker](HANDOFF_GROUP_PICKER_2026-10-10.md) in the owned C development worktree. Final 32 synthetic and six retail-copy cases plus eight extracted workflows pass. Two unrelated corpus workflows skip explicitly. RC2 remains unchanged.
 
 # Navigation lane, 2026-09-27
 

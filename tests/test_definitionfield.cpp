@@ -33,6 +33,16 @@ int main() try {
     const std::vector<std::string> invalidText={std::string("A\0B",3),"\x80","\xc0\x80","\xc2","\xed\xa0\x80","\xf4\x90\x80\x80","\xc2\x80","\xc2\x9f"};
     for(const auto& text:invalidText)
         require(!albion::definitionwrite::printableWideText(text),"Malformed/control UTF-8 draft accepted");
-    std::cout<<"Definition draft Unicode, exact originals, malformed data and byte limits: PASS\n";
+    forge::bin::File groups;groups.addEntry("THING_GROUP","3",{});groups.addEntry("ENGINE_THEME_GROUP","THEMES",{});
+    forge::bin::Entry owner;owner.definition="OBJECT";
+    for(const auto* category:{"OBJECT","BUILDING","CREATURE"}) {
+        owner.definition=category;
+        require(albion::definitionread::groupChoice(groups,owner,0) && !albion::definitionread::groupChoice(groups,owner,1),"Thing group family differs");
+    }
+    owner.definition="ENGINE_THEME";
+    require(!albion::definitionread::groupChoice(groups,owner,0) && albion::definitionread::groupChoice(groups,owner,1),"Theme group family differs");
+    require(!albion::definitionread::groupChoice(groups,owner,size_t(-1)),"Out-of-range group accepted");
+    owner.definition="UNKNOWN";require(!albion::definitionread::groupFamily(owner),"Unknown category inferred");
+    std::cout<<"Definition draft Unicode, exact originals, malformed data, byte limits and group families: PASS\n";
     return 0;
 } catch(const std::exception& error) {std::cerr<<error.what()<<'\n';return 1;}

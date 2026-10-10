@@ -5,7 +5,7 @@ from pathlib import Path
 from test_mod_field_details import tag
 from test_texture_lookup import texture_bank
 
-def write_fixture(root,repo,extra_members=0,group_names=("3","GROUP_NORMAL")):
+def write_fixture(root,repo,extra_members=0,group_names=("3","GROUP_NORMAL"),group_types=("THING_GROUP","THING_GROUP")):
     folder=root/'data/CompiledDefs';folder.mkdir(parents=True)
     schema=json.loads((repo/'docs/re_reference/def_schema.json').read_text(encoding='utf-8'))['OBJECT']['fields']
     def object_payload(group):
@@ -16,7 +16,7 @@ def write_fixture(root,repo,extra_members=0,group_names=("3","GROUP_NORMAL")):
             data+=struct.pack('<I',tag(f['name']))+value
         return data
     records=[('OBJECT','OBJ_A',object_payload(2)),('OBJECT','OBJ_B',object_payload(3)),
-        ('THING_GROUP',group_names[0],b'\x01\0\x01\0\0'),('THING_GROUP',group_names[1],b'\x01\0\x01\0\0'),
+        (group_types[0],group_names[0],b'\x01\0\x01\0\0'),(group_types[1],group_names[1],b'\x01\0\x01\0\0'),
         ('OBJECT','WRONG_TYPE',object_payload(0)),('OBJECT','ABSENT',object_payload(-1)),
         ('OBJECT','OUT_OF_RANGE',object_payload(999)),('OBJECT','BAD_WIDTH',object_payload(struct.pack('<i',2)+b'EXTRA'))]
     records += [('OBJECT',f'OBJ_EXTRA_{i}',object_payload(2)) for i in range(extra_members)]

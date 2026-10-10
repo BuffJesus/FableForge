@@ -1,4 +1,4 @@
-> Active continuation: [UI glyph fallback](HANDOFF_GUI_FONTS_2026-10-10.md) in the owned C development worktree. Unicode pushed-head CI and exact extracted font acceptance pass. Confirmed definition-reference controls are the next authoring gap. RC2 remains published unchanged.
+> Active continuation: [confirmed GroupDef picker](HANDOFF_GROUP_PICKER_2026-10-10.md) in the owned C development worktree. Final 32 synthetic and six retail-copy cases plus eight extracted workflows pass. Two unrelated corpus workflows skip explicitly. RC2 remains unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2530,3 +2530,23 @@ on this machine. Archive SHA256:
 `581cc3201f1382c21bf4c0895b09ae0c8df16d6c4e2217f04d2bbc77517bfe3c`.
 This does not prove universal font coverage, text shaping, colour emoji, gameplay or
 another-machine behavior. See [font handoff](HANDOFF_GUI_FONTS_2026-10-10.md).
+
+### Confirmed GroupDef target picker, 2026-10-10
+
+Decoded game-bank int32 GroupDef drafts now offer searched native-index choices
+for confirmed Thing/terrain-theme families. Wrong-family, missing and stale target
+identities refuse before publication; unresolved originals retain exact no-op bytes.
+Other integers/banks remain uninterpreted and raw CLI editing is unchanged.
+The current retail villager schema does not decode its GroupDef type, so it remains
+read-only; no speculative schema change. All 32 synthetic cases and six retail-copy
+Object/Building/theme cases pass, independently preserving 14,764 records except
+the selected four-byte delta, exact identities/names and Restore; native inputs stay
+unchanged. The dev skill selected affected tests; the format-I/O skill required the
+independent raw-delta and untouched-byte checks.
+
+Exact extracted archive passes 115 identities, 136 documentation links and eight
+selected workflows (including 32 picker, six retail, 34 scalar and name/tree/group
+neighbors), 120 not run and two unrelated missing-corpus skips. SHA256:
+`cf6d013ef97fd8fe3fcf128f3dcebf8c156a3d272a32d852bed4750b8cc733dd`.
+No full-suite, clean-machine or gameplay claim. See
+[GroupDef handoff](HANDOFF_GROUP_PICKER_2026-10-10.md).

@@ -1,5 +1,6 @@
 #pragma once
 #include "definitionwrite.hpp"
+#include "definitionread.hpp"
 #include "forge/defdecode.hpp"
 #include "forge/defedit.hpp"
 #include "forge/unicode.hpp"
@@ -63,7 +64,8 @@ inline std::string fieldValue(const forge::defdecode::DecodedField& field) {
 inline bool replaceField(const std::filesystem::path& sourceNames,const std::filesystem::path& sourceBank,
                           const std::filesystem::path& destination,size_t index,const forge::bin::Entry& expected,
                           const std::vector<std::pair<uint32_t,std::string>>& expectedNames,
-                          const forge::defschema::Schema& schema,const std::string& field,const std::string& value) {
+                          const forge::defschema::Schema& schema,const std::string& field,const std::string& value,
+                          const std::map<size_t,forge::bin::Entry>* expectedGroups=nullptr) {
     auto file=forge::bin::File::open(sourceNames,sourceBank);
     if(file.originalNames()!=expectedNames || index>=file.entries().size())
         throw std::runtime_error("Definition namespace changed; refresh before editing.");
@@ -88,6 +90,22 @@ inline bool replaceField(const std::filesystem::path& sourceNames,const std::fil
     // including noncanonical true bytes and existing NaN payload bits.
     if(fieldValue(*target)==value) return false;
     forge::defedit::setField(file,schema,index,field,value);
+    // Alternate spellings of an unchanged scalar are still byte-exact no-ops,
+    // including legacy unresolved references. There is nothing to publish.
+    if(file.entries()[index].data==expected.data) return false;
+    if(sourceBank.filename()=="game.bin" && field=="GroupDef" && target->type=="int32" && definitionread::groupFamily(expected)) {
+        const auto updated=forge::defdecode::decode(file.entries()[index],schema);
+        const auto found=std::find_if(updated.fields.begin(),updated.fields.end(),[&](const auto& candidate){return candidate.name==field;});
+        if(found==updated.fields.end() || found->value.size()!=4) throw std::runtime_error("Group reference has no confirmed four-byte layout.");
+        const auto& bytes=found->value;
+        const uint32_t group=uint32_t(bytes[0]) | (uint32_t(bytes[1])<<8) | (uint32_t(bytes[2])<<16) | (uint32_t(bytes[3])<<24);
+        if(!definitionread::groupChoice(file,expected,group)) throw std::runtime_error("Choose an existing group of the confirmed family in this game bank.");
+        if(!expectedGroups) throw std::runtime_error("Capture the current group choices before editing.");
+        const auto captured=expectedGroups->find(group);const auto& current=file.entries()[group];
+        if(captured==expectedGroups->end() || captured->second.name!=current.name ||
+           captured->second.definition!=current.definition || captured->second.indexInDefinition!=current.indexInDefinition)
+            throw std::runtime_error("The selected group identity changed; start the edit again.");
+    }
     if(target->type=="CDefString") {
         const auto updated=forge::defdecode::decode(file.entries()[index],schema);
         const auto found=std::find_if(updated.fields.begin(),updated.fields.end(),[&](const auto& candidate){return candidate.name==field;});
@@ -101,7 +119,6 @@ inline bool replaceField(const std::filesystem::path& sourceNames,const std::fil
         }
         if(!valid) throw std::runtime_error("Choose an existing name from this bank or no name.");
     }
-    if(file.entries()[index].data==expected.data) return false;
     publish(file,sourceNames,destination,true);return true;
 }
 } // namespace albion::definitionwrite

@@ -251,6 +251,11 @@ def main():
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_edit', [sys.executable, repo / 'tools/test_definition_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_group_picker', [sys.executable, repo / 'tools/test_definition_group_picker_ui.py',
+        '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('definition_group_retail', [sys.executable, repo / 'tools/test_definition_group_retail.py',
+        '--install', args.root.resolve(), '--gui', package / 'FableForge.exe', '--tool', package / 'forge-tools.exe',
+        '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_wide', [sys.executable, repo / 'tools/test_definition_wide_edit_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_wide_retail', [sys.executable, repo / 'tools/test_definition_wide_retail.py',

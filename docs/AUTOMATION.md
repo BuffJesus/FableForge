@@ -1126,3 +1126,5 @@ Definition tree widgets: `definition_type_node_<type-index>`, `definition_group_
 
 
 `combo_definition_edit_name` opens the existing-name chooser for four-byte CDefString drafts. `input_definition_name_search` filters pool names or offsets; `definition_name_option_<byte-offset>` and `definition_name_option_none` select an existing name or -1. Duplicate pool names have separate offset choices. Saving refuses changed references that are not exact string starts in the captured owning pool.
+
+`combo_definition_edit_group` opens the confirmed game-bank int32 GroupDef picker. `input_definition_group_search` filters target names or native indices; `definition_group_option_<native-index>` selects that explicit index, not a name lookup. Only confirmed owner/family combinations participate. Changed wrong-family, missing or stale target identities refuse; unchanged legacy bytes remain a no-op. Synthetic picker and read-only retail-copy workflows cover publication, exact deltas and explicit-output Restore.

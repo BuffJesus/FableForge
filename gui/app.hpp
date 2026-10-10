@@ -627,6 +627,7 @@ private:
     size_t definitionEditIndex_=0;
     forge::bin::Entry definitionEditExpected_;
     std::vector<std::pair<uint32_t,std::string>> definitionEditExpectedNames_;
+    std::map<size_t,forge::bin::Entry> definitionEditExpectedGroups_;
     std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
     std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
     char definitionEditValue_[128]={};

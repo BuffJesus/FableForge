@@ -3,6 +3,17 @@
 #include "forge/bin.hpp"
 #include "forge/defdecode.hpp"
 namespace albion::definitionread {
+// Confirmed placement/theme families only. Other integers or categories do not
+// imply a writable reference, even when a browser can display their group.
+inline const char* groupFamily(const forge::bin::Entry& owner) {
+    if(owner.definition=="OBJECT" || owner.definition=="BUILDING" || owner.definition=="CREATURE") return "THING_GROUP";
+    if(owner.definition=="ENGINE_THEME") return "ENGINE_THEME_GROUP";
+    return nullptr;
+}
+inline bool groupChoice(const forge::bin::File& file,const forge::bin::Entry& owner,size_t index) {
+    const auto family=groupFamily(owner);
+    return family && index<file.entries().size() && file.entries()[index].definition==family;
+}
 // Game-bank GroupDef stores a runtime entry index. The existing placement palette
 // resolves it only when the target definition is a *_GROUP type.
 inline std::optional<size_t> groupTarget(const forge::bin::File& file,const forge::defdecode::Decoded& decoded) {

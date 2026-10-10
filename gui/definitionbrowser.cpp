@@ -141,6 +141,13 @@ bool App::beginDefinitionEdit(size_t field) {
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
         definitionEditIndex_=*definitionSelected_;definitionEditExpected_=definitionFile_.entries()[definitionEditIndex_];
         definitionEditExpectedNames_=definitionFile_.originalNames();definitionEditNames_=definitionLoadedNames_;definitionEditBank_=definitionLoadedBank_;
+        definitionEditExpectedGroups_.clear();
+        if(definitionBank_=="game.bin" && selected.name=="GroupDef" && selected.type=="int32" && definitionread::groupFamily(definitionEditExpected_))
+            for(size_t i=0;i<definitionFile_.entries().size();++i) if(definitionread::groupChoice(definitionFile_,definitionEditExpected_,i)) {
+                const auto& group=definitionFile_.entries()[i];
+                forge::bin::Entry identity{group.definition,group.name,group.indexInDefinition,{}};
+                definitionEditExpectedGroups_.emplace(i,std::move(identity));
+            }
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
         definitionEditField_=selected.name;definitionEditType_=selected.type;definitionEditing_=true;definitionCloning_=false;
         definitionNameSearch_[0]=0;
@@ -215,7 +222,7 @@ bool App::saveDefinitionEdit() {
         if(definitionEditBank_!=destination && fs::exists(destination)) throw std::runtime_error("The destination bank appeared; refresh before editing.");
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
         const bool changed=definitionwrite::replaceField(definitionEditNames_,definitionEditBank_,destination,definitionEditIndex_,
-            definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_);
+            definitionEditExpected_,definitionEditExpectedNames_,definitionSchema_,definitionEditField_,definitionEditValue_,&definitionEditExpectedGroups_);
         definitionEditSuccess_=changed?"Saved "+definitionEditField_+".":"The field is unchanged.";
         definitionEditing_=false;definitionEditConfirm_=false;definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=definitionEditIndex_;
         if(changed && definitionBank_=="game.bin") {
@@ -286,6 +293,32 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
                         if(ImGui::Selectable(label.c_str(),value==std::to_string(offset))) setDefinitionEditValue(std::to_string(offset));
                         auto_.registerWidget(("definition_name_option_"+std::to_string(offset)).c_str());ImGui::PopID();
                     }
+                }
+                ImGui::EndCombo();
+            }
+        } else if(!definitionCloning_ && definitionBank_=="game.bin" && definitionEditField_=="GroupDef" &&
+                  definitionEditType_=="int32" && definitionread::groupFamily(definitionEditExpected_)) {
+            const std::string value=definitionEditValue_;
+            std::string preview="Unresolved original: "+value;
+            uint32_t selected=0;const auto parsed=std::from_chars(value.data(),value.data()+value.size(),selected);
+            if(parsed.ec==std::errc{} && parsed.ptr==value.data()+value.size() && definitionread::groupChoice(definitionFile_,definitionEditExpected_,selected))
+                preview=std::to_string(selected)+": "+(definitionFile_.entries()[selected].name.empty()?"(unnamed group)":definitionFile_.entries()[selected].name);
+            ImGui::SetNextItemWidth(cardInner);const bool open=ImGui::BeginCombo("##definitiongroup",preview.c_str());
+            auto_.registerWidget("combo_definition_edit_group");
+            if(open) {
+                ImGui::InputText("Search groups",definitionNameSearch_,sizeof definitionNameSearch_);auto_.registerWidget("input_definition_group_search");
+                std::vector<size_t> options;const auto search=definitionLower(definitionNameSearch_);
+                for(size_t i=0;i<definitionFile_.entries().size();++i) {
+                    const auto& group=definitionFile_.entries()[i];
+                    if(definitionread::groupChoice(definitionFile_,definitionEditExpected_,i) &&
+                       (search.empty() || definitionLower(group.name).find(search)!=std::string::npos || std::to_string(i).find(search)!=std::string::npos)) options.push_back(i);
+                }
+                ImGuiListClipper clipper;clipper.Begin(int(options.size()));
+                while(clipper.Step()) for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i) {
+                    const auto index=options[size_t(i)];const auto& group=definitionFile_.entries()[index];
+                    const auto label=std::to_string(index)+": "+(group.name.empty()?"(unnamed group)":group.name);
+                    if(ImGui::Selectable(label.c_str(),value==std::to_string(index))) setDefinitionEditValue(std::to_string(index));
+                    auto_.registerWidget(("definition_group_option_"+std::to_string(index)).c_str());
                 }
                 ImGui::EndCombo();
             }
