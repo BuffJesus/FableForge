@@ -1576,6 +1576,9 @@ public:
     void setDpiScale(float s) { dpiScale_ = s; }
 private:
     ImFont* fontBody_ = nullptr;
+    // Shared immutable bytes outlive ImGui's sources and avoid one file copy per
+    // role/scale. main.cpp destroys the atlas before this App is destroyed.
+    std::map<std::string,std::vector<unsigned char>> fontFileData_;
     ImFont* fontBold_ = nullptr;
     ImFont* fontTitle_ = nullptr;
     ImFont* fontSmall_ = nullptr;

@@ -1089,6 +1089,16 @@ automation setter. Narrow strings and clone names retain ASCII-only input.
 refusal. `definition_wide_retail` drives both window sizes against read-only retail
 inputs, compares every record/table/name byte and restores only owned output.
 
+`assert_font_glyph <body|bold|title|small> <hex-codepoint>` checks actual source
+glyph availability without accepting the replacement glyph; `_missing` checks
+absence. Malformed code points, surrogates and unknown roles fail the assertion.
+`FABLEFORGE_AUTOMATION_FONT_DIR` overrides the font directory only when automation
+is active. `font_fallback` checks all four roles across repeated scale/atlas rebuilds
+and system/no-font/primary-only fixtures. Optional absent language/emoji groups are
+explicitly reported in its `skipped_glyph_groups`; `--require-wide` requires the
+installed CJK and emoji sources for a stronger local proof. No system fonts are
+modified or bundled; only primary-font copies in owned scratch fixtures are used.
+
 Definition clone drafts use `definition_clone` (or the real
 `btn_definition_clone` control), `definition_value <new-name>`, `definition_save`
 and `definition_cancel`. `definition_clone_refused` checks draft/load refusal;

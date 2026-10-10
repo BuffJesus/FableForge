@@ -209,6 +209,8 @@ def main():
         '--count', '8', '--install', args.root.resolve(), '--out', work / 'exports'])
     run('gui', [sys.executable, repo / 'tools/ui_smoke.py', '--exe', package / 'FableForge.exe',
         '--install', args.root.resolve(), '--cwd', cwd])
+    run('font_fallback', [sys.executable, repo / 'tools/test_font_fallback_ui.py',
+        '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('text_browser', [sys.executable, repo / 'tools/test_text_browser_ui.py',
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('text_backup_restore', [sys.executable, repo / 'tools/test_text_backup_restore.py',

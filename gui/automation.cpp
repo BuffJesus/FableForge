@@ -1672,6 +1672,16 @@ bool Automation::tick(App& app) {
         else note("ok   " + line);
         ++pc_;
     }
+    else if(cmd=="assert_font_glyph" || cmd=="assert_font_glyph_missing") {
+        std::istringstream args(rest);std::string role,code,extra;args>>role>>code;
+        uint32_t point=0;const auto parsed=std::from_chars(code.data(),code.data()+code.size(),point,16);
+        ImFont* font=role=="body"?app.fontBody_:role=="bold"?app.fontBold_:role=="title"?app.fontTitle_:role=="small"?app.fontSmall_:nullptr;
+        if(!font || parsed.ec!=std::errc{} || parsed.ptr!=code.data()+code.size() || code.empty() ||
+           point>0x10ffff || (point>=0xd800 && point<=0xdfff) || (args>>extra)) fail("Invalid font role or Unicode code point: "+rest);
+        else if(font->IsGlyphInFont(ImWchar(point))!=(cmd=="assert_font_glyph")) fail("Unexpected font glyph availability: "+rest);
+        else note("ok   "+line);
+        ++pc_;
+    }
     else if (cmd == "assert_log") {   // assert_log <text>: some app log line contains the text
         if (!app.logContains(rest)) fail("assert_log: no log line contains '" + rest + "'"); else note("ok   " + line);
         ++pc_;

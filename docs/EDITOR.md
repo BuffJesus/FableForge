@@ -1450,7 +1450,7 @@ Definitions are grouped by type and confirmed game-bank group. Search includes g
 
 Confirmed object Graphic fields offer Open model by native ID. Missing or ambiguous IDs preserve the current preview. Definition drafts protect this navigation.
 
-Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. GUI Unicode authoring is part of the development continuation after rc.2. Glyph availability depends on the installed UI font: accented Latin and Greek were inspected, while CJK and emoji currently show replacement glyphs even though input and saved bytes remain intact. Unsupported originals remain inspectable.
+Wide-string CLI edits accept valid UTF-8 and save native UTF-16LE. GUI Unicode authoring is part of the development continuation after rc.2. The GUI keeps Segoe UI as its primary font and merges missing glyphs from available Windows language and emoji fonts, sharing their data across roles and scale rebuilds. Accented Latin, Greek, CJK and monochrome emoji were inspected at both sizes. Optional fonts vary by installation; absent glyphs still use replacements without changing input/storage. This is glyph fallback, not a guarantee of every script, text shaping or colour emoji. Unsupported originals remain inspectable.
 
 Terrain-theme texture fields offer Open texture for confirmed positive main-bank IDs. Unsupported and ambiguous targets preserve the current preview; definition drafts protect navigation.
 

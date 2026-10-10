@@ -1,4 +1,4 @@
-> Active continuation: [GUI Unicode definition drafts](HANDOFF_GUI_UNICODE_2026-10-10.md) in the owned C development worktree. Source and exact extracted Unicode checks pass; the clone/context head has green Windows CI. RC2 remains published unchanged. Broader UI font fallback is next.
+> Active continuation: [UI glyph fallback](HANDOFF_GUI_FONTS_2026-10-10.md) in the owned C development worktree. Unicode pushed-head CI and exact extracted font acceptance pass. Confirmed definition-reference controls are the next authoring gap. RC2 remains published unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2512,3 +2512,21 @@ The packaged retail GUI check preserves all identities, unrelated payloads and n
 and passes Restore with native hashes unchanged. Broader font
 coverage remains open: Latin/Greek render, but inspected CJK/emoji use replacement
 glyphs despite correct stored bytes. See [Unicode handoff](HANDOFF_GUI_UNICODE_2026-10-10.md).
+
+### System glyph fallback, 2026-10-10
+
+Windows Fonts are located through the native directory API. Body/bold/title/small
+keep their primary Segoe faces and merge available CJK/emoji fallback glyphs.
+Immutable file bytes are shared across roles and scale rebuilds; no font is bundled
+or installed. Six system/no-font/primary-only cases pass at both sizes across three
+scale passes and all roles. CJK and monochrome emoji are now visible in inspected
+native/synthetic drafts, superseding the prior replacement-glyph limitation when
+the relevant system fonts are installed. Optional absence stays usable and explicit.
+Unicode head `2d8abff` passes Windows CI run 38062819381.
+
+Exact extracted archive passes 114 identities, 134 links and eight selected
+workflows, 121 not run and zero skips; the font report has zero skipped glyph groups
+on this machine. Archive SHA256:
+`581cc3201f1382c21bf4c0895b09ae0c8df16d6c4e2217f04d2bbc77517bfe3c`.
+This does not prove universal font coverage, text shaping, colour emoji, gameplay or
+another-machine behavior. See [font handoff](HANDOFF_GUI_FONTS_2026-10-10.md).

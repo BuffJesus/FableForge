@@ -43,6 +43,8 @@ def main():
     if not a.no_build:
         ok &= run("build", ["cmake", "--build", "build"], capture_output=True)
     ok &= run("CTest (core, rows, geometry, LZO)", ["ctest", "--test-dir", "build", "--output-on-failure"], capture_output=True)
+    ok &= run("UI system glyph fallback, missing fonts, roles and atlas rebuilds",
+              [sys.executable, "tools/test_font_fallback_ui.py"], capture_output=True)
     for label, script in (
         ("read-only world storage CLI and per-entry refusals", "test_worldreview_cli.py"),
         ("LEV exact-name ambiguity and class findings", "test_levsymbols.py"),

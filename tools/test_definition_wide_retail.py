@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--forge', type=Path, default=repo/'build/forge.exe')
     parser.add_argument('--cwd', type=Path, default=repo)
     parser.add_argument('--work-root', type=Path, default=repo/'build')
+    parser.add_argument('--require-glyphs', action='store_true', help='Require installed CJK/emoji glyph coverage')
     args = parser.parse_args()
     native = args.install.resolve()
     folder = native/'data/CompiledDefs'
@@ -60,6 +61,9 @@ def main():
         lines = ['wait_maps', 'wait_ready', f'set uiscale {scale}',
                  f'set saveroot {output.as_posix()}', 'assets_tab 6', 'wait_definitions',
                  'definition_select '+record['name'], 'frames 3']
+        if args.require_glyphs:
+            for role in ('body', 'bold', 'title', 'small'):
+                lines += [f'assert_font_glyph {role} {point}' for point in ('00e9', '03a9', '6f22', '1f642')]
         lines += click('btn_definition_edit_3')+click('input_definition_edit_value')
         lines += ['key_down Ctrl', 'key_down A', 'key_up A', 'key_up Ctrl',
                   'input_text '+text, 'frames 3', f'screenshot {(case/"draft.png").as_posix()}']

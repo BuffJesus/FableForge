@@ -1,4 +1,4 @@
-> Active continuation: [GUI Unicode definition drafts](HANDOFF_GUI_UNICODE_2026-10-10.md) in the owned C development worktree. Source and exact extracted Unicode checks pass; the clone/context head has green Windows CI. RC2 remains published unchanged. Broader UI font fallback is next.
+> Active continuation: [UI glyph fallback](HANDOFF_GUI_FONTS_2026-10-10.md) in the owned C development worktree. Unicode pushed-head CI and exact extracted font acceptance pass. Confirmed definition-reference controls are the next authoring gap. RC2 remains published unchanged.
 
 # Navigation lane, 2026-09-27
 
