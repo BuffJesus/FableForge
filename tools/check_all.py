@@ -127,6 +127,10 @@ def main():
                   [sys.executable, "tools/audit_creature_self_refs.py", "--install", install_root, "--clone-api"], capture_output=True)
         ok &= run("Retail paired Creature clone, self-only deltas and Restore",
                   [sys.executable, "tools/test_creature_clone_retail.py", "--install", install_root], capture_output=True)
+        for window_size in ("1440x900", "800x600"):
+            ok &= run("Retail Creature clone controls and Restore " + window_size,
+                      [sys.executable, "tools/test_creature_clone_retail.py", "--install", install_root,
+                       "--gui", "build/FableForge.exe", "--size", window_size], capture_output=True)
         ok &= run("Creature GroupDef schema, independent boundaries and all retail records",
                   [sys.executable, "tools/test_creature_group_schema.py", "--install", install_root], capture_output=True)
         ok &= run("retail group picker families, exact field deltas and Restore",
@@ -336,6 +340,8 @@ def main():
               [sys.executable, "tools/test_definition_clone.py"], capture_output=True)
     ok &= run("Creature clone selector, verified self-only payloads, paired rollback and Restore",
               [sys.executable, "tools/test_creature_clone_cli.py"], capture_output=True)
+    ok &= run("Creature clone controls, draft protection, stale sources and paired Restore",
+              [sys.executable, "tools/test_creature_clone_ui.py"], capture_output=True)
     ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",
               [sys.executable, "tools/test_definition_clone_ui.py"], capture_output=True)
     ok &= run("Definition existing-name picker, exact field deltas, invalid offsets and Restore",

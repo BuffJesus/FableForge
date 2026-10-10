@@ -1,4 +1,4 @@
-> Active continuation: [paired Creature clone CLI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Thirty CLI cases, six retail-copy cases and six extracted workflows pass, including rollback/Restore and 44 existing GUI clone neighbors. Distinct Creature GUI action is next; own appearance/body cloning remains open. RC2 unchanged.
+> Active continuation: [guarded Creature clone GUI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Distinct shared-component controls pass 36 GUI cases, both-size retail-copy preservation/Restore and eight extracted workflows, including 44 exact-clone GUI neighbors. Own appearance/body cloning remains open. RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

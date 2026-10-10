@@ -157,7 +157,7 @@ bool App::beginDefinitionEdit(size_t field) {
         return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
-bool App::beginDefinitionClone() {
+bool App::beginDefinitionClone(bool creature) {
     definitionEditError_.clear();definitionEditSuccess_.clear();
     try {
         if(definitionEditing_) throw std::runtime_error("Save or cancel the current definition draft first.");
@@ -167,6 +167,16 @@ bool App::beginDefinitionClone() {
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
         auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
         definitionwrite::verifyEntries(definitionFile_,current);
+        if(creature) {
+            if(definitionBank_!="game.bin" || current.entries()[*definitionSelected_].definition!="CREATURE")
+                throw std::runtime_error("Choose a Creature donor in the game bank.");
+            // Preflight the strict layout/refusal path without changing the
+            // captured donor bank or choosing the user's eventual new name.
+            auto probe=current;size_t suffix=0;std::string probeName;
+            do {probeName="FORGE_CREATURE_DRAFT_"+std::to_string(suffix++);}
+            while(std::any_of(current.entries().begin(),current.entries().end(),[&](const auto& entry){return entry.name==probeName;}));
+            (void)forge::defedit::cloneCreature(probe,definitionSchema_,*definitionSelected_,probeName);
+        }
         definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
         definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
         definitionCloneFile_=std::move(current);
@@ -175,7 +185,7 @@ bool App::beginDefinitionClone() {
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
         const auto& donor=definitionFile_.entries()[definitionEditIndex_];
         definitionEditField_=donor.name.empty()?"(unnamed record)":donor.name;
-        definitionEditType_="clone";definitionEditing_=true;definitionCloning_=true;
+        definitionEditType_=creature?"clone-creature":"clone";definitionEditing_=true;definitionCloning_=true;
         definitionEditConfirm_=false;definitionEditValue_[0]=0;return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
@@ -193,8 +203,11 @@ bool App::saveDefinitionClone() {
            definitionwrite::cloneBytes(definitionEditBank_)!=definitionCloneBankBytes_)
             throw std::runtime_error("The source bank or name pool changed; start the clone again.");
         auto cloned=definitionCloneFile_;
-        const auto added=forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
-        definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true);
+        const bool creature=definitionEditType_=="clone-creature";
+        const auto added=creature?forge::defedit::cloneCreature(cloned,definitionSchema_,definitionEditIndex_,definitionEditValue_):
+            forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
+        definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,
+            creature?&definitionSchema_:nullptr,creature?std::optional<size_t>(definitionEditIndex_):std::nullopt);
         definitionEditSuccess_="Created "+std::string(definitionEditValue_)+".";
         definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;
         definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();
@@ -253,11 +266,19 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
         ImGui::BeginDisabled(definitionsBusy() || modFilesBusy() || !definitionSelected_);
         if(theme::ghostButton("Clone selected definition",ImVec2(cardInner,0))) beginDefinitionClone();
         auto_.registerWidget("btn_definition_clone");ImGui::EndDisabled();
+        if(definitionSelected_ && *definitionSelected_<definitionFile_.entries().size() && definitionBank_=="game.bin" &&
+           definitionFile_.entries()[*definitionSelected_].definition=="CREATURE") {
+            ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
+            if(theme::ghostButton("Clone creature",ImVec2(cardInner,0))) beginDefinitionClone(true);
+            auto_.registerWidget("btn_definition_clone_creature");ImGui::EndDisabled();
+        }
     }
     if(definitionEditing_) {
         if(definitionCloning_) {
             ImGui::TextWrapped("Clone %s",definitionEditField_.c_str());
-            theme::hint("Copies this record unchanged. References keep their existing targets.");
+            theme::hint(definitionEditType_=="clone-creature"?
+                "Retargets verified self references. Components, appearance and body stay shared.":
+                "Copies this record unchanged. References keep their existing targets.");
         } else ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
         ImGui::TextWrapped("Destination: %s",definitionEditDestination_.string().c_str());
         if(definitionEditType_=="CDefString") {
@@ -384,7 +405,10 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
             if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();}
             auto_.registerWidget("btn_definition_edit_cancel");
         } else {
-            const int answer=confirmRow(definitionCloning_?"Create this definition in the destination bank?":"Write this field to the destination bank?",definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
+            const char* question=definitionCloning_?(definitionEditType_=="clone-creature"?
+                "Create creature with shared components?":"Create this definition in the destination bank?"):
+                "Write this field to the destination bank?";
+            const int answer=confirmRow(question,definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
             if(answer>0) saveDefinitionEdit();if(answer) definitionEditConfirm_=false;
         }
     }

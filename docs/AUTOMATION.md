@@ -1109,6 +1109,15 @@ uses `input_definition_edit_value`; `btn_definition_save` and
 numeric/unnamed/duplicate-name donors, folder/pack outputs, stale sources,
 invalid names, cancellation, Close/Install guards and paired Restore at both sizes.
 
+The distinct Creature mode uses `definition_clone_creature` or the real
+`btn_definition_clone_creature` control, plus the same name/Save/Cancel widgets.
+`definition_clone_creature_refused` checks preflight refusal;
+`definition_creature_cloning` distinguishes it from an exact clone draft.
+`creature_clone_ui` covers 36 synthetic cases across both window sizes.
+`creature_clone_gui_retail_1440x900` and `_800x600` independently compare
+all prior retail records, verified self-only deltas, paired recovery and explicit
+Restore on owned outputs. Appearance/body/components remain shared.
+
 `definition_group` reports the validated game-bank group entry index, or `-`. `btn_definition_group` follows it by index after the current frame, protecting numeric names and the current decoded view.
 
 Definition vector drafts expose `input_definition_vector_0`, `_1` and (for C3DVector) `_2` for real coordinate input. `definition_value` accepts the existing comma-separated writer syntax for these drafts. The dedicated `definition_vectors` package workflow independently verifies every other payload byte, exact no-ops and malformed input/layout refusals at both sizes.

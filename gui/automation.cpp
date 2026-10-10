@@ -697,8 +697,9 @@ bool Automation::tick(App& app) {
     }
     else if (cmd == "model_select") { if (!app.selectModel(rest)) fail("model_select: " + rest); else note("ok   " + line); ++pc_; }
     else if (cmd == "model_search") { std::snprintf(app.modelSearch_, sizeof app.modelSearch_, "%s", rest == "-" ? "" : rest.c_str()); note("ok   " + line); ++pc_; }
-    else if(cmd=="definition_clone" || cmd=="definition_clone_refused") {
-        if(app.beginDefinitionClone()!=(cmd=="definition_clone")) fail("definition clone returned an unexpected result");else note("ok   "+line);++pc_;
+    else if(cmd=="definition_clone" || cmd=="definition_clone_refused" || cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused") {
+        const bool creature=cmd=="definition_clone_creature" || cmd=="definition_clone_creature_refused";
+        if(app.beginDefinitionClone(creature)!=(cmd=="definition_clone" || cmd=="definition_clone_creature")) fail("definition clone returned an unexpected result");else note("ok   "+line);++pc_;
     }
     else if(cmd=="definition_edit" || cmd=="definition_edit_refused") {
         size_t field=0;const auto parsed=std::from_chars(rest.data(),rest.data()+rest.size(),field);

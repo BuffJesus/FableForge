@@ -589,7 +589,7 @@ public:
     bool setDefinitionBank(const std::string& bank);
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
-    bool beginDefinitionClone();
+    bool beginDefinitionClone(bool creature=false);
     bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();

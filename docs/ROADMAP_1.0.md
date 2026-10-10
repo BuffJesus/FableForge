@@ -1,4 +1,4 @@
-> Active continuation: [paired Creature clone CLI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Thirty CLI cases, six retail-copy cases and six extracted workflows pass, including rollback/Restore and 44 existing GUI clone neighbors. Distinct Creature GUI action is next; own appearance/body cloning remains open. RC2 unchanged.
+> Active continuation: [guarded Creature clone GUI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Distinct shared-component controls pass 36 GUI cases, both-size retail-copy preservation/Restore and eight extracted workflows, including 44 exact-clone GUI neighbors. Own appearance/body cloning remains open. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2606,3 +2606,16 @@ including 44 unchanged GUI clone cases; 125 not run and two unrelated missing-co
 skips. ZIP SHA256 `732db7d64d142e7f7f9138d26345aaf25c1a36d651269074bba8c43b4908fc92`.
 Distinct Creature GUI action is next; own appearance/body cloning remains open.
 No full-suite, clean-machine or gameplay claim. See the creature donor handoff.
+
+Distinct game-bank CREATURE Clone creature controls now use the verified self-only
+core API and paired publisher. Preflight rejects unresolved/malformed/empty donors;
+draft/confirmation explicitly keep components shared. Thirty-six synthetic source
+GUI cases and six read-only native-input/owned-output cases at each window size
+pass, including all-record/raw-pool preservation and exact Restore. Final compact
+confirmation is visually checked; six focused cases pass after the wording change.
+Generic exact clone remains unchanged. Own appearance/body cloning stays open;
+exact extracted GUI checkpoint passes 117 identities, 141 links and eight selected
+workflows, including all 44 exact-clone GUI neighbors. 126 not run and two unrelated
+missing-corpus skips remain explicit. ZIP SHA256
+`51d135c1e95f4fb51cfe4a501f164a7064aa3c1577d4467c137c789a54ffca4e`.
+Evidence and remaining scope are recorded in the creature handoff.

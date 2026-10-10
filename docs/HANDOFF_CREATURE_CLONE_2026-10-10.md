@@ -158,3 +158,44 @@ Next: commit/push, then add a distinct guarded Creature GUI clone action using t
 paired publisher. Own appearance/body cloning remains unfinished roadmap work;
 generic exact GUI/CLI clones remain unchanged. Foundation head e5d6e8e CI
 38065970643 passed; API head 0e4eeaf run 38066442857 remains live at this checkpoint.
+
+## Distinct Creature GUI continuation
+
+Starting at 20df28c, the game-bank CREATURE-only Clone creature action preflights
+the strict core clone on a disposable copy before opening a draft. Draft mode
+captures the donor/source/destination through existing clone guards. Save uses
+the distinct core API and paired publisher contract; generic exact clones retain
+their original payload contract. Both the draft and compact Create confirmation
+state that components stay shared. Appearance/body cloning remains unfinished.
+
+Source 36-case GUI gate passes at `creature-clone-ui-qrtdjqfc`: both-size actual
+controls, numeric/indexed duplicate donors, folders/packs, Cancel/Close/Install,
+stale bank/names, invalid names, malformed/unknown/empty donors and bank scope.
+Retail GUI gates pass six cases each at `creature-clone-retail-3_4bx33n`
+(800x600) and `creature-clone-retail-j06wlilk` (1440x900). Independent raw checks
+preserve all prior records/table/pool bytes and only retarget verified self slots;
+explicit-output Restore is exact and native compiled hashes remain unchanged.
+
+After shortening the confirmation so shared-component wording remains visible
+at 800x600, the GUI rebuilt successfully. Final compact retail gate passes at
+`creature-clone-retail-tjf2twxu`; confirmation screenshot inspected. Focused
+save/folder/Close review is retained at `creature-clone-ui-xsg8ss5h`.
+Registered synthetic and both-size native GUI source/extracted workflows.
+API CI 38066442857 and CLI CI 38067118481 passed. Extracted checkpoint is next;
+no full-suite, clean-machine, gameplay or private appearance/body clone claim.
+
+Focused final GUI gate passes all six cases at `creature-clone-ui-xsg8ss5h`.
+Exact checkpoint `dist/development/20261010-creature-clone-gui/FableForge-0.18.1-dev-win64.zip`
+SHA256 `51d135c1e95f4fb51cfe4a501f164a7064aa3c1577d4467c137c789a54ffca4e`.
+Packaged at starting HEAD 20df28c with scoped GUI/docs/tests dirty; final evidence
+notes updated afterward without replacing the tested archive. Extracted gate
+`package-smoke-f7lkku3o` passes 117 identities, 141 links and eight workflows:
+eight-map retail smoke, GUI smoke, 30 Creature CLI cases, six packaged-schema
+retail CLI cases, 36 Creature GUI cases, six retail GUI cases at each size and
+all 44 generic exact-clone GUI neighbors. 126 workflows not run; two unrelated
+missing controller/Aeon and F2 corpus skips remain unexercised coverage.
+
+Next: commit/push this GUI milestone, then recover a bounded private appearance/body
+clone graph from verified CDefs ownership and native evidence. Do not rewrite all
+numeric matches or silently clone shared gameplay components. RC2 and predecessor
+archives remain unchanged; no full-suite, clean-machine or gameplay claim.

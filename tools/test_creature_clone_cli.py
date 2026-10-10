@@ -13,13 +13,14 @@ from test_fmp_links import read_bank, crc0
 from test_definition_clone import deny_rename
 
 
-def fixture(root):
+def fixture(root,creature_fields=None):
     folder=root/'data/CompiledDefs';folder.mkdir(parents=True)
     def payload(owner,mode='normal'):
         data=bytearray(b'\x01\0\x01\x02\0')
         for value in (0x12345678,2,owner,0x87654321,owner,0):data+=struct.pack('<I',value)
-        data+=struct.pack('<III',crc0('Components'),owner if mode=='unknown' else 0,0)
-        data+=struct.pack('<II',crc0('GroupDef'),3)
+        for field in creature_fields or ({'name':'Components'},{'name':'GroupDef'}):
+            value=struct.pack('<II',owner if mode=='unknown' else 0,0) if field['name']=='Components' else struct.pack('<I',3 if field['name']=='GroupDef' else 0)
+            data+=struct.pack('<I',crc0(field['name']))+value
         if mode=='bad-count':data[3]=3
         if mode=='empty':del data[5:29];data[3]=0
         return bytes(data)

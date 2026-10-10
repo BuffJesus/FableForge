@@ -3,12 +3,14 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
 import subprocess
 import tempfile
 from test_fmp_links import read_bank, crc0
+from test_definition_edit_ui import click
 
 
 def digest(path):
@@ -24,6 +26,8 @@ def main():
     parser.add_argument('--schema',type=Path,default=repo/'docs/re_reference/def_schema.json')
     parser.add_argument('--cwd',type=Path,default=repo)
     parser.add_argument('--work-root',type=Path,default=repo/'build')
+    parser.add_argument('--gui',type=Path,help='Exercise the real Creature clone control instead of CLI')
+    parser.add_argument('--size',default='1440x900',choices=('1440x900','800x600'))
     args=parser.parse_args();native=args.install.resolve();folder=native/'data/CompiledDefs'
     inputs=sorted(folder.glob('*.bin'));hashes={str(path):digest(path) for path in inputs}
     records=read_bank(native);original=(folder/'game.bin').read_bytes();pool=(folder/'names.bin').read_bytes()
@@ -38,13 +42,31 @@ def main():
                 if mode=='existing':
                     dest.parent.mkdir(parents=True);shutil.copyfile(folder/'game.bin',dest);shutil.copyfile(folder/'names.bin',dest.parent/'names.bin')
                 new='CREATURE_FORGE_CLI_'+str(owner)
-                result=subprocess.run([str(args.tool.resolve()),'defs','clone-creature',str(folder/'game.bin'),donor_name,new,
-                    '--schema',str(args.schema.resolve()),'--out',str(dest),'--json'],cwd=args.cwd.resolve(),capture_output=True,text=True,encoding='utf-8',timeout=120)
+                if args.gui:
+                    lines=['wait_maps','wait_ready',f'set uiscale {1.5 if args.size=="800x600" else 1}',f'set saveroot {output.as_posix()}',
+                        'assets_tab 6','wait_definitions','definition_select '+donor_name,'frames 3']
+                    if accepted:
+                        lines+=click('btn_definition_clone_creature')+['assert_state definition_creature_cloning 1']
+                        lines+=click('input_definition_edit_value')+['input_text '+new,'frames 3']
+                        lines+=click('btn_definition_save')+[f'screenshot {(case/"confirmation.png").as_posix()}']
+                        lines+=click('btn_definition_save_confirm')+['wait_ready','wait_definitions','frames 3',
+                            'assert_state definition_creature_cloning 0',f'assert_state definition_selected {len(records)}']
+                    else:lines+=['definition_clone_creature_refused','assert_state definition_editing 0']
+                    lines+=['quit'];script=case/'creature.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+                    result=subprocess.run([str(args.gui.resolve()),'--install',str(native),'--size',args.size,'--auto',str(script)],
+                        cwd=args.cwd.resolve(),capture_output=True,text=True,encoding='utf-8',timeout=120,
+                        env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local')))
+                    trace=Path(str(script)+'.log').read_text(encoding='utf-8')
+                    assert result.returncode==0 and 'RESULT PASS' in trace and 'FAIL ' not in trace,trace[-6500:]
+                else:
+                    result=subprocess.run([str(args.tool.resolve()),'defs','clone-creature',str(folder/'game.bin'),donor_name,new,
+                        '--schema',str(args.schema.resolve()),'--out',str(dest),'--json'],cwd=args.cwd.resolve(),capture_output=True,text=True,encoding='utf-8',timeout=120)
                 (case/'output.log').write_text(result.stdout+result.stderr,encoding='utf-8')
-                assert (result.returncode==0)==accepted,result.stdout+result.stderr
+                if not args.gui:assert (result.returncode==0)==accepted,result.stdout+result.stderr
                 if not accepted:
                     assert not output.exists();cases+=1;continue
-                report=json.loads(result.stdout);assert report['donor_index']==owner and report['entry_index']==len(records)
+                if not args.gui:
+                    report=json.loads(result.stdout);assert report['donor_index']==owner and report['entry_index']==len(records)
                 expected=bytearray(records[owner]['data']);count=struct.unpack_from('<H',expected,3)[0];offsets=[]
                 for index in range(count):
                     for member in (4,8):

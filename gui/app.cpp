@@ -1971,6 +1971,7 @@ std::vector<std::string> App::stateDump() const {
     v.push_back("definition_name_refs="+std::to_string(definitionNameRefs));
     v.push_back("definition_editing="+std::to_string(definitionEditing_));
     v.push_back("definition_cloning="+std::to_string(definitionCloning_));
+    v.push_back("definition_creature_cloning="+std::to_string(definitionCloning_ && definitionEditType_=="clone-creature"));
     v.push_back("definition_edit_failed="+std::to_string(!definitionEditError_.empty()));
     v.push_back("definition_ready="+std::to_string(bool(definitionDecoded_)));
     v.push_back("definition_failed="+std::to_string(!definitionError_.empty() || !definitionSelectionError_.empty() || !definitionDecodeError_.empty()));
