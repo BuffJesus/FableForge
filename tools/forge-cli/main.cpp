@@ -259,6 +259,7 @@ int usage() {
         "  forge ui clone-object-model <game-root> <donorObject> <newObject> <meshId>\n"
         "       [--schema <schema.json>] --out <out-root>\n"
         "  forge defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]\n"
+        "  forge defs clone-creature <game.bin> <donor-name-or-index> <new-name> --schema <schema.json> --out <game.bin> [--names <names.bin>] [--json]\n"
         "  forge defs set-field <bin> [--names <names.bin>] <entryName> <field> <value>\n"
         "  forge title add <game-root> <OBJECT_HERO_TITLE_NEW> --donor <OBJECT_HERO_TITLE_X>\n"
         "       --gui <textId> --desc <textId> --greet <groupId> --comment <groupId> --self <groupId>\n"
@@ -7604,7 +7605,7 @@ int questCard(const std::string& gameRoot, const std::string& schemaPath,
 // writes the modified bin (+ names.bin) to --out or a "<bin>.set-field.bin"
 // sibling. Untouched entries stay byte-identical (semantic re-serialize).
 int defsClone(const std::string& binPath,const std::string& namesPath,const std::string& donor,
-              const std::string& newName,const std::string& outPath,bool asJson) {
+              const std::string& newName,const std::string& outPath,bool asJson,const std::string& creatureSchemaPath={}) {
     namespace fs=std::filesystem;
     const fs::path input=fs::u8path(binPath),names=namesPath.empty()?input.parent_path()/"names.bin":fs::u8path(namesPath);
     auto file=forge::bin::File::open(names,input);std::optional<size_t> exact;
@@ -7618,8 +7619,15 @@ int defsClone(const std::string& binPath,const std::string& namesPath,const std:
         if(parsed.ec!=std::errc{} || parsed.ptr!=donor.data()+donor.size())
             throw std::runtime_error("defs clone: choose an exact donor name or complete unsigned index");
     }
-    const auto added=forge::defedit::cloneEntry(file,index,newName);const auto output=fs::u8path(outPath);
-    albion::definitionwrite::publishClone(file,names,input,output,true);
+    const auto output=fs::u8path(outPath);std::optional<forge::defschema::Schema> creatureSchema;
+    if(!creatureSchemaPath.empty()) {
+        if(input.filename()!="game.bin" || output.filename()!="game.bin")
+            throw std::runtime_error("defs clone-creature: source and destination must be game.bin");
+        creatureSchema=forge::defschema::Schema::load(fs::u8path(creatureSchemaPath));
+    }
+    const auto added=creatureSchema?forge::defedit::cloneCreature(file,*creatureSchema,index,newName):forge::defedit::cloneEntry(file,index,newName);
+    albion::definitionwrite::publishClone(file,names,input,output,true,creatureSchema?&*creatureSchema:nullptr,
+        creatureSchema?std::optional<size_t>(index):std::nullopt);
     const auto& entry=file.entries()[added];
     if(asJson) std::puts(json{{"bin",output.string()},{"names",(output.parent_path()/"names.bin").string()},
         {"donor_index",index},{"entry_index",added},{"definition",entry.definition},{"entry_name",entry.name},
@@ -14309,19 +14317,21 @@ int main(int argc, char** argv) {
             return uiSetCardModel(gameRoot, schemaPath, entryName, (uint32_t)meshId,
                                   outRoot, inPlace);
         }
-        if(args.size()>=2 && args[0]=="defs" && args[1]=="clone") {
-            std::string names,out;bool asJson=false;std::vector<std::string> positional;
+        if(args.size()>=2 && args[0]=="defs" && (args[1]=="clone" || args[1]=="clone-creature")) {
+            const bool creature=args[1]=="clone-creature";
+            std::string names,out,creatureSchema;bool asJson=false;std::vector<std::string> positional;
             for(size_t i=2;i<args.size();++i) {
                 const auto& argument=args[i];
-                if(argument=="--names" || argument=="--out") {
+                if(argument=="--names" || argument=="--out" || (creature && argument=="--schema")) {
                     if(i+1>=args.size() || args[i+1].rfind("--",0)==0) throw std::runtime_error("defs clone: option requires a path");
-                    if(argument=="--names") names=args[++i];else out=args[++i];
+                    if(argument=="--names") names=args[++i];else if(argument=="--schema") creatureSchema=args[++i];else out=args[++i];
                 } else if(argument=="--json") asJson=true;
                 else if(argument.rfind("--",0)==0) throw std::runtime_error("defs clone: unknown option "+argument);
                 else positional.push_back(argument);
             }
             if(positional.size()!=3 || out.empty()) throw std::runtime_error("defs clone: usage: defs clone <bin> <donor-name-or-index> <new-name> --out <bin> [--names <names.bin>] [--json]");
-            return defsClone(positional[0],names,positional[1],positional[2],out,asJson);
+            if(creature && creatureSchema.empty()) throw std::runtime_error("defs clone-creature: --schema <schema.json> is required");
+            return defsClone(positional[0],names,positional[1],positional[2],out,asJson,creatureSchema);
         }
         // forge defs set-field <bin> [--names <names.bin>] <entryName> <field>
         //   <value> [--schema <schema.json>] [--out <out.bin>] [--json]

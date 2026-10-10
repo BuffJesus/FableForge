@@ -1,4 +1,4 @@
-> Active continuation: [distinct Creature clone API](HANDOFF_CREATURE_CLONE_2026-10-10.md). Independent retail container gate passes 508 clones and nine refusals with unchanged prior records/pool/native hashes. Paired CLI publication/Restore is next; generic exact cloning and RC2 remain unchanged.
+> Active continuation: [paired Creature clone CLI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Thirty CLI cases, six retail-copy cases and six extracted workflows pass, including rollback/Restore and 44 existing GUI clone neighbors. Distinct Creature GUI action is next; own appearance/body cloning remains open. RC2 unchanged.
 
 # Navigation lane, 2026-09-27
 

@@ -1,4 +1,4 @@
-> Active continuation: [distinct Creature clone API](HANDOFF_CREATURE_CLONE_2026-10-10.md). Independent retail container gate passes 508 clones and nine refusals with unchanged prior records/pool/native hashes. Paired CLI publication/Restore is next; generic exact cloning and RC2 remain unchanged.
+> Active continuation: [paired Creature clone CLI](HANDOFF_CREATURE_CLONE_2026-10-10.md). Thirty CLI cases, six retail-copy cases and six extracted workflows pass, including rollback/Restore and 44 existing GUI clone neighbors. Distinct Creature GUI action is next; own appearance/body cloning remains open. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 
@@ -2593,3 +2593,16 @@ including exact identities, name crc0/ordinals, original raw pool and per-clone
 deltas with unchanged native hashes. Paired publication/Restore and GUI promotion
 remain next; own appearance/body cloning remains unfinished. No new package or
 gameplay claim. Schema head d2678ed CI 38065569483 passes.
+
+Paired `defs clone-creature` now requires an explicit schema and game-bank paths.
+The publisher recomputes the expected self-only clone from fresh source before
+using existing namespace, offline, transaction and recovery guards. Generic exact
+cloning retains its donor-byte requirement. Thirty synthetic CLI cases, six native
+input/owned output cases, five affected CTests and 35 generic CLI neighbors pass.
+Native hashes stay unchanged; fresh/existing outputs independently verify all
+14,764 prior records, raw identity rows/pool, appended crc0/ordinal and Restore.
+Exact extracted checkpoint passes 117 identities, 141 links and six workflows,
+including 44 unchanged GUI clone cases; 125 not run and two unrelated missing-corpus
+skips. ZIP SHA256 `732db7d64d142e7f7f9138d26345aaf25c1a36d651269074bba8c43b4908fc92`.
+Distinct Creature GUI action is next; own appearance/body cloning remains open.
+No full-suite, clean-machine or gameplay claim. See the creature donor handoff.

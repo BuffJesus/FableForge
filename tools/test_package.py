@@ -235,6 +235,11 @@ def main():
         '--gui', package / 'FableForge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_clone', [sys.executable, repo / 'tools/test_definition_clone.py',
         '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--work-root', work])
+    run('creature_clone_cli', [sys.executable, repo / 'tools/test_creature_clone_cli.py',
+        '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
+    run('creature_clone_retail', [sys.executable, repo / 'tools/test_creature_clone_retail.py',
+        '--install', args.root.resolve(), '--tool', package / 'forge-tools.exe', '--forge', package / 'forge.exe',
+        '--schema', package / 'docs/re_reference/def_schema.json', '--cwd', cwd, '--work-root', work])
     run('definition_clone_ui', [sys.executable, repo / 'tools/test_definition_clone_ui.py',
         '--gui', package / 'FableForge.exe', '--forge', package / 'forge.exe', '--cwd', cwd, '--work-root', work])
     run('definition_name_picker', [sys.executable, repo / 'tools/test_definition_name_picker_ui.py',

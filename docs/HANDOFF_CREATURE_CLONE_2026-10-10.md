@@ -114,3 +114,47 @@ publisher/CLI and verify transactional backup/rollback/Restore before GUI promot
 Own appearance/body cloning remains unfinished roadmap work, not replaced by
 shared-component cloning. Project procedures required preservation and independent
 raw-delta proof before promoting the in-memory API.
+
+## Paired CLI publication continuation
+
+Starting clean at committed/pushed 0e4eeaf. `defs clone-creature` requires an
+explicit schema, game.bin source/output and the existing exact-name-or-native-index
+selector. The shared pair publisher now has an optional explicit Creature donor
+contract: recompute a verified clone from fresh source, compare its full appended
+payload/type/ordinal, then use unchanged namespace/destination/offline/preparation/
+rollback/recovery guards. Incomplete typed contracts refuse. Generic exact-clone
+publication retains its exact-donor requirement. New GUI controls are not added yet.
+
+Build of forge-tools/forge/FableForge passes (existing u8path warnings retained).
+Five affected CTests pass. Final source CLI gate passes 30 selector/name/options,
+self-only delta, empty/malformed/unknown donor, bank-scope, aliases, incompatible
+pool/orphan, locked-rename rollback, fresh/existing/in-place and explicit Restore
+cases: `creature-clone-cli-xfy96ui0`. Initial 22-case gate also passed at
+`creature-clone-cli-n4ps4v9r`. Exact generic 35-case neighbor passes:
+`definition-clone-7wsyj7g1`, including its owned hidden running-owner/junction helper.
+
+Six read-only native-input cases pass: `creature-clone-retail-qh1ssvs7`.
+Trader clones move exactly three self slots; inherited villager-base clones move
+zero and preserve shared references. Fresh/existing paired outputs independently
+preserve all 14,764 prior records/identity rows, original raw name-pool body,
+new-name crc0 and native ordinal; Restore removes creations or restores exact
+originals. Boss-bandit unresolved and empty NULLDEF refuse before output creation.
+Native compiled hashes remain unchanged. Registered source and extracted gates;
+the retail extracted gate explicitly uses the packaged schema path.
+
+Exact checkpoint:
+`dist/development/20261010-creature-clone-cli/FableForge-0.18.1-dev-win64.zip`
+SHA256 `732db7d64d142e7f7f9138d26345aaf25c1a36d651269074bba8c43b4908fc92`.
+Packaged at starting HEAD 0e4eeaf with scoped CLI/publisher/docs/tests dirty;
+final notes updated afterward without replacing the tested archive.
+`package-smoke-ptyqh3vy` passes 117 file identities, 141 local links and six
+selected workflows: eight-map retail smoke, GUI smoke, all 35 generic CLI cases,
+all 30 Creature CLI cases, six retail-copy Creature cases using packaged schema,
+and all 44 existing GUI clone cases. 125 workflows not run; two unrelated missing
+controller/Aeon and F2 corpus skips explicitly remain unexercised coverage.
+No full-suite, clean-machine or gameplay claim.
+
+Next: commit/push, then add a distinct guarded Creature GUI clone action using this
+paired publisher. Own appearance/body cloning remains unfinished roadmap work;
+generic exact GUI/CLI clones remain unchanged. Foundation head e5d6e8e CI
+38065970643 passed; API head 0e4eeaf run 38066442857 remains live at this checkpoint.
