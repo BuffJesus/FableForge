@@ -375,6 +375,8 @@ def main():
               [sys.executable, "tools/audit_creature_visual_graph.py"], capture_output=True)
     ok &= run("Creature visual navigation numeric names and malformed-reference UI refusal",
               [sys.executable, "tools/test_creature_visual_navigation_fixture_ui.py"], capture_output=True)
+    ok &= run("Creature body GUI stale bank/name/graphics refusal on tiny independent fixtures",
+              [sys.executable, "tools/test_creature_body_stale_ui.py"], capture_output=True)
     ok &= run("Creature animation synthetic boundaries and malformed component refusal",
               [sys.executable, "tools/audit_creature_animation.py"], capture_output=True)
     ok &= run("Definition clone controls, exact donors, stale drafts and paired Restore",

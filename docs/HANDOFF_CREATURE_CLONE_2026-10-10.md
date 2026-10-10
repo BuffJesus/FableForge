@@ -753,3 +753,17 @@ focused CTests pass. Registered source gate; no broad-suite/package claim.
 Next: isolated stale bank/name/graphics UI checks, pack destination coverage and
 named mesh choice before the next extracted package. Existing archives/RC2 stay
 unchanged. No assembled-creature/animation/runtime compatibility claim.
+
+Tiny independent stale-source GUI gate now passes eight both-size cases in
+`creature-body-stale-ui-li7pdpxp`: save/Restore controls plus live draft bank,
+names and graphics-directory changes. Synthetic source has one CCreatureDef,
+two tiny type-5 graphics directory entries and one tiny texture slot; no retail
+bank copied. A screenshot barrier after opening the draft precedes mutation.
+Each refusal retains editing state, logs the specific expected stale bank/name
+or graphics reason, creates no output/recovery files, and leaves every fixture
+byte exact except the deliberate mutation. Both positive controls independently
+check the one-word delta and Restore. Initial 549_zyuf packet passed state checks;
+the final gate adds specific error-log assertions to exclude unrelated refusals.
+Production code unchanged. Registered unconditional source gate; no rebuild or
+broad-suite repetition needed. Pack destinations and named model chooser remain
+next before new extracted-package acceptance. Existing packages/RC2 unchanged.
