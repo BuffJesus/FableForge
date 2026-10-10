@@ -15,7 +15,8 @@ from test_definition_edit_ui import click
 from test_fmp_links import read_bank, crc0
 from test_texture_lookup import texture_bank
 
-MODES = ('save', 'restore', 'numeric', 'unnamed', 'indexed-duplicate', 'folder', 'pack',
+MODES = ('save', 'restore', 'numeric', 'unnamed', 'indexed-duplicate', 'folder',
+         'folder-textures', 'folder-bad-textures', 'folder-texture-directory', 'pack',
          'empty', 'duplicate', 'cancel', 'confirmation-cancel', 'destination',
          'stale-bank', 'stale-names', 'pool-conflict', 'bounds', 'install-switch', 'frontend', 'script')
 
@@ -52,7 +53,8 @@ def main():
             original_bank, original_names = source_bank.read_bytes(), source_names.read_bytes()
             original_records = read_bank(root, bank_name)
             destination = case/'output \u6f22'
-            output_root = destination if mode in ('folder', 'pack', 'pool-conflict') else root
+            folder_mode = mode.startswith('folder')
+            output_root = destination if folder_mode or mode in ('pack', 'pool-conflict') else root
             bank = output_root/'data/CompiledDefs'/bank_name
             names = bank.parent/'names.bin'
             pack_bytes = None
@@ -63,12 +65,23 @@ def main():
             if mode == 'pool-conflict':
                 names.parent.mkdir(parents=True)
                 names.write_bytes(b'INCOMPATIBLE POOL')
+            output_textures = destination/'data/graphics/pc/textures.big'
+            output_texture_bytes = None
+            if mode == 'folder-textures':
+                texture_bank(output_textures, [(2, 'OutputOnly', 20)])
+                output_texture_bytes = output_textures.read_bytes()
+            elif mode == 'folder-bad-textures':
+                output_textures.parent.mkdir(parents=True)
+                output_texture_bytes = b'INVALID OUTPUT TEXTURE BANK'
+                output_textures.write_bytes(output_texture_bytes)
+            elif mode == 'folder-texture-directory':
+                output_textures.mkdir(parents=True)
             donor = 1 if mode == 'numeric' else 2 if mode == 'unnamed' else 3 if mode == 'indexed-duplicate' else 0
             selector = '1' if mode == 'numeric' else str(donor)
             new_name = 'GUI_CLONE_CHECK'
-            accepted = mode in ('save', 'restore', 'numeric', 'unnamed', 'indexed-duplicate', 'folder', 'pack', 'frontend', 'script')
+            accepted = folder_mode or mode in ('save', 'restore', 'numeric', 'unnamed', 'indexed-duplicate', 'pack', 'frontend', 'script')
             lines = ['wait_maps', 'wait_ready', f'set uiscale {scale}']
-            if mode in ('folder', 'pool-conflict'):
+            if folder_mode or mode == 'pool-conflict':
                 lines += [f'set saveroot {destination.as_posix()}']
             elif mode == 'pack':
                 lines += [f'pack_dest {destination.as_posix()}']
@@ -112,6 +125,11 @@ def main():
                     'assert_state definition_editing 0', 'assert_state definition_cloning 0',
                     'assert_state definition_selected 5', f'definition_select {new_name}',
                     f'screenshot {(case/"created.png").as_posix()}']
+                if folder_mode:
+                    ready = int(mode not in ('folder-bad-textures', 'folder-texture-directory'))
+                    lines += [f'assert_state context_ready {ready}']
+                    if not ready:
+                        lines += ['assert_log Textures unavailable:']
                 if mode == 'restore':
                     lines += ['restore_all', 'wait_ready', 'wait_definitions', 'frames 3',
                               'definition_select_refused '+new_name, 'definition_select 0']
@@ -149,6 +167,12 @@ def main():
             trace = Path(str(script)+'.log').read_text(encoding='utf-8')
             assert result == 0 and 'RESULT PASS' in trace and 'FAIL ' not in trace, trace[-7000:]
             assert textures.read_bytes() == texture_bytes
+            if output_texture_bytes is not None:
+                assert output_textures.read_bytes() == output_texture_bytes
+            elif mode == 'folder-texture-directory':
+                assert output_textures.is_dir()
+            elif folder_mode:
+                assert not output_textures.exists(), 'preview fallback must not copy textures'
             if accepted and mode != 'restore':
                 after = read_bank(output_root, bank_name)
                 assert len(after) == 6 and after[:5] == original_records

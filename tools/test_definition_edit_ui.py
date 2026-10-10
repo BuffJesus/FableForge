@@ -109,6 +109,7 @@ def main():
             else:
                 lines+=['definition_value '+('1' if mode=='noop' else '99'),'definition_save','wait_ready','wait_file_job','wait_definitions','frames 3',
                     'assert_state definition_editing 0','assert_definition_field RandomVillagerMax '+('1' if mode=='noop' else '99')]
+            if mode=='folder':lines+=['assert_state context_ready 1']
             lines+=['quit'];script=case/'edit.txt';script.write_text('\n'.join(lines)+'\n',encoding='utf-8')
             env=dict(os.environ,FABLEFORGE_AUTOMATION_HIDDEN='1',APPDATA=str(case/'profile'),LOCALAPPDATA=str(case/'local'))
             with (case/'output.log').open('w',encoding='utf-8') as output:

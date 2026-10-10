@@ -73,6 +73,7 @@ def main():
             lines += click('btn_definition_save')+click('btn_definition_save_confirm')
             lines += ['wait_ready', 'wait_definitions', 'frames 3',
                       'assert_state definition_cloning 0',
+                      'assert_state context_ready 1',
                       f'assert_state definition_selected {len(before)}',
                       'definition_select '+new_name,
                       f'screenshot {(work/"created.png").as_posix()}', 'quit']

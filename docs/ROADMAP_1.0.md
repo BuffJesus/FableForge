@@ -2479,3 +2479,18 @@ extracted package pass: 112 identities, 132 links, seven selected workflows,
 The packaged GUI also passes the independent retail clone/Restore check.
 This is separate from RC2's unchanged archive; no full-suite or live-game claim.
 Evidence and resume: [GUI clone handoff](HANDOFF_GUI_CLONE_2026-10-10.md).
+
+### Partial-output texture context follow-up
+
+A folder-clone regression reproduced `context_ready=0` after writing only compiled
+definitions. Context loading now combines authored definitions with native textures
+when output textures are absent. Existing corrupt banks, directories or status
+errors do not fall back. Eight focused clone cases at both sizes, two scalar-folder
+cases and the 14,764-record retail clone/Restore check pass, including a ready-context
+assertion and unchanged input hashes. No texture files are copied or authored.
+Exact extracted follow-up acceptance passes 112 identities, 132 links and four
+selected workflows (including 44 clone/34 scalar cases), 123 not run, zero skips.
+Archive SHA256: `9be422f1097e0cee629a5450de6e4a8e230217b93da711438b5d66d668d26e3b`.
+The packaged retail GUI check also passes the ready-context requirement and Restore.
+The initial clone checkpoint and RC2 archive remain intact. See the GUI clone
+handoff for evidence; Unicode GUI wide-string authoring is next.

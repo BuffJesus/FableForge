@@ -74,9 +74,40 @@ at `c3f87a7`. The new GUI-clone development build is not part of that release.
 
 ## Next
 
-Commit the scoped GUI continuation, then choose the next roadmap task. The
+The scoped GUI continuation is committed at `05a6909` and pushed as
+[draft PR 2](https://github.com/BuffJesus/FableForge/pull/2). The
 development rebuild, compact confirmation inspection and exact extracted archive
 acceptance are complete. RC2 publication is completed; keep its validated archive
 unchanged and separate from the new development checkpoint.
 Continue roadmap work until the user asks to stop. Live gameplay and a clean-machine
 walkthrough remain separate; no native install write or checkpoint deletion is needed.
+
+## Partial definition-output texture context follow-up
+
+A new assertion reproduced a real context regression: after a successful folder
+clone, `context_ready=0` despite valid native textures (`definition-clone-ui-b13wujhj`).
+`startContextLoad` previously looked only in the definition output for textures,
+then replaced the full context with a definitions-only one. It now retains output
+definitions but reads native textures when the output texture path is absent.
+Existing corrupt banks, directories and filesystem-status errors do not trigger
+fallback. No textures are copied or authored by this change. Existing model lookup
+already falls back from `modelRoot_` to the native install.
+
+Eight focused GUI clone cases pass at both sizes for absent/valid/corrupt/directory
+output textures (`definition-clone-ui-lovh7klk`); both folder scalar cases pass
+(`definition-edit-ui-ewppfr4s`). The retail GUI check now requires a ready context
+and passes all 14,764 records/identities and Restore with native hashes unchanged
+(`retail-definition-clone-2tz9ubk0`). The earlier expected partial-output warning
+is historical; this follow-up removes it when source textures are available.
+The GUI rebuild, Python compilation and diff whitespace check pass. A separate
+follow-up archive is retained at `dist/development/20261010-def-context/FableForge-0.18.1-dev-win64.zip`,
+SHA256 `9be422f1097e0cee629a5450de6e4a8e230217b93da711438b5d66d668d26e3b`.
+Packaging metadata records `05a6909` with tracked changes. Exact extracted evidence
+`package-smoke-knjfbzm7` passes 112 identities, 132 links and four selected workflows
+(retail, GUI smoke, all 44 GUI clone cases and all 34 scalar cases), 123 not run,
+zero skipped. Packaged retail GUI evidence `retail-definition-clone-rw7m968u`
+passes ready-context, 14,764-record preservation, Restore and unchanged native hashes.
+The editor help and final acceptance notes were updated after packaging; the
+validated archive remains unchanged. The initial clone ZIP stays intact.
+Next: Unicode GUI wide-string authoring using the proven UTF-8/UTF-16 core contract.
+Broader font coverage remains a separate presentation limitation.

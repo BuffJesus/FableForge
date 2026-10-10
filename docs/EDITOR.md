@@ -1474,6 +1474,9 @@ The new record is selected after saving. Save folders and valid pack destination
 use the existing destination chooser; Cancel and Close/Install protection retain
 the draft until you save or discard it. Changed sources or destinations refuse.
 Restore recovers the bank and its names together, or removes a newly created pair.
+For definition-only save folders, preview uses the edited definitions with textures
+from the original install when the folder has no texture bank. An existing invalid
+output texture bank reports an error; preview fallback does not copy any assets.
 
 The CLI provides the same operation with `forge-tools defs clone <bank.bin>
 <donor-name-or-index> <new-name> --out <output-bank.bin>`. Existing outputs must

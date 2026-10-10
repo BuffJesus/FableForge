@@ -894,10 +894,17 @@ void App::startContextLoad(const std::string& fromRoot) {
     modelRoot_ = fromRoot.empty() ? installPath_ : fromRoot;
     ctxPending_ = std::make_shared<te::Context>();
     const fs::path root = fromRoot.empty() ? fs::u8path(installPath_) : fs::u8path(fromRoot);
+    fs::path textures = root / "data" / "graphics" / "pc" / "textures.big";
+    // Definition-only save folders keep their authored defs but borrow the
+    // original install's textures. An existing bad output must still fail.
+    std::error_code textureStatus;
+    const bool outputTexturesExist = fs::exists(textures, textureStatus);
+    if (!fromRoot.empty() && !outputTexturesExist && !textureStatus)
+        textures = fs::u8path(installPath_) / "data" / "graphics" / "pc" / "textures.big";
     auto ctx = ctxPending_;
-    ctxFuture_ = std::async(std::launch::async, [ctx, root]() {
+    ctxFuture_ = std::async(std::launch::async, [ctx, root, textures]() {
         std::string err;
-        const bool ok = ctx->load(root, root / "data" / "graphics" / "pc" / "textures.big", err);
+        const bool ok = ctx->load(root, textures, err);
         // no textures.big (a trimmed install): keep the ENGINE_THEME defs so theme
         // paint, navigation and blank levels still work without the albedo bake
         if (!ok) { std::string derr; ctx->loadDefs(root, derr); }
