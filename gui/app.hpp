@@ -589,7 +589,7 @@ public:
     bool setDefinitionBank(const std::string& bank);
     void browseDefinition(const std::string& name);
     bool beginDefinitionEdit(size_t field);
-    bool beginDefinitionClone(bool creature=false);
+    bool beginDefinitionClone(bool creature=false,bool privateVisual=false);
     bool saveDefinitionClone();
     bool setDefinitionEditValue(const std::string& value);
     bool saveDefinitionEdit();
@@ -631,6 +631,7 @@ private:
     std::filesystem::path definitionEditNames_,definitionEditBank_,definitionEditDestination_;
     std::string definitionEditField_,definitionEditType_,definitionEditError_,definitionEditSuccess_;
     char definitionEditValue_[128]={};
+    char definitionCloneBodyName_[128]={},definitionCloneAppearanceName_[128]={};
     char definitionNameSearch_[128]={};
     std::pair<std::filesystem::path,std::filesystem::path> definitionPaths() const;
     bool selectDefinitionIndex(size_t index,bool reveal=true);

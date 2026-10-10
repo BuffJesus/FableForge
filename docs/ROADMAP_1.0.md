@@ -1,4 +1,4 @@
-> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Coordinated core API passes 494 native donors and 23 expected refusals with exact prior-bank preservation. Typed paired publication, CLI and GUI are next; no runtime/full-feature claim. RC2 unchanged.
+> Active continuation: [private Creature visual cloning](HANDOFF_CREATURE_CLONE_2026-10-10.md). Core API passes 494 native donors/23 expected refusals; typed publication, CLI and initial both-size GUI checks pass. Broader private donor/draft probes and a new checkpoint remain; no runtime/full-feature claim. RC2 unchanged.
 
 # Albion Atlas -> 1.0: what it should do, what it can't, and how we get there
 

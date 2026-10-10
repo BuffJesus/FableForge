@@ -408,3 +408,53 @@ sleeping-helper running-owner/alias checks. No real game process was launched.
 Registered private gate in check_all; no full broad-suite claim. CLI documentation
 now distinguishes shared components, private visual definitions and shared assets.
 Next: commit/push this checkpoint, then private GUI mode and both-size UI evidence.
+
+Publisher/CLI checkpoint committed and pushed as 0ec6697. Windows CI 38076414718
+and prior core CI 38075951769 were still running at the last observation.
+
+Private GUI implementation is now in progress: a separate Creature action keeps
+the shared/exact buttons, preflights a disposable private plan with CRC-distinct
+probe names, captures the same source pair and destination, and displays explicit
+root/body/appearance names with shared-assets/gameplay notices. Save passes all
+three names through the canonical core and typed publisher before selecting the
+new root; existing stale-source/destination and draft guards remain. The live GUI
+build is session 77516; do not restart just because its observation times out.
+The latest root-label/success-message tweak was made while that build was live,
+so a subsequent incremental build is required before claiming the final UI
+compiled. No private GUI clicks/screenshots, compact-window or runtime claim yet.
+Next: finish this build, incrementally rebuild the final touched GUI source,
+exercise private controls at both sizes and repeat the shared GUI regression.
+
+Core CI 38075951769 (e2a3c54) now passed; publisher CI 38076414718 last seen running.
+GUI build 77516 completed; final incremental rebuild plus private gate 6661 also
+completed successfully. `creature-private-ui-ghugbpwb` passes six native-input GUI
+cases: save, cancel and duplicate-body-name refusal at 1440x900/scale1 and
+800x600/scale1.5. Real buttons and all three input widgets are exercised. Independent
+raw parsing plus canonical relocation observations check exact selected-row
+ownership, other shared rows, all three output payloads, every prior record and
+numeric-table/name-pool prefixes. Fresh pair recovery markers and Restore pass;
+source game/name SHA256 unchanged. Outputs are definition banks only, no full
+install or texture copies. Compact confirmation screenshot inspected: body and
+appearance names, shared-assets notice and Create/Cancel fit; root field remains
+reachable above in the scrolling card. No claim that all fields fit simultaneously.
+Private stale-source/destination, close-review, missing-component and inherited
+donor UI probes remain to broaden; core/CLI evidence is not a substitute for them.
+
+Registered native private-GUI gate in check_all. Full existing shared Creature GUI
+regression is live in session 90978, packet `creature-clone-ui-jd57wu7o`; initial
+large-window save/numeric/indexed-duplicate cases passed. Observe this handle to
+completion rather than restarting. No full-suite, new archive or gameplay claim.
+
+Shared GUI session 90978 completed successfully: all 36 cases in jd57wu7o pass,
+including both-size folder/pack, Close/Install, stale source, malformed/unknown
+donors and exact recovery. Private extension session 62469 completed successfully:
+`creature-private-ui-7c1azaou` passes ten new both-size empty-root/body/appearance,
+destination-change refusal and close-review cases. Close Cancel retains the draft;
+Review returns to the explicit confirmation, then save yields the exact three-node
+plan and Restore removes its created pair. Six prior native GUI checks are reused,
+not rerun. The default private gate covers all eight modes at each size; --only
+allows scoped continuation. Every packet verifies source hashes unchanged.
+
+Next: private stale-bank/name source checks on a small owned definition fixture,
+missing/unresolved and inherited-donor GUI probes, then a new development package
+with extracted checks. Existing shared GUI archive remains untouched.

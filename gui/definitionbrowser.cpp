@@ -157,7 +157,7 @@ bool App::beginDefinitionEdit(size_t field) {
         return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
-bool App::beginDefinitionClone(bool creature) {
+bool App::beginDefinitionClone(bool creature,bool privateVisual) {
     definitionEditError_.clear();definitionEditSuccess_.clear();
     try {
         if(definitionEditing_) throw std::runtime_error("Save or cancel the current definition draft first.");
@@ -167,6 +167,7 @@ bool App::beginDefinitionClone(bool creature) {
         if(!packDest_.empty()) {if(!modpack::isPack(fs::u8path(packDest_))) throw std::runtime_error("Choose a valid FableForge pack.");(void)modpack::load(fs::u8path(packDest_));}
         auto current=forge::bin::File::open(definitionLoadedNames_,definitionLoadedBank_);
         definitionwrite::verifyEntries(definitionFile_,current);
+        if(privateVisual && !creature) throw std::runtime_error("Private visuals require a Creature donor.");
         if(creature) {
             if(definitionBank_!="game.bin" || current.entries()[*definitionSelected_].definition!="CREATURE")
                 throw std::runtime_error("Choose a Creature donor in the game bank.");
@@ -175,7 +176,17 @@ bool App::beginDefinitionClone(bool creature) {
             auto probe=current;size_t suffix=0;std::string probeName;
             do {probeName="FORGE_CREATURE_DRAFT_"+std::to_string(suffix++);}
             while(std::any_of(current.entries().begin(),current.entries().end(),[&](const auto& entry){return entry.name==probeName;}));
-            (void)forge::defedit::cloneCreature(probe,definitionSchema_,*definitionSelected_,probeName);
+            if(privateVisual) {
+                std::array<std::string,3> probeNames;
+                std::set<uint32_t> keys;
+                for(const auto& entry:current.entries()) keys.insert(forge::bin::nameCrc(entry.name));
+                for(auto& name:probeNames) {
+                    do{name="FORGE_PRIVATE_DRAFT_"+std::to_string(suffix++);}
+                    while(keys.contains(forge::bin::nameCrc(name)));
+                    keys.insert(forge::bin::nameCrc(name));
+                }
+                (void)forge::defedit::cloneCreatureVisuals(probe,definitionSchema_,*definitionSelected_,probeNames[0],probeNames[1],probeNames[2]);
+            } else (void)forge::defedit::cloneCreature(probe,definitionSchema_,*definitionSelected_,probeName);
         }
         definitionCloneNamesBytes_=definitionwrite::cloneBytes(definitionLoadedNames_);
         definitionCloneBankBytes_=definitionwrite::cloneBytes(definitionLoadedBank_);
@@ -185,8 +196,9 @@ bool App::beginDefinitionClone(bool creature) {
         definitionEditDestination_=fs::u8path(packDest_.empty()?saveRoot():packDest_)/"data"/"CompiledDefs"/definitionBank_;
         const auto& donor=definitionFile_.entries()[definitionEditIndex_];
         definitionEditField_=donor.name.empty()?"(unnamed record)":donor.name;
-        definitionEditType_=creature?"clone-creature":"clone";definitionEditing_=true;definitionCloning_=true;
-        definitionEditConfirm_=false;definitionEditValue_[0]=0;return true;
+        definitionEditType_=privateVisual?"clone-creature-private":creature?"clone-creature":"clone";definitionEditing_=true;definitionCloning_=true;
+        definitionEditConfirm_=false;definitionEditValue_[0]=0;
+        definitionCloneBodyName_[0]=0;definitionCloneAppearanceName_[0]=0;return true;
     } catch(const std::exception& error) {definitionEditError_=error.what();return false;}
 }
 bool App::saveDefinitionClone() {
@@ -204,11 +216,22 @@ bool App::saveDefinitionClone() {
             throw std::runtime_error("The source bank or name pool changed; start the clone again.");
         auto cloned=definitionCloneFile_;
         const bool creature=definitionEditType_=="clone-creature";
-        const auto added=creature?forge::defedit::cloneCreature(cloned,definitionSchema_,definitionEditIndex_,definitionEditValue_):
-            forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
-        definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,
-            creature?&definitionSchema_:nullptr,creature?std::optional<size_t>(definitionEditIndex_):std::nullopt);
-        definitionEditSuccess_="Created "+std::string(definitionEditValue_)+".";
+        const bool privateVisual=definitionEditType_=="clone-creature-private";
+        size_t added;
+        if(privateVisual) {
+            const auto result=forge::defedit::cloneCreatureVisuals(cloned,definitionSchema_,definitionEditIndex_,
+                definitionEditValue_,definitionCloneBodyName_,definitionCloneAppearanceName_);
+            added=result.rootIndex;
+            const definitionwrite::CreatureVisualCloneContract contract{definitionSchema_,definitionEditIndex_,
+                definitionEditValue_,definitionCloneBodyName_,definitionCloneAppearanceName_};
+            definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,nullptr,{},&contract);
+        } else {
+            added=creature?forge::defedit::cloneCreature(cloned,definitionSchema_,definitionEditIndex_,definitionEditValue_):
+                forge::defedit::cloneEntry(cloned,definitionEditIndex_,definitionEditValue_);
+            definitionwrite::publishClone(cloned,definitionEditNames_,definitionEditBank_,destination,true,
+                creature?&definitionSchema_:nullptr,creature?std::optional<size_t>(definitionEditIndex_):std::nullopt);
+        }
+        definitionEditSuccess_="Created "+std::string(definitionEditValue_)+(privateVisual?" with private body and appearance definitions (assets shared).":".");
         definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;
         definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();
         definitionLoaded_=false;definitionBrowseRequest_.reset();definitionBrowseIndex_=added;
@@ -271,12 +294,16 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
             ImGui::BeginDisabled(definitionEditing_ || definitionsBusy() || modFilesBusy());
             if(theme::ghostButton("Clone creature",ImVec2(cardInner,0))) beginDefinitionClone(true);
             auto_.registerWidget("btn_definition_clone_creature");ImGui::EndDisabled();
+            ImGui::BeginDisabled(definitionsBusy() || modFilesBusy());
+            if(theme::ghostButton("Clone private creature visuals",ImVec2(cardInner,0))) beginDefinitionClone(true,true);
+            auto_.registerWidget("btn_definition_clone_creature_private");ImGui::EndDisabled();
         }
     }
     if(definitionEditing_) {
         if(definitionCloning_) {
             ImGui::TextWrapped("Clone %s",definitionEditField_.c_str());
-            theme::hint(definitionEditType_=="clone-creature"?
+            theme::hint(definitionEditType_=="clone-creature-private"?
+                "New root, body and appearance definitions. Other gameplay components and all assets stay shared.":definitionEditType_=="clone-creature"?
                 "Retargets verified self references. Components, appearance and body stay shared.":
                 "Copies this record unchanged. References keep their existing targets.");
         } else ImGui::TextWrapped("Edit %s (%s)",definitionEditField_.c_str(),definitionEditType_.c_str());
@@ -394,18 +421,27 @@ void App::drawDefinitionBrowser(float pad,float inner,float cardInner) {
         } else {
             const bool text=definitionCloning_ || definitionEditType_=="CCharString" || definitionEditType_=="CWideString";
             const bool wide=definitionEditType_=="CWideString";
-            if(text) ImGui::TextDisabled("%s",definitionCloning_?"New name (up to 127 ASCII characters)":wide?"Unicode text (up to 127 UTF-8 bytes)":"Text (up to 127 ASCII characters)");
+            if(text) ImGui::TextDisabled("%s",definitionEditType_=="clone-creature-private"?"Root name (127 ASCII characters max)":definitionCloning_?"New name (up to 127 ASCII characters)":wide?"Unicode text (up to 127 UTF-8 bytes)":"Text (up to 127 ASCII characters)");
             ImGui::SetNextItemWidth(cardInner);ImGui::InputText("##definitionvalue",definitionEditValue_,sizeof definitionEditValue_,
                 text?ImGuiInputTextFlags_CallbackCharFilter:0,text?(wide?definitionUnicodeChar:definitionASCIIChar):nullptr);
         }
         auto_.registerWidget("input_definition_edit_value");
+        if(definitionCloning_ && definitionEditType_=="clone-creature-private") {
+            ImGui::TextDisabled("Body name (127 ASCII characters max)");ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputText("##privatebody",definitionCloneBodyName_,sizeof definitionCloneBodyName_,ImGuiInputTextFlags_CallbackCharFilter,definitionASCIIChar);
+            auto_.registerWidget("input_definition_clone_body");
+            ImGui::TextDisabled("Appearance name (127 ASCII characters max)");ImGui::SetNextItemWidth(cardInner);
+            ImGui::InputText("##privateappearance",definitionCloneAppearanceName_,sizeof definitionCloneAppearanceName_,ImGuiInputTextFlags_CallbackCharFilter,definitionASCIIChar);
+            auto_.registerWidget("input_definition_clone_appearance");
+        }
         if(!definitionEditConfirm_) {
             if(theme::ghostButton(definitionCloning_?"Create definition":"Save field",ImVec2(cardInner,0))) definitionEditConfirm_=true;
             auto_.registerWidget("btn_definition_save");
             if(theme::ghostButton("Cancel edit",ImVec2(cardInner,0))) {definitionEditing_=false;definitionCloning_=false;definitionEditConfirm_=false;definitionCloneFile_={};definitionCloneNamesBytes_.clear();definitionCloneBankBytes_.clear();}
             auto_.registerWidget("btn_definition_edit_cancel");
         } else {
-            const char* question=definitionCloning_?(definitionEditType_=="clone-creature"?
+            const char* question=definitionCloning_?(definitionEditType_=="clone-creature-private"?
+                "Create three private definitions (assets shared)?":definitionEditType_=="clone-creature"?
                 "Create creature with shared components?":"Create this definition in the destination bank?"):
                 "Write this field to the destination bank?";
             const int answer=confirmRow(question,definitionCloning_?"Create":"Save",cardInner,S(28),"btn_definition_save_confirm");
